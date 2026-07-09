@@ -827,6 +827,17 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let preparation_graph_global_id = graph.global_id;
         let preparation_instance_epoch = self.cache_epoch();
+        // World-space gradients must reconfigure when only world transforms
+        // moved (prepared_epoch); local-space-only graphs keep the pure
+        // cache_epoch key so the M7 skip still holds.
+        let preparation_world_epoch = if render_cache
+            .gradient_preparation_frame(graph)
+            .has_world_space_gradient_paints
+        {
+            self.prepared_epoch()
+        } else {
+            0
+        };
         if paint_preparation
             .as_ref()
             .and_then(|preparation| preparation.as_ref())
@@ -834,6 +845,7 @@ impl ArtboardInstance {
                 preparation.can_skip_prepared_frame(
                     preparation_graph_global_id,
                     preparation_instance_epoch,
+                    preparation_world_epoch,
                 )
             })
         {
@@ -848,6 +860,7 @@ impl ArtboardInstance {
         let preparation_key = RuntimePaintPreparationCacheKey {
             graph_global_id: preparation_graph_global_id,
             instance_epoch: preparation_instance_epoch,
+            world_epoch: preparation_world_epoch,
             nested_epoch: if defer_layout_gradients {
                 self.runtime_nested_paint_preparation_epoch(commands)
             } else {
@@ -963,6 +976,10 @@ impl ArtboardInstance {
                 .map(|nested| nested.child.as_ref())
             {
                 epoch = epoch.wrapping_mul(0x100000001b3) ^ child.cache_epoch();
+                // World-space gradient staleness folds through nested
+                // children too: keyed transform writes only bump the child's
+                // prepared_epoch, never its cache_epoch.
+                epoch = epoch.wrapping_mul(0x100000001b3) ^ child.prepared_epoch();
             }
         }
         epoch
@@ -5777,6 +5794,12 @@ impl RuntimeMeshRenderBufferSlots {
 struct RuntimePaintPreparationCacheKey {
     graph_global_id: u32,
     instance_epoch: u64,
+    // World-space gradient shaders bake shape world transforms into their
+    // endpoints, and keyed transform writes only bump prepared_epoch (via
+    // WORLD_TRANSFORM dirt), never cache_epoch. Mirrors C++
+    // linear_gradient.cpp: rebuild on PathFlags::world && WorldTransform dirt.
+    // Zero when the graph has no world-space gradient paints.
+    world_epoch: u64,
     nested_epoch: u64,
 }
 
@@ -5787,10 +5810,16 @@ struct RuntimePaintPreparationFrame {
 }
 
 impl RuntimePaintPreparationFrame {
-    fn can_skip_prepared_frame(&self, graph_global_id: u32, instance_epoch: u64) -> bool {
+    fn can_skip_prepared_frame(
+        &self,
+        graph_global_id: u32,
+        instance_epoch: u64,
+        world_epoch: u64,
+    ) -> bool {
         !self.has_nested_artboards
             && self.key.graph_global_id == graph_global_id
             && self.key.instance_epoch == instance_epoch
+            && self.key.world_epoch == world_epoch
     }
 }
 
@@ -6202,12 +6231,26 @@ struct RuntimeGradientPreparationFrame {
     paints_by_mutator: Arc<BTreeMap<usize, Vec<RuntimeGradientPaintRef>>>,
     dependency_order: Arc<Vec<usize>>,
     dependency_insertion_order: Arc<Vec<usize>>,
+    has_world_space_gradient_paints: bool,
 }
 
 impl RuntimeGradientPreparationFrame {
     fn has_paints(&self) -> bool {
         !self.paints_by_mutator.is_empty()
     }
+}
+
+fn runtime_gradient_paints_include_world_space(
+    graph: &ArtboardGraph,
+    paints_by_mutator: &BTreeMap<usize, Vec<RuntimeGradientPaintRef>>,
+) -> bool {
+    paints_by_mutator.values().flatten().any(|paint_ref| {
+        graph
+            .shape_paint_containers
+            .get(paint_ref.container_index)
+            .and_then(|container| container.paints.get(paint_ref.paint_index))
+            .is_some_and(|paint| paint.path_kind == Some(ShapePaintPathKind::World))
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6854,9 +6897,12 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
+            let paints_by_mutator = runtime_gradient_paints_by_mutator(graph);
+            let has_world_space_gradient_paints =
+                runtime_gradient_paints_include_world_space(graph, &paints_by_mutator);
             self.gradient_preparation = Some(RuntimeGradientPreparationFrame {
                 key,
-                paints_by_mutator: Arc::new(runtime_gradient_paints_by_mutator(graph)),
+                paints_by_mutator: Arc::new(paints_by_mutator),
                 dependency_order: Arc::new(runtime_gradient_dependency_order(
                     &graph.dependency_order,
                     graph,
@@ -6869,6 +6915,7 @@ impl RuntimeRenderPathCache {
                     },
                     graph,
                 )),
+                has_world_space_gradient_paints,
             });
         }
 
@@ -8189,7 +8236,10 @@ fn runtime_draw_command(
                 paint_configurations
                     .as_deref()
                     .is_some_and(|configurations| {
-                        configurations.is_current(global_id, instance.cache_epoch())
+                        configurations.is_current(
+                            global_id,
+                            runtime_paint_configuration_epoch(instance, paint),
+                        )
                     });
             if !paint_configuration_is_current {
                 let object = runtime
@@ -9381,6 +9431,25 @@ fn runtime_render_paint_configuration(
     })
 }
 
+// The paint-configuration cache epoch for a shape paint command. World-space
+// paints (paint_space_transform set) bake shape world transforms into their
+// shader endpoints, and keyed transform writes only bump prepared_epoch, so
+// their configuration must also be keyed on it. Mirrors C++
+// linear_gradient.cpp:98-106 (PathFlags::world && WorldTransform dirt).
+fn runtime_paint_configuration_epoch(
+    instance: &ArtboardInstance,
+    paint: &RuntimeShapePaintCommand,
+) -> u64 {
+    let cache_epoch = instance.cache_epoch();
+    if paint.paint_space_transform.is_some() {
+        (0xcbf29ce484222325u64 ^ cache_epoch)
+            .wrapping_mul(0x100000001b3)
+            .wrapping_add(instance.prepared_epoch())
+    } else {
+        cache_epoch
+    }
+}
+
 fn runtime_configure_paint_with_cache(
     render_paint: &mut dyn RenderPaint,
     configurations: &mut RuntimeRenderPaintConfigurationSlots,
@@ -9389,7 +9458,7 @@ fn runtime_configure_paint_with_cache(
     object: &RuntimeObject,
     paint: &RuntimeShapePaintCommand,
 ) -> Result<()> {
-    let instance_epoch = instance.cache_epoch();
+    let instance_epoch = runtime_paint_configuration_epoch(instance, paint);
     if configurations
         .get(paint_global_id)
         .is_some_and(|cached| cached.instance_epoch == instance_epoch)
@@ -13974,6 +14043,7 @@ mod tests {
         fill_rules: Cell<usize>,
         lines: Cell<usize>,
         closes: Cell<usize>,
+        linear_gradients: RefCell<Vec<[f32; 4]>>,
     }
 
     struct CountingFactory {
@@ -14215,13 +14285,17 @@ mod tests {
 
         fn make_linear_gradient(
             &mut self,
-            _sx: f32,
-            _sy: f32,
-            _ex: f32,
-            _ey: f32,
+            sx: f32,
+            sy: f32,
+            ex: f32,
+            ey: f32,
             _colors: &[ColorInt],
             _stops: &[f32],
         ) -> Box<dyn RenderShader> {
+            self.stats
+                .linear_gradients
+                .borrow_mut()
+                .push([sx, sy, ex, ey]);
             Box::new(TestRenderShader)
         }
 
@@ -14554,5 +14628,203 @@ mod tests {
         assert_eq!(stats.lines.get(), 0);
         assert_eq!(third_verbs, 3);
         assert_eq!(third_points, 2);
+    }
+
+    fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn schema_property_key(type_name: &str, property_name: &str) -> u64 {
+        let definition = rive_schema::definition_by_name(type_name)
+            .unwrap_or_else(|| panic!("missing schema definition {type_name}"));
+        definition
+            .properties
+            .iter()
+            .find(|property| property.name == property_name)
+            .map(|property| property.key.int)
+            .or_else(|| {
+                definition.ancestors.iter().find_map(|ancestor| {
+                    rive_schema::definition_by_name(ancestor).and_then(|ancestor| {
+                        ancestor
+                            .properties
+                            .iter()
+                            .find(|property| property.name == property_name)
+                            .map(|property| property.key.int)
+                    })
+                })
+            })
+            .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}"))
+            .into()
+    }
+
+    fn push_object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
+        let type_key = rive_schema::definition_by_name(type_name)
+            .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+            .type_key
+            .int;
+        push_var_uint(bytes, u64::from(type_key));
+        properties(bytes);
+        push_var_uint(bytes, 0);
+    }
+
+    fn push_uint(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u64) {
+        push_var_uint(bytes, schema_property_key(type_name, property_name));
+        push_var_uint(bytes, value);
+    }
+
+    fn push_f32(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
+        push_var_uint(bytes, schema_property_key(type_name, property_name));
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_bool(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: bool) {
+        push_var_uint(bytes, schema_property_key(type_name, property_name));
+        bytes.push(u8::from(value));
+    }
+
+    fn push_color(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u32) {
+        push_var_uint(bytes, schema_property_key(type_name, property_name));
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    // A shape with a world-space (transformAffectsStroke=false) gradient
+    // stroke; the gradient shader bakes the shape's world transform into its
+    // endpoints.
+    fn synthetic_world_space_gradient_stroke_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9631);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "x", 0.0);
+            push_f32(bytes, "Node", "y", 0.0);
+        });
+        push_object(&mut bytes, "Stroke", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_f32(bytes, "Stroke", "thickness", 2.0);
+            push_bool(bytes, "Stroke", "transformAffectsStroke", false);
+        });
+        push_object(&mut bytes, "LinearGradient", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_f32(bytes, "LinearGradient", "endX", 10.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "GradientStop", "colorValue", 0xffff_0000);
+            push_f32(bytes, "GradientStop", "position", 0.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "GradientStop", "colorValue", 0xff00_00ff);
+            push_f32(bytes, "GradientStop", "position", 1.0);
+        });
+        push_object(&mut bytes, "PointsPath", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_bool(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+            push_f32(bytes, "Vertex", "x", 0.0);
+            push_f32(bytes, "Vertex", "y", 0.0);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+            push_f32(bytes, "Vertex", "x", 10.0);
+            push_f32(bytes, "Vertex", "y", 0.0);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+            push_f32(bytes, "Vertex", "x", 10.0);
+            push_f32(bytes, "Vertex", "y", 10.0);
+        });
+        bytes
+    }
+
+    // Regression for the M8 audit finding (world-space gradient staleness,
+    // item 23): world-space gradient shaders bake shape world transforms into
+    // their endpoints, so the persistent-cache paint preparation must
+    // reconfigure them when a keyed transform write moves the shape between
+    // two prepared positions. Mirrors C++ linear_gradient.cpp:98-106
+    // (PathFlags::world && WorldTransform dirt).
+    #[test]
+    fn world_space_gradient_stroke_reconfigures_after_transform_write() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let artboard = graph.artboards.first().expect("synthetic riv has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            artboard,
+            &graph.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        let first = stats.linear_gradients.borrow().clone();
+        let baseline = *first
+            .last()
+            .expect("first prepare configures the world-space gradient shader");
+
+        // Keyed transform write between two prepared positions.
+        assert!(instance.set_transform_property(1, TransformProperty::X, 25.0));
+        instance.update_components();
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        let second = stats.linear_gradients.borrow().clone();
+        assert!(
+            second.len() > first.len(),
+            "world-space gradient shader was not reconfigured after the transform write"
+        );
+        let moved = *second.last().expect("second prepare records endpoints");
+        assert!(
+            (moved[0] - (baseline[0] + 25.0)).abs() <= 0.0001
+                && (moved[2] - (baseline[2] + 25.0)).abs() <= 0.0001,
+            "world-space gradient endpoints did not follow the shape world transform: \
+             baseline {baseline:?}, moved {moved:?}"
+        );
     }
 }

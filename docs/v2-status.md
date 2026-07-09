@@ -455,11 +455,15 @@ the only memory the next session has. Update it every commit.
 
 19. M8 OPENED (user decision 2026-07-09; scope in porting-map-v2 #V2-9).
     Queue, in order:
-    (a) Scripting seam: land ScriptingVm/ScriptInstance/ScriptHost traits
-        in rive-runtime per the lane report (item 14), sandbox parity,
-        native-vector binding; build the C++ golden runner WITH scripting
-        so scripted corpus files get real reference streams; then port
-        bindings corpus-file-by-corpus-file in the census order.
+    (a) Scripting seam: runtime-owned ScriptingVm/ScriptInstance/
+        ScriptHost traits are landed, luaur implements them behind the
+        `rive` `scripting` feature, Rive globals install before bytecode
+        load, native-vector `Vector` is bound, and malformed/truncated
+        bytecode is preflighted before the unsafe luaur loader. Remaining:
+        close full sandbox parity (`luaL_sandbox` equivalent or recorded
+        luaur gap), build the C++ golden runner WITH scripting so scripted
+        corpus files get real reference streams, then port bindings
+        corpus-file-by-corpus-file in the census order.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3539,6 +3543,32 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Landed the runtime-owned scripting seam. `rive-runtime`
+  now owns `ScriptingVm`/`ScriptInstance`/`ScriptHost` plus VM-neutral
+  methods/values; `rive-scripting` implements the seam with luaur, installs
+  Rive globals before bytecode load, binds `Vector` as luaur's native vector,
+  instantiates a real `script_artboard_test.riv` protocol script, and rejects
+  malformed/truncated Luau bytecode before reaching luaur's unsafe
+  `luau_load` deserializer. `crates/rive` exposes the backend behind a
+  `scripting` feature. Verification: `cargo test -p rive-scripting --quiet`,
+  `cargo check -p rive --features scripting`,
+  `cargo check -p rive-scripting --no-default-features`,
+  `cargo test --workspace`, `make golden-compare`, and `git diff --check`
+  pass; golden compare remains exact=263 / exact-segments=584 / diverges=0,
+  parked gated=6 / harness=26. Next scripting step: C++ golden runner WITH
+  scripting, full sandbox parity, then binding ports against real scripted
+  reference streams.
+
+- 2026-07-09: [M7] Recorded a user-requested open-fence hot-loop tracking run
+  after M7 closeout so future perf work has a current directional baseline.
+  `make perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports aggregate min
+  Rust/C++=1.941, Rust min-sum=1.905 ms, C++ min-sum=0.982 ms, and post-run
+  load 8.53/12.94/14.42. This is not acceptance evidence because load is
+  above the fence and C++ min-sum is just outside the 0.70-0.95 ms sanity
+  band; visible outliers are `advance_blend_mode` first, then
+  `animation_reset_cases`.
 
 - 2026-07-08: [M7] Stored render-paint configurations in dense global slots.
   The low-load perf gate stayed unavailable, so the session continued the

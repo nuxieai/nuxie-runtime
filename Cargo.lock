@@ -218,6 +218,7 @@ dependencies = [
  "rive-graph",
  "rive-render-api",
  "rive-runtime",
+ "rive-scripting",
 ]
 
 [[package]]
@@ -300,9 +301,11 @@ dependencies = [
 name = "rive-scripting"
 version = "0.1.0"
 dependencies = [
+ "luaur-common",
  "luaur-rt",
  "luaur-vm",
  "rive-binary",
+ "rive-runtime",
 ]
 
 [[package]]

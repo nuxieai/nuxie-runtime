@@ -7,6 +7,7 @@ mod data_bind_graph;
 mod draw;
 mod objects;
 mod properties;
+mod scripting;
 mod state_machine;
 mod text;
 mod view_model;
@@ -35,6 +36,10 @@ pub use draw::{
     preallocate_render_paints_for_artboard_tree,
 };
 pub use objects::InstanceSlot;
+pub use scripting::{
+    NoopScriptHost, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
+    ScriptModuleFailure, ScriptValue, ScriptingVm,
+};
 pub use state_machine::{
     RuntimeLayerState, RuntimeStateMachine, RuntimeStateMachineInput, RuntimeStateMachineLayer,
     StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,

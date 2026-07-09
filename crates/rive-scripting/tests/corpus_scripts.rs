@@ -112,6 +112,9 @@ fn corpus_script_assets_carry_luau_bytecode_not_source() {
 mod luau {
     use super::*;
     use luaur_rt::{Function, Table, Value};
+    use rive_runtime::{
+        NoopScriptHost, ScriptMethod, ScriptValue, ScriptingVm as RuntimeScriptingVm,
+    };
     use rive_scripting::vm::ScriptVm;
 
     #[test]
@@ -123,6 +126,46 @@ mod luau {
         for script in &scripts {
             vm.load_script_asset_payload(&script.name, &script.payload)
                 .unwrap_or_else(|e| panic!("luaur failed to load '{}': {e}", script.name));
+        }
+    }
+
+    #[test]
+    fn malformed_bytecode_is_rejected_before_luau_load() {
+        let vm = ScriptVm::new();
+        for bytecode in [Vec::new(), vec![6], vec![6, 3], vec![6, 3, 0xff]] {
+            let error = vm
+                .load_bytecode("malformed", &bytecode)
+                .expect_err("malformed bytecode should be a regular error");
+            assert!(
+                error.to_string().contains("malformed Luau bytecode"),
+                "unexpected error: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn truncated_corpus_bytecode_is_rejected_before_luau_load() {
+        let scripts = extract_scripts(&read_corpus("script_artboard_test.riv"));
+        let script = &scripts[0];
+        let content = SignedContent::parse(&script.payload).unwrap().content;
+        let cuts = [
+            0usize,
+            1,
+            2,
+            3,
+            content.len() / 2,
+            content.len().saturating_sub(1),
+        ];
+        let vm = ScriptVm::new();
+
+        for cut in cuts {
+            let error = vm
+                .load_bytecode(&format!("{}-truncated-{cut}", script.name), &content[..cut])
+                .expect_err("truncated corpus bytecode should be a regular error");
+            assert!(
+                error.to_string().contains("malformed Luau bytecode"),
+                "unexpected error for cut {cut}: {error}"
+            );
         }
     }
 
@@ -239,5 +282,65 @@ mod luau {
         // Inputs are plain fields on the instance (C++ setNumberInput).
         instance.set("columns", 5.0).unwrap();
         assert_eq!(instance.get::<f64>("columns").unwrap(), 5.0);
+    }
+
+    #[test]
+    fn runtime_scripting_seam_instantiates_protocol_script() {
+        let scripts = extract_scripts(&read_corpus("script_artboard_test.riv"));
+        let script = &scripts[0];
+        assert_eq!(script.name, "ArtboardGrid");
+
+        let mut vm = ScriptVm::new();
+        let mut host = NoopScriptHost;
+        let mut instance = RuntimeScriptingVm::instantiate_script(
+            &mut vm,
+            &script.name,
+            &script.payload,
+            &mut host,
+        )
+        .unwrap();
+
+        for method in [
+            ScriptMethod::Init,
+            ScriptMethod::Advance,
+            ScriptMethod::Update,
+            ScriptMethod::Draw,
+            ScriptMethod::PointerDown,
+        ] {
+            assert!(
+                instance.has_method(method).unwrap(),
+                "instance should implement {}",
+                method.as_str()
+            );
+        }
+
+        assert_eq!(
+            instance.get_input("columns").unwrap().as_number(),
+            Some(3.0)
+        );
+        instance
+            .set_input("columns", ScriptValue::Number(5.0))
+            .unwrap();
+        assert_eq!(
+            instance.get_input("columns").unwrap().as_number(),
+            Some(5.0)
+        );
+
+        let vector: Value = vm.eval("return Vector(1, 2)").unwrap();
+        assert!(
+            matches!(vector, Value::Vector(v) if v == [1.0, 2.0, 0.0]),
+            "Vector must be luaur's native vector value, got {vector:?}"
+        );
+
+        assert_eq!(
+            instance
+                .call_method(
+                    ScriptMethod::Advance,
+                    &[ScriptValue::Number(0.016)],
+                    &mut host,
+                )
+                .unwrap(),
+            ScriptValue::Bool(false)
+        );
     }
 }

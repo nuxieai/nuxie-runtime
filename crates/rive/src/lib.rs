@@ -18,10 +18,14 @@ pub use rive_render_api::{
     Vec2D,
 };
 pub use rive_runtime::{
-    LinearAnimationInstance, RuntimeLayerState, RuntimeStateMachineInput,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    LinearAnimationInstance, NoopScriptHost, RuntimeLayerState, RuntimeStateMachineInput,
+    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure,
+    ScriptValue, ScriptingVm, StateMachineInputInstance, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent,
 };
+
+#[cfg(feature = "scripting")]
+pub use rive_scripting::vm::{LuaScriptInstance, ScriptVm};
 
 /// Imported Rive file plus its runtime graph projection.
 #[derive(Debug, Clone)]

@@ -13,11 +13,13 @@ description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (lua
 # crates. Build with `--no-default-features` for the dependency-free
 # envelope-parsing subset.
 default = ["luau"]
-luau = ["dep:luaur-rt", "dep:luaur-vm"]
+luau = ["dep:luaur-common", "dep:luaur-rt", "dep:luaur-vm"]
 
 [dependencies]
+rive-runtime = { path = "../rive-runtime" }
 # Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
 # against upstream Luau commit 8f33df9 per the luaur README).
+luaur-common = { version = "=0.1.8", optional = true }
 luaur-rt = { version = "=0.1.8", optional = true }
 # The raw C-style VM API (luau_load for precompiled bytecode). Same pinned
 # version as luaur-rt's own dependency so cargo unifies to one copy.

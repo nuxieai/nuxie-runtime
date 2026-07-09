@@ -110,3 +110,83 @@ cpp-runtime-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p rive-runtime --test cpp_probe -- --nocapture
 
 cpp-compare: cpp-binary-compare cpp-graph-compare cpp-runtime-compare
+
+.PHONY: fuzz-build fuzz-smoke fuzz fuzz-regressions
+
+# --- Negative-input fuzzing (cargo-fuzz, requires the nightly toolchain) -----
+# cargo-fuzz spawns its own `cargo`/`rustc`, so pointing it at nightly via a
+# `+toolchain` proxy is not enough when the default `cargo` is a non-rustup
+# build. FUZZ_CARGO wraps the invocation so the whole tree builds with nightly.
+# In CI, where nightly is the default toolchain, override with FUZZ_CARGO=cargo.
+FUZZ_DIR ?= fuzz
+FUZZ_CARGO ?= rustup run nightly cargo
+FUZZ_TARGETS ?= fuzz_import fuzz_runtime fuzz_pointer
+FUZZ_SMOKE_SECONDS ?= 30
+FUZZ_TARGET ?= fuzz_runtime
+FUZZ_SECONDS ?= 300
+FUZZ_RSS_LIMIT_MB ?= 4096
+# Per-input wall clock. A libFuzzer -timeout is what turns a hang into a
+# reported finding; keep it modest so the smoke gate cannot wedge.
+FUZZ_TIMEOUT ?= 25
+
+# Build every libfuzzer target (also the CI "build-only" gate).
+fuzz-build:
+	cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz build
+
+# The committed seed corpus lives in fuzz/seeds/<target>/; libFuzzer's writable
+# working corpus (fuzz/corpus/<target>/) and any crash artifacts are gitignored.
+# NOTE: the smoke gate deliberately does NOT replay fuzz/regressions/ -- that
+# tree also archives reproducers for KNOWN-OPEN findings (see
+# fuzz/regressions/README.md), which would wedge the gate. Fixed-bug
+# regressions are checked explicitly via `make fuzz-regressions`.
+
+# Smoke gate: build all targets, then exercise them. This is a gate that proves
+# the harness builds and runs end-to-end -- it is NOT a full fuzzing campaign
+# (use `make fuzz` for that). fuzz_import (parser only, no known hangs) gets a
+# short timed mutation burst. fuzz_runtime/fuzz_pointer are run as a
+# DETERMINISTIC seed replay (-runs=0) rather than timed mutation, because the
+# runtime pipeline currently has open input-dependent HANG findings (unbounded
+# parent/reference-chain walks; see fuzz/regressions/README.md) that a timed
+# mutation run rediscovers within seconds, which would make the gate flaky. The
+# -timeout guard still turns any hang into a hard failure.
+fuzz-smoke: fuzz-build
+	@set -e; for target in $(FUZZ_TARGETS); do \
+		if [ "$$target" = "fuzz_import" ]; then \
+			echo "== fuzz-smoke: $$target (timed $(FUZZ_SMOKE_SECONDS)s) =="; \
+			( cd $(FUZZ_DIR) && mkdir -p corpus/$$target && $(FUZZ_CARGO) fuzz run \
+				$$target corpus/$$target seeds/$$target -- \
+				-max_total_time=$(FUZZ_SMOKE_SECONDS) -timeout=$(FUZZ_TIMEOUT) \
+				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
+		else \
+			echo "== fuzz-smoke: $$target (seed replay) =="; \
+			( cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz run \
+				$$target seeds/$$target -- \
+				-runs=0 -timeout=$(FUZZ_TIMEOUT) \
+				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
+		fi; \
+	done
+
+# Longer local campaign for a single target. Example:
+#   make fuzz FUZZ_TARGET=fuzz_runtime FUZZ_SECONDS=1800
+# Crash/timeout reproducers land in fuzz/artifacts/<target>/. To keep one as a
+# regression, minimize it (`cargo fuzz tmin`) and copy it into
+# fuzz/regressions/<target>/ (fixed) or fuzz/regressions/open/ (still failing).
+fuzz:
+	cd $(FUZZ_DIR) && mkdir -p corpus/$(FUZZ_TARGET) && $(FUZZ_CARGO) fuzz run \
+		$(FUZZ_TARGET) corpus/$(FUZZ_TARGET) seeds/$(FUZZ_TARGET) -- \
+		-max_total_time=$(FUZZ_SECONDS) -timeout=$(FUZZ_TIMEOUT) \
+		-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB)
+
+# Replay committed regression reproducers for FIXED bugs (fuzz/regressions/
+# <target>/). Reproducers for still-open findings live under
+# fuzz/regressions/open/ and are intentionally excluded here.
+fuzz-regressions: fuzz-build
+	@set -e; for target in $(FUZZ_TARGETS); do \
+		if [ -d "$(FUZZ_DIR)/regressions/$$target" ] && \
+			[ -n "$$(ls -A $(FUZZ_DIR)/regressions/$$target 2>/dev/null)" ]; then \
+			echo "== fuzz-regressions: $$target =="; \
+			( cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz run $$target \
+				regressions/$$target -- -runs=0 -timeout=$(FUZZ_TIMEOUT) \
+				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
+		fi; \
+	done

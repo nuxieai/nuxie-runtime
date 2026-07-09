@@ -329,9 +329,34 @@ the only memory the next session has. Update it every commit.
   min-sum=1.929 ms, C++ min-sum=0.964 ms, and load 2.69/3.66/4.37; this is
   tracking-only because the C++ min-sum is still outside the 0.70-0.95 ms
   sanity band, even though the printed ratio is now on the strict threshold.
-  Full `make golden-compare` remains exact=263 / exact-segments=584 /
-  diverges=0, and `cargo test --workspace`, `cargo fmt --all -- --check`,
-  and `git diff --check` pass. M7 remains open.
+  Formal follow-up acceptance attempts reported Rust/C++=1.988 with C++
+  min-sum=0.980 ms (tracking-only, high C++), then Rust/C++=2.042 with C++
+  min-sum=0.941 ms, then Rust/C++=2.064 with C++ min-sum=0.929 ms. The latter
+  two are sanity-band-valid ratio failures, so the next slice was profiled
+  before changing runtime code. `advance_blend_mode@0` sampled
+  `advance_artboard_data_binds_with_root_transform` and
+  `collect_nested_artboard_context_source_values`; C++ source review covered
+  `NestedArtboard::updateDataBinds`, `Artboard::updateDataBinds`, and the
+  `DataBindContainer::updateDataBinds` empty dirty/persisting queue early
+  return. Rust now skips nested context-source collection and child data-bind
+  advancement for leaf nested artboards that have no direct context-source
+  bindings and no nested children to recurse into. Focused 50M tracking moved
+  `advance_blend_mode@0` total/advance/draw from
+  17220.71/10216.74/5103.15 ms to 16476.08/9577.32/5031.80 ms;
+  `animation_reset_cases@0` was noisy/slightly total-better at
+  8611.36/4293.87/4831.43 ms to 8537.71/4385.46/4845.63 ms. Post-slice
+  user-requested hot-loop runs deliberately ignored the load fence and report
+  Rust/C++=1.975 with Rust min-sum=1.938 ms, C++ min-sum=0.981 ms, load
+  4.38/4.32/4.35, then Rust/C++=1.949 with Rust min-sum=2.002 ms, C++
+  min-sum=1.027 ms, load 4.79/4.41/4.38. After tightening the recursive case
+  to preserve descendant value propagation, a current-code open-fence
+  `make perf-hot-loop PERF_MAX_RATIO=999` run reports Rust/C++=1.927 with
+  Rust min-sum=1.896 ms, C++ min-sum=0.983 ms, and starting load
+  6.49/4.85/4.57. These are useful tracking snapshots, but not M7 acceptance
+  evidence because the C++ min-sum is outside the sanity band. Full
+  `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0, and `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -339,13 +364,12 @@ the only memory the next session has. Update it every commit.
   persisting data-bind source-list take/recycle scout; they preserved
   correctness but worsened or failed to move direct/fenced release timings.
   Next priority is three clean low-load/sanity-band `make perf-hot-loop`
-  invocations because the latest tracking run printed aggregate Rust/C++=2.000.
-  If any acceptance attempt fails, re-profile the tiny-file fixed-overhead
-  outliers and read the matching C++ draw property-key, paint-configuration,
-  world-transform, state-machine, or data-bind hot path before adding another
-  runtime fast path; do not chase the smaller `ai_assitant@0` or
-  `spotify_kids_demo@0` tails again until a fresh profile puts them back above
-  fixed overhead.
+  invocations because the latest tracking runs are now under the ratio fence
+  but outside the C++ sanity band. If C++ remains above the sanity band, wait
+  and retry rather than adding another optimization. If a sanity-band run fails
+  the ratio, re-profile remaining `advance_blend_mode` /
+  `animation_reset_cases` data-bind/color-animation hot sites and read the
+  matching C++ code before adding another runtime fast path.
 
 ## Milestones
 
@@ -2016,6 +2040,34 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Skip empty nested context-source passes for leaf nested
+  artboards. Formal post-state-machine acceptance attempts reported
+  Rust/C++=1.988 with C++ min-sum=0.980 ms (tracking-only high C++), then
+  sanity-band-valid failures at Rust/C++=2.042 with C++ min-sum=0.941 ms and
+  Rust/C++=2.064 with C++ min-sum=0.929 ms. Fresh samples put
+  `advance_blend_mode@0` in
+  `advance_artboard_data_binds_with_root_transform` and
+  `collect_nested_artboard_context_source_values`; C++ review covered
+  `NestedArtboard::updateDataBinds`, `Artboard::updateDataBinds`, and
+  `DataBindContainer::updateDataBinds` early-returning on empty
+  dirty/persisting queues. Rust now skips descending/calling the child
+  data-bind pass when a nested child has neither direct context-source
+  bindings nor nested children. Focused 50M tracking moved
+  `advance_blend_mode@0` total/advance/draw from
+  17220.71/10216.74/5103.15 ms to 16476.08/9577.32/5031.80 ms;
+  `animation_reset_cases@0` was noisy/slightly total-better at
+  8611.36/4293.87/4831.43 ms to 8537.71/4385.46/4845.63 ms. Post-slice
+  user-requested hot-loop tracking reports Rust/C++=1.975 and 1.949. After
+  tightening the recursive case to preserve descendant value propagation, a
+  current-code open-fence run reports Rust/C++=1.927, Rust min-sum=1.896 ms,
+  C++ min-sum=0.983 ms, and starting load 6.49/4.85/4.57. These are not
+  acceptance evidence because C++ min-sums are still outside the 0.70-0.95 ms
+  sanity band. Full `make golden-compare` reports exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Next: get three clean
+  low-load/sanity-band `make perf-hot-loop` runs; if a sanity-band run fails,
+  re-profile remaining data-bind/color-animation hot sites before adding
+  another fast path.
 - 2026-07-09: [M7] Replaced the Rust transition-condition iterator closure
   with a straight early-return loop matching C++ `StateTransition::allowed`.
   Focused profiles after the generated uint-read slice still showed

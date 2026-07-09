@@ -2465,10 +2465,18 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            let child_has_direct_context_sources =
+                nested.child.has_artboard_context_source_bindings();
+            let child_has_nested_context_sources = !nested.child.nested_artboard_locals.is_empty();
+            if !child_has_direct_context_sources && !child_has_nested_context_sources {
+                continue;
+            }
             let descendant_start = values.len();
-            nested
-                .child
-                .collect_nested_artboard_context_source_values(child_root_transform, values);
+            if child_has_nested_context_sources {
+                nested
+                    .child
+                    .collect_nested_artboard_context_source_values(child_root_transform, values);
+            }
             let descendant_end = values.len();
             for source in &values[descendant_start..descendant_end] {
                 nested
@@ -2478,8 +2486,16 @@ impl ArtboardInstance {
             nested
                 .child
                 .advance_artboard_data_binds_with_root_transform(child_root_transform, 0.0);
-            nested.child.append_artboard_context_source_values(values);
+            if child_has_direct_context_sources {
+                nested.child.append_artboard_context_source_values(values);
+            }
         }
+    }
+
+    fn has_artboard_context_source_bindings(&self) -> bool {
+        !self.artboard_layout_computed_bindings.is_empty()
+            || !self.artboard_custom_property_bindings.is_empty()
+            || !self.artboard_solo_source_bindings.is_empty()
     }
 
     fn append_artboard_context_source_values(

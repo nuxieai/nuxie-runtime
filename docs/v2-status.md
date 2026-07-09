@@ -448,6 +448,15 @@ the only memory the next session has. Update it every commit.
   `advance_blend_mode`=3.543/3.533, `animation_reset_cases`=2.549-2.818,
   `spotify_kids_demo@0`=1.943, `animated_clipping@0`=1.868,
   `ai_assitant@0`=1.847, and `align_target@0`=1.641.
+  Another user-requested M8 open-fence tracking run deliberately ignored the
+  load fence with `make perf-hot-loop PERF_MAX_RATIO=999`. It reports
+  aggregate min Rust/C++=2.145, Rust min-sum=2.983 ms, C++ min-sum=1.391 ms,
+  and post-run load 32.66/27.63/24.48. Treat this as tracking-only because
+  load and C++ min-sum are both outside the formal sanity fence; visible
+  ratios are `advance_blend_mode`=3.428/3.350,
+  `animation_reset_cases`=2.744-2.877, `spotify_kids_demo@0`=2.087,
+  `ai_assitant@0`=1.991, `animated_clipping@0`=1.821, and
+  `align_target@0`=1.727.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint

@@ -894,6 +894,27 @@ the only memory the next session has. Update it every commit.
     (c) nested paint prep folds child prepared_epoch unconditionally —
     narrow per-child only if profiling shows churn.
 
+29. HARDENING LANE MERGED (commits c38e2a3/1041450/cb73370): the M8
+    hardening pillar is COMPLETE. (a) Cycle guards across the FULL
+    recursion surface mirroring C++'s DependencySorter visited-set and
+    Artboard::isAncestor idioms — timed-mutation fuzzing surfaced two
+    variants beyond the original finding (nested-artboard stack
+    overflow; exponential fan-out where a depth cap was insufficient),
+    all guarded with divergence comments; 4 reproducers in
+    make fuzz-regressions; 240s campaign zero findings. (b) All six
+    item-20 semantic-trap fixes landed. (c) Lint gates: audit's ~99%
+    compliance estimate corrected with real counts (hundreds of warn
+    sites); deny pinned on clean crates (rive, rive-schema), workspace
+    warn elsewhere, make lint-gate + CI job. FOLLOW-UP QUEUE: burn down
+    warn counts crate-by-crate, rive-capi first (SDK panic budget).
+    LOCAL-ENV NOTE: Homebrew cargo shadows the rustup proxy on this
+    machine — run fuzz targets with the rustup nightly bin dir first in
+    PATH (CI unaffected, FUZZ_CARGO=cargo).
+    M8 REMAINING: scripted queue (Codex: 5 divergences + 19 binding
+    diagnostics), corpus fixtures for the six audit scenarios, item-22
+    caveat-doc removal in capi-vm surfaces, warn burn-down, and the
+    Nuxie rename sweep LAST (map item 26/#V2-9.5).
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

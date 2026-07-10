@@ -423,7 +423,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 .into_iter()
                 .any(|name| property_key_for_name("Node", name) == Some(property_key))
                 && (data_bind.converter_global.is_none()
-                    || data_bind.converter_type_name == Some("DataConverterGroup")))
+                    || matches!(
+                        data_bind.converter_type_name,
+                        Some("DataConverterGroup" | "ScriptedDataConverter")
+                    )))
                 || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
                     && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         }

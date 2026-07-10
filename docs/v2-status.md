@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=16 / exact-segments=18 / diverges=10 /
+- Scripted compare: exact=18 / exact-segments=21 / diverges=8 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -526,8 +526,8 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. M0-M7 remain complete; M8 is active. The current ratchet passes at
-   exact=263 / exact-segments=584 / diverges=27 / unsupported-feature=5;
+1. M0-M7 remain complete; M8 is active. The regular ratchet passes at
+   exact=263 / exact-segments=584 / diverges=26 / unsupported-feature=6;
    `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
@@ -620,8 +620,14 @@ the only memory the next session has. Update it every commit.
         state-machine converter instances, and one-time text paint-pool
         allocation. `scripting_linear_animation.riv` is exact at two samples
         after scripted advance activation, instance-origin parity, opacity
-        cache invalidation, and per-object rebind ordering. Next is a fresh
-        structural audit of the ten remaining scripted divergences.
+        cache invalidation, and per-object rebind ordering. A fresh structural
+        audit promoted `gamepad_test.riv` at two samples and
+        `viewmodel_instance_to_artboard.riv` at its exact initial sample. The
+        eight remaining divergences split into resource allocation (three),
+        text shaping (two), transform/context, gradient state, and feather
+        draw envelopes. Next is the shared resource-allocation family:
+        `data_bind_artboard_input.riv`, `replace_view_model.riv`, and
+        `viewmodel_from_instance.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3801,6 +3807,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Re-audited all ten remaining scripted divergences and
+  promoted `gamepad_test.riv` plus `viewmodel_instance_to_artboard.riv` to
+  scripted exact. `gamepad_test.riv` also widens from one to two samples;
+  `viewmodel_instance_to_artboard.riv` stays at its exact initial sample
+  because `0.1` exposes a later draw-path geometry mismatch. Scripted compare
+  moves to exact=18 / exact-segments=21 / diverges=8 /
+  unsupported-feature=1 with M8=1. The eight real gaps are classified into
+  resource allocation (three), text shaping (two), transform/context,
+  gradient state, and feather draw envelopes. Next is the shared
+  resource-allocation family. Full regular and scripted compares,
+  `cargo test --workspace`, corpus regeneration, formatting, and diff checks
+  pass.
 
 - 2026-07-09: [M8] Promoted `scripting_linear_animation.riv` to scripted
   exact and widened it from one to two samples. Scripted drawables now call

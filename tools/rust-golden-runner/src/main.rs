@@ -1218,6 +1218,9 @@ fn advance_scene_to(
     }
     instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
     instance
+        .advance_script_instances(elapsed_seconds)
+        .context("scripted drawable advance failed")?;
+    instance
         .update_script_instances()
         .context("scripted drawable update failed")?;
     instance.update_pass();
@@ -1528,9 +1531,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
             Rc::clone(&self.render_state),
         )
         .map_err(|error| ScriptError::new(error.to_string()))?;
-        if view_model.is_some() {
-            instance.view_model = view_model;
-        }
+        instance.view_model = view_model;
         instance.bind_view_model();
         Ok(Box::new(instance))
     }
@@ -1603,13 +1604,6 @@ impl ScriptArtboard for RunnerScriptArtboard {
                 self.artboard_index
             ))
         })?;
-        let object = self.runtime.object(graph.global_id as usize);
-        let origin_x = object
-            .and_then(|object| object.double_property("originX"))
-            .unwrap_or(0.5);
-        let origin_y = object
-            .and_then(|object| object.double_property("originY"))
-            .unwrap_or(0.5);
         let mut paint_cache = self
             .render_state
             .borrow_mut()
@@ -1635,20 +1629,9 @@ impl ScriptArtboard for RunnerScriptArtboard {
             )
             .map_err(|error| ScriptError::new(error.to_string()))
             .and_then(|()| {
-                if self.frame_origin {
-                    renderer.save();
-                    renderer.transform(rive_render_api::Mat2D([
-                        1.0,
-                        0.0,
-                        0.0,
-                        1.0,
-                        self.width * origin_x,
-                        self.height * origin_y,
-                    ]));
-                }
                 let result = self
                     .instance
-                    .draw_prepared_static_artboard_with_render_cache(
+                    .draw_prepared_static_artboard_with_render_cache_and_origin(
                         &self.runtime,
                         graph,
                         &self.artboards,
@@ -1656,11 +1639,9 @@ impl ScriptArtboard for RunnerScriptArtboard {
                         renderer,
                         &mut paint_cache,
                         &mut self.path_cache,
+                        self.frame_origin,
                     )
                     .map_err(|error| ScriptError::new(error.to_string()));
-                if self.frame_origin {
-                    renderer.restore();
-                }
                 result
             });
         self.render_state
@@ -2231,12 +2212,13 @@ fn rebind_scripted_drawables(
             Rc::clone(render_state),
             owned_view_model_context,
         )?;
+        if owned_view_model_context.is_some() {
+            instance
+                .reinitialize_script_instance_with_factory(local_object.global_id, factory)
+                .context("scripted drawable rebind init failed")?;
+        }
     }
-    if owned_view_model_context.is_some() {
-        instance
-            .reinitialize_script_instances_with_factory(factory)
-            .context("scripted drawable rebind init failed")?;
-    } else {
+    if owned_view_model_context.is_none() {
         instance
             .update_script_instances()
             .context("scripted drawable rebind update failed")?;

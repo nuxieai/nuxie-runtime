@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=15 / exact-segments=16 / diverges=11 /
+- Scripted compare: exact=16 / exact-segments=18 / diverges=10 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -618,7 +618,10 @@ the only memory the next session has. Update it every commit.
         `scripted_data_converter_bound_input.riv` is exact at two samples after
         typed scripted conversion, bound converter inputs, shared artboard/
         state-machine converter instances, and one-time text paint-pool
-        allocation. Next is `scripting_linear_animation.riv`.
+        allocation. `scripting_linear_animation.riv` is exact at two samples
+        after scripted advance activation, instance-origin parity, opacity
+        cache invalidation, and per-object rebind ordering. Next is a fresh
+        structural audit of the ten remaining scripted divergences.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3798,6 +3801,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `scripting_linear_animation.riv` to scripted
+  exact and widened it from one to two samples. Scripted drawables now call
+  `advance(self, seconds)` with C++'s active-until-false lifecycle and
+  reactivate after input hydration. Scripted artboard instances honor the
+  `frameOrigin(false)` set by C++ cloning, nil view-model arguments remain nil,
+  render-opacity changes invalidate frames prepared before first update, and
+  rebind hydration/init runs per object to preserve clone allocation order.
+  Scripted compare moves to exact=16 / exact-segments=18 / diverges=10 /
+  unsupported-feature=1 with M8=1. Full regular and scripted compares,
+  `cargo test --workspace`, focused advance/cache tests, corpus regeneration,
+  formatting, and diff checks pass.
 
 - 2026-07-09: [M8] Promoted `scripted_data_context.riv` to scripted exact.
   Persistent nested artboard instances can now be visited without exposing

@@ -86,6 +86,7 @@ pub struct ArtboardInstance {
         BTreeMap<u32, RuntimeScriptInstanceHandle>,
     nested_script_owned_contexts: BTreeMap<u32, RuntimeOwnedViewModelInstance>,
     script_path_effect_globals: BTreeSet<u32>,
+    script_advances_active: BTreeSet<u32>,
     script_updates_pending: BTreeSet<u32>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
@@ -338,6 +339,7 @@ impl ArtboardInstance {
             scripted_data_converter_instances_by_global: BTreeMap::new(),
             nested_script_owned_contexts: BTreeMap::new(),
             script_path_effect_globals: BTreeSet::new(),
+            script_advances_active: BTreeSet::new(),
             script_updates_pending: BTreeSet::new(),
             nested_artboards,
             nested_artboard_locals,
@@ -401,6 +403,10 @@ impl ArtboardInstance {
         global_id: u32,
         instance: Box<dyn ScriptInstance>,
     ) {
+        self.script_advances_active.remove(&global_id);
+        if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
+            self.script_advances_active.insert(global_id);
+        }
         self.script_instances_by_global
             .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
         self.script_updates_pending.insert(global_id);
@@ -438,6 +444,31 @@ impl ArtboardInstance {
         Ok(did_update)
     }
 
+    pub fn advance_script_instances(&mut self, seconds: f32) -> Result<bool, ScriptError> {
+        if seconds == 0.0 {
+            return Ok(false);
+        }
+        let active = std::mem::take(&mut self.script_advances_active);
+        let mut did_advance = false;
+        let mut host = NoopScriptHost;
+        for global_id in active {
+            let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+                continue;
+            };
+            let result = handle.borrow_mut().call_method(
+                ScriptMethod::Advance,
+                &[ScriptValue::Number(f64::from(seconds))],
+                &mut host,
+            )?;
+            if result == ScriptValue::Bool(true) {
+                self.script_advances_active.insert(global_id);
+                self.script_updates_pending.insert(global_id);
+                did_advance = true;
+            }
+        }
+        Ok(did_advance)
+    }
+
     /// Re-runs user `init` after C++ clears a scripted object's data context.
     pub fn reinitialize_script_instances(&mut self) -> Result<bool, ScriptError> {
         let mut did_initialize = false;
@@ -448,6 +479,9 @@ impl ArtboardInstance {
                 continue;
             }
             instance.call_method(ScriptMethod::Init, &[], &mut host)?;
+            if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
+                self.script_advances_active.insert(*global_id);
+            }
             self.script_updates_pending.insert(*global_id);
             did_initialize = true;
         }
@@ -466,10 +500,33 @@ impl ArtboardInstance {
                 continue;
             }
             instance.call_method_with_factory(ScriptMethod::Init, &[], &mut host, factory)?;
+            if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
+                self.script_advances_active.insert(*global_id);
+            }
             self.script_updates_pending.insert(*global_id);
             did_initialize = true;
         }
         Ok(did_initialize)
+    }
+
+    pub fn reinitialize_script_instance_with_factory(
+        &mut self,
+        global_id: u32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            return Ok(false);
+        };
+        let mut instance = handle.borrow_mut();
+        if !instance.has_method(ScriptMethod::Init)? {
+            return Ok(false);
+        }
+        instance.call_method_with_factory(ScriptMethod::Init, &[], &mut NoopScriptHost, factory)?;
+        if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
+            self.script_advances_active.insert(global_id);
+        }
+        self.script_updates_pending.insert(global_id);
+        Ok(true)
     }
 
     pub fn set_script_input_for_global(
@@ -484,6 +541,13 @@ impl ArtboardInstance {
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
         handle.borrow_mut().set_input(name, value)?;
+        if handle
+            .borrow_mut()
+            .has_method(ScriptMethod::Advance)
+            .unwrap_or(false)
+        {
+            self.script_advances_active.insert(global_id);
+        }
         self.script_updates_pending.insert(global_id);
         Ok(())
     }
@@ -500,6 +564,13 @@ impl ArtboardInstance {
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
         handle.borrow_mut().set_artboard_input(name, artboard)?;
+        if handle
+            .borrow_mut()
+            .has_method(ScriptMethod::Advance)
+            .unwrap_or(false)
+        {
+            self.script_advances_active.insert(global_id);
+        }
         self.script_updates_pending.insert(global_id);
         Ok(())
     }
@@ -516,6 +587,13 @@ impl ArtboardInstance {
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
         handle.borrow_mut().set_view_model_input(name, view_model)?;
+        if handle
+            .borrow_mut()
+            .has_method(ScriptMethod::Advance)
+            .unwrap_or(false)
+        {
+            self.script_advances_active.insert(global_id);
+        }
         self.script_updates_pending.insert(global_id);
         Ok(())
     }
@@ -1726,6 +1804,7 @@ impl ArtboardInstance {
             crate::constraints::apply_list_constraints(self, component_index);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+            let previous_opacity = self.components[component_index].transform.render_opacity;
             let opacity = self.authored_transform(local_id).opacity;
             let parent_opacity = self.components[component_index]
                 .parent_local
@@ -1734,6 +1813,9 @@ impl ArtboardInstance {
                 .map(|parent| parent.transform.render_opacity)
                 .unwrap_or(1.0);
             self.components[component_index].update_render_opacity(opacity, parent_opacity);
+            if self.components[component_index].transform.render_opacity != previous_opacity {
+                self.mark_render_opacity_changed();
+            }
         }
     }
 
@@ -3123,6 +3205,38 @@ mod tests {
         updates: Rc<Cell<usize>>,
     }
 
+    struct AdvanceScriptInstance {
+        advances: Rc<Cell<usize>>,
+    }
+
+    impl ScriptInstance for AdvanceScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Advance)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Advance);
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].as_number().map(|value| value as f32), Some(0.1));
+            let count = self.advances.get() + 1;
+            self.advances.set(count);
+            Ok(ScriptValue::Bool(count != 2))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
     impl ScriptInstance for UpdateScriptInstance {
         fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
             Ok(matches!(method, ScriptMethod::Init | ScriptMethod::Update))
@@ -3210,6 +3324,7 @@ mod tests {
             scripted_data_converter_instances_by_global: BTreeMap::new(),
             nested_script_owned_contexts: BTreeMap::new(),
             script_path_effect_globals: BTreeSet::new(),
+            script_advances_active: BTreeSet::new(),
             script_updates_pending: BTreeSet::new(),
             nested_artboards: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),
@@ -3284,6 +3399,57 @@ mod tests {
                 .expect("post-init update")
         );
         assert_eq!(updates.get(), 3);
+    }
+
+    #[test]
+    fn scripted_advances_stop_on_false_and_reactivate_on_input_change() {
+        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        let advances = Rc::new(Cell::new(0));
+        instance.set_script_instance_for_global(
+            7,
+            Box::new(AdvanceScriptInstance {
+                advances: Rc::clone(&advances),
+            }),
+        );
+
+        assert!(
+            instance
+                .advance_script_instances(0.1)
+                .expect("first advance")
+        );
+        assert!(
+            !instance
+                .advance_script_instances(0.1)
+                .expect("second advance")
+        );
+        assert!(
+            !instance
+                .advance_script_instances(0.1)
+                .expect("inactive advance")
+        );
+        assert_eq!(advances.get(), 2);
+
+        instance
+            .set_script_input_for_global(7, "value", ScriptValue::Number(2.0))
+            .expect("input update");
+        assert!(
+            instance
+                .advance_script_instances(0.1)
+                .expect("reactivated advance")
+        );
+        assert_eq!(advances.get(), 3);
+    }
+
+    #[test]
+    fn render_opacity_update_invalidates_a_prepared_zero_opacity_frame() {
+        let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        assert_eq!(instance.components[0].transform.render_opacity, 0.0);
+        let prepared_epoch = instance.prepared_epoch;
+
+        instance.update_component(0, ComponentDirt::RENDER_OPACITY);
+
+        assert_eq!(instance.components[0].transform.render_opacity, 1.0);
+        assert!(instance.prepared_epoch > prepared_epoch);
     }
 
     fn synthetic_component(local_id: usize, graph_order: usize) -> RuntimeComponent {

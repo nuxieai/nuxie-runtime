@@ -1496,6 +1496,30 @@ impl ArtboardInstance {
         paint_cache: &mut RuntimeRenderPaintCache,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        self.draw_prepared_static_artboard_with_render_cache_and_origin(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            renderer,
+            paint_cache,
+            path_cache,
+            true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_prepared_static_artboard_with_render_cache_and_origin(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        paint_cache: &mut RuntimeRenderPaintCache,
+        path_cache: &mut RuntimeRenderPathCache,
+        apply_origin_transform: bool,
+    ) -> Result<()> {
         // Seed the nested-artboard cycle guard with this artboard's global id.
         let nested_ancestors = BTreeSet::from([graph.global_id]);
         self.draw_prepared_static_artboard_internal_with_path_cache(
@@ -1510,7 +1534,7 @@ impl ArtboardInstance {
             path_cache,
             Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.nested_artboards),
-            true,
+            apply_origin_transform,
             &nested_ancestors,
         )
     }

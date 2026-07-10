@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
+  exact-segments=584, diverges=8, unsupported-feature=24, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=19 gated=6; the harness bucket is empty
-- Scripted compare: exact=7 / exact-segments=7 / diverges=0 /
-  unsupported-feature=19 across the 26 M8 scripting entries
+  M8=18 gated=6; the harness bucket is empty
+- Scripted compare: exact=8 / exact-segments=8 / diverges=0 /
+  unsupported-feature=18 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -3778,6 +3778,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `script_inputs_test_1.riv` to scripted-mode
+  exact by keeping both script generator execution and user `init` inside the
+  renderer factory scope, matching C++ support for `Paint.new` in either
+  phase. The runtime-neutral `ScriptInstance` seam now has a factory-aware
+  method-call fallback, and rebound script initialization uses it as well.
+  `scripted_as_path.riv` advances from `script-init-paint` to the narrower
+  `script-artboard-node` diagnostic. Scripted compare reports exact=8 /
+  exact-segments=8 / diverges=0 / unsupported-feature=18. Full compare
+  reports exact=263 / exact-segments=584 / diverges=8 /
+  unsupported-feature=24, and `cargo test --workspace` passes. Next target is
+  the newly exposed `script-artboard-node` slice.
 
 - 2026-07-09: [M8 scout] Rejected an oversized first attempt at the
   four-file `script-view-model` queue. Focused execution of

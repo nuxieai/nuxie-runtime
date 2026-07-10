@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use rive_binary::RuntimeFile;
 use rive_graph::ArtboardGraph;
+use rive_render_api::Factory as RenderFactory;
 
 use crate::RuntimeOwnedViewModelInstance;
 use crate::animation::{
@@ -424,6 +425,24 @@ impl ArtboardInstance {
                 continue;
             }
             instance.call_method(ScriptMethod::Init, &[], &mut host)?;
+            self.script_updates_pending.insert(*global_id);
+            did_initialize = true;
+        }
+        Ok(did_initialize)
+    }
+
+    pub fn reinitialize_script_instances_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let mut did_initialize = false;
+        let mut host = NoopScriptHost;
+        for (global_id, handle) in &self.script_instances_by_global {
+            let mut instance = handle.borrow_mut();
+            if !instance.has_method(ScriptMethod::Init)? {
+                continue;
+            }
+            instance.call_method_with_factory(ScriptMethod::Init, &[], &mut host, factory)?;
             self.script_updates_pending.insert(*global_id);
             did_initialize = true;
         }

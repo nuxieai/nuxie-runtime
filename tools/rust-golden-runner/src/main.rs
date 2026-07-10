@@ -15,7 +15,7 @@ use rive_runtime::{
 #[cfg(feature = "scripting")]
 use rive_runtime::{
     NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue,
-    ScriptingVm as RuntimeScriptingVm, preallocate_render_paint_cache_for_artboard_instance,
+    preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_source_render_paints,
 };
@@ -128,6 +128,8 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
         Some("script-artboard-advance")
     } else if message.contains("attempt to call missing method 'animation' of userdata") {
         Some("script-artboard-animation")
+    } else if message.contains("attempt to call missing method 'node' of userdata") {
+        Some("script-artboard-node")
     } else if message.contains("Paint allocation requires an active scripted draw context") {
         Some("script-init-paint")
     } else if message.contains("attempt to index nil with 'viewModel'")
@@ -1580,22 +1582,14 @@ fn initialize_scripted_drawables(
                 local_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = if local_object.type_name == Some("ScriptedLayout") {
-            vm.instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
-        } else {
-            RuntimeScriptingVm::instantiate_script(
-                &mut vm,
-                &script.name,
-                &script.payload,
-                &mut host,
-            )
-        }
-        .with_context(|| {
-            format!(
-                "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
-                script.name, local_object.global_id
-            )
-        })?;
+        let mut script_instance = vm
+            .instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
+            .with_context(|| {
+                format!(
+                    "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
+                    script.name, local_object.global_id
+                )
+            })?;
         let defer_cold_hydration = scripted_object_has_view_model_input(
             runtime,
             artboard,
@@ -1616,7 +1610,7 @@ fn initialize_scripted_drawables(
                 .context("failed to inspect script init method")?
             {
                 script_instance
-                    .call_method(ScriptMethod::Init, &[], &mut host)
+                    .call_method_with_factory(ScriptMethod::Init, &[], &mut host, factory)
                     .with_context(|| {
                         format!(
                             "script init failed for ScriptedDrawable global {}",
@@ -1825,7 +1819,7 @@ fn rebind_scripted_drawables(
     }
     if owned_view_model_context.is_some() {
         instance
-            .reinitialize_script_instances()
+            .reinitialize_script_instances_with_factory(factory)
             .context("scripted drawable rebind init failed")?;
     } else {
         instance

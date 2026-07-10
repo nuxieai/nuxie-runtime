@@ -501,6 +501,17 @@ impl ScriptInstance for LuaScriptInstance {
         Ok(script_value_from_lua(value).map_err(script_error)?)
     }
 
+    fn call_method_with_factory(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+        host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<ScriptValue, ScriptError> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || self.call_method(method, args, host))
+    }
+
     fn call_draw(
         &mut self,
         factory: &mut dyn RenderFactory,

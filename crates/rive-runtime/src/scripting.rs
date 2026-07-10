@@ -253,6 +253,17 @@ pub trait ScriptInstance {
         host: &mut dyn ScriptHost,
     ) -> Result<ScriptValue, ScriptError>;
 
+    fn call_method_with_factory(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+        host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<ScriptValue, ScriptError> {
+        let _ = factory;
+        self.call_method(method, args, host)
+    }
+
     fn call_draw(
         &mut self,
         factory: &mut dyn RenderFactory,

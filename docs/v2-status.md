@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M8=19 gated=6; the harness bucket is empty
-- Scripted compare: exact=6 / exact-segments=6 / diverges=1 /
+- Scripted compare: exact=7 / exact-segments=7 / diverges=0 /
   unsupported-feature=19 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -3778,6 +3778,23 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8 scout] Rejected an oversized first attempt at the
+  four-file `script-view-model` queue. Focused execution of
+  `viewmodel_from_instance.riv` established that its first `Data.Child`
+  failure is not a bounded constructor-only slice: reaching the next stable
+  diagnostic requires file-level `Data` constructors, mutable string/number
+  property userdata, `context:viewModel()` lifecycle handoff, named
+  `ScriptedViewModel:instance`, and binding a constructed view model through
+  `Artboard:instance(viewModel)`. A roughly 500-line cross-crate prototype
+  exercised that complete chain through the artboard-instance call but still
+  ended on a later nil property and moved no exact segment. It was fully
+  backed out rather than committed without an end condition. The clean-tree
+  `make scripted-golden-compare` baseline remains exact=7 /
+  exact-segments=7 / diverges=0 / unsupported-feature=19. Do not restart this
+  queue as independent API stubs; return with one corpus-backed vertical
+  artboard/view-model binding design. Next target is the bounded two-file
+  `script-init-paint` queue.
 
 - 2026-07-09: [M8] Promoted `data_binding_artboards_test.riv` to
   scripted-mode exact, eliminating the final scripted stream divergence.

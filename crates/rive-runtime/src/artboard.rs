@@ -125,6 +125,7 @@ pub struct ArtboardInstance {
     pub(crate) draw_order_epoch: u64,
     pub(crate) did_change: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
+    pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -397,6 +398,7 @@ impl ArtboardInstance {
             draw_order_epoch: 1,
             did_change: true,
             layout_constraint_bounds_enabled,
+            layout_constraint_bounds: None,
         };
         instance.apply_initial_layout_component_display_collapses();
         let nested_host_locals = instance.nested_artboard_locals.clone();
@@ -1424,6 +1426,11 @@ impl ArtboardInstance {
             return;
         }
         self.layout_constraint_bounds_enabled = true;
+        self.layout_constraint_bounds = self.runtime_graph().and_then(|graph| {
+            self.runtime_taffy_layout_bounds(graph, self.runtime_file())
+                .map(Arc::new)
+        });
+        self.enqueue_artboard_parametric_layout_control_sources();
         let layout_locals = self
             .components
             .iter()
@@ -3476,6 +3483,7 @@ mod tests {
             draw_order_epoch: 1,
             did_change: true,
             layout_constraint_bounds_enabled: false,
+            layout_constraint_bounds: None,
         }
     }
 

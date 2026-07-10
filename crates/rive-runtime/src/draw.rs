@@ -3960,6 +3960,16 @@ impl ArtboardInstance {
         }
     }
 
+    pub(crate) fn runtime_parametric_path_layout_control_size(
+        &self,
+        path_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<(f32, f32)> {
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file())?;
+        let control_size = self.runtime_layout_control_size_for_path(path_local, &layout_bounds)?;
+        Some((control_size.width, control_size.height))
+    }
+
     fn runtime_weighted_path_context(
         &self,
         path: &PathGeometryNode,

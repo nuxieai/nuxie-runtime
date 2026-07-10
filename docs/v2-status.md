@@ -645,15 +645,16 @@ the only memory the next session has. Update it every commit.
         an empty scripted effect. `script_create_text_runs.riv` is exact at
         two samples after nested width-fill leaves gained the referenced
         artboard's intrinsic content width as their flex basis. The sole
-        runnable divergence, `data_viz_demo.riv`, now emits 16 of C++'s 18
-        post-layout gradient rebuilds after nested layout hosts activate child
-        layout-constraint bounds and run a second paint-preparation pass. The
-        four LineBars horizontal rebuilds match C++'s 276.666656 endpoint
-        exactly. Next close the two remaining facts: Circles' weighted vertical
-        shape length is 115.158203 instead of 113.158203, and LineBars' two
-        vertical world-dirty gradients retain their initial shaders instead of
-        rebuilding. Component-list instancing remains the sole explicit
-        scripted unsupported gap.
+        runnable divergence, `data_viz_demo.riv`, now matches C++'s complete
+        construction and post-layout gradient preamble through shaders 89-106
+        within the comparator's float epsilon. Nested layout hosts retain the
+        solved layout map for constraints and publish ParametricPath control
+        sizes as live sources, producing all 18 rebuilds in C++ allocation
+        order. The first structural mismatch has moved past `sample seconds=0`
+        to root background/clip rendering: C++ emits feathered background and
+        clip-path topology while Rust emits a plain rectangle without feather
+        state. Component-list instancing remains the sole explicit scripted
+        unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3833,6 +3834,22 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Matched the complete post-layout gradient preamble in
+  `data_viz_demo.riv`. Nested instances now retain their authoritative Taffy
+  layout map for constraint world transforms and local bounds, and mirror
+  C++ `ParametricPath::controlSize` by publishing solved width/height through
+  live target-to-source bindings when layout activates. Focused Rust output
+  reaches C++'s 1758 lines and allocates all 18 shaders in the same order;
+  the four LineBars horizontal endpoints differ by only 0.000031, within the
+  existing float epsilon. The first structural mismatch is now after
+  `sample seconds=0`, at root background/clip rendering. Scripted compare
+  remains exact=25 / exact-segments=33 / diverges=1 /
+  unsupported-feature=1; regular compare remains exact=263 /
+  exact-segments=584 / diverges=26 / unsupported-feature=6.
+  `cargo test --workspace`, both golden compares, formatting, trace search,
+  and diff checks pass. Next: port the C++ feathered root background/clip
+  draw envelope exercised by this file.
 
 - 2026-07-10: [M8] Recovered 16 of the 18 missing post-layout gradient
   rebuilds in the sole scripted divergence, `data_viz_demo.riv`. Nested

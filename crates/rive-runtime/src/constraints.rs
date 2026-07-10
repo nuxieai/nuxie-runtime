@@ -1469,7 +1469,11 @@ fn target_transform_for_transform_constraint(
         && component.type_name == "LayoutComponent"
         && let Some(graph) = artboard.runtime_graph()
     {
-        artboard.runtime_layout_component_world_transform(component.local_id, graph)
+        artboard.runtime_component_world_transform_with_bounds(
+            component.local_id,
+            graph,
+            artboard.layout_constraint_bounds.as_deref(),
+        )
     } else {
         component.transform.world_transform
     };
@@ -1489,7 +1493,11 @@ fn constraint_bounds(artboard: &ArtboardInstance, component_index: usize) -> (f3
         && component.type_name == "LayoutComponent"
         && let Some(graph) = artboard.runtime_graph()
     {
-        let bounds = artboard.runtime_layout_component_bounds(component.local_id, graph);
+        let bounds = artboard
+            .layout_constraint_bounds
+            .as_deref()
+            .and_then(|bounds| bounds.get(&component.local_id).copied())
+            .unwrap_or_else(|| artboard.runtime_layout_component_bounds(component.local_id, graph));
         return (0.0, 0.0, bounds.width, bounds.height);
     }
     if component.type_name == "Text"

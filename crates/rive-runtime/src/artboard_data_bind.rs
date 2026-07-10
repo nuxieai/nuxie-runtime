@@ -73,6 +73,12 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
         ("TrimPath", "start") => cached_runtime_data_bind_property_key!("TrimPath", "start"),
         ("TrimPath", "end") => cached_runtime_data_bind_property_key!("TrimPath", "end"),
         ("Shape", "length") => cached_runtime_data_bind_property_key!("Shape", "length"),
+        ("ParametricPath", "width") => {
+            cached_runtime_data_bind_property_key!("ParametricPath", "width")
+        }
+        ("ParametricPath", "height") => {
+            cached_runtime_data_bind_property_key!("ParametricPath", "height")
+        }
         ("FormulaTokenValue", "operationValue") => {
             cached_runtime_data_bind_property_key!("FormulaTokenValue", "operationValue")
         }
@@ -3376,12 +3382,58 @@ impl ArtboardInstance {
         property: RuntimeArtboardNumericSourceProperty,
     ) -> Option<f32> {
         match property {
-            RuntimeArtboardNumericSourceProperty::DirectDouble => {
-                self.double_property(target_local_id, property_key)
-            }
+            RuntimeArtboardNumericSourceProperty::DirectDouble => self
+                .layout_constraint_bounds_enabled
+                .then(|| {
+                    let graph = self.runtime_graph()?;
+                    graph.paths.iter().find(|path| {
+                        path.local_id == target_local_id && path.parametric.is_some()
+                    })?;
+                    let (width, height) =
+                        self.runtime_parametric_path_layout_control_size(target_local_id, graph)?;
+                    if runtime_data_bind_property_key_for_name("ParametricPath", "width")
+                        == Some(property_key)
+                    {
+                        Some(width)
+                    } else if runtime_data_bind_property_key_for_name("ParametricPath", "height")
+                        == Some(property_key)
+                    {
+                        Some(height)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .or_else(|| self.double_property(target_local_id, property_key)),
             RuntimeArtboardNumericSourceProperty::ShapeLength => self
                 .runtime_graph()
                 .and_then(|graph| self.artboard_shape_length(target_local_id, graph)),
+        }
+    }
+
+    pub(crate) fn enqueue_artboard_parametric_layout_control_sources(&mut self) {
+        let Some(graph) = self.runtime_graph() else {
+            return;
+        };
+        let indices = self
+            .artboard_numeric_source_bindings
+            .iter()
+            .enumerate()
+            .filter_map(|(index, binding)| {
+                (matches!(
+                    binding.property,
+                    RuntimeArtboardNumericSourceProperty::DirectDouble
+                ) && graph.paths.iter().any(|path| {
+                    path.local_id == binding.target_local_id && path.parametric.is_some()
+                }) && self
+                    .runtime_parametric_path_layout_control_size(binding.target_local_id, graph)
+                    .is_some())
+                .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        for index in indices {
+            self.artboard_data_bind_source_queues
+                .enqueue_numeric_source(index);
         }
     }
 

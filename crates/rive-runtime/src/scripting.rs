@@ -578,6 +578,35 @@ pub fn bound_script_input_value(
     }
 }
 
+/// Resolves a data-bound `ScriptInputArtboard` to its referenced artboard id.
+pub fn bound_script_artboard_input(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    input: &RuntimeObject,
+) -> Option<u64> {
+    if input.type_name != "ScriptInputArtboard" {
+        return None;
+    }
+    let property_key = property_key_for_name(input.type_name, "artboardId")?;
+    let data_bind = (0..file.object_count()).find_map(|id| {
+        let data_bind = file.object(id)?;
+        (data_bind.type_name == "DataBindContext"
+            && data_bind.uint_property("propertyKey") == Some(u64::from(property_key))
+            && file
+                .data_bind_target_for_object(data_bind)
+                .is_some_and(|target| target.id == input.id)
+            && file
+                .data_bind_to_target_for_object(data_bind)
+                .unwrap_or(false))
+        .then_some(data_bind)
+    })?;
+    let source_path = file.data_bind_context_resolved_source_path_ids_for_object(data_bind)?;
+    let name_based = file
+        .data_bind_is_name_based_for_object(data_bind)
+        .unwrap_or(false);
+    context.artboard_value_by_context_source_path(file, &[], &source_path, name_based)
+}
+
 /// Resolves a `ScriptInputViewModelProperty` after its scripted object has a
 /// data context. C++ treats hydration as all-or-nothing, so `None` means the
 /// caller must defer every input and user `init`, not install a nil stand-in.

@@ -364,6 +364,8 @@ fn run() -> Result<String> {
     let mut draw_elapsed = Duration::ZERO;
     let mut current_seconds = 0.0;
     let mut next_input = 0;
+    #[cfg(feature = "scripting")]
+    let mut bound_script_artboards = BTreeMap::new();
     for _ in 0..options.benchmark_repeat {
         for sample in &options.samples {
             while next_input < input_events.len()
@@ -409,6 +411,15 @@ fn run() -> Result<String> {
             })?;
             #[cfg(feature = "scripting")]
             if let Some(state) = script_artboard_render_state.as_ref() {
+                refresh_bound_script_artboard_inputs(
+                    &runtime,
+                    artboard,
+                    &graph.artboards,
+                    &mut instance,
+                    state,
+                    owned_view_model_context.as_ref(),
+                    &mut bound_script_artboards,
+                )?;
                 state.borrow_mut().realize_pending(
                     &runtime,
                     &graph.artboards,
@@ -460,6 +471,69 @@ fn run() -> Result<String> {
     } else {
         Ok(factory.stream())
     }
+}
+
+#[cfg(feature = "scripting")]
+fn refresh_bound_script_artboard_inputs(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    instance: &mut ArtboardInstance,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
+    current_artboards: &mut BTreeMap<u32, u64>,
+) -> Result<()> {
+    let Some(context) = owned_view_model_context else {
+        return Ok(());
+    };
+    for global_id in artboard_object_range(runtime, artboard, artboards) {
+        let Some(input) = runtime.object(global_id) else {
+            continue;
+        };
+        if input.type_name != "ScriptInputArtboard" {
+            continue;
+        }
+        let Some(parent_local_id) = input
+            .uint_property("parentId")
+            .and_then(|id| usize::try_from(id).ok())
+        else {
+            continue;
+        };
+        let Some(scripted_global_id) = artboard
+            .local_objects
+            .iter()
+            .find(|object| object.local_id == parent_local_id)
+            .map(|object| object.global_id)
+        else {
+            continue;
+        };
+        let Some(bound_artboard_id) =
+            rive_runtime::bound_script_artboard_input(runtime, context, input)
+        else {
+            continue;
+        };
+        let authored_artboard_id = input.uint_property("artboardId").unwrap_or(u64::MAX);
+        let current_artboard_id = current_artboards
+            .entry(input.id)
+            .or_insert(authored_artboard_id);
+        if *current_artboard_id == bound_artboard_id {
+            continue;
+        }
+        let artboard_index = usize::try_from(bound_artboard_id)
+            .context("bound script artboard id does not fit usize")?;
+        let script_artboard =
+            RunnerScriptArtboard::new(runtime, artboards, artboard_index, Rc::clone(render_state))?;
+        let name = input.string_property("name").unwrap_or_default();
+        instance
+            .set_script_artboard_input_for_global(
+                scripted_global_id,
+                name,
+                Box::new(script_artboard),
+            )
+            .with_context(|| format!("failed to update bound artboard script input '{name}'"))?;
+        *current_artboard_id = bound_artboard_id;
+    }
+    Ok(())
 }
 
 struct BenchmarkTimings {

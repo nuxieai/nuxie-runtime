@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=18 / exact-segments=21 / diverges=8 /
+- Scripted compare: exact=19 / exact-segments=22 / diverges=7 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -623,11 +623,13 @@ the only memory the next session has. Update it every commit.
         cache invalidation, and per-object rebind ordering. A fresh structural
         audit promoted `gamepad_test.riv` at two samples and
         `viewmodel_instance_to_artboard.riv` at its exact initial sample. The
-        eight remaining divergences split into resource allocation (three),
+        initial eight divergences split into resource allocation (three),
         text shaping (two), transform/context, gradient state, and feather
-        draw envelopes. Next is the shared resource-allocation family:
-        `data_bind_artboard_input.riv`, `replace_view_model.riv`, and
-        `viewmodel_from_instance.riv`.
+        draw envelopes. `data_bind_artboard_input.riv` is now exact after
+        adding runtime resolution and post-advance propagation for data-bound
+        `ScriptInputArtboard` values. Next is the remaining allocation pair,
+        `replace_view_model.riv` and `viewmodel_from_instance.riv`, now treated
+        as separate lifecycle investigations rather than one assumed family.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3807,6 +3809,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `data_bind_artboard_input.riv` to scripted exact.
+  `rive-runtime` now resolves `ScriptInputArtboard.artboardId` data binds from
+  the owning view-model context, and the scripted runner propagates changed
+  artboard references after scene advancement without rerunning user `init`,
+  matching C++ `ScriptInputArtboard::updateArtboard`. The focused stream now
+  allocates the replacement artboard paint at the same point and draws the
+  view-model-selected child color. A `0.1` widening was rejected because it
+  exposes a separate later context mutation. Scripted compare moves to
+  exact=19 / exact-segments=22 / diverges=7 / unsupported-feature=1 with
+  M8=1. Full regular and scripted compares, `cargo test --workspace`, corpus
+  regeneration, formatting, and diff checks pass. Next is the remaining
+  allocation pair as separate lifecycle gaps.
 
 - 2026-07-09: [M8] Re-audited all ten remaining scripted divergences and
   promoted `gamepad_test.riv` plus `viewmodel_instance_to_artboard.riv` to

@@ -17,8 +17,9 @@ use rive_render_api::{
     RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
 };
 use rive_runtime::{
-    RuntimeContourMeasure, RuntimePathMeasure, ScriptArtboard, ScriptNode,
-    ScriptPaint as RuntimeScriptPaint, runtime_path_commands_from_raw_path,
+    RuntimeContourMeasure, RuntimePathMeasure, ScriptAnimation, ScriptAnimationTime,
+    ScriptArtboard, ScriptNode, ScriptPaint as RuntimeScriptPaint,
+    runtime_path_commands_from_raw_path,
 };
 
 use super::view_model::{create_scripted_view_model, model_from_table};
@@ -170,6 +171,38 @@ struct ScriptedArtboard {
     artboard: Rc<RefCell<Box<dyn ScriptArtboard>>>,
 }
 
+struct ScriptedAnimation {
+    artboard: Rc<RefCell<Box<dyn ScriptArtboard>>>,
+    animation: ScriptAnimation,
+}
+
+impl UserData for ScriptedAnimation {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("duration", |_, this| Ok(this.animation.duration()));
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("advance", |_, this, seconds: f32| {
+            this.artboard
+                .borrow_mut()
+                .advance_animation(&mut this.animation, seconds)
+                .map_err(|error| Error::runtime(error.to_string()))
+        });
+        for (name, mode) in [
+            ("setTime", ScriptAnimationTime::Seconds),
+            ("setTimeFrames", ScriptAnimationTime::Frames),
+            ("setTimePercentage", ScriptAnimationTime::Percentage),
+        ] {
+            methods.add_method_mut(name, move |_, this, value: f32| {
+                this.artboard
+                    .borrow_mut()
+                    .set_animation_time(&mut this.animation, value, mode)
+                    .map_err(|error| Error::runtime(error.to_string()))
+            });
+        }
+    }
+}
+
 impl ScriptedArtboard {
     fn new(artboard: Box<dyn ScriptArtboard>) -> Self {
         Self {
@@ -220,6 +253,20 @@ impl UserData for ScriptedArtboard {
                 .borrow_mut()
                 .advance(seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
+        });
+        methods.add_method("animation", |lua, this, name: String| {
+            let animation = this
+                .artboard
+                .borrow()
+                .animation(&name)
+                .map_err(|error| Error::runtime(error.to_string()))?;
+            Ok(match animation {
+                Some(animation) => Value::UserData(lua.create_userdata(ScriptedAnimation {
+                    artboard: Rc::clone(&this.artboard),
+                    animation,
+                })?),
+                None => Value::Nil,
+            })
         });
         methods.add_method("node", |lua, this, name: String| {
             let node = this

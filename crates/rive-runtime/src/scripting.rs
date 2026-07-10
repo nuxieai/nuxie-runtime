@@ -10,7 +10,7 @@ use rive_render_api::{
 };
 
 use crate::properties::property_key_for_name;
-use crate::{ArtboardInstance, RuntimeOwnedViewModelInstance};
+use crate::{ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelInstance};
 
 /// Runtime-owned scripting error type.
 ///
@@ -479,6 +479,71 @@ pub struct NoopScriptHost;
 
 impl ScriptHost for NoopScriptHost {}
 
+/// Runtime-owned linear-animation handle exposed to scripts.
+///
+/// Coarsely translated from `ScriptedAnimation` in
+/// `/Users/levi/dev/oss/rive-runtime/src/lua/lua_artboards.cpp`.
+#[derive(Debug, Clone)]
+pub struct ScriptAnimation {
+    instance: LinearAnimationInstance,
+    duration: f32,
+    fps: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptAnimationTime {
+    Seconds,
+    Frames,
+    Percentage,
+}
+
+impl ScriptAnimation {
+    pub fn named(artboard: &ArtboardInstance, name: &str) -> Option<Self> {
+        let (index, animation) = artboard
+            .linear_animations()
+            .iter()
+            .enumerate()
+            .find(|(_, animation)| animation.name.as_deref() == Some(name))?;
+        Some(Self {
+            instance: artboard.linear_animation_instance(index)?,
+            duration: animation.duration as f32 / animation.fps as f32,
+            fps: animation.fps as f32,
+        })
+    }
+
+    pub fn duration(&self) -> f32 {
+        self.duration
+    }
+
+    pub fn advance(&mut self, artboard: &mut ArtboardInstance, seconds: f32) -> bool {
+        let keep_going = artboard.advance_linear_animation_instance(&mut self.instance, seconds);
+        artboard.apply_linear_animation_instance(&self.instance, 1.0);
+        keep_going
+    }
+
+    pub fn set_time(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        value: f32,
+        mode: ScriptAnimationTime,
+    ) {
+        let seconds = match mode {
+            ScriptAnimationTime::Seconds => value,
+            ScriptAnimationTime::Frames => value / self.fps,
+            ScriptAnimationTime::Percentage => value * self.duration,
+        };
+        let Some(animation) = artboard
+            .linear_animation(self.instance.animation_index())
+            .cloned()
+        else {
+            return;
+        };
+        self.instance
+            .set_time(&animation, animation.global_to_local_seconds(seconds));
+        artboard.apply_linear_animation_instance(&self.instance, 1.0);
+    }
+}
+
 /// Runtime-owned artboard userdata exposed to scripts.
 pub trait ScriptArtboard {
     fn width(&self) -> f32;
@@ -499,6 +564,27 @@ pub trait ScriptArtboard {
 
     fn advance(&mut self, _seconds: f32) -> Result<bool, ScriptError> {
         Ok(false)
+    }
+
+    fn animation(&self, _name: &str) -> Result<Option<ScriptAnimation>, ScriptError> {
+        Ok(None)
+    }
+
+    fn advance_animation(
+        &mut self,
+        _animation: &mut ScriptAnimation,
+        _seconds: f32,
+    ) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
+
+    fn set_animation_time(
+        &mut self,
+        _animation: &mut ScriptAnimation,
+        _value: f32,
+        _mode: ScriptAnimationTime,
+    ) -> Result<(), ScriptError> {
+        Ok(())
     }
 
     fn node(&self, _name: &str) -> Result<Option<ScriptNode>, ScriptError> {

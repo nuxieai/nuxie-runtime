@@ -1532,6 +1532,31 @@ impl ScriptArtboard for RunnerScriptArtboard {
         Ok(changed)
     }
 
+    fn animation(
+        &self,
+        name: &str,
+    ) -> std::result::Result<Option<rive_runtime::ScriptAnimation>, ScriptError> {
+        Ok(rive_runtime::ScriptAnimation::named(&self.instance, name))
+    }
+
+    fn advance_animation(
+        &mut self,
+        animation: &mut rive_runtime::ScriptAnimation,
+        seconds: f32,
+    ) -> std::result::Result<bool, ScriptError> {
+        Ok(animation.advance(&mut self.instance, seconds))
+    }
+
+    fn set_animation_time(
+        &mut self,
+        animation: &mut rive_runtime::ScriptAnimation,
+        value: f32,
+        mode: rive_runtime::ScriptAnimationTime,
+    ) -> std::result::Result<(), ScriptError> {
+        animation.set_time(&mut self.instance, value, mode);
+        Ok(())
+    }
+
     fn node(
         &self,
         name: &str,

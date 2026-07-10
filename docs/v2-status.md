@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=19, unsupported-feature=13, not-yet=0
+  exact-segments=584, diverges=20, unsupported-feature=12, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=7 gated=6; the harness bucket is empty
-- Scripted compare: exact=11 / exact-segments=11 / diverges=8 /
-  unsupported-feature=7 across the 26 M8 scripting entries
+  M8=6 gated=6; the harness bucket is empty
+- Scripted compare: exact=11 / exact-segments=11 / diverges=9 /
+  unsupported-feature=6 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -527,7 +527,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. M0-M7 remain complete; M8 is active. The current ratchet passes at
-   exact=263 / exact-segments=584 / diverges=19 / unsupported-feature=13;
+   exact=263 / exact-segments=584 / diverges=20 / unsupported-feature=12;
    `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
@@ -3786,6 +3786,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Ported the complete C++ `ScriptedAnimation` Lua class:
+  `Artboard:animation(name)` now returns a runtime-owned animation handle with
+  `duration`, `advance`, `setTime`, `setTimeFrames`, and
+  `setTimePercentage`, and each mutation immediately applies to its owning
+  scripted artboard. `scripting_linear_animation.riv` advances from the
+  `script-artboard-animation` gate to runnable divergence; its focused sample
+  differs only in the known backboard signed-zero serialization. Scripted
+  compare reports exact=11 / exact-segments=11 / diverges=9 /
+  unsupported-feature=6. Full compare reports exact=263 /
+  exact-segments=584 / diverges=20 / unsupported-feature=12 with parked M8=6
+  / gated=6; `cargo test --workspace`, corpus regeneration, formatting, and
+  diff checks pass. Next target is the largest coherent family in the six-file
+  M8 queue.
 
 - 2026-07-09: [M8] Narrowed the static text preflight for the corpus-backed
   `Shape.x`/`Shape.y` plus `ScriptedDataConverter` pair and admitted

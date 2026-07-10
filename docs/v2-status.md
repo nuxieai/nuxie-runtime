@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=27, unsupported-feature=5, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5; the M8 and harness buckets are empty
-- Scripted compare: exact=11 / exact-segments=11 / diverges=16 /
+- Scripted compare: exact=13 / exact-segments=13 / diverges=14 /
   unsupported-feature=0 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -568,8 +568,8 @@ the only memory the next session has. Update it every commit.
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
         `make scripted-golden-compare` now builds mode-specific C++/Rust
-        binaries and ratchets all 26 M8 entries: eleven exact streams, one
-        runnable divergence, and fourteen verified feature diagnostics. The
+        binaries and ratchets all 27 M8 entries: thirteen exact streams and
+        fourteen runnable divergences, with no unsupported diagnostics. The
         C++ `Vector` static table is ported, advancing
         `script_affects_has_changed.riv` to a stream divergence. The harness
         bucket is empty: scripted loading selects the
@@ -604,9 +604,12 @@ the only memory the next session has. Update it every commit.
         divergence. Recursive `TargetEffect`/`GroupEffect` routing and the
         corpus-used `Mat2D` multiplication operator make `group_effect.riv`
         exact. The gated `reuse_path_in_effect.riv` fixture now reports the
-        narrower `script-path-commands` capability gap. The next M8 scripting
-        slice is the four-file `script-view-model` bucket; fourteen named
-        diagnostics remain.
+        narrower `script-path-commands` capability gap. Corpus re-audit also
+        promoted `scripted_viewmodel_cache.riv` and `viewmodel_access.riv`,
+        whose complete streams differ only within the established numeric
+        tolerance. The next M8 scripting slice is the remaining constructed
+        view-model/data-context family, beginning with
+        `script_create_viewmodel_instance.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3786,6 +3789,17 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Re-audited the stale scripted view-model queue and promoted
+  `scripted_viewmodel_cache.riv` plus `viewmodel_access.riv` to scripted exact.
+  Their complete command streams have matching topology and differ only by
+  signed zero and ordinary f32 noise already covered by the repository's
+  numeric comparison policy. Scripted compare moves from exact=11 /
+  exact-segments=11 / diverges=16 to exact=13 / exact-segments=13 /
+  diverges=14, with unsupported-feature=0. No runtime behavior changed; corpus
+  regeneration, the scripted golden compare, formatting, and diff checks pass.
+  The next real gap is the constructed view-model/data-context family led by
+  `script_create_viewmodel_instance.riv`.
 
 - 2026-07-09: [M8] Ported the import-time half of C++ `Text::updateList`:
   serialized list references now hydrate shared ordered item identities with

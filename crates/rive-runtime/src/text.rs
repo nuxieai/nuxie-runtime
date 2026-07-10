@@ -3452,7 +3452,12 @@ fn next_cpp_unordered_bucket_count(current: usize, desired: usize) -> usize {
     if current == 0 {
         return 2;
     }
-    next_prime((current * 2).max(desired))
+    // Guard the rehash growth `current * 2` against usize overflow: in debug it
+    // panics, in release it wraps -- a build-dependent divergence. Bucket counts
+    // are bounded by the real element (glyph/run) count, so saturation is
+    // unreachable on any input; saturating_mul just makes debug and release
+    // agree deterministically.
+    next_prime(current.saturating_mul(2).max(desired))
 }
 
 fn next_prime(mut value: usize) -> usize {
@@ -3466,8 +3471,12 @@ fn is_prime(value: usize) -> bool {
     if value < 2 {
         return false;
     }
-    let mut divisor = 2;
-    while divisor * divisor <= value {
+    let mut divisor = 2usize;
+    // `divisor * divisor` can overflow usize when `value` is near usize::MAX
+    // (divisor climbs toward sqrt(value)); saturating_mul makes the last
+    // comparison `saturated > value` cleanly false and exits the loop, whereas a
+    // wrapping product could wrap below `value` and loop past the real sqrt.
+    while divisor.saturating_mul(divisor) <= value {
         if value % divisor == 0 {
             return false;
         }

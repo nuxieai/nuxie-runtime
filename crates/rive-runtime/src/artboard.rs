@@ -1849,6 +1849,26 @@ impl ArtboardInstance {
         layout_local: usize,
         ancestor_changed: bool,
     ) -> bool {
+        // Cycle guard: this and collapse_component_tree_with_ancestor recurse
+        // mutually over parent_local-derived children, which a malformed-but-
+        // accepted file can make cyclic -> unbounded recursion. Thread a visited
+        // set (C++'s DependencySorter::visit idiom, src/dependency_sorter.cpp);
+        // on a valid file every component has one parent, so each local is
+        // visited at most once and the guard is a no-op.
+        let mut visited = BTreeSet::new();
+        self.propagate_layout_component_display_collapse_with_ancestor_guarded(
+            layout_local,
+            ancestor_changed,
+            &mut visited,
+        )
+    }
+
+    fn propagate_layout_component_display_collapse_with_ancestor_guarded(
+        &mut self,
+        layout_local: usize,
+        ancestor_changed: bool,
+        visited: &mut BTreeSet<usize>,
+    ) -> bool {
         let display_hidden =
             self.layout_component_style_local(layout_local)
                 .and_then(|style_local| {
@@ -1869,10 +1889,11 @@ impl ArtboardInstance {
 
         let mut changed = false;
         for child_local in children {
-            changed |= self.collapse_component_tree_with_ancestor(
+            changed |= self.collapse_component_tree_with_ancestor_guarded(
                 child_local,
                 collapsed,
                 ancestor_changed,
+                visited,
             );
         }
         changed
@@ -2299,6 +2320,29 @@ impl ArtboardInstance {
         collapsed: bool,
         ancestor_changed: bool,
     ) -> bool {
+        // Cycle guard entry point: see
+        // propagate_layout_component_display_collapse_with_ancestor.
+        let mut visited = BTreeSet::new();
+        self.collapse_component_tree_with_ancestor_guarded(
+            local_id,
+            collapsed,
+            ancestor_changed,
+            &mut visited,
+        )
+    }
+
+    fn collapse_component_tree_with_ancestor_guarded(
+        &mut self,
+        local_id: usize,
+        collapsed: bool,
+        ancestor_changed: bool,
+        visited: &mut BTreeSet<usize>,
+    ) -> bool {
+        // Cycle guard: see propagate_layout_component_display_collapse_with_
+        // ancestor. Skip a local already visited on this propagation walk.
+        if !visited.insert(local_id) {
+            return false;
+        }
         let changed_here = self.collapse_component(local_id, collapsed);
         let mut changed = changed_here;
         if ancestor_changed && !collapsed {
@@ -2316,9 +2360,10 @@ impl ArtboardInstance {
             // display:none state into the value pushed onto children.
             Some("Artboard" | "LayoutComponent") => {
                 changed
-                    | self.propagate_layout_component_display_collapse_with_ancestor(
+                    | self.propagate_layout_component_display_collapse_with_ancestor_guarded(
                         local_id,
                         ancestor_changed || changed_here,
+                        visited,
                     )
             }
             _ => {
@@ -2329,10 +2374,11 @@ impl ArtboardInstance {
                     .map(|component| component.local_id)
                     .collect::<Vec<_>>();
                 for child in children {
-                    changed |= self.collapse_component_tree_with_ancestor(
+                    changed |= self.collapse_component_tree_with_ancestor_guarded(
                         child,
                         collapsed,
                         ancestor_changed || changed_here,
+                        visited,
                     );
                 }
                 changed

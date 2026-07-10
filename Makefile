@@ -36,6 +36,34 @@ check:
 test:
 	cargo test --workspace
 
+# --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------
+# The runtime crates opt into the panic-freedom clippy lints
+# (clippy::unwrap_used / indexing_slicing / arithmetic_side_effects):
+# - LINT_GATE_DENY_CRATES are fully clean and pin the lints at DENY in their
+#   own [lints.clippy] tables -- clippy alone fails the gate on a violation.
+# - LINT_GATE_WARN_CRATES inherit the workspace table at WARN (root
+#   Cargo.toml); their remaining own-src warning counts are printed here so
+#   regressions are visible in review. Move a crate into the deny list (and
+#   switch its lints table to the deny form) once its counts reach zero.
+# Library targets only (src/); deliberately NOT tests and NOT tools/ or
+# rive-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
+# flags leak to dependency crates; the per-crate lints tables scope correctly.
+LINT_GATE_DENY_CRATES = rive rive-schema
+LINT_GATE_WARN_CRATES = rive-runtime rive-binary rive-graph rive-capi
+
+.PHONY: lint-gate
+lint-gate:
+	@set -e; \
+	for crate in $(LINT_GATE_DENY_CRATES); do \
+		echo "== lint-gate (deny): $$crate =="; \
+		cargo clippy -p $$crate --lib --quiet; \
+	done; \
+	for crate in $(LINT_GATE_WARN_CRATES); do \
+		count=$$(cargo clippy -p $$crate --lib --quiet 2>&1 \
+			| grep -c -- "--> crates/$$crate/src" || true); \
+		echo "== lint-gate (warn): $$crate -- $$count own-src warning sites =="; \
+	done
+
 inspect:
 	@cargo run --quiet -p rive-binary --bin riv-inspect -- fixtures/graph/dependency_test.riv
 
@@ -140,30 +168,24 @@ fuzz-build:
 # fuzz/regressions/README.md), which would wedge the gate. Fixed-bug
 # regressions are checked explicitly via `make fuzz-regressions`.
 
-# Smoke gate: build all targets, then exercise them. This is a gate that proves
-# the harness builds and runs end-to-end -- it is NOT a full fuzzing campaign
-# (use `make fuzz` for that). fuzz_import (parser only, no known hangs) gets a
-# short timed mutation burst. fuzz_runtime/fuzz_pointer are run as a
-# DETERMINISTIC seed replay (-runs=0) rather than timed mutation, because the
-# runtime pipeline currently has open input-dependent HANG findings (unbounded
-# parent/reference-chain walks; see fuzz/regressions/README.md) that a timed
-# mutation run rediscovers within seconds, which would make the gate flaky. The
-# -timeout guard still turns any hang into a hard failure.
+# Smoke gate: build all targets, then exercise each with a short timed mutation
+# burst. This is a gate that proves the harness builds and runs end-to-end -- it
+# is NOT a full fuzzing campaign (use `make fuzz` for that).
+#
+# NOTE: fuzz_runtime/fuzz_pointer were temporarily switched to a deterministic
+# seed replay (-runs=0) while the runtime pipeline had open input-dependent HANG
+# findings (unbounded parent/reference-chain walks) that a timed mutation run
+# rediscovered within seconds. Those cycle-guard findings are now FIXED (see
+# fuzz/regressions/README.md and v2-status item 27), so all targets are back to
+# timed mutation. The -timeout guard still turns any residual hang into a hard
+# failure.
 fuzz-smoke: fuzz-build
 	@set -e; for target in $(FUZZ_TARGETS); do \
-		if [ "$$target" = "fuzz_import" ]; then \
-			echo "== fuzz-smoke: $$target (timed $(FUZZ_SMOKE_SECONDS)s) =="; \
-			( cd $(FUZZ_DIR) && mkdir -p corpus/$$target && $(FUZZ_CARGO) fuzz run \
-				$$target corpus/$$target seeds/$$target -- \
-				-max_total_time=$(FUZZ_SMOKE_SECONDS) -timeout=$(FUZZ_TIMEOUT) \
-				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
-		else \
-			echo "== fuzz-smoke: $$target (seed replay) =="; \
-			( cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz run \
-				$$target seeds/$$target -- \
-				-runs=0 -timeout=$(FUZZ_TIMEOUT) \
-				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
-		fi; \
+		echo "== fuzz-smoke: $$target (timed $(FUZZ_SMOKE_SECONDS)s) =="; \
+		( cd $(FUZZ_DIR) && mkdir -p corpus/$$target && $(FUZZ_CARGO) fuzz run \
+			$$target corpus/$$target seeds/$$target -- \
+			-max_total_time=$(FUZZ_SMOKE_SECONDS) -timeout=$(FUZZ_TIMEOUT) \
+			-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
 	done
 
 # Longer local campaign for a single target. Example:

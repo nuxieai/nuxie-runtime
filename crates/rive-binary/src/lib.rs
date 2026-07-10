@@ -6953,7 +6953,16 @@ fn cpp_view_model_instance_value_symbol(
         return Some(VIEW_MODEL_SYMBOL_ITEM_INDEX);
     }
 
-    let symbol = property.uint_property("symbolTypeValue").unwrap_or(0) as u8;
+    // `symbolTypeValue` is a ViewModel data-type discriminant whose domain is
+    // the small RuntimeDataType enum (0..=12, plus 99/100) -- always <= 255. A
+    // value that does not fit in u8 can only come from a malformed file, so we
+    // treat it as "no symbol" (0) via u8::try_from rather than silently
+    // truncating with `as u8`. For every in-domain value try_from is identical
+    // to the old cast, so valid files are unaffected.
+    let symbol = property
+        .uint_property("symbolTypeValue")
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(0);
     (symbol != 0).then_some(symbol)
 }
 
@@ -12603,10 +12612,19 @@ fn decode_cpp_manifest_paths(
     Ok(())
 }
 
+// Manifest name/path maps are keyed by a *signed* int in C++
+// (`DataResolver::resolveName(int id)`, include/rive/data_resolver.hpp). The
+// runtime id arrives as an unsigned var-uint, so we deliberately reinterpret the
+// low 32 bits as i32 (`as i32` is a bit-preserving truncate/reinterpret in Rust,
+// NOT saturating) to match C++'s key space exactly -- an id above i32::MAX must
+// wrap to the same negative key on both insert and lookup. Insert path.
 fn cpp_manifest_key(value: u64) -> i32 {
     value as i32
 }
 
+// Lookup counterpart to cpp_manifest_key: same intentional u32->i32
+// reinterpret, so `resolve_*` finds keys inserted by decode_cpp_manifest_*.
+// See cpp_manifest_key above and the pinning test cpp_manifest_key_reinterpret.
 fn cpp_manifest_resolver_key(value: u32) -> i32 {
     value as i32
 }
@@ -12732,5 +12750,47 @@ impl<'a> BinaryReader<'a> {
 
             shift = shift.wrapping_add(7);
         }
+    }
+}
+
+#[cfg(test)]
+mod manifest_key_tests {
+    use super::{cpp_manifest_key, cpp_manifest_resolver_key};
+
+    // Pins the intentional u32->i32 (and u64->i32) manifest-key reinterpret.
+    // C++ keys its manifest name/path maps by a signed `int`
+    // (DataResolver::resolveName(int)), so we reinterpret the unsigned runtime id
+    // bit-for-bit rather than saturating. The insert key (cpp_manifest_key) and
+    // the lookup key (cpp_manifest_resolver_key) MUST agree for any id, including
+    // ids above i32::MAX that wrap negative -- otherwise resolve_name/_path would
+    // miss entries decode_cpp_manifest_* inserted.
+    #[test]
+    fn manifest_key_reinterpret_is_bit_preserving_and_consistent() {
+        // In-range ids are unchanged.
+        assert_eq!(cpp_manifest_key(0), 0);
+        assert_eq!(cpp_manifest_resolver_key(0), 0);
+        assert_eq!(cpp_manifest_key(1), 1);
+        assert_eq!(cpp_manifest_resolver_key(7), 7);
+        assert_eq!(cpp_manifest_key(u64::from(i32::MAX as u32)), i32::MAX);
+
+        // Ids above i32::MAX reinterpret (wrap) to a negative key, NOT saturate.
+        assert_eq!(cpp_manifest_key(u64::from(u32::MAX)), -1);
+        assert_eq!(cpp_manifest_resolver_key(u32::MAX), -1);
+        assert_eq!(cpp_manifest_key(0x8000_0000), i32::MIN);
+        assert_eq!(cpp_manifest_resolver_key(0x8000_0000), i32::MIN);
+
+        // Insert key and lookup key agree for every u32 id (the load-bearing
+        // property): decode inserts with cpp_manifest_key, resolve reads with
+        // cpp_manifest_resolver_key.
+        for id in [0u32, 1, 42, i32::MAX as u32, 0x8000_0000, u32::MAX] {
+            assert_eq!(
+                cpp_manifest_key(u64::from(id)),
+                cpp_manifest_resolver_key(id)
+            );
+        }
+
+        // cpp_manifest_key only inspects the low 32 bits (mirrors C++ truncating
+        // the var-uint into an int); the high bits of the u64 do not shift it.
+        assert_eq!(cpp_manifest_key(0xFFFF_FFFF_0000_0001), 1);
     }
 }

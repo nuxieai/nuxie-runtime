@@ -95,6 +95,9 @@ impl<'a> Artboard<'a> {
     }
 
     pub fn graph(self) -> &'a ArtboardGraph {
+        // Safe by construction: every Artboard is created with an index bounds-
+        // checked against this same vec (artboards()/artboard()/artboard_named()).
+        #[allow(clippy::indexing_slicing)]
         &self.file.graph.artboards[self.index]
     }
 

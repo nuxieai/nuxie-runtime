@@ -797,6 +797,19 @@ impl RuntimeLinearAnimation {
             }
             AnimationLoop::PingPong => {
                 let duration = self.duration_seconds();
+                // Guard zero-length animations. C++ (linear_animation.cpp:142-144)
+                // computes `(int)(seconds / durationSeconds())`, which is UB when
+                // durationSeconds()==0 (division by zero -> inf/NaN cast to int);
+                // Rust instead saturates the cast (inf->i32::MAX, NaN->0), a
+                // different-but-defined result. Neither is meaningful. Since
+                // duration_seconds() == (end - start).abs(), a zero duration means
+                // start_seconds() == end_seconds(), so both ping-pong branches
+                // collapse to that single frame. Return it directly -- a
+                // documented deterministic choice (the C++ value is UB and not
+                // reliably reproducible).
+                if duration == 0.0 {
+                    return self.start_seconds();
+                }
                 let local_time = positive_mod(seconds, duration);
                 let direction = (seconds / duration) as i32 % 2;
                 if direction == 0 {
@@ -1610,5 +1623,32 @@ mod tests {
 
         assert_eq!(animation.start_seconds(), 0.0);
         assert_eq!(animation.duration_seconds(), 1.0);
+    }
+
+    #[test]
+    fn ping_pong_zero_duration_is_finite_and_deterministic() {
+        // duration==0 makes C++ compute (int)(seconds / 0) -> UB and Rust
+        // saturate an inf/NaN cast; guard collapses both branches to the single
+        // frame. Must never return NaN/inf regardless of the sampled second.
+        let animation = RuntimeLinearAnimation {
+            global_id: 1,
+            name: None,
+            fps: 60,
+            duration: 0,
+            speed: 1.0,
+            loop_value: 2, // PingPong
+            work_start: 0,
+            work_end: 0,
+            enable_work_area: false,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+        };
+
+        assert_eq!(animation.duration_seconds(), 0.0);
+        for seconds in [-2.0_f32, -0.5, 0.0, 0.5, 2.0, 1000.0] {
+            let local = animation.global_to_local_seconds(seconds);
+            assert!(local.is_finite(), "local time not finite for {seconds}");
+            assert_eq!(local, animation.start_seconds());
+        }
     }
 }

@@ -10,3 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rive = { path = "../rive" }
+
+# Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
+[lints]
+workspace = true

@@ -145,3 +145,27 @@ jobs:
 
       - name: Build and smoke-run fuzz targets
         run: make fuzz-smoke FUZZ_CARGO=cargo FUZZ_SMOKE_SECONDS=20
+
+  # Panic-freedom clippy gate for the SDK runtime crates (v2-status item 20
+  # #6). Self-contained: library targets only, no reference runtime needed.
+  # Denies clippy::unwrap_used / indexing_slicing / arithmetic_side_effects on
+  # the crates that are already clean and reports own-src warning counts for
+  # the rest; see the lint-gate target in the Makefile.
+  lint-gate:
+    name: Clippy lint gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable + clippy
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy --no-self-update
+          rustup default stable
+
+      - name: Run the clippy lint gate
+        run: make lint-gate

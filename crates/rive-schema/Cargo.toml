@@ -10,3 +10,12 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 serde_json = "1"
+
+# This crate is fully CLEAN on the workspace panic-freedom clippy lints (see
+# [workspace.lints.clippy] in the root Cargo.toml), so it pins them at DENY
+# here (a crate lints table cannot combine `workspace = true` with overrides).
+# `make lint-gate` / CI enforce this on the library target.
+[lints.clippy]
+unwrap_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"

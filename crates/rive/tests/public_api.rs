@@ -1,3 +1,11 @@
+// Test code is deliberately outside the panic-freedom lint gate (the crate
+// lints table denies these for src/; unwrap/indexing are fine in tests).
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+
 use rive::{File, RecordingFactory, StateMachineInputKind};
 use std::path::PathBuf;
 

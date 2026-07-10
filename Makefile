@@ -36,6 +36,34 @@ check:
 test:
 	cargo test --workspace
 
+# --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------
+# The runtime crates opt into the panic-freedom clippy lints
+# (clippy::unwrap_used / indexing_slicing / arithmetic_side_effects):
+# - LINT_GATE_DENY_CRATES are fully clean and pin the lints at DENY in their
+#   own [lints.clippy] tables -- clippy alone fails the gate on a violation.
+# - LINT_GATE_WARN_CRATES inherit the workspace table at WARN (root
+#   Cargo.toml); their remaining own-src warning counts are printed here so
+#   regressions are visible in review. Move a crate into the deny list (and
+#   switch its lints table to the deny form) once its counts reach zero.
+# Library targets only (src/); deliberately NOT tests and NOT tools/ or
+# rive-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
+# flags leak to dependency crates; the per-crate lints tables scope correctly.
+LINT_GATE_DENY_CRATES = rive rive-schema
+LINT_GATE_WARN_CRATES = rive-runtime rive-binary rive-graph rive-capi
+
+.PHONY: lint-gate
+lint-gate:
+	@set -e; \
+	for crate in $(LINT_GATE_DENY_CRATES); do \
+		echo "== lint-gate (deny): $$crate =="; \
+		cargo clippy -p $$crate --lib --quiet; \
+	done; \
+	for crate in $(LINT_GATE_WARN_CRATES); do \
+		count=$$(cargo clippy -p $$crate --lib --quiet 2>&1 \
+			| grep -c -- "--> crates/$$crate/src" || true); \
+		echo "== lint-gate (warn): $$crate -- $$count own-src warning sites =="; \
+	done
+
 inspect:
 	@cargo run --quiet -p rive-binary --bin riv-inspect -- fixtures/graph/dependency_test.riv
 

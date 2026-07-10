@@ -21,6 +21,23 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rive-app/rive-rust"
 
+# Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).
+# Opted into per-crate via `lints.workspace = true` by the SDK runtime crates
+# only (rive-runtime, rive-binary, rive-graph, rive-schema, rive, rive-capi) --
+# NOT the tools/ crates and NOT rive-scripting (active external work area).
+# These are `[lints.clippy]` entries, so they fire only under `cargo clippy`
+# (no cargo build/check noise). All three sit at WARN because the pre-existing
+# site counts are far above one lane's fix budget (hundreds of indexing and
+# arithmetic sites, ~170 unwraps; see `make lint-gate`); `make lint-gate`
+# DENIES them per-crate wherever a crate is already clean (rive, rive-schema
+# today) and reports the counts for the rest so the ratchet direction is
+# visible. Escalate a lint to "deny" here once its last runtime-crate sites
+# are cleared.
+[workspace.lints.clippy]
+unwrap_used = "warn"
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

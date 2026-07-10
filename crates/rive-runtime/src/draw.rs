@@ -2647,6 +2647,15 @@ impl ArtboardInstance {
             main_sizes.push(size);
         }
 
+        // Parallel-length invariant: the loop above pushes exactly one entry
+        // into `main_sizes` and one into `fill_bases` per layout child, so both
+        // stay index-aligned with `layout_children`. The zip below and the
+        // `resolved_main_sizes[index]` indexing further down rely on this: a
+        // shorter `main_sizes` would silently truncate via zip, and a shorter
+        // `resolved_main_sizes` would panic on the index. Lock it so a future
+        // edit that adds an early `continue` fails loudly in debug/tests.
+        debug_assert_eq!(main_sizes.len(), layout_children.len());
+        debug_assert_eq!(fill_bases.len(), layout_children.len());
         let remaining = (main_available_after_gap - fixed_total).max(0.0);
         let resolved_main_sizes = layout_children
             .iter()
@@ -3115,6 +3124,14 @@ impl ArtboardInstance {
             })
             .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0));
         let child_count = layout_children.len() as f32;
+        // child_count is >= 2 here (guarded by the `layout_children.len() < 2`
+        // early return above), so the division below is safe. Guard it locally
+        // as well: the early return is ~40 lines away, and a future edit that
+        // relaxes it must not silently reintroduce an `x / 0.0` NaN into the
+        // returned layout bounds. Bail gracefully (no simple-layout bounds).
+        if child_count == 0.0 {
+            return None;
+        }
         let available_width =
             (self.width - padding_left - padding_right - gap * (child_count - 1.0)).max(0.0);
         let available_height = (self.height - padding_top - padding_bottom).max(0.0);

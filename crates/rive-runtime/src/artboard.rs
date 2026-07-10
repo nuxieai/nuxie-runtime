@@ -129,6 +129,7 @@ pub struct ArtboardInstance {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
+    pub(crate) render_cache_revision: u64,
     pub(crate) data_bind_resolved_path_ids: Option<Vec<u32>>,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
@@ -2262,7 +2263,24 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn set_nested_artboard_artboard_id(&mut self, local_id: usize, value: u64) -> bool {
-        let Some(nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
+        self.set_nested_artboard_artboard_id_with_force(local_id, value, false)
+    }
+
+    pub(crate) fn replace_nested_artboard_artboard_id(
+        &mut self,
+        local_id: usize,
+        value: u64,
+    ) -> bool {
+        self.set_nested_artboard_artboard_id_with_force(local_id, value, true)
+    }
+
+    fn set_nested_artboard_artboard_id_with_force(
+        &mut self,
+        local_id: usize,
+        value: u64,
+        force: bool,
+    ) -> bool {
+        let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
             let changed = self.nested_artboards.remove(&local_id).is_some();
             if changed {
                 self.remove_nested_artboard_local(local_id);
@@ -2272,13 +2290,23 @@ impl ArtboardInstance {
             }
             return changed;
         };
-        if self
-            .nested_artboards
-            .get(&local_id)
-            .is_some_and(|existing| existing.child.graph_global_id == nested.child.graph_global_id)
+        if !force
+            && self
+                .nested_artboards
+                .get(&local_id)
+                .is_some_and(|existing| {
+                    existing.child.graph_global_id == nested.child.graph_global_id
+                })
         {
             return false;
         }
+        nested.render_cache_revision = self.nested_artboards.get(&local_id).map_or(0, |existing| {
+            if existing.child.graph_global_id == nested.child.graph_global_id {
+                existing.render_cache_revision.saturating_add(1)
+            } else {
+                0
+            }
+        });
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
         self.artboard_owned_context_key = None;
@@ -2908,6 +2936,7 @@ fn build_runtime_nested_artboard_instance(
         build_nested_host_data_bind_source_local_slots(&child, &data_bind_source_locals_by_path);
     Ok(RuntimeNestedArtboardInstance {
         child,
+        render_cache_revision: 0,
         data_bind_resolved_path_ids,
         data_bind_property_source_locals,
         data_bind_image_source_locals,
@@ -3827,6 +3856,7 @@ mod tests {
                     vec![synthetic_component(10, 0)],
                     vec![10],
                 )),
+                render_cache_revision: 0,
                 data_bind_resolved_path_ids: None,
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),

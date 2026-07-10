@@ -848,7 +848,9 @@ impl ArtboardInstance {
         paint_by_global: &mut RuntimeRenderPaints,
         mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
         mut paint_preparation: Option<&mut Option<RuntimePaintPreparationFrame>>,
-        mut nested_paint_caches: Option<&mut BTreeMap<u64, RuntimeRenderPaintCache>>,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
         nested_ancestors: &BTreeSet<u32>,
@@ -1048,15 +1050,18 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut RuntimeRenderPaints,
         mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
-        nested_paint_caches: Option<&mut BTreeMap<u64, RuntimeRenderPaintCache>>,
+        nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         command: &RuntimeDrawCommand,
         nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
-        let referenced_artboard_global = command
+        let nested_instance = command
             .local_id
-            .and_then(|local_id| self.nested_artboards.get(&local_id))
+            .and_then(|local_id| self.nested_artboards.get(&local_id));
+        let referenced_artboard_global = nested_instance
             .map(|nested| nested.child.graph_global_id)
             .or(command.referenced_artboard_global)
             .context("nested artboard missing referenced artboard")?;
@@ -1078,6 +1083,7 @@ impl ArtboardInstance {
             command.global_id,
             command.local_id,
             referenced_artboard_global,
+            nested_instance.map_or(0, |nested| nested.render_cache_revision),
         );
         let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
         let child_paint_caches = match nested_paint_caches {
@@ -1216,7 +1222,9 @@ impl ArtboardInstance {
         paint_by_global: &mut RuntimeRenderPaints,
         mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
         _paint_preparation: Option<&mut Option<RuntimePaintPreparationFrame>>,
-        mut nested_paint_caches: Option<&mut BTreeMap<u64, RuntimeRenderPaintCache>>,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         commands: &[RuntimeDrawCommand],
@@ -1551,7 +1559,9 @@ impl ArtboardInstance {
         mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
         path_cache: &mut RuntimeRenderPathCache,
         mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
-        mut nested_paint_caches: Option<&mut BTreeMap<u64, RuntimeRenderPaintCache>>,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
         apply_origin_transform: bool,
         nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
@@ -5773,6 +5783,13 @@ pub struct RuntimeGradientStop {
     pub position: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeNestedRenderCacheKey {
+    host: u32,
+    referenced_artboard_global: u32,
+    instance_revision: u64,
+}
+
 #[derive(Default)]
 pub struct RuntimeRenderPaintCache {
     paints: RuntimeRenderPaints,
@@ -5780,7 +5797,7 @@ pub struct RuntimeRenderPaintCache {
     preparation: Option<RuntimePaintPreparationFrame>,
     images: RuntimeRenderImages,
     meshes: RuntimeMeshRenderBufferSlots,
-    nested_artboards: BTreeMap<u64, RuntimeRenderPaintCache>,
+    nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
 }
 
 #[derive(Default)]
@@ -6001,7 +6018,7 @@ pub struct RuntimeRenderPathCache {
     allocated_text_paint_pools: BTreeSet<(u32, usize, u32)>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
-    nested_artboards: BTreeMap<u64, RuntimeRenderPathCache>,
+    nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPathCache>,
     // Cycle guard for the component_world_transform_with_bounds <->
     // compute_component_world_transform_with_layout_bounds parent-walk
     // recursion: locals on the current walk. See the guard comment in
@@ -7639,6 +7656,7 @@ fn preallocate_artboard_mesh_render_buffer_tree_batch_into(
                 Some(local_object.global_id),
                 Some(local_object.local_id),
                 child_graph.global_id,
+                0,
             );
             let child_cache = cache.nested_artboards.entry(cache_key).or_default();
             preallocate_artboard_mesh_render_buffer_tree_batch_into(
@@ -7866,6 +7884,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
                 Some(local_object.global_id),
                 Some(local_object.local_id),
                 child_graph.global_id,
+                0,
             );
             let child_cache = cache.nested_artboards.entry(cache_key).or_default();
             preallocate_artboard_render_paint_tree_batch_into(
@@ -7924,11 +7943,16 @@ fn nested_render_cache_key(
     global_id: Option<u32>,
     local_id: Option<usize>,
     referenced_artboard_global: u32,
-) -> u64 {
+    instance_revision: u64,
+) -> RuntimeNestedRenderCacheKey {
     let host = global_id
         .or_else(|| local_id.and_then(|local_id| u32::try_from(local_id).ok()))
         .unwrap_or(referenced_artboard_global);
-    (u64::from(host) << 32) | u64::from(referenced_artboard_global)
+    RuntimeNestedRenderCacheKey {
+        host,
+        referenced_artboard_global,
+        instance_revision,
+    }
 }
 
 fn preallocate_render_paint(
@@ -8234,7 +8258,9 @@ fn runtime_draw_command(
     mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
-    nested_paint_caches: Option<&mut BTreeMap<u64, RuntimeRenderPaintCache>>,
+    nested_paint_caches: Option<
+        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    >,
     nested_ancestors: &BTreeSet<u32>,
 ) -> Result<()> {
     match command.kind {
@@ -9024,7 +9050,9 @@ fn runtime_draw_nested_artboard(
     mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
-    nested_paint_caches: Option<&mut BTreeMap<u64, RuntimeRenderPaintCache>>,
+    nested_paint_caches: Option<
+        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    >,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     nested_ancestors: &BTreeSet<u32>,
 ) -> Result<()> {
@@ -9036,9 +9064,10 @@ fn runtime_draw_nested_artboard(
         return Ok(());
     }
 
-    let referenced_artboard_global = command
+    let nested_instance = command
         .local_id
-        .and_then(|local_id| instance.nested_artboards.get(&local_id))
+        .and_then(|local_id| instance.nested_artboards.get(&local_id));
+    let referenced_artboard_global = nested_instance
         .map(|nested| nested.child.graph_global_id)
         .or(command.referenced_artboard_global)
         .context("nested artboard missing referenced artboard")?;
@@ -9061,10 +9090,7 @@ fn runtime_draw_nested_artboard(
         .local_id
         .and_then(|local_id| instance.component(local_id))
         .context("nested artboard host component is missing")?;
-    let persistent_child = command
-        .local_id
-        .and_then(|local_id| instance.nested_artboards.get(&local_id))
-        .map(|nested| nested.child.as_ref());
+    let persistent_child = nested_instance.map(|nested| nested.child.as_ref());
     let host_world = match command.object_kind {
         RuntimeDrawCommandObjectKind::NestedArtboardLayout => command
             .local_id
@@ -9114,6 +9140,7 @@ fn runtime_draw_nested_artboard(
         command.global_id,
         command.local_id,
         referenced_artboard_global,
+        nested_instance.map_or(0, |nested| nested.render_cache_revision),
     );
     let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
 
@@ -14392,11 +14419,16 @@ mod tests {
 
     #[test]
     fn nested_render_cache_key_includes_live_referenced_artboard() {
-        let authored = nested_render_cache_key(Some(33), Some(14), 105);
-        let rebound = nested_render_cache_key(Some(33), Some(14), 147);
+        let authored = nested_render_cache_key(Some(33), Some(14), 105, 0);
+        let rebound = nested_render_cache_key(Some(33), Some(14), 147, 0);
+        let replaced = nested_render_cache_key(Some(33), Some(14), 105, 1);
 
         assert_ne!(authored, rebound);
-        assert_eq!(authored, nested_render_cache_key(Some(33), Some(14), 105));
+        assert_ne!(authored, replaced);
+        assert_eq!(
+            authored,
+            nested_render_cache_key(Some(33), Some(14), 105, 0)
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=19 / exact-segments=22 / diverges=7 /
+- Scripted compare: exact=20 / exact-segments=24 / diverges=6 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -627,9 +627,10 @@ the only memory the next session has. Update it every commit.
         text shaping (two), transform/context, gradient state, and feather
         draw envelopes. `data_bind_artboard_input.riv` is now exact after
         adding runtime resolution and post-advance propagation for data-bound
-        `ScriptInputArtboard` values. Next is the remaining allocation pair,
-        `replace_view_model.riv` and `viewmodel_from_instance.riv`, now treated
-        as separate lifecycle investigations rather than one assumed family.
+        `ScriptInputArtboard` values. `replace_view_model.riv` is exact at two
+        samples after equal-ID context replacement gained one-shot child
+        replacement and instance-revision render caches. Next is the remaining
+        allocation lifecycle gap, `viewmodel_from_instance.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3809,6 +3810,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `replace_view_model.riv` to scripted exact and
+  widened it from one to two samples. Nested-artboard artboard-value bindings
+  now distinguish initial context establishment from replacement of an
+  already-retained context, force one equal-ID child rebuild on the latter,
+  and remain idempotent across subsequent data-bind passes. Same-graph child
+  replacements carry an instance revision in paint/path cache identity, so
+  their fresh render resources match C++ without invalidating changed-graph
+  or unrelated caches. Scripted compare moves to exact=20 /
+  exact-segments=24 / diverges=6 / unsupported-feature=1 with M8=1. Full
+  regular and scripted compares, `cargo test --workspace`, corpus
+  regeneration, formatting, and diff checks pass. Next is the separate
+  `viewmodel_from_instance.riv` allocation lifecycle gap.
 
 - 2026-07-09: [M8] Promoted `data_bind_artboard_input.riv` to scripted exact.
   `rive-runtime` now resolves `ScriptInputArtboard.artboardId` data binds from

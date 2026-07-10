@@ -879,6 +879,7 @@ pub(super) struct RuntimeArtboardNestedHostBindingInstance {
     property: RuntimeArtboardNestedHostProperty,
     path: Vec<u32>,
     owned_context_source_path: Option<Vec<usize>>,
+    artboard_value_applied: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1559,6 +1560,7 @@ pub(super) fn build_artboard_nested_host_bindings(
                 property,
                 path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
                 owned_context_source_path: None,
+                artboard_value_applied: true,
             })
         })
         .collect()
@@ -2748,6 +2750,7 @@ impl ArtboardInstance {
         {
             return false;
         }
+        let replacing_owned_context = self.artboard_owned_context_key.is_some();
         self.artboard_owned_context_key = Some(RuntimeArtboardOwnedContextKey::from_context_chain(
             context,
             context_chain,
@@ -2763,6 +2766,9 @@ impl ArtboardInstance {
         }
         for binding in &mut self.artboard_nested_host_bindings {
             binding.owned_context_source_path = None;
+            if replacing_owned_context {
+                binding.artboard_value_applied = false;
+            }
         }
         for binding in &mut self.artboard_text_list_bindings {
             binding.source = None;
@@ -3947,20 +3953,35 @@ impl ArtboardInstance {
     fn apply_artboard_nested_host_bindings(&mut self) -> bool {
         let mut changed = false;
         for index in 0..self.artboard_nested_host_bindings.len() {
-            let Some((target_local_id, property, value)) = self
+            let Some((target_local_id, property, value, first_artboard_apply)) = self
                 .artboard_nested_host_bindings
-                .get(index)
+                .get_mut(index)
                 .and_then(|binding| {
-                    self.artboard_data_bind_values
-                        .get(&binding.path)
-                        .cloned()
-                        .map(|value| (binding.target_local_id, binding.property, value))
+                    let value = self.artboard_data_bind_values.get(&binding.path)?.clone();
+                    let first_artboard_apply =
+                        matches!(
+                            (binding.property, &value),
+                            (
+                                RuntimeArtboardNestedHostProperty::ArtboardId { .. },
+                                RuntimeDataBindGraphValue::Artboard(_)
+                            )
+                        ) && !std::mem::replace(&mut binding.artboard_value_applied, true);
+                    Some((
+                        binding.target_local_id,
+                        binding.property,
+                        value,
+                        first_artboard_apply,
+                    ))
                 })
             else {
                 continue;
             };
-            changed |=
-                self.apply_artboard_nested_host_binding_value(target_local_id, property, &value);
+            changed |= self.apply_artboard_nested_host_binding_value(
+                target_local_id,
+                property,
+                &value,
+                first_artboard_apply,
+            );
         }
         changed
     }
@@ -3970,6 +3991,7 @@ impl ArtboardInstance {
         target_local_id: usize,
         property: RuntimeArtboardNestedHostProperty,
         value: &RuntimeDataBindGraphValue,
+        first_artboard_apply: bool,
     ) -> bool {
         match (property, value) {
             (
@@ -3978,8 +4000,11 @@ impl ArtboardInstance {
             ) => {
                 let property_changed =
                     self.set_uint_property(target_local_id, property_key, *value);
-                let artboard_changed =
-                    self.set_nested_artboard_artboard_id(target_local_id, *value);
+                let artboard_changed = if first_artboard_apply && !property_changed {
+                    self.replace_nested_artboard_artboard_id(target_local_id, *value)
+                } else {
+                    self.set_nested_artboard_artboard_id(target_local_id, *value)
+                };
                 property_changed || artboard_changed
             }
             (

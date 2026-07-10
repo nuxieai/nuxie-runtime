@@ -3062,7 +3062,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
         // CustomPropertyNumberBase::propertyValuePropertyKey in C++ generated/custom_property_number_base.hpp.
         && data_bind.property_key == 243
         && (data_bind.converter_global.is_none()
-            || data_bind.converter_type_name == Some("DataConverterGroup"))
+            || matches!(
+                data_bind.converter_type_name,
+                Some("DataConverterGroup" | "DataConverterFormula")
+            ))
     {
         return true;
     }
@@ -3119,6 +3122,14 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
         || (data_bind.target_type_name == Some("Node")
             // WorldTransformComponentBase::opacityPropertyKey in C++ generated/world_transform_component_base.hpp.
             && data_bind.property_key == 18
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("NestedArtboard")
+            // NestedArtboard inherits NodeBase::x/yPropertyKey.
+            && matches!(data_bind.property_key, 13 | 14)
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("NestedArtboard")
+            // NestedArtboardBase::artboardIdPropertyKey.
+            && data_bind.property_key == 197
             && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Rectangle")
             // ParametricPathBase::widthPropertyKey/heightPropertyKey in C++ generated/shapes/parametric_path_base.hpp.

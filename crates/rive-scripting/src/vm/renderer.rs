@@ -16,7 +16,7 @@ use rive_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, RawPath,
     RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
 };
-use rive_runtime::ScriptArtboard;
+use rive_runtime::{ScriptArtboard, ScriptNode, ScriptPaint as RuntimeScriptPaint};
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
@@ -203,6 +203,17 @@ impl UserData for ScriptedArtboard {
                 .map_err(|error| Error::runtime(error.to_string()))?;
             lua.create_userdata(ScriptedArtboard::new(instance))
         });
+        methods.add_method("node", |lua, this, name: String| {
+            let node = this
+                .artboard
+                .borrow()
+                .node(&name)
+                .map_err(|error| Error::runtime(error.to_string()))?;
+            Ok(match node {
+                Some(node) => Value::UserData(lua.create_userdata(ScriptedNode::new(node))?),
+                None => Value::Nil,
+            })
+        });
         methods.add_method_mut("draw", |_, this, args: MultiValue| {
             let arg_types = args
                 .iter()
@@ -339,6 +350,14 @@ impl ScriptedPath {
         }
     }
 
+    fn from_raw_path(raw_path: RawPath) -> Self {
+        Self {
+            raw_path,
+            dirty: true,
+            render_path: None,
+        }
+    }
+
     fn mark_dirty(&mut self) {
         self.dirty = true;
     }
@@ -362,6 +381,55 @@ impl ScriptedPath {
             .as_ref()
             .expect("render path is initialized")
             .as_ref()
+    }
+}
+
+struct ScriptedNode {
+    path: Option<RawPath>,
+    paint: Option<RuntimeScriptPaint>,
+}
+
+impl ScriptedNode {
+    fn new(node: ScriptNode) -> Self {
+        Self {
+            path: node.path,
+            paint: node.paint,
+        }
+    }
+}
+
+impl UserData for ScriptedNode {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("asPath", |lua, this, ()| {
+            Ok(match this.path.clone() {
+                Some(path) => {
+                    Value::UserData(lua.create_userdata(ScriptedPath::from_raw_path(path))?)
+                }
+                None => Value::Nil,
+            })
+        });
+        methods.add_method("asPaint", |lua, this, ()| {
+            Ok(match this.paint {
+                Some(paint) => Value::UserData(lua.create_userdata(ScriptedPaintData(paint))?),
+                None => Value::Nil,
+            })
+        });
+    }
+}
+
+struct ScriptedPaintData(RuntimeScriptPaint);
+
+impl UserData for ScriptedPaintData {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("style", |_, this| Ok(style_name(this.0.style)));
+        fields.add_field_method_get("join", |_, this| Ok(join_name(this.0.join)));
+        fields.add_field_method_get("cap", |_, this| Ok(cap_name(this.0.cap)));
+        fields.add_field_method_get("thickness", |_, this| Ok(this.0.thickness));
+        fields.add_field_method_get("blendMode", |_, this| {
+            Ok(blend_mode_name(this.0.blend_mode))
+        });
+        fields.add_field_method_get("feather", |_, this| Ok(this.0.feather));
+        fields.add_field_method_get("color", |_, this| Ok(this.0.color));
     }
 }
 

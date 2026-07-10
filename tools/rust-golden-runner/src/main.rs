@@ -174,6 +174,11 @@ fn run() -> Result<String> {
         .iter()
         .any(|object| object.type_name == Some("ScriptedLayout"));
     #[cfg(feature = "scripting")]
+    let has_script_artboard_input = artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("ScriptInputArtboard"));
+    #[cfg(feature = "scripting")]
     let (script_artboard_render_state, mut paint_cache) = if has_scripted_layout {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         let state = initialize_scripted_drawables_and_realize(
@@ -189,6 +194,29 @@ fn run() -> Result<String> {
             &graph.artboards,
             factory.as_factory(),
         );
+        (state, cache)
+    } else if has_script_artboard_input {
+        let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
+        let state = initialize_scripted_drawables(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            factory.as_factory(),
+        )
+        .context("failed to initialize scripted drawables")?;
+        let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            factory.as_factory(),
+        );
+        if let Some(state) = state.as_ref() {
+            state
+                .borrow_mut()
+                .realize_pending(&runtime, &graph.artboards, factory.as_factory())
+                .context("failed to allocate initialized script artboard paints")?;
+        }
         (state, cache)
     } else {
         let cache = rive_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
@@ -1446,6 +1474,23 @@ impl ScriptArtboard for RunnerScriptArtboard {
                 Rc::clone(&self.render_state),
             )
             .map_err(|error| ScriptError::new(error.to_string()))?,
+        ))
+    }
+
+    fn node(
+        &self,
+        name: &str,
+    ) -> std::result::Result<Option<rive_runtime::ScriptNode>, ScriptError> {
+        let graph = self.artboards.get(self.artboard_index).ok_or_else(|| {
+            ScriptError::new(format!(
+                "missing scripted artboard index {}",
+                self.artboard_index
+            ))
+        })?;
+        Ok(rive_runtime::script_node_for_artboard(
+            &self.instance,
+            graph,
+            name,
         ))
     }
 

@@ -4,10 +4,13 @@ use std::rc::Rc;
 use std::{error::Error, fmt};
 
 use rive_binary::{RuntimeFile, RuntimeObject};
-use rive_render_api::{Factory as RenderFactory, Renderer};
+use rive_graph::{ArtboardGraph, ShapePaintKind, ShapePaintStateNode};
+use rive_render_api::{
+    BlendMode, Factory as RenderFactory, RawPath, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin,
+};
 
-use crate::RuntimeOwnedViewModelInstance;
 use crate::properties::property_key_for_name;
+use crate::{ArtboardInstance, RuntimeOwnedViewModelInstance};
 
 /// Runtime-owned scripting error type.
 ///
@@ -98,6 +101,108 @@ pub enum ScriptValue {
     String(String),
     Vec2 { x: f32, y: f32 },
     Vec3 { x: f32, y: f32, z: f32 },
+}
+
+/// Runtime-owned node data exposed by C++ `ScriptedArtboard::node`.
+#[derive(Debug, Clone)]
+pub struct ScriptNode {
+    pub path: Option<RawPath>,
+    pub paint: Option<ScriptPaint>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ScriptPaint {
+    pub style: RenderPaintStyle,
+    pub color: u32,
+    pub thickness: f32,
+    pub join: StrokeJoin,
+    pub cap: StrokeCap,
+    pub feather: f32,
+    pub blend_mode: BlendMode,
+}
+
+/// Ports the lookup/snapshot portion of C++ `src/lua/lua_artboards.cpp`'s
+/// `ScriptedNode`, leaving userdata construction to the scripting backend.
+pub fn script_node_for_artboard(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    name: &str,
+) -> Option<ScriptNode> {
+    let component = graph.component_named(name)?;
+    let path = graph
+        .paths
+        .iter()
+        .find(|path| path.local_id == component.local_id)
+        // C++ exposes the retained `Path::rawPath()` at lookup time. Before
+        // the child artboard's first update that path is intentionally empty.
+        .map(|_| RawPath::new());
+    let paint = graph
+        .shape_paint_containers
+        .iter()
+        .flat_map(|container| &container.paints)
+        .find(|paint| paint.local_id == component.local_id)
+        .map(|paint| {
+            let object = instance
+                .runtime_file()
+                .and_then(|file| file.object(paint.global_id as usize));
+            let authored_color = match paint.paint_state {
+                Some(ShapePaintStateNode::SolidColor { color }) => color,
+                _ => 0xff000000,
+            };
+            let color = paint
+                .mutator_local
+                .zip(property_key_for_name("SolidColor", "colorValue"))
+                .and_then(|(local_id, key)| instance.color_property(local_id, key))
+                .unwrap_or(authored_color);
+            ScriptPaint {
+                style: match paint.paint_type {
+                    ShapePaintKind::Stroke => RenderPaintStyle::Stroke,
+                    _ => RenderPaintStyle::Fill,
+                },
+                color,
+                thickness: object
+                    .and_then(|object| object.double_property("thickness"))
+                    .unwrap_or(1.0),
+                join: match object.and_then(|object| object.uint_property("join")) {
+                    Some(1) => StrokeJoin::Round,
+                    Some(2) => StrokeJoin::Bevel,
+                    _ => StrokeJoin::Miter,
+                },
+                cap: match object.and_then(|object| object.uint_property("cap")) {
+                    Some(1) => StrokeCap::Round,
+                    Some(2) => StrokeCap::Square,
+                    _ => StrokeCap::Butt,
+                },
+                feather: paint
+                    .feather
+                    .as_ref()
+                    .map(|feather| feather.strength)
+                    .unwrap_or(0.0),
+                blend_mode: script_blend_mode(paint.blend_mode_value),
+            }
+        });
+    Some(ScriptNode { path, paint })
+}
+
+fn script_blend_mode(value: u32) -> BlendMode {
+    match value {
+        14 => BlendMode::Screen,
+        15 => BlendMode::Overlay,
+        16 => BlendMode::Darken,
+        17 => BlendMode::Lighten,
+        18 => BlendMode::ColorDodge,
+        19 => BlendMode::ColorBurn,
+        20 => BlendMode::HardLight,
+        21 => BlendMode::SoftLight,
+        22 => BlendMode::Difference,
+        23 => BlendMode::Exclusion,
+        24 => BlendMode::Multiply,
+        25 => BlendMode::Hue,
+        26 => BlendMode::Saturation,
+        27 => BlendMode::Color,
+        28 => BlendMode::Luminosity,
+        _ => BlendMode::SrcOver,
+    }
 }
 
 /// A runtime-neutral snapshot of a bound view-model exposed to Luau.
@@ -234,6 +339,10 @@ pub trait ScriptArtboard {
     fn set_frame_origin(&mut self, frame_origin: bool);
 
     fn instance(&self) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
+
+    fn node(&self, _name: &str) -> Result<Option<ScriptNode>, ScriptError> {
+        Ok(None)
+    }
 
     fn draw(
         &mut self,

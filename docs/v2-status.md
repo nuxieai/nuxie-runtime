@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=8, unsupported-feature=24, not-yet=0
+  exact-segments=584, diverges=9, unsupported-feature=23, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=18 gated=6; the harness bucket is empty
-- Scripted compare: exact=8 / exact-segments=8 / diverges=0 /
-  unsupported-feature=18 across the 26 M8 scripting entries
+  M8=17 gated=6; the harness bucket is empty
+- Scripted compare: exact=9 / exact-segments=9 / diverges=0 /
+  unsupported-feature=17 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -3778,6 +3778,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `scripted_as_path.riv` to scripted-mode exact by
+  porting the corpus-backed `ScriptedArtboard::node`, `ScriptedNode::asPath`,
+  and `ScriptedNode::asPaint` surface from C++ `src/lua/lua_artboards.cpp`.
+  The runtime seam returns VM-neutral path/paint snapshots; Luau wraps them as
+  node, path, and read-only paint-data userdata. Script-artboard input paint
+  allocation now follows C++ lifecycle order: source paints, script
+  generator/init paints, selected-root clone paints, then pending child clone
+  paints. Scripted compare reports exact=9 / exact-segments=9 / diverges=0 /
+  unsupported-feature=17. Full compare reports exact=263 /
+  exact-segments=584 / diverges=9 / unsupported-feature=23, and
+  `cargo test --workspace` passes. Next target is the tied-highest bounded
+  `scripted-path-effects` queue (3 files); the four-file view-model queue
+  remains parked behind its recorded vertical-slice design requirement.
 
 - 2026-07-09: [M8] Promoted `script_inputs_test_1.riv` to scripted-mode
   exact by keeping both script generator execution and user `init` inside the

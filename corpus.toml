@@ -1490,9 +1490,9 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "scripted_as_path"
 path = "tests/unit_tests/assets/scripted_as_path.riv"
 samples = [0.0]
-status = "unsupported-feature"
+status = "diverges"
 milestone = "M8"
-features = ["type-key:106:FileAssetContents", "type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:5:StraightVertex", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "scripted-rust-runner-unsupported:script-artboard-node"]
+features = ["scripted-status:exact", "type-key:106:FileAssetContents", "type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:5:StraightVertex", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "scripted_boolean"

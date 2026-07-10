@@ -3838,6 +3838,23 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-10: [M8] Ported `FollowPathConstraint::markConstraintDirty` property
+  invalidation: distance, orient, and inherited strength changes now dirty
+  the constrained parent's transform and recursively dirty its world
+  transform, with a focused regression test. This closes a real C++ class
+  behavior gap but does not yet move `data_viz_demo.riv`: C++ publishes two
+  sets of six follow-path distances before the first draw (the second starts
+  at `0.902826846`), while Rust publishes only the first (`0.902750015`).
+  Matching glyph advances and path-measure length rule out text shaping and
+  path geometry; a stale cloned nested view-model context and runner-level
+  parent/child reorderings were tested and rejected without landing. Full
+  `cargo test --workspace`, scripted compare, and regular compare pass.
+  Metrics remain scripted exact=25 / exact-segments=33 / diverges=1 /
+  unsupported-feature=1 and regular exact=263 / exact-segments=584 /
+  diverges=26 / unsupported-feature=6. Next: identify the C++ data-bind dirty
+  queue edge that republishes those six parent number values during the same
+  scene advance, then mirror that edge inside the runtime update pass.
+
 - 2026-07-10: [M8] Ported C++'s ordinary `ShapePaint::draw` envelope for
   artboard background paints. Inner feathers now configure the RenderPaint,
   clip against the shared retained background path, and draw the padded rect
@@ -3845,10 +3862,11 @@ the only memory the next session has. Update it every commit.
   feather offsets follow the same ordering as shape paints. The focused Rust
   stream grows from 1758 to 1760 lines and matches C++'s opening path IDs,
   operation order, topology, fill rules, and feather strength. The first
-  normalized mismatch moves to line 587, where variable-font Text local 100's
-  centered `"30%"` run is about 0.14 wider in Rust. Scripted metrics remain
-  exact=25 / exact-segments=33 / diverges=1 / unsupported-feature=1. Next:
-  compare C++ HarfBuzz and Rust variable-font advances for that run.
+  normalized mismatch moves to line 587 at the first follow-path-constrained
+  text transform. Scripted metrics remain exact=25 / exact-segments=33 /
+  diverges=1 / unsupported-feature=1. Subsequent investigation confirmed
+  identical HarfBuzz advances and isolated the mismatch to sample-time
+  follow-path distance publication; see the newer entry above.
 
 - 2026-07-10: [M8] Matched the complete post-layout gradient preamble in
   `data_viz_demo.riv`. Nested instances now retain their authoritative Taffy

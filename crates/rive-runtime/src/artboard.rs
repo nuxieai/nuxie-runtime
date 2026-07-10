@@ -2022,6 +2022,12 @@ impl ArtboardInstance {
                 };
                 self.set_nested_state_machine_bool(state_machine_local_id, input_id, value)
             }
+            Some("FollowPathConstraint")
+                if property_key_for_name("FollowPathConstraint", "orient")
+                    == Some(property_key) =>
+            {
+                self.mark_constraint_parent_transform_dirty(local_id)
+            }
             _ => false,
         }
     }
@@ -2251,8 +2257,31 @@ impl ArtboardInstance {
             {
                 self.set_nested_remap_time(local_id, value)
             }
+            Some("FollowPathConstraint")
+                if property_key_for_name("FollowPathConstraint", "distance")
+                    == Some(property_key)
+                    || property_key_for_name("Constraint", "strength") == Some(property_key) =>
+            {
+                self.mark_constraint_parent_transform_dirty(local_id)
+            }
             _ => false,
         }
+    }
+
+    fn mark_constraint_parent_transform_dirty(&mut self, constraint_local_id: usize) -> bool {
+        let parent_local = self
+            .component(constraint_local_id)
+            .and_then(|component| component.parent_local)
+            .or_else(|| {
+                let parent_key = property_key_for_name("Component", "parentId")?;
+                usize::try_from(self.uint_property(constraint_local_id, parent_key)?).ok()
+            });
+        let Some(parent_local) = parent_local else {
+            return false;
+        };
+        let mut changed = self.add_dirt(parent_local, ComponentDirt::TRANSFORM, false);
+        changed |= self.add_dirt(parent_local, ComponentDirt::WORLD_TRANSFORM, true);
+        changed
     }
 
     fn mark_parent_gradient_stops_dirty(&mut self, stop_local_id: usize) -> bool {
@@ -4135,6 +4164,42 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::PAINT | ComponentDirt::STOPS)
         );
+    }
+
+    #[test]
+    fn follow_path_property_changes_dirty_the_constrained_parent_transform() {
+        let mut parent = synthetic_component(0, 0);
+        parent.type_name = "Node";
+        let mut constraint = synthetic_component(1, 1);
+        constraint.type_name = "FollowPathConstraint";
+        constraint.parent_local = Some(0);
+        let mut instance = synthetic_instance(vec![parent, constraint], vec![0, 1]);
+        let distance_key = property_key_for_name("FollowPathConstraint", "distance")
+            .expect("FollowPathConstraint.distance key");
+        let orient_key = property_key_for_name("FollowPathConstraint", "orient")
+            .expect("FollowPathConstraint.orient key");
+        let strength_key =
+            property_key_for_name("Constraint", "strength").expect("Constraint.strength key");
+
+        fn assert_parent_transform_dirty(instance: &mut ArtboardInstance, changed: bool) {
+            assert!(changed);
+            assert!(
+                instance
+                    .component(0)
+                    .unwrap()
+                    .dirt
+                    .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+            );
+            instance.dirt = ComponentDirt::NONE;
+            instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        }
+
+        let changed = instance.set_double_property(1, distance_key, 0.5);
+        assert_parent_transform_dirty(&mut instance, changed);
+        let changed = instance.set_bool_property(1, orient_key, false);
+        assert_parent_transform_dirty(&mut instance, changed);
+        let changed = instance.set_double_property(1, strength_key, 0.5);
+        assert_parent_transform_dirty(&mut instance, changed);
     }
 
     #[test]

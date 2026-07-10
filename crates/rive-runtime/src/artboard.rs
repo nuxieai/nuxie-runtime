@@ -50,7 +50,7 @@ use crate::properties::{
 };
 use crate::scripting::{
     NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptInstance,
-    ScriptMethod, ScriptValue,
+    ScriptMethod, ScriptValue, ScriptViewModel,
 };
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
@@ -458,6 +458,22 @@ impl ArtboardInstance {
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
         handle.borrow_mut().set_artboard_input(name, artboard)?;
+        self.script_updates_pending.insert(global_id);
+        Ok(())
+    }
+
+    pub fn set_script_view_model_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        view_model: ScriptViewModel,
+    ) -> Result<(), ScriptError> {
+        let handle = self
+            .script_instances_by_global
+            .get(&global_id)
+            .cloned()
+            .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
+        handle.borrow_mut().set_view_model_input(name, view_model)?;
         self.script_updates_pending.insert(global_id);
         Ok(())
     }

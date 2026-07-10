@@ -13,8 +13,10 @@
 
 mod bytecode;
 mod renderer;
+mod view_model;
 
 use std::cell::Cell;
+use std::collections::BTreeSet;
 use std::ffi::CString;
 
 use bytecode::validate_luau_bytecode;
@@ -27,8 +29,9 @@ use renderer::RendererBindings;
 use rive_render_api::{Factory as RenderFactory, Renderer};
 use rive_runtime::{
     ScriptArtboard, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue,
-    ScriptingVm as RuntimeScriptingVm,
+    ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
+use view_model::ScriptedViewModel;
 
 use crate::envelope::SignedContent;
 
@@ -52,6 +55,7 @@ pub struct ScriptVm {
 pub struct LuaScriptInstance {
     table: Table,
     renderer_bindings: RendererBindings,
+    view_model_inputs: BTreeSet<String>,
 }
 
 impl LuaScriptInstance {
@@ -59,6 +63,7 @@ impl LuaScriptInstance {
         Self {
             table,
             renderer_bindings: RendererBindings::default(),
+            view_model_inputs: BTreeSet::new(),
         }
     }
 
@@ -66,6 +71,7 @@ impl LuaScriptInstance {
         Self {
             table,
             renderer_bindings,
+            view_model_inputs: BTreeSet::new(),
         }
     }
 
@@ -533,6 +539,37 @@ impl ScriptInstance for LuaScriptInstance {
             .create_scripted_artboard(&lua, artboard)
             .map_err(script_error)?;
         self.table.set(name, artboard).map_err(script_error)
+    }
+
+    fn set_view_model_input(
+        &mut self,
+        name: &str,
+        view_model: ScriptViewModel,
+    ) -> std::result::Result<(), ScriptError> {
+        if let Ok(Value::UserData(previous)) = self.table.get::<Value>(name)
+            && let Ok(mut previous) = previous.borrow_mut::<ScriptedViewModel>()
+        {
+            previous.dispose();
+        }
+        let lua = self.table.lua();
+        let view_model = lua
+            .create_userdata(ScriptedViewModel::new(view_model))
+            .map_err(script_error)?;
+        self.table.set(name, view_model).map_err(script_error)?;
+        self.view_model_inputs.insert(name.to_owned());
+        Ok(())
+    }
+}
+
+impl Drop for LuaScriptInstance {
+    fn drop(&mut self) {
+        for name in &self.view_model_inputs {
+            if let Ok(Value::UserData(view_model)) = self.table.get::<Value>(name)
+                && let Ok(mut view_model) = view_model.borrow_mut::<ScriptedViewModel>()
+            {
+                view_model.dispose();
+            }
+        }
     }
 }
 

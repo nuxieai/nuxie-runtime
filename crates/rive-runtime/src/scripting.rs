@@ -1,4 +1,5 @@
 use std::cell::{RefCell, RefMut};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::{error::Error, fmt};
 
@@ -99,6 +100,32 @@ pub enum ScriptValue {
     Vec3 { x: f32, y: f32, z: f32 },
 }
 
+/// A runtime-neutral snapshot of a bound view-model exposed to Luau.
+///
+/// Ported from the lookup shape in C++ `src/lua/lua_properties.cpp` and
+/// `src/script_input_viewmodel_property.cpp`. Property variants are added as
+/// their corpus-backed bindings land; unknown properties remain absent in
+/// Luau, matching C++ lookup failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptViewModel {
+    properties: BTreeMap<String, ScriptViewModelProperty>,
+}
+
+impl ScriptViewModel {
+    pub fn new(properties: BTreeMap<String, ScriptViewModelProperty>) -> Self {
+        Self { properties }
+    }
+
+    pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
+        self.properties.get(name).copied()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptViewModelProperty {
+    Trigger,
+}
+
 impl ScriptValue {
     pub fn as_number(&self) -> Option<f64> {
         match self {
@@ -151,6 +178,36 @@ pub fn bound_script_input_value(
             .map(|value| ScriptValue::String(String::from_utf8_lossy(value).into_owned())),
         _ => None,
     }
+}
+
+/// Resolves a `ScriptInputViewModelProperty` after its scripted object has a
+/// data context. C++ treats hydration as all-or-nothing, so `None` means the
+/// caller must defer every input and user `init`, not install a nil stand-in.
+pub fn bound_script_view_model(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    input: &RuntimeObject,
+) -> Option<ScriptViewModel> {
+    if input.type_name != "ScriptInputViewModelProperty" {
+        return None;
+    }
+    let source_path = file.resolved_data_bind_path_ids_for_referencer_object(input)?;
+    let property_path =
+        context.property_path_for_context_source_path(file, &[], &source_path, false)?;
+    let view_model_index = context.view_model_index_by_property_path(&property_path)?;
+    let properties = file
+        .view_model(view_model_index)?
+        .properties
+        .into_iter()
+        .filter_map(|property| {
+            let kind = match property.type_name {
+                "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
+                _ => return None,
+            };
+            Some((property.string_property("name")?.to_owned(), kind))
+        })
+        .collect();
+    Some(ScriptViewModel::new(properties))
 }
 
 /// Host callbacks exposed to scripted objects.
@@ -220,6 +277,17 @@ pub trait ScriptInstance {
         let _ = (name, artboard);
         Err(ScriptError::new(
             "script artboard inputs require backend userdata support",
+        ))
+    }
+
+    fn set_view_model_input(
+        &mut self,
+        name: &str,
+        view_model: ScriptViewModel,
+    ) -> Result<(), ScriptError> {
+        let _ = (name, view_model);
+        Err(ScriptError::new(
+            "script view-model inputs require backend userdata support",
         ))
     }
 }

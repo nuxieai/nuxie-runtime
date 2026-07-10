@@ -42,7 +42,8 @@ pub use draw::{
 pub use objects::InstanceSlot;
 pub use scripting::{
     NoopScriptHost, ScriptArtboard, ScriptError, ScriptHost, ScriptInstance, ScriptMethod,
-    ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm, bound_script_input_value,
+    ScriptModule, ScriptModuleFailure, ScriptValue, ScriptViewModel, ScriptViewModelProperty,
+    ScriptingVm, bound_script_input_value, bound_script_view_model,
 };
 pub use state_machine::{
     RuntimeLayerState, RuntimeStateMachine, RuntimeStateMachineInput, RuntimeStateMachineLayer,

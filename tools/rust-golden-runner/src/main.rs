@@ -135,6 +135,8 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
         || message.contains("attempt to index nil with 'Child'")
     {
         Some("script-view-model")
+    } else if message.contains("attempt to index nil with 'addListener'") {
+        Some("script-view-model-property-listener")
     } else {
         None
     }
@@ -1583,26 +1585,34 @@ fn initialize_scripted_drawables(
                 script.name, local_object.global_id
             )
         })?;
-        hydrate_script_inputs(
+        let defer_cold_hydration = scripted_object_has_view_model_input(
             runtime,
             artboard,
             artboards,
             local_object.local_id,
-            script_instance.as_mut(),
-            Rc::clone(&render_state),
-        )?;
-        if script_instance
-            .has_method(ScriptMethod::Init)
-            .context("failed to inspect script init method")?
-        {
-            script_instance
-                .call_method(ScriptMethod::Init, &[], &mut host)
-                .with_context(|| {
-                    format!(
-                        "script init failed for ScriptedDrawable global {}",
-                        local_object.global_id
-                    )
-                })?;
+        );
+        if !defer_cold_hydration {
+            hydrate_script_inputs(
+                runtime,
+                artboard,
+                artboards,
+                local_object.local_id,
+                script_instance.as_mut(),
+                Rc::clone(&render_state),
+            )?;
+            if script_instance
+                .has_method(ScriptMethod::Init)
+                .context("failed to inspect script init method")?
+            {
+                script_instance
+                    .call_method(ScriptMethod::Init, &[], &mut host)
+                    .with_context(|| {
+                        format!(
+                            "script init failed for ScriptedDrawable global {}",
+                            local_object.global_id
+                        )
+                    })?;
+            }
         }
         if local_object.type_name == Some("ScriptedLayout")
             && script_instance
@@ -1636,6 +1646,21 @@ fn initialize_scripted_drawables(
     }
 
     Ok(Some(render_state))
+}
+
+#[cfg(feature = "scripting")]
+fn scripted_object_has_view_model_input(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    scripted_local_id: usize,
+) -> bool {
+    artboard_object_range(runtime, artboard, artboards).any(|global_id| {
+        runtime.object(global_id).is_some_and(|object| {
+            object.type_name == "ScriptInputViewModelProperty"
+                && object.uint_property("parentId") == Some(scripted_local_id as u64)
+        })
+    })
 }
 
 #[cfg(feature = "scripting")]
@@ -1839,6 +1864,17 @@ fn rehydrate_script_inputs(
             instance
                 .set_script_artboard_input_for_global(scripted_global_id, name, Box::new(artboard))
                 .with_context(|| format!("failed to rebind artboard script input '{name}'"))?;
+            continue;
+        }
+        if type_name == "ScriptInputViewModelProperty" {
+            let Some(view_model) = owned_view_model_context.and_then(|context| {
+                rive_runtime::bound_script_view_model(runtime, context, object)
+            }) else {
+                continue;
+            };
+            instance
+                .set_script_view_model_input_for_global(scripted_global_id, name, view_model)
+                .with_context(|| format!("failed to rebind view-model script input '{name}'"))?;
             continue;
         }
         let value = owned_view_model_context

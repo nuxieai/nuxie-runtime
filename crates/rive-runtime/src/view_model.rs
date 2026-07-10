@@ -3840,6 +3840,28 @@ fn runtime_owned_view_model_property_children(
                 })
                 .map(|reference| RuntimeViewModelPointer::Imported {
                     object_id: reference.object.id,
+                })
+                .or_else(|| {
+                    // C++ ViewModelInstanceViewModel::referenceViewModelInstance
+                    // reads this serialized index even when the earlier
+                    // ArtboardImporter-scoped relationship was unavailable.
+                    let view_model_instance = view_model_instance?;
+                    let value = file.view_model_instance_value_for_property_id_object(
+                        view_model_instance,
+                        u32::try_from(property_index).ok()?,
+                    )?;
+                    if value.type_name != "ViewModelInstanceViewModel" {
+                        return None;
+                    }
+                    let instance_index =
+                        usize::try_from(value.uint_property("propertyValue")?).ok()?;
+                    let referenced_instance = referenced_view_model
+                        .as_ref()?
+                        .instances
+                        .get(instance_index)?;
+                    Some(RuntimeViewModelPointer::Imported {
+                        object_id: referenced_instance.object.id,
+                    })
                 });
             let value = if let Some(value) = imported_value {
                 value

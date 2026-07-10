@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M8=19 gated=6; the harness bucket is empty
-- Scripted compare: exact=5 / exact-segments=5 / diverges=2 /
+- Scripted compare: exact=6 / exact-segments=6 / diverges=1 /
   unsupported-feature=19 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -588,8 +588,13 @@ the only memory the next session has. Update it every commit.
         retaining zero-opacity scripted draw envelopes. `script_layout_test.riv`
         is exact after admitting the `ScriptedLayout` subclass, exposing the
         factory during script construction, calling `resize`, and preserving
-        C++ source/script/instance paint allocation order. Remaining: work the
-        other named scripting diagnostics and two stream divergences.
+        C++ source/script/instance paint allocation order.
+        `scripted_memory_leak.riv` is exact after deferring atomic input
+        hydration until its view-model context resolves, retaining serialized
+        nested view-model instances, and exposing cached trigger/listener
+        userdata with explicit rebind/drop disposal. Remaining: the sole
+        `data_binding_artboards_test.riv` stream divergence and nineteen named
+        scripting diagnostics.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3769,6 +3774,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `scripted_memory_leak.riv` to scripted-mode exact.
+  `ScriptInputViewModelProperty` now defers the whole cold hydration transaction
+  until a data context resolves, serialized nested view-model references survive
+  runtime-owned context construction, and luaur exposes cached trigger userdata
+  with listener cleanup on rebind and script-instance drop. The resulting two
+  user `init` calls both see `gameLogicVM`, and paint allocation matches C++ at
+  eight paints. `script_create_viewmodel_instance.riv` advances to the sharper
+  `script-view-model-property-listener` diagnostic. Verification: scripted
+  compare reports exact=6/exact-segments=6/diverges=1/unsupported=19; default
+  compare remains exact=263/exact-segments=584/diverges=7/unsupported=25;
+  `cargo test --workspace`, format, and diff checks pass. Next: localize the
+  sole `data_binding_artboards_test.riv` scripted stream divergence.
 
 - 2026-07-09: [M8] Promoted `script_layout_test.riv` to scripted-mode exact.
   `ScriptedLayout` now follows `ScriptedDrawable` inheritance in the runner

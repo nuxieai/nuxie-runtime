@@ -140,30 +140,24 @@ fuzz-build:
 # fuzz/regressions/README.md), which would wedge the gate. Fixed-bug
 # regressions are checked explicitly via `make fuzz-regressions`.
 
-# Smoke gate: build all targets, then exercise them. This is a gate that proves
-# the harness builds and runs end-to-end -- it is NOT a full fuzzing campaign
-# (use `make fuzz` for that). fuzz_import (parser only, no known hangs) gets a
-# short timed mutation burst. fuzz_runtime/fuzz_pointer are run as a
-# DETERMINISTIC seed replay (-runs=0) rather than timed mutation, because the
-# runtime pipeline currently has open input-dependent HANG findings (unbounded
-# parent/reference-chain walks; see fuzz/regressions/README.md) that a timed
-# mutation run rediscovers within seconds, which would make the gate flaky. The
-# -timeout guard still turns any hang into a hard failure.
+# Smoke gate: build all targets, then exercise each with a short timed mutation
+# burst. This is a gate that proves the harness builds and runs end-to-end -- it
+# is NOT a full fuzzing campaign (use `make fuzz` for that).
+#
+# NOTE: fuzz_runtime/fuzz_pointer were temporarily switched to a deterministic
+# seed replay (-runs=0) while the runtime pipeline had open input-dependent HANG
+# findings (unbounded parent/reference-chain walks) that a timed mutation run
+# rediscovered within seconds. Those cycle-guard findings are now FIXED (see
+# fuzz/regressions/README.md and v2-status item 27), so all targets are back to
+# timed mutation. The -timeout guard still turns any residual hang into a hard
+# failure.
 fuzz-smoke: fuzz-build
 	@set -e; for target in $(FUZZ_TARGETS); do \
-		if [ "$$target" = "fuzz_import" ]; then \
-			echo "== fuzz-smoke: $$target (timed $(FUZZ_SMOKE_SECONDS)s) =="; \
-			( cd $(FUZZ_DIR) && mkdir -p corpus/$$target && $(FUZZ_CARGO) fuzz run \
-				$$target corpus/$$target seeds/$$target -- \
-				-max_total_time=$(FUZZ_SMOKE_SECONDS) -timeout=$(FUZZ_TIMEOUT) \
-				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
-		else \
-			echo "== fuzz-smoke: $$target (seed replay) =="; \
-			( cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz run \
-				$$target seeds/$$target -- \
-				-runs=0 -timeout=$(FUZZ_TIMEOUT) \
-				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
-		fi; \
+		echo "== fuzz-smoke: $$target (timed $(FUZZ_SMOKE_SECONDS)s) =="; \
+		( cd $(FUZZ_DIR) && mkdir -p corpus/$$target && $(FUZZ_CARGO) fuzz run \
+			$$target corpus/$$target seeds/$$target -- \
+			-max_total_time=$(FUZZ_SMOKE_SECONDS) -timeout=$(FUZZ_TIMEOUT) \
+			-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
 	done
 
 # Longer local campaign for a single target. Example:

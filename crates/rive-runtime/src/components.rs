@@ -5,7 +5,7 @@ use crate::properties::{
 use rive_binary::RuntimeFile;
 use rive_graph::{ArtboardGraph, ComponentNode};
 use rive_schema::definition_by_name;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use std::sync::OnceLock;
 
@@ -533,12 +533,24 @@ fn runtime_layout_chain_has_layout_component(
     components: &[RuntimeComponent],
     component_by_local: &BTreeMap<usize, usize>,
 ) -> bool {
+    // Cycle guard: a malformed-but-accepted file can make `parent_local` form a
+    // parent cycle (A -> B -> A). C++ hangs on this input (Path::onAddedClean's
+    // unbounded shape-parent walk); Component::validate only checks that a
+    // parent resolves, not that the chain is acyclic. We deliberately DIVERGE
+    // and terminate the walk, mirroring C++'s own cycle-guard idiom -- the
+    // visited-set from DependencySorter::visit (src/dependency_sorter.cpp, the
+    // m_Perm/m_Temp sets) -- so an embedded-SDK hang becomes a graceful
+    // no-ancestor result. Unreachable on any valid file.
+    let mut visited = BTreeSet::new();
     while let Some(component) = component_by_local
         .get(&local_id)
         .and_then(|index| components.get(*index))
     {
         if component.type_name == "LayoutComponent" {
             return true;
+        }
+        if !visited.insert(local_id) {
+            return false;
         }
         let Some(parent_local) = component.parent_local else {
             return false;
@@ -553,7 +565,13 @@ fn runtime_constrained_layout_ancestor(
     components: &[RuntimeComponent],
     component_by_local: &BTreeMap<usize, usize>,
 ) -> Option<usize> {
+    // Cycle guard: see runtime_layout_chain_has_layout_component above. Same
+    // malformed parent-cycle input, same deliberate terminate-where-C++-hangs
+    // divergence, same DependencySorter visited-set idiom
+    // (src/dependency_sorter.cpp). Terminating early yields no constrained
+    // ancestor, which is the safe "as if the chain ended" result.
     let mut saw_constraint = false;
+    let mut visited = BTreeSet::new();
     while let Some(component) = component_by_local
         .get(&local_id)
         .and_then(|index| components.get(*index))
@@ -562,6 +580,9 @@ fn runtime_constrained_layout_ancestor(
             return saw_constraint.then_some(local_id);
         }
         saw_constraint |= !component.constraint_locals.is_empty();
+        if !visited.insert(local_id) {
+            return None;
+        }
         let Some(parent_local) = component.parent_local else {
             return None;
         };

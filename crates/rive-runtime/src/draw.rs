@@ -36,6 +36,27 @@ use crate::text::{
 };
 use crate::{ArtboardInstance, Mat2D};
 
+// Nested-artboard cycle guard (`nested_ancestors`).
+//
+// A malformed-but-accepted file can make the artboard nesting graph cyclic
+// (artboard A nests B nests A, possibly with branching). Both the static
+// paint-prep and draw recursions (`prepare_static_*` / `draw_prepared_static_*`
+// mutual recursion) re-resolve the nesting graph on every descent, so a cycle
+// drives them into an unbounded (and, with branching, exponential) descent ->
+// stack overflow / hang, an embedded-SDK crash as fatal as a panic.
+//
+// C++ avoids this with `Artboard::isAncestor` (src/artboard.cpp): it refuses to
+// instantiate a nested child whose artboard source is already an ancestor, so
+// the instance tree it builds once is finite. We mirror that idiom directly by
+// threading the set of artboard global ids on the current descent path
+// (`nested_ancestors`); before descending into a referenced artboard we skip it
+// if it is already an ancestor, terminating the cycle gracefully. This bounds
+// the recursion to simple paths over the (few) artboards -- unlike a plain depth
+// cap it can neither overflow the stack nor fan out exponentially, and it never
+// truncates legitimate deep nesting. It is a DELIBERATE terminate-where-C++-
+// would-otherwise-loop divergence (v2-status item 27), unreachable on valid
+// (acyclic) files, so golden output is unchanged.
+
 macro_rules! cached_runtime_property_key {
     ($type_name:literal, $property_name:literal) => {{
         static KEY: OnceLock<Option<u16>> = OnceLock::new();
@@ -798,6 +819,10 @@ impl ArtboardInstance {
         paint_cache: &mut RuntimeRenderPaintCache,
         render_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        // Seed the nested-artboard cycle guard with the root artboard's global id
+        // (see nested_artboard_cycle: the ancestor set that mirrors C++
+        // Artboard::isAncestor).
+        let nested_ancestors = BTreeSet::from([graph.global_id]);
         self.prepare_static_artboard_tree_paints_internal(
             runtime,
             graph,
@@ -809,6 +834,7 @@ impl ArtboardInstance {
             Some(&mut paint_cache.nested_artboards),
             render_cache,
             true,
+            &nested_ancestors,
         )
     }
 
@@ -824,6 +850,7 @@ impl ArtboardInstance {
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
+        nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         let preparation_graph_global_id = graph.global_id;
         let preparation_instance_epoch = self.cache_epoch();
@@ -887,6 +914,7 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 commands,
+                nested_ancestors,
             )?;
             if let Some(preparation) = paint_preparation.as_deref_mut() {
                 *preparation = Some(RuntimePaintPreparationFrame {
@@ -930,6 +958,7 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 command,
+                nested_ancestors,
             )?;
         }
 
@@ -1022,10 +1051,19 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         command: &RuntimeDrawCommand,
+        nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         let referenced_artboard_global = command
             .referenced_artboard_global
             .context("nested artboard missing referenced artboard")?;
+        // Cycle guard (see `nested_ancestors` at the top of this module): if this
+        // artboard is already an ancestor on the current descent path, descending
+        // would loop -- terminate gracefully, mirroring C++ Artboard::isAncestor.
+        if nested_ancestors.contains(&referenced_artboard_global) {
+            return Ok(());
+        }
+        let mut child_ancestors = nested_ancestors.clone();
+        child_ancestors.insert(referenced_artboard_global);
         let child_graph = artboards
             .iter()
             .find(|graph| graph.global_id == referenced_artboard_global)
@@ -1089,6 +1127,7 @@ impl ArtboardInstance {
                     child_nested_paints,
                     child_cache,
                     true,
+                    &child_ancestors,
                 )?;
             } else {
                 child.prepare_static_artboard_tree_paints_internal(
@@ -1102,6 +1141,7 @@ impl ArtboardInstance {
                     None,
                     child_cache,
                     true,
+                    &child_ancestors,
                 )?;
             }
             return Ok(());
@@ -1132,6 +1172,7 @@ impl ArtboardInstance {
                 child_nested_paints,
                 child_cache,
                 true,
+                &child_ancestors,
             )?;
         } else {
             child.prepare_static_artboard_tree_paints_internal(
@@ -1145,6 +1186,7 @@ impl ArtboardInstance {
                 None,
                 child_cache,
                 true,
+                &child_ancestors,
             )?;
         }
         Ok(())
@@ -1163,6 +1205,7 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         commands: &[RuntimeDrawCommand],
+        nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
@@ -1211,6 +1254,7 @@ impl ArtboardInstance {
                     render_cache,
                     layout_bounds,
                     &command,
+                    nested_ancestors,
                 )?;
             }
             return Ok(());
@@ -1257,6 +1301,7 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 command,
+                nested_ancestors,
             )?;
         }
 
@@ -1407,6 +1452,8 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let mut mesh_buffers = RuntimeMeshRenderBufferSlots::default();
         let images = RuntimeRenderImages::default();
+        // Seed the nested-artboard cycle guard with this artboard's global id.
+        let nested_ancestors = BTreeSet::from([graph.global_id]);
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             graph,
@@ -1420,6 +1467,7 @@ impl ArtboardInstance {
             None,
             None,
             true,
+            &nested_ancestors,
         )
     }
 
@@ -1433,6 +1481,8 @@ impl ArtboardInstance {
         paint_cache: &mut RuntimeRenderPaintCache,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        // Seed the nested-artboard cycle guard with this artboard's global id.
+        let nested_ancestors = BTreeSet::from([graph.global_id]);
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             graph,
@@ -1446,6 +1496,7 @@ impl ArtboardInstance {
             Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.nested_artboards),
             true,
+            &nested_ancestors,
         )
     }
 
@@ -1463,6 +1514,7 @@ impl ArtboardInstance {
         mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         apply_origin_transform: bool,
+        nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         if self
             .component(0)
@@ -1534,6 +1586,7 @@ impl ArtboardInstance {
                     Some(caches) => Some(&mut **caches),
                     None => None,
                 },
+                nested_ancestors,
             )?;
         }
 
@@ -2015,9 +2068,34 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Mat2D {
+        // Cycle guard: the parent walk below recurses on `parent_local`, which a
+        // malformed-but-accepted file can make cyclic -> unbounded recursion.
+        // Thread a visited set (C++'s DependencySorter::visit idiom,
+        // src/dependency_sorter.cpp); on revisit, fall back to the component's
+        // stored world transform, terminating gracefully. No-op on valid files.
+        let mut visited = BTreeSet::new();
+        self.runtime_component_world_transform_with_bounds_guarded(
+            local_id,
+            graph,
+            layout_bounds,
+            &mut visited,
+        )
+    }
+
+    fn runtime_component_world_transform_with_bounds_guarded(
+        &self,
+        local_id: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        visited: &mut BTreeSet<usize>,
+    ) -> Mat2D {
         let Some(component) = self.component(local_id) else {
             return Mat2D::IDENTITY;
         };
+        if !visited.insert(local_id) {
+            // Parent cycle detected (see the wrapper above): stop the walk.
+            return component.transform.world_transform;
+        }
         if component.type_name == "Artboard" {
             return component.transform.world_transform;
         }
@@ -2073,8 +2151,13 @@ impl ArtboardInstance {
                 .multiply(stored_layout_world.invert_or_identity())
                 .multiply(component.transform.world_transform);
         }
-        self.runtime_component_world_transform_with_bounds(parent_local, graph, layout_bounds)
-            .multiply(component.transform.local_transform)
+        self.runtime_component_world_transform_with_bounds_guarded(
+            parent_local,
+            graph,
+            layout_bounds,
+            visited,
+        )
+        .multiply(component.transform.local_transform)
     }
 
     fn runtime_layout_component_world_transform(
@@ -4124,6 +4207,16 @@ impl TaffyRuntimeLayoutEngine {
         taffy: &mut TaffyTree<usize>,
         build: &mut TaffyLayoutBuild,
     ) -> Option<NodeId> {
+        // Cycle guard: a malformed-but-accepted file can make the layout child
+        // graph cyclic, which would recurse forever here (the node map is only
+        // populated after the child recursion below). The nodes-by-local map
+        // doubles as the visited set, mirroring C++'s visited-set cycle-guard
+        // idiom (DependencySorter::visit, src/dependency_sorter.cpp): each local
+        // is built exactly once on any valid tree, so returning the existing
+        // node is identical behavior there and terminates cycles gracefully.
+        if let Some(node) = build.nodes_by_local.get(&local) {
+            return Some(*node);
+        }
         let component = graph
             .components
             .iter()
@@ -4255,6 +4348,15 @@ impl TaffyRuntimeLayoutEngine {
         build: &TaffyLayoutBuild,
         bounds: &mut BTreeMap<usize, RuntimeLayoutBounds>,
     ) -> Option<()> {
+        // Cycle guard: a malformed-but-accepted file can make the layout child
+        // graph cyclic, turning this walk into unbounded recursion. The bounds
+        // map doubles as the visited set (each local is laid out exactly once on
+        // any valid tree), mirroring C++'s visited-set cycle-guard idiom
+        // (DependencySorter::visit, src/dependency_sorter.cpp); on revisit,
+        // terminate gracefully with the already-computed bounds.
+        if bounds.contains_key(&local) {
+            return Some(());
+        }
         let node = *build.nodes_by_local.get(&local)?;
         let layout = taffy.layout(node).ok()?;
         let x = parent_x + layout.location.x;
@@ -5843,6 +5945,11 @@ pub struct RuntimeRenderPathCache {
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
+    // Cycle guard for the component_world_transform_with_bounds <->
+    // compute_component_world_transform_with_layout_bounds parent-walk
+    // recursion: locals on the current walk. See the guard comment in
+    // component_world_transform_with_bounds; empty except mid-walk.
+    world_transform_visiting: BTreeSet<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6504,12 +6611,22 @@ impl RuntimeRenderPathCache {
             return transform;
         }
 
+        // Cycle guard: the memo insert below only lands AFTER the recursive
+        // parent walk, so a malformed file's parent cycle would recurse forever
+        // (every lap re-misses the cache). Track the locals on the current walk
+        // (C++'s DependencySorter::visit visited-set idiom,
+        // src/dependency_sorter.cpp) and fall back to the stored world transform
+        // on revisit, terminating gracefully. No-op on valid (acyclic) files.
+        if !self.world_transform_visiting.insert(local_id) {
+            return component.transform.world_transform;
+        }
         let transform = self.compute_component_world_transform_with_layout_bounds(
             instance,
             graph,
             local_id,
             layout_bounds,
         );
+        self.world_transform_visiting.remove(&local_id);
         self.world_transforms
             .insert(graph.global_id, local_id, key, transform);
         transform
@@ -8060,6 +8177,7 @@ fn runtime_draw_command(
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
+    nested_ancestors: &BTreeSet<u32>,
 ) -> Result<()> {
     match command.kind {
         RuntimeDrawCommandKind::ClipStart => {
@@ -8123,6 +8241,7 @@ fn runtime_draw_command(
             paint_configurations.as_deref_mut(),
             nested_paint_caches,
             layout_bounds,
+            nested_ancestors,
         );
     }
 
@@ -8842,6 +8961,7 @@ fn runtime_draw_nested_artboard(
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    nested_ancestors: &BTreeSet<u32>,
 ) -> Result<()> {
     if let Some(local_id) = command.local_id
         && let Some(artboard_id_key) =
@@ -8854,6 +8974,15 @@ fn runtime_draw_nested_artboard(
     let referenced_artboard_global = command
         .referenced_artboard_global
         .context("nested artboard missing referenced artboard")?;
+    // Cycle guard (see `nested_ancestors` at the top of this module): mirror of
+    // the paint-prep guard for the draw recursion. Skip a nested artboard that is
+    // already an ancestor on the current descent path, as C++ Artboard::isAncestor
+    // does, so a cyclic nesting graph terminates instead of looping/overflowing.
+    if nested_ancestors.contains(&referenced_artboard_global) {
+        return Ok(());
+    }
+    let mut child_ancestors = nested_ancestors.clone();
+    child_ancestors.insert(referenced_artboard_global);
     let child_graph = artboards
         .iter()
         .find(|graph| graph.global_id == referenced_artboard_global)
@@ -8948,6 +9077,7 @@ fn runtime_draw_nested_artboard(
                 Some(&mut child_paint_cache.nested_artboards),
                 child_cache,
                 false,
+                &child_ancestors,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -8962,6 +9092,7 @@ fn runtime_draw_nested_artboard(
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
                 false,
+                &child_ancestors,
             )?;
         } else {
             child.prepare_static_artboard_tree_paints_internal(
@@ -8975,6 +9106,7 @@ fn runtime_draw_nested_artboard(
                 None,
                 child_cache,
                 false,
+                &child_ancestors,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -8989,6 +9121,7 @@ fn runtime_draw_nested_artboard(
                 paint_configurations.as_deref_mut(),
                 None,
                 false,
+                &child_ancestors,
             )?;
         }
 
@@ -9017,6 +9150,7 @@ fn runtime_draw_nested_artboard(
             Some(&mut child_paint_cache.nested_artboards),
             child_cache,
             false,
+            &child_ancestors,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -9031,6 +9165,7 @@ fn runtime_draw_nested_artboard(
             Some(&mut child_paint_cache.paint_configurations),
             Some(&mut child_paint_cache.nested_artboards),
             false,
+            &child_ancestors,
         )?;
     } else {
         child.prepare_static_artboard_tree_paints_internal(
@@ -9044,6 +9179,7 @@ fn runtime_draw_nested_artboard(
             None,
             child_cache,
             false,
+            &child_ancestors,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -9058,6 +9194,7 @@ fn runtime_draw_nested_artboard(
             paint_configurations.as_deref_mut(),
             None,
             false,
+            &child_ancestors,
         )?;
     }
 

@@ -2095,10 +2095,22 @@ fn flattened_draw_rules_local(
     drawable_local: usize,
     component_draw_rules: &BTreeMap<usize, usize>,
 ) -> Option<usize> {
+    // Cycle guard: a malformed-but-accepted file can make the parent reference
+    // chain cyclic (A -> B -> A, not just the self-loop the `parent_local ==
+    // current_local` check below catches). C++ hangs on such input; its
+    // Component::validate only checks that a parent resolves. We deliberately
+    // DIVERGE and terminate the walk with a visited-set, mirroring C++'s own
+    // cycle-guard idiom -- DependencySorter::visit's m_Perm/m_Temp visited sets
+    // (src/dependency_sorter.cpp) -- so an embedded-SDK draw-order hang becomes
+    // a graceful "no draw rule" result. Unreachable on any valid file.
     let mut current_local = drawable_local;
+    let mut visited = BTreeSet::new();
     loop {
         if let Some(draw_rules_local) = component_draw_rules.get(&current_local).copied() {
             return Some(draw_rules_local);
+        }
+        if !visited.insert(current_local) {
+            return None;
         }
 
         let current = runtime_object_for_local(file, local_objects, current_local)?;
@@ -4380,9 +4392,18 @@ fn linear_gradient_paint_container_dependency_node(
     let mut current_local = container_local;
     let mut current = container;
 
+    // Cycle guard: a malformed-but-accepted file can make this parent reference
+    // chain cyclic; C++ would hang. Terminate with a visited set, mirroring
+    // C++'s own DependencySorter::visit cycle-guard idiom
+    // (src/dependency_sorter.cpp). Falling out of the loop yields the same
+    // container fallback as a chain that simply ends. No-op on valid files.
+    let mut visited = BTreeSet::new();
     loop {
         if is_node(current) {
             return component_node_by_local.get(&current_local).copied();
+        }
+        if !visited.insert(current_local) {
+            break;
         }
 
         let Some((parent_local, parent)) =
@@ -4752,7 +4773,14 @@ fn descendant_component_locals_inclusive(
     component_by_local: &BTreeMap<usize, usize>,
 ) -> Vec<usize> {
     let mut locals = Vec::new();
-    collect_descendant_component_locals(local_id, components, component_by_local, &mut locals);
+    let mut visited = BTreeSet::new();
+    collect_descendant_component_locals(
+        local_id,
+        components,
+        component_by_local,
+        &mut locals,
+        &mut visited,
+    );
     locals
 }
 
@@ -4761,14 +4789,31 @@ fn collect_descendant_component_locals(
     components: &[ComponentNode],
     component_by_local: &BTreeMap<usize, usize>,
     locals: &mut Vec<usize>,
+    visited: &mut BTreeSet<usize>,
 ) {
+    // Cycle guard: a malformed-but-accepted file can make the parent/child
+    // component graph cyclic, which turns this descendant walk into unbounded
+    // recursion -> stack overflow. C++ hangs/overflows on the same input; we
+    // deliberately DIVERGE and terminate, mirroring C++'s own visited-set
+    // cycle-guard idiom (DependencySorter::visit's m_Perm/m_Temp sets,
+    // src/dependency_sorter.cpp). A node is collected at most once, which is
+    // identical behavior on any valid (acyclic) tree.
+    if !visited.insert(local_id) {
+        return;
+    }
     locals.push(local_id);
 
     let Some(index) = component_by_local.get(&local_id) else {
         return;
     };
     for child in &components[*index].children {
-        collect_descendant_component_locals(*child, components, component_by_local, locals);
+        collect_descendant_component_locals(
+            *child,
+            components,
+            component_by_local,
+            locals,
+            visited,
+        );
     }
 }
 
@@ -4779,7 +4824,16 @@ fn drawable_is_child_of_layout(
     layout_local: usize,
 ) -> bool {
     let mut current_local = Some(drawable_local);
+    // Cycle guard: the `parent_local == Some(local_id)` check below only stops
+    // self-loops; a longer malformed parent cycle (A -> B -> A) would loop
+    // forever. Terminate with a visited set, mirroring C++'s
+    // DependencySorter::visit cycle-guard idiom (src/dependency_sorter.cpp).
+    // Treated as "not a child of the layout", same as a chain that ends.
+    let mut visited = BTreeSet::new();
     while let Some(local_id) = current_local {
+        if !visited.insert(local_id) {
+            return false;
+        }
         let Some(object) = runtime_object_for_local(file, local_objects, local_id) else {
             return false;
         };

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::{error::Error, fmt};
 
 use rive_binary::{RuntimeFile, RuntimeObject};
-use rive_graph::{ArtboardGraph, ShapePaintKind, ShapePaintStateNode};
+use rive_graph::{ArtboardGraph, ShapePaintKind, ShapePaintNode, ShapePaintStateNode};
 use rive_render_api::{
     BlendMode, Factory as RenderFactory, RawPath, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin,
 };
@@ -141,47 +141,52 @@ pub fn script_node_for_artboard(
         .iter()
         .flat_map(|container| &container.paints)
         .find(|paint| paint.local_id == component.local_id)
-        .map(|paint| {
-            let object = instance
-                .runtime_file()
-                .and_then(|file| file.object(paint.global_id as usize));
-            let authored_color = match paint.paint_state {
-                Some(ShapePaintStateNode::SolidColor { color }) => color,
-                _ => 0xff000000,
-            };
-            let color = paint
-                .mutator_local
-                .zip(property_key_for_name("SolidColor", "colorValue"))
-                .and_then(|(local_id, key)| instance.color_property(local_id, key))
-                .unwrap_or(authored_color);
-            ScriptPaint {
-                style: match paint.paint_type {
-                    ShapePaintKind::Stroke => RenderPaintStyle::Stroke,
-                    _ => RenderPaintStyle::Fill,
-                },
-                color,
-                thickness: object
-                    .and_then(|object| object.double_property("thickness"))
-                    .unwrap_or(1.0),
-                join: match object.and_then(|object| object.uint_property("join")) {
-                    Some(1) => StrokeJoin::Round,
-                    Some(2) => StrokeJoin::Bevel,
-                    _ => StrokeJoin::Miter,
-                },
-                cap: match object.and_then(|object| object.uint_property("cap")) {
-                    Some(1) => StrokeCap::Round,
-                    Some(2) => StrokeCap::Square,
-                    _ => StrokeCap::Butt,
-                },
-                feather: paint
-                    .feather
-                    .as_ref()
-                    .map(|feather| feather.strength)
-                    .unwrap_or(0.0),
-                blend_mode: script_blend_mode(paint.blend_mode_value),
-            }
-        });
+        .map(|paint| script_paint_for_shape(instance, paint));
     Some(ScriptNode { path, paint })
+}
+
+pub(crate) fn script_paint_for_shape(
+    instance: &ArtboardInstance,
+    paint: &ShapePaintNode,
+) -> ScriptPaint {
+    let object = instance
+        .runtime_file()
+        .and_then(|file| file.object(paint.global_id as usize));
+    let authored_color = match paint.paint_state {
+        Some(ShapePaintStateNode::SolidColor { color }) => color,
+        _ => 0xff000000,
+    };
+    let color = paint
+        .mutator_local
+        .zip(property_key_for_name("SolidColor", "colorValue"))
+        .and_then(|(local_id, key)| instance.color_property(local_id, key))
+        .unwrap_or(authored_color);
+    ScriptPaint {
+        style: match paint.paint_type {
+            ShapePaintKind::Stroke => RenderPaintStyle::Stroke,
+            _ => RenderPaintStyle::Fill,
+        },
+        color,
+        thickness: object
+            .and_then(|object| object.double_property("thickness"))
+            .unwrap_or(1.0),
+        join: match object.and_then(|object| object.uint_property("join")) {
+            Some(1) => StrokeJoin::Round,
+            Some(2) => StrokeJoin::Bevel,
+            _ => StrokeJoin::Miter,
+        },
+        cap: match object.and_then(|object| object.uint_property("cap")) {
+            Some(1) => StrokeCap::Round,
+            Some(2) => StrokeCap::Square,
+            _ => StrokeCap::Butt,
+        },
+        feather: paint
+            .feather
+            .as_ref()
+            .map(|feather| feather.strength)
+            .unwrap_or(0.0),
+        blend_mode: script_blend_mode(paint.blend_mode_value),
+    }
 }
 
 fn script_blend_mode(value: u32) -> BlendMode {
@@ -373,6 +378,18 @@ pub trait ScriptInstance {
         self.call_method(method, args, host)
     }
 
+    fn call_path_effect_update(
+        &mut self,
+        source: RawPath,
+        node: ScriptNode,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RawPath, ScriptError> {
+        let _ = (source, node, host);
+        Err(ScriptError::new(
+            "script path effects require backend path userdata support",
+        ))
+    }
+
     fn call_draw(
         &mut self,
         factory: &mut dyn RenderFactory,
@@ -409,6 +426,22 @@ pub trait ScriptInstance {
         Err(ScriptError::new(
             "script view-model inputs require backend userdata support",
         ))
+    }
+}
+
+impl ArtboardInstance {
+    pub(crate) fn apply_scripted_path_effect(
+        &self,
+        global_id: u32,
+        source: RawPath,
+        node: ScriptNode,
+    ) -> Result<RawPath, ScriptError> {
+        let handle = self
+            .script_instance_for_global(global_id)
+            .ok_or_else(|| ScriptError::new(format!("missing script path effect {global_id}")))?;
+        handle
+            .borrow_mut()
+            .call_path_effect_update(source, node, &mut NoopScriptHost)
     }
 }
 

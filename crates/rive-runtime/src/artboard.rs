@@ -81,6 +81,7 @@ pub struct ArtboardInstance {
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    script_path_effect_globals: BTreeSet<u32>,
     script_updates_pending: BTreeSet<u32>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
@@ -328,6 +329,7 @@ impl ArtboardInstance {
             linear_animations,
             state_machines: Arc::new(state_machines),
             script_instances_by_global: BTreeMap::new(),
+            script_path_effect_globals: BTreeSet::new(),
             script_updates_pending: BTreeSet::new(),
             nested_artboards,
             nested_artboard_locals,
@@ -395,6 +397,15 @@ impl ArtboardInstance {
         self.script_updates_pending.insert(global_id);
     }
 
+    pub fn set_script_path_effect_instance_for_global(
+        &mut self,
+        global_id: u32,
+        instance: Box<dyn ScriptInstance>,
+    ) {
+        self.script_path_effect_globals.insert(global_id);
+        self.set_script_instance_for_global(global_id, instance);
+    }
+
     /// Runs the C++ `ScriptedDrawable::update` phase for scripts dirtied by
     /// initialization or input hydration.
     pub fn update_script_instances(&mut self) -> Result<bool, ScriptError> {
@@ -402,6 +413,9 @@ impl ArtboardInstance {
         let mut did_update = false;
         let mut host = NoopScriptHost;
         for global_id in pending {
+            if self.script_path_effect_globals.contains(&global_id) {
+                continue;
+            }
             let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
                 continue;
             };
@@ -3094,6 +3108,7 @@ mod tests {
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: BTreeMap::new(),
+            script_path_effect_globals: BTreeSet::new(),
             script_updates_pending: BTreeSet::new(),
             nested_artboards: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),

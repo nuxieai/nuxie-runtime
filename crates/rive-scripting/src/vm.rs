@@ -512,6 +512,15 @@ impl ScriptInstance for LuaScriptInstance {
         bindings.with_factory_context(factory, || self.call_method(method, args, host))
     }
 
+    fn call_path_effect_update(
+        &mut self,
+        source: rive_render_api::RawPath,
+        node: rive_runtime::ScriptNode,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<rive_render_api::RawPath, ScriptError> {
+        renderer::call_path_effect_update(&self.table, source, node).map_err(script_error)
+    }
+
     fn call_draw(
         &mut self,
         factory: &mut dyn RenderFactory,

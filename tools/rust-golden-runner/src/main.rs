@@ -1692,7 +1692,14 @@ fn initialize_scripted_drawables(
                     )
                 })?;
         }
-        instance.set_script_instance_for_global(local_object.global_id, script_instance);
+        if local_object.type_name == Some("ScriptedPathEffect") {
+            instance.set_script_path_effect_instance_for_global(
+                local_object.global_id,
+                script_instance,
+            );
+        } else {
+            instance.set_script_instance_for_global(local_object.global_id, script_instance);
+        }
     }
 
     Ok(Some(render_state))
@@ -1967,7 +1974,10 @@ fn mark_scripted_drawables_for_update(artboard: &ArtboardGraph, instance: &mut A
 
 #[cfg(feature = "scripting")]
 fn is_scripted_drawable_type(type_name: &str) -> bool {
-    matches!(type_name, "ScriptedDrawable" | "ScriptedLayout")
+    matches!(
+        type_name,
+        "ScriptedDrawable" | "ScriptedLayout" | "ScriptedPathEffect"
+    )
 }
 
 #[cfg(feature = "scripting")]
@@ -2186,9 +2196,9 @@ fn ensure_static_draw_supported_for_artboard(
             .local_objects
             .iter()
             .find_map(|object| match object.type_name {
-                Some(
-                    path_effect_type @ ("ScriptedPathEffect" | "TargetEffect" | "GroupEffect"),
-                ) => Some((path_effect_type, object.global_id)),
+                Some(path_effect_type @ ("TargetEffect" | "GroupEffect")) => {
+                    Some((path_effect_type, object.global_id))
+                }
                 _ => None,
             })
     {

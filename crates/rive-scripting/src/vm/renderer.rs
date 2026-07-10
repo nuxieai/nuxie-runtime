@@ -16,7 +16,10 @@ use rive_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, RawPath,
     RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
 };
-use rive_runtime::{ScriptArtboard, ScriptNode, ScriptPaint as RuntimeScriptPaint};
+use rive_runtime::{
+    RuntimeContourMeasure, RuntimePathMeasure, ScriptArtboard, ScriptNode,
+    ScriptPaint as RuntimeScriptPaint, runtime_path_commands_from_raw_path,
+};
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
@@ -382,6 +385,10 @@ impl ScriptedPath {
             .expect("render path is initialized")
             .as_ref()
     }
+
+    fn commands(&self) -> Vec<rive_runtime::RuntimePathCommand> {
+        runtime_path_commands_from_raw_path(&self.raw_path)
+    }
 }
 
 struct ScriptedNode {
@@ -487,7 +494,150 @@ impl UserData for ScriptedPath {
             this.mark_dirty();
             Ok(())
         });
+        methods.add_method("contours", |lua, this, ()| {
+            let contours = Rc::new(RuntimeContourMeasure::from_commands(&this.commands()));
+            Ok(match contours.is_empty() {
+                true => Value::Nil,
+                false => Value::UserData(
+                    lua.create_userdata(ScriptedContourMeasure { contours, index: 0 })?,
+                ),
+            })
+        });
+        methods.add_method("measure", |lua, this, ()| {
+            lua.create_userdata(ScriptedPathMeasure {
+                measure: RuntimePathMeasure::from_commands(&this.commands()),
+            })
+        });
     }
+}
+
+struct ScriptedContourMeasure {
+    contours: Rc<Vec<RuntimeContourMeasure>>,
+    index: usize,
+}
+
+impl ScriptedContourMeasure {
+    fn measure(&self) -> &RuntimeContourMeasure {
+        &self.contours[self.index]
+    }
+}
+
+impl UserData for ScriptedContourMeasure {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("length", |_, this| Ok(this.measure().length()));
+        fields.add_field_method_get("isClosed", |_, this| Ok(this.measure().is_closed()));
+        fields.add_field_method_get("next", |lua, this| {
+            let next = this.index + 1;
+            Ok(match next < this.contours.len() {
+                true => Value::UserData(lua.create_userdata(Self {
+                    contours: Rc::clone(&this.contours),
+                    index: next,
+                })?),
+                false => Value::Nil,
+            })
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("positionAndTangent", |_, this, distance: f32| {
+            let sample = this.measure().at_distance(distance);
+            Ok((
+                LuaVector::new(sample.pos.0, sample.pos.1, 0.0),
+                LuaVector::new(sample.tan.0, sample.tan.1, 0.0),
+            ))
+        });
+        methods.add_method("warp", |_, this, point: LuaVector| {
+            let sample = this.measure().at_distance(point.x());
+            Ok(LuaVector::new(
+                sample.pos.0 - sample.tan.1 * point.y(),
+                sample.pos.1 + sample.tan.0 * point.y(),
+                0.0,
+            ))
+        });
+        methods.add_method("extract", |_, this, args: MultiValue| {
+            extract_measure_segment(
+                this.measure().segment(
+                    number_arg(args.front(), "startDistance")?,
+                    number_arg(args.get(1), "endDistance")?,
+                    bool_arg_or(args.get(3), true)?,
+                ),
+                args.get(2),
+            )
+        });
+    }
+}
+
+struct ScriptedPathMeasure {
+    measure: RuntimePathMeasure,
+}
+
+impl UserData for ScriptedPathMeasure {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("length", |_, this| Ok(this.measure.length()));
+        fields.add_field_method_get("isClosed", |_, this| Ok(this.measure.is_closed()));
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("positionAndTangent", |_, this, distance: f32| {
+            let sample = this.measure.at_distance(distance);
+            Ok((
+                LuaVector::new(sample.pos.0, sample.pos.1, 0.0),
+                LuaVector::new(sample.tan.0, sample.tan.1, 0.0),
+            ))
+        });
+        methods.add_method("warp", |_, this, point: LuaVector| {
+            let sample = this.measure.at_distance(point.x());
+            Ok(LuaVector::new(
+                sample.pos.0 - sample.tan.1 * point.y(),
+                sample.pos.1 + sample.tan.0 * point.y(),
+                0.0,
+            ))
+        });
+        methods.add_method("extract", |_, this, args: MultiValue| {
+            extract_measure_segment(
+                this.measure.segment(
+                    number_arg(args.front(), "startDistance")?,
+                    number_arg(args.get(1), "endDistance")?,
+                    bool_arg_or(args.get(3), true)?,
+                ),
+                args.get(2),
+            )
+        });
+    }
+}
+
+fn extract_measure_segment(segment: RawPath, destination: Option<&Value>) -> Result<()> {
+    let Some(Value::UserData(destination)) = destination else {
+        return Err(Error::runtime(
+            "Path measure extract expects a destination Path",
+        ));
+    };
+    let mut destination = destination.borrow_mut::<ScriptedPath>()?;
+    destination.raw_path.add_path(&segment, Mat2D::IDENTITY);
+    destination.mark_dirty();
+    Ok(())
+}
+
+fn bool_arg_or(value: Option<&Value>, fallback: bool) -> Result<bool> {
+    match value {
+        None | Some(Value::Nil) => Ok(fallback),
+        Some(Value::Boolean(value)) => Ok(*value),
+        _ => Err(Error::runtime("expected boolean")),
+    }
+}
+
+pub(super) fn call_path_effect_update(
+    table: &Table,
+    source: RawPath,
+    node: ScriptNode,
+) -> Result<RawPath> {
+    let lua = table.lua();
+    let function: luaur_rt::Function = table.get("update")?;
+    let source = lua.create_userdata(ScriptedPath::from_raw_path(source))?;
+    let node = lua.create_userdata(ScriptedNode::new(node))?;
+    let output: AnyUserData = function.call((table.clone(), source, node))?;
+    let output = output.borrow::<ScriptedPath>()?;
+    Ok(output.raw_path.clone())
 }
 
 fn install_path_global(lua: &Lua) -> Result<()> {

@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=9, unsupported-feature=23, not-yet=0
+  exact-segments=584, diverges=11, unsupported-feature=21, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=17 gated=6; the harness bucket is empty
-- Scripted compare: exact=9 / exact-segments=9 / diverges=0 /
-  unsupported-feature=17 across the 26 M8 scripting entries
+  M8=15 gated=6; the harness bucket is empty
+- Scripted compare: exact=10 / exact-segments=10 / diverges=1 /
+  unsupported-feature=15 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -526,8 +526,8 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. M0-M7 remain complete; M8 is active. The baseline ratchet passes at
-   exact=263 / exact-segments=584 / diverges=7 / unsupported-feature=25;
+1. M0-M7 remain complete; M8 is active. The current ratchet passes at
+   exact=263 / exact-segments=584 / diverges=11 / unsupported-feature=21;
    `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
@@ -568,10 +568,11 @@ the only memory the next session has. Update it every commit.
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
         `make scripted-golden-compare` now builds mode-specific C++/Rust
-        binaries and ratchets all 26 M8 entries: seven exact streams and
-        nineteen verified feature diagnostics. The C++ `Vector` static
-        table is ported, advancing `script_affects_has_changed.riv` to a stream
-        divergence. The harness bucket is empty: scripted loading selects the
+        binaries and ratchets all 26 M8 entries: ten exact streams, one
+        runnable divergence, and fifteen verified feature diagnostics. The
+        C++ `Vector` static table is ported, advancing
+        `script_affects_has_changed.riv` to a stream divergence. The harness
+        bucket is empty: scripted loading selects the
         serialized view-model instance where C++ fixtures require it, the
         scripted oracle uses its release configuration to avoid a debug-only
         Feather AABB assertion, and stream extraction tolerates script `print`
@@ -596,9 +597,12 @@ the only memory the next session has. Update it every commit.
         `data_binding_artboards_test.riv` is exact after binding the serialized
         root artboard value through `NestedArtboardLayout`, replacing the live
         child before recursive context binding, and keying render caches by
-        both host and selected child. The scripted lane has no stream
-        divergences; remaining work is the nineteen named scripting
-        diagnostics.
+        both host and selected child. Direct `ScriptedPathEffect` execution,
+        path/contour measurement, extraction, and node paint snapshots are
+        now ported; `script_path_effects_test.riv` is exact and
+        `path_effect_with_feathers.riv` runs to a pre-existing nested clipping
+        divergence. The next scripting slice is `TargetEffect`/`GroupEffect`
+        routing for `group_effect.riv`; fifteen named diagnostics remain.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3778,6 +3782,22 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Ported the direct scripted path-effect runtime slice.
+  `ScriptedPathEffect` instances now follow the script init/input lifecycle
+  without receiving drawable zero-argument updates, and shape-paint path
+  construction calls Luau `update(self, sourcePath, node)` with VM-neutral
+  path and paint snapshots. The Luau Path surface now exposes C++-compatible
+  contour/path measurement, position/tangent, warp, and append-to-destination
+  extraction; focused tests cover RawPath conversion and multi-contour
+  extraction. `script_path_effects_test.riv` is scripted-mode exact, while
+  `path_effect_with_feathers.riv` advances from unsupported to runnable
+  divergence at its existing nested clipping allocation/order gap. Scripted
+  compare reports exact=10 / exact-segments=10 / diverges=1 /
+  unsupported-feature=15. Full compare reports exact=263 /
+  exact-segments=584 / diverges=11 / unsupported-feature=21, and `cargo test
+  --workspace` passes. Next target is `TargetEffect`/`GroupEffect` routing for
+  `group_effect.riv`.
 
 - 2026-07-09: [M8] Promoted `scripted_as_path.riv` to scripted-mode exact by
   porting the corpus-backed `ScriptedArtboard::node`, `ScriptedNode::asPath`,

@@ -28,16 +28,17 @@ pub(crate) use data_bind_graph::{
     data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
 pub use draw::{
-    RuntimeDrawCommand, RuntimeDrawCommandKind, RuntimeDrawCommandObjectKind, RuntimeFeatherState,
-    RuntimeGradientStop, RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimeRenderImages,
-    RuntimeRenderPaintCache, RuntimeRenderPaints, RuntimeRenderPathCache, RuntimeShapePaintCommand,
-    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    preallocate_render_paint_cache_for_artboard_instance,
+    RuntimeContourMeasure, RuntimeDrawCommand, RuntimeDrawCommandKind,
+    RuntimeDrawCommandObjectKind, RuntimeFeatherState, RuntimeGradientStop,
+    RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimePathMeasure, RuntimePathSample,
+    RuntimeRenderImages, RuntimeRenderPaintCache, RuntimeRenderPaints, RuntimeRenderPathCache,
+    RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
+    RuntimeShapePaintState, preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
-    preallocate_source_render_paints,
+    preallocate_source_render_paints, runtime_path_commands_from_raw_path,
 };
 pub use objects::InstanceSlot;
 pub use scripting::{

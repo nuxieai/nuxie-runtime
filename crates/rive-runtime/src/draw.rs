@@ -9,10 +9,10 @@ use rive_graph::{
 };
 use rive_render_api::{
     BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
-    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, RawPath, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
-    Vec2D as RenderVec2D,
+    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, StrokeCap as RenderStrokeCap,
+    StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -29,6 +29,7 @@ use crate::properties::{
     runtime_object_explicit_uint_property_by_key, runtime_object_uint_property_by_key,
     shape_paint_is_visible_property_key, solid_color_value_property_key,
 };
+use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
     RuntimeTextLayoutConstraint, runtime_text_input_shape_paint_commands,
     runtime_text_shape_paint_commands, static_text_constraint_bounds,
@@ -11226,6 +11227,19 @@ fn runtime_stroke_effect_path_commands(
 ) -> Option<Vec<RuntimePathCommand>> {
     match effect.type_name {
         "DashPath" => runtime_dash_path_effect_commands(artboard, effect, paint, source),
+        "ScriptedPathEffect" => {
+            let output = artboard
+                .apply_scripted_path_effect(
+                    effect.global_id,
+                    runtime_raw_path_from_commands(source),
+                    ScriptNode {
+                        path: None,
+                        paint: Some(script_paint_for_shape(artboard, paint)),
+                    },
+                )
+                .ok()?;
+            Some(runtime_path_commands_from_raw_path(&output))
+        }
         "TrimPath" => runtime_trim_path_line_effect_commands(artboard, effect, paint, source),
         _ => None,
     }
@@ -11465,16 +11479,21 @@ struct TrimContour {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RuntimePathMeasure {
+pub struct RuntimePathMeasure {
     contours: Vec<TrimContour>,
     length: f32,
     raw_is_closed: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct RuntimePathSample {
-    pub(crate) pos: (f32, f32),
-    pub(crate) tan: (f32, f32),
+pub struct RuntimePathSample {
+    pub pos: (f32, f32),
+    pub tan: (f32, f32),
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeContourMeasure {
+    contour: TrimContour,
 }
 
 #[derive(Debug, Clone)]
@@ -11747,7 +11766,7 @@ impl TrimContour {
 }
 
 impl RuntimePathMeasure {
-    pub(crate) fn from_commands(commands: &[RuntimePathCommand]) -> Self {
+    pub fn from_commands(commands: &[RuntimePathCommand]) -> Self {
         Self::from_commands_with_inv_tolerance(commands, TRIM_CONTOUR_DEFAULT_INV_TOLERANCE)
     }
 
@@ -11778,7 +11797,7 @@ impl RuntimePathMeasure {
         }
     }
 
-    pub(crate) fn length(&self) -> f32 {
+    pub fn length(&self) -> f32 {
         self.length
     }
 
@@ -11793,7 +11812,7 @@ impl RuntimePathMeasure {
         self.at_distance(self.length * in_range_percentage)
     }
 
-    fn at_distance(&self, distance: f32) -> RuntimePathSample {
+    pub fn at_distance(&self, distance: f32) -> RuntimePathSample {
         let mut current_distance = distance;
         for contour in &self.contours {
             let contour_length = contour.length;
@@ -11849,13 +11868,117 @@ impl RuntimePathMeasure {
         }
     }
 
-    pub(crate) fn is_closed(&self) -> bool {
+    pub fn is_closed(&self) -> bool {
         self.contours.len() == 1 && self.contours[0].is_closed
     }
 
     pub(crate) fn raw_is_closed(&self) -> bool {
         self.raw_is_closed
     }
+}
+
+impl RuntimeContourMeasure {
+    pub fn from_commands(commands: &[RuntimePathCommand]) -> Vec<Self> {
+        TrimContour::from_commands(commands)
+            .into_iter()
+            .map(|contour| Self { contour })
+            .collect()
+    }
+
+    pub fn length(&self) -> f32 {
+        self.contour.length
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.contour.is_closed
+    }
+
+    pub fn at_distance(&self, distance: f32) -> RuntimePathSample {
+        let (pos, tan) = self.contour.position_tangent_at_distance(distance);
+        RuntimePathSample { pos, tan }
+    }
+
+    pub fn segment(&self, start: f32, end: f32, start_with_move: bool) -> RawPath {
+        let mut commands = Vec::new();
+        self.contour
+            .get_segment(start, end, &mut commands, start_with_move);
+        runtime_raw_path_from_commands(&commands)
+    }
+}
+
+impl RuntimePathMeasure {
+    pub fn segment(&self, start: f32, end: f32, start_with_move: bool) -> RawPath {
+        let mut commands = Vec::new();
+        self.get_segment(start, end, &mut commands, start_with_move);
+        runtime_raw_path_from_commands(&commands)
+    }
+}
+
+pub fn runtime_path_commands_from_raw_path(path: &RawPath) -> Vec<RuntimePathCommand> {
+    (|| {
+        let mut commands = Vec::with_capacity(path.verbs().len());
+        let mut point_index = 0usize;
+        let mut current = None;
+        for verb in path.verbs() {
+            match verb {
+                RenderPathVerb::Move => {
+                    let point = path.points().get(point_index)?;
+                    point_index += 1;
+                    current = Some((point.x, point.y));
+                    commands.push(RuntimePathCommand::Move {
+                        x: point.x,
+                        y: point.y,
+                    });
+                }
+                RenderPathVerb::Line => {
+                    let point = path.points().get(point_index)?;
+                    point_index += 1;
+                    current = Some((point.x, point.y));
+                    commands.push(RuntimePathCommand::Line {
+                        x: point.x,
+                        y: point.y,
+                    });
+                }
+                RenderPathVerb::Quad => {
+                    let from = current?;
+                    let control = path.points().get(point_index)?;
+                    let point = path.points().get(point_index + 1)?;
+                    point_index += 2;
+                    let x1 = from.0 + (control.x - from.0) * (2.0 / 3.0);
+                    let y1 = from.1 + (control.y - from.1) * (2.0 / 3.0);
+                    let x2 = point.x + (control.x - point.x) * (2.0 / 3.0);
+                    let y2 = point.y + (control.y - point.y) * (2.0 / 3.0);
+                    current = Some((point.x, point.y));
+                    commands.push(RuntimePathCommand::Cubic {
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        x3: point.x,
+                        y3: point.y,
+                    });
+                }
+                RenderPathVerb::Cubic => {
+                    let p1 = path.points().get(point_index)?;
+                    let p2 = path.points().get(point_index + 1)?;
+                    let p3 = path.points().get(point_index + 2)?;
+                    point_index += 3;
+                    current = Some((p3.x, p3.y));
+                    commands.push(RuntimePathCommand::Cubic {
+                        x1: p1.x,
+                        y1: p1.y,
+                        x2: p2.x,
+                        y2: p2.y,
+                        x3: p3.x,
+                        y3: p3.y,
+                    });
+                }
+                RenderPathVerb::Close => commands.push(RuntimePathCommand::Close),
+            }
+        }
+        Some(commands)
+    })()
+    .unwrap_or_default()
 }
 
 impl TrimSegmentKind {
@@ -14227,6 +14350,68 @@ mod tests {
 
         assert_ne!(authored, rebound);
         assert_eq!(authored, nested_render_cache_key(Some(33), Some(14), 105));
+    }
+
+    #[test]
+    fn raw_script_path_commands_preserve_verbs_and_lower_quadratics() {
+        let mut path = RawPath::new();
+        path.move_to(1.0, 2.0);
+        path.line_to(3.0, 4.0);
+        path.quad_to(6.0, 7.0, 9.0, 10.0);
+        path.cubic_to(11.0, 12.0, 13.0, 14.0, 15.0, 16.0);
+        path.close();
+
+        assert_eq!(
+            runtime_path_commands_from_raw_path(&path),
+            vec![
+                RuntimePathCommand::Move { x: 1.0, y: 2.0 },
+                RuntimePathCommand::Line { x: 3.0, y: 4.0 },
+                RuntimePathCommand::Cubic {
+                    x1: 5.0,
+                    y1: 6.0,
+                    x2: 7.0,
+                    y2: 8.0,
+                    x3: 9.0,
+                    y3: 10.0,
+                },
+                RuntimePathCommand::Cubic {
+                    x1: 11.0,
+                    y1: 12.0,
+                    x2: 13.0,
+                    y2: 14.0,
+                    x3: 15.0,
+                    y3: 16.0,
+                },
+                RuntimePathCommand::Close,
+            ]
+        );
+    }
+
+    #[test]
+    fn script_path_measure_exposes_contours_and_extracts_distance_ranges() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Move { x: 20.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 20.0, y: 5.0 },
+        ];
+        let contours = RuntimeContourMeasure::from_commands(&commands);
+        let measure = RuntimePathMeasure::from_commands(&commands);
+
+        assert_eq!(contours.len(), 2);
+        assert_eq!(contours[0].length(), 10.0);
+        assert_eq!(contours[1].at_distance(2.0).pos, (20.0, 2.0));
+        assert_eq!(measure.length(), 15.0);
+        assert_eq!(measure.at_distance(12.0).pos, (20.0, 2.0));
+        assert_eq!(
+            runtime_path_commands_from_raw_path(&measure.segment(8.0, 12.0, true)),
+            vec![
+                RuntimePathCommand::Move { x: 8.0, y: 0.0 },
+                RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+                RuntimePathCommand::Move { x: 20.0, y: 0.0 },
+                RuntimePathCommand::Line { x: 20.0, y: 2.0 },
+            ]
+        );
     }
     use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue};
     use rive_binary::read_runtime_file;

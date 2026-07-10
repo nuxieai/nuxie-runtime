@@ -4191,6 +4191,11 @@ impl RuntimeOwnedViewModelInstance {
         self.string_value_by_property_index(property_index)
     }
 
+    pub fn boolean_value_by_property_name(&self, property_name: &str) -> Option<bool> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.boolean_value_by_property_index(property_index)
+    }
+
     pub fn nested_view_model_selection_by_property_name(
         &self,
         property_name: &str,

@@ -53,6 +53,7 @@ pub struct ScriptVm {
     renderer_bindings: RendererBindings,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
+    default_context_parent_view_models: Vec<ScriptViewModel>,
 }
 
 /// A luaur-backed scripted object instance table.
@@ -120,6 +121,7 @@ impl ScriptVm {
             renderer_bindings: RendererBindings::default(),
             view_models: BTreeMap::new(),
             default_context_view_model: None,
+            default_context_parent_view_models: Vec::new(),
         }
     }
 
@@ -129,6 +131,16 @@ impl ScriptVm {
 
     pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {
         self.default_context_view_model = view_model;
+        self.default_context_parent_view_models.clear();
+    }
+
+    pub fn set_default_context_view_model_chain(
+        &mut self,
+        view_model: Option<ScriptViewModel>,
+        parents: Vec<ScriptViewModel>,
+    ) {
+        self.default_context_view_model = view_model;
+        self.default_context_parent_view_models = parents;
     }
 
     /// The underlying mlua-style handle (globals, create_function, userdata).
@@ -489,7 +501,10 @@ impl RuntimeScriptingVm for ScriptVm {
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
         let context = self
             .lua
-            .create_userdata(ScriptedContext::new(Rc::clone(&context_view_model)))
+            .create_userdata(ScriptedContext::new(
+                Rc::clone(&context_view_model),
+                self.default_context_parent_view_models.clone(),
+            ))
             .map_err(script_error)?;
         let instance: Table = generator.call(context.clone()).map_err(script_error)?;
         Ok(Box::new(LuaScriptInstance::with_renderer_bindings(

@@ -82,6 +82,7 @@ pub struct ArtboardInstance {
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    nested_script_owned_contexts: BTreeMap<u32, RuntimeOwnedViewModelInstance>,
     script_path_effect_globals: BTreeSet<u32>,
     script_updates_pending: BTreeSet<u32>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
@@ -332,6 +333,7 @@ impl ArtboardInstance {
             linear_animations,
             state_machines: Arc::new(state_machines),
             script_instances_by_global: BTreeMap::new(),
+            nested_script_owned_contexts: BTreeMap::new(),
             script_path_effect_globals: BTreeSet::new(),
             script_updates_pending: BTreeSet::new(),
             nested_artboards,
@@ -928,6 +930,76 @@ impl ArtboardInstance {
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
         self.advance_nested_artboards_collect_events(elapsed_seconds, None)
+    }
+
+    pub fn try_visit_nested_artboard_instances_mut<E>(
+        &mut self,
+        visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.try_visit_nested_artboard_instances_mut_at_depth(1, visitor)
+    }
+
+    fn try_visit_nested_artboard_instances_mut_at_depth<E>(
+        &mut self,
+        depth: usize,
+        visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for nested in self.nested_artboards.values_mut() {
+            visitor(depth, nested.child.graph_global_id, nested.child.as_mut())?;
+            nested
+                .child
+                .try_visit_nested_artboard_instances_mut_at_depth(depth + 1, visitor)?;
+        }
+        Ok(())
+    }
+
+    pub fn bind_nested_artboard_owned_context_for_graph(
+        &mut self,
+        file: &RuntimeFile,
+        graph_global_id: u32,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let mut changed = false;
+        for nested in self.nested_artboards.values_mut() {
+            if nested.child.graph_global_id == graph_global_id {
+                let context_chain: [&[usize]; 1] = [&[]];
+                changed |=
+                    nested.bind_owned_view_model_animation_contexts(file, context, &context_chain);
+                changed |= nested
+                    .child
+                    .bind_owned_view_model_artboard_context(file, context);
+            } else {
+                changed |= nested.child.bind_nested_artboard_owned_context_for_graph(
+                    file,
+                    graph_global_id,
+                    context,
+                );
+            }
+        }
+        changed
+    }
+
+    pub fn set_nested_script_owned_context_for_graph(
+        &mut self,
+        graph_global_id: u32,
+        context: RuntimeOwnedViewModelInstance,
+    ) {
+        self.nested_script_owned_contexts
+            .insert(graph_global_id, context);
+    }
+
+    pub fn rebind_nested_script_owned_contexts(&mut self, file: &RuntimeFile) -> bool {
+        let contexts = self
+            .nested_script_owned_contexts
+            .iter()
+            .map(|(graph_global_id, context)| (*graph_global_id, context.clone()))
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for (graph_global_id, context) in contexts {
+            changed |=
+                self.bind_nested_artboard_owned_context_for_graph(file, graph_global_id, &context);
+        }
+        changed
     }
 
     pub fn advance_nested_artboards_with_state_machine(
@@ -3132,6 +3204,7 @@ mod tests {
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: BTreeMap::new(),
+            nested_script_owned_contexts: BTreeMap::new(),
             script_path_effect_globals: BTreeSet::new(),
             script_updates_pending: BTreeSet::new(),
             nested_artboards: BTreeMap::new(),

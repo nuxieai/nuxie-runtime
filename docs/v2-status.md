@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=13 / exact-segments=13 / diverges=13 /
+- Scripted compare: exact=14 / exact-segments=14 / diverges=12 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -612,7 +612,10 @@ the only memory the next session has. Update it every commit.
         now carries the sharper `component-list-instancing` diagnostic because
         C++ binds each non-empty list item to an instantiated child artboard,
         while Rust intentionally does not approximate that coupled draw/layout/
-        context behavior. Next is `scripted_data_context.riv`.
+        context behavior. `scripted_data_context.riv` is exact after nested
+        `dataContext` scripts gained parent/root model traversal, boolean
+        properties, and retained child contexts that survive root rebinds.
+        Next is `scripted_data_converter_bound_input.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3792,6 +3795,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `scripted_data_context.riv` to scripted exact.
+  Persistent nested artboard instances can now be visited without exposing
+  storage, and nested scripts that import `dataContext` initialize after the
+  root context tree is bound. Luau exposes `context:dataContext()`,
+  `DataContext:parent()` / `viewModel()`, root-model traversal, and boolean
+  view-model properties. Script-mutated child contexts are retained on the
+  root artboard and replayed after later root rebinds, keeping the nested state
+  machine and child text binds on the same live model. Scripted compare moves
+  to exact=14 / exact-segments=14 / diverges=12 / unsupported-feature=1;
+  full compare remains exact=263 / exact-segments=584 / diverges=26 /
+  unsupported-feature=6 with gated=5 and M8=1. `cargo test --workspace`, both
+  golden compares, corpus regeneration, formatting, and diff checks pass.
 
 - 2026-07-09: [M8] Sharpened
   `script_create_viewmodel_instance.riv` to the named

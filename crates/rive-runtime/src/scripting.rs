@@ -287,6 +287,16 @@ impl ScriptViewModel {
             .set_string_by_property_name(name, value.as_bytes())
     }
 
+    pub fn boolean(&self, name: &str) -> Option<bool> {
+        self.instance.borrow().boolean_value_by_property_name(name)
+    }
+
+    pub fn set_boolean(&self, name: &str, value: bool) -> bool {
+        self.instance
+            .borrow_mut()
+            .set_boolean_by_property_name(name, value)
+    }
+
     pub fn view_model(&self, name: &str) -> Option<Self> {
         self.nested_view_models.get(name).cloned()
     }
@@ -383,6 +393,7 @@ impl ScriptViewModel {
 pub enum ScriptViewModelProperty {
     Number,
     String,
+    Boolean,
     Trigger,
     List,
     ViewModel,
@@ -445,6 +456,7 @@ fn build_script_view_model_shared(
             let kind = match property.type_name {
                 "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
                 "ViewModelPropertyString" => ScriptViewModelProperty::String,
+                "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
                 "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,

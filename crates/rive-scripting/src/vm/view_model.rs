@@ -64,6 +64,21 @@ pub(super) fn create_scripted_view_model(
             }
         })?,
     )?;
+    let get_boolean_model = model.clone();
+    table.set(
+        "getBoolean",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_boolean_model.property(&name) {
+                Some(ScriptViewModelProperty::Boolean) => lua
+                    .create_userdata(ScriptedPropertyBoolean::new(
+                        get_boolean_model.clone(),
+                        name,
+                    ))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let instance_model = model.clone();
     table.set(
         "instance",
@@ -95,6 +110,9 @@ pub(super) fn create_scripted_view_model(
             }
             ScriptViewModelProperty::String => {
                 lua.create_userdata(ScriptedPropertyString::new(model.clone(), name.clone()))?
+            }
+            ScriptViewModelProperty::Boolean => {
+                lua.create_userdata(ScriptedPropertyBoolean::new(model.clone(), name.clone()))?
             }
             ScriptViewModelProperty::Trigger => {
                 lua.create_userdata(ScriptedPropertyTrigger::default())?
@@ -171,6 +189,35 @@ impl UserData for ScriptedPropertyNumber {
 struct ScriptedPropertyString {
     model: ScriptViewModel,
     name: String,
+}
+
+struct ScriptedPropertyBoolean {
+    model: ScriptViewModel,
+    name: String,
+}
+
+impl ScriptedPropertyBoolean {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        Self { model, name }
+    }
+}
+
+impl UserData for ScriptedPropertyBoolean {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |_, this| {
+            Ok(this.model.boolean(&this.name).unwrap_or_default())
+        });
+        fields.add_field_method_set("value", |_, this, value: bool| {
+            this.model.set_boolean(&this.name, value);
+            Ok(())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("getBoolean", |_, this, ()| {
+            Ok(this.model.boolean(&this.name).unwrap_or_default())
+        });
+    }
 }
 
 impl ScriptedPropertyString {
@@ -292,11 +339,15 @@ impl UserData for ScriptedPropertyList {
 
 pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
+    parents: Vec<ScriptViewModel>,
 }
 
 impl ScriptedContext {
-    pub(super) fn new(model: Rc<RefCell<Option<ScriptViewModel>>>) -> Self {
-        Self { model }
+    pub(super) fn new(
+        model: Rc<RefCell<Option<ScriptViewModel>>>,
+        parents: Vec<ScriptViewModel>,
+    ) -> Self {
+        Self { model, parents }
     }
 }
 
@@ -309,10 +360,50 @@ impl UserData for ScriptedContext {
             })
         });
         methods.add_method("rootViewModel", |lua, this, ()| {
-            Ok(match this.model.borrow().clone() {
-                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
-                None => Value::Nil,
+            Ok(
+                match this
+                    .parents
+                    .last()
+                    .cloned()
+                    .or_else(|| this.model.borrow().clone())
+                {
+                    Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                    None => Value::Nil,
+                },
+            )
+        });
+        methods.add_method("dataContext", |lua, this, ()| {
+            let Some(model) = this.model.borrow().clone() else {
+                return Ok(Value::Nil);
+            };
+            lua.create_userdata(ScriptedDataContext {
+                model,
+                parents: this.parents.clone(),
             })
+            .map(Value::UserData)
+        });
+    }
+}
+
+struct ScriptedDataContext {
+    model: ScriptViewModel,
+    parents: Vec<ScriptViewModel>,
+}
+
+impl UserData for ScriptedDataContext {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("viewModel", |lua, this, ()| {
+            create_scripted_view_model(lua, this.model.clone()).map(Value::Table)
+        });
+        methods.add_method("parent", |lua, this, ()| {
+            let Some((parent, remaining)) = this.parents.split_first() else {
+                return Ok(Value::Nil);
+            };
+            lua.create_userdata(ScriptedDataContext {
+                model: parent.clone(),
+                parents: remaining.to_vec(),
+            })
+            .map(Value::UserData)
         });
     }
 }

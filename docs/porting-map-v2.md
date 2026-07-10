@@ -400,6 +400,15 @@ resolved; fuzzers in CI with zero known reachable panics from accepted files;
 the repo is publishable as Nuxie runtime as-is. Then Phase R is a clean
 start.
 
+## Phase S: Upstream Sync (separate map)
+
+After M8, Nuxie runtime tracks `rive-app/rive-runtime` through the recurring
+workflow in `docs/upstream-sync-map.md` (`/sync-upstream` command): triage
+new upstream commits with impact/risk/effort ratings, a HARD user-approval
+gate on every port decision, then port-and-advance-the-pin with the golden
+ratchet as proof of completeness. Nightly automation runs triage-only after
+two clean manual cycles. Added 2026-07-09 by user decision.
+
 ## Phase R: Renderer Port (separate map)
 
 The eventual Rust renderer — a faithful port of the C++ Rive Renderer's

@@ -22,7 +22,7 @@ use crate::{
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use rive_schema::{FieldKind, definition_by_type_key};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
 macro_rules! cached_runtime_data_bind_property_key {
@@ -312,6 +312,9 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
+    default_value_is_resolved: bool,
+    snapshots_source_value: bool,
+    pending_value: Option<RuntimeDataBindGraphValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -430,14 +433,17 @@ impl RuntimeArtboardDataBindTargetQueues {
         queues
     }
 
-    fn enqueue_path(&mut self, path: &[u32]) {
+    fn enqueue_path(&mut self, path: &[u32]) -> Vec<usize> {
         let Some(targets) = self.by_path.get(path).cloned() else {
-            return;
+            return Vec::new();
         };
+        let mut enqueued_properties = Vec::new();
         for target in targets {
             match target {
                 RuntimeArtboardDataBindTargetRef::Property(index) => {
-                    self.enqueue_property(index);
+                    if self.enqueue_property(index) {
+                        enqueued_properties.push(index);
+                    }
                 }
                 RuntimeArtboardDataBindTargetRef::ImageAsset(index) => {
                     self.enqueue_image_asset(index);
@@ -447,17 +453,19 @@ impl RuntimeArtboardDataBindTargetQueues {
                 }
             }
         }
+        enqueued_properties
     }
 
-    fn enqueue_property(&mut self, index: usize) {
+    fn enqueue_property(&mut self, index: usize) -> bool {
         let Some(flag) = self.dirty_property_flags.get_mut(index) else {
-            return;
+            return false;
         };
         if *flag {
-            return;
+            return false;
         }
         *flag = true;
         self.dirty_properties.push(index);
+        true
     }
 
     fn enqueue_image_asset(&mut self, index: usize) {
@@ -535,6 +543,7 @@ pub(super) struct RuntimeArtboardDataBindSourceQueues {
     custom_property_update_flags: Vec<bool>,
     dirty_numeric_sources: Vec<usize>,
     dirty_numeric_source_flags: Vec<bool>,
+    push_numeric_sources: Vec<usize>,
     persisting_layout_computed: Vec<usize>,
     persisting_solo_sources: Vec<usize>,
     persisting_numeric_sources: Vec<usize>,
@@ -587,6 +596,7 @@ impl RuntimeArtboardDataBindSourceQueues {
                             data_bind_index: binding.data_bind_index,
                         });
                     queues.enqueue_numeric_source(index);
+                    queues.push_numeric_sources.push(index);
                 }
                 RuntimeArtboardNumericSourceProperty::ShapeLength => {
                     queues.persisting_numeric_sources.push(index);
@@ -671,6 +681,12 @@ impl RuntimeArtboardDataBindSourceQueues {
         }
         *flag = true;
         self.dirty_numeric_sources.push(index);
+    }
+
+    fn enqueue_numeric_push_sources(&mut self) {
+        for index in self.push_numeric_sources.clone() {
+            self.enqueue_numeric_source(index);
+        }
     }
 
     fn has_custom_property_update_indices(&self) -> bool {
@@ -1316,6 +1332,16 @@ pub(super) fn build_artboard_property_bindings(
         return Vec::new();
     };
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
+    let target_to_source_paths = file
+        .artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter(|data_bind| {
+            data_bind_flags_apply_target_to_source(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            )
+        })
+        .filter_map(|data_bind| file.data_bind_context_source_path_ids_for_object(data_bind.object))
+        .collect::<BTreeSet<_>>();
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -1374,7 +1400,7 @@ pub(super) fn build_artboard_property_bindings(
             let path_is_name_based = file
                 .data_bind_is_name_based_for_object(data_bind.object)
                 .unwrap_or(false);
-            let default_value = default_instance
+            let resolved_default_value = default_instance
                 .as_ref()
                 .and_then(|default_instance| {
                     file.data_context_view_model_property_for_instance(
@@ -1394,11 +1420,17 @@ pub(super) fn build_artboard_property_bindings(
                         return None;
                     }
                     runtime_created_view_model_value_for_declared_path(file, &path)
-                })
-                .unwrap_or_else(|| match property_kind {
-                    FieldKind::Bool => RuntimeDataBindGraphValue::Boolean(false),
-                    _ => RuntimeDataBindGraphValue::Number(0.0),
                 });
+            if resolved_default_value.is_none() && !path_is_name_based {
+                return None;
+            }
+            let default_value =
+                resolved_default_value
+                    .clone()
+                    .unwrap_or_else(|| match property_kind {
+                        FieldKind::Bool => RuntimeDataBindGraphValue::Boolean(false),
+                        _ => RuntimeDataBindGraphValue::Number(0.0),
+                    });
             if !artboard_property_binding_value_matches_kind(&default_value, property_kind)
                 && !artboard_property_binding_allows_converted_default(
                     converter.as_ref(),
@@ -1408,6 +1440,12 @@ pub(super) fn build_artboard_property_bindings(
             {
                 return None;
             }
+            let snapshots_source_value = converter.is_none()
+                && matches!(target.type_name, "LinearGradient" | "RadialGradient")
+                && target_to_source_paths.contains(&path);
+            let pending_value = snapshots_source_value
+                .then(|| resolved_default_value.clone())
+                .flatten();
 
             Some(RuntimeArtboardPropertyBindingInstance {
                 data_bind_index,
@@ -1421,7 +1459,10 @@ pub(super) fn build_artboard_property_bindings(
                     converter.as_ref(),
                 ),
                 converter,
+                pending_value,
                 default_value,
+                default_value_is_resolved: resolved_default_value.is_some(),
+                snapshots_source_value,
             })
         })
         .collect()
@@ -1789,6 +1830,8 @@ pub(super) fn build_artboard_numeric_source_bindings(
     let trim_start_key = runtime_data_bind_property_key_for_name("TrimPath", "start");
     let trim_end_key = runtime_data_bind_property_key_for_name("TrimPath", "end");
     let shape_length_key = runtime_data_bind_property_key_for_name("Shape", "length");
+    let parametric_width_key = runtime_data_bind_property_key_for_name("ParametricPath", "width");
+    let parametric_height_key = runtime_data_bind_property_key_for_name("ParametricPath", "height");
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -1802,6 +1845,8 @@ pub(super) fn build_artboard_numeric_source_bindings(
             let target = data_bind.target?;
             let property_key =
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let source_path =
+                file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
             let property = match target.type_name {
                 "TrimPath" if Some(property_key) == trim_start_key => {
                     RuntimeArtboardNumericSourceProperty::DirectDouble
@@ -1812,6 +1857,12 @@ pub(super) fn build_artboard_numeric_source_bindings(
                 "Shape" if Some(property_key) == shape_length_key => {
                     RuntimeArtboardNumericSourceProperty::ShapeLength
                 }
+                _ if runtime_type_is_a(target.type_key, "ParametricPath")
+                    && [parametric_width_key, parametric_height_key]
+                        .contains(&Some(property_key)) =>
+                {
+                    RuntimeArtboardNumericSourceProperty::DirectDouble
+                }
                 _ => return None,
             };
             Some(RuntimeArtboardNumericSourceBindingInstance {
@@ -1819,7 +1870,7 @@ pub(super) fn build_artboard_numeric_source_bindings(
                 target_local_id: data_bind.target_local_id?,
                 property_key,
                 property,
-                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                path: source_path,
             })
         })
         .collect()
@@ -2542,12 +2593,38 @@ impl ArtboardInstance {
     }
 
     fn enqueue_artboard_data_bind_targets_for_path(&mut self, path: &[u32]) {
-        self.artboard_data_bind_target_queues.enqueue_path(path);
+        let value = self.artboard_data_bind_values.get(path).cloned();
+        let enqueued = self.artboard_data_bind_target_queues.enqueue_path(path);
+        if let Some(value) = value {
+            for index in enqueued {
+                if let Some(binding) = self.artboard_property_bindings.get_mut(index) {
+                    if binding.snapshots_source_value {
+                        binding.pending_value = Some(value.clone());
+                    }
+                }
+            }
+        }
     }
 
     fn enqueue_artboard_property_binding_target(&mut self, index: usize) {
-        self.artboard_data_bind_target_queues
-            .enqueue_property(index);
+        if !self
+            .artboard_data_bind_target_queues
+            .enqueue_property(index)
+        {
+            return;
+        }
+        let value = self
+            .artboard_property_bindings
+            .get(index)
+            .and_then(|binding| self.artboard_data_bind_values.get(&binding.path))
+            .cloned();
+        if let (Some(binding), Some(value)) =
+            (self.artboard_property_bindings.get_mut(index), value)
+        {
+            if binding.snapshots_source_value {
+                binding.pending_value = Some(value);
+            }
+        }
     }
 
     pub(crate) fn notify_artboard_data_bind_target_property_changed(
@@ -2718,12 +2795,15 @@ impl ArtboardInstance {
     ) -> bool {
         let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
         let mut changed = if bind_self && rebind_self {
-            self.bind_owned_view_model_artboard_values(
+            let changed = self.bind_owned_view_model_artboard_values(
                 file,
                 context,
                 context_chain,
                 allow_full_context_bindings,
-            )
+            );
+            self.artboard_data_bind_source_queues
+                .enqueue_numeric_push_sources();
+            changed
         } else {
             false
         };
@@ -2855,11 +2935,13 @@ impl ArtboardInstance {
                 if self.artboard_data_bind_values.get(path) == Some(&value) {
                     continue;
                 }
+                if self.artboard_property_bindings[index].snapshots_source_value {
+                    self.artboard_property_bindings[index].pending_value = Some(value.clone());
+                }
                 let path = self.artboard_property_bindings[index].path.clone();
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
         }
-
         if allow_full_context_bindings {
             changed |= self.bind_owned_name_based_color_values(file, context, context_chain);
         }
@@ -3109,7 +3191,7 @@ impl ArtboardInstance {
             let Some(value) = self
                 .artboard_property_bindings
                 .iter()
-                .find(|binding| binding.path == path)
+                .find(|binding| binding.path == path && binding.default_value_is_resolved)
                 .map(|binding| binding.default_value.clone())
                 .or_else(|| {
                     self.artboard_image_asset_bindings
@@ -3727,7 +3809,10 @@ impl ArtboardInstance {
         index: usize,
     ) -> Option<(usize, usize, u16, RuntimeDataBindGraphValue)> {
         let binding = self.artboard_property_bindings.get_mut(index)?;
-        let value = self.artboard_data_bind_values.get(&binding.path).cloned()?;
+        let value = binding
+            .pending_value
+            .take()
+            .or_else(|| self.artboard_data_bind_values.get(&binding.path).cloned())?;
         let converted = match binding.converter.as_ref() {
             Some(RuntimeDataBindGraphConverter::ToString { .. }) => match value {
                 RuntimeDataBindGraphValue::Enum(value) => {
@@ -4655,6 +4740,10 @@ mod tests {
         assert_eq!(queues.persisting_layout_computed(), &[0]);
         assert_eq!(queues.persisting_solo_sources(), &[0]);
         assert_eq!(queues.persisting_numeric_sources(), &[1]);
+
+        queues.enqueue_numeric_push_sources();
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(7, 11, None);
         queues.enqueue_target_property(7, 11, None);

@@ -644,9 +644,12 @@ the only memory the next session has. Update it every commit.
         initial sample after inner feathers retained C++'s padded path around
         an empty scripted effect. `script_create_text_runs.riv` is exact at
         two samples after nested width-fill leaves gained the referenced
-        artboard's intrinsic content width as their flex basis. Next is the
-        sole runnable divergence, `data_viz_demo.riv`; component-list
-        instancing remains the sole explicit scripted unsupported gap.
+        artboard's intrinsic content width as their flex basis. The sole
+        runnable divergence, `data_viz_demo.riv`, now matches gradient
+        allocations through shader 88 after binding-source lifecycle parity;
+        next isolate C++'s extra scripted/source-instance gradient allocation
+        block (shaders 89-106). Component-list instancing remains the sole
+        explicit scripted unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3826,6 +3829,22 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Advanced the sole scripted divergence,
+  `data_viz_demo.riv`, from its first mismatch at shader 28 to C++'s extra
+  scripted/source-instance gradient allocation block after shader 88. Rust
+  now preserves per-binding dirty snapshots for direct gradient targets that
+  share a path with a target-to-source publisher, republishes ParametricPath
+  width/height sources after owned-context replacement, and leaves invalid
+  numeric-ID paths authored instead of resolving them through the scripting
+  manifest. The implementation is deliberately class-scoped: broad generic
+  double-source and snapshot variants regressed exact corpus entries and were
+  narrowed before landing. Scripted compare remains exact=25 /
+  exact-segments=33 / diverges=1 / unsupported-feature=1; regular compare
+  remains exact=263 / exact-segments=584 / diverges=26 /
+  unsupported-feature=6. Both golden compares, `cargo test --workspace`,
+  formatting, and diff checks pass. Next: identify and mirror the C++
+  lifecycle that allocates data-viz shaders 89-106 before the first sample.
 
 - 2026-07-09: [M8] Promoted `script_create_text_runs.riv` to scripted exact
   and widened it from one to two samples. C++ lends a nested artboard's real

@@ -57,7 +57,11 @@ corpus.toml`, not backlog prose.
    queue, one-line log entry), and commit with the milestone tag in the
    message, e.g. `[M2] Port joystick apply`. When a milestone completes, move
    its log entries to `docs/v2-log-archive.md` — the status file stays small
-   because every session pays to read it.
+   because every session pays to read it. After committing, `git push` (the
+   branch tracks `origin` at github.com/nuxieai/nuxie-runtime) and also
+   `git push origin <branch>:main` — main mirrors this branch by standing
+   user decision (2026-07-09). If a push fails on network/auth, note it in
+   the log and continue; never let push failures block slices.
 6. **Continue or hand off.** If context budget allows, loop to step 2.
    Otherwise end with the status file current — the next session must be able
    to resume from it alone.

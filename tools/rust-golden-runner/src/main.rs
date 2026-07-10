@@ -135,6 +135,7 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
     } else if message.contains("attempt to index nil with 'viewModel'")
         || message.contains("attempt to index nil with 'lis'")
         || message.contains("attempt to index nil with 'Child'")
+        || message.contains("attempt to index nil with 'value'")
     {
         Some("script-view-model")
     } else if message.contains("attempt to index nil with 'addListener'") {
@@ -183,6 +184,7 @@ fn run() -> Result<String> {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         let state = initialize_scripted_drawables_and_realize(
             &runtime,
+            artboard_index,
             artboard,
             &graph.artboards,
             &mut instance,
@@ -199,6 +201,7 @@ fn run() -> Result<String> {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         let state = initialize_scripted_drawables(
             &runtime,
+            artboard_index,
             artboard,
             &graph.artboards,
             &mut instance,
@@ -227,6 +230,7 @@ fn run() -> Result<String> {
         );
         let state = initialize_scripted_drawables_and_realize(
             &runtime,
+            artboard_index,
             artboard,
             &graph.artboards,
             &mut instance,
@@ -1355,6 +1359,8 @@ struct RunnerScriptArtboard {
     artboards: Vec<ArtboardGraph>,
     artboard_index: usize,
     instance: ArtboardInstance,
+    state_machine: Option<StateMachineInstance>,
+    view_model: Option<rive_runtime::ScriptViewModel>,
     width: f32,
     height: f32,
     frame_origin: bool,
@@ -1414,6 +1420,13 @@ impl RunnerScriptArtboard {
             .with_context(|| {
                 format!("failed to instantiate scripted artboard index {artboard_index}")
             })?;
+        let state_machine_index = runtime
+            .artboard(artboard_index)
+            .and_then(|artboard| artboard.uint_property("defaultStateMachineId"))
+            .and_then(|index| usize::try_from(index).ok())
+            .filter(|index| graph.state_machines.get(*index).is_some());
+        let state_machine =
+            state_machine_index.and_then(|index| instance.state_machine_instance(index));
         let object = runtime.object(graph.global_id as usize);
         let render_instance_id = render_state.borrow_mut().register(artboard_index);
         Ok(Self {
@@ -1421,6 +1434,10 @@ impl RunnerScriptArtboard {
             artboards: artboards.to_vec(),
             artboard_index,
             instance,
+            state_machine,
+            view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
+                .as_ref()
+                .and_then(|context| rive_runtime::script_view_model_from_owned(runtime, context)),
             width: object
                 .and_then(|object| object.double_property("width"))
                 .unwrap_or(0.0),
@@ -1432,6 +1449,19 @@ impl RunnerScriptArtboard {
             render_state,
             path_cache: RuntimeRenderPathCache::default(),
         })
+    }
+
+    fn bind_view_model(&mut self) {
+        let Some(view_model) = self.view_model.as_ref() else {
+            return;
+        };
+        let owned = view_model.owned_instance();
+        let owned = owned.borrow();
+        if let Some(state_machine) = self.state_machine.as_mut() {
+            state_machine.bind_owned_view_model_context(&owned);
+            state_machine.advance_data_context();
+        }
+        bind_selected_artboard_view_model_context(&mut self.instance, &self.runtime, &owned);
     }
 }
 
@@ -1465,16 +1495,41 @@ impl ScriptArtboard for RunnerScriptArtboard {
         self.frame_origin = frame_origin;
     }
 
-    fn instance(&self) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
-        Ok(Box::new(
-            RunnerScriptArtboard::new(
-                &self.runtime,
-                &self.artboards,
-                self.artboard_index,
-                Rc::clone(&self.render_state),
-            )
-            .map_err(|error| ScriptError::new(error.to_string()))?,
-        ))
+    fn data(&self) -> Option<rive_runtime::ScriptViewModel> {
+        self.view_model.clone()
+    }
+
+    fn instance(
+        &self,
+        view_model: Option<rive_runtime::ScriptViewModel>,
+    ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+        let mut instance = RunnerScriptArtboard::new(
+            &self.runtime,
+            &self.artboards,
+            self.artboard_index,
+            Rc::clone(&self.render_state),
+        )
+        .map_err(|error| ScriptError::new(error.to_string()))?;
+        if view_model.is_some() {
+            instance.view_model = view_model;
+        }
+        instance.bind_view_model();
+        Ok(Box::new(instance))
+    }
+
+    fn advance(&mut self, seconds: f32) -> std::result::Result<bool, ScriptError> {
+        self.bind_view_model();
+        let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
+            self.instance
+                .advance_state_machine_instance(state_machine, seconds)
+        } else {
+            self.instance.advance_nested_artboards(seconds)
+        };
+        changed |= self
+            .instance
+            .advance_artboard_data_binds_with_elapsed(seconds);
+        changed |= self.instance.update_pass();
+        Ok(changed)
     }
 
     fn node(
@@ -1576,13 +1631,21 @@ impl ScriptArtboard for RunnerScriptArtboard {
 #[cfg(feature = "scripting")]
 fn initialize_scripted_drawables_and_realize(
     runtime: &RuntimeFile,
+    artboard_index: usize,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
-    let state = initialize_scripted_drawables(runtime, artboard, artboards, instance, factory)
-        .context("failed to initialize scripted drawables")?;
+    let state = initialize_scripted_drawables(
+        runtime,
+        artboard_index,
+        artboard,
+        artboards,
+        instance,
+        factory,
+    )
+    .context("failed to initialize scripted drawables")?;
     if let Some(state) = state.as_ref() {
         state
             .borrow_mut()
@@ -1595,6 +1658,7 @@ fn initialize_scripted_drawables_and_realize(
 #[cfg(feature = "scripting")]
 fn initialize_scripted_drawables(
     runtime: &RuntimeFile,
+    artboard_index: usize,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
@@ -1607,6 +1671,11 @@ fn initialize_scripted_drawables(
 
     let render_state = Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default()));
     let mut vm = ScriptVm::new();
+    vm.set_view_models(rive_runtime::script_view_models(runtime));
+    let initial_context = selected_artboard_owned_view_model_context(runtime, artboard_index)
+        .as_ref()
+        .and_then(|context| rive_runtime::script_view_model_from_owned(runtime, context));
+    vm.set_default_context_view_model(initial_context);
     let mut host = NoopScriptHost;
     for local_object in &artboard.local_objects {
         if !local_object
@@ -1851,6 +1920,11 @@ fn rebind_scripted_drawables(
     factory: &mut dyn RenderFactory,
     owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
 ) -> Result<()> {
+    let context_view_model = owned_view_model_context
+        .and_then(|context| rive_runtime::script_view_model_from_owned(runtime, context));
+    instance
+        .set_script_context_view_model(context_view_model)
+        .context("failed to bind scripted context view model")?;
     for local_object in &artboard.local_objects {
         if !local_object
             .type_name

@@ -21,6 +21,8 @@ use rive_runtime::{
     ScriptPaint as RuntimeScriptPaint, runtime_path_commands_from_raw_path,
 };
 
+use super::view_model::{create_scripted_view_model, model_from_table};
+
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
     factory: Rc<Cell<Option<NonNull<dyn RenderFactory>>>>,
@@ -195,16 +197,29 @@ impl UserData for ScriptedArtboard {
             this.artboard.borrow_mut().set_frame_origin(value);
             Ok(())
         });
+        fields.add_field_method_get("data", |lua, this| {
+            Ok(match this.artboard.borrow().data() {
+                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                None => Value::Nil,
+            })
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("instance", |lua, this, ()| {
+        methods.add_method("instance", |lua, this, view_model: Option<Table>| {
+            let view_model = view_model.as_ref().map(model_from_table).transpose()?;
             let instance = this
                 .artboard
                 .borrow()
-                .instance()
+                .instance(view_model)
                 .map_err(|error| Error::runtime(error.to_string()))?;
             lua.create_userdata(ScriptedArtboard::new(instance))
+        });
+        methods.add_method_mut("advance", |_, this, seconds: f32| {
+            this.artboard
+                .borrow_mut()
+                .advance(seconds)
+                .map_err(|error| Error::runtime(error.to_string()))
         });
         methods.add_method("node", |lua, this, name: String| {
             let node = this

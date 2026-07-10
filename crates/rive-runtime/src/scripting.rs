@@ -210,30 +210,170 @@ fn script_blend_mode(value: u32) -> BlendMode {
     }
 }
 
-/// A runtime-neutral snapshot of a bound view-model exposed to Luau.
-///
-/// Ported from the lookup shape in C++ `src/lua/lua_properties.cpp` and
-/// `src/script_input_viewmodel_property.cpp`. Property variants are added as
-/// their corpus-backed bindings land; unknown properties remain absent in
-/// Luau, matching C++ lookup failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A shared runtime-owned view-model instance exposed to scripting backends.
+#[derive(Debug, Clone)]
 pub struct ScriptViewModel {
     properties: BTreeMap<String, ScriptViewModelProperty>,
+    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    default_instance: Rc<RuntimeOwnedViewModelInstance>,
+    named_instances: Rc<BTreeMap<String, RuntimeOwnedViewModelInstance>>,
 }
 
 impl ScriptViewModel {
-    pub fn new(properties: BTreeMap<String, ScriptViewModelProperty>) -> Self {
-        Self { properties }
+    pub fn new(
+        properties: BTreeMap<String, ScriptViewModelProperty>,
+        instance: RuntimeOwnedViewModelInstance,
+        default_instance: RuntimeOwnedViewModelInstance,
+        named_instances: BTreeMap<String, RuntimeOwnedViewModelInstance>,
+    ) -> Self {
+        Self {
+            properties,
+            instance: Rc::new(RefCell::new(instance)),
+            default_instance: Rc::new(default_instance),
+            named_instances: Rc::new(named_instances),
+        }
     }
 
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
         self.properties.get(name).copied()
     }
+
+    pub fn properties(&self) -> &BTreeMap<String, ScriptViewModelProperty> {
+        &self.properties
+    }
+
+    pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {
+        let instance = match name {
+            Some(name) => self.named_instances.get(name)?.clone(),
+            None => self.default_instance.as_ref().clone(),
+        };
+        Some(Self {
+            properties: self.properties.clone(),
+            instance: Rc::new(RefCell::new(instance)),
+            default_instance: Rc::clone(&self.default_instance),
+            named_instances: Rc::clone(&self.named_instances),
+        })
+    }
+
+    pub fn owned_instance(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
+        Rc::clone(&self.instance)
+    }
+
+    pub fn number(&self, name: &str) -> Option<f32> {
+        self.instance.borrow().number_value_by_property_name(name)
+    }
+
+    pub fn set_number(&self, name: &str, value: f32) -> bool {
+        self.instance
+            .borrow_mut()
+            .set_number_by_property_name(name, value)
+    }
+
+    pub fn string(&self, name: &str) -> Option<String> {
+        self.instance
+            .borrow()
+            .string_value_by_property_name(name)
+            .map(|value| String::from_utf8_lossy(value).into_owned())
+    }
+
+    pub fn set_string(&self, name: &str, value: &str) -> bool {
+        self.instance
+            .borrow_mut()
+            .set_string_by_property_name(name, value.as_bytes())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptViewModelProperty {
+    Number,
+    String,
     Trigger,
+}
+
+pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewModel> {
+    file.view_models()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(view_model_index, view_model)| {
+            let name = view_model.object.string_property("name")?.to_owned();
+            let properties = view_model
+                .properties
+                .iter()
+                .filter_map(|property| {
+                    let kind = match property.type_name {
+                        "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
+                        "ViewModelPropertyString" => ScriptViewModelProperty::String,
+                        "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
+                        _ => return None,
+                    };
+                    Some((property.string_property("name")?.to_owned(), kind))
+                })
+                .collect();
+            let instance = RuntimeOwnedViewModelInstance::new(file, view_model_index)?;
+            let named_instances = view_model
+                .instances
+                .iter()
+                .enumerate()
+                .filter_map(|(instance_index, instance)| {
+                    Some((
+                        instance.object.string_property("name")?.to_owned(),
+                        RuntimeOwnedViewModelInstance::from_instance(
+                            file,
+                            view_model_index,
+                            instance_index,
+                        )?,
+                    ))
+                })
+                .collect();
+            Some((
+                name,
+                ScriptViewModel::new(properties, instance.clone(), instance, named_instances),
+            ))
+        })
+        .collect()
+}
+
+pub fn script_view_model_from_owned(
+    file: &RuntimeFile,
+    instance: &RuntimeOwnedViewModelInstance,
+) -> Option<ScriptViewModel> {
+    let view_model_index = instance.view_model_index();
+    let view_model = file.view_model(view_model_index)?;
+    let properties = view_model
+        .properties
+        .iter()
+        .filter_map(|property| {
+            let kind = match property.type_name {
+                "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
+                "ViewModelPropertyString" => ScriptViewModelProperty::String,
+                "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
+                _ => return None,
+            };
+            Some((property.string_property("name")?.to_owned(), kind))
+        })
+        .collect();
+    let named_instances = view_model
+        .instances
+        .iter()
+        .enumerate()
+        .filter_map(|(instance_index, named)| {
+            Some((
+                named.object.string_property("name")?.to_owned(),
+                RuntimeOwnedViewModelInstance::from_instance(
+                    file,
+                    view_model_index,
+                    instance_index,
+                )?,
+            ))
+        })
+        .collect();
+    let default_instance = RuntimeOwnedViewModelInstance::new(file, view_model_index)?;
+    Some(ScriptViewModel::new(
+        properties,
+        instance.clone(),
+        default_instance,
+        named_instances,
+    ))
 }
 
 impl ScriptValue {
@@ -317,7 +457,13 @@ pub fn bound_script_view_model(
             Some((property.string_property("name")?.to_owned(), kind))
         })
         .collect();
-    Some(ScriptViewModel::new(properties))
+    let instance = RuntimeOwnedViewModelInstance::new(file, view_model_index)?;
+    Some(ScriptViewModel::new(
+        properties,
+        instance.clone(),
+        instance,
+        BTreeMap::new(),
+    ))
 }
 
 /// Host callbacks exposed to scripted objects.
@@ -343,7 +489,18 @@ pub trait ScriptArtboard {
     fn set_height(&mut self, height: f32);
     fn set_frame_origin(&mut self, frame_origin: bool);
 
-    fn instance(&self) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
+    fn data(&self) -> Option<ScriptViewModel> {
+        None
+    }
+
+    fn instance(
+        &self,
+        view_model: Option<ScriptViewModel>,
+    ) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
+
+    fn advance(&mut self, _seconds: f32) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
 
     fn node(&self, _name: &str) -> Result<Option<ScriptNode>, ScriptError> {
         Ok(None)
@@ -358,6 +515,13 @@ pub trait ScriptArtboard {
 
 /// Runtime-owned handle for one scripted object instance.
 pub trait ScriptInstance {
+    fn set_context_view_model(
+        &mut self,
+        _view_model: Option<ScriptViewModel>,
+    ) -> Result<(), ScriptError> {
+        Ok(())
+    }
+
     fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError>;
 
     fn call_method(

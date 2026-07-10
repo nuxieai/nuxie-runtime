@@ -1,49 +1,197 @@
 use std::collections::BTreeMap;
 
-use luaur_rt::{AnyUserData, Function, MultiValue, UserData, UserDataMethods, Value};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use luaur_rt::{
+    Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
+};
 use rive_runtime::{ScriptViewModel, ScriptViewModelProperty};
 
 /// Luau bindings ported from the ScriptedViewModel/ScriptedProperty trigger
 /// slice of C++ `src/lua/lua_properties.cpp`.
-pub(super) struct ScriptedViewModel {
+struct ScriptedViewModelHandle {
     model: ScriptViewModel,
-    property_cache: BTreeMap<String, AnyUserData>,
 }
 
-impl ScriptedViewModel {
-    pub(super) fn new(model: ScriptViewModel) -> Self {
-        Self {
-            model,
-            property_cache: BTreeMap::new(),
-        }
-    }
+impl UserData for ScriptedViewModelHandle {}
 
-    pub(super) fn dispose(&mut self) {
-        for property in self.property_cache.values() {
-            if let Ok(mut trigger) = property.borrow_mut::<ScriptedPropertyTrigger>() {
-                trigger.listeners.clear();
+pub(super) fn create_scripted_view_model(
+    lua: &Lua,
+    model: ScriptViewModel,
+) -> luaur_rt::Result<Table> {
+    let table = lua.create_table();
+    table.set(
+        "__rive_model",
+        lua.create_userdata(ScriptedViewModelHandle {
+            model: model.clone(),
+        })?,
+    )?;
+
+    let get_number_model = model.clone();
+    table.set(
+        "getNumber",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_number_model.property(&name) {
+                Some(ScriptViewModelProperty::Number) => lua
+                    .create_userdata(ScriptedPropertyNumber::new(get_number_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
             }
-        }
-        self.property_cache.clear();
+        })?,
+    )?;
+    let get_string_model = model.clone();
+    table.set(
+        "getString",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_string_model.property(&name) {
+                Some(ScriptViewModelProperty::String) => lua
+                    .create_userdata(ScriptedPropertyString::new(get_string_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
+    let instance_model = model.clone();
+    table.set(
+        "instance",
+        lua.create_function(move |lua, (_self, name): (Table, Option<String>)| {
+            let model = instance_model
+                .named_instance(name.as_deref())
+                .or_else(|| instance_model.named_instance(None))
+                .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
+            create_scripted_view_model(lua, model)
+        })?,
+    )?;
+
+    for (name, kind) in model.properties() {
+        let property = match kind {
+            ScriptViewModelProperty::Number => {
+                lua.create_userdata(ScriptedPropertyNumber::new(model.clone(), name.clone()))?
+            }
+            ScriptViewModelProperty::String => {
+                lua.create_userdata(ScriptedPropertyString::new(model.clone(), name.clone()))?
+            }
+            ScriptViewModelProperty::Trigger => {
+                lua.create_userdata(ScriptedPropertyTrigger::default())?
+            }
+        };
+        table.set(name.as_str(), property)?;
+    }
+    Ok(table)
+}
+
+pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewModel> {
+    let handle = table.get::<luaur_rt::AnyUserData>("__rive_model")?;
+    Ok(handle.borrow::<ScriptedViewModelHandle>()?.model.clone())
+}
+
+struct ScriptedPropertyNumber {
+    model: ScriptViewModel,
+    name: String,
+}
+
+impl ScriptedPropertyNumber {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        Self { model, name }
     }
 }
 
-impl UserData for ScriptedViewModel {
-    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method_mut("__index", |lua, this, name: String| {
-            if let Some(property) = this.property_cache.get(&name) {
-                return Ok(Value::UserData(property.clone()));
-            }
-            let property = match this.model.property(&name) {
-                Some(ScriptViewModelProperty::Trigger) => {
-                    lua.create_userdata(ScriptedPropertyTrigger::default())?
-                }
-                None => return Ok(Value::Nil),
-            };
-            this.property_cache.insert(name, property.clone());
-            Ok(Value::UserData(property))
+impl UserData for ScriptedPropertyNumber {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |_, this| {
+            Ok(this.model.number(&this.name).unwrap_or_default())
+        });
+        fields.add_field_method_set("value", |_, this, value: f32| {
+            this.model.set_number(&this.name, value);
+            Ok(())
         });
     }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("getNumber", |_, this, ()| {
+            Ok(this.model.number(&this.name).unwrap_or_default())
+        });
+    }
+}
+
+struct ScriptedPropertyString {
+    model: ScriptViewModel,
+    name: String,
+}
+
+impl ScriptedPropertyString {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        Self { model, name }
+    }
+}
+
+impl UserData for ScriptedPropertyString {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |_, this| {
+            Ok(this.model.string(&this.name).unwrap_or_default())
+        });
+        fields.add_field_method_set("value", |_, this, value: String| {
+            this.model.set_string(&this.name, &value);
+            Ok(())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("getString", |_, this, ()| {
+            Ok(this.model.string(&this.name).unwrap_or_default())
+        });
+    }
+}
+
+pub(super) struct ScriptedContext {
+    model: Rc<RefCell<Option<ScriptViewModel>>>,
+}
+
+impl ScriptedContext {
+    pub(super) fn new(model: Rc<RefCell<Option<ScriptViewModel>>>) -> Self {
+        Self { model }
+    }
+}
+
+impl UserData for ScriptedContext {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("viewModel", |lua, this, ()| {
+            Ok(match this.model.borrow().clone() {
+                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                None => Value::Nil,
+            })
+        });
+        methods.add_method("rootViewModel", |lua, this, ()| {
+            Ok(match this.model.borrow().clone() {
+                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                None => Value::Nil,
+            })
+        });
+    }
+}
+
+pub(super) fn install_data_global(
+    lua: &Lua,
+    models: &BTreeMap<String, ScriptViewModel>,
+) -> luaur_rt::Result<()> {
+    let data = lua.create_table();
+    for (name, model) in models {
+        let definition = lua.create_table();
+        let model = model.clone();
+        definition.set(
+            "new",
+            lua.create_function(move |lua, name: Option<String>| {
+                let instance = model
+                    .named_instance(name.as_deref())
+                    .or_else(|| model.named_instance(None))
+                    .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
+                create_scripted_view_model(lua, instance)
+            })?,
+        )?;
+        data.set(name.as_str(), definition)?;
+    }
+    lua.globals().set("Data", data)
 }
 
 #[derive(Default)]

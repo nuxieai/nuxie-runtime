@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=12, unsupported-feature=20, not-yet=0
+  exact-segments=584, diverges=17, unsupported-feature=15, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=14 gated=6; the harness bucket is empty
-- Scripted compare: exact=11 / exact-segments=11 / diverges=1 /
-  unsupported-feature=14 across the 26 M8 scripting entries
+  M8=9 gated=6; the harness bucket is empty
+- Scripted compare: exact=11 / exact-segments=11 / diverges=6 /
+  unsupported-feature=9 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -3786,6 +3786,28 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Ported the first runtime-owned scripted view-model vertical
+  slice. `Data.<Model>.new([instance])`, `context:viewModel()`, named
+  `ScriptedViewModel:instance`, number/string property values, artboard
+  `data`, view-model-bound `Artboard:instance`, and scripted artboard
+  `advance` now share `RuntimeOwnedViewModelInstance` handles through the
+  runtime scripting seam. User `init` now receives the same Context userdata
+  as the generator, matching the C++ two-argument lifecycle ABI. Because
+  luaur reserves userdata `__index` for its method table, file-defined dynamic
+  properties are exposed through a table proxy with a hidden shared-model
+  userdata instead of disconnected hard-coded fields. Five M8 entries move
+  from hard-gated diagnostics to runnable divergence:
+  `data_bind_artboard_input.riv`, `databind_viewmodel.riv`,
+  `script_create_viewmodel_instance.riv`, `scripted_viewmodel_cache.riv`, and
+  `viewmodel_from_instance.riv`; `viewmodel_instance_to_artboard.riv` now
+  reaches its narrower unsupported property-kind path. Scripted compare
+  reports exact=11 / exact-segments=11 / diverges=6 / unsupported-feature=9.
+  Full compare remains exact=263 / exact-segments=584, with diverges=17 /
+  unsupported-feature=15 and parked M8=9 / gated=6; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and corpus regeneration pass. Next target is
+  the remaining scripted view-model property families and nested model
+  references, starting from `viewmodel_instance_to_artboard.riv`.
 
 - 2026-07-09: [M8] Promoted `group_effect.riv` to scripted-mode exact by
   projecting `TargetEffect -> GroupEffect` child stroke-effect relationships

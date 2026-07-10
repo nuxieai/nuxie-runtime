@@ -4039,6 +4039,20 @@ fn runtime_owned_view_model_property_children(
 }
 
 impl RuntimeOwnedViewModelInstance {
+    pub fn view_model_index(&self) -> usize {
+        self.view_model_index
+    }
+
+    pub fn number_value_by_property_name(&self, property_name: &str) -> Option<f32> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.number_value_by_property_index(property_index)
+    }
+
+    pub fn string_value_by_property_name(&self, property_name: &str) -> Option<&[u8]> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.string_value_by_property_index(property_index)
+    }
+
     pub(crate) fn instance_identity(&self) -> u64 {
         self.instance_identity
     }

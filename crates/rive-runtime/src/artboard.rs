@@ -511,6 +511,18 @@ impl ArtboardInstance {
         Ok(())
     }
 
+    pub fn set_script_context_view_model(
+        &mut self,
+        view_model: Option<ScriptViewModel>,
+    ) -> Result<(), ScriptError> {
+        for handle in self.script_instances_by_global.values() {
+            handle
+                .borrow_mut()
+                .set_context_view_model(view_model.clone())?;
+        }
+        Ok(())
+    }
+
     pub fn mark_script_update_for_global(&mut self, global_id: u32) -> bool {
         if !self.script_instances_by_global.contains_key(&global_id) {
             return false;

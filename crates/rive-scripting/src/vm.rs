@@ -15,14 +15,16 @@ mod bytecode;
 mod renderer;
 mod view_model;
 
-use std::cell::Cell;
-use std::collections::BTreeSet;
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 use std::ffi::CString;
+use std::rc::Rc;
 
 use bytecode::validate_luau_bytecode;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value, Vector as LuaVector,
+    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value,
+    Vector as LuaVector,
 };
 use luaur_vm::functions::luau_load::luau_load;
 use renderer::RendererBindings;
@@ -31,7 +33,7 @@ use rive_runtime::{
     ScriptArtboard, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue,
     ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
-use view_model::ScriptedViewModel;
+use view_model::{ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
 
@@ -49,13 +51,16 @@ pub struct ScriptVm {
     lua: Lua,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
+    view_models: BTreeMap<String, ScriptViewModel>,
+    default_context_view_model: Option<ScriptViewModel>,
 }
 
 /// A luaur-backed scripted object instance table.
 pub struct LuaScriptInstance {
     table: Table,
     renderer_bindings: RendererBindings,
-    view_model_inputs: BTreeSet<String>,
+    context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
+    context: Option<AnyUserData>,
 }
 
 impl LuaScriptInstance {
@@ -63,15 +68,22 @@ impl LuaScriptInstance {
         Self {
             table,
             renderer_bindings: RendererBindings::default(),
-            view_model_inputs: BTreeSet::new(),
+            context_view_model: Rc::new(RefCell::new(None)),
+            context: None,
         }
     }
 
-    fn with_renderer_bindings(table: Table, renderer_bindings: RendererBindings) -> Self {
+    fn with_renderer_bindings(
+        table: Table,
+        renderer_bindings: RendererBindings,
+        context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
+        context: Option<AnyUserData>,
+    ) -> Self {
         Self {
             table,
             renderer_bindings,
-            view_model_inputs: BTreeSet::new(),
+            context_view_model,
+            context,
         }
     }
 
@@ -106,7 +118,17 @@ impl ScriptVm {
             lua: Lua::new(),
             rive_globals_installed: Cell::new(false),
             renderer_bindings: RendererBindings::default(),
+            view_models: BTreeMap::new(),
+            default_context_view_model: None,
         }
+    }
+
+    pub fn set_view_models(&mut self, view_models: BTreeMap<String, ScriptViewModel>) {
+        self.view_models = view_models;
+    }
+
+    pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {
+        self.default_context_view_model = view_model;
     }
 
     /// The underlying mlua-style handle (globals, create_function, userdata).
@@ -134,6 +156,7 @@ impl ScriptVm {
         let cache = self.ensure_module_cache()?;
         self.install_require_global(cache)?;
         self.renderer_bindings.install(&self.lua)?;
+        view_model::install_data_global(&self.lua, &self.view_models)?;
 
         self.lua.sandbox(true)?;
         self.rive_globals_installed.set(true);
@@ -312,7 +335,12 @@ impl ScriptVm {
     }
 
     pub fn script_instance_from_table(&self, table: Table) -> LuaScriptInstance {
-        LuaScriptInstance::with_renderer_bindings(table, self.renderer_bindings.clone())
+        LuaScriptInstance::with_renderer_bindings(
+            table,
+            self.renderer_bindings.clone(),
+            Rc::new(RefCell::new(None)),
+            None,
+        )
     }
 }
 
@@ -458,16 +486,30 @@ impl RuntimeScriptingVm for ScriptVm {
             .map_err(script_error)?
             .call(())
             .map_err(script_error)?;
-        let context = self.lua.create_table();
-        let instance: Table = generator.call(context).map_err(script_error)?;
+        let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context = self
+            .lua
+            .create_userdata(ScriptedContext::new(Rc::clone(&context_view_model)))
+            .map_err(script_error)?;
+        let instance: Table = generator.call(context.clone()).map_err(script_error)?;
         Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
             instance,
             self.renderer_bindings.clone(),
+            context_view_model,
+            Some(context),
         )))
     }
 }
 
 impl ScriptInstance for LuaScriptInstance {
+    fn set_context_view_model(
+        &mut self,
+        view_model: Option<ScriptViewModel>,
+    ) -> std::result::Result<(), ScriptError> {
+        *self.context_view_model.borrow_mut() = view_model;
+        Ok(())
+    }
+
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
         let value: Value = self.table.get(method.as_str()).map_err(script_error)?;
         Ok(matches!(value, Value::Function(_)))
@@ -496,6 +538,11 @@ impl ScriptInstance for LuaScriptInstance {
         call_args.push_back(Value::Table(self.table.clone()));
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
+        }
+        if method == ScriptMethod::Init
+            && let Some(context) = self.context.as_ref()
+        {
+            call_args.push_back(Value::UserData(context.clone()));
         }
         let value: Value = function.call(call_args).map_err(script_error)?;
         Ok(script_value_from_lua(value).map_err(script_error)?)
@@ -566,30 +613,10 @@ impl ScriptInstance for LuaScriptInstance {
         name: &str,
         view_model: ScriptViewModel,
     ) -> std::result::Result<(), ScriptError> {
-        if let Ok(Value::UserData(previous)) = self.table.get::<Value>(name)
-            && let Ok(mut previous) = previous.borrow_mut::<ScriptedViewModel>()
-        {
-            previous.dispose();
-        }
         let lua = self.table.lua();
-        let view_model = lua
-            .create_userdata(ScriptedViewModel::new(view_model))
-            .map_err(script_error)?;
+        let view_model = create_scripted_view_model(&lua, view_model).map_err(script_error)?;
         self.table.set(name, view_model).map_err(script_error)?;
-        self.view_model_inputs.insert(name.to_owned());
         Ok(())
-    }
-}
-
-impl Drop for LuaScriptInstance {
-    fn drop(&mut self) {
-        for name in &self.view_model_inputs {
-            if let Ok(Value::UserData(view_model)) = self.table.get::<Value>(name)
-                && let Ok(mut view_model) = view_model.borrow_mut::<ScriptedViewModel>()
-            {
-                view_model.dispose();
-            }
-        }
     }
 }
 

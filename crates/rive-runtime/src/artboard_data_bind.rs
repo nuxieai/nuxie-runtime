@@ -19,7 +19,7 @@ use crate::{
 };
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
-use rive_schema::FieldKind;
+use rive_schema::{FieldKind, definition_by_type_key};
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
@@ -876,6 +876,7 @@ pub(super) struct RuntimeArtboardNestedHostBindingInstance {
     target_local_id: usize,
     property: RuntimeArtboardNestedHostProperty,
     path: Vec<u32>,
+    owned_context_source_path: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1477,7 +1478,7 @@ pub(super) fn build_artboard_nested_host_bindings(
                 return None;
             }
             let target = data_bind.target?;
-            if target.type_name != "NestedArtboard" {
+            if !runtime_type_is_a(target.type_key, "NestedArtboard") {
                 return None;
             }
             let property_key =
@@ -1497,9 +1498,14 @@ pub(super) fn build_artboard_nested_host_bindings(
                 target_local_id: data_bind.target_local_id?,
                 property,
                 path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                owned_context_source_path: None,
             })
         })
         .collect()
+}
+
+fn runtime_type_is_a(type_key: u16, type_name: &str) -> bool {
+    definition_by_type_key(type_key).is_some_and(|definition| definition.is_a(type_name))
 }
 
 pub(super) fn build_artboard_default_view_model_values(
@@ -2658,6 +2664,9 @@ impl ArtboardInstance {
         for binding in &mut self.artboard_custom_property_bindings {
             binding.owned_context_source_path = None;
         }
+        for binding in &mut self.artboard_nested_host_bindings {
+            binding.owned_context_source_path = None;
+        }
         true
     }
 
@@ -2742,6 +2751,33 @@ impl ArtboardInstance {
                 let path = self.artboard_custom_property_bindings[index].path.clone();
                 changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
             }
+        }
+
+        for index in 0..self.artboard_nested_host_bindings.len() {
+            let path = self.artboard_nested_host_bindings[index].path.clone();
+            let Some(default_value) = self.artboard_data_bind_values.get(&path).cloned() else {
+                continue;
+            };
+            let update = {
+                let binding = &mut self.artboard_nested_host_bindings[index];
+                runtime_owned_view_model_binding_value_for_retained_context_chain(
+                    file,
+                    context,
+                    context_chain,
+                    &binding.path,
+                    false,
+                    &default_value,
+                    &mut binding.owned_context_source_path,
+                )
+            };
+            if let Some(value) = update
+                && self.artboard_data_bind_values.get(&path) != Some(&value)
+            {
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+        if changed {
+            changed |= self.apply_artboard_nested_host_bindings();
         }
         changed
     }
@@ -3820,8 +3856,11 @@ impl ArtboardInstance {
                 RuntimeArtboardNestedHostProperty::ArtboardId { property_key },
                 RuntimeDataBindGraphValue::Artboard(value),
             ) => {
-                let changed = self.set_uint_property(target_local_id, property_key, *value);
-                changed || self.set_nested_artboard_artboard_id(target_local_id, *value)
+                let property_changed =
+                    self.set_uint_property(target_local_id, property_key, *value);
+                let artboard_changed =
+                    self.set_nested_artboard_artboard_id(target_local_id, *value);
+                property_changed || artboard_changed
             }
             (
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key },
@@ -4032,6 +4071,16 @@ impl ArtboardInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nested_artboard_layout_is_a_nested_artboard() {
+        let type_key = rive_schema::definition_by_name("NestedArtboardLayout")
+            .expect("NestedArtboardLayout schema definition")
+            .type_key
+            .int;
+
+        assert!(runtime_type_is_a(type_key, "NestedArtboard"));
+    }
 
     fn custom_binding(
         data_bind_index: usize,

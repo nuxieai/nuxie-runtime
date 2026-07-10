@@ -568,8 +568,8 @@ the only memory the next session has. Update it every commit.
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
         `make scripted-golden-compare` now builds mode-specific C++/Rust
-        binaries and ratchets all 26 M8 entries: seven valid divergent streams
-        and nineteen verified feature diagnostics. The C++ `Vector` static
+        binaries and ratchets all 26 M8 entries: seven exact streams and
+        nineteen verified feature diagnostics. The C++ `Vector` static
         table is ported, advancing `script_affects_has_changed.riv` to a stream
         divergence. The harness bucket is empty: scripted loading selects the
         serialized view-model instance where C++ fixtures require it, the
@@ -592,9 +592,13 @@ the only memory the next session has. Update it every commit.
         `scripted_memory_leak.riv` is exact after deferring atomic input
         hydration until its view-model context resolves, retaining serialized
         nested view-model instances, and exposing cached trigger/listener
-        userdata with explicit rebind/drop disposal. Remaining: the sole
-        `data_binding_artboards_test.riv` stream divergence and nineteen named
-        scripting diagnostics.
+        userdata with explicit rebind/drop disposal.
+        `data_binding_artboards_test.riv` is exact after binding the serialized
+        root artboard value through `NestedArtboardLayout`, replacing the live
+        child before recursive context binding, and keying render caches by
+        both host and selected child. The scripted lane has no stream
+        divergences; remaining work is the nineteen named scripting
+        diagnostics.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3774,6 +3778,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `data_binding_artboards_test.riv` to
+  scripted-mode exact, eliminating the final scripted stream divergence.
+  Owned contexts now refresh nested-host bindings for all `NestedArtboard`
+  subclasses and apply an artboard-valued replacement before recursing into
+  the selected child context. Draw preparation and rendering resolve the live
+  child graph, cache nested resources by `(host, selected artboard)`, and
+  allocate paints once when a rebound child first appears. The runner uses
+  root-inclusive serialized context binding only in scripted mode, preserving
+  the established non-scripted C++ lifecycle. Verification: scripted compare
+  reports exact=7/exact-segments=7/diverges=0/unsupported=19; default compare
+  remains exact=263/exact-segments=584/diverges=7/unsupported=25; `cargo test
+  --workspace`, focused regression tests, format, and diff checks pass. Next:
+  take the highest-leverage named M8 scripting diagnostic.
 
 - 2026-07-09: [M8] Promoted `scripted_memory_leak.riv` to scripted-mode exact.
   `ScriptInputViewModelProperty` now defers the whole cold hydration transaction

@@ -248,7 +248,7 @@ fn run() -> Result<String> {
         state_machine.advance_data_context();
     }
     if let Some(context) = owned_view_model_context.as_ref() {
-        instance.bind_owned_view_model_nested_artboard_contexts(&runtime, context);
+        bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
     }
     #[cfg(feature = "scripting")]
     if owned_view_model_context.is_some()
@@ -597,9 +597,20 @@ fn instantiate_scene_state(
         state_machine.advance_data_context();
     }
     if let Some(context) = owned_view_model_context.as_ref() {
-        instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
+        bind_selected_artboard_view_model_context(&mut instance, runtime, context);
     }
     Ok((instance, state_machine, owned_view_model_context))
+}
+
+fn bind_selected_artboard_view_model_context(
+    instance: &mut ArtboardInstance,
+    runtime: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+) {
+    #[cfg(feature = "scripting")]
+    instance.bind_owned_view_model_artboard_context(runtime, context);
+    #[cfg(not(feature = "scripting"))]
+    instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
 }
 
 fn timed_result<T>(
@@ -1151,7 +1162,7 @@ fn advance_scene_to(
         instance.advance_nested_artboards(elapsed_seconds);
     }
     if let Some(context) = owned_view_model_context {
-        instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
+        bind_selected_artboard_view_model_context(instance, runtime, context);
     }
     instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
     instance

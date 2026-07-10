@@ -63,6 +63,18 @@ pub(super) fn create_scripted_view_model(
             create_scripted_view_model(lua, model)
         })?,
     )?;
+    let get_view_model = model.clone();
+    table.set(
+        "getViewModel",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            Ok(match get_view_model.view_model(&name) {
+                Some(model) => {
+                    Value::UserData(lua.create_userdata(ScriptedPropertyViewModel::new(model))?)
+                }
+                None => Value::Nil,
+            })
+        })?,
+    )?;
 
     for (name, kind) in model.properties() {
         let property = match kind {
@@ -75,6 +87,14 @@ pub(super) fn create_scripted_view_model(
             ScriptViewModelProperty::Trigger => {
                 lua.create_userdata(ScriptedPropertyTrigger::default())?
             }
+            ScriptViewModelProperty::ViewModel => {
+                let nested = model.view_model(name).ok_or_else(|| {
+                    luaur_rt::Error::runtime(format!(
+                        "view-model property '{name}' has no active instance"
+                    ))
+                })?;
+                lua.create_userdata(ScriptedPropertyViewModel::new(nested))?
+            }
         };
         table.set(name.as_str(), property)?;
     }
@@ -84,6 +104,24 @@ pub(super) fn create_scripted_view_model(
 pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewModel> {
     let handle = table.get::<luaur_rt::AnyUserData>("__rive_model")?;
     Ok(handle.borrow::<ScriptedViewModelHandle>()?.model.clone())
+}
+
+struct ScriptedPropertyViewModel {
+    model: ScriptViewModel,
+}
+
+impl ScriptedPropertyViewModel {
+    fn new(model: ScriptViewModel) -> Self {
+        Self { model }
+    }
+}
+
+impl UserData for ScriptedPropertyViewModel {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |lua, this| {
+            create_scripted_view_model(lua, this.model.clone()).map(Value::Table)
+        });
+    }
 }
 
 struct ScriptedPropertyNumber {

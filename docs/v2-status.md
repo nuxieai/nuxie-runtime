@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=17, unsupported-feature=15, not-yet=0
+  exact-segments=584, diverges=18, unsupported-feature=14, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=9 gated=6; the harness bucket is empty
-- Scripted compare: exact=11 / exact-segments=11 / diverges=6 /
-  unsupported-feature=9 across the 26 M8 scripting entries
+  M8=8 gated=6; the harness bucket is empty
+- Scripted compare: exact=11 / exact-segments=11 / diverges=7 /
+  unsupported-feature=8 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -3786,6 +3786,22 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Added nested scripted view-model property snapshots and
+  admitted `viewmodel_instance_to_artboard.riv`. Runtime-owned model handles
+  now report the active generated or named nested instance selected by a
+  `ViewModelPropertyViewModel`; the cycle-bounded script model builder exposes
+  that child through both `root.chi.value` and `getViewModel`, and the existing
+  artboard-instance binding consumes the same child handle. The focused C++
+  comparison now differs only on signed zero in the child backboard corners,
+  so the file advances from `script-view-model` gating to runnable divergence.
+  Scripted compare reports exact=11 / exact-segments=11 / diverges=7 /
+  unsupported-feature=8. Full compare remains exact=263 /
+  exact-segments=584, with diverges=18 / unsupported-feature=14 and parked
+  M8=8 / gated=6; `cargo test --workspace`, formatting, corpus regeneration,
+  and diff checks pass. Next target is the largest remaining M8 blocker after
+  a fresh manifest query, with nested model mutation/reference replacement
+  still explicitly outside this snapshot slice.
 
 - 2026-07-09: [M8] Ported the first runtime-owned scripted view-model vertical
   slice. `Data.<Model>.new([instance])`, `context:viewModel()`, named

@@ -4053,6 +4053,31 @@ impl RuntimeOwnedViewModelInstance {
         self.string_value_by_property_index(property_index)
     }
 
+    pub fn nested_view_model_selection_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<(usize, Option<usize>)> {
+        let property_index = self.property_index_by_name(property_name)?;
+        let view_model = self
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_index == property_index)?;
+        let view_model_index = view_model.referenced_view_model_index?;
+        let instance_index = match view_model.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => None,
+            RuntimeViewModelPointer::Imported { object_id } => Some(
+                view_model
+                    .view_model_instance_ids
+                    .iter()
+                    .position(|id| *id == object_id)?,
+            ),
+            RuntimeViewModelPointer::Null | RuntimeViewModelPointer::DataContextRoot => {
+                return None;
+            }
+        };
+        Some((view_model_index, instance_index))
+    }
+
     pub(crate) fn instance_identity(&self) -> u64 {
         self.instance_identity
     }

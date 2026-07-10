@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=20, unsupported-feature=12, not-yet=0
+  exact-segments=584, diverges=22, unsupported-feature=10, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=6 gated=6; the harness bucket is empty
-- Scripted compare: exact=11 / exact-segments=11 / diverges=9 /
-  unsupported-feature=6 across the 26 M8 scripting entries
+  M8=5 gated=5; the harness bucket is empty
+- Scripted compare: exact=11 / exact-segments=11 / diverges=11 /
+  unsupported-feature=5 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -527,7 +527,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. M0-M7 remain complete; M8 is active. The current ratchet passes at
-   exact=263 / exact-segments=584 / diverges=20 / unsupported-feature=12;
+   exact=263 / exact-segments=584 / diverges=22 / unsupported-feature=10;
    `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
@@ -3786,6 +3786,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Removed the obsolete scripted-data-context umbrella
+  preflight now that runtime-owned context and nested view-model snapshots are
+  available. `viewmodel_access.riv` and the previously gated
+  `scripted_data_context.riv` both execute and move to runnable divergence;
+  `replace_view_model.riv` remains unsupported under its newly observed
+  `data-binding-nested-child` blocker. Scripted compare now covers 27 entries
+  at exact=11 / exact-segments=11 / diverges=11 / unsupported-feature=5.
+  Full compare reports exact=263 / exact-segments=584 / diverges=22 /
+  unsupported-feature=10 with parked M8=5 / gated=5; `cargo test --workspace`,
+  corpus regeneration, formatting, and diff checks pass. Next target is the
+  now-three-file nested-child family in the five-file M8 queue.
 
 - 2026-07-09: [M8] Ported the complete C++ `ScriptedAnimation` Lua class:
   `Artboard:animation(name)` now returns a runtime-owned animation handle with

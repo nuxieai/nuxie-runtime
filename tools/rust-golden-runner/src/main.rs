@@ -2283,13 +2283,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(scripted_drawable) = unsupported_scripted_data_context(runtime, artboard) {
-        bail!(
-            "unsupported: scripted-data-context in Rust golden runner (ScriptedDrawable global {})",
-            scripted_drawable.global_id
-        );
-    }
-
     if artboard
         .local_objects
         .iter()
@@ -3215,23 +3208,6 @@ fn custom_property_enum_data_bind_supported(data_bind: &rive_graph::DataBindNode
     data_bind.property_key == CUSTOM_PROPERTY_ENUM_VALUE_PROPERTY_KEY
         && data_bind.converter_global.is_none()
         && target_to_source
-}
-
-fn unsupported_scripted_data_context<'a>(
-    runtime: &RuntimeFile,
-    artboard: &'a ArtboardGraph,
-) -> Option<&'a rive_graph::AdvancingComponentNode> {
-    let scripted_drawable = artboard
-        .advancing_components
-        .iter()
-        .find(|component| component.type_name == "ScriptedDrawable")?;
-    let has_context_text_bind = artboard.data_binds.iter().any(|data_bind| {
-        data_bind.type_name == "DataBindContext"
-            && data_bind.target_type_name == Some("TextValueRun")
-    });
-    let has_nested_view_model_context = runtime_has_type(runtime, "ViewModelPropertyViewModel")
-        && runtime_has_type(runtime, "ViewModelInstanceViewModel");
-    (has_context_text_bind && has_nested_view_model_context).then_some(scripted_drawable)
 }
 
 fn nested_child_data_bind_is_text(data_bind: &rive_graph::DataBindNode) -> bool {

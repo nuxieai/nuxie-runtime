@@ -637,8 +637,11 @@ the only memory the next session has. Update it every commit.
         `relative_data_bind_path.riv` is exact at two samples after scripted
         import mode gave script assets their own contents ownership, nested
         instances retained relative path semantics, and ordinary nested
-        transform plus name-based color bindings remained admissible. Next is the smallest
-        remaining stream, `databind_viewmodel.riv`.
+        transform plus name-based color bindings remained admissible.
+        `databind_viewmodel.riv` is exact at two samples after stateful nested
+        artboards gained their authored local view-model context and retained
+        view-model references. Next is the smallest remaining stream,
+        `path_effect_with_feathers.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3818,6 +3821,21 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `databind_viewmodel.riv` to scripted exact and
+  widened it from one to two samples. Stateful nested artboards now mirror
+  C++ `NestedArtboard::findStatefulChildVmi`/`bindStateful`: the authored
+  child `ViewModelInstance` is materialized as the nested artboard's local
+  root context instead of resolving child paths against the outer root.
+  View-model-valued artboard bindings translate imported instance identity
+  back to the serialized instance index and rebind retained child contexts,
+  so nested reference replacement remains live after construction. Scripted
+  compare moves to exact=23 / exact-segments=30 / diverges=3 /
+  unsupported-feature=1 with M8=1; regular compare remains exact=263 /
+  exact-segments=584 / diverges=26 / unsupported-feature=6 with M8=1 and
+  gated=5. `cargo test --workspace`, corpus regeneration, formatting, and
+  diff checks pass. Next is the smallest remaining stream,
+  `path_effect_with_feathers.riv`.
 
 - 2026-07-09: [M8] Promoted `relative_data_bind_path.riv` to scripted exact
   and widened it from one to two samples. Scripted import mode now gives

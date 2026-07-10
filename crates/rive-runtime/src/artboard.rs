@@ -132,6 +132,8 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) render_cache_revision: u64,
     pub(crate) data_bind_path_ids: Option<Vec<u32>>,
     pub(crate) data_bind_path_is_relative: bool,
+    pub(crate) stateful_view_model_instance_local: Option<usize>,
+    pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelInstance>,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     animations: Vec<RuntimeNestedAnimationInstance>,
@@ -647,6 +649,12 @@ impl ArtboardInstance {
         self.build_context
             .as_ref()
             .map(|context| context.file.as_ref())
+    }
+
+    pub(crate) fn runtime_file_arc(&self) -> Option<Arc<RuntimeFile>> {
+        self.build_context
+            .as_ref()
+            .map(|context| Arc::clone(&context.file))
     }
 
     pub(crate) fn runtime_graph(&self) -> Option<&ArtboardGraph> {
@@ -2950,6 +2958,21 @@ fn build_runtime_nested_artboard_instance(
     let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
     let data_bind_view_model_instance_locals_by_id =
         build_nested_host_view_model_instance_locals(parent_slots, parent_objects, host_local_id);
+    let stateful_view_model_instance_local = file
+        .object(child_graph.global_id as usize)
+        .and_then(|artboard| artboard.uint_property("viewModelId"))
+        .and_then(|view_model_id| u32::try_from(view_model_id).ok())
+        .and_then(|view_model_id| {
+            data_bind_view_model_instance_locals_by_id
+                .get(&view_model_id)
+                .copied()
+        });
+    let stateful_view_model_context = stateful_view_model_instance_local.and_then(|local_id| {
+        let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
+        let instance = file.object(slot.source_global_id as usize)?;
+        let view_model_index = usize::try_from(instance.uint_property("viewModelId")?).ok()?;
+        RuntimeOwnedViewModelInstance::from_instance_object(file, view_model_index, instance)
+    });
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
         parent_slots,
         parent_objects,
@@ -2964,6 +2987,8 @@ fn build_runtime_nested_artboard_instance(
         render_cache_revision: 0,
         data_bind_path_ids,
         data_bind_path_is_relative,
+        stateful_view_model_instance_local,
+        stateful_view_model_context,
         data_bind_property_source_locals,
         data_bind_image_source_locals,
         animations,
@@ -3885,6 +3910,8 @@ mod tests {
                 render_cache_revision: 0,
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
+                stateful_view_model_instance_local: None,
+                stateful_view_model_context: None,
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 animations: Vec::new(),

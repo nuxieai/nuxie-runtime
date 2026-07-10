@@ -16,8 +16,8 @@ use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    RuntimeOwnedViewModelInstance, ScriptInstance, data_bind_flags_apply_source_to_target,
-    data_bind_flags_apply_target_to_source,
+    RuntimeOwnedViewModelInstance, RuntimeViewModelPointer, ScriptInstance,
+    data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
@@ -1503,6 +1503,7 @@ fn artboard_property_binding_value_matches_kind(
             | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
             | (RuntimeDataBindGraphValue::String(_), FieldKind::String)
             | (RuntimeDataBindGraphValue::Enum(_), FieldKind::Uint)
+            | (RuntimeDataBindGraphValue::ViewModel(_), FieldKind::Uint)
     )
 }
 
@@ -2746,6 +2747,24 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            if let Some(stateful_context) = nested.stateful_view_model_context.clone() {
+                let stateful_context_chain: [&[usize]; 1] = [&[]];
+                if rebind_self {
+                    changed |= nested.bind_owned_view_model_animation_contexts(
+                        file,
+                        &stateful_context,
+                        &stateful_context_chain,
+                    );
+                }
+                changed |= nested.child.bind_owned_view_model_artboard_context_chain(
+                    file,
+                    &stateful_context,
+                    &stateful_context_chain,
+                    true,
+                    allow_full_context_bindings,
+                );
+                continue;
+            }
             if rebind_self {
                 changed |= nested.bind_owned_view_model_animation_contexts(
                     file,
@@ -3928,6 +3947,9 @@ impl ArtboardInstance {
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
                 self.set_uint_property(target_local_id, property_key, value)
             }
+            (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::ViewModel(value))) => self
+                .view_model_instance_index_for_target_pointer(target_local_id, value)
+                .is_some_and(|value| self.set_uint_property(target_local_id, property_key, value)),
             (Some(FieldKind::Bool), Some(RuntimeDataBindGraphValue::Boolean(value))) => {
                 self.set_bool_property(target_local_id, property_key, value)
             }
@@ -3940,6 +3962,41 @@ impl ArtboardInstance {
             }
             _ => false,
         }
+    }
+
+    fn view_model_instance_index_for_target_pointer(
+        &self,
+        target_local_id: usize,
+        value: RuntimeViewModelPointer,
+    ) -> Option<u64> {
+        let RuntimeViewModelPointer::Imported { object_id } = value else {
+            return None;
+        };
+        if self.slot(target_local_id)?.type_name != Some("ViewModelInstanceViewModel") {
+            return None;
+        }
+        let parent_key = runtime_data_bind_component_parent_id_key()?;
+        let property_id_key = runtime_data_bind_view_model_instance_value_property_id_key()?;
+        let view_model_id_key = runtime_data_bind_view_model_instance_view_model_id_key()?;
+        let parent_local_id =
+            usize::try_from(self.uint_property(target_local_id, parent_key)?).ok()?;
+        let property_id =
+            usize::try_from(self.uint_property(target_local_id, property_id_key)?).ok()?;
+        let view_model_index =
+            usize::try_from(self.uint_property(parent_local_id, view_model_id_key)?).ok()?;
+        let file = self.runtime_file()?;
+        let view_model = file.view_model(view_model_index)?;
+        let property = view_model.properties.get(property_id)?;
+        if property.type_name != "ViewModelPropertyViewModel" {
+            return None;
+        }
+        let referenced_view_model_index =
+            usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?;
+        file.view_model(referenced_view_model_index)?
+            .instances
+            .iter()
+            .position(|instance| instance.object.id == object_id)
+            .and_then(|index| u64::try_from(index).ok())
     }
 
     fn update_artboard_custom_property_binding(&mut self, index: usize) -> bool {
@@ -4125,7 +4182,7 @@ impl ArtboardInstance {
     }
 
     fn sync_nested_child_artboard_data_contexts(&mut self) -> bool {
-        let mut changed = false;
+        let mut changed = self.sync_stateful_nested_view_model_contexts();
         let mut updates = std::mem::take(&mut self.artboard_nested_child_context_updates_scratch);
         for index in 0..self.nested_artboard_locals.len() {
             updates.clear();
@@ -4220,6 +4277,88 @@ impl ArtboardInstance {
             }
         }
         self.artboard_nested_child_context_updates_scratch = updates;
+        changed
+    }
+
+    fn sync_stateful_nested_view_model_contexts(&mut self) -> bool {
+        let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
+            return false;
+        };
+        let Some(property_id_key) = runtime_data_bind_view_model_instance_value_property_id_key()
+        else {
+            return false;
+        };
+        let Some(property_value_key) =
+            runtime_data_bind_property_key_for_name("ViewModelInstanceViewModel", "propertyValue")
+        else {
+            return false;
+        };
+
+        let mut updates = BTreeMap::<usize, Vec<(usize, usize)>>::new();
+        for host_local_id in &self.nested_artboard_locals {
+            let Some(instance_local_id) = self
+                .nested_artboards
+                .get(host_local_id)
+                .and_then(|nested| nested.stateful_view_model_instance_local)
+            else {
+                continue;
+            };
+            for slot in &self.slots {
+                if slot.type_name != Some("ViewModelInstanceViewModel")
+                    || self.uint_property(slot.local_id, parent_key)
+                        != u64::try_from(instance_local_id).ok()
+                {
+                    continue;
+                }
+                let Some(property_index) = self
+                    .uint_property(slot.local_id, property_id_key)
+                    .and_then(|value| usize::try_from(value).ok())
+                else {
+                    continue;
+                };
+                let Some(instance_index) = self
+                    .uint_property(slot.local_id, property_value_key)
+                    .and_then(|value| usize::try_from(value).ok())
+                else {
+                    continue;
+                };
+                updates
+                    .entry(*host_local_id)
+                    .or_default()
+                    .push((property_index, instance_index));
+            }
+        }
+
+        let mut changed = false;
+        let Some(file) = self.runtime_file_arc() else {
+            return false;
+        };
+        for (host_local_id, updates) in updates {
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            let Some(context) = nested.stateful_view_model_context.as_mut() else {
+                continue;
+            };
+            let context_changed = updates.into_iter().fold(false, |changed, update| {
+                context.set_view_model_by_property_index(update.0, update.1) || changed
+            });
+            if !context_changed {
+                continue;
+            }
+            let context = context.clone();
+            let context_chain: [&[usize]; 1] = [&[]];
+            changed = true;
+            changed |=
+                nested.bind_owned_view_model_animation_contexts(&file, &context, &context_chain);
+            changed |= nested.child.bind_owned_view_model_artboard_context_chain(
+                &file,
+                &context,
+                &context_chain,
+                true,
+                true,
+            );
+        }
         changed
     }
 

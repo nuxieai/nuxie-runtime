@@ -4266,6 +4266,14 @@ impl RuntimeOwnedViewModelInstance {
         Self::from_view_model(file, view_model_index, Some(instance.object))
     }
 
+    pub(crate) fn from_instance_object(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: &RuntimeObject,
+    ) -> Option<Self> {
+        Self::from_view_model(file, view_model_index, Some(instance))
+    }
+
     fn from_view_model(
         file: &RuntimeFile,
         view_model_index: usize,

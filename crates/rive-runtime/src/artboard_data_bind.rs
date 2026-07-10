@@ -12,10 +12,11 @@ use crate::properties::{
     layout_computed_property_for_key, property_key_for_name, solid_color_value_property_key,
     solo_active_component_id_property_key,
 };
+use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    RuntimeOwnedViewModelInstance, data_bind_flags_apply_source_to_target,
+    RuntimeOwnedViewModelInstance, ScriptInstance, data_bind_flags_apply_source_to_target,
     data_bind_flags_apply_target_to_source,
 };
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
@@ -2489,6 +2490,43 @@ fn runtime_created_view_model_value_for_declared_property(
 }
 
 impl ArtboardInstance {
+    pub fn set_scripted_data_converter_instance_for_global(
+        &mut self,
+        global_id: u32,
+        instance: Box<dyn ScriptInstance>,
+    ) -> bool {
+        let handle = RuntimeScriptInstanceHandle::new(instance);
+        self.scripted_data_converter_instances_by_global
+            .insert(global_id, handle.clone());
+        let mut attached = false;
+        for binding in &mut self.artboard_property_bindings {
+            if let Some(converter) = binding.converter.as_mut() {
+                attached |= converter.attach_scripted_instance(global_id, &handle);
+            }
+        }
+        for binding in &mut self.artboard_custom_property_bindings {
+            if let Some(converter) = binding.converter.as_mut() {
+                attached |= converter.attach_scripted_instance(global_id, &handle);
+            }
+        }
+        for binding in &mut self.artboard_formula_token_bindings {
+            if let Some(converter) = binding.converter.as_mut() {
+                attached |= converter.attach_scripted_instance(global_id, &handle);
+            }
+        }
+        for binding in &mut self.artboard_converter_property_bindings {
+            if let Some(converter) = binding.converter.as_mut() {
+                attached |= converter.attach_scripted_instance(global_id, &handle);
+            }
+        }
+        for binding in &mut self.artboard_list_bindings {
+            if let Some(converter) = binding.converter.as_mut() {
+                attached |= converter.attach_scripted_instance(global_id, &handle);
+            }
+        }
+        attached
+    }
+
     fn enqueue_artboard_data_bind_targets_for_path(&mut self, path: &[u32]) {
         self.artboard_data_bind_target_queues.enqueue_path(path);
     }

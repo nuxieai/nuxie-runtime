@@ -99,8 +99,24 @@ pub enum ScriptValue {
     Bool(bool),
     Number(f64),
     String(String),
+    Color(u32),
     Vec2 { x: f32, y: f32 },
     Vec3 { x: f32, y: f32, z: f32 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptDataConverterMethod {
+    Convert,
+    ReverseConvert,
+}
+
+impl ScriptDataConverterMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Convert => "convert",
+            Self::ReverseConvert => "reverseConvert",
+        }
+    }
 }
 
 /// Runtime-owned node data exposed by C++ `ScriptedArtboard::node`.
@@ -767,6 +783,17 @@ pub trait ScriptInstance {
         ))
     }
 
+    fn call_data_converter(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: ScriptValue,
+    ) -> Result<ScriptValue, ScriptError> {
+        let _ = (method, value);
+        Err(ScriptError::new(
+            "scripted data conversion requires backend data-value support",
+        ))
+    }
+
     fn get_input(&self, name: &str) -> Result<ScriptValue, ScriptError>;
 
     fn set_input(&mut self, name: &str, value: ScriptValue) -> Result<(), ScriptError>;
@@ -824,6 +851,12 @@ impl RuntimeScriptInstanceHandle {
 
     pub(crate) fn borrow_mut(&self) -> RefMut<'_, Box<dyn ScriptInstance>> {
         self.inner.borrow_mut()
+    }
+}
+
+impl PartialEq for RuntimeScriptInstanceHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
     }
 }
 

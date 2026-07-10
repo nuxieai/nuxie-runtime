@@ -167,6 +167,9 @@ impl StateMachineInstance {
                 StateMachineLayerInstance::new(layer, artboard, &inputs, &bindable_numbers)
             })
             .collect();
+        let mut data_bind_graph = RuntimeDataBindGraph::new(state_machine);
+        data_bind_graph
+            .attach_scripted_instances(&artboard.scripted_data_converter_instances_by_global);
         Self {
             state_machine_index,
             inputs,
@@ -189,7 +192,7 @@ impl StateMachineInstance {
             pending_view_model_actions: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
-            data_bind_graph: RuntimeDataBindGraph::new(state_machine),
+            data_bind_graph,
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
         }

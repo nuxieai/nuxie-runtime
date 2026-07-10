@@ -3,7 +3,8 @@
 #![cfg(feature = "luau")]
 
 use luaur_rt::{Function, Table, Value};
-use rive_scripting::vm::ScriptVm;
+use rive_runtime::{ScriptDataConverterMethod, ScriptInstance, ScriptValue};
+use rive_scripting::vm::{LuaScriptInstance, ScriptVm};
 
 #[test]
 fn boots_and_evaluates_source() {
@@ -120,6 +121,74 @@ fn installing_rive_globals_is_idempotent_after_sandboxing() {
     assert!(
         format!("{err}").contains("module 'StillMissing' not found"),
         "got: {err}"
+    );
+}
+
+#[test]
+fn scripted_data_values_round_trip_converter_types_and_color_channels() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    let table: Table = vm
+        .eval(
+            r#"
+            return {
+                convert = function(self, input)
+                    if input:isNumber() then
+                        local output = DataValue.number()
+                        output.value = input.value + 2
+                        return output
+                    elseif input:isString() then
+                        local output = DataValue.string()
+                        output.value = input.value .. "!"
+                        return output
+                    elseif input:isBoolean() then
+                        local output = DataValue.boolean()
+                        output.value = not input.value
+                        return output
+                    end
+                    local output = DataValue.color()
+                    output.value = input.value
+                    output.red = input.red + 1
+                    output.green = input.green + 2
+                    output.blue = input.blue + 3
+                    output.alpha = input.alpha - 1
+                    return output
+                end,
+            }
+            "#,
+        )
+        .unwrap();
+    let mut instance = LuaScriptInstance::new(table);
+
+    assert_eq!(
+        instance
+            .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(3.0),)
+            .unwrap(),
+        ScriptValue::Number(5.0)
+    );
+    assert_eq!(
+        instance
+            .call_data_converter(
+                ScriptDataConverterMethod::Convert,
+                ScriptValue::String("rive".to_owned()),
+            )
+            .unwrap(),
+        ScriptValue::String("rive!".to_owned())
+    );
+    assert_eq!(
+        instance
+            .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Bool(true),)
+            .unwrap(),
+        ScriptValue::Bool(false)
+    );
+    assert_eq!(
+        instance
+            .call_data_converter(
+                ScriptDataConverterMethod::Convert,
+                ScriptValue::Color(0xff102030),
+            )
+            .unwrap(),
+        ScriptValue::Color(0xfe112233)
     );
 }
 

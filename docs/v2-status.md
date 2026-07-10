@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=14 / exact-segments=14 / diverges=12 /
+- Scripted compare: exact=15 / exact-segments=16 / diverges=11 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -615,7 +615,10 @@ the only memory the next session has. Update it every commit.
         context behavior. `scripted_data_context.riv` is exact after nested
         `dataContext` scripts gained parent/root model traversal, boolean
         properties, and retained child contexts that survive root rebinds.
-        Next is `scripted_data_converter_bound_input.riv`.
+        `scripted_data_converter_bound_input.riv` is exact at two samples after
+        typed scripted conversion, bound converter inputs, shared artboard/
+        state-machine converter instances, and one-time text paint-pool
+        allocation. Next is `scripting_linear_animation.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3808,6 +3811,19 @@ the only memory the next session has. Update it every commit.
   full compare remains exact=263 / exact-segments=584 / diverges=26 /
   unsupported-feature=6 with gated=5 and M8=1. `cargo test --workspace`, both
   golden compares, corpus regeneration, formatting, and diff checks pass.
+
+- 2026-07-09: [M8] Promoted
+  `scripted_data_converter_bound_input.riv` to scripted exact and widened it
+  from one to two samples. The runtime data-bind graph now carries optional
+  shared scripted-converter instances while retaining non-scripting
+  pass-through behavior. Luau implements typed number/string/boolean/color
+  `DataValue` userdata and converter calls; the runner discovers, hydrates,
+  initializes, and attaches converter assets to both artboard and later-cloned
+  state-machine binding graphs. The widened sample also exposed and fixed
+  repeated unused text paint-pool allocation. Scripted compare moves to
+  exact=15 / exact-segments=16 / diverges=11 / unsupported-feature=1 with M8=1.
+  Full regular and scripted compares, `cargo test --workspace`, focused VM/
+  runtime tests, corpus regeneration, formatting, and diff checks pass.
 
 - 2026-07-09: [M8] Sharpened
   `script_create_viewmodel_instance.riv` to the named

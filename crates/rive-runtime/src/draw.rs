@@ -5974,6 +5974,7 @@ pub struct RuntimeRenderPathCache {
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
+    allocated_text_paint_pools: BTreeSet<(u32, usize, u32)>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u64, RuntimeRenderPathCache>,
@@ -8516,7 +8517,14 @@ fn runtime_draw_command(
         if saved && paint.needs_save_operation {
             renderer.restore();
         }
-        if draws_text && paint.allocates_text_paint_pool {
+        if draws_text
+            && paint.allocates_text_paint_pool
+            && path_cache.allocated_text_paint_pools.insert((
+                graph.global_id,
+                command.local_id.unwrap_or_default(),
+                paint.paint_global_id,
+            ))
+        {
             let _ = factory.make_render_paint();
         }
     }

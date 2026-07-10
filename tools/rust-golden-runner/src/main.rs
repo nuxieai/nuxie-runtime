@@ -1840,6 +1840,15 @@ fn initialize_scripted_drawables_for_artboard(
     let bound_context_model = context_model.clone();
     vm.set_default_context_view_model_chain(context_model, parent_context_models);
     let mut host = NoopScriptHost;
+    initialize_scripted_data_converters(
+        runtime,
+        instance,
+        factory,
+        script_assets,
+        bound_context_model.as_ref(),
+        &mut vm,
+        &mut host,
+    )?;
     for local_object in &artboard.local_objects {
         if !local_object
             .type_name
@@ -1942,6 +1951,106 @@ fn initialize_scripted_drawables_for_artboard(
     }
 
     Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn initialize_scripted_data_converters(
+    runtime: &RuntimeFile,
+    instance: &mut ArtboardInstance,
+    factory: &mut dyn RenderFactory,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    context_model: Option<&ScriptViewModel>,
+    vm: &mut ScriptVm,
+    host: &mut NoopScriptHost,
+) -> Result<()> {
+    for converter in runtime
+        .data_converters()
+        .into_iter()
+        .filter(|converter| converter.type_name == "ScriptedDataConverter")
+    {
+        let script_asset_id = converter.uint_property("scriptAssetId").unwrap_or(0);
+        let script = script_assets.get(&script_asset_id).with_context(|| {
+            format!(
+                "ScriptedDataConverter global {} references missing ScriptAsset id {}",
+                converter.id, script_asset_id
+            )
+        })?;
+        let mut script_instance = vm
+            .instantiate_script_with_factory(&script.name, &script.payload, host, factory)
+            .with_context(|| {
+                format!(
+                    "failed to instantiate ScriptAsset '{}' for ScriptedDataConverter global {}",
+                    script.name, converter.id
+                )
+            })?;
+        for input in scripted_data_converter_inputs(runtime, converter.id) {
+            let Some(name) = input.string_property("name") else {
+                continue;
+            };
+            let value = context_model
+                .and_then(|model| {
+                    let owned = model.owned_instance();
+                    rive_runtime::bound_script_input_value(runtime, &owned.borrow(), input)
+                })
+                .or_else(|| default_script_input_value(input));
+            if let Some(value) = value {
+                script_instance.set_input(name, value).with_context(|| {
+                    format!(
+                        "failed to hydrate input '{name}' for ScriptedDataConverter global {}",
+                        converter.id
+                    )
+                })?;
+            }
+        }
+        if script_instance
+            .has_method(ScriptMethod::Init)
+            .context("failed to inspect scripted converter init method")?
+        {
+            script_instance
+                .call_method_with_factory(ScriptMethod::Init, &[], host, factory)
+                .with_context(|| {
+                    format!(
+                        "script init failed for ScriptedDataConverter global {}",
+                        converter.id
+                    )
+                })?;
+        }
+        instance.set_scripted_data_converter_instance_for_global(converter.id, script_instance);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn scripted_data_converter_inputs(
+    runtime: &RuntimeFile,
+    converter_global_id: u32,
+) -> Vec<&rive_binary::RuntimeObject> {
+    ((converter_global_id as usize + 1)..runtime.object_count())
+        .map_while(|global_id| {
+            let object = runtime.object(global_id)?;
+            (object.type_name.starts_with("ScriptInput")
+                || object.type_name.starts_with("DataBind"))
+            .then_some(object)
+        })
+        .filter(|object| object.type_name.starts_with("ScriptInput"))
+        .collect()
+}
+
+#[cfg(feature = "scripting")]
+fn default_script_input_value(input: &rive_binary::RuntimeObject) -> Option<ScriptValue> {
+    match input.type_name {
+        "ScriptInputBoolean" => input.bool_property("propertyValue").map(ScriptValue::Bool),
+        "ScriptInputColor" => input
+            .color_property("propertyValue")
+            .map(|value| ScriptValue::Number(value as f64)),
+        "ScriptInputNumber" => input
+            .double_property("propertyValue")
+            .map(|value| ScriptValue::Number(f64::from(value))),
+        "ScriptInputString" => input
+            .string_property("propertyValue")
+            .map(|value| ScriptValue::String(value.to_owned())),
+        _ => None,
+    }
 }
 
 #[cfg(feature = "scripting")]

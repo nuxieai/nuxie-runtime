@@ -3,9 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use rive_binary::{RuntimeFile, RuntimeObject};
 
 use crate::draw::color_lerp;
+use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::{
     RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
-    RuntimeStateMachine, RuntimeTransitionInterpolator, RuntimeViewModelPointer,
+    RuntimeStateMachine, RuntimeTransitionInterpolator, RuntimeViewModelPointer, ScriptValue,
     StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
     StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
     StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
@@ -159,6 +160,10 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeDataBindGraphConverter {
     PassThrough,
+    Scripted {
+        global_id: u32,
+        instance: Option<RuntimeScriptInstanceHandle>,
+    },
     BooleanNegate,
     TriggerIncrement,
     ToNumber,
@@ -244,6 +249,30 @@ pub(crate) enum RuntimeDataBindGraphFormulaToken {
 }
 
 impl RuntimeDataBindGraphConverter {
+    pub(crate) fn attach_scripted_instance(
+        &mut self,
+        target_global_id: u32,
+        handle: &RuntimeScriptInstanceHandle,
+    ) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::Scripted {
+                global_id,
+                instance,
+            } if *global_id == target_global_id => {
+                *instance = Some(handle.clone());
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut attached = false;
+                for converter in converters {
+                    attached |= converter.attach_scripted_instance(target_global_id, handle);
+                }
+                attached
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) fn set_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
         match self {
             RuntimeDataBindGraphConverter::Formula { tokens } => {
@@ -479,6 +508,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
 ) -> bool {
     match converter {
         RuntimeDataBindGraphConverter::PassThrough
+        | RuntimeDataBindGraphConverter::Scripted { .. }
         | RuntimeDataBindGraphConverter::BooleanNegate
         | RuntimeDataBindGraphConverter::TriggerIncrement
         | RuntimeDataBindGraphConverter::ToNumber
@@ -1247,12 +1277,53 @@ fn runtime_owned_view_model_property_path_from_source_path(
         .collect()
 }
 
+fn runtime_data_bind_graph_scripted_convert(
+    instance: &RuntimeScriptInstanceHandle,
+    method: ScriptDataConverterMethod,
+    value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    let value = match value {
+        RuntimeDataBindGraphValue::Number(value) => ScriptValue::Number(f64::from(*value)),
+        RuntimeDataBindGraphValue::Boolean(value) => ScriptValue::Bool(*value),
+        RuntimeDataBindGraphValue::String(value) => {
+            ScriptValue::String(String::from_utf8_lossy(value).into_owned())
+        }
+        RuntimeDataBindGraphValue::Color(value) => ScriptValue::Color(*value),
+        _ => return None,
+    };
+    match instance
+        .borrow_mut()
+        .call_data_converter(method, value)
+        .ok()?
+    {
+        ScriptValue::Number(value) => Some(RuntimeDataBindGraphValue::Number(value as f32)),
+        ScriptValue::Bool(value) => Some(RuntimeDataBindGraphValue::Boolean(value)),
+        ScriptValue::String(value) => Some(RuntimeDataBindGraphValue::String(value.into_bytes())),
+        ScriptValue::Color(value) => Some(RuntimeDataBindGraphValue::Color(value)),
+        _ => None,
+    }
+}
+
 pub(crate) fn runtime_data_bind_graph_convert_value(
     converter: &RuntimeDataBindGraphConverter,
     value: &RuntimeDataBindGraphValue,
 ) -> Option<RuntimeDataBindGraphValue> {
     match (converter, value) {
         (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
+        (RuntimeDataBindGraphConverter::Scripted { instance: None, .. }, value) => {
+            Some(value.clone())
+        }
+        (
+            RuntimeDataBindGraphConverter::Scripted {
+                instance: Some(instance),
+                ..
+            },
+            value,
+        ) => runtime_data_bind_graph_scripted_convert(
+            instance,
+            ScriptDataConverterMethod::Convert,
+            value,
+        ),
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
@@ -1551,6 +1622,20 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
 ) -> Option<RuntimeDataBindGraphValue> {
     match (converter, value) {
         (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
+        (RuntimeDataBindGraphConverter::Scripted { instance: None, .. }, value) => {
+            Some(value.clone())
+        }
+        (
+            RuntimeDataBindGraphConverter::Scripted {
+                instance: Some(instance),
+                ..
+            },
+            value,
+        ) => runtime_data_bind_graph_scripted_convert(
+            instance,
+            ScriptDataConverterMethod::ReverseConvert,
+            value,
+        ),
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
@@ -2129,9 +2214,11 @@ fn runtime_data_bind_graph_converter_for_object(
                 })
                 .collect(),
         ),
-        "DataConverterOperation" | "ScriptedDataConverter" => {
-            RuntimeDataBindGraphConverter::PassThrough
-        }
+        "DataConverterOperation" => RuntimeDataBindGraphConverter::PassThrough,
+        "ScriptedDataConverter" => RuntimeDataBindGraphConverter::Scripted {
+            global_id: converter.id,
+            instance: None,
+        },
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
@@ -2792,6 +2879,20 @@ impl RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraph {
+    pub(crate) fn attach_scripted_instances(
+        &mut self,
+        instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    ) {
+        for source in &mut self.sources {
+            let Some(converter) = source.converter.as_mut() else {
+                continue;
+            };
+            for (global_id, handle) in instances {
+                converter.attach_scripted_instance(*global_id, handle);
+            }
+        }
+    }
+
     pub(crate) fn new(state_machine: &RuntimeStateMachine) -> Self {
         let mut sources = Vec::new();
         let mut targets = Vec::new();
@@ -8502,5 +8603,74 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod};
+
+    struct DoublingConverter;
+
+    impl ScriptInstance for DoublingConverter {
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn call_data_converter(
+            &mut self,
+            method: ScriptDataConverterMethod,
+            value: ScriptValue,
+        ) -> Result<ScriptValue, ScriptError> {
+            let ScriptValue::Number(value) = value else {
+                return Ok(ScriptValue::Nil);
+            };
+            Ok(ScriptValue::Number(match method {
+                ScriptDataConverterMethod::Convert => value * 2.0,
+                ScriptDataConverterMethod::ReverseConvert => value / 2.0,
+            }))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn scripted_converter_attaches_without_changing_unattached_passthrough() {
+        let mut converter = RuntimeDataBindGraphConverter::Scripted {
+            global_id: 7,
+            instance: None,
+        };
+        let input = RuntimeDataBindGraphValue::Number(3.0);
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(&converter, &input),
+            Some(input.clone())
+        );
+
+        let handle = RuntimeScriptInstanceHandle::new(Box::new(DoublingConverter));
+        assert!(converter.attach_scripted_instance(7, &handle));
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(&converter, &input),
+            Some(RuntimeDataBindGraphValue::Number(6.0))
+        );
+        assert_eq!(
+            runtime_data_bind_graph_reverse_convert_value(&converter, &input),
+            Some(RuntimeDataBindGraphValue::Number(1.5))
+        );
     }
 }

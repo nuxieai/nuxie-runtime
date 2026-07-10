@@ -3097,12 +3097,24 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 864 | 865)
             && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Shape")
+            // ShapeBase::lengthPropertyKey is a computed target-to-source value.
+            && data_bind.property_key == 781
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Shape")
             // TransformComponentBase::rotationPropertyKey in C++ generated/transform_component_base.hpp.
             && data_bind.property_key == 15
             && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
+        || (data_bind.target_type_name == Some("Shape")
+            // TransformComponentBase::scaleX/scaleYPropertyKey.
+            && matches!(data_bind.property_key, 16 | 17)
+            && data_bind.converter_type_name == Some("DataConverterSystemNormalizer"))
         || (data_bind.target_type_name == Some("RootBone")
             && matches!(data_bind.property_key, 90 | 91)
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("FollowPathConstraint")
+            // FollowPathConstraintBase::distancePropertyKey.
+            && data_bind.property_key == 363
+            && data_bind.converter_type_name == Some("DataConverterRangeMapper"))
         || (data_bind.target_type_name == Some("Artboard")
             // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
             && matches!(data_bind.property_key, 13 | 14)
@@ -3135,6 +3147,18 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             // ParametricPathBase::widthPropertyKey/heightPropertyKey in C++ generated/shapes/parametric_path_base.hpp.
             && matches!(data_bind.property_key, 16 | 17 | 20 | 21)
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("CubicMirroredVertex")
+            // CubicMirroredVertexBase::distancePropertyKey.
+            && data_bind.property_key == 83
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("LinearGradient")
+            // LinearGradientBase start/end coordinate property keys.
+            && matches!(data_bind.property_key, 32 | 33 | 34 | 35)
+            && (data_bind.converter_global.is_none()
+                || matches!(
+                    data_bind.converter_type_name,
+                    Some("DataConverterOperationValue" | "DataConverterFormula")
+                )))
         || (data_bind.target_type_name == Some("CustomPropertyString")
             // CustomPropertyStringBase::propertyValuePropertyKey in C++ generated/custom_property_string_base.hpp.
             && data_bind.property_key == 246
@@ -3164,7 +3188,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             // TrimPathBase::start/end/offsetPropertyKey in C++ generated/shapes/paint/trim_path_base.hpp.
             && matches!(data_bind.property_key, 114 | 115 | 116)
             && (data_bind.converter_global.is_none()
-                || data_bind.converter_type_name == Some("DataConverterGroup")))
+                || matches!(
+                    data_bind.converter_type_name,
+                    Some("DataConverterGroup" | "DataConverterRangeMapper")
+                )))
         || (data_bind.target_type_name == Some("LayoutComponent")
             // LayoutComponentBase::width/heightPropertyKey in C++ generated/layout/layout_component_base.hpp.
             && matches!(data_bind.property_key, 7 | 8)

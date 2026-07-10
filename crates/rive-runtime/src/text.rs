@@ -429,6 +429,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                     )))
                 || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
                     && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
+                || (["scaleX", "scaleY"].into_iter().any(|name| {
+                    property_key_for_name("TransformComponent", name) == Some(property_key)
+                }) && data_bind.converter_type_name == Some("DataConverterSystemNormalizer"))
         }
         Some("Node") => {
             (["x", "y"]
@@ -457,6 +460,20 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 .into_iter()
                 .any(|name| property_key_for_name("ParametricPath", name) == Some(property_key))
                 && data_bind.converter_global.is_none()
+        }
+        Some("CubicMirroredVertex") => {
+            property_key_for_name("CubicMirroredVertex", "distance") == Some(property_key)
+                && data_bind.converter_global.is_none()
+        }
+        Some("LinearGradient") => {
+            ["startX", "startY", "endX", "endY"]
+                .into_iter()
+                .any(|name| property_key_for_name("LinearGradient", name) == Some(property_key))
+                && (data_bind.converter_global.is_none()
+                    || matches!(
+                        data_bind.converter_type_name,
+                        Some("DataConverterOperationValue" | "DataConverterFormula")
+                    ))
         }
         Some("NestedArtboard") => ["artboardId", "isPaused", "speed", "quantize"]
             .into_iter()
@@ -495,7 +512,14 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 .into_iter()
                 .any(|name| property_key_for_name("TrimPath", name) == Some(property_key))
                 && (data_bind.converter_global.is_none()
-                    || data_bind.converter_type_name == Some("DataConverterGroup"))
+                    || matches!(
+                        data_bind.converter_type_name,
+                        Some("DataConverterGroup" | "DataConverterRangeMapper")
+                    ))
+        }
+        Some("FollowPathConstraint") => {
+            property_key_for_name("FollowPathConstraint", "distance") == Some(property_key)
+                && data_bind.converter_type_name == Some("DataConverterRangeMapper")
         }
         Some("Text") => {
             [
@@ -632,6 +656,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "Skin"
                         | "Tendon"
                         | "Weight"
+                        | "CubicWeight"
                         | "KeyedObject"
                         | "KeyedProperty"
                         | "LinearAnimation"

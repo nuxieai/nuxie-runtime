@@ -849,6 +849,39 @@ impl UserData for ScriptedMat2D {
             });
         }
     }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method("__mul", |lua, this, rhs: Value| {
+            Ok(match rhs {
+                Value::Vector(vector) => {
+                    let point = this
+                        .0
+                        .transform_point(rive_render_api::Vec2D::new(vector.x(), vector.y()));
+                    Value::Vector(LuaVector::new(point.x, point.y, 0.0))
+                }
+                Value::UserData(rhs) => {
+                    let rhs = rhs.borrow::<ScriptedMat2D>()?;
+                    Value::UserData(
+                        lua.create_userdata(ScriptedMat2D(multiply_mat2d(this.0, rhs.0)))?,
+                    )
+                }
+                _ => return Err(Error::runtime("Mat2D can multiply a Vector or Mat2D")),
+            })
+        });
+    }
+}
+
+fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
+    let a = lhs.0;
+    let b = rhs.0;
+    Mat2D([
+        a[0] * b[0] + a[2] * b[1],
+        a[1] * b[0] + a[3] * b[1],
+        a[0] * b[2] + a[2] * b[3],
+        a[1] * b[2] + a[3] * b[3],
+        a[0] * b[4] + a[2] * b[5] + a[4],
+        a[1] * b[4] + a[3] * b[5] + a[5],
+    ])
 }
 
 fn install_mat2d_global(lua: &Lua) -> Result<()> {

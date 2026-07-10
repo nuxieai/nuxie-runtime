@@ -2729,6 +2729,39 @@ fn cpp_clipping_shape_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_projects_target_effect_group_children_in_registration_order() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TargetEffect", "targetId");
+    let bytes = synthetic_runtime_file(7118, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Stroke", &[(parent_id_key, 1)]);
+        push_object(bytes, "SolidColor", &[(parent_id_key, 2)]);
+        push_object(bytes, "GroupEffect", &[(parent_id_key, 0)]);
+        push_object_with_properties(bytes, "TrimPath", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "TrimPath", "end", 0.75);
+            push_uint_property(bytes, "TrimPath", "modeValue", 1);
+        });
+        push_object(
+            bytes,
+            "TargetEffect",
+            &[(parent_id_key, 2), (target_id_key, 4)],
+        );
+    });
+
+    let (_, graph) = read_graph_from_bytes(&bytes, "synthetic/target_group_effect.riv");
+    let target = &graph.artboards[0].shape_paint_containers[0].paints[0].effects[0];
+
+    assert_eq!(target.type_name, "TargetEffect");
+    assert_eq!(target.target_group_effect_local, Some(4));
+    assert_eq!(target.group_effects.len(), 1);
+    assert_eq!(target.group_effects[0].type_name, "TrimPath");
+    assert_eq!(target.group_effects[0].trim_end, Some(0.75));
+}
+
+#[test]
 fn graph_projects_shape_paint_container_registrations() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_blend_mode_value_key = property_key_for_name("Drawable", "blendModeValue");

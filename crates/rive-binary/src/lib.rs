@@ -7713,6 +7713,7 @@ pub struct RuntimeStrokeEffect<'a> {
     pub object: &'a RuntimeObject,
     pub target_group_effect_local_id: Option<usize>,
     pub target_group_effect: Option<&'a RuntimeObject>,
+    pub group_effects: Vec<RuntimeStrokeEffect<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -11535,6 +11536,7 @@ fn cpp_shape_paint_effects<'a>(
     slots: &[Option<usize>],
     objects: &'a [Option<RuntimeObject>],
 ) -> Vec<RuntimeStrokeEffect<'a>> {
+    let mut group_stack = BTreeSet::new();
     slots
         .iter()
         .enumerate()
@@ -11546,17 +11548,57 @@ fn cpp_shape_paint_effects<'a>(
                 return None;
             }
 
-            let (target_group_effect_local_id, target_group_effect) =
-                cpp_target_effect_group_effect(object, slots, objects)
-                    .map(|(local, group_effect)| (Some(local), Some(group_effect)))
-                    .unwrap_or((None, None));
-
-            Some(RuntimeStrokeEffect {
+            Some(cpp_stroke_effect(
                 local_id,
                 object,
-                target_group_effect_local_id,
-                target_group_effect,
-            })
+                slots,
+                objects,
+                &mut group_stack,
+            ))
+        })
+        .collect()
+}
+
+fn cpp_stroke_effect<'a>(
+    local_id: usize,
+    object: &'a RuntimeObject,
+    slots: &[Option<usize>],
+    objects: &'a [Option<RuntimeObject>],
+    group_stack: &mut BTreeSet<usize>,
+) -> RuntimeStrokeEffect<'a> {
+    let target = cpp_target_effect_group_effect(object, slots, objects);
+    let group_effects = target
+        .filter(|(group_local, _)| group_stack.insert(*group_local))
+        .map(|(group_local, _)| {
+            let effects = cpp_group_effects(group_local, slots, objects, group_stack);
+            group_stack.remove(&group_local);
+            effects
+        })
+        .unwrap_or_default();
+
+    RuntimeStrokeEffect {
+        local_id,
+        object,
+        target_group_effect_local_id: target.map(|(local, _)| local),
+        target_group_effect: target.map(|(_, group)| group),
+        group_effects,
+    }
+}
+
+fn cpp_group_effects<'a>(
+    group_local_id: usize,
+    slots: &[Option<usize>],
+    objects: &'a [Option<RuntimeObject>],
+    group_stack: &mut BTreeSet<usize>,
+) -> Vec<RuntimeStrokeEffect<'a>> {
+    slots
+        .iter()
+        .enumerate()
+        .filter_map(|(local_id, slot)| {
+            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
+            (runtime_object_is_cpp_registered_stroke_effect(object)
+                && object.uint_property("parentId") == Some(group_local_id as u64))
+            .then(|| cpp_stroke_effect(local_id, object, slots, objects, group_stack))
         })
         .collect()
 }

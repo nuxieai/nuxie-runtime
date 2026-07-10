@@ -58,3 +58,25 @@ fn scripted_draw_can_emit_renderer_path_calls() {
     );
     assert!(stream.contains("restore\nframe\n"), "{stream}");
 }
+
+#[test]
+fn scripted_mat2d_multiplication_matches_rive_composition_order() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    let chunk = vm
+        .load(
+            "scripted-mat2d-multiply",
+            "return function(_)\n\
+                 local matrix = Mat2D.withTranslation(3, 4) * Mat2D.withScale(2, 5)\n\
+                 return { xx = matrix.xx, yy = matrix.yy, tx = matrix.tx, ty = matrix.ty }\n\
+               end",
+        )
+        .unwrap();
+    let generator: luaur_rt::Function = chunk.call(()).unwrap();
+    let result: luaur_rt::Table = generator.call(luaur_rt::Value::Nil).unwrap();
+
+    assert_eq!(result.get::<f32>("xx").unwrap(), 2.0);
+    assert_eq!(result.get::<f32>("yy").unwrap(), 5.0);
+    assert_eq!(result.get::<f32>("tx").unwrap(), 3.0);
+    assert_eq!(result.get::<f32>("ty").unwrap(), 4.0);
+}

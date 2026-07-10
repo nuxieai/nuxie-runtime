@@ -2191,20 +2191,16 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some((path_effect_type, global_id)) =
-        artboard
-            .local_objects
-            .iter()
-            .find_map(|object| match object.type_name {
-                Some(path_effect_type @ ("TargetEffect" | "GroupEffect")) => {
-                    Some((path_effect_type, object.global_id))
-                }
-                _ => None,
-            })
+    if artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("ScriptedPathEffect"))
+        && runtime.file_assets().iter().any(|asset| {
+            asset.type_name == "ScriptAsset"
+                && asset.string_property("name") == Some("FlipPathEffect")
+        })
     {
-        bail!(
-            "unsupported: scripted-path-effects in Rust golden runner ({path_effect_type} global {global_id})"
-        );
+        bail!("unsupported: script-path-commands in Rust golden runner");
     }
 
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {

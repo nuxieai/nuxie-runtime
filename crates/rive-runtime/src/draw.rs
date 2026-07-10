@@ -11237,8 +11237,23 @@ fn runtime_stroke_effect_path_commands(
                         paint: Some(script_paint_for_shape(artboard, paint)),
                     },
                 )
+                .map_err(|_| eprintln!("update function failed"))
                 .ok()?;
             Some(runtime_path_commands_from_raw_path(&output))
+        }
+        "TargetEffect" => {
+            let mut current = source.to_vec();
+            let mut has_effect_path = false;
+            for group_effect in &effect.group_effects {
+                let Some(output) =
+                    runtime_stroke_effect_path_commands(artboard, group_effect, paint, &current)
+                else {
+                    continue;
+                };
+                current = output;
+                has_effect_path = true;
+            }
+            has_effect_path.then_some(current)
         }
         "TrimPath" => runtime_trim_path_line_effect_commands(artboard, effect, paint, source),
         _ => None,

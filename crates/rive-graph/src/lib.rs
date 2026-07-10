@@ -758,6 +758,7 @@ pub struct StrokeEffectNode {
     pub target_group_effect_local: Option<usize>,
     pub target_group_effect_global: Option<u32>,
     pub target_group_effect_type_name: Option<&'static str>,
+    pub group_effects: Vec<StrokeEffectNode>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2484,42 +2485,7 @@ fn shape_paint_containers(
                                 .effects
                                 .into_iter()
                                 .filter_map(|effect| {
-                                    let global_id =
-                                        local_object_global_id(local_objects, effect.local_id)?;
-
-                                    Some(StrokeEffectNode {
-                                        local_id: effect.local_id,
-                                        global_id,
-                                        type_name: effect.object.type_name,
-                                        trim_start: trim_path_double(&effect.object, "start"),
-                                        trim_end: trim_path_double(&effect.object, "end"),
-                                        trim_offset: trim_path_double(&effect.object, "offset"),
-                                        trim_mode_value: if effect.object.type_name == "TrimPath" {
-                                            optional_u32_property(Some(&effect.object), "modeValue")
-                                        } else {
-                                            None
-                                        },
-                                        dash_offset: dash_path_double(&effect.object, "offset"),
-                                        dash_offset_is_percentage: dash_path_bool(
-                                            &effect.object,
-                                            "offsetIsPercentage",
-                                        ),
-                                        dashes: dash_path_dashes(
-                                            file,
-                                            local_objects,
-                                            effect.local_id,
-                                        ),
-                                        target_group_effect_local: effect
-                                            .target_group_effect_local_id,
-                                        target_group_effect_global: effect
-                                            .target_group_effect_local_id
-                                            .and_then(|local_id| {
-                                                local_object_global_id(local_objects, local_id)
-                                            }),
-                                        target_group_effect_type_name: effect
-                                            .target_group_effect
-                                            .map(|object| object.type_name),
-                                    })
+                                    stroke_effect_node(file, local_objects, effect)
                                 })
                                 .collect(),
                             gradient_stops,
@@ -2535,6 +2501,39 @@ fn optional_u32_property(object: Option<&RuntimeObject>, property: &str) -> Opti
     object?
         .uint_property(property)
         .and_then(|value| u32::try_from(value).ok())
+}
+
+fn stroke_effect_node(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    effect: rive_binary::RuntimeStrokeEffect<'_>,
+) -> Option<StrokeEffectNode> {
+    Some(StrokeEffectNode {
+        local_id: effect.local_id,
+        global_id: local_object_global_id(local_objects, effect.local_id)?,
+        type_name: effect.object.type_name,
+        trim_start: trim_path_double(effect.object, "start"),
+        trim_end: trim_path_double(effect.object, "end"),
+        trim_offset: trim_path_double(effect.object, "offset"),
+        trim_mode_value: if effect.object.type_name == "TrimPath" {
+            optional_u32_property(Some(effect.object), "modeValue")
+        } else {
+            None
+        },
+        dash_offset: dash_path_double(effect.object, "offset"),
+        dash_offset_is_percentage: dash_path_bool(effect.object, "offsetIsPercentage"),
+        dashes: dash_path_dashes(file, local_objects, effect.local_id),
+        target_group_effect_local: effect.target_group_effect_local_id,
+        target_group_effect_global: effect
+            .target_group_effect_local_id
+            .and_then(|local_id| local_object_global_id(local_objects, local_id)),
+        target_group_effect_type_name: effect.target_group_effect.map(|object| object.type_name),
+        group_effects: effect
+            .group_effects
+            .into_iter()
+            .filter_map(|effect| stroke_effect_node(file, local_objects, effect))
+            .collect(),
+    })
 }
 
 fn trim_path_double(object: &RuntimeObject, property: &str) -> Option<f32> {

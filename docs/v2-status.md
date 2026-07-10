@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=11, unsupported-feature=21, not-yet=0
+  exact-segments=584, diverges=12, unsupported-feature=20, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=15 gated=6; the harness bucket is empty
-- Scripted compare: exact=10 / exact-segments=10 / diverges=1 /
-  unsupported-feature=15 across the 26 M8 scripting entries
+  M8=14 gated=6; the harness bucket is empty
+- Scripted compare: exact=11 / exact-segments=11 / diverges=1 /
+  unsupported-feature=14 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -527,7 +527,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. M0-M7 remain complete; M8 is active. The current ratchet passes at
-   exact=263 / exact-segments=584 / diverges=11 / unsupported-feature=21;
+   exact=263 / exact-segments=584 / diverges=12 / unsupported-feature=20;
    `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
@@ -568,8 +568,8 @@ the only memory the next session has. Update it every commit.
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
         `make scripted-golden-compare` now builds mode-specific C++/Rust
-        binaries and ratchets all 26 M8 entries: ten exact streams, one
-        runnable divergence, and fifteen verified feature diagnostics. The
+        binaries and ratchets all 26 M8 entries: eleven exact streams, one
+        runnable divergence, and fourteen verified feature diagnostics. The
         C++ `Vector` static table is ported, advancing
         `script_affects_has_changed.riv` to a stream divergence. The harness
         bucket is empty: scripted loading selects the
@@ -601,8 +601,12 @@ the only memory the next session has. Update it every commit.
         path/contour measurement, extraction, and node paint snapshots are
         now ported; `script_path_effects_test.riv` is exact and
         `path_effect_with_feathers.riv` runs to a pre-existing nested clipping
-        divergence. The next scripting slice is `TargetEffect`/`GroupEffect`
-        routing for `group_effect.riv`; fifteen named diagnostics remain.
+        divergence. Recursive `TargetEffect`/`GroupEffect` routing and the
+        corpus-used `Mat2D` multiplication operator make `group_effect.riv`
+        exact. The gated `reuse_path_in_effect.riv` fixture now reports the
+        narrower `script-path-commands` capability gap. The next M8 scripting
+        slice is the four-file `script-view-model` bucket; fourteen named
+        diagnostics remain.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3782,6 +3786,21 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `group_effect.riv` to scripted-mode exact by
+  projecting `TargetEffect -> GroupEffect` child stroke-effect relationships
+  recursively through `rive-binary` and `rive-graph`, then evaluating each
+  group in C++ registration order over its path-provider proxy. The nested
+  `RepeaterEffect` also exercised and gained C++-order `Mat2D * Mat2D` / vector
+  multiplication. Focused tests cover recursive group projection and matrix
+  composition. The related gated `reuse_path_in_effect.riv` now verifies as
+  `script-path-commands`, its actual missing Path length/index surface, instead
+  of the closed broad group-effect diagnostic. Scripted compare reports
+  exact=11 / exact-segments=11 / diverges=1 / unsupported-feature=14. Full
+  compare reports exact=263 / exact-segments=584 / diverges=12 /
+  unsupported-feature=20, and `cargo test --workspace` passes. Next target is
+  the four-file `script-view-model` bucket, beginning with its previously
+  scouted runtime-neutral view-model userdata seam.
 
 - 2026-07-09: [M8] Ported the direct scripted path-effect runtime slice.
   `ScriptedPathEffect` instances now follow the script init/input lifecycle

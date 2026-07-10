@@ -5,7 +5,6 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
 };
-use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
@@ -3668,21 +3667,7 @@ impl ArtboardInstance {
     }
 
     fn artboard_shape_length(&self, shape_local_id: usize, graph: &ArtboardGraph) -> Option<f32> {
-        let composer = graph
-            .path_composers
-            .iter()
-            .find(|composer| composer.shape_local == shape_local_id)?;
-        let mut commands = Vec::new();
-        for path_ref in &composer.paths {
-            let path = graph
-                .paths
-                .iter()
-                .find(|path| path.local_id == path_ref.local_id)?;
-            let path_world =
-                self.runtime_component_world_transform_with_bounds(path.local_id, graph, None);
-            commands.extend(runtime_path_geometry_commands(self, path, path_world));
-        }
-        Some(RuntimePathMeasure::from_commands(&commands).length())
+        self.runtime_shape_length_with_layout(shape_local_id, graph)
     }
 
     fn update_artboard_layout_computed_bindings(&mut self, root_transform: Mat2D) -> bool {

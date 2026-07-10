@@ -35,7 +35,7 @@ use crate::text::{
     runtime_text_shape_paint_commands, static_text_constraint_bounds,
     static_text_layout_measure_bounds, text_input_layout_measure_bounds,
 };
-use crate::{ArtboardInstance, Mat2D};
+use crate::{ArtboardInstance, ComponentDirt, Mat2D};
 
 // Nested-artboard cycle guard (`nested_ancestors`).
 //
@@ -831,9 +831,24 @@ impl ArtboardInstance {
             factory,
             &mut paint_cache.paints,
             Some(&mut paint_cache.paint_configurations),
+            None,
+            Some(&mut paint_cache.nested_artboards),
+            render_cache,
+            true,
+            false,
+            &nested_ancestors,
+        )?;
+        self.prepare_static_artboard_tree_paints_internal(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            &mut paint_cache.paints,
+            Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.preparation),
             Some(&mut paint_cache.nested_artboards),
             render_cache,
+            true,
             true,
             &nested_ancestors,
         )
@@ -853,6 +868,7 @@ impl ArtboardInstance {
         >,
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
+        apply_nested_layout_bounds: bool,
         nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         let preparation_graph_global_id = graph.global_id;
@@ -917,6 +933,7 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 commands,
+                apply_nested_layout_bounds,
                 nested_ancestors,
             )?;
             if let Some(preparation) = paint_preparation.as_deref_mut() {
@@ -961,6 +978,7 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 command,
+                apply_nested_layout_bounds,
                 nested_ancestors,
             )?;
         }
@@ -1056,6 +1074,7 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         command: &RuntimeDrawCommand,
+        apply_nested_layout_bounds: bool,
         nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         let nested_instance = command
@@ -1116,7 +1135,8 @@ impl ArtboardInstance {
             .map(|nested| nested.child.as_ref())
         {
             let layout_child;
-            let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
+            let child = if apply_nested_layout_bounds
+                && command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
             {
                 let mut cloned = child.clone();
                 runtime_apply_nested_artboard_layout_child_bounds(
@@ -1124,7 +1144,7 @@ impl ArtboardInstance {
                     command,
                     layout_bounds,
                 )?;
-                cloned.update_pass();
+                runtime_settle_nested_artboard_layout_child(&mut cloned);
                 layout_child = cloned;
                 &layout_child
             } else {
@@ -1144,10 +1164,11 @@ impl ArtboardInstance {
                     factory,
                     child_paints,
                     Some(child_configurations),
-                    Some(child_preparation),
+                    apply_nested_layout_bounds.then_some(child_preparation),
                     child_nested_paints,
                     child_cache,
                     true,
+                    apply_nested_layout_bounds,
                     &child_ancestors,
                 )?;
             } else {
@@ -1162,6 +1183,7 @@ impl ArtboardInstance {
                     None,
                     child_cache,
                     true,
+                    apply_nested_layout_bounds,
                     &child_ancestors,
                 )?;
             }
@@ -1169,7 +1191,9 @@ impl ArtboardInstance {
         }
 
         let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
-        runtime_apply_nested_artboard_layout_child_bounds(&mut child, command, layout_bounds)?;
+        if apply_nested_layout_bounds {
+            runtime_apply_nested_artboard_layout_child_bounds(&mut child, command, layout_bounds)?;
+        }
         let host_opacity = command
             .local_id
             .and_then(|local_id| self.component(local_id))
@@ -1189,10 +1213,11 @@ impl ArtboardInstance {
                 factory,
                 child_paints,
                 Some(child_configurations),
-                Some(child_preparation),
+                apply_nested_layout_bounds.then_some(child_preparation),
                 child_nested_paints,
                 child_cache,
                 true,
+                apply_nested_layout_bounds,
                 &child_ancestors,
             )?;
         } else {
@@ -1207,6 +1232,7 @@ impl ArtboardInstance {
                 None,
                 child_cache,
                 true,
+                apply_nested_layout_bounds,
                 &child_ancestors,
             )?;
         }
@@ -1228,6 +1254,7 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         commands: &[RuntimeDrawCommand],
+        apply_nested_layout_bounds: bool,
         nested_ancestors: &BTreeSet<u32>,
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
@@ -1277,6 +1304,7 @@ impl ArtboardInstance {
                     render_cache,
                     layout_bounds,
                     &command,
+                    apply_nested_layout_bounds,
                     nested_ancestors,
                 )?;
             }
@@ -1324,6 +1352,7 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 command,
+                apply_nested_layout_bounds,
                 nested_ancestors,
             )?;
         }
@@ -2209,7 +2238,7 @@ impl ArtboardInstance {
         .multiply(component.transform.local_transform)
     }
 
-    fn runtime_layout_component_world_transform(
+    pub(crate) fn runtime_layout_component_world_transform(
         &self,
         layout_local: usize,
         graph: &ArtboardGraph,
@@ -2240,7 +2269,7 @@ impl ArtboardInstance {
             .unwrap_or(Mat2D::IDENTITY)
     }
 
-    fn runtime_layout_component_bounds(
+    pub(crate) fn runtime_layout_component_bounds(
         &self,
         layout_local: usize,
         graph: &ArtboardGraph,
@@ -3618,6 +3647,58 @@ impl ArtboardInstance {
             .shape_paint_paths
             .insert(graph.global_id, paint.local_id, key, commands.clone());
         commands.as_ref().clone()
+    }
+
+    pub(crate) fn runtime_shape_length_with_layout(
+        &self,
+        shape_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<f32> {
+        let composer = graph
+            .path_composers
+            .iter()
+            .find(|composer| composer.shape_local == shape_local)?;
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
+        let layout_bounds = layout_bounds.as_ref();
+        let shape_world =
+            self.runtime_component_world_transform_with_bounds(shape_local, graph, layout_bounds);
+        let inverse_shape_world = shape_world.invert_or_identity();
+        let nsliced_context =
+            runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds);
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let path_lookup = path_cache.path_composer_lookup_frame(graph);
+        let mut commands = Vec::new();
+
+        for path_ref in &composer.paths {
+            let path = path_lookup.path(graph, path_ref.local_id)?;
+            let path_world = path_cache.component_world_transform_with_bounds(
+                self,
+                graph,
+                path.local_id,
+                layout_bounds,
+            );
+            let path_frame =
+                path_cache.path_geometry_commands_frame(self, graph, path, layout_bounds);
+            let path_transform = if path_frame.has_weighted_context {
+                Mat2D::IDENTITY
+            } else {
+                path_world
+            };
+            let mut path_commands = path_frame.commands.as_ref().clone();
+            transform_path_commands(&mut path_commands, path_transform);
+            if let Some(context) = nsliced_context.as_ref() {
+                runtime_deform_path_commands_with_nsliced_node(
+                    &mut path_commands,
+                    context,
+                    ShapePaintPathKind::World,
+                    shape_world,
+                    inverse_shape_world,
+                );
+            }
+            commands.extend(path_commands);
+        }
+
+        Some(RuntimePathMeasure::from_commands(&commands).length())
     }
 
     fn runtime_shape_paint_path_commands_uncached(
@@ -9244,6 +9325,7 @@ fn runtime_draw_nested_artboard(
                 Some(&mut child_paint_cache.nested_artboards),
                 child_cache,
                 false,
+                true,
                 &child_ancestors,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -9273,6 +9355,7 @@ fn runtime_draw_nested_artboard(
                 None,
                 child_cache,
                 false,
+                true,
                 &child_ancestors,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -9317,6 +9400,7 @@ fn runtime_draw_nested_artboard(
             Some(&mut child_paint_cache.nested_artboards),
             child_cache,
             false,
+            true,
             &child_ancestors,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -9346,6 +9430,7 @@ fn runtime_draw_nested_artboard(
             None,
             child_cache,
             false,
+            true,
             &child_ancestors,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -9566,6 +9651,7 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         .and_then(|bounds| bounds.get(&local_id).copied())
         .context("nested artboard layout missing Taffy bounds")?;
     child.set_artboard_dimensions(bounds.width, bounds.height);
+    child.enable_layout_constraint_bounds();
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         child.set_double_property(0, width_key, bounds.width);
     }
@@ -9573,6 +9659,15 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         child.set_double_property(0, height_key, bounds.height);
     }
     Ok(())
+}
+
+fn runtime_settle_nested_artboard_layout_child(child: &mut ArtboardInstance) {
+    for _ in 0..100 {
+        child.update_pass();
+        if !child.has_dirt(ComponentDirt::COMPONENTS) {
+            break;
+        }
+    }
 }
 
 fn runtime_draw_clip_start(

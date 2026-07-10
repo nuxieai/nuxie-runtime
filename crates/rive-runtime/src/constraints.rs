@@ -1464,21 +1464,34 @@ fn target_transform_for_transform_constraint(
         "originY",
         0.0,
     );
-    artboard.components[target_index]
-        .transform
-        .world_transform
-        .multiply(Mat2D([
-            1.0,
-            0.0,
-            0.0,
-            1.0,
-            left + width * origin_x,
-            top + height * origin_y,
-        ]))
+    let component = &artboard.components[target_index];
+    let target_world = if artboard.layout_constraint_bounds_enabled
+        && component.type_name == "LayoutComponent"
+        && let Some(graph) = artboard.runtime_graph()
+    {
+        artboard.runtime_layout_component_world_transform(component.local_id, graph)
+    } else {
+        component.transform.world_transform
+    };
+    target_world.multiply(Mat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        left + width * origin_x,
+        top + height * origin_y,
+    ]))
 }
 
 fn constraint_bounds(artboard: &ArtboardInstance, component_index: usize) -> (f32, f32, f32, f32) {
     let component = &artboard.components[component_index];
+    if artboard.layout_constraint_bounds_enabled
+        && component.type_name == "LayoutComponent"
+        && let Some(graph) = artboard.runtime_graph()
+    {
+        let bounds = artboard.runtime_layout_component_bounds(component.local_id, graph);
+        return (0.0, 0.0, bounds.width, bounds.height);
+    }
     if component.type_name == "Text"
         && let (Some(runtime), Some(graph)) = (artboard.runtime_file(), artboard.runtime_graph())
         && let Some(bounds) =
@@ -1488,7 +1501,8 @@ fn constraint_bounds(artboard: &ArtboardInstance, component_index: usize) -> (f3
     }
 
     // C++ `TransformComponent::constraintBounds()` defaults to an empty AABB.
-    // LayoutComponent overrides stay behind their M6 gate for now.
+    // LayoutComponent overrides become available after their layout host has
+    // supplied dimensions, matching LayoutComponent::localBounds().
     (0.0, 0.0, 0.0, 0.0)
 }
 

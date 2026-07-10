@@ -645,11 +645,15 @@ the only memory the next session has. Update it every commit.
         an empty scripted effect. `script_create_text_runs.riv` is exact at
         two samples after nested width-fill leaves gained the referenced
         artboard's intrinsic content width as their flex basis. The sole
-        runnable divergence, `data_viz_demo.riv`, now matches gradient
-        allocations through shader 88 after binding-source lifecycle parity;
-        next isolate C++'s extra scripted/source-instance gradient allocation
-        block (shaders 89-106). Component-list instancing remains the sole
-        explicit scripted unsupported gap.
+        runnable divergence, `data_viz_demo.riv`, now emits 16 of C++'s 18
+        post-layout gradient rebuilds after nested layout hosts activate child
+        layout-constraint bounds and run a second paint-preparation pass. The
+        four LineBars horizontal rebuilds match C++'s 276.666656 endpoint
+        exactly. Next close the two remaining facts: Circles' weighted vertical
+        shape length is 115.158203 instead of 113.158203, and LineBars' two
+        vertical world-dirty gradients retain their initial shaders instead of
+        rebuilding. Component-list instancing remains the sole explicit
+        scripted unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3829,6 +3833,26 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Recovered 16 of the 18 missing post-layout gradient
+  rebuilds in the sole scripted divergence, `data_viz_demo.riv`. Nested
+  artboards now begin with layout constraint bounds unavailable, matching
+  C++ construction, then activate local `(0, 0, width, height)` constraint
+  bounds when their layout host supplies dimensions, dirty layout targets and
+  constrained dependents, settle data binds/components, and prepare paints a
+  second time. Layout constraint targets use the solved layout world
+  translation rather than the authored component transform. Shape-length
+  sources now measure layout, weighted, and N-sliced path geometry. Focused
+  Rust output grows from 1740 to 1756 lines: all 12 Circles rebuilds appear,
+  and all four LineBars horizontal rebuilds match C++'s 276.666656 endpoint.
+  Remaining focused differences are Circles' weighted vertical length
+  115.158203 versus 113.158203 and two LineBars vertical gradients that do not
+  rebuild. Scripted compare remains exact=25 / exact-segments=33 /
+  diverges=1 / unsupported-feature=1; regular compare remains exact=263 /
+  exact-segments=584 / diverges=26 / unsupported-feature=6. Both golden
+  compares, `cargo test --workspace`, the focused lifecycle test, formatting,
+  and diff checks pass. Next: fix those two weighted/world-dirt facts without
+  widening the lifecycle surface.
 
 - 2026-07-10: [M8] Advanced the sole scripted divergence,
   `data_viz_demo.riv`, from its first mismatch at shader 28 to C++'s extra

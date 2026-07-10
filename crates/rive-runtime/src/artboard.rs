@@ -124,6 +124,7 @@ pub struct ArtboardInstance {
     pub(crate) layout_epoch: u64,
     pub(crate) draw_order_epoch: u64,
     pub(crate) did_change: bool,
+    pub(crate) layout_constraint_bounds_enabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -187,7 +188,14 @@ impl ArtboardInstance {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.clone()),
         };
-        Self::from_graph_inner(file, graph, &artboards, &mut BTreeSet::new(), Some(context))
+        Self::from_graph_inner(
+            file,
+            graph,
+            &artboards,
+            &mut BTreeSet::new(),
+            Some(context),
+            true,
+        )
     }
 
     pub fn from_graph_with_artboards(
@@ -199,7 +207,14 @@ impl ArtboardInstance {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.to_vec()),
         };
-        Self::from_graph_inner(file, graph, artboards, &mut BTreeSet::new(), Some(context))
+        Self::from_graph_inner(
+            file,
+            graph,
+            artboards,
+            &mut BTreeSet::new(),
+            Some(context),
+            true,
+        )
     }
 
     fn from_graph_inner(
@@ -208,6 +223,7 @@ impl ArtboardInstance {
         artboards: &[ArtboardGraph],
         visiting: &mut BTreeSet<u32>,
         build_context: Option<RuntimeArtboardBuildContext>,
+        layout_constraint_bounds_enabled: bool,
     ) -> Result<Self> {
         let inserted = visiting.insert(graph.global_id);
         let dimensions =
@@ -380,6 +396,7 @@ impl ArtboardInstance {
             layout_epoch: 1,
             draw_order_epoch: 1,
             did_change: true,
+            layout_constraint_bounds_enabled,
         };
         instance.apply_initial_layout_component_display_collapses();
         let nested_host_locals = instance.nested_artboard_locals.clone();
@@ -1400,6 +1417,22 @@ impl ArtboardInstance {
 
     pub(crate) fn mark_prepared_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
+    }
+
+    pub(crate) fn enable_layout_constraint_bounds(&mut self) {
+        if self.layout_constraint_bounds_enabled {
+            return;
+        }
+        self.layout_constraint_bounds_enabled = true;
+        let layout_locals = self
+            .components
+            .iter()
+            .filter(|component| component.type_name == "LayoutComponent")
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+        for local_id in layout_locals {
+            self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+        }
     }
 
     pub(crate) fn mark_layout_changed(&mut self) {
@@ -2950,6 +2983,7 @@ fn build_runtime_nested_artboard_instance(
         artboards,
         visiting,
         build_context,
+        false,
     )?);
     child.bind_default_view_model_artboard_list_context(file);
     if !child_has_state_machine_data_binds(file, child_graph) {
@@ -3441,6 +3475,7 @@ mod tests {
             layout_epoch: 1,
             draw_order_epoch: 1,
             did_change: true,
+            layout_constraint_bounds_enabled: false,
         }
     }
 
@@ -3657,6 +3692,40 @@ mod tests {
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
 
         assert!(!instance.add_dirt(0, ComponentDirt::PATH, true));
+    }
+
+    #[test]
+    fn enabling_layout_constraint_bounds_dirties_layout_dependents() {
+        let mut layout = synthetic_component(0, 0);
+        layout.type_name = "LayoutComponent";
+        layout.dependent_locals.push(1);
+        let dependent = synthetic_component(1, 1);
+        let mut instance = synthetic_instance(vec![layout, dependent], vec![0, 1]);
+        instance.dirt = ComponentDirt::NONE;
+        let prepared_epoch = instance.prepared_epoch();
+
+        instance.enable_layout_constraint_bounds();
+
+        assert!(instance.layout_constraint_bounds_enabled);
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert!(
+            instance
+                .component(1)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert!(instance.prepared_epoch() > prepared_epoch);
+
+        let cache_epoch = instance.cache_epoch();
+        instance.enable_layout_constraint_bounds();
+        assert_eq!(instance.cache_epoch(), cache_epoch);
     }
 
     #[test]

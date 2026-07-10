@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=22 / exact-segments=28 / diverges=4 /
+- Scripted compare: exact=25 / exact-segments=33 / diverges=1 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -642,8 +642,11 @@ the only memory the next session has. Update it every commit.
         artboards gained their authored local view-model context and retained
         view-model references. `path_effect_with_feathers.riv` is exact at its
         initial sample after inner feathers retained C++'s padded path around
-        an empty scripted effect. Next is the smaller remaining divergence,
-        `script_create_text_runs.riv`.
+        an empty scripted effect. `script_create_text_runs.riv` is exact at
+        two samples after nested width-fill leaves gained the referenced
+        artboard's intrinsic content width as their flex basis. Next is the
+        sole runnable divergence, `data_viz_demo.riv`; component-list
+        instancing remains the sole explicit scripted unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3823,6 +3826,21 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `script_create_text_runs.riv` to scripted exact
+  and widened it from one to two samples. C++ lends a nested artboard's real
+  layout node to its parent, so width-fill allocation starts from that
+  child's intrinsic content width. Rust's Taffy projection represented nested
+  artboards as contentless leaves and gave every fill child an auto/zero flex
+  basis, making all scripted buttons inherit the same width. Nested fill
+  leaves now measure the referenced root under a main-axis hug override and
+  use that intrinsic result as their flex basis before distributing remaining
+  space. Scripted compare moves to exact=25 / exact-segments=33 / diverges=1 /
+  unsupported-feature=1 with M8=1; regular compare remains exact=263 /
+  exact-segments=584 / diverges=26 / unsupported-feature=6 with M8=1 and
+  gated=5. `cargo test --workspace`, both golden compares, corpus
+  regeneration, formatting, and diff checks pass. Next is the sole runnable
+  divergence, `data_viz_demo.riv`.
 
 - 2026-07-09: [M8] Promoted `path_effect_with_feathers.riv` to scripted exact
   at its initial sample. Rust now mirrors C++ `Feather::rebuildInnerPath` when

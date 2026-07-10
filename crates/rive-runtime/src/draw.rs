@@ -4218,6 +4218,26 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
         graph: &ArtboardGraph,
         runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        self.compute_bounds_with_root_hug(
+            instance,
+            graph,
+            runtime,
+            Size {
+                width: false,
+                height: false,
+            },
+        )
+    }
+}
+
+impl TaffyRuntimeLayoutEngine {
+    fn compute_bounds_with_root_hug(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+        root_hug: Size<bool>,
+    ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
         // Ported from C++ `src/layout_component.cpp`
         // `syncStyle`/`syncLayoutChildren`/`calculateLayoutInternal`: translate
         // Rive layout style into the delegated layout engine, then expose the
@@ -4234,7 +4254,23 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
         let mut build = TaffyLayoutBuild::default();
         let root_node =
             self.build_node(instance, graph, runtime, 0, true, &mut taffy, &mut build)?;
-        let available_space = self.root_available_space(instance)?;
+        if root_hug.width || root_hug.height {
+            let mut style = taffy.style(root_node).ok()?.clone();
+            if root_hug.width {
+                style.size.width = Dimension::auto();
+            }
+            if root_hug.height {
+                style.size.height = Dimension::auto();
+            }
+            taffy.set_style(root_node, style).ok()?;
+        }
+        let mut available_space = self.root_available_space(instance)?;
+        if root_hug.width {
+            available_space.width = AvailableSpace::MaxContent;
+        }
+        if root_hug.height {
+            available_space.height = AvailableSpace::MaxContent;
+        }
         taffy
             .compute_layout_with_measure(
                 root_node,
@@ -4260,9 +4296,7 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
         self.collect_bounds(0, 0.0, 0.0, &taffy, &build, &mut bounds)?;
         Some(bounds)
     }
-}
 
-impl TaffyRuntimeLayoutEngine {
     fn build_node(
         &self,
         instance: &ArtboardInstance,
@@ -4782,7 +4816,13 @@ impl TaffyRuntimeLayoutEngine {
             1 => {
                 style.flex_grow = 1.0;
                 style.flex_shrink = 1.0;
-                style.flex_basis = Dimension::auto();
+                // C++ contributes the referenced artboard's layout node, so
+                // fill distribution starts from its intrinsic content size.
+                style.flex_basis = self
+                    .nested_artboard_layout_axis_hug_size(instance, local, parent_is_row)
+                    .filter(|value| value.is_finite() && *value >= 0.0)
+                    .map(Dimension::length)
+                    .unwrap_or_else(Dimension::auto);
             }
             _ => return None,
         }
@@ -4869,6 +4909,38 @@ impl TaffyRuntimeLayoutEngine {
                 nested.child.height
             })
         })
+    }
+
+    fn nested_artboard_layout_axis_hug_size(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        width_axis: bool,
+    ) -> Option<f32> {
+        let nested = instance.nested_artboards.get(&local)?;
+        nested
+            .child
+            .runtime_file()
+            .zip(nested.child.runtime_graph())
+            .and_then(|(runtime, graph)| {
+                self.compute_bounds_with_root_hug(
+                    &nested.child,
+                    graph,
+                    Some(runtime),
+                    Size {
+                        width: width_axis,
+                        height: !width_axis,
+                    },
+                )
+            })
+            .and_then(|bounds| bounds.get(&0).copied())
+            .map(|bounds| {
+                if width_axis {
+                    bounds.width
+                } else {
+                    bounds.height
+                }
+            })
     }
 
     fn nested_artboard_layout_axis_scale(

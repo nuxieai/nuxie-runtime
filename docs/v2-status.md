@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=27, unsupported-feature=5, not-yet=0
+  exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  gated=5; the M8 and harness buckets are empty
-- Scripted compare: exact=13 / exact-segments=13 / diverges=14 /
-  unsupported-feature=0 across the 27 M8 scripting entries
+  gated=5 and M8=1; the harness bucket is empty
+- Scripted compare: exact=13 / exact-segments=13 / diverges=13 /
+  unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -608,8 +608,11 @@ the only memory the next session has. Update it every commit.
         promoted `scripted_viewmodel_cache.riv` and `viewmodel_access.riv`,
         whose complete streams differ only within the established numeric
         tolerance. The next M8 scripting slice is the remaining constructed
-        view-model/data-context family, beginning with
-        `script_create_viewmodel_instance.riv`.
+        view-model/data-context family. `script_create_viewmodel_instance.riv`
+        now carries the sharper `component-list-instancing` diagnostic because
+        C++ binds each non-empty list item to an instantiated child artboard,
+        while Rust intentionally does not approximate that coupled draw/layout/
+        context behavior. Next is `scripted_data_context.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3789,6 +3792,24 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Sharpened
+  `script_create_viewmodel_instance.riv` to the named
+  `component-list-instancing` boundary. Focused probing confirmed the missing
+  behavior is the existing indivisible C++ path: instantiate an artboard for
+  each non-empty list item, bind that item's view model, and include it in
+  layout/draw. A partial owned-list source propagation experiment was fully
+  backed out because source metadata alone does not realize child behavior,
+  preserving the prior decision not to approximate this path. The full corpus
+  also caught an accidental name-based path-flag edit during that experiment;
+  it was restored before the retained slice.
+  Rust golden-runner mode targets now remove the shared executable before
+  building, preventing a fresh scripting-feature binary from surviving a
+  later default build. Scripted compare is exact=13 / exact-segments=13 /
+  diverges=13 / unsupported-feature=1, with the diagnostic verified. Full
+  compare is exact=263 / exact-segments=584 / diverges=26 /
+  unsupported-feature=6 with gated=5 and M8=1. `cargo test --workspace`, both
+  golden compares, corpus regeneration, formatting, and diff checks pass.
 
 - 2026-07-09: [M8] Re-audited the stale scripted view-model queue and promoted
   `scripted_viewmodel_cache.riv` plus `viewmodel_access.riv` to scripted exact.

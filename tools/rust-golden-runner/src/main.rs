@@ -14,8 +14,8 @@ use rive_runtime::{
 };
 #[cfg(feature = "scripting")]
 use rive_runtime::{
-    NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue,
-    preallocate_render_paint_cache_for_artboard_instance,
+    NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue, ScriptViewModel,
+    ScriptViewModelProperty, preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_source_render_paints,
 };
@@ -2125,6 +2125,11 @@ fn ensure_static_draw_supported_for_artboard(
         return Ok(());
     }
 
+    #[cfg(feature = "scripting")]
+    if let Some(local_id) = bound_nonempty_component_list_local(runtime, graph, artboard) {
+        bail!("unsupported: component-list-instancing in Rust golden runner (local {local_id})");
+    }
+
     if let Some(nested) = artboard.nested_artboards.iter().find(|nested| {
         !matches!(
             nested.type_name,
@@ -2337,6 +2342,62 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn bound_nonempty_component_list_local(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> Option<usize> {
+    let component_list_local =
+        reachable_component_list_local(graph, artboard, &mut BTreeSet::new())?;
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|candidate| candidate.global_id == artboard.global_id)?;
+    let context = selected_artboard_owned_view_model_context(runtime, artboard_index)?;
+    let model = rive_runtime::script_view_model_from_owned(runtime, &context)?;
+    if !script_view_model_has_nonempty_list(&model) {
+        return None;
+    }
+    Some(component_list_local)
+}
+
+#[cfg(feature = "scripting")]
+fn reachable_component_list_local(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    visiting: &mut BTreeSet<u32>,
+) -> Option<usize> {
+    if !visiting.insert(artboard.global_id) {
+        return None;
+    }
+    if let Some(list) = artboard.component_lists.first() {
+        return Some(list.local_id);
+    }
+    artboard
+        .sorted_drawable_order
+        .iter()
+        .filter_map(|drawable| drawable.referenced_artboard_global)
+        .find_map(|global_id| {
+            let child = graph
+                .artboards
+                .iter()
+                .find(|candidate| candidate.global_id == global_id)?;
+            reachable_component_list_local(graph, child, visiting)
+        })
+}
+
+#[cfg(feature = "scripting")]
+fn script_view_model_has_nonempty_list(model: &ScriptViewModel) -> bool {
+    model.properties().iter().any(|(name, kind)| match kind {
+        ScriptViewModelProperty::List => model.list_len(name).is_some_and(|len| len != 0),
+        ScriptViewModelProperty::ViewModel => model
+            .view_model(name)
+            .is_some_and(|nested| script_view_model_has_nonempty_list(&nested)),
+        _ => false,
+    })
 }
 
 fn unsupported_layout_component_paint<'a>(

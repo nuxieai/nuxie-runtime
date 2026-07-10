@@ -80,9 +80,11 @@ scripted-golden-runner:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_WITH_SCRIPTING=1 RIVE_GOLDEN_RUNNER_NAME=rive_golden_runner_scripted tools/golden-runner/build.sh "$(CPP_CONFIG)"
 
 rust-golden-runner:
+	rm -f "$(RUST_GOLDEN_RUNNER)"
 	cargo build --quiet $(RUST_GOLDEN_RUNNER_FLAGS) -p rust-golden-runner
 
 scripted-rust-golden-runner:
+	rm -f "$(RUST_GOLDEN_RUNNER)"
 	cargo build --quiet $(RUST_GOLDEN_RUNNER_FLAGS) -p rust-golden-runner --features scripting
 	cp "$(RUST_GOLDEN_RUNNER)" "$(SCRIPTED_RUST_GOLDEN_RUNNER)"
 

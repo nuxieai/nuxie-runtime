@@ -6679,11 +6679,29 @@ impl RuntimeOwnedViewModelInstance {
         source_path: &[u32],
         name_based: bool,
     ) -> Option<Vec<usize>> {
+        self.property_path_for_context_source_path_with_manifest_mode(
+            file,
+            context_path,
+            source_path,
+            name_based,
+            false,
+        )
+    }
+
+    pub(crate) fn property_path_for_context_source_path_with_manifest_mode(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+        scripting_manifest: bool,
+    ) -> Option<Vec<usize>> {
         if name_based {
             return self.property_path_for_context_name_source_path(
                 file,
                 context_path,
                 source_path,
+                scripting_manifest,
             );
         }
 
@@ -6708,11 +6726,16 @@ impl RuntimeOwnedViewModelInstance {
         file: &RuntimeFile,
         context_path: &[usize],
         source_path: &[u32],
+        scripting_manifest: bool,
     ) -> Option<Vec<usize>> {
         if source_path.is_empty() {
             return None;
         }
-        let manifest = file.manifest()?;
+        let manifest = if scripting_manifest {
+            file.scripting_manifest()?
+        } else {
+            file.manifest()?
+        };
         let source_path = source_path
             .first()
             .and_then(|path_id| manifest.resolve_path(*path_id))

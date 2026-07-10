@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=21 / exact-segments=26 / diverges=5 /
+- Scripted compare: exact=22 / exact-segments=28 / diverges=4 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -633,8 +633,12 @@ the only memory the next session has. Update it every commit.
         `viewmodel_from_instance.riv` is exact at two samples after root cold
         user `init` stopped observing a bound `Context` before C++ exposes it;
         the retained selected model still feeds global Data, generators, and
-        pre-bind setup. This closes the resource-allocation subgroup. Next is
-        the focused transform/context gap in `relative_data_bind_path.riv`.
+        pre-bind setup. This closes the resource-allocation subgroup.
+        `relative_data_bind_path.riv` is exact at two samples after scripted
+        import mode gave script assets their own contents ownership, nested
+        instances retained relative path semantics, and ordinary nested
+        transform plus name-based color bindings remained admissible. Next is the smallest
+        remaining stream, `databind_viewmodel.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3814,6 +3818,21 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `relative_data_bind_path.riv` to scripted exact
+  and widened it from one to two samples. Scripted import mode now gives
+  `ScriptAsset` its C++ file-asset importer scope, so its payload no longer
+  overwrites the valid manifest; non-scripting import keeps its separate C++
+  stack behavior. Nested artboard instances retain
+  `DataBindPath.isRelative` and resolve those paths through manifest names
+  against each parent context.
+  Ordinary nested-artboard properties remain in the generic generated-setter
+  binding path while lifecycle properties keep their specialized handling;
+  unresolved name-based colors resolve during full root-context binding
+  without entering the reduced nested-context-only binding graph used by the
+  regular runner. Scripted compare moves to exact=22 / exact-segments=28 /
+  diverges=4 / unsupported-feature=1 with M8=1. Next is the smallest remaining
+  stream, `databind_viewmodel.riv`.
 
 - 2026-07-09: [M8] Promoted `viewmodel_from_instance.riv` to scripted exact
   and widened it from one to two samples. C++ preserves the selected model for

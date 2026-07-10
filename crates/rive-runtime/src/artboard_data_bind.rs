@@ -981,6 +981,7 @@ fn runtime_owned_view_model_binding_value_for_retained_context_chain(
     context_chain: &[&[usize]],
     path: &[u32],
     path_is_name_based: bool,
+    scripting_manifest: bool,
     default_value: &RuntimeDataBindGraphValue,
     retained_source_path: &mut Option<Vec<usize>>,
 ) -> Option<RuntimeDataBindGraphValue> {
@@ -995,11 +996,12 @@ fn runtime_owned_view_model_binding_value_for_retained_context_chain(
     }
 
     let (source_path, value) = context_chain.iter().find_map(|context_path| {
-        let source_path = context.property_path_for_context_source_path(
+        let source_path = context.property_path_for_context_source_path_with_manifest_mode(
             file,
             context_path,
             path,
             path_is_name_based,
+            scripting_manifest,
         )?;
         let value = runtime_owned_view_model_binding_value_for_property_path(
             context,
@@ -1325,15 +1327,24 @@ pub(super) fn build_artboard_property_bindings(
                 return None;
             }
             let target = data_bind.target?;
-            if matches!(
-                target.type_name,
-                "ArtboardComponentList" | "NestedArtboard" | "Solo"
-            ) {
+            if matches!(target.type_name, "ArtboardComponentList" | "Solo") {
                 return None;
             }
             let target_local_id = data_bind.target_local_id?;
             let property_key =
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let target_is_nested_artboard = runtime_type_is_a(target.type_key, "NestedArtboard");
+            if target_is_nested_artboard
+                && [
+                    runtime_data_bind_property_key_for_name("NestedArtboard", "artboardId"),
+                    runtime_data_bind_property_key_for_name("NestedArtboard", "isPaused"),
+                    runtime_data_bind_property_key_for_name("NestedArtboard", "speed"),
+                    runtime_data_bind_property_key_for_name("NestedArtboard", "quantize"),
+                ]
+                .contains(&Some(property_key))
+            {
+                return None;
+            }
             let Some(property_kind) =
                 rive_schema::core_registry_setter_field_kind_by_property_key(property_key)
             else {
@@ -2678,7 +2689,7 @@ impl ArtboardInstance {
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
         let context_chain: [&[usize]; 1] = [&[]];
-        self.bind_owned_view_model_artboard_context_chain(file, context, &context_chain, true)
+        self.bind_owned_view_model_artboard_context_chain(file, context, &context_chain, true, true)
     }
 
     pub fn bind_owned_view_model_nested_artboard_contexts(
@@ -2687,7 +2698,13 @@ impl ArtboardInstance {
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
         let context_chain: [&[usize]; 1] = [&[]];
-        self.bind_owned_view_model_artboard_context_chain(file, context, &context_chain, false)
+        self.bind_owned_view_model_artboard_context_chain(
+            file,
+            context,
+            &context_chain,
+            false,
+            false,
+        )
     }
 
     fn bind_owned_view_model_artboard_context_chain(
@@ -2696,19 +2713,27 @@ impl ArtboardInstance {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
         bind_self: bool,
+        allow_full_context_bindings: bool,
     ) -> bool {
         let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
         let mut changed = if bind_self && rebind_self {
-            self.bind_owned_view_model_artboard_values(file, context, context_chain)
+            self.bind_owned_view_model_artboard_values(
+                file,
+                context,
+                context_chain,
+                allow_full_context_bindings,
+            )
         } else {
             false
         };
         for index in 0..self.nested_artboard_locals.len() {
             let host_local_id = self.nested_artboard_locals[index];
             let child_context = self.owned_view_model_context_chain_for_nested_host(
+                file,
                 context,
                 context_chain,
                 host_local_id,
+                allow_full_context_bindings,
             );
             let child_context_chain_storage =
                 RuntimeOwnedViewModelContextChainStorage::with_child_context(
@@ -2733,6 +2758,7 @@ impl ArtboardInstance {
                 context,
                 child_context_chain,
                 true,
+                allow_full_context_bindings,
             );
         }
         changed
@@ -2781,6 +2807,7 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
+        allow_full_context_bindings: bool,
     ) -> bool {
         let mut changed = false;
 
@@ -2793,6 +2820,7 @@ impl ArtboardInstance {
                     context_chain,
                     &binding.path,
                     binding.path_is_name_based,
+                    allow_full_context_bindings,
                     &binding.default_value,
                     &mut binding.owned_context_source_path,
                 )
@@ -2813,6 +2841,10 @@ impl ArtboardInstance {
             }
         }
 
+        if allow_full_context_bindings {
+            changed |= self.bind_owned_name_based_color_values(file, context, context_chain);
+        }
+
         for index in 0..self.artboard_image_asset_bindings.len() {
             let update = {
                 let binding = &mut self.artboard_image_asset_bindings[index];
@@ -2822,6 +2854,7 @@ impl ArtboardInstance {
                     context_chain,
                     &binding.path,
                     false,
+                    allow_full_context_bindings,
                     &binding.default_value,
                     &mut binding.owned_context_source_path,
                 )
@@ -2845,6 +2878,7 @@ impl ArtboardInstance {
                     context_chain,
                     binding.path.as_ref(),
                     binding.path_is_name_based,
+                    allow_full_context_bindings,
                     &binding.default_value,
                     &mut binding.owned_context_source_path,
                 )
@@ -2872,6 +2906,7 @@ impl ArtboardInstance {
                     context_chain,
                     &binding.path,
                     false,
+                    allow_full_context_bindings,
                     &default_value,
                     &mut binding.owned_context_source_path,
                 )
@@ -2885,12 +2920,14 @@ impl ArtboardInstance {
         let mut text_lists_changed = false;
         for binding in &mut self.artboard_text_list_bindings {
             let source = context_chain.iter().find_map(|context_path| {
-                let property_path = context.property_path_for_context_source_path(
-                    file,
-                    context_path,
-                    &binding.path,
-                    binding.path_is_name_based,
-                )?;
+                let property_path = context
+                    .property_path_for_context_source_path_with_manifest_mode(
+                        file,
+                        context_path,
+                        &binding.path,
+                        binding.path_is_name_based,
+                        allow_full_context_bindings,
+                    )?;
                 context.list_handle_by_property_path(&property_path)
             });
             text_lists_changed |= source.is_some();
@@ -2908,17 +2945,81 @@ impl ArtboardInstance {
         changed
     }
 
+    fn bind_owned_name_based_color_values(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) -> bool {
+        let Some(artboard_index) = file
+            .artboards()
+            .into_iter()
+            .position(|artboard| artboard.id == self.graph_global_id)
+        else {
+            return false;
+        };
+        let Some(color_key) = solid_color_value_property_key() else {
+            return false;
+        };
+        let updates = file
+            .artboard_data_binds(artboard_index)
+            .into_iter()
+            .filter_map(|data_bind| {
+                if !data_bind_flags_apply_source_to_target(
+                    data_bind.object.uint_property("flags").unwrap_or(0),
+                ) || !file
+                    .data_bind_is_name_based_for_object(data_bind.object)
+                    .unwrap_or(false)
+                    || data_bind.target?.type_name != "SolidColor"
+                    || u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
+                        != color_key
+                {
+                    return None;
+                }
+                let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+                let value = context_chain.iter().find_map(|context_path| {
+                    let property_path = context
+                        .property_path_for_context_source_path_with_manifest_mode(
+                            file,
+                            context_path,
+                            &path,
+                            true,
+                            true,
+                        )?;
+                    context.color_value_by_property_path(&property_path)
+                })?;
+                Some((data_bind.target_local_id?, value))
+            })
+            .collect::<Vec<_>>();
+        updates.into_iter().fold(false, |changed, (target, value)| {
+            self.set_color_property(target, color_key, value) || changed
+        })
+    }
+
     fn owned_view_model_context_chain_for_nested_host<'a>(
         &self,
+        file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &'a [&'a [usize]],
         host_local_id: usize,
+        scripting_manifest: bool,
     ) -> Option<RuntimeOwnedViewModelContextPathStorage<'a>> {
-        let path = self
-            .nested_artboards
-            .get(&host_local_id)?
-            .data_bind_resolved_path_ids
-            .as_deref()?;
+        let nested = self.nested_artboards.get(&host_local_id)?;
+        let path = nested.data_bind_path_ids.as_deref()?;
+        if nested.data_bind_path_is_relative {
+            return context_chain.iter().find_map(|context_path| {
+                let property_path = context
+                    .property_path_for_context_source_path_with_manifest_mode(
+                        file,
+                        context_path,
+                        path,
+                        true,
+                        scripting_manifest,
+                    )?;
+                context.view_model_index_by_property_path(&property_path)?;
+                Some(RuntimeOwnedViewModelContextPathStorage::Heap(property_path))
+            });
+        }
         runtime_owned_view_model_context_path_for_context_chain(context, context_chain, path)
     }
 

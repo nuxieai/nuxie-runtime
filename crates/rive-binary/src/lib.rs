@@ -4249,6 +4249,17 @@ impl RuntimeFile {
     }
 
     pub fn manifest(&self) -> Option<RuntimeManifest> {
+        self.manifest_with_script_assets(false)
+    }
+
+    pub fn scripting_manifest(&self) -> Option<RuntimeManifest> {
+        self.manifest_with_script_assets(true)
+    }
+
+    fn manifest_with_script_assets(
+        &self,
+        script_assets_create_importers: bool,
+    ) -> Option<RuntimeManifest> {
         let mut latest_file_asset = None;
         let mut manifest = None;
 
@@ -4264,7 +4275,9 @@ impl RuntimeFile {
                 continue;
             };
 
-            if file_asset_creates_importer(definition.name) {
+            if file_asset_creates_importer(definition.name)
+                || (script_assets_create_importers && definition.name == "ScriptAsset")
+            {
                 latest_file_asset = Some(object);
                 if definition.name == "ManifestAsset" {
                     manifest = Some(RuntimeManifest::default());

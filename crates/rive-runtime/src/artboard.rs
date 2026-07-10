@@ -130,7 +130,8 @@ pub struct ArtboardInstance {
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) render_cache_revision: u64,
-    pub(crate) data_bind_resolved_path_ids: Option<Vec<u32>>,
+    pub(crate) data_bind_path_ids: Option<Vec<u32>>,
+    pub(crate) data_bind_path_is_relative: bool,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     animations: Vec<RuntimeNestedAnimationInstance>,
@@ -2338,15 +2339,26 @@ impl ArtboardInstance {
             .artboards
             .iter()
             .find(|artboard| artboard.global_id == self.graph_global_id)?;
-        let data_bind_resolved_path_ids = self
+        let data_bind_path = self
             .slot(host_local_id)
             .and_then(|host| context.file.object(host.source_global_id as usize))
             .and_then(|host_object| {
                 context
                     .file
                     .data_bind_path_for_referencer_object(host_object)
-            })
-            .map(|path| path.resolved_path_ids);
+            });
+        let data_bind_path_is_relative = data_bind_path
+            .as_ref()
+            .and_then(|path| path.object)
+            .and_then(|path| path.bool_property("isRelative"))
+            .unwrap_or(false);
+        let data_bind_path_ids = data_bind_path.map(|path| {
+            if data_bind_path_is_relative {
+                path.path_ids
+            } else {
+                path.resolved_path_ids
+            }
+        });
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
         build_runtime_nested_artboard_instance(
@@ -2359,7 +2371,8 @@ impl ArtboardInstance {
             child_graph,
             &mut visiting,
             Some(context.clone()),
-            data_bind_resolved_path_ids,
+            data_bind_path_ids,
+            data_bind_path_is_relative,
             self.bool_property(
                 host_local_id,
                 property_key_for_name("NestedArtboard", "isPaused")?,
@@ -2862,9 +2875,19 @@ fn build_runtime_nested_artboard_instances(
         let Some(referenced) = file.resolved_artboard_for_referencer_object(host_object) else {
             continue;
         };
-        let data_bind_resolved_path_ids = file
-            .data_bind_path_for_referencer_object(host_object)
-            .map(|path| path.resolved_path_ids);
+        let data_bind_path = file.data_bind_path_for_referencer_object(host_object);
+        let data_bind_path_is_relative = data_bind_path
+            .as_ref()
+            .and_then(|path| path.object)
+            .and_then(|path| path.bool_property("isRelative"))
+            .unwrap_or(false);
+        let data_bind_path_ids = data_bind_path.map(|path| {
+            if data_bind_path_is_relative {
+                path.path_ids
+            } else {
+                path.resolved_path_ids
+            }
+        });
         let Some(child_graph) = artboards
             .iter()
             .find(|artboard| artboard.global_id == referenced.id)
@@ -2885,7 +2908,8 @@ fn build_runtime_nested_artboard_instances(
             child_graph,
             visiting,
             build_context.clone(),
-            data_bind_resolved_path_ids,
+            data_bind_path_ids,
+            data_bind_path_is_relative,
             host_object.bool_property("isPaused").unwrap_or(false),
             host_object.double_property("speed").unwrap_or(1.0),
             host_object.double_property("quantize").unwrap_or(-1.0),
@@ -2906,7 +2930,8 @@ fn build_runtime_nested_artboard_instance(
     child_graph: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
-    data_bind_resolved_path_ids: Option<Vec<u32>>,
+    data_bind_path_ids: Option<Vec<u32>>,
+    data_bind_path_is_relative: bool,
     is_paused: bool,
     speed: f32,
     quantize: f32,
@@ -2937,7 +2962,8 @@ fn build_runtime_nested_artboard_instance(
     Ok(RuntimeNestedArtboardInstance {
         child,
         render_cache_revision: 0,
-        data_bind_resolved_path_ids,
+        data_bind_path_ids,
+        data_bind_path_is_relative,
         data_bind_property_source_locals,
         data_bind_image_source_locals,
         animations,
@@ -3857,7 +3883,8 @@ mod tests {
                     vec![10],
                 )),
                 render_cache_revision: 0,
-                data_bind_resolved_path_ids: None,
+                data_bind_path_ids: None,
+                data_bind_path_is_relative: false,
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 animations: Vec::new(),

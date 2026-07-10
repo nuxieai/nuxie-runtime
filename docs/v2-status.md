@@ -640,8 +640,10 @@ the only memory the next session has. Update it every commit.
         transform plus name-based color bindings remained admissible.
         `databind_viewmodel.riv` is exact at two samples after stateful nested
         artboards gained their authored local view-model context and retained
-        view-model references. Next is the smallest remaining stream,
-        `path_effect_with_feathers.riv`.
+        view-model references. `path_effect_with_feathers.riv` is exact at its
+        initial sample after inner feathers retained C++'s padded path around
+        an empty scripted effect. Next is the smaller remaining divergence,
+        `script_create_text_runs.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3821,6 +3823,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `path_effect_with_feathers.riv` to scripted exact
+  at its initial sample. Rust now mirrors C++ `Feather::rebuildInnerPath` when
+  a scripted path effect returns an empty path: zero bounds still expand by
+  `strength * 1.5`, producing a drawable inner rectangle behind an empty clip
+  instead of dropping the paint. A `0.1` widening was rejected because it
+  exposes a separate later animation/path-geometry mismatch. Scripted compare
+  moves to exact=24 / exact-segments=31 / diverges=2 /
+  unsupported-feature=1 with M8=1; regular compare remains exact=263 /
+  exact-segments=584 / diverges=26 / unsupported-feature=6 with M8=1 and
+  gated=5. `cargo test --workspace`, corpus regeneration, formatting, and
+  diff checks pass. Next is the smaller remaining divergence,
+  `script_create_text_runs.riv`.
 
 - 2026-07-09: [M8] Promoted `databind_viewmodel.riv` to scripted exact and
   widened it from one to two samples. Stateful nested artboards now mirror

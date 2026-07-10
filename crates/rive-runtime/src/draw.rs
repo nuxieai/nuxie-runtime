@@ -10883,12 +10883,10 @@ fn inner_feather_path_commands(
     source: &[RuntimePathCommand],
     shape_world: Mat2D,
 ) -> Vec<RuntimePathCommand> {
-    if !feather.inner || source.is_empty() {
+    if !feather.inner {
         return Vec::new();
     }
-    let Some(bounds) = path_command_bounds(source) else {
-        return Vec::new();
-    };
+    let bounds = path_command_bounds(source).unwrap_or_else(|| PathBounds::from_point(0.0, 0.0));
     let pad = feather.strength * 1.5;
     let mut commands = rect_commands(bounds.pad(pad));
     let mut reversed_source = path_commands_backwards(source);

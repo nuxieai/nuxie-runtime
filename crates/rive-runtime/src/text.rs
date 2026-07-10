@@ -527,6 +527,7 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 "overflowValue",
                 "verticalTrimTopValue",
                 "verticalTrimBottomValue",
+                "textRunListSource",
             ]
             .into_iter()
             .any(|name| property_key_for_name("Text", name) == Some(property_key))
@@ -679,6 +680,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ListenerInputTypeGamepad"
                         | "ScriptedDrawable"
                         | "ScriptInputArtboard"
+                        | "ScriptInputViewModelProperty"
                         | "TextFollowPathModifier"
                         | "Feather"
                         | "CustomPropertyGroup"
@@ -692,15 +694,24 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModelInstance"
                         | "ViewModelInstanceNumber"
                         | "ViewModelInstanceString"
+                        | "ViewModelInstanceList"
+                        | "ViewModelInstanceListItem"
+                        | "ViewModelInstanceTrigger"
                         | "ViewModelInstanceViewModel"
+                        | "ViewModelPropertyList"
                         | "ViewModelPropertyNumber"
                         | "ViewModelPropertyString"
+                        | "ViewModelPropertyTrigger"
                         | "ViewModelPropertyViewModel"
                         | "Event"
                         | "StateMachine"
                         | "StateMachineLayer"
                         | "StateMachineBool"
                         | "ListenerBoolChange"
+                        | "ListenerViewModelChange"
+                        | "StateMachineListenerSingle"
+                        | "BindablePropertyTrigger"
+                        | "DataConverterTrigger"
                         | "AnimationState"
                         | "AnyState"
                         | "EntryState"
@@ -771,7 +782,14 @@ impl<'a> StaticTextSlice<'a> {
             .copied()
             .filter(|local| child_type(*local) == Some("TextStylePaint"))
             .collect::<Vec<_>>();
-        if run_locals.is_empty() {
+        let has_text_run_list_source = graph.data_binds.iter().any(|data_bind| {
+            data_bind.target_local == Some(text_local)
+                && data_bind.target_type_name == Some("Text")
+                && u16::try_from(data_bind.property_key).ok()
+                    == property_key_for_name("Text", "textRunListSource")
+                && data_bind_flags_apply_source_to_target(data_bind.flags)
+        });
+        if run_locals.is_empty() && !has_text_run_list_source {
             bail!(
                 "static text subset requires at least one TextValueRun child, found {}",
                 run_locals.len()

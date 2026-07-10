@@ -290,6 +290,93 @@ impl ScriptViewModel {
     pub fn view_model(&self, name: &str) -> Option<Self> {
         self.nested_view_models.get(name).cloned()
     }
+
+    pub fn list_len(&self, name: &str) -> Option<usize> {
+        self.instance
+            .borrow()
+            .list_items_by_property_name(name)
+            .map(|items| items.len())
+    }
+
+    pub fn list_item(&self, name: &str, index: usize) -> Option<Self> {
+        let item = self
+            .instance
+            .borrow()
+            .list_items_by_property_name(name)?
+            .get(index)
+            .cloned()?;
+        let view_model_index = item.borrow().view_model_index();
+        build_script_view_model_shared(
+            Rc::clone(&self.file),
+            view_model_index,
+            item,
+            self.ancestors.as_slice(),
+        )
+    }
+
+    pub fn push_list_item(&self, name: &str, item: &ScriptViewModel) -> bool {
+        self.instance
+            .borrow_mut()
+            .push_list_item_by_property_name(name, Rc::clone(&item.instance))
+    }
+
+    pub fn insert_list_item(&self, name: &str, index: usize, item: &ScriptViewModel) -> bool {
+        self.instance
+            .borrow_mut()
+            .insert_list_item_by_property_name(name, index, Rc::clone(&item.instance))
+    }
+
+    pub fn pop_list_item(&self, name: &str) -> Option<Self> {
+        let item = self
+            .instance
+            .borrow_mut()
+            .pop_list_item_by_property_name(name)?;
+        let view_model_index = item.borrow().view_model_index();
+        build_script_view_model_shared(
+            Rc::clone(&self.file),
+            view_model_index,
+            item,
+            self.ancestors.as_slice(),
+        )
+    }
+
+    pub fn shift_list_item(&self, name: &str) -> Option<Self> {
+        let item = self
+            .instance
+            .borrow_mut()
+            .shift_list_item_by_property_name(name)?;
+        let view_model_index = item.borrow().view_model_index();
+        build_script_view_model_shared(
+            Rc::clone(&self.file),
+            view_model_index,
+            item,
+            self.ancestors.as_slice(),
+        )
+    }
+
+    pub fn swap_list_items(&self, name: &str, first: usize, second: usize) -> bool {
+        self.instance
+            .borrow_mut()
+            .swap_list_items_by_property_name(name, first, second)
+    }
+
+    pub fn clear_list_items(&self, name: &str) -> bool {
+        self.instance
+            .borrow_mut()
+            .clear_list_items_by_property_name(name)
+    }
+
+    pub fn remove_list_item_at(&self, name: &str, index: usize) -> bool {
+        self.instance
+            .borrow_mut()
+            .remove_list_item_at_by_property_name(name, index)
+    }
+
+    pub fn remove_list_item(&self, name: &str, item: &ScriptViewModel, remove_all: bool) -> bool {
+        self.instance
+            .borrow_mut()
+            .remove_list_items_by_identity(name, &item.instance, remove_all)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,6 +384,7 @@ pub enum ScriptViewModelProperty {
     Number,
     String,
     Trigger,
+    List,
     ViewModel,
 }
 
@@ -335,6 +423,20 @@ fn build_script_view_model(
     instance: RuntimeOwnedViewModelInstance,
     ancestors: &[usize],
 ) -> Option<ScriptViewModel> {
+    build_script_view_model_shared(
+        file,
+        view_model_index,
+        Rc::new(RefCell::new(instance)),
+        ancestors,
+    )
+}
+
+fn build_script_view_model_shared(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ancestors: &[usize],
+) -> Option<ScriptViewModel> {
     let view_model = file.view_model(view_model_index)?;
     let properties = view_model
         .properties
@@ -344,6 +446,7 @@ fn build_script_view_model(
                 "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
                 "ViewModelPropertyString" => ScriptViewModelProperty::String,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
+                "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
                 _ => return None,
             };
@@ -358,8 +461,9 @@ fn build_script_view_model(
         .filter(|property| property.type_name == "ViewModelPropertyViewModel")
         .filter_map(|property| {
             let name = property.string_property("name")?.to_owned();
-            let (nested_index, instance_index) =
-                instance.nested_view_model_selection_by_property_name(&name)?;
+            let (nested_index, instance_index) = instance
+                .borrow()
+                .nested_view_model_selection_by_property_name(&name)?;
             if child_ancestors.contains(&nested_index) {
                 return None;
             }
@@ -385,7 +489,7 @@ fn build_script_view_model(
     Some(ScriptViewModel {
         properties,
         nested_view_models,
-        instance: Rc::new(RefCell::new(instance)),
+        instance,
         file,
         view_model_index,
         ancestors: Rc::new(ancestors.to_vec()),

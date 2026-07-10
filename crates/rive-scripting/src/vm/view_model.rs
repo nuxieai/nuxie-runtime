@@ -52,6 +52,18 @@ pub(super) fn create_scripted_view_model(
             }
         })?,
     )?;
+    let get_list_model = model.clone();
+    table.set(
+        "getList",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_list_model.property(&name) {
+                Some(ScriptViewModelProperty::List) => lua
+                    .create_userdata(ScriptedPropertyList::new(get_list_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let instance_model = model.clone();
     table.set(
         "instance",
@@ -86,6 +98,9 @@ pub(super) fn create_scripted_view_model(
             }
             ScriptViewModelProperty::Trigger => {
                 lua.create_userdata(ScriptedPropertyTrigger::default())?
+            }
+            ScriptViewModelProperty::List => {
+                lua.create_userdata(ScriptedPropertyList::new(model.clone(), name.clone()))?
             }
             ScriptViewModelProperty::ViewModel => {
                 let nested = model.view_model(name).ok_or_else(|| {
@@ -178,6 +193,99 @@ impl UserData for ScriptedPropertyString {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("getString", |_, this, ()| {
             Ok(this.model.string(&this.name).unwrap_or_default())
+        });
+    }
+}
+
+struct ScriptedPropertyList {
+    model: ScriptViewModel,
+    name: String,
+}
+
+impl ScriptedPropertyList {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        Self { model, name }
+    }
+
+    fn item_value(&self, lua: &Lua, index: usize) -> luaur_rt::Result<Value> {
+        match self.model.list_item(&self.name, index) {
+            Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
+            None => Ok(Value::Nil),
+        }
+    }
+}
+
+impl UserData for ScriptedPropertyList {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("length", |_, this| {
+            Ok(this.model.list_len(&this.name).unwrap_or_default())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("push", |_, this, item: Table| {
+            let item = model_from_table(&item)?;
+            this.model.push_list_item(&this.name, &item);
+            Ok(())
+        });
+        methods.add_method("insert", |_, this, (item, index): (Table, usize)| {
+            let item = model_from_table(&item)?;
+            this.model
+                .insert_list_item(&this.name, index.saturating_sub(1), &item);
+            Ok(())
+        });
+        methods.add_method("pop", |lua, this, ()| {
+            match this.model.pop_list_item(&this.name) {
+                Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
+                None => Ok(Value::Nil),
+            }
+        });
+        methods.add_method("shift", |lua, this, ()| {
+            match this.model.shift_list_item(&this.name) {
+                Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
+                None => Ok(Value::Nil),
+            }
+        });
+        methods.add_method("swap", |_, this, (first, second): (usize, usize)| {
+            this.model.swap_list_items(
+                &this.name,
+                first.saturating_sub(1),
+                second.saturating_sub(1),
+            );
+            Ok(())
+        });
+        methods.add_method("clear", |_, this, ()| {
+            this.model.clear_list_items(&this.name);
+            Ok(())
+        });
+        methods.add_method("remove", |_, this, item: Table| {
+            let item = model_from_table(&item)?;
+            this.model.remove_list_item(&this.name, &item, false);
+            Ok(())
+        });
+        methods.add_method("removeAt", |_, this, index: usize| {
+            let Some(index) = index.checked_sub(1) else {
+                return Err(luaur_rt::Error::runtime("removeAt index out of range"));
+            };
+            if !this.model.remove_list_item_at(&this.name, index) {
+                return Err(luaur_rt::Error::runtime("removeAt index out of range"));
+            }
+            Ok(())
+        });
+        methods.add_method("removeAllOf", |_, this, item: Table| {
+            let item = model_from_table(&item)?;
+            this.model.remove_list_item(&this.name, &item, true);
+            Ok(())
+        });
+        methods.add_meta_method("__index", |lua, this, key: Value| match key {
+            Value::Integer(index) => usize::try_from(index)
+                .ok()
+                .and_then(|index| index.checked_sub(1))
+                .map_or(Ok(Value::Nil), |index| this.item_value(lua, index)),
+            Value::Number(index) if index >= 1.0 && index.fract() == 0.0 => {
+                this.item_value(lua, index as usize - 1)
+            }
+            _ => Ok(Value::Nil),
         });
     }
 }

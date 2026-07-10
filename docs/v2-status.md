@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
+  exact-segments=584, diverges=27, unsupported-feature=5, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=1 gated=5; the harness bucket is empty
-- Scripted compare: exact=11 / exact-segments=11 / diverges=15 /
-  unsupported-feature=1 across the 27 M8 scripting entries
+  gated=5; the M8 and harness buckets are empty
+- Scripted compare: exact=11 / exact-segments=11 / diverges=16 /
+  unsupported-feature=0 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -527,7 +527,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. M0-M7 remain complete; M8 is active. The current ratchet passes at
-   exact=263 / exact-segments=584 / diverges=26 / unsupported-feature=6;
+   exact=263 / exact-segments=584 / diverges=27 / unsupported-feature=5;
    `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
@@ -3786,6 +3786,21 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Ported C++ `ScriptedPropertyList`'s ordered list surface:
+  runtime-owned lists now retain shared item identities, and Luau exposes
+  `getList`, direct list properties, length/index reads, push/insert/pop/
+  shift/swap/clear/remove/removeAt/removeAllOf. Static text now admits
+  `Text.textRunListSource` and its scripting/view-model metadata envelope, so
+  `script_create_text_runs.riv` executes its real bytecode and emits a 55 KB
+  Rust stream instead of stopping at import. It moves from unsupported to
+  runnable divergence, draining the M8 unsupported queue: scripted compare is
+  exact=11 / exact-segments=11 / diverges=16 / unsupported-feature=0; full
+  compare is exact=263 / exact-segments=584 / diverges=27 /
+  unsupported-feature=5 with gated=5. `cargo test --workspace`, both golden
+  compares, corpus regeneration, formatting, and diff checks pass. Next is
+  C++ `Text::updateList`: map the shared item models' `textContent` and
+  `textStyle` symbols into dynamic shaped runs.
 
 - 2026-07-09: [M8] Admitted `ScriptInputArtboard`, `GamepadInput`, and
   `ListenerInputTypeGamepad` as supported siblings in static-text artboards.

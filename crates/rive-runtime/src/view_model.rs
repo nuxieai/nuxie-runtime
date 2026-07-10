@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use rive_binary::{
     RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
@@ -1727,7 +1729,13 @@ struct RuntimeOwnedViewModelSymbolListIndex {
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelList {
     property_index: usize,
+    value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeOwnedViewModelListValue {
     item_count: usize,
+    items: Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1959,7 +1967,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.lists
             .iter()
             .find(|list| list.property_index == property_index)
-            .map(|list| list.item_count)
+            .map(|list| list.value.borrow().item_count)
     }
 
     fn active_list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
@@ -1975,7 +1983,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|list| list.property_index == property_index)
                 })
-                .map(|list| list.item_count),
+                .map(|list| list.value.borrow().item_count),
             _ => None,
         }
     }
@@ -2213,10 +2221,12 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if list.item_count == item_count {
+        let mut value = list.value.borrow_mut();
+        if value.item_count == item_count {
             return false;
         }
-        list.item_count = item_count;
+        value.item_count = item_count;
+        value.items.truncate(item_count);
         true
     }
 
@@ -3380,7 +3390,7 @@ fn runtime_owned_view_model_lists(
                     (property.type_name == "ViewModelPropertyList").then_some(
                         RuntimeOwnedViewModelList {
                             property_index,
-                            item_count: 0,
+                            value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue::default())),
                         },
                     )
                 })
@@ -3415,7 +3425,10 @@ fn runtime_owned_view_model_lists_for_instance(
                     let item_count = file.view_model_instance_list_size_for_object(source)?;
                     Some(RuntimeOwnedViewModelList {
                         property_index,
-                        item_count,
+                        value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                            item_count,
+                            items: Vec::new(),
+                        })),
                     })
                 })
                 .collect()
@@ -5094,10 +5107,13 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if list.item_count == item_count {
+        let mut value = list.value.borrow_mut();
+        if value.item_count == item_count {
             return false;
         }
-        list.item_count = item_count;
+        value.item_count = item_count;
+        value.items.truncate(item_count);
+        drop(value);
         self.mark_mutated();
         true
     }
@@ -5124,6 +5140,174 @@ impl RuntimeOwnedViewModelInstance {
             .then_some(RuntimeOwnedViewModelListSourceHandle {
                 property_path: vec![property_index],
             })
+    }
+
+    fn list_value_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<Rc<RefCell<RuntimeOwnedViewModelListValue>>> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.lists
+            .iter()
+            .find(|list| list.property_index == property_index)
+            .map(|list| Rc::clone(&list.value))
+    }
+
+    pub(crate) fn list_items_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>> {
+        Some(
+            self.list_value_by_property_name(property_name)?
+                .borrow()
+                .items
+                .clone(),
+        )
+    }
+
+    pub(crate) fn push_list_item_by_property_name(
+        &mut self,
+        property_name: &str,
+        item: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) -> bool {
+        let Some(list) = self.list_value_by_property_name(property_name) else {
+            return false;
+        };
+        let mut list = list.borrow_mut();
+        list.items.push(item);
+        list.item_count = list.items.len();
+        drop(list);
+        self.mark_mutated();
+        true
+    }
+
+    pub(crate) fn insert_list_item_by_property_name(
+        &mut self,
+        property_name: &str,
+        index: usize,
+        item: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) -> bool {
+        let Some(list) = self.list_value_by_property_name(property_name) else {
+            return false;
+        };
+        let mut list = list.borrow_mut();
+        let index = index.min(list.items.len());
+        list.items.insert(index, item);
+        list.item_count = list.items.len();
+        drop(list);
+        self.mark_mutated();
+        true
+    }
+
+    pub(crate) fn pop_list_item_by_property_name(
+        &mut self,
+        property_name: &str,
+    ) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        let list = self.list_value_by_property_name(property_name)?;
+        let mut list = list.borrow_mut();
+        let item = list.items.pop()?;
+        list.item_count = list.items.len();
+        drop(list);
+        self.mark_mutated();
+        Some(item)
+    }
+
+    pub(crate) fn shift_list_item_by_property_name(
+        &mut self,
+        property_name: &str,
+    ) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        let list = self.list_value_by_property_name(property_name)?;
+        let mut list = list.borrow_mut();
+        if list.items.is_empty() {
+            return None;
+        }
+        let item = list.items.remove(0);
+        list.item_count = list.items.len();
+        drop(list);
+        self.mark_mutated();
+        Some(item)
+    }
+
+    pub(crate) fn swap_list_items_by_property_name(
+        &mut self,
+        property_name: &str,
+        first: usize,
+        second: usize,
+    ) -> bool {
+        let Some(list) = self.list_value_by_property_name(property_name) else {
+            return false;
+        };
+        let mut list = list.borrow_mut();
+        if first >= list.items.len() || second >= list.items.len() || first == second {
+            return false;
+        }
+        list.items.swap(first, second);
+        drop(list);
+        self.mark_mutated();
+        true
+    }
+
+    pub(crate) fn clear_list_items_by_property_name(&mut self, property_name: &str) -> bool {
+        let Some(list) = self.list_value_by_property_name(property_name) else {
+            return false;
+        };
+        let mut list = list.borrow_mut();
+        if list.items.is_empty() && list.item_count == 0 {
+            return false;
+        }
+        list.items.clear();
+        list.item_count = 0;
+        drop(list);
+        self.mark_mutated();
+        true
+    }
+
+    pub(crate) fn remove_list_item_at_by_property_name(
+        &mut self,
+        property_name: &str,
+        index: usize,
+    ) -> bool {
+        let Some(list) = self.list_value_by_property_name(property_name) else {
+            return false;
+        };
+        let mut list = list.borrow_mut();
+        if index >= list.items.len() {
+            return false;
+        }
+        list.items.remove(index);
+        list.item_count = list.items.len();
+        drop(list);
+        self.mark_mutated();
+        true
+    }
+
+    pub(crate) fn remove_list_items_by_identity(
+        &mut self,
+        property_name: &str,
+        item: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+        remove_all: bool,
+    ) -> bool {
+        let Some(list) = self.list_value_by_property_name(property_name) else {
+            return false;
+        };
+        let mut list = list.borrow_mut();
+        let old_len = list.items.len();
+        if remove_all {
+            list.items.retain(|candidate| !Rc::ptr_eq(candidate, item));
+        } else if let Some(index) = list
+            .items
+            .iter()
+            .position(|candidate| Rc::ptr_eq(candidate, item))
+        {
+            list.items.remove(index);
+        }
+        if list.items.len() == old_len {
+            return false;
+        }
+        list.item_count = list.items.len();
+        drop(list);
+        self.mark_mutated();
+        true
     }
 
     pub fn list_source_handle_by_property_name_path(
@@ -6150,7 +6334,7 @@ impl RuntimeOwnedViewModelInstance {
         self.lists
             .iter()
             .find(|list| list.property_index == property_index)
-            .map(|list| list.item_count)
+            .map(|list| list.value.borrow().item_count)
     }
 
     pub(crate) fn list_item_count_by_property_path(

@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=20 / exact-segments=24 / diverges=6 /
+- Scripted compare: exact=21 / exact-segments=26 / diverges=5 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -629,8 +629,12 @@ the only memory the next session has. Update it every commit.
         adding runtime resolution and post-advance propagation for data-bound
         `ScriptInputArtboard` values. `replace_view_model.riv` is exact at two
         samples after equal-ID context replacement gained one-shot child
-        replacement and instance-revision render caches. Next is the remaining
-        allocation lifecycle gap, `viewmodel_from_instance.riv`.
+        replacement and instance-revision render caches.
+        `viewmodel_from_instance.riv` is exact at two samples after root cold
+        user `init` stopped observing a bound `Context` before C++ exposes it;
+        the retained selected model still feeds global Data, generators, and
+        pre-bind setup. This closes the resource-allocation subgroup. Next is
+        the focused transform/context gap in `relative_data_bind_path.riv`.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3810,6 +3814,16 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `viewmodel_from_instance.riv` to scripted exact
+  and widened it from one to two samples. C++ preserves the selected model for
+  global Data, generator construction, and later binding, but root script user
+  `init` does not see that model as its `Context` during cold construction.
+  The scripted runner now makes that lifecycle distinction while leaving
+  already-bound nested scripts unchanged, removing two premature child
+  instances and their four paints. Scripted compare moves to exact=21 /
+  exact-segments=26 / diverges=5 / unsupported-feature=1 with M8=1. Next is
+  the focused transform/context gap in `relative_data_bind_path.riv`.
 
 - 2026-07-09: [M8] Promoted `replace_view_model.riv` to scripted exact and
   widened it from one to two samples. Nested-artboard artboard-value bindings

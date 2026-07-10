@@ -1778,8 +1778,9 @@ fn initialize_scripted_drawables(
         factory,
         &script_assets,
         Rc::clone(&render_state),
-        root_context_model.clone(),
+        root_context_model,
         Vec::new(),
+        false,
     )?;
     Ok(Some(render_state))
 }
@@ -1830,6 +1831,7 @@ fn initialize_nested_scripted_drawables(
                 Rc::clone(render_state),
                 child_context_model.clone(),
                 parent_context_models,
+                true,
             )?;
             if let Some(model) = child_context_model.as_ref() {
                 bound_nested_contexts.push((graph_global_id, model.clone()));
@@ -1889,6 +1891,7 @@ fn initialize_scripted_drawables_for_artboard(
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     context_model: Option<ScriptViewModel>,
     parent_context_models: Vec<ScriptViewModel>,
+    script_context_is_bound: bool,
 ) -> Result<()> {
     let mut vm = ScriptVm::new();
     vm.set_view_models(rive_runtime::script_view_models(runtime));
@@ -1931,6 +1934,11 @@ fn initialize_scripted_drawables_for_artboard(
                     script.name, local_object.global_id
                 )
             })?;
+        if !script_context_is_bound {
+            script_instance
+                .set_context_view_model(None)
+                .context("failed to clear cold script context view model")?;
+        }
         let defer_cold_hydration = scripted_object_has_view_model_input(
             runtime,
             artboard,

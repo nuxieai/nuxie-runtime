@@ -651,9 +651,12 @@ the only memory the next session has. Update it every commit.
         solved layout map for constraints and publish ParametricPath control
         sizes as live sources, producing all 18 rebuilds in C++ allocation
         order. The first structural mismatch has moved past `sample seconds=0`
-        to root background/clip rendering: C++ emits feathered background and
-        clip-path topology while Rust emits a plain rectangle without feather
-        state. Component-list instancing remains the sole explicit scripted
+        through the root background envelope. Artboard background paints now
+        follow C++ `ShapePaint::draw`, including retained-path clipping and the
+        padded/reversed inner-feather path. The first normalized mismatch is
+        now the centered variable-font Text local 100 transform: Rust measures
+        the bound `"30%"` run about 0.14 wider than C++, shifting its origin by
+        0.0698. Component-list instancing remains the sole explicit scripted
         unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
@@ -3834,6 +3837,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Ported C++'s ordinary `ShapePaint::draw` envelope for
+  artboard background paints. Inner feathers now configure the RenderPaint,
+  clip against the shared retained background path, and draw the padded rect
+  plus reversed background contour from a distinct retained slot; world/local
+  feather offsets follow the same ordering as shape paints. The focused Rust
+  stream grows from 1758 to 1760 lines and matches C++'s opening path IDs,
+  operation order, topology, fill rules, and feather strength. The first
+  normalized mismatch moves to line 587, where variable-font Text local 100's
+  centered `"30%"` run is about 0.14 wider in Rust. Scripted metrics remain
+  exact=25 / exact-segments=33 / diverges=1 / unsupported-feature=1. Next:
+  compare C++ HarfBuzz and Rust variable-font advances for that run.
 
 - 2026-07-10: [M8] Matched the complete post-layout gradient preamble in
   `data_viz_demo.riv`. Nested instances now retain their authoritative Taffy

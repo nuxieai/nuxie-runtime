@@ -8187,14 +8187,49 @@ fn runtime_draw_background(
         }
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
+        if let Some(feather) = runtime_paint.feather_state.as_ref()
+            && runtime_feather_uses_world_space(feather)
+            && !feather.inner
+            && runtime_feather_has_offset(feather)
+        {
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
         let fill_rule = runtime_paint.fill_rule;
-        let key = path_cache.retained_render_path_key(instance, graph, fill_rule);
-        let path = path_cache.background_path(
+        // C++ retains one artboard background path independently of each
+        // ShapePaint's fill rule. Individual fills only mutate the path at
+        // draw time; the inner-feather clip observes the retained default.
+        let key = path_cache.retained_render_path_key(instance, graph, RenderFillRule::NonZero);
+        let background_path = path_cache.background_path(
             key,
             background.container_local,
             factory,
             background.path_commands.as_slice(),
         );
+        let path = if let Some(feather) = runtime_paint.feather_state.as_ref()
+            && feather.inner
+        {
+            renderer.clip_path(background_path.as_ref());
+            path_cache.draw_path(
+                RuntimeDrawPathCacheKey {
+                    kind: RuntimeDrawPathCacheKind::Draw,
+                    path_kind: runtime_draw_path_cache_path_kind(runtime_paint),
+                    local_id: Some(runtime_paint.paint_local),
+                    path_index: runtime_paint.path_slot_index,
+                },
+                instance.path_epoch(),
+                factory,
+                feather.inner_path_commands.as_slice(),
+                RenderFillRule::Clockwise,
+            )
+        } else {
+            if let Some(feather) = runtime_paint.feather_state.as_ref()
+                && !runtime_feather_uses_world_space(feather)
+                && runtime_feather_has_offset(feather)
+            {
+                renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+            }
+            background_path
+        };
         if runtime_paint.paint_type == RuntimeShapePaintKind::Fill {
             path.fill_rule(fill_rule);
         }
@@ -8228,8 +8263,10 @@ fn runtime_prepared_background_frame(
             width: instance.width,
             height: instance.height,
         });
-    let left = -instance.origin_x * background_bounds.width;
-    let top = -instance.origin_y * background_bounds.height;
+    // Preserve C++ Artboard::updateRenderPath's multiplication order,
+    // including the signed zero visible to renderer streams.
+    let left = -background_bounds.width * instance.origin_x;
+    let top = -background_bounds.height * instance.origin_y;
     let path_commands = Arc::new(runtime_rect_commands(
         left,
         top,
@@ -8240,7 +8277,12 @@ fn runtime_prepared_background_frame(
         .paints
         .iter()
         .filter_map(|paint| {
-            runtime_background_shape_paint_command(instance, paint, container.blend_mode_value)
+            runtime_background_shape_paint_command(
+                instance,
+                paint,
+                container.blend_mode_value,
+                path_commands.as_slice(),
+            )
         })
         .collect::<Vec<_>>();
     if paints.is_empty() {
@@ -8257,6 +8299,7 @@ fn runtime_background_shape_paint_command(
     instance: &ArtboardInstance,
     paint: &ShapePaintNode,
     container_blend_mode_value: u32,
+    path_commands: &[RuntimePathCommand],
 ) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(instance, paint) {
         return None;
@@ -8268,6 +8311,15 @@ fn runtime_background_shape_paint_command(
     let paint_state = runtime_shape_paint_state(instance, paint, render_opacity);
     if !runtime_shape_paint_state_is_visible(&paint_state) {
         return None;
+    }
+    let mut feather_state = runtime_feather_state(
+        instance,
+        paint.feather.as_ref(),
+        path_commands,
+        Mat2D::IDENTITY,
+    );
+    if let Some(feather_state) = feather_state.as_mut() {
+        prune_empty_path_segments(&mut feather_state.inner_path_commands);
     }
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
@@ -8285,7 +8337,7 @@ fn runtime_background_shape_paint_command(
         ),
         render_opacity,
         paint_state,
-        feather_state: None,
+        feather_state,
         paint_space_transform: None,
         path_commands: Vec::new(),
         effect_path_commands: Vec::new(),
@@ -8523,7 +8575,6 @@ fn runtime_draw_command(
             })
             .unwrap_or(Mat2D::IDENTITY)
     });
-
     let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
     let text_shape_paints = if draws_text {
         Some(path_cache.text_shape_paint_commands(

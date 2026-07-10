@@ -385,6 +385,17 @@ raised from "corpus-verified" to "hardened."
      test assets — do NOT vendor in the public repo; fetch from
      rive-app/rive-runtime at CI time (the C++ reference runtime remains a
      dev-time test dependency only, never shipped).
+   - History rewrite (FINAL step, after the rename sweep, before any
+     publish/announce; run only while no agent is mid-slice): rewrite the
+     full history so the sole author/committer is
+     `Levi McCallum <levi@levimccallum.com>` (email to be confirmed with
+     the user at execution — repo git config now presets it) and strip all
+     `Co-Authored-By:` trailers. Mechanics: `git filter-repo --force` with
+     name/email callbacks plus a message callback dropping trailer lines;
+     then re-add origin (filter-repo removes it), force-push branch + main,
+     delete stale local branches/worktrees. Note all commit SHAs change —
+     doc references to old SHAs become historical labels. From 2026-07-09
+     onward, commits in this repo carry NO Co-Authored-By trailer.
    - SDK footprint: record a binary-size budget for the `nux-capi` cdylib
      (mobile SDK context), measure current size, and apply the cheap wins
      (identical-code-folding/linker flags, `opt-level` check, symbol

@@ -3787,6 +3787,23 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-09: [M8] Ported the import-time half of C++ `Text::updateList`:
+  serialized list references now hydrate shared ordered item identities with
+  cycle-safe recursion, text list bindings retain that shared source, and
+  dynamic runs resolve each item's `textContent` and `textStyle` with C++'s
+  first-style fallback. Used text styles now draw in first-run occurrence
+  order. `script_create_text_runs.riv` grows from 55,801 to 64,210 Rust bytes
+  versus 64,196 C++ bytes, and its root text commands now match structurally;
+  the first remaining difference is the older nested-button layout transform
+  (`x=601.518738` versus `609.835144`), so the file remains a runnable
+  divergence. A generalized trailing-whitespace measurement experiment was
+  rejected and fully backed out after regressing three exact files. Full
+  compare remains exact=263 / exact-segments=584 / diverges=27 /
+  unsupported-feature=5 with gated=5; scripted compare remains exact=11 /
+  exact-segments=11 / diverges=16 / unsupported-feature=0. Both golden
+  compares, `cargo test --workspace`, corpus regeneration, formatting, and
+  diff checks pass.
+
 - 2026-07-09: [M8] Ported C++ `ScriptedPropertyList`'s ordered list surface:
   runtime-owned lists now retain shared item identities, and Luau exposes
   `getList`, direct list properties, length/index reads, push/insert/pop/

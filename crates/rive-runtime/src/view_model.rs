@@ -1,9 +1,9 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use rive_binary::{
-    RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
+    RuntimeDataValue, RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
     RuntimeViewModelInstanceReference,
 };
 
@@ -1675,6 +1675,30 @@ impl RuntimeOwnedViewModelListSourceHandle {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeOwnedViewModelListHandle {
+    value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
+}
+
+impl RuntimeOwnedViewModelListHandle {
+    pub(crate) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .filter_map(|item| {
+                let item = item.borrow();
+                Some((
+                    item.string_value_by_property_name("textContent")?.to_vec(),
+                    item.string_value_by_property_name("textStyle")
+                        .unwrap_or_default()
+                        .to_vec(),
+                ))
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelViewModelSourceHandle {
     property_path: Vec<usize>,
@@ -1986,6 +2010,67 @@ impl RuntimeOwnedViewModelViewModel {
                 .map(|list| list.value.borrow().item_count),
             _ => None,
         }
+    }
+
+    fn active_list_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeOwnedViewModelList> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => self
+                .lists
+                .iter()
+                .find(|list| list.property_index == property_index),
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_lists
+                .get(&object_id)?
+                .iter()
+                .find(|list| list.property_index == property_index),
+            _ => None,
+        }
+    }
+
+    fn materialize_active_instance(&self) -> Option<RuntimeOwnedViewModelInstance> {
+        let view_model_index = self.referenced_view_model_index?;
+        macro_rules! active_values {
+            ($owned:expr, $imported:expr) => {{
+                match self.value {
+                    RuntimeViewModelPointer::OwnedGenerated { .. } => $owned.clone(),
+                    RuntimeViewModelPointer::Imported { object_id } => {
+                        $imported.get(&object_id).cloned().unwrap_or_default()
+                    }
+                    _ => Vec::new(),
+                }
+            }};
+        }
+        Some(RuntimeOwnedViewModelInstance {
+            view_model_index,
+            instance_identity: RuntimeOwnedViewModelInstance::next_instance_identity(),
+            mutation_generation: 0,
+            property_names: self.property_names.clone(),
+            numbers: active_values!(&self.numbers, self.imported_numbers),
+            booleans: active_values!(&self.booleans, self.imported_booleans),
+            strings: active_values!(&self.strings, self.imported_strings),
+            colors: active_values!(&self.colors, self.imported_colors),
+            enums: active_values!(&self.enums, self.imported_enums),
+            symbol_list_indices: active_values!(
+                &self.symbol_list_indices,
+                self.imported_symbol_list_indices
+            ),
+            lists: active_values!(&self.lists, self.imported_lists),
+            assets: active_values!(&self.assets, self.imported_assets),
+            artboards: active_values!(&self.artboards, self.imported_artboards),
+            triggers: active_values!(&self.triggers, self.imported_triggers),
+            view_models: match self.value {
+                RuntimeViewModelPointer::OwnedGenerated { .. } => self.children.clone(),
+                RuntimeViewModelPointer::Imported { object_id } => self
+                    .imported_children
+                    .get(&object_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                _ => Vec::new(),
+            },
+        })
     }
 
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -3422,18 +3507,58 @@ fn runtime_owned_view_model_lists_for_instance(
                         view_model_instance,
                         &path,
                     )?;
-                    let item_count = file.view_model_instance_list_size_for_object(source)?;
+                    let (item_count, items) =
+                        match file.view_model_instance_source_data_value_for_object(source)? {
+                            RuntimeDataValue::List(items) => {
+                                let item_count = items.len();
+                                let hydrated = items
+                                    .into_iter()
+                                    .filter_map(|item| {
+                                        let reference = file
+                                            .referenced_view_model_instance_for_list_item_object(
+                                                item,
+                                            )?;
+                                        runtime_owned_view_model_list_item_instance(file, reference)
+                                            .map(|instance| Rc::new(RefCell::new(instance)))
+                                    })
+                                    .collect::<Vec<_>>();
+                                (item_count, hydrated)
+                            }
+                            _ => (0, Vec::new()),
+                        };
                     Some(RuntimeOwnedViewModelList {
                         property_index,
                         value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
                             item_count,
-                            items: Vec::new(),
+                            items,
                         })),
                     })
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_list_item_instance(
+    file: &RuntimeFile,
+    reference: RuntimeViewModelInstanceReference<'_>,
+) -> Option<RuntimeOwnedViewModelInstance> {
+    thread_local! {
+        static HYDRATING: RefCell<BTreeSet<(usize, usize)>> = RefCell::new(BTreeSet::new());
+    }
+    let key = (reference.view_model_index, reference.instance_index);
+    if !HYDRATING.with(|hydrating| hydrating.borrow_mut().insert(key)) {
+        return None;
+    }
+    let instance = RuntimeOwnedViewModelInstance::from_instance(
+        file,
+        reference.view_model_index,
+        reference.instance_index,
+    );
+    HYDRATING.with(|hydrating| {
+        hydrating.borrow_mut().remove(&key);
+    });
+    instance
 }
 
 fn runtime_owned_view_model_imported_lists(
@@ -6349,6 +6474,24 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_list_item_count_by_property_index(*property_index)
     }
 
+    pub(crate) fn list_handle_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeOwnedViewModelListHandle> {
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let list = if view_model_path.is_empty() {
+            self.lists
+                .iter()
+                .find(|list| list.property_index == *property_index)?
+        } else {
+            self.view_model_by_property_path(view_model_path)?
+                .active_list_by_property_index(*property_index)?
+        };
+        Some(RuntimeOwnedViewModelListHandle {
+            value: Rc::clone(&list.value),
+        })
+    }
+
     pub(crate) fn list_item_count_by_context_source_path(
         &self,
         file: &RuntimeFile,
@@ -6514,6 +6657,14 @@ impl RuntimeOwnedViewModelInstance {
             | RuntimeViewModelPointer::Imported { .. } => view_model.referenced_view_model_index,
             _ => None,
         }
+    }
+
+    pub(crate) fn nested_instance_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeOwnedViewModelInstance> {
+        self.view_model_by_property_path(property_path)?
+            .materialize_active_instance()
     }
 
     pub(crate) fn property_path_for_context_source_path(

@@ -19,14 +19,15 @@ use crate::artboard_data_bind::{
     RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
     RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardOwnedContextKey,
     RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
-    RuntimeArtboardSoloSourceBindingInstance, RuntimeNestedChildContextUpdate,
-    apply_artboard_name_based_color_data_bind_defaults, build_artboard_converter_property_bindings,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
-    build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
-    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
-    build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
-    build_artboard_property_bindings, build_artboard_solo_bindings,
-    build_artboard_solo_source_bindings, build_nested_host_data_bind_source_local_slots,
+    RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
+    RuntimeNestedChildContextUpdate, apply_artboard_name_based_color_data_bind_defaults,
+    build_artboard_converter_property_bindings, build_artboard_custom_property_bindings,
+    build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
+    build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
+    build_artboard_list_bindings, build_artboard_nested_host_bindings,
+    build_artboard_numeric_source_bindings, build_artboard_property_bindings,
+    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
+    build_artboard_text_list_bindings, build_nested_host_data_bind_source_local_slots,
     build_nested_host_data_bind_source_locals, build_nested_host_view_model_instance_locals,
 };
 use crate::components::{
@@ -107,6 +108,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_solo_source_bindings: Vec<RuntimeArtboardSoloSourceBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
+    pub(crate) artboard_text_list_bindings: Vec<RuntimeArtboardTextListBindingInstance>,
     pub(crate) artboard_context_source_values_scratch: Vec<RuntimeArtboardContextSourceValue>,
     pub(crate) artboard_nested_child_context_updates_scratch: Vec<RuntimeNestedChildContextUpdate>,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
@@ -281,6 +283,7 @@ impl ArtboardInstance {
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
+        let artboard_text_list_bindings = build_artboard_text_list_bindings(file, graph);
         let artboard_data_bind_source_queues = RuntimeArtboardDataBindSourceQueues::new(
             &artboard_custom_property_bindings,
             &artboard_layout_computed_bindings,
@@ -354,6 +357,7 @@ impl ArtboardInstance {
             artboard_solo_source_bindings,
             artboard_nested_host_bindings,
             artboard_list_bindings,
+            artboard_text_list_bindings,
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
@@ -802,6 +806,14 @@ impl ArtboardInstance {
         self.objects.string_property(local_id, property_key)
     }
 
+    pub(crate) fn text_list_runs(&self, text_local: usize) -> Vec<(Vec<u8>, Vec<u8>)> {
+        self.artboard_text_list_bindings
+            .iter()
+            .find(|binding| binding.target_local_id() == text_local)
+            .map(RuntimeArtboardTextListBindingInstance::text_runs)
+            .unwrap_or_default()
+    }
+
     pub(crate) fn set_string_property(
         &mut self,
         local_id: usize,
@@ -1223,16 +1235,16 @@ impl ArtboardInstance {
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
     }
 
-    fn mark_prepared_changed(&mut self) {
+    pub(crate) fn mark_prepared_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
     }
 
-    fn mark_layout_changed(&mut self) {
+    pub(crate) fn mark_layout_changed(&mut self) {
         self.layout_epoch = self.layout_epoch.wrapping_add(1);
         self.mark_prepared_changed();
     }
 
-    fn mark_path_changed(&mut self) {
+    pub(crate) fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
         self.mark_prepared_changed();
     }
@@ -3145,6 +3157,7 @@ mod tests {
             artboard_solo_source_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
+            artboard_text_list_bindings: Vec::new(),
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),

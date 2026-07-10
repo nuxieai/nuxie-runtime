@@ -123,9 +123,12 @@ pub(crate) fn runtime_text_shape_paint_commands(
     // elides the drawable-level save.
     let needs_save_operation = true;
     let text_blend_mode_value = slice.text_blend_mode_value(runtime, instance)?;
+    let style_order = slice.ordered_style_indices(runtime, instance)?;
 
     let mut commands = Vec::new();
-    for (style, path_buckets) in slice.styles.iter().zip(render_data.path_buckets_by_style) {
+    for style_index in style_order {
+        let style = &slice.styles[style_index];
+        let path_buckets = render_data.path_buckets_by_style[style_index].clone();
         let Some(container) = style.container else {
             continue;
         };
@@ -281,6 +284,7 @@ struct StaticResolvedRun {
 struct StaticTextStyle<'a> {
     local_id: usize,
     global_id: u32,
+    name: Option<String>,
     container: Option<&'a ShapePaintContainerNode>,
     font_bytes: Option<&'a [u8]>,
     variations: Vec<(u32, f32)>,
@@ -1435,7 +1439,43 @@ impl<'a> StaticTextSlice<'a> {
             });
             char_start += char_len;
         }
+        for (text, style_name) in instance.text_list_runs(self.text_local) {
+            let text = String::from_utf8(text).context("dynamic TextValueRun text is not UTF-8")?;
+            let style_name = std::str::from_utf8(&style_name).unwrap_or_default();
+            let style_local = self
+                .styles
+                .iter()
+                .find(|style| style.name.as_deref() == Some(style_name))
+                .or_else(|| self.styles.first())
+                .context("dynamic TextValueRun requires a TextStylePaint")?
+                .local_id;
+            let char_len = text.chars().count();
+            runs.push(StaticResolvedRun {
+                local_id: self.text_local,
+                global_id: self.text_global,
+                style_local,
+                char_start,
+                char_len,
+                text,
+            });
+            char_start += char_len;
+        }
         Ok(runs)
+    }
+
+    fn ordered_style_indices(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<Vec<usize>> {
+        let mut order = Vec::new();
+        for run in self.resolved_runs(runtime, instance)? {
+            let style_index = self.style_index_for_local(run.style_local)?;
+            if !order.contains(&style_index) {
+                order.push(style_index);
+            }
+        }
+        Ok(order)
     }
 
     fn style_font_size(
@@ -2480,6 +2520,7 @@ impl<'a> StaticTextStyle<'a> {
         Ok(Self {
             local_id: style_local,
             global_id: style_global,
+            name: style.string_property("name").map(str::to_owned),
             container,
             font_bytes,
             variations,

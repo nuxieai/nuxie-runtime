@@ -12,6 +12,7 @@ use crate::properties::{
     layout_computed_property_for_key, property_key_for_name, solid_color_value_property_key,
     solo_active_component_id_property_key,
 };
+use crate::view_model::RuntimeOwnedViewModelListHandle;
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     RuntimeOwnedViewModelInstance, data_bind_flags_apply_source_to_target,
@@ -1177,6 +1178,64 @@ pub(super) struct RuntimeArtboardListBindingInstance {
     source_number_value: Option<f32>,
     target_list_size: Option<usize>,
     should_reset_instances: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardTextListBindingInstance {
+    target_local_id: usize,
+    path: Vec<u32>,
+    path_is_name_based: bool,
+    source: Option<RuntimeOwnedViewModelListHandle>,
+}
+
+impl RuntimeArtboardTextListBindingInstance {
+    pub(super) fn target_local_id(&self) -> usize {
+        self.target_local_id
+    }
+
+    pub(super) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        self.source
+            .as_ref()
+            .map(RuntimeOwnedViewModelListHandle::text_runs)
+            .unwrap_or_default()
+    }
+}
+
+pub(super) fn build_artboard_text_list_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardTextListBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(text_run_list_source_key) = property_key_for_name("Text", "textRunListSource") else {
+        return Vec::new();
+    };
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            let target = data_bind.target?;
+            if !(target.type_name == "Text"
+                && data_bind.object.uint_property("propertyKey")
+                    == Some(u64::from(text_run_list_source_key))
+                && data_bind_flags_apply_source_to_target(
+                    data_bind.object.uint_property("flags").unwrap_or(0),
+                ))
+            {
+                return None;
+            }
+            Some(RuntimeArtboardTextListBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                path: file
+                    .data_bind_context_source_path_ids_for_object(data_bind.object)?
+                    .to_vec(),
+                path_is_name_based: file
+                    .data_bind_is_name_based_for_object(data_bind.object)
+                    .unwrap_or(false),
+                source: None,
+            })
+        })
+        .collect()
 }
 
 pub(super) fn build_artboard_list_bindings(
@@ -2667,6 +2726,9 @@ impl ArtboardInstance {
         for binding in &mut self.artboard_nested_host_bindings {
             binding.owned_context_source_path = None;
         }
+        for binding in &mut self.artboard_text_list_bindings {
+            binding.source = None;
+        }
         true
     }
 
@@ -2775,6 +2837,26 @@ impl ArtboardInstance {
             {
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
+        }
+        let mut text_lists_changed = false;
+        for binding in &mut self.artboard_text_list_bindings {
+            let source = context_chain.iter().find_map(|context_path| {
+                let property_path = context.property_path_for_context_source_path(
+                    file,
+                    context_path,
+                    &binding.path,
+                    binding.path_is_name_based,
+                )?;
+                context.list_handle_by_property_path(&property_path)
+            });
+            text_lists_changed |= source.is_some();
+            binding.source = source;
+        }
+        if text_lists_changed {
+            self.mark_path_changed();
+            self.mark_prepared_changed();
+            self.mark_layout_changed();
+            changed = true;
         }
         if changed {
             changed |= self.apply_artboard_nested_host_bindings();

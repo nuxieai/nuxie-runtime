@@ -565,7 +565,7 @@ pub fn bound_script_view_model(
     let property_path =
         context.property_path_for_context_source_path(file, &[], &source_path, false)?;
     let view_model_index = context.view_model_index_by_property_path(&property_path)?;
-    let instance = RuntimeOwnedViewModelInstance::new(file, view_model_index)?;
+    let instance = context.nested_instance_by_property_path(&property_path)?;
     build_script_view_model(Rc::new(file.clone()), view_model_index, instance, &[])
 }
 

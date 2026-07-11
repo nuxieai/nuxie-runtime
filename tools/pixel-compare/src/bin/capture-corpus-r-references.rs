@@ -1,4 +1,4 @@
-use pixel_compare::{ReferenceIdentity, RgbaImage, validate_reference_identities};
+use pixel_compare::{validate_reference_identities, ReferenceIdentity, RgbaImage};
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;

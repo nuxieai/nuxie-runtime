@@ -1,5 +1,5 @@
 use pixel_compare::{
-    ReferenceIdentity, RgbaImage, Tolerance, artifact, compare, validate_reference_identities,
+    artifact, compare, validate_reference_identities, ReferenceIdentity, RgbaImage, Tolerance,
 };
 use serde::Deserialize;
 use std::error::Error;

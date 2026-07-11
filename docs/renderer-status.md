@@ -48,9 +48,10 @@ Run `make renderer-golden`.
 
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
    partitioning and C++ direct/atlas threshold routing are complete. Fix the
-   isolated atlas-stroke join cutouts, then converge the remaining atlas
-   filtering/corner cases. Continue R2 with the remaining `render_context.cpp`
-   behavior, robust triangulation, and the intersection board.
+   isolated atlas-stroke join cutouts using a C++ WebGPU intermediate-mask
+   oracle, then converge the remaining atlas filtering/corner cases. Continue
+   R2 with the remaining `render_context.cpp` behavior, robust triangulation,
+   and integration of the translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -74,6 +75,9 @@ Run `make renderer-golden`.
 - 2026-07-11: A renderer reference is identified by stream, frame, and mode.
   C++ Metal is the clockwise-atomic oracle; MSAA rows remain harness-gated
   until a C++ backend with implemented MSAA flush is wired into replay.
+- 2026-07-11: C++ Metal and C++ WebGPU intentionally use different atlas
+  stroke cull states. Final Metal pixels remain a corpus signal, but atlas-mask
+  diagnosis compares Rust wgpu against C++ WebGPU at the intermediate R16 mask.
 
 ## Log
 
@@ -403,3 +407,20 @@ Run `make renderer-golden`.
   default-mode images. Two large atomic fixtures need only channel delta 3,
   with 2 and 10 pixels above that threshold inside their existing 32-pixel
   budgets. The corrected ratchet is exact=19/diverges=0/gated=1,447.
+- 2026-07-11: Ported C++ `RectanizerSkyline` with its exact placement trace and
+  replaced shelf atlas packing. The packed texture uses occupied extent rather
+  than vertical capacity, coordinates do not truncate to `i16`, and packing is
+  bounded by `max_texture_dimension_2d`. Compact 328-region layouts fit at
+  1900x900; oversized layouts fail as `RendererError::AtlasPacking` before
+  texture creation. The focused and full renderer suites pass 11 and 69 tests.
+- 2026-07-11: Ported `intersection_board.cpp` as a standalone checked module.
+  An independent randomized model plus direct C++ contract cases cover strict
+  edges, translated tiles, maximal groups, extreme rectangles, eight running
+  lanes, overlap bits, and baseline transitions. Bounds/allocation failures are
+  explicit; 19 focused and 69 full renderer tests pass. Render-batch integration
+  remains a separate R2 slice.
+- 2026-07-11: Rejected a no-op atlas culling change after both its regression
+  and production behavior passed unchanged on the parent. A one-draw oracle
+  confirmed that Metal final pixels cannot isolate WebGPU atlas behavior.
+  The next atlas step is a C++ WebGPU R16 mask exporter and Rust mask comparator;
+  no atlas coverage code changes until that fail-before oracle exists.

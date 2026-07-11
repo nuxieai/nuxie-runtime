@@ -81,7 +81,10 @@ impl AtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(PatchVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {

@@ -142,6 +142,23 @@ impl TessVertexSpan {
             contour_id_with_flags,
         )
     }
+
+    pub(crate) fn x_range(&self) -> (i32, i32) {
+        (self.x0_x1 as i16 as i32, (self.x0_x1 >> 16) as i16 as i32)
+    }
+
+    pub(crate) fn set_ranges(
+        &mut self,
+        x0: i32,
+        x1: i32,
+        reflection_x0: i32,
+        reflection_x1: i32,
+        reflection_y: f32,
+    ) {
+        self.x0_x1 = pack_i16_pair(x0, x1);
+        self.reflection_x0_x1 = pack_i16_pair(reflection_x0, reflection_x1);
+        self.reflection_y = reflection_y;
+    }
 }
 
 const fn pack_i16_pair(low: i32, high: i32) -> i32 {

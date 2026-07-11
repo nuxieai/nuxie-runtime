@@ -7,13 +7,15 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=7, diverges=0, gated=1,458, total=1,465.
+- Rust wgpu: exact=9, diverges=0, gated=1,456, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
   `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
-  `gm-path_skbug_11886-clockwise-atomic`.
+  `gm-path_skbug_11886-clockwise-atomic`,
+  `gm-convex_lineonly_ths-clockwise-atomic`, and
+  `gm-rotatedcubicpath-clockwise-atomic`.
 
 ## Milestones
 
@@ -116,3 +118,9 @@ Run `make renderer-golden`.
   pixels), moving exact to 7. Named probes still outside tolerance:
   `batchedtriangulations` 2,856 pixels, `convex_lineonly_ths` 8,792,
   `rotatedcubicpath` 301. Their MSAA variants also remain gated.
+- 2026-07-11: Ported atomic reverse-then-forward tessellation: reflected spans,
+  doubled patch allocation, forward-half contour starts, and back-face culling.
+  The triangle became pixel-exact; `rotatedcubicpath` dropped to 2 pixels and
+  `convex_lineonly_ths` to 14, promoting both and moving exact to 9. The prior
+  solid-fill passes improved to 0-2 pixels. `batchedtriangulations` remains a
+  named interior-triangulation gap at 2,136 pixels.

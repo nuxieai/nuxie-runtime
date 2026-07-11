@@ -21,6 +21,33 @@ pub(crate) struct FillTessellation {
     pub instance_count: u32,
 }
 
+impl FillTessellation {
+    pub(crate) fn make_double_sided(&mut self) {
+        let base = self.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let half_vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        for span in &mut self.spans {
+            if span.contour_id_with_flags & CONTOUR_ID_MASK == 0 {
+                continue;
+            }
+            let (x0, x1) = span.x_range();
+            let offset = x0 - base as i32;
+            let reflection_x0 = (base + half_vertex_count) as i32 - offset;
+            let reflection_x1 = reflection_x0 - (x1 - x0);
+            span.set_ranges(
+                x0 + half_vertex_count as i32,
+                x1 + half_vertex_count as i32,
+                reflection_x0,
+                reflection_x1,
+                0.0,
+            );
+        }
+        for contour in &mut self.contours {
+            contour.vertex_index0 += half_vertex_count;
+        }
+        self.instance_count *= 2;
+    }
+}
+
 pub(crate) fn build_fill_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -486,5 +513,21 @@ mod tests {
         assert_eq!(tessellation.spans[0].x0_x1 as u32, 0x0008_0000);
         assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x000c_0008);
         assert_eq!(tessellation.spans[3].x0_x1 as u32, 0x0010_000e);
+    }
+
+    #[test]
+    fn atomic_fill_layout_packs_reverse_then_forward_halves() {
+        let mut path = RawPath::new();
+        path.move_to(4.0, 4.0);
+        path.line_to(60.0, 4.0);
+        path.line_to(32.0, 60.0);
+        path.close();
+        let mut tessellation = build_fill_tessellation(&path, Mat2D::IDENTITY).unwrap();
+        tessellation.make_double_sided();
+        assert_eq!(tessellation.base_instance, 1);
+        assert_eq!(tessellation.instance_count, 2);
+        assert_eq!(tessellation.contours[0].vertex_index0, 16);
+        assert_eq!(tessellation.spans[1].x_range(), (16, 20));
+        assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x000c_0010);
     }
 }

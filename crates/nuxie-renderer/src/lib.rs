@@ -700,6 +700,7 @@ impl WgpuFrame {
                 let mut tessellation =
                     draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
                         .expect("atomic eligibility already validated tessellation");
+                tessellation.make_double_sided();
                 tessellation.contours[0].path_id = 1;
                 tessellation.path.coverage_buffer_range.pitch = padded_width;
                 let mut uniforms = analytic_uniforms(self.width, self.height, 1);

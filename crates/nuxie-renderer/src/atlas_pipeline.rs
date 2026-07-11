@@ -114,7 +114,7 @@ impl AtlasPipeline {
             "nuxie-atlas-stroke-pipeline",
             &stroke_fragment,
             wgpu::BlendOperation::Max,
-            Some(wgpu::Face::Back),
+            None,
         );
         Self {
             fill,

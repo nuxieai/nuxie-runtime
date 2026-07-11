@@ -376,3 +376,15 @@ Run `make renderer-golden`.
   pixels differ, but supported degenerate strokes now expose the already parked
   direct-stroke atomic resolution gap instead of inheriting whole-frame
   fallback output. Close that gap next; do not widen its corpus tolerance.
+- 2026-07-11: Removed the invented always-atlas override for feathered strokes
+  and restored C++ `PathDraw::SelectCoverageType` routing: direct coverage below
+  the half-scale boundary, atlas coverage at and above it. The atlas stroke
+  pipeline now also matches C++ WebGPU's explicit no-cull state. All 38
+  renderer tests and exact=21/diverges=0 corpus gates pass; `emptystroke` stays
+  unchanged at 546/255, while the focused `feather_strokes` mismatch improves
+  from 1,550,127 to 1,523,053 pixels. A mode-correct C++ clockwise-atomic
+  comparison and a one-draw reproduction isolate the remaining atlas defect:
+  straight stroke edges render, but closed miter/bevel join coverage leaves
+  hard corner cutouts even without packing or culling. Direct-only routing was
+  rejected because large radii produce long-range join rays. Continue with the
+  atlas join tessellation/coverage records; do not replace the atlas threshold.

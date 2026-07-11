@@ -748,11 +748,10 @@ impl WgpuFrame {
                         mut triangles,
                     ) = if draw.paint.feather != 0.0 {
                         let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
-                        // wgpu uses C++'s alwaysFeatherToAtlas policy for strokes.
                         let requires_atlas = draw::feather_requires_atlas(
                             draw.paint.feather,
                             draw.state.transform,
-                            is_stroke,
+                            false,
                         );
                         let stroke = is_stroke.then_some((
                             draw.paint.thickness,
@@ -872,7 +871,7 @@ impl WgpuFrame {
                         && draw::feather_requires_atlas(
                             draw.paint.feather,
                             draw.state.transform,
-                            draw.paint.style == RenderPaintStyle::Stroke,
+                            false,
                         ))
                     .then(|| {
                         let scale =

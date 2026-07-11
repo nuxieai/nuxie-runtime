@@ -27,6 +27,7 @@ pub(crate) struct Skyline {
 }
 
 /// The packed origins and occupied extent of an atlas layout.
+#[derive(Debug)]
 pub(crate) struct AtlasLayout {
     origins: Vec<[u32; 2]>,
     extent: [u32; 2],
@@ -42,40 +43,64 @@ impl AtlasLayout {
     }
 }
 
-/// Packs atlas regions with enough vertical capacity for the worst case, then
-/// reports the actually occupied extent.
-pub(crate) fn pack_atlas_regions(width: u32, regions: &[(u32, u32)]) -> Option<AtlasLayout> {
-    let capacity_height = regions
-        .iter()
-        .try_fold(0_u32, |height, &(_, region_height)| {
-            height.checked_add(region_height)
-        })?
-        .max(1);
-    let width = i32::try_from(width).ok()?;
-    let capacity_height = i32::try_from(capacity_height).ok()?;
-    if width > i32::from(i16::MAX) || capacity_height > i32::from(i16::MAX) {
-        return None;
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AtlasPackError {
+    InvalidDimensions,
+    Full,
+}
 
-    let mut skyline = Skyline::new(width, capacity_height);
+impl AtlasPackError {
+    pub(crate) fn message(self) -> &'static str {
+        match self {
+            Self::InvalidDimensions => "atlas dimensions exceed skyline coordinate range",
+            Self::Full => "atlas regions exceed the device texture limit",
+        }
+    }
+}
+
+/// Packs atlas regions within the device's maximum 2D texture dimension.
+pub(crate) fn pack_atlas_regions(
+    width: u32,
+    max_dimension: u32,
+    regions: &[(u32, u32)],
+) -> Result<AtlasLayout, AtlasPackError> {
+    if width == 0 || max_dimension == 0 || width > max_dimension {
+        return Err(AtlasPackError::InvalidDimensions);
+    }
+    let width = i32::try_from(width).map_err(|_| AtlasPackError::InvalidDimensions)?;
+    let max_dimension =
+        i32::try_from(max_dimension).map_err(|_| AtlasPackError::InvalidDimensions)?;
+
+    let mut skyline = Skyline::new(width, max_dimension);
     let mut origins = Vec::with_capacity(regions.len());
     let mut extent = [1, 1];
     for &(region_width, region_height) in regions {
-        let region_width = i32::try_from(region_width).ok()?;
-        let region_height = i32::try_from(region_height).ok()?;
+        let region_width_i32 =
+            i32::try_from(region_width).map_err(|_| AtlasPackError::InvalidDimensions)?;
+        let region_height_i32 =
+            i32::try_from(region_height).map_err(|_| AtlasPackError::InvalidDimensions)?;
         let mut x = 0;
         let mut y = 0;
-        if !skyline.add_rect(region_width, region_height, &mut x, &mut y) {
-            return None;
+        if !skyline.add_rect(region_width_i32, region_height_i32, &mut x, &mut y) {
+            return Err(AtlasPackError::Full);
         }
-        let x = u32::try_from(x).ok()?;
-        let y = u32::try_from(y).ok()?;
-        extent[0] = extent[0].max(x.checked_add(region_width as u32)?);
-        extent[1] = extent[1].max(y.checked_add(region_height as u32)?);
+        let x = u32::try_from(x).map_err(|_| AtlasPackError::InvalidDimensions)?;
+        let y = u32::try_from(y).map_err(|_| AtlasPackError::InvalidDimensions)?;
+        let right = x
+            .checked_add(region_width)
+            .ok_or(AtlasPackError::InvalidDimensions)?;
+        let bottom = y
+            .checked_add(region_height)
+            .ok_or(AtlasPackError::InvalidDimensions)?;
+        if right > max_dimension as u32 || bottom > max_dimension as u32 {
+            return Err(AtlasPackError::Full);
+        }
+        extent[0] = extent[0].max(right);
+        extent[1] = extent[1].max(bottom);
         origins.push([x, y]);
     }
 
-    Some(AtlasLayout { origins, extent })
+    Ok(AtlasLayout { origins, extent })
 }
 
 impl Skyline {
@@ -115,7 +140,7 @@ impl Skyline {
     /// As in the C++ implementation, requests larger than the atlas leave
     /// `x` and `y` untouched. Requests that fit the atlas but cannot fit its
     /// remaining skyline set both to zero on failure.
-    pub(crate) fn add_rect(&mut self, width: i32, height: i32, x: &mut i16, y: &mut i16) -> bool {
+    pub(crate) fn add_rect(&mut self, width: i32, height: i32, x: &mut i32, y: &mut i32) -> bool {
         if width < 0 || height < 0 || width > self.width || height > self.height {
             return false;
         }
@@ -139,8 +164,8 @@ impl Skyline {
 
         if let Some(best_index) = best_index {
             self.add_skyline_level(best_index, best_x, best_y, width, height);
-            *x = best_x as i16;
-            *y = best_y as i16;
+            *x = best_x;
+            *y = best_y;
             self.area_so_far = self.area_so_far.wrapping_add(width.wrapping_mul(height));
             true
         } else {
@@ -156,8 +181,8 @@ impl Skyline {
         width: i32,
         height: i32,
         padding: i16,
-        x: &mut i16,
-        y: &mut i16,
+        x: &mut i32,
+        y: &mut i32,
     ) -> bool {
         let padding = i32::from(padding);
         if self.add_rect(
@@ -166,8 +191,8 @@ impl Skyline {
             x,
             y,
         ) {
-            *x = x.wrapping_add(padding as i16);
-            *y = y.wrapping_add(padding as i16);
+            *x = x.wrapping_add(padding);
+            *y = y.wrapping_add(padding);
             true
         } else {
             false
@@ -253,9 +278,9 @@ impl Skyline {
 
 #[cfg(test)]
 mod tests {
-    use super::{pack_atlas_regions, Skyline};
+    use super::{pack_atlas_regions, AtlasPackError, Skyline};
 
-    fn add_rect(skyline: &mut Skyline, width: i32, height: i32) -> Option<(i16, i16)> {
+    fn add_rect(skyline: &mut Skyline, width: i32, height: i32) -> Option<(i32, i32)> {
         let mut x = -1;
         let mut y = -1;
         skyline
@@ -364,7 +389,7 @@ mod tests {
 
     #[test]
     fn atlas_layout_uses_the_occupied_extent_instead_of_vertical_capacity() {
-        let layout = pack_atlas_regions(1920, &[(50, 100); 30]).unwrap();
+        let layout = pack_atlas_regions(1920, 2048, &[(50, 100); 30]).unwrap();
 
         assert_eq!(layout.extent(), [1500, 100]);
         assert!(layout.extent()[1] <= 2048);
@@ -372,7 +397,24 @@ mod tests {
     }
 
     #[test]
-    fn atlas_layout_rejects_capacity_overflow() {
-        assert!(pack_atlas_regions(1920, &[(50, u32::MAX), (50, 1)]).is_none());
+    fn many_regions_do_not_overflow_a_temporary_summed_height() {
+        let layout = pack_atlas_regions(1920, 2048, &[(50, 100); 328]).unwrap();
+
+        assert_eq!(layout.extent(), [1900, 900]);
+        assert_eq!(layout.origins().last(), Some(&[1150, 800]));
+    }
+
+    #[test]
+    fn atlas_layout_fails_before_exceeding_the_device_texture_limit() {
+        let result = pack_atlas_regions(1920, 2048, &[(1920, 100); 21]);
+
+        assert!(matches!(result, Err(AtlasPackError::Full)));
+    }
+
+    #[test]
+    fn atlas_layout_rejects_dimension_overflow() {
+        let result = pack_atlas_regions(1920, 2048, &[(50, u32::MAX), (50, 1)]);
+
+        assert!(matches!(result, Err(AtlasPackError::InvalidDimensions)));
     }
 }

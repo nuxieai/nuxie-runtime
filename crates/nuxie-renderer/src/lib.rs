@@ -28,6 +28,7 @@ use wgpu::util::DeviceExt;
 #[derive(Debug)]
 pub enum RendererError {
     Adapter(String),
+    AtlasPacking(&'static str),
     Device(String),
     Map(String),
     Unsupported(&'static str),
@@ -37,6 +38,7 @@ impl fmt::Display for RendererError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Adapter(message) => write!(f, "wgpu adapter error: {message}"),
+            Self::AtlasPacking(message) => write!(f, "atlas packing error: {message}"),
             Self::Device(message) => write!(f, "wgpu device error: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
@@ -965,8 +967,9 @@ impl WgpuFrame {
                     .max()
                     .unwrap_or(1);
                 let pack_width = self.width.max(1).max(max_atlas_region_width);
-                let atlas_layout = skyline::pack_atlas_regions(pack_width, &atlas_regions)
-                    .expect("atlas regions must fit in the skyline allocator");
+                let max_atlas_dimension = self.context.device.limits().max_texture_dimension_2d;
+                let atlas_layout =
+                    pack_atlas_for_device(pack_width, max_atlas_dimension, &atlas_regions)?;
                 let mut atlas_origins = atlas_layout.origins().iter().copied();
                 for (index, draw) in prepared.iter_mut().enumerate() {
                     let Some(atlas) = &mut draw.atlas else {
@@ -1094,6 +1097,7 @@ impl WgpuFrame {
                     &contours,
                     padded_width as usize * padded_height as usize,
                 );
+                Ok::<(), RendererError>(())
             };
         let encode_fallback_run =
             |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
@@ -1312,7 +1316,7 @@ impl WgpuFrame {
                     end += 1;
                 }
                 if atomic {
-                    encode_atomic_run(&self.draws[start..end], clear_target, &mut encoder);
+                    encode_atomic_run(&self.draws[start..end], clear_target, &mut encoder)?;
                 } else {
                     encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder);
                 }
@@ -1367,6 +1371,15 @@ impl WgpuFrame {
         readback.unmap();
         Ok(pixels)
     }
+}
+
+fn pack_atlas_for_device(
+    width: u32,
+    max_dimension: u32,
+    regions: &[(u32, u32)],
+) -> Result<skyline::AtlasLayout, RendererError> {
+    skyline::pack_atlas_regions(width, max_dimension, regions)
+        .map_err(|error| RendererError::AtlasPacking(error.message()))
 }
 
 fn analytic_uniforms(width: u32, height: u32, tessellation_height: u32) -> gpu::FlushUniforms {
@@ -1608,6 +1621,13 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
+
+    #[test]
+    fn oversized_atlas_layout_returns_renderer_error_before_wgpu() {
+        let result = pack_atlas_for_device(1920, 2048, &[(1920, 100); 21]);
+
+        assert!(matches!(result, Err(RendererError::AtlasPacking(_))));
+    }
 
     #[test]
     fn matrix_composition_matches_renderer_post_concat() {

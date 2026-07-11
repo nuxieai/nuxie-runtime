@@ -9,7 +9,7 @@
 mod native;
 
 #[cfg(feature = "native")]
-pub use native::{FfiFactory, FfiFrame, NativeRendererError};
+pub use native::{FfiFactory, FfiFrame, FfiRenderMode, NativeRendererError};
 
 /// Describes the state of the native bridge in default workspace builds.
 pub const NATIVE_FEATURE_STATUS: &str =

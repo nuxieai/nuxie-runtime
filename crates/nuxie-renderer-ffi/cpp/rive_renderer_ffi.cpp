@@ -141,6 +141,19 @@ extern "C" int rive_ffi_context_begin_frame(rive_ffi_context* ctx,
                                             uint32_t height,
                                             uint32_t clearColor)
 {
+    return rive_ffi_context_begin_frame_mode(ctx,
+                                             width,
+                                             height,
+                                             clearColor,
+                                             0);
+}
+
+extern "C" int rive_ffi_context_begin_frame_mode(rive_ffi_context* ctx,
+                                                 uint32_t width,
+                                                 uint32_t height,
+                                                 uint32_t clearColor,
+                                                 uint32_t mode)
+{
     if (ctx == nullptr || ctx->context == nullptr)
     {
         return 0;
@@ -154,6 +167,19 @@ extern "C" int rive_ffi_context_begin_frame(rive_ffi_context* ctx,
     desc.renderTargetWidth = width;
     desc.renderTargetHeight = height;
     desc.clearColor = clearColor;
+    if (mode == 1)
+    {
+        desc.msaaSampleCount = 4;
+    }
+    else if (mode == 2)
+    {
+        desc.disableRasterOrdering = true;
+        desc.clockwiseFillOverride = true;
+    }
+    else if (mode != 0)
+    {
+        return 0;
+    }
     ctx->context->beginFrame(desc);
     ctx->renderer = std::make_unique<rive::RiveRenderer>(ctx->context.get());
     ctx->drawCount = 0;

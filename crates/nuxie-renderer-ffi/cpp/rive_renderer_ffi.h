@@ -33,6 +33,11 @@ int rive_ffi_context_begin_frame(rive_ffi_context*,
                                  uint32_t width,
                                  uint32_t height,
                                  uint32_t clear_color);
+int rive_ffi_context_begin_frame_mode(rive_ffi_context*,
+                                      uint32_t width,
+                                      uint32_t height,
+                                      uint32_t clear_color,
+                                      uint32_t mode);
 void rive_ffi_context_end_frame(rive_ffi_context*);
 size_t rive_ffi_context_read_pixels(rive_ffi_context*, uint8_t* out, size_t len);
 uint64_t rive_ffi_context_draw_count(const rive_ffi_context*);

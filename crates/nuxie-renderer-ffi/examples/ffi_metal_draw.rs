@@ -4,7 +4,7 @@ mod app {
     use nuxie_binary::read_runtime_file;
     use nuxie_graph::GraphFile;
     use nuxie_renderer_ffi::FfiFactory;
-    use nuxie_runtime::{ArtboardInstance, preallocate_render_paints};
+    use nuxie_runtime::{ArtboardInstance, RuntimeRenderPathCache, preallocate_render_paints};
     use std::env;
     use std::path::PathBuf;
 
@@ -43,20 +43,29 @@ mod app {
         let mut factory =
             FfiFactory::new_metal(width, height).context("failed to create Metal FFI factory")?;
         let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
+        let mut path_cache = RuntimeRenderPathCache::default();
         instance
-            .prepare_static_artboard_paints(&runtime, artboard, &mut factory, &mut paint_by_global)
+            .prepare_static_artboard_paints(
+                &runtime,
+                artboard,
+                &mut factory,
+                &mut paint_by_global,
+                &mut path_cache,
+            )
             .context("failed to prepare paints")?;
 
         let mut frame = factory
             .begin_frame(0x00000000)
             .context("failed to begin Metal FFI frame")?;
         instance
-            .draw_prepared_static_artboard(
+            .draw_prepared_static_artboard_with_path_cache(
                 &runtime,
                 artboard,
+                std::slice::from_ref(artboard),
                 &mut factory,
                 &mut frame,
                 &mut paint_by_global,
+                &mut path_cache,
             )
             .context("failed to draw through Metal FFI frame")?;
         let draw_count = frame.end();

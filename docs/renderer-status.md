@@ -45,8 +45,8 @@ Run `make renderer-golden`.
 ## Next
 
 1. Complete `draw.cpp` stroke geometry by porting the tessellation-span
-   stress oracle: thread render mode through the C++ Metal FFI context, then
-   compare `lots_of_tess_spans_stroke` in an actual atomic mode.
+   thin-stroke coverage behavior exposed by `strokes3`, then confirm against
+   `lots_of_tess_spans_stroke` with the mode-correct C++ oracle.
 2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
@@ -211,3 +211,13 @@ Run `make renderer-golden`.
   `--mode`. Upstream Metal exposes `ContextOptions.disableFramebufferReads`
   for forcing atomic rendering; wire that through the harness before treating
   this GM as an algorithm verdict. Exact remains 18.
+- 2026-07-11: Made native replay mode-correct. The FFI begin-frame API now
+  accepts default, 4x MSAA, and clockwise-atomic modes; replay passes `--mode`
+  through to C++ `FrameDescriptor.msaaSampleCount` or the
+  `disableRasterOrdering + clockwiseFillOverride` pair. Forced C++
+  clockwise-atomic differs from the old default Metal stress reference by 466
+  pixels, while Rust still differs from the forced oracle by 374,732. A
+  focused sweep finds the same subpixel coverage family in `strokes3` (42,778
+  pixels), while `strokes_zoomed` and both tricky-cubic stroke GMs are exact.
+  The next source gap is therefore thin-stroke coverage, not span placement or
+  render mode. Exact remains 18.

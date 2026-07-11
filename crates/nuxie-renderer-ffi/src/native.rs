@@ -39,6 +39,15 @@ pub struct FfiFactory {
     height: u32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u32)]
+pub enum FfiRenderMode {
+    #[default]
+    Default = 0,
+    Msaa = 1,
+    ClockwiseAtomic = 2,
+}
+
 impl FfiFactory {
     pub fn new_null(width: u32, height: u32) -> Result<Self, NativeRendererError> {
         let context = unsafe { ffi::rive_ffi_context_make_null(width, height) };
@@ -62,12 +71,21 @@ impl FfiFactory {
     }
 
     pub fn begin_frame(&mut self, clear_color: ColorInt) -> Result<FfiFrame, NativeRendererError> {
+        self.begin_frame_with_mode(clear_color, FfiRenderMode::Default)
+    }
+
+    pub fn begin_frame_with_mode(
+        &mut self,
+        clear_color: ColorInt,
+        mode: FfiRenderMode,
+    ) -> Result<FfiFrame, NativeRendererError> {
         let ok = unsafe {
-            ffi::rive_ffi_context_begin_frame(
+            ffi::rive_ffi_context_begin_frame_mode(
                 self.context.as_ptr(),
                 self.width,
                 self.height,
                 clear_color,
+                mode as u32,
             )
         };
         if ok == 0 {
@@ -664,11 +682,12 @@ mod ffi {
         pub fn rive_ffi_context_make_null(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_make_metal(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_delete(context: *mut Context);
-        pub fn rive_ffi_context_begin_frame(
+        pub fn rive_ffi_context_begin_frame_mode(
             context: *mut Context,
             width: u32,
             height: u32,
             clear_color: u32,
+            mode: u32,
         ) -> i32;
         pub fn rive_ffi_context_end_frame(context: *mut Context);
         pub fn rive_ffi_context_read_pixels(

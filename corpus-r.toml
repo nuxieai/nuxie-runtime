@@ -1596,10 +1596,9 @@ stream = "fixtures/renderer/streams/gm/lots_of_tess_spans_stroke.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/lots_of_tess_spans_stroke.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

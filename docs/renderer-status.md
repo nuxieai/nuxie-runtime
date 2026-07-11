@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=18, diverges=0, gated=1,447, total=1,465.
+- Rust wgpu: exact=20, diverges=0, gated=1,445, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -24,7 +24,9 @@ Run `make renderer-golden`.
   `gm-widebuttcaps-clockwise-atomic`, and
   `gm-emptystroke-clockwise-atomic`,
   `gm-bevel180strokes-clockwise-atomic`, and
-  `gm-OverStroke-clockwise-atomic`.
+  `gm-OverStroke-clockwise-atomic`,
+  `gm-strokes3-clockwise-atomic`, and
+  `gm-lots_of_tess_spans_stroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -44,16 +46,13 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Complete `draw.cpp` stroke geometry by porting the tessellation-span
-   stress behavior exposed by `lots_of_tess_spans_stroke` with the mode-correct
-   C++ oracle.
-2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
+1. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
-3. Expand corpus entries only as focused pixel replay proves each feature.
+2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
-4. Bun-lesson hardening additions (user decision 2026-07-11; details in
+3. Bun-lesson hardening additions (user decision 2026-07-11; details in
    the map): mid-R2 adversarial review of the invented wgpu
    resource/binding plumbing (the ORE-replacement seam — where V2's
    audits proved bugs live); R3 entry criteria: GPU semantic-trap audit
@@ -231,3 +230,12 @@ Run `make renderer-golden`.
   channel tolerance, so `strokes3` promotes without widening its allowance and
   exact moves to 19. The remaining stroke target is the tessellation-span
   stress case.
+- 2026-07-11: Closed the tessellation-span stress case by replacing the
+  single-row GPU smoke test with a two-row readback oracle. It proved that
+  logical tessellation row 0 was landing in texture row 1 under wgpu. Using a
+  negative tessellation inverse viewport, matching the render-target
+  orientation, restores every boundary texel. `lots_of_tess_spans_stroke`
+  moves from 474,329 raw differences at delta 254 to differences bounded
+  entirely by the existing delta-2 backend tolerance, so it promotes without
+  an allowance change and exact moves to 20. Stroke geometry is complete; the
+  next `draw.cpp` slice is feather geometry.

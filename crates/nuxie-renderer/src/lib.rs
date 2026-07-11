@@ -1105,7 +1105,7 @@ fn analytic_uniforms(width: u32, height: u32, tessellation_height: u32) -> gpu::
     let mut uniforms = gpu::FlushUniforms::zeroed();
     uniforms.inverse_viewports = [
         2.0,
-        2.0 / tessellation_height.max(1) as f32,
+        -2.0 / tessellation_height.max(1) as f32,
         2.0 / width as f32,
         -2.0 / height as f32,
     ];
@@ -1383,21 +1383,24 @@ mod tests {
     }
 
     #[test]
-    fn upstream_tessellation_pass_executes() {
+    fn upstream_tessellation_pass_writes_across_texture_rows() {
         let factory = WgpuFactory::new(64, 64).unwrap();
         let mut uniforms = gpu::FlushUniforms::zeroed();
-        uniforms.inverse_viewports[1] = 2.0;
-        let span = gpu::TessVertexSpan::without_reflection(
-            [[4.0, 4.0], [20.0, 4.0], [44.0, 4.0], [60.0, 4.0]],
+        uniforms.inverse_viewports[1] = -1.0;
+        let points = [[4.0, 4.0], [20.0, 4.0], [44.0, 4.0], [60.0, 4.0]];
+        let first = gpu::TessVertexSpan::without_reflection(
+            points,
             [1.0, 0.0],
             0.0,
-            0,
-            2,
+            2046,
+            2052,
             1,
             0,
             1,
             1,
         );
+        let second =
+            gpu::TessVertexSpan::without_reflection(points, [1.0, 0.0], 1.0, -2, 4, 1, 0, 1, 1);
         let paths = [gpu::PathData::zeroed()];
         let contours = [gpu::ContourData::new([32.0, 4.0], 0, 0)];
         let mut encoder =
@@ -1407,20 +1410,64 @@ mod tests {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-tessellation-test-encoder"),
                 });
-        let _texture = factory.context.tessellator.encode(
+        let texture = factory.context.tessellator.encode(
             &factory.context.device,
             &mut encoder,
-            &[span],
+            &[first, second],
             &uniforms,
             &paths,
             &contours,
-            1,
+            2,
+        );
+        let bytes_per_row = gpu::TESS_TEXTURE_WIDTH as u32 * 16;
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-tessellation-test-readback"),
+                size: u64::from(bytes_per_row) * 2,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(2),
+                },
+            },
+            texture.size(),
         );
         factory.context.queue.submit(Some(encoder.finish()));
+        let slice = readback.slice(..);
+        let (sender, receiver) = mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
         factory
             .context
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .unwrap();
+        receiver.recv().unwrap().unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let mut written = Vec::new();
+        for y in 0usize..2 {
+            for x in 0..gpu::TESS_TEXTURE_WIDTH {
+                let flags_offset = y * bytes_per_row as usize + x as usize * 16 + 12;
+                let flags =
+                    u32::from_ne_bytes(mapped[flags_offset..flags_offset + 4].try_into().unwrap());
+                if flags != 0 {
+                    written.push((x, y));
+                }
+            }
+        }
+        assert_eq!(
+            written,
+            [(2046, 0), (2047, 0), (0, 1), (1, 1), (2, 1), (3, 1)]
+        );
     }
 }

@@ -367,6 +367,19 @@ raised from "corpus-verified" to "hardened."
 4. **Residuals:** drain or explicitly re-gate the remaining `harness` bucket;
    the two view-model-convention residuals stay gated on component-list
    instancing per the recorded decision.
+4b. **Component-list instancing (added 2026-07-10 by user decision).** Port
+   `ArtboardComponentList` runtime behavior — per-item artboard instancing,
+   item view-model context binding, map-rule selection, list layout, and the
+   draw path (virtualization to the extent the corpus/acceptance file needs
+   it) — from C++ `src/artboard_component_list.cpp` +
+   `artboard_list_map_rule.cpp`. This is the last unported runtime feature
+   and is paywall-core (runtime-populated lists of options). Acceptance:
+   `script_create_viewmodel_instance.riv` scripted-exact (retiring the
+   `component-list-instancing` diagnostic), plus re-check the two files
+   whose earlier gates cited it and the instance-0 convention reopen
+   condition (revisit that Decision once instancing lands). The static
+   projection (map rules, list registration) already exists in nuxie-graph
+   from V1/V2 — this slice makes it live.
 
 5. **Release prep — Nuxie runtime (added 2026-07-09).** The port ships as
    open source under the product name Nuxie (nuxie.io — the user's own

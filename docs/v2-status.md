@@ -999,6 +999,19 @@ the only memory the next session has. Update it every commit.
     caveat-doc removal in capi-vm surfaces, warn burn-down, and the
     Nuxie rename sweep LAST (map item 26/#V2-9.5).
 
+30. M8 SCOPE ADDITION (user decision 2026-07-10; map #V2-9 item 4b):
+    port ArtboardComponentList runtime instancing — per-item artboard
+    instances, item VM context binding, map rules, list layout, draw
+    (virtualization as far as acceptance needs). Last unported runtime
+    feature; paywall-core. Acceptance: script_create_viewmodel_instance
+    scripted-exact, retiring scripted-rust-runner-unsupported:
+    component-list-instancing; then revisit the instance-0 convention
+    reopen condition (Decision, item 8) which cited exactly this
+    feature. C++ sources: src/artboard_component_list.cpp,
+    artboard_list_map_rule.cpp; static projection already in
+    nuxie-graph. Schedule before the licensing/history-rewrite finale
+    so the release ships with zero unported runtime features.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

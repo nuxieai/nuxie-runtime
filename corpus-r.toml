@@ -95,10 +95,9 @@ stream = "fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/batchedconvexpaths.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2045,10 +2044,9 @@ stream = "fixtures/renderer/streams/gm/path_skbug_11886.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/path_skbug_11886.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

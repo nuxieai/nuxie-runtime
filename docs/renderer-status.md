@@ -7,11 +7,13 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=5, diverges=0, gated=1,460, total=1,465.
+- Rust wgpu: exact=7, diverges=0, gated=1,458, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
-  `first-light-triangle-clockwise-atomic` and `gm-rect-clockwise-atomic`.
+  `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
+  `gm-batchedconvexpaths-clockwise-atomic`, and
+  `gm-path_skbug_11886-clockwise-atomic`.
 
 ## Milestones
 
@@ -109,3 +111,8 @@ Run `make renderer-golden`.
   clearing once and resolving each fresh tiled coverage allocation with
   premultiplied SrcOver. The four overlapping translucent draws in `gm:rect`
   pass at 4 differing pixels within budget, moving the metric to exact=5.
+- 2026-07-11: Swept the solid-fill GM slice. Clockwise-atomic promoted
+  `batchedconvexpaths` (30 pixels, max delta 19) and `path_skbug_11886` (2
+  pixels), moving exact to 7. Named probes still outside tolerance:
+  `batchedtriangulations` 2,856 pixels, `convex_lineonly_ths` 8,792,
+  `rotatedcubicpath` 301. Their MSAA variants also remain gated.

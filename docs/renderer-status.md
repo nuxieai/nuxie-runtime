@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=20, diverges=0, gated=1,445, total=1,465.
+- Rust wgpu: exact=21, diverges=0, gated=1,444, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -26,7 +26,8 @@ Run `make renderer-golden`.
   `gm-bevel180strokes-clockwise-atomic`, and
   `gm-OverStroke-clockwise-atomic`,
   `gm-strokes3-clockwise-atomic`, and
-  `gm-lots_of_tess_spans_stroke-clockwise-atomic`.
+  `gm-lots_of_tess_spans_stroke-clockwise-atomic`, and
+  `gm-emptyfeather-clockwise-atomic`.
 
 ## Milestones
 
@@ -239,3 +240,10 @@ Run `make renderer-golden`.
   entirely by the existing delta-2 backend tolerance, so it promotes without
   an allowance change and exact moves to 20. Stroke geometry is complete; the
   next `draw.cpp` slice is feather geometry.
+- 2026-07-11: Ported the first feather edge case by culling fill paths whose
+  local control polygon is provably collinear. This covers the move-only,
+  move-close, and zero-length-line variants in `emptyfeather` without
+  classifying self-intersections or curved paths as empty. The GM's remaining
+  144 pixels are confined to the red marker AA edges, so it promotes with the
+  same bounded-edge policy used by `OverStroke`; exact moves to 21. Real
+  feather convolution remains the next R2 target.

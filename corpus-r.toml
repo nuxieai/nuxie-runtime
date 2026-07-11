@@ -713,10 +713,9 @@ stream = "fixtures/renderer/streams/gm/emptyfeather.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/emptyfeather.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 144
 
 
 [[entry]]

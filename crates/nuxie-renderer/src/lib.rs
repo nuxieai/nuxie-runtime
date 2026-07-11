@@ -562,7 +562,7 @@ impl Renderer for WgpuFrame {
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
         let path = wgpu_path(path);
         let paint = wgpu_paint(paint);
-        if path_draw_is_noop(path, paint) {
+        if path_draw_is_noop(path, paint, self.state.transform) {
             return;
         }
         self.draws.push(SolidDraw {
@@ -1277,10 +1277,28 @@ fn align_to(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
 }
 
-fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint) -> bool {
+fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint, transform: Mat2D) -> bool {
     path.raw_path.verbs().is_empty()
         || (paint.style == RenderPaintStyle::Stroke && !(paint.thickness > 0.0))
         || !(paint.feather >= 0.0)
+        || (paint.style == RenderPaintStyle::Fill
+            && (draw::build_fill_tessellation(&path.raw_path, transform).is_none()
+                || fill_path_is_collinear(&path.raw_path)))
+}
+
+fn fill_path_is_collinear(path: &RawPath) -> bool {
+    let mut points = path.points().iter().copied();
+    let Some(origin) = points.next() else {
+        return true;
+    };
+    let Some(axis_point) = points.find(|point| point.x != origin.x || point.y != origin.y) else {
+        return true;
+    };
+    let axis = (axis_point.x - origin.x, axis_point.y - origin.y);
+    points.all(|point| {
+        let relative = (point.x - origin.x, point.y - origin.y);
+        axis.0 * relative.1 - axis.1 * relative.0 == 0.0
+    })
 }
 
 #[cfg(test)]
@@ -1305,20 +1323,27 @@ mod tests {
         };
         let mut path = empty.clone();
         path.raw_path.move_to(0.0, 0.0);
-        path.raw_path.line_to(1.0, 1.0);
+        path.raw_path.line_to(1.0, 0.0);
+        path.raw_path.line_to(0.0, 1.0);
+        path.raw_path.close();
         let mut paint = WgpuPaint::default();
 
-        assert!(path_draw_is_noop(&empty, &paint));
-        assert!(!path_draw_is_noop(&path, &paint));
+        assert!(path_draw_is_noop(&empty, &paint, Mat2D::IDENTITY));
+        assert!(!path_draw_is_noop(&path, &paint, Mat2D::IDENTITY));
 
         paint.style = RenderPaintStyle::Stroke;
         paint.thickness = 0.0;
-        assert!(path_draw_is_noop(&path, &paint));
+        assert!(path_draw_is_noop(&path, &paint, Mat2D::IDENTITY));
         paint.thickness = f32::NAN;
-        assert!(path_draw_is_noop(&path, &paint));
+        assert!(path_draw_is_noop(&path, &paint, Mat2D::IDENTITY));
         paint.thickness = 1.0;
         paint.feather = f32::NAN;
-        assert!(path_draw_is_noop(&path, &paint));
+        assert!(path_draw_is_noop(&path, &paint, Mat2D::IDENTITY));
+
+        let mut move_only = empty.clone();
+        move_only.raw_path.move_to(4.0, 4.0);
+        paint = WgpuPaint::default();
+        assert!(path_draw_is_noop(&move_only, &paint, Mat2D::IDENTITY));
     }
 
     #[test]

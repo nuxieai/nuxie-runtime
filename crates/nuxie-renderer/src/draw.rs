@@ -84,6 +84,14 @@ pub(crate) fn build_feather_tessellation(
     Some(tessellation)
 }
 
+pub(crate) fn feather_requires_atlas(
+    paint_feather: f32,
+    transform: Mat2D,
+    force_atlas: bool,
+) -> bool {
+    force_atlas || paint_feather * 1.5 * max_matrix_scale(transform) >= 32.0
+}
+
 fn build_stroke_or_feather_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -1412,6 +1420,22 @@ mod tests {
         assert!(tessellation.spans[1..]
             .iter()
             .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
+    }
+
+    #[test]
+    fn feather_atlas_boundary_matches_cpp_scale_factor() {
+        assert!(!feather_requires_atlas(8.0, Mat2D::IDENTITY, false));
+        assert!(!feather_requires_atlas(
+            10.0,
+            Mat2D([2.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            false
+        ));
+        assert!(feather_requires_atlas(
+            32.0 / 3.0,
+            Mat2D([2.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            false
+        ));
+        assert!(feather_requires_atlas(0.01, Mat2D::IDENTITY, true));
     }
 
     #[test]

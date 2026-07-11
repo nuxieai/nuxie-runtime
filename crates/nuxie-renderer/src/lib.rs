@@ -681,6 +681,11 @@ impl WgpuFrame {
                 draw.paint.shader.is_none()
                     && if draw.paint.feather != 0.0 {
                         draw.paint.style == RenderPaintStyle::Fill
+                            && !draw::feather_requires_atlas(
+                                draw.paint.feather,
+                                draw.state.transform,
+                                false,
+                            )
                             && draw::build_feather_tessellation(
                                 &draw.path.raw_path,
                                 draw.state.transform,

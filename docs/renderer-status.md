@@ -271,3 +271,9 @@ Run `make renderer-golden`.
   path; feathered strokes remain runtime-gated until mixed direct/atlas draw
   partitioning lands. All 30 renderer tests pass and the corpus remains
   exact=21/diverges=0.
+- 2026-07-11: Locked the direct-versus-atlas feather boundary to C++'s
+  `find_atlas_feather_scale_factor`: a feather routes to the atlas at 32 or
+  more device pixels (`paintFeather * 1.5 * matrixMaxScale`), and MSAA can
+  force atlas routing regardless of radius. Boundary tests cover identity,
+  scaled transforms, equality, and forced routing. Until the atlas pass lands,
+  these draws correctly keep the frame out of the direct atomic path.

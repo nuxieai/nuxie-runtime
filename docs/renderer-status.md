@@ -40,6 +40,14 @@ Run `make renderer-golden`.
 3. Expand corpus entries as features become replayable. Do not tune broad
    tolerances around missing algorithm work.
 
+4. Bun-lesson hardening additions (user decision 2026-07-11; details in
+   the map): mid-R2 adversarial review of the invented wgpu
+   resource/binding plumbing (the ORE-replacement seam — where V2's
+   audits proved bugs live); R3 entry criteria: GPU semantic-trap audit
+   (GLSL->WGSL/naga divergence surface) and a renderer fuzz-replay
+   harness (degenerate streams through both renderers; no panic/hang/
+   device-loss; behavioral deltas as named findings).
+
 ## Decisions
 
 - 2026-07-10: Phase R activated by the user; incremental R0-R5 strategy chosen.

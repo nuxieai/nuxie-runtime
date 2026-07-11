@@ -197,6 +197,14 @@ Rust-idiom notes carried over from the V2 performance guidance: retained
 objects own arena state rather than `Arc`-counting; per-frame allocations
 reuse buffers; no `RefCell` graphs; hot loops iterate slices.
 
+**Mid-R2 adversarial review (added 2026-07-11, Bun lesson).** The V2 audits
+proved bugs concentrate in INVENTED seams, not translated code. Phase R's
+invented seam is the wgpu resource/binding layer that replaced ORE. Before
+R2 exits, run a split-context assume-it's-wrong review of that plumbing —
+bind-group lifecycles, buffer reuse/rewind, readback synchronization,
+pipeline caching — plus the stream-replay glue. Findings fixed or explicitly
+accepted with rationale, same as the M8 audit protocol.
+
 ### Exit Criteria
 
 The GM stream corpus passes within tolerance in clockwise-atomic mode on the
@@ -204,7 +212,22 @@ primary backend; no `.riv` regression versus #R-1.
 
 ## #R-3: Corpus Convergence
 
-Blocked by: #R-2
+Blocked by: #R-2, plus two entry criteria (added 2026-07-11, Bun lessons —
+Bun's 19 regressions were all cross-language semantic traps found in
+production; ours get found before convergence is declared):
+
+- **GPU semantic-trap audit**: enumerate and check the GLSL→WGSL/naga
+  divergence surface (uniformity analysis, texture/sampler semantics, float
+  precision/denormals, matrix packing/majorness, integer wrap in shaders,
+  MSAA resolve rules, coordinate conventions) against the ported pipelines —
+  the pixel-domain analog of the M8 semantic-trap sweep. Findings ranked,
+  fixed or accepted with rationale.
+- **Renderer fuzz-replay harness**: replay degenerate/fuzzed streams (NaN
+  and huge transforms, zero-area paths, absurd stroke widths, deep clip
+  stacks, hostile gradient stops) through BOTH renderers; assert the Rust
+  renderer never panics, hangs, or loses the device, and record behavioral
+  deltas vs C++ as named findings. Extends the M8 fuzz harness's negative-
+  input discipline into the pixel domain; wire a smoke gate into CI.
 
 1. Full `corpus-r.toml` sweep: all GM streams and all `.riv` entries, both
    modes, all backends available in CI.

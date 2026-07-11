@@ -97,6 +97,35 @@ pub(crate) fn feather_atlas_scale(paint_feather: f32, transform: Mat2D) -> f32 {
     16.0 / device_radius.max(16.0)
 }
 
+pub(crate) fn feather_pixel_bounds(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+) -> Option<[i32; 4]> {
+    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for point in path.points() {
+        let point = transform.transform_point(*point);
+        min.x = min.x.min(point.x);
+        min.y = min.y.min(point.y);
+        max.x = max.x.max(point.x);
+        max.y = max.y.max(point.y);
+    }
+    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
+        return None;
+    }
+    let radius = paint_feather * 1.5;
+    let [xx, yx, xy, yy, _, _] = transform.0;
+    let outset_x = radius * (xx.abs() + xy.abs()) + 1.0;
+    let outset_y = radius * (yx.abs() + yy.abs()) + 1.0;
+    Some([
+        (min.x - outset_x).floor() as i32,
+        (min.y - outset_y).floor() as i32,
+        (max.x + outset_x).ceil() as i32,
+        (max.y + outset_y).ceil() as i32,
+    ])
+}
+
 fn build_stroke_or_feather_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -1441,6 +1470,21 @@ mod tests {
             false
         ));
         assert!(feather_requires_atlas(0.01, Mat2D::IDENTITY, true));
+    }
+
+    #[test]
+    fn feather_pixel_bounds_include_transformed_radius_and_aa() {
+        let mut path = RawPath::new();
+        path.move_to(16.0, 16.0);
+        path.line_to(48.0, 48.0);
+        assert_eq!(
+            feather_pixel_bounds(&path, Mat2D::IDENTITY, 80.0),
+            Some([-105, -105, 169, 169])
+        );
+        assert_eq!(
+            feather_pixel_bounds(&path, Mat2D([2.0, 0.0, 0.0, 0.5, 10.0, -4.0]), 4.0),
+            Some([29, 0, 119, 24])
+        );
     }
 
     #[test]

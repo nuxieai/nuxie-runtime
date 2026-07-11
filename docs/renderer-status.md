@@ -297,3 +297,15 @@ Run `make renderer-golden`.
   dropping them; its max delta is 179 pending C++ bounds/padding/packing and
   coverage convergence. All 32 renderer tests and the exact=21/diverges=0
   corpus gate pass.
+- 2026-07-11: Replaced temporary full-target per-draw masks with one shared
+  shelf-packed atlas. Fill bounds now match C++'s transformed control-point
+  bounds plus feather radius and one AA pixel, intersect the viewport, reserve
+  two pixels of padding, scissor each region, clear once, and load between
+  mask batches. Tight bounds and transformed/scaled cases have CPU tests; the
+  submitted mask oracle now uses a real 80-unit feather and requires positive
+  half-float coverage at its scaled center. `feather_ellipse` remains max delta
+  178, proving allocation was not its remaining coverage mismatch. A guarded
+  feathered-stroke probe improved after atlas routing but still exposed direct
+  border leakage and missing stroke/miter/cap outset, so runtime stroke enablement
+  remains intentionally gated. All 33 renderer tests and exact=21/diverges=0
+  corpus checks pass.

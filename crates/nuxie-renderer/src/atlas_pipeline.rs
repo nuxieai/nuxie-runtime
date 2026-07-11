@@ -139,6 +139,8 @@ impl AtlasPipeline {
         base_instance: u32,
         instance_count: u32,
         is_stroke: bool,
+        clear: bool,
+        scissor: [u32; 4],
     ) {
         let uniform = upload(
             device,
@@ -205,7 +207,11 @@ impl AtlasPipeline {
             depth_slice: None,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                load: if clear {
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                } else {
+                    wgpu::LoadOp::Load
+                },
                 store: wgpu::StoreOp::Store,
             },
         })];
@@ -218,6 +224,7 @@ impl AtlasPipeline {
             multiview_mask: None,
         });
         pass.set_pipeline(if is_stroke { &self.stroke } else { &self.fill });
+        pass.set_scissor_rect(scissor[0], scissor[1], scissor[2], scissor[3]);
         pass.set_bind_group(0, &flush, &[]);
         pass.set_bind_group(1, &image, &[]);
         pass.set_bind_group(3, &samplers, &[]);

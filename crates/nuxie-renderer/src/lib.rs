@@ -1,5 +1,6 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
+mod draw;
 mod gpu;
 
 use bytemuck::{Pod, Zeroable};
@@ -38,7 +39,9 @@ impl Error for RendererError {}
 struct Context {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    pipeline: wgpu::RenderPipeline,
+    non_zero_stencil_pipeline: wgpu::RenderPipeline,
+    even_odd_stencil_pipeline: wgpu::RenderPipeline,
+    cover_pipeline: wgpu::RenderPipeline,
 }
 
 pub struct WgpuFactory {
@@ -83,14 +86,15 @@ impl WgpuFactory {
             bind_group_layouts: &[],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nuxie-solid-pipeline"),
+        let vertex_buffer_layouts = [Some(Vertex::layout())];
+        let pipeline_descriptor = |label, fragment, depth_stencil| wgpu::RenderPipelineDescriptor {
+            label: Some(label),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vertex_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Some(Vertex::layout())],
+                buffers: &vertex_buffer_layouts,
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -98,13 +102,70 @@ impl WgpuFactory {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil,
             multisample: wgpu::MultisampleState {
                 count: 4,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            fragment: Some(wgpu::FragmentState {
+            fragment,
+            multiview_mask: None,
+            cache: None,
+        };
+        let stencil_face = |pass_op| wgpu::StencilFaceState {
+            compare: wgpu::CompareFunction::Always,
+            fail_op: wgpu::StencilOperation::Keep,
+            depth_fail_op: wgpu::StencilOperation::Keep,
+            pass_op,
+        };
+        let stencil_state = |front, back| wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Stencil8,
+            depth_write_enabled: None,
+            depth_compare: None,
+            stencil: wgpu::StencilState {
+                front,
+                back,
+                read_mask: 0xff,
+                write_mask: 0xff,
+            },
+            bias: wgpu::DepthBiasState::default(),
+        };
+        let stencil_targets = [Some(wgpu::ColorTargetState {
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            blend: None,
+            write_mask: wgpu::ColorWrites::empty(),
+        })];
+        let stencil_fragment = || wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fragment_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &stencil_targets,
+        };
+        let non_zero_stencil_pipeline = device.create_render_pipeline(&pipeline_descriptor(
+            "nuxie-non-zero-stencil-pipeline",
+            Some(stencil_fragment()),
+            Some(stencil_state(
+                stencil_face(wgpu::StencilOperation::IncrementWrap),
+                stencil_face(wgpu::StencilOperation::DecrementWrap),
+            )),
+        ));
+        let even_odd_stencil_pipeline = device.create_render_pipeline(&pipeline_descriptor(
+            "nuxie-even-odd-stencil-pipeline",
+            Some(stencil_fragment()),
+            Some(stencil_state(
+                stencil_face(wgpu::StencilOperation::Invert),
+                stencil_face(wgpu::StencilOperation::Invert),
+            )),
+        ));
+        let cover_stencil_face = wgpu::StencilFaceState {
+            compare: wgpu::CompareFunction::NotEqual,
+            fail_op: wgpu::StencilOperation::Keep,
+            depth_fail_op: wgpu::StencilOperation::Keep,
+            pass_op: wgpu::StencilOperation::Zero,
+        };
+        let cover_pipeline = device.create_render_pipeline(&pipeline_descriptor(
+            "nuxie-cover-pipeline",
+            Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fragment_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -114,14 +175,15 @@ impl WgpuFactory {
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            multiview_mask: None,
-            cache: None,
-        });
+            Some(stencil_state(cover_stencil_face, cover_stencil_face)),
+        ));
         Ok(Self {
             context: Arc::new(Context {
                 device,
                 queue,
-                pipeline,
+                non_zero_stencil_pipeline,
+                even_odd_stencil_pipeline,
+                cover_pipeline,
             }),
             width,
             height,
@@ -540,6 +602,20 @@ impl WgpuFrame {
             });
         let multisample_view =
             multisample_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let stencil_texture = self
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-stencil-target"),
+                size: texture.size(),
+                mip_level_count: 1,
+                sample_count: 4,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Stencil8,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+        let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder =
             self.context
                 .device
@@ -549,15 +625,26 @@ impl WgpuFrame {
         let vertex_buffers = self
             .draws
             .iter()
-            .filter_map(|draw| tessellate_solid(draw, self.width, self.height))
-            .map(|vertices| {
-                self.context
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("nuxie-path-vertices"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    })
+            .filter_map(|draw| {
+                let path_vertices = tessellate_solid(draw, self.width, self.height)?;
+                let cover_vertices = cover_vertices(&path_vertices);
+                let path_buffer =
+                    self.context
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("nuxie-path-vertices"),
+                            contents: bytemuck::cast_slice(&path_vertices),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
+                let cover_buffer =
+                    self.context
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("nuxie-path-cover"),
+                            contents: bytemuck::cast_slice(&cover_vertices),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
+                Some((path_buffer, cover_buffer, draw.path.fill_rule))
             })
             .collect::<Vec<_>>();
         {
@@ -572,18 +659,34 @@ impl WgpuFrame {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &stencil_view,
+                    depth_ops: None,
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.context.pipeline);
-            for buffer in &vertex_buffers {
-                pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.set_stencil_reference(0);
+            for (path_buffer, cover_buffer, fill_rule) in &vertex_buffers {
+                pass.set_pipeline(match fill_rule {
+                    FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
+                    FillRule::NonZero | FillRule::Clockwise => {
+                        &self.context.non_zero_stencil_pipeline
+                    }
+                });
+                pass.set_vertex_buffer(0, path_buffer.slice(..));
                 pass.draw(
-                    0..(buffer.size() / std::mem::size_of::<Vertex>() as u64) as u32,
+                    0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64) as u32,
                     0..1,
                 );
+                pass.set_pipeline(&self.context.cover_pipeline);
+                pass.set_vertex_buffer(0, cover_buffer.slice(..));
+                pass.draw(0..6, 0..1);
             }
         }
 
@@ -635,6 +738,27 @@ impl WgpuFrame {
     }
 }
 
+fn cover_vertices(path_vertices: &[Vertex]) -> [Vertex; 6] {
+    let mut min = [f32::INFINITY; 2];
+    let mut max = [f32::NEG_INFINITY; 2];
+    for vertex in path_vertices {
+        min[0] = min[0].min(vertex.position[0]);
+        min[1] = min[1].min(vertex.position[1]);
+        max[0] = max[0].max(vertex.position[0]);
+        max[1] = max[1].max(vertex.position[1]);
+    }
+    let color = path_vertices[0].color;
+    let vertex = |position| Vertex { position, color };
+    [
+        vertex([min[0], min[1]]),
+        vertex([max[0], min[1]]),
+        vertex([max[0], max[1]]),
+        vertex([min[0], min[1]]),
+        vertex([max[0], max[1]]),
+        vertex([min[0], max[1]]),
+    ]
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Vertex {
@@ -668,22 +792,6 @@ fn tessellate_solid(draw: &SolidDraw, width: u32, height: u32) -> Option<Vec<Ver
     if draw.paint.style != RenderPaintStyle::Fill || draw.paint.shader.is_some() {
         return None;
     }
-    let mut points = Vec::new();
-    let mut point_index = 0;
-    for verb in draw.path.raw_path.verbs() {
-        match verb {
-            nuxie_render_api::PathVerb::Move | nuxie_render_api::PathVerb::Line => {
-                let point = draw.path.raw_path.points()[point_index];
-                points.push(draw.state.transform.transform_point(point));
-                point_index += 1;
-            }
-            nuxie_render_api::PathVerb::Close => break,
-            _ => return None,
-        }
-    }
-    if points.len() < 3 {
-        return None;
-    }
     let rgba = rgba(draw.paint.color, draw.state.opacity);
     let vertex = |point: nuxie_render_api::Vec2D| Vertex {
         position: [
@@ -692,13 +800,16 @@ fn tessellate_solid(draw: &SolidDraw, width: u32, height: u32) -> Option<Vec<Ver
         ],
         color: rgba,
     };
-    let mut vertices = Vec::with_capacity((points.len() - 2) * 3);
-    for index in 1..points.len() - 1 {
-        vertices.push(vertex(points[0]));
-        vertices.push(vertex(points[index]));
-        vertices.push(vertex(points[index + 1]));
+    let mut vertices = Vec::new();
+    for contour in draw::flatten_path(&draw.path.raw_path, draw.state.transform) {
+        let indices = draw::triangulate_contour(&contour.points)?;
+        vertices.extend(
+            indices
+                .into_iter()
+                .map(|index| vertex(contour.points[index as usize])),
+        );
     }
-    Some(vertices)
+    (!vertices.is_empty()).then_some(vertices)
 }
 
 fn is_full_target_clip(path: &WgpuPath, transform: Mat2D, width: u32, height: u32) -> bool {

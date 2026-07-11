@@ -67,3 +67,10 @@ Run `make renderer-golden`.
   generated WebGPU WGSL modules validate through naga. Ported the `gpu.hpp`
   host upload records, enum encodings, packed tessellation fields, color
   swizzles, and blend IDs with C++ ABI size/offset tests.
+- 2026-07-11: Ported the first `draw.cpp` path-preparation slice: transformed
+  verb iteration, line/quad/cubic normalization, Wang parametric segment
+  counts, closed-contour normalization, and concave triangulation. The MSAA
+  bootstrap now uses stencil-then-cover for non-zero and even-odd compound
+  fills. The `oval` probe's topology is correct; its remaining 3,136-pixel,
+  max-delta-73 difference is confined to flattened cubic edge coverage, so it
+  stays gated pending analytic patches.

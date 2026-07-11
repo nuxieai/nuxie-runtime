@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=13, diverges=0, gated=1,452, total=1,465.
+- Rust wgpu: exact=14, diverges=0, gated=1,451, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -19,7 +19,8 @@ Run `make renderer-golden`.
   `gm-batchedtriangulations-clockwise-atomic`, and
   `gm-zerolinestroke-clockwise-atomic`,
   `gm-CubicStroke-clockwise-atomic`, and
-  `gm-zero_control_stroke-clockwise-atomic`.
+  `gm-zero_control_stroke-clockwise-atomic`, and
+  `gm-roundjoinstrokes-clockwise-atomic`.
 
 ## Milestones
 
@@ -162,4 +163,6 @@ Run `make renderer-golden`.
   record-layout test and the upstream GPU execution smoke test. Focused
   `emptystroke` replay produces the expected shape placement but remains gated
   at 1,320 differing pixels (max delta 81), concentrated on round-cap edge
-  coverage; exact remains 13.
+  coverage. A sibling sweep proves `roundjoinstrokes` pixel-exact at zero
+  differing pixels and promotes it, moving exact to 14. `widebuttcaps` remains
+  gated at 5,004 differing pixels (max delta 254).

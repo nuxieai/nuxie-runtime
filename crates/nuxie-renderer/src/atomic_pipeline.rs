@@ -14,6 +14,15 @@ pub(crate) struct AtomicPipeline {
     sampler_layout: wgpu::BindGroupLayout,
 }
 
+pub(crate) struct AtomicDraw<'a> {
+    pub tessellation: &'a wgpu::TextureView,
+    pub base_instance: u32,
+    pub instance_count: u32,
+    pub patch_index_range: std::ops::Range<u32>,
+    pub triangle_vertices: &'a [crate::gpu::TriangleVertex],
+    pub is_stroke: bool,
+}
+
 impl AtomicPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let path_vertex = shader(
@@ -111,8 +120,8 @@ impl AtomicPipeline {
                 ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::empty(),
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             multiview_mask: None,
@@ -145,8 +154,8 @@ impl AtomicPipeline {
                 ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::empty(),
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             multiview_mask: None,
@@ -198,8 +207,8 @@ impl AtomicPipeline {
                 compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::empty(),
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             multiview_mask: None,
@@ -218,26 +227,22 @@ impl AtomicPipeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode(
+    pub(crate) fn encode_batch(
         &self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         patch_vertices: &wgpu::Buffer,
         patch_indices: &wgpu::Buffer,
-        tessellation: &wgpu::TextureView,
+        draws: &[AtomicDraw<'_>],
         uniforms: &FlushUniforms,
         paths: &[PathData],
         paints: &[PaintData],
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
-        base_instance: u32,
-        instance_count: u32,
-        patch_index_range: std::ops::Range<u32>,
-        triangle_vertices: &[crate::gpu::TriangleVertex],
-        is_stroke: bool,
         pixel_count: usize,
     ) {
+        assert!(!draws.is_empty());
         let uniform = upload(
             device,
             "nuxie-atomic-uniforms",
@@ -280,14 +285,19 @@ impl AtomicPipeline {
             &vec![0u32; pixel_count],
             wgpu::BufferUsages::STORAGE,
         );
-        let triangle_buffer = (!triangle_vertices.is_empty()).then(|| {
-            upload(
-                device,
-                "nuxie-atomic-interior-triangles",
-                triangle_vertices,
-                wgpu::BufferUsages::VERTEX,
-            )
-        });
+        let triangle_buffers = draws
+            .iter()
+            .map(|draw| {
+                (!draw.triangle_vertices.is_empty()).then(|| {
+                    upload(
+                        device,
+                        "nuxie-atomic-interior-triangles",
+                        draw.triangle_vertices,
+                        wgpu::BufferUsages::VERTEX,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-atomic-dummy-texture"),
             size: wgpu::Extent3d {
@@ -304,20 +314,25 @@ impl AtomicPipeline {
         });
         let dummy_view = dummy.create_view(&Default::default());
         let sampler = device.create_sampler(&Default::default());
-        let flush = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-atomic-flush-group"),
-            layout: &self.flush_layout,
-            entries: &[
-                binding(0, uniform.as_entire_binding()),
-                binding(3, paths.as_entire_binding()),
-                binding(4, paints.as_entire_binding()),
-                binding(5, paint_aux.as_entire_binding()),
-                binding(6, contours.as_entire_binding()),
-                binding(8, wgpu::BindingResource::TextureView(tessellation)),
-                binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(10, wgpu::BindingResource::TextureView(&dummy_view)),
-            ],
-        });
+        let flush_groups = draws
+            .iter()
+            .map(|draw| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("nuxie-atomic-flush-group"),
+                    layout: &self.flush_layout,
+                    entries: &[
+                        binding(0, uniform.as_entire_binding()),
+                        binding(3, paths.as_entire_binding()),
+                        binding(4, paints.as_entire_binding()),
+                        binding(5, paint_aux.as_entire_binding()),
+                        binding(6, contours.as_entire_binding()),
+                        binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
+                        binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
+                        binding(10, wgpu::BindingResource::TextureView(&dummy_view)),
+                    ],
+                })
+            })
+            .collect::<Vec<_>>();
         let image = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-image-group"),
             layout: &self.image_layout,
@@ -342,42 +357,43 @@ impl AtomicPipeline {
                 binding(10, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
-        {
+        for (draw_index, draw) in draws.iter().enumerate() {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-path-pass",
                 &attachments,
             ));
-            pass.set_pipeline(if is_stroke {
+            pass.set_pipeline(if draw.is_stroke {
                 &self.stroke_path
             } else {
                 &self.path
             });
-            pass.set_bind_group(0, &flush, &[]);
+            pass.set_bind_group(0, &flush_groups[draw_index], &[]);
             pass.set_bind_group(1, &image, &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);
             pass.set_vertex_buffer(0, patch_vertices.slice(..));
             pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
             pass.draw_indexed(
-                patch_index_range,
+                draw.patch_index_range.clone(),
                 0,
-                base_instance..base_instance + instance_count,
+                draw.base_instance..draw.base_instance + draw.instance_count,
             );
-        }
-        if let Some(triangle_buffer) = &triangle_buffer {
-            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                "nuxie-atomic-interior-pass",
-                &attachments,
-            ));
-            pass.set_pipeline(&self.interior);
-            pass.set_bind_group(0, &flush, &[]);
-            pass.set_bind_group(1, &image, &[]);
-            pass.set_bind_group(2, &atomics, &[]);
-            pass.set_bind_group(3, &samplers, &[]);
-            pass.set_vertex_buffer(0, triangle_buffer.slice(..));
-            pass.draw(0..triangle_vertices.len() as u32, 0..1);
+            drop(pass);
+            if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
+                let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    "nuxie-atomic-interior-pass",
+                    &attachments,
+                ));
+                pass.set_pipeline(&self.interior);
+                pass.set_bind_group(0, &flush_groups[draw_index], &[]);
+                pass.set_bind_group(1, &image, &[]);
+                pass.set_bind_group(2, &atomics, &[]);
+                pass.set_bind_group(3, &samplers, &[]);
+                pass.set_vertex_buffer(0, triangle_buffer.slice(..));
+                pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+            }
         }
         {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
@@ -386,7 +402,7 @@ impl AtomicPipeline {
                 &attachments,
             ));
             pass.set_pipeline(&self.resolve);
-            pass.set_bind_group(0, &flush, &[]);
+            pass.set_bind_group(0, flush_groups.last().unwrap(), &[]);
             pass.set_bind_group(1, &image, &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);

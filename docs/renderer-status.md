@@ -45,7 +45,8 @@ Run `make renderer-golden`.
 ## Next
 
 1. Complete `draw.cpp` stroke geometry by porting the tessellation-span
-   coverage accumulation behavior exposed by `lots_of_tess_spans_stroke`.
+   stress oracle: thread render mode through the C++ Metal FFI context, then
+   compare `lots_of_tess_spans_stroke` in an actual atomic mode.
 2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
@@ -199,3 +200,14 @@ Run `make renderer-golden`.
   to 375,640 differing pixels; its 25% coverage masks are pixel-identical, so
   the remaining gap is dense-overlap coverage magnitude rather than missing
   geometry. Exact remains 18 pending that separate accumulation slice.
+- 2026-07-11: Ported the first `render_context.cpp` logical-flush behavior:
+  atomic-eligible frame draws now use global monotonic path/contour IDs,
+  shared path/paint/coverage/color buffers, per-path tessellation textures,
+  fixed-function intermediate path resolves, and one final resolve. Existing
+  fill, interior, and stroke probes remain exact. The dense stress comparison
+  remains near 375k pixels because the oracle itself is mode-mismatched:
+  `renderer-replay --backend ffi-metal --mode clockwise-atomic` is byte-exact
+  with the checked default Metal reference because the FFI branch ignores
+  `--mode`. Upstream Metal exposes `ContextOptions.disableFramebufferReads`
+  for forcing atomic rendering; wire that through the harness before treating
+  this GM as an algorithm verdict. Exact remains 18.

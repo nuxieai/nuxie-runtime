@@ -687,6 +687,15 @@ impl WgpuFrame {
                     }
             });
         let used_atomic = if atomic_eligible {
+            struct PreparedAtomicDraw {
+                spans: Vec<gpu::TessVertexSpan>,
+                base_instance: u32,
+                instance_count: u32,
+                patch_index_range: std::ops::Range<u32>,
+                triangles: Vec<gpu::TriangleVertex>,
+                is_stroke: bool,
+            }
+
             {
                 let attachments = [Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -708,15 +717,24 @@ impl WgpuFrame {
             }
             let padded_width = align_to(self.width, 32);
             let padded_height = align_to(self.height, 32);
-            for draw in &self.draws {
+            let mut prepared = Vec::with_capacity(self.draws.len());
+            let mut paths = vec![gpu::PathData::zeroed()];
+            let mut paints = vec![gpu::PaintData::solid(
+                0,
+                FillRule::NonZero,
+                BlendMode::SrcOver,
+            )];
+            let mut contours = Vec::new();
+            for (draw_index, draw) in self.draws.iter().enumerate() {
+                let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
                 let (
-                    spans,
+                    mut spans,
                     mut path,
-                    mut contours,
+                    mut draw_contours,
                     base_instance,
                     instance_count,
                     patch_index_range,
-                    triangles,
+                    mut triangles,
                 ) = if draw.paint.style == RenderPaintStyle::Stroke {
                     let tessellation = draw::build_stroke_tessellation(
                         &draw.path.raw_path,
@@ -774,61 +792,97 @@ impl WgpuFrame {
                         Vec::new(),
                     )
                 };
-                for contour in &mut contours {
-                    contour.path_id = 1;
+                let contour_offset = contours.len() as u32;
+                for span in &mut spans {
+                    let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+                    if local_id != 0 {
+                        let global_id = contour_offset + local_id;
+                        assert!(global_id <= gpu::CONTOUR_ID_MASK);
+                        span.contour_id_with_flags =
+                            (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK) | global_id;
+                    }
                 }
-                let tessellation_height = draw::tessellation_texture_height(&spans);
+                for contour in &mut draw_contours {
+                    contour.path_id = u32::from(path_id);
+                }
+                for triangle in &mut triangles {
+                    triangle.weight_path_id =
+                        (triangle.weight_path_id & !0xffff) | i32::from(path_id);
+                }
                 path.coverage_buffer_range.pitch = padded_width;
-                let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
-                uniforms.render_target_update_bounds =
-                    [0, 0, self.width as i32, self.height as i32];
-                let paths = [gpu::PathData::zeroed(), path];
+                paths.push(path);
+                paints.push(if draw.paint.style == RenderPaintStyle::Stroke {
+                    gpu::PaintData::solid_stroke(
+                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                        draw.paint.blend_mode,
+                    )
+                } else {
+                    gpu::PaintData::solid(
+                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                        draw.path.fill_rule,
+                        draw.paint.blend_mode,
+                    )
+                });
+                contours.extend(draw_contours);
+                prepared.push(PreparedAtomicDraw {
+                    spans,
+                    base_instance,
+                    instance_count,
+                    patch_index_range,
+                    triangles,
+                    is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
+                });
+            }
+            let tessellation_height = prepared
+                .iter()
+                .map(|draw| draw::tessellation_texture_height(&draw.spans))
+                .max()
+                .unwrap_or(1);
+            let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
+            uniforms.render_target_update_bounds = [0, 0, self.width as i32, self.height as i32];
+            let mut tessellation_textures = Vec::with_capacity(prepared.len());
+            for draw in &prepared {
                 let tessellation_texture = self.context.tessellator.encode(
                     &self.context.device,
                     &mut encoder,
-                    &spans,
+                    &draw.spans,
                     &uniforms,
                     &paths,
                     &contours,
                     tessellation_height,
                 );
-                let tessellation_view =
-                    tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let paints = [
-                    gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
-                    if draw.paint.style == RenderPaintStyle::Stroke {
-                        gpu::PaintData::solid_stroke(
-                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                            draw.paint.blend_mode,
-                        )
-                    } else {
-                        gpu::PaintData::solid(
-                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                            draw.path.fill_rule,
-                            draw.paint.blend_mode,
-                        )
-                    },
-                ];
-                self.context.atomic_pipeline.encode(
-                    &self.context.device,
-                    &mut encoder,
-                    &view,
-                    &self.context.patch_vertex_buffer,
-                    &self.context.patch_index_buffer,
-                    &tessellation_view,
-                    &uniforms,
-                    &paths,
-                    &paints,
-                    &[gpu::PaintAuxData::zeroed(); 2],
-                    &contours,
-                    base_instance,
-                    instance_count,
-                    patch_index_range,
-                    &triangles,
-                    draw.paint.style == RenderPaintStyle::Stroke,
-                    padded_width as usize * padded_height as usize,
-                );
+                tessellation_textures.push(tessellation_texture);
             }
+            let tessellation_views = tessellation_textures
+                .iter()
+                .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()))
+                .collect::<Vec<_>>();
+            let atomic_draws = prepared
+                .iter()
+                .zip(&tessellation_views)
+                .map(|(draw, tessellation)| atomic_pipeline::AtomicDraw {
+                    tessellation,
+                    base_instance: draw.base_instance,
+                    instance_count: draw.instance_count,
+                    patch_index_range: draw.patch_index_range.clone(),
+                    triangle_vertices: &draw.triangles,
+                    is_stroke: draw.is_stroke,
+                })
+                .collect::<Vec<_>>();
+            self.context.atomic_pipeline.encode_batch(
+                &self.context.device,
+                &mut encoder,
+                &view,
+                &self.context.patch_vertex_buffer,
+                &self.context.patch_index_buffer,
+                &atomic_draws,
+                &uniforms,
+                &paths,
+                &paints,
+                &vec![gpu::PaintAuxData::zeroed(); paths.len()],
+                &contours,
+                padded_width as usize * padded_height as usize,
+            );
             true
         } else {
             false

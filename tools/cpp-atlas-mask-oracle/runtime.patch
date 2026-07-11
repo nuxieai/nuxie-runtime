@@ -1,0 +1,122 @@
+diff --git a/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp b/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
+index 4fcf8c0e..4d745852 100644
+--- a/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
++++ b/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
+@@ -98,20 +98,23 @@ public:
+                                   bool srgb = false,
+                                   bool generateRemainingMips = false) override;
+ 
+ #ifdef RIVE_CANVAS
+     rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                        uint32_t height) override;
+ 
+     std::unique_ptr<rive::ore::Context> makeOreContext() override;
+ #endif
+ 
++    // Temporary oracle hook. build.sh reverses this patch after readback.
++    wgpu::Texture atlasMaskTextureForOracle() const { return m_atlasTexture; }
++
+ private:
+     RenderContextWebGPUImpl(wgpu::Adapter,
+                             wgpu::Device,
+                             wgpu::Queue,
+                             const ContextOptions&);
+ 
+     // Create a standard PLS "draw" pipeline for the current implementation.
+     // vertexShader / fragmentShader carry information about which override
+     // constants are actually used by the shader (WebGPU doesn't allow
+     // overriding a constant that is declared but not used via the main
+diff --git a/renderer/premake5.lua b/renderer/premake5.lua
+index 308f1f45..842750f2 100644
+--- a/renderer/premake5.lua
++++ b/renderer/premake5.lua
+@@ -325,10 +325,61 @@ if _OPTIONS['with-webgpu'] or _OPTIONS['with-dawn'] then
+         end
+ 
+         filter({})
+ 
+         if RIVE_WAGYU_PORT then
+             buildoptions({ RIVE_WAGYU_PORT })
+             linkoptions({ RIVE_WAGYU_PORT })
+         end
+     end
+ end
++
++if _OPTIONS['with-dawn'] then
++    project('rive_atlas_mask_oracle')
++    do
++        kind('ConsoleApp')
++        includedirs({
++            'include',
++            RIVE_RUNTIME_DIR .. '/include',
++            'src',
++            'dependencies/dawn/include',
++            'dependencies/dawn/out/release/gen/include',
++        })
++        files({ 'atlas_mask_oracle/main.cpp' })
++        links({
++            'rive',
++            'rive_pls_renderer',
++            'rive_decoders',
++            'libpng',
++            'zlib',
++            'libjpeg',
++            'libwebp',
++            'rive_harfbuzz',
++            'rive_sheenbidi',
++            'rive_yoga',
++            'webgpu_dawn',
++            'dawn_native_static',
++            'dawn_proc_static',
++            'dawn_platform_static',
++        })
++        libdirs({
++            'dependencies/dawn/out/release/obj/src/dawn',
++            'dependencies/dawn/out/release/obj/src/dawn/native',
++            'dependencies/dawn/out/release/obj/src/dawn/platform',
++        })
++        filter('system:macosx')
++        do
++            links({
++                'Cocoa.framework',
++                'Metal.framework',
++                'QuartzCore.framework',
++                'IOKit.framework',
++                'IOSurface.framework',
++            })
++        end
++        filter('system:windows')
++        do
++            links({ 'dxguid', 'winmm' })
++        end
++        filter({})
++    end
++end
+diff --git a/renderer/src/webgpu/render_context_webgpu_impl.cpp b/renderer/src/webgpu/render_context_webgpu_impl.cpp
+index ff41da4c..4d28916e 100644
+--- a/renderer/src/webgpu/render_context_webgpu_impl.cpp
++++ b/renderer/src/webgpu/render_context_webgpu_impl.cpp
+@@ -2845,21 +2845,22 @@ void RenderContextWebGPUImpl::resizeTessellationTexture(uint32_t width,
+ }
+ 
+ void RenderContextWebGPUImpl::resizeAtlasTexture(uint32_t width,
+                                                  uint32_t height)
+ {
+     width = std::max(width, 1u);
+     height = std::max(height, 1u);
+ 
+     wgpu::TextureDescriptor desc{
+         .usage = wgpu::TextureUsage::RenderAttachment |
+-                 wgpu::TextureUsage::TextureBinding,
++                 wgpu::TextureUsage::TextureBinding |
++                 wgpu::TextureUsage::CopySrc,
+         .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
+         .format = wgpu::TextureFormat::R16Float,
+     };
+ 
+     m_atlasTexture = m_device.CreateTexture(&desc);
+     m_atlasTextureView = m_atlasTexture.CreateView();
+ }
+ 
+ void RenderContextWebGPUImpl::resizeAtomicCoverageBacking(uint32_t width,
+                                                           uint32_t height)

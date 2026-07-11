@@ -19,3 +19,4 @@
 /tools/gm-stream-capture/build/windows/
 /tools/gm-stream-capture/generated-gates.txt
 /tools/gm-stream-capture/generated_registry.inc
+/tools/cpp-atlas-mask-oracle/out/

@@ -124,7 +124,7 @@ impl AtomicPipeline {
                 compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: None,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -256,10 +256,7 @@ impl AtomicPipeline {
             ],
         });
         {
-            let attachments = [color_attachment(
-                target,
-                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-            )];
+            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-path-pass",
                 &attachments,

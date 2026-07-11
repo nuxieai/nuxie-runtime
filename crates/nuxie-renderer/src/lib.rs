@@ -666,73 +666,83 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
-        let used_atomic = if self.mode == RenderMode::ClockwiseAtomic && self.draws.len() == 1 {
-            let draw = &self.draws[0];
-            if draw.paint.style == RenderPaintStyle::Fill && draw.paint.shader.is_none() {
-                if let Some(mut tessellation) =
-                    draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                {
-                    if tessellation.contours.len() == 1 {
-                        tessellation.contours[0].path_id = 1;
-                        let padded_width = align_to(self.width, 32);
-                        let padded_height = align_to(self.height, 32);
-                        tessellation.path.coverage_buffer_range.pitch = padded_width;
-                        let mut uniforms = analytic_uniforms(self.width, self.height, 1);
-                        uniforms.color_clear_value =
-                            gpu::swizzle_rive_color_to_rgba_premul(self.clear_color);
-                        uniforms.render_target_update_bounds =
-                            [0, 0, self.width as i32, self.height as i32];
-                        let paths = [gpu::PathData::zeroed(), tessellation.path];
-                        let tessellation_texture = self.context.tessellator.encode(
-                            &self.context.device,
-                            &mut encoder,
-                            &tessellation.spans,
-                            &uniforms,
-                            &paths,
-                            &tessellation.contours,
-                            1,
-                        );
-                        let tessellation_view = tessellation_texture
-                            .create_view(&wgpu::TextureViewDescriptor::default());
-                        let paints = [
-                            gpu::PaintData::solid(
-                                self.clear_color,
-                                FillRule::NonZero,
-                                BlendMode::SrcOver,
-                            ),
-                            gpu::PaintData::solid(
-                                modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                draw.path.fill_rule,
-                                draw.paint.blend_mode,
-                            ),
-                        ];
-                        let paint_aux = [gpu::PaintAuxData::zeroed(); 2];
-                        self.context.atomic_pipeline.encode(
-                            &self.context.device,
-                            &mut encoder,
-                            &view,
-                            &self.context.patch_vertex_buffer,
-                            &self.context.patch_index_buffer,
-                            &tessellation_view,
-                            &uniforms,
-                            &paths,
-                            &paints,
-                            &paint_aux,
-                            &tessellation.contours,
-                            tessellation.base_instance,
-                            tessellation.instance_count,
-                            padded_width as usize * padded_height as usize,
-                        );
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            } else {
-                false
+        let atomic_eligible = self.mode == RenderMode::ClockwiseAtomic
+            && !self.draws.is_empty()
+            && self.draws.iter().all(|draw| {
+                draw.paint.style == RenderPaintStyle::Fill
+                    && draw.paint.shader.is_none()
+                    && draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                        .is_some_and(|tessellation| tessellation.contours.len() == 1)
+            });
+        let used_atomic = if atomic_eligible {
+            {
+                let attachments = [Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(color(self.clear_color)),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })];
+                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nuxie-atomic-frame-clear"),
+                    color_attachments: &attachments,
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
             }
+            let padded_width = align_to(self.width, 32);
+            let padded_height = align_to(self.height, 32);
+            for draw in &self.draws {
+                let mut tessellation =
+                    draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                        .expect("atomic eligibility already validated tessellation");
+                tessellation.contours[0].path_id = 1;
+                tessellation.path.coverage_buffer_range.pitch = padded_width;
+                let mut uniforms = analytic_uniforms(self.width, self.height, 1);
+                uniforms.render_target_update_bounds =
+                    [0, 0, self.width as i32, self.height as i32];
+                let paths = [gpu::PathData::zeroed(), tessellation.path];
+                let tessellation_texture = self.context.tessellator.encode(
+                    &self.context.device,
+                    &mut encoder,
+                    &tessellation.spans,
+                    &uniforms,
+                    &paths,
+                    &tessellation.contours,
+                    1,
+                );
+                let tessellation_view =
+                    tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let paints = [
+                    gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+                    gpu::PaintData::solid(
+                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                        draw.path.fill_rule,
+                        draw.paint.blend_mode,
+                    ),
+                ];
+                self.context.atomic_pipeline.encode(
+                    &self.context.device,
+                    &mut encoder,
+                    &view,
+                    &self.context.patch_vertex_buffer,
+                    &self.context.patch_index_buffer,
+                    &tessellation_view,
+                    &uniforms,
+                    &paths,
+                    &paints,
+                    &[gpu::PaintAuxData::zeroed(); 2],
+                    &tessellation.contours,
+                    tessellation.base_instance,
+                    tessellation.instance_count,
+                    padded_width as usize * padded_height as usize,
+                );
+            }
+            true
         } else {
             false
         };

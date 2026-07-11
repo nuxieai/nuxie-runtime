@@ -2253,10 +2253,9 @@ stream = "fixtures/renderer/streams/gm/rect.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/rect.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

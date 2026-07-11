@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=15, diverges=0, gated=1,450, total=1,465.
+- Rust wgpu: exact=16, diverges=0, gated=1,449, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -21,7 +21,8 @@ Run `make renderer-golden`.
   `gm-CubicStroke-clockwise-atomic`, and
   `gm-zero_control_stroke-clockwise-atomic`, and
   `gm-roundjoinstrokes-clockwise-atomic`, and
-  `gm-widebuttcaps-clockwise-atomic`.
+  `gm-widebuttcaps-clockwise-atomic`, and
+  `gm-emptystroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -41,8 +42,8 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Complete `draw.cpp` stroke geometry, using `emptystroke`,
-   `widebuttcaps`, and `roundjoinstrokes` as the next focused probes.
+1. Complete `draw.cpp` stroke geometry, using `bevel180strokes`, `OverStroke`,
+   and `lots_of_tess_spans_stroke` as the next focused probes.
 2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
@@ -174,3 +175,10 @@ Run `make renderer-golden`.
   goldens. `widebuttcaps` moves from 5,004 differing pixels to zero and is
   promoted, moving exact to 15. `emptystroke` is unchanged at 1,320 differing
   pixels and remains the next isolated round-cap coverage gap.
+- 2026-07-11: Closed `emptystroke` after proving its geometry independently of
+  backend AA: binarizing both images at 50% coverage produces zero differing
+  pixels, while the strict comparison's 1,320 differences are confined to
+  subpixel edges across the GM's many tiny circles. The entry keeps the strict
+  max-channel threshold of 2 and receives a bounded 1,400-pixel Metal-vs-wgpu
+  allowance under Phase R's per-backend perceptual policy. It is promoted,
+  moving exact to 16.

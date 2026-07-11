@@ -58,6 +58,7 @@ use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
     build_state_machines,
 };
+use crate::view_model::RuntimeOwnedViewModelListHandle;
 
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
@@ -76,6 +77,8 @@ pub struct ArtboardInstance {
     pub(crate) list_follow_path_constraints: Vec<RuntimeListFollowPathConstraint>,
     pub(crate) scroll_constraints: Vec<RuntimeScrollConstraint>,
     pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
+    pub(crate) component_list_items: BTreeMap<usize, Vec<RuntimeComponentListItemInstance>>,
+    pub(crate) component_list_sources: BTreeMap<usize, RuntimeOwnedViewModelListHandle>,
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) update_order: Vec<usize>,
@@ -144,6 +147,17 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     speed: f32,
     quantize: f32,
     cumulated_seconds: f32,
+}
+
+/// Ported from C++ `src/artboard_component_list.cpp`: one persistent child
+/// artboard and state machine for an owned view-model list item.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeComponentListItemInstance {
+    pub(crate) child: Box<ArtboardInstance>,
+    pub(crate) state_machine: Option<StateMachineInstance>,
+    pub(crate) context: RuntimeOwnedViewModelInstance,
+    pub(crate) transform: Mat2D,
+    pub(crate) render_cache_revision: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -352,6 +366,8 @@ impl ArtboardInstance {
             list_follow_path_constraints,
             scroll_constraints,
             component_list_item_transforms: BTreeMap::new(),
+            component_list_items: BTreeMap::new(),
+            component_list_sources: BTreeMap::new(),
             ik_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
@@ -465,6 +481,7 @@ impl ArtboardInstance {
             instance.call_method(ScriptMethod::Update, &[], &mut host)?;
             did_update = true;
         }
+        did_update |= self.refresh_component_list_items();
         Ok(did_update)
     }
 
@@ -1027,6 +1044,128 @@ impl ArtboardInstance {
         Some(StateMachineInstance::new(index, state_machine, self))
     }
 
+    /// Ported from C++ `src/artboard_component_list.cpp::updateList`,
+    /// `findArtboard`, and `createArtboardAt`.
+    pub(crate) fn sync_component_list_items(
+        &mut self,
+        file: &RuntimeFile,
+        list_local_id: usize,
+        contexts: Vec<RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        if self
+            .component_list_items
+            .get(&list_local_id)
+            .is_some_and(|existing| {
+                existing.len() == contexts.len()
+                    && existing.iter().zip(&contexts).all(|(item, context)| {
+                        item.context.instance_identity() == context.instance_identity()
+                    })
+            })
+        {
+            return false;
+        }
+        let Some(build_context) = self.build_context.clone() else {
+            return false;
+        };
+        let Some(parent_graph) = build_context
+            .artboards
+            .iter()
+            .find(|graph| graph.global_id == self.graph_global_id)
+        else {
+            return false;
+        };
+        let Some(component_list) = parent_graph
+            .component_lists
+            .iter()
+            .find(|list| list.local_id == list_local_id)
+        else {
+            return false;
+        };
+
+        let mut items = Vec::with_capacity(contexts.len());
+        for context in contexts {
+            let mapped_index = component_list
+                .map_rules
+                .iter()
+                .find(|rule| rule.view_model_id == context.view_model_index() as i64)
+                .and_then(|rule| usize::try_from(rule.artboard_id).ok());
+            let child_graph = mapped_index
+                .and_then(|index| build_context.artboards.get(index))
+                .or_else(|| {
+                    build_context.artboards.iter().find(|graph| {
+                        file.object(graph.global_id as usize)
+                            .and_then(|artboard| artboard.uint_property("viewModelId"))
+                            .and_then(|value| usize::try_from(value).ok())
+                            == Some(context.view_model_index())
+                    })
+                });
+            let Some(child_graph) = child_graph else {
+                continue;
+            };
+            let mut visiting = BTreeSet::from([self.graph_global_id]);
+            let Ok(mut child) = ArtboardInstance::from_graph_inner(
+                file,
+                child_graph,
+                &build_context.artboards,
+                &mut visiting,
+                Some(build_context.clone()),
+                false,
+            ) else {
+                continue;
+            };
+            child.bind_owned_view_model_artboard_context(file, &context);
+            let mut state_machine = child.state_machine_instance(0);
+            if let Some(state_machine) = state_machine.as_mut() {
+                state_machine.bind_owned_view_model_context(&context);
+                child.advance_state_machine_instance(state_machine, 0.0);
+            }
+            child.advance_artboard_data_binds_with_elapsed(0.0);
+            child.update_pass();
+            items.push(RuntimeComponentListItemInstance {
+                child: Box::new(child),
+                state_machine,
+                context,
+                transform: Mat2D::IDENTITY,
+                render_cache_revision: 0,
+            });
+        }
+
+        let changed = self
+            .component_list_items
+            .get(&list_local_id)
+            .is_none_or(|existing| existing.len() != items.len());
+        self.component_list_item_transforms.insert(
+            list_local_id,
+            items.iter().map(|item| item.transform).collect(),
+        );
+        self.component_list_items.insert(list_local_id, items);
+        if changed {
+            self.mark_layout_changed();
+            self.mark_prepared_changed();
+        }
+        changed
+    }
+
+    pub(crate) fn refresh_component_list_items(&mut self) -> bool {
+        let Some(file) = self
+            .build_context
+            .as_ref()
+            .map(|context| Arc::clone(&context.file))
+        else {
+            return false;
+        };
+        let updates = self
+            .component_list_sources
+            .iter()
+            .map(|(&local_id, source)| (local_id, source.items()))
+            .collect::<Vec<_>>();
+        updates
+            .into_iter()
+            .fold(false, |changed, (local_id, items)| {
+                self.sync_component_list_items(&file, local_id, items) || changed
+            })
+    }
+
     pub fn advance_state_machine_instance(
         &mut self,
         instance: &mut StateMachineInstance,
@@ -1133,7 +1272,7 @@ impl ArtboardInstance {
         mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
     ) -> bool {
         let layout_bounds = self.runtime_nested_artboard_layout_bounds();
-        let mut changed = false;
+        let mut changed = self.refresh_component_list_items();
         for index in 0..self.nested_artboard_locals.len() {
             let host_local = self.nested_artboard_locals[index];
             if self
@@ -1172,6 +1311,20 @@ impl ArtboardInstance {
             if nested_needs_update {
                 changed = true;
                 self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
+            }
+        }
+        for items in self.component_list_items.values_mut() {
+            for item in items {
+                if let Some(state_machine) = item.state_machine.as_mut() {
+                    changed |= item
+                        .child
+                        .advance_state_machine_instance(state_machine, elapsed_seconds);
+                }
+                changed |= item
+                    .child
+                    .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+                changed |= item.child.advance_nested_artboards(elapsed_seconds);
+                changed |= item.child.update_pass();
             }
         }
         changed
@@ -3480,6 +3633,8 @@ mod tests {
             list_follow_path_constraints: Vec::new(),
             scroll_constraints: Vec::new(),
             component_list_item_transforms: BTreeMap::new(),
+            component_list_items: BTreeMap::new(),
+            component_list_sources: BTreeMap::new(),
             ik_constraints: Vec::new(),
             joysticks_apply_before_update: true,
             update_order,

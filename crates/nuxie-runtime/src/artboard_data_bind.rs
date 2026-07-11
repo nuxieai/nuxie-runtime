@@ -1339,9 +1339,7 @@ pub(super) fn build_artboard_list_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let Some(default_instance) = artboard_default_view_model_instance(file, artboard_index) else {
-        return Vec::new();
-    };
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -1357,8 +1355,9 @@ pub(super) fn build_artboard_list_bindings(
                 .unwrap_or(false);
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
             let converter = runtime_data_bind_graph_converter(file, data_bind.object);
-            let source =
-                file.data_context_view_model_property_for_instance(default_instance.object, &path);
+            let source = default_instance.as_ref().and_then(|default_instance| {
+                file.data_context_view_model_property_for_instance(default_instance.object, &path)
+            });
             let source_is_unresolved_name_based = path_is_name_based && source.is_none();
             let default_value = source
                 .and_then(|source| match converter.as_ref() {
@@ -1370,17 +1369,12 @@ pub(super) fn build_artboard_list_bindings(
                         .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
                     _ => None,
                 })
-                .or_else(|| {
-                    if !path_is_name_based {
-                        return None;
+                .or_else(|| match converter.as_ref() {
+                    Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
+                        Some(RuntimeDataBindGraphValue::Number(0.0))
                     }
-                    match converter.as_ref() {
-                        Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
-                            Some(RuntimeDataBindGraphValue::Number(0.0))
-                        }
-                        None => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
-                        _ => None,
-                    }
+                    None => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
+                    _ => None,
                 })?;
 
             Some(RuntimeArtboardListBindingInstance {
@@ -3239,6 +3233,29 @@ impl ArtboardInstance {
             {
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
+        }
+        let component_list_updates = self
+            .artboard_list_bindings
+            .iter()
+            .filter_map(|binding| {
+                let source = context_chain.iter().find_map(|context_path| {
+                    let property_path = context
+                        .property_path_for_context_source_path_with_manifest_mode(
+                            file,
+                            context_path,
+                            &binding.path,
+                            false,
+                            allow_full_context_bindings,
+                        )?;
+                    context.list_handle_by_property_path(&property_path)
+                })?;
+                Some((binding.target_local_id, source))
+            })
+            .collect::<Vec<_>>();
+        for (list_local_id, source) in component_list_updates {
+            let items = source.items();
+            self.component_list_sources.insert(list_local_id, source);
+            changed |= self.sync_component_list_items(file, list_local_id, items);
         }
         let mut text_lists_changed = false;
         for binding in &mut self.artboard_text_list_bindings {

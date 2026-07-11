@@ -665,9 +665,15 @@ the only memory the next session has. Update it every commit.
         Its four reused circle-path lines are structurally identical with a
         maximum local-space cancellation delta of 0.0002442, accepted by a
         0.00025 tolerance; the byte-identical transform reduces that to about
-        9.5e-6 in world space. All runnable scripted entries are now exact.
-        Component-list instancing remains the sole explicit scripted
-        unsupported gap.
+        9.5e-6 in world space. All previously runnable scripted entries remain
+        exact. Component-list instancing now retains ordered list-item
+        contexts, maps each item to a persistent child artboard/state machine,
+        advances those children, and renders the formerly fenced fixture with
+        the same 182-line draw envelope as C++.
+        `script_create_viewmodel_instance.riv` is promoted from unsupported to
+        the runnable divergence lane; its remaining structural mismatch is
+        four child-paint allocations that occur during item draw instead of
+        before `sample seconds=0`.
     (b) C ABI COMPLETE: pointer events, owned view-model contexts, explicit
         cache-holding draw with instance affinity and balanced handle release,
         and the recorded default-SM rule (authored default, else first) are
@@ -682,7 +688,8 @@ the only memory the next session has. Update it every commit.
         README positioning, MIT license/third-party notices, and checksum-pinned
         upstream fixture fetching are complete; only four project-generated
         malformed fuzz reproducers remain tracked as `.riv` files. Remaining:
-        final history rewrite after the user confirms email and destructive
+        close component-list allocation-order parity, then perform the final
+        history rewrite after the user confirms email and destructive
         force-push authorization.
     Phase R remains gated on explicit user activation; its map now also
     records a Bun-style big-bang execution option to choose at
@@ -3882,8 +3889,8 @@ the only memory the next session has. Update it every commit.
   tests, C smoke, both corpus lanes, formatting, and diff checks pass; metrics
   remain regular 263/584/26/6 and scripted 26/34/0/1. Next: obtain explicit
   confirmation for `Levi McCallum <levi@levimccallum.com>` and authorization
-  to rewrite and force-push all history; that destructive operation is the sole
-  remaining M8 exit item.
+  to rewrite and force-push all history after component-list instancing reaches
+  scripted exact; map item 4b is the active runtime prerequisite.
 
 - 2026-07-10: [M8] Completed the publish-facing Nuxie rename. The public crate
   is `nuxie`; internal crates and codegen are `nuxie-*`; the embedded SDK is

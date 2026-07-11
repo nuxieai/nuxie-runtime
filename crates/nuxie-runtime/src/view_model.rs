@@ -1681,6 +1681,15 @@ pub(crate) struct RuntimeOwnedViewModelListHandle {
 }
 
 impl RuntimeOwnedViewModelListHandle {
+    pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelInstance> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .map(|item| item.borrow().clone())
+            .collect()
+    }
+
     pub(crate) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
         self.value
             .borrow()

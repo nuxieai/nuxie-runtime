@@ -48,9 +48,9 @@ Run `make renderer-golden`.
 ## Next
 
 1. Finish feather routing in source dependency order: converge atlas coverage,
-   correct the cubic feathered-stroke mask's multi-draw origin rays, partition
-   atomic-capable draws instead of rejecting the whole frame, then enable the
-   prepared feathered-stroke path. Continue R2 with the remaining
+   partition atomic-capable draws instead of rejecting the whole frame, and
+   close the remaining direct-stroke atomic resolution gap before considering
+   wgpu's `alwaysFeatherToAtlas` policy optional. Continue R2 with the remaining
    `render_context.cpp` behavior, robust triangulation, and the intersection
    board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
@@ -328,3 +328,14 @@ Run `make renderer-golden`.
   clean, while later cubic paths produce local-origin rays in both direct and
   bounded-atlas routes; the issue is therefore cubic stroke-mask/multi-draw
   bookkeeping, not atlas allocation. Runtime feathered strokes remain gated.
+- 2026-07-11: Enabled feathered strokes through wgpu's C++-supported
+  `alwaysFeatherToAtlas` policy. Atlas stroke pipelines now match C++ back-face
+  culling, and CPU tessellation explicitly collapses exactly co-directional
+  cubic joins to one segment, preventing smooth closure wedges from reaching
+  the mask. The focused `feather_strokes` replay is structurally correct across
+  all seven radii with no local-origin rays. It remains corpus-gated at
+  1,550,127 differing pixels/max delta 255 because broad atlas filtering and
+  low-radius direct-vs-atlas differences are not tolerance work; a classifier
+  probe also shows direct feathered strokes still lose draws during atomic
+  resolution. The runtime no longer rejects the feature, while promotion waits
+  on coverage convergence.

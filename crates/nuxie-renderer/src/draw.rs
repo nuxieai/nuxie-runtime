@@ -325,17 +325,20 @@ fn build_stroke_or_feather_tessellation(
                     (prepared[index + 1].tangents[0], 1, contour_id | join_flags)
                 } else {
                     let next_tangent = prepared[(index + 1) % prepared.len()].tangents[0];
-                    let segment_count = if !is_stroke {
-                        feather_join_segments
-                    } else if join == StrokeJoin::Round {
-                        round_join_segment_count(
-                            curve.tangents[1],
-                            next_tangent,
-                            polar_segments_per_radian,
-                        )
-                    } else {
-                        5
-                    };
+                    let segment_count =
+                        if is_stroke && same_direction(curve.tangents[1], next_tangent) {
+                            1
+                        } else if !is_stroke {
+                            feather_join_segments
+                        } else if join == StrokeJoin::Round {
+                            round_join_segment_count(
+                                curve.tangents[1],
+                                next_tangent,
+                                polar_segments_per_radian,
+                            )
+                        } else {
+                            5
+                        };
                     (next_tangent, segment_count, contour_id | join_flags)
                 };
                 pending.push((
@@ -661,6 +664,10 @@ fn dot(a: Vec2D, b: Vec2D) -> f32 {
 
 fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
     a.x * b.y - a.y * b.x
+}
+
+fn same_direction(a: Vec2D, b: Vec2D) -> bool {
+    vector_cross(a, b) == 0.0 && dot(a, b) > 0.0
 }
 
 pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
@@ -1583,6 +1590,28 @@ mod tests {
         assert!(tessellation.spans[1..]
             .iter()
             .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 }));
+    }
+
+    #[test]
+    fn smooth_cubic_stroke_joins_emit_no_join_wedge() {
+        let mut path = RawPath::new();
+        path.move_to(100.0, 50.0);
+        path.cubic_to(100.0, 75.0, 75.0, 100.0, 50.0, 100.0);
+        path.cubic_to(25.0, 100.0, 0.0, 75.0, 0.0, 50.0);
+        path.cubic_to(0.0, 25.0, 25.0, 0.0, 50.0, 0.0);
+        path.cubic_to(75.0, 0.0, 100.0, 25.0, 100.0, 50.0);
+        path.close();
+
+        let tessellation = build_feather_atlas_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            4.0,
+            Some((10.0, StrokeJoin::Miter, StrokeCap::Butt)),
+        )
+        .unwrap();
+        assert!(tessellation.spans[1..]
+            .iter()
+            .all(|span| span.segment_counts >> 20 == 1));
     }
 
     #[test]

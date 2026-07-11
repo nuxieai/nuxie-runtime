@@ -679,37 +679,39 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
-        let atomic_eligible = self.mode == RenderMode::ClockwiseAtomic
-            && !self.draws.is_empty()
-            && self.draws.iter().all(|draw| {
-                draw.paint.shader.is_none()
-                    && if draw.paint.feather != 0.0 {
-                        draw.paint.style == RenderPaintStyle::Fill
-                            && draw::build_feather_tessellation(
+        let atomic_eligible =
+            self.mode == RenderMode::ClockwiseAtomic
+                && !self.draws.is_empty()
+                && self.draws.iter().all(|draw| {
+                    draw.paint.shader.is_none()
+                        && if draw.paint.feather != 0.0 {
+                            let stroke = (draw.paint.style == RenderPaintStyle::Stroke)
+                                .then_some((draw.paint.thickness, draw.paint.join, draw.paint.cap));
+                            draw::build_feather_tessellation(
                                 &draw.path.raw_path,
                                 draw.state.transform,
                                 draw.paint.feather,
-                                None,
+                                stroke,
                             )
                             .is_some()
-                    } else {
-                        match draw.paint.style {
-                            RenderPaintStyle::Fill => draw::build_fill_tessellation(
-                                &draw.path.raw_path,
-                                draw.state.transform,
-                            )
-                            .is_some_and(|tessellation| tessellation.contours.len() == 1),
-                            RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
-                                &draw.path.raw_path,
-                                draw.state.transform,
-                                draw.paint.thickness,
-                                draw.paint.join,
-                                draw.paint.cap,
-                            )
-                            .is_some(),
+                        } else {
+                            match draw.paint.style {
+                                RenderPaintStyle::Fill => draw::build_fill_tessellation(
+                                    &draw.path.raw_path,
+                                    draw.state.transform,
+                                )
+                                .is_some_and(|tessellation| tessellation.contours.len() == 1),
+                                RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
+                                    &draw.path.raw_path,
+                                    draw.state.transform,
+                                    draw.paint.thickness,
+                                    draw.paint.join,
+                                    draw.paint.cap,
+                                )
+                                .is_some(),
+                            }
                         }
-                    }
-            });
+                });
         let used_atomic = if atomic_eligible {
             #[derive(Clone, Copy)]
             struct AtlasPlacement {
@@ -774,10 +776,11 @@ impl WgpuFrame {
                     mut triangles,
                 ) = if draw.paint.feather != 0.0 {
                     let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
+                    // wgpu uses C++'s alwaysFeatherToAtlas policy for strokes.
                     let requires_atlas = draw::feather_requires_atlas(
                         draw.paint.feather,
                         draw.state.transform,
-                        false,
+                        is_stroke,
                     );
                     let stroke = is_stroke.then_some((
                         draw.paint.thickness,
@@ -895,7 +898,7 @@ impl WgpuFrame {
                     && draw::feather_requires_atlas(
                         draw.paint.feather,
                         draw.state.transform,
-                        false,
+                        draw.paint.style == RenderPaintStyle::Stroke,
                     ))
                 .then(|| {
                     let scale = draw::feather_atlas_scale(draw.paint.feather, draw.state.transform);

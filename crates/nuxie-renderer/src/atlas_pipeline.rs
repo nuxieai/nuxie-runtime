@@ -70,7 +70,7 @@ impl AtlasPipeline {
             ],
             immediate_size: 0,
         });
-        let make_pipeline = |label, fragment: &wgpu::ShaderModule, operation| {
+        let make_pipeline = |label, fragment: &wgpu::ShaderModule, operation, cull_mode| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -82,6 +82,7 @@ impl AtlasPipeline {
                 },
                 primitive: wgpu::PrimitiveState {
                     front_face: wgpu::FrontFace::Cw,
+                    cull_mode,
                     ..Default::default()
                 },
                 depth_stencil: None,
@@ -107,11 +108,13 @@ impl AtlasPipeline {
             "nuxie-atlas-fill-pipeline",
             &fill_fragment,
             wgpu::BlendOperation::Add,
+            None,
         );
         let stroke = make_pipeline(
             "nuxie-atlas-stroke-pipeline",
             &stroke_fragment,
             wgpu::BlendOperation::Max,
+            Some(wgpu::Face::Back),
         );
         Self {
             fill,

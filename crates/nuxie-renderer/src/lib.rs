@@ -903,6 +903,11 @@ impl WgpuFrame {
                         &draw.path.raw_path,
                         draw.state.transform,
                         draw.paint.feather,
+                        (draw.paint.style == RenderPaintStyle::Stroke).then_some((
+                            draw.paint.thickness,
+                            draw.paint.join,
+                            draw.paint.cap,
+                        )),
                     )
                     .expect("atomic eligibility already validated feather bounds");
                     let left = left.clamp(0, self.width as i32);

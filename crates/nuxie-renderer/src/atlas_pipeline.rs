@@ -2,7 +2,8 @@
 
 use crate::gpu::{
     ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData,
-    MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT, MIDPOINT_FAN_PATCH_INDEX_COUNT,
+    MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT, MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT,
+    MIDPOINT_FAN_PATCH_INDEX_COUNT,
 };
 use wgpu::util::DeviceExt;
 
@@ -231,7 +232,7 @@ impl AtlasPipeline {
         pass.set_vertex_buffer(0, patch_vertices.slice(..));
         pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
         let index_range = if is_stroke {
-            0..48
+            0..MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT as u32
         } else {
             MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
                 ..(MIDPOINT_FAN_PATCH_INDEX_COUNT + MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT) as u32

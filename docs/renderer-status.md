@@ -47,12 +47,12 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Finish feather routing in source dependency order: replace the temporary
-   full-target per-draw atlas textures with C++ bounds, padding, and packing;
-   converge atlas coverage; partition atomic-capable draws instead of rejecting
-   the whole frame; then enable the prepared feathered-stroke path. Continue
-   R2 with the remaining `render_context.cpp` behavior, robust triangulation,
-   and the intersection board.
+1. Finish feather routing in source dependency order: converge atlas coverage,
+   correct the cubic feathered-stroke mask's multi-draw origin rays, partition
+   atomic-capable draws instead of rejecting the whole frame, then enable the
+   prepared feathered-stroke path. Continue R2 with the remaining
+   `render_context.cpp` behavior, robust triangulation, and the intersection
+   board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -319,3 +319,12 @@ Run `make renderer-golden`.
   33, and 25). `feather_shapes` remains max 116 and names corner/cusp geometry
   as separate work. All 34 renderer tests and exact=21/diverges=0 corpus gates
   pass; neither fixture is promoted by widening around broad residuals.
+- 2026-07-11: Completed C++ path pixel-outset parity for feather atlas
+  placement, including stroke radius, the 4x miter limit, square-cap `sqrt(2)`
+  diagonal, feather radius, transformed axis outsets, and one AA pixel. Fill,
+  bevel/butt, miter, and square-cap cases have exact bounds tests, and atlas
+  stroke masks now name the canonical 48-index border count instead of a magic
+  number. A guarded `feather_strokes` replay proved a single closed line square
+  clean, while later cubic paths produce local-origin rays in both direct and
+  bounded-atlas routes; the issue is therefore cubic stroke-mask/multi-draw
+  bookkeeping, not atlas allocation. Runtime feathered strokes remain gated.

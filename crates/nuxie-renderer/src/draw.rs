@@ -120,6 +120,7 @@ pub(crate) fn feather_pixel_bounds(
     path: &RawPath,
     transform: Mat2D,
     paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<[i32; 4]> {
     let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
     let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
@@ -133,7 +134,17 @@ pub(crate) fn feather_pixel_bounds(
     if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
         return None;
     }
-    let radius = paint_feather * 1.5;
+    let mut radius = stroke.map_or(0.0, |(thickness, join, cap)| {
+        let stroke_radius = thickness * 0.5;
+        if join == StrokeJoin::Miter {
+            stroke_radius * 4.0
+        } else if cap == StrokeCap::Square {
+            stroke_radius * std::f32::consts::SQRT_2
+        } else {
+            stroke_radius
+        }
+    });
+    radius += paint_feather * 1.5;
     let [xx, yx, xy, yy, _, _] = transform.0;
     let outset_x = radius * (xx.abs() + xy.abs()) + 1.0;
     let outset_y = radius * (yx.abs() + yy.abs()) + 1.0;
@@ -1509,12 +1520,47 @@ mod tests {
         path.move_to(16.0, 16.0);
         path.line_to(48.0, 48.0);
         assert_eq!(
-            feather_pixel_bounds(&path, Mat2D::IDENTITY, 80.0),
+            feather_pixel_bounds(&path, Mat2D::IDENTITY, 80.0, None),
             Some([-105, -105, 169, 169])
         );
         assert_eq!(
-            feather_pixel_bounds(&path, Mat2D([2.0, 0.0, 0.0, 0.5, 10.0, -4.0]), 4.0),
+            feather_pixel_bounds(&path, Mat2D([2.0, 0.0, 0.0, 0.5, 10.0, -4.0]), 4.0, None,),
             Some([29, 0, 119, 24])
+        );
+    }
+
+    #[test]
+    fn feather_pixel_bounds_include_cpp_stroke_outsets() {
+        let mut path = RawPath::new();
+        path.move_to(16.0, 16.0);
+        path.line_to(48.0, 48.0);
+
+        assert_eq!(
+            feather_pixel_bounds(
+                &path,
+                Mat2D::IDENTITY,
+                4.0,
+                Some((10.0, StrokeJoin::Bevel, StrokeCap::Butt)),
+            ),
+            Some([4, 4, 60, 60])
+        );
+        assert_eq!(
+            feather_pixel_bounds(
+                &path,
+                Mat2D::IDENTITY,
+                4.0,
+                Some((10.0, StrokeJoin::Miter, StrokeCap::Butt)),
+            ),
+            Some([-11, -11, 75, 75])
+        );
+        assert_eq!(
+            feather_pixel_bounds(
+                &path,
+                Mat2D::IDENTITY,
+                4.0,
+                Some((10.0, StrokeJoin::Bevel, StrokeCap::Square)),
+            ),
+            Some([1, 1, 63, 63])
         );
     }
 

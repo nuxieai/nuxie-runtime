@@ -238,6 +238,7 @@ impl PatchVertex {
 pub(crate) const MIDPOINT_FAN_PATCH_SEGMENT_SPAN: usize = 8;
 pub(crate) const OUTER_CURVE_PATCH_SEGMENT_SPAN: usize = 17;
 pub(crate) const MIDPOINT_FAN_PATCH_VERTEX_COUNT: usize = 42;
+pub(crate) const MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT: usize = 48;
 pub(crate) const MIDPOINT_FAN_PATCH_INDEX_COUNT: usize = 72;
 pub(crate) const MIDPOINT_FAN_CENTER_AA_PATCH_VERTEX_COUNT: usize = 74;
 pub(crate) const MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT: usize = 120;

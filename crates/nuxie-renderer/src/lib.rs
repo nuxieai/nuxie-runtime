@@ -1624,6 +1624,22 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    // Keep these synchronized with tools/cpp-atlas-mask-oracle/runtime-src/main.cpp.
+    const ATLAS_ORACLE_SIZE: u32 = 64;
+    const ATLAS_ORACLE_SQUARE_MIN: f32 = 16.0;
+    const ATLAS_ORACLE_SQUARE_MAX: f32 = 48.0;
+    const ATLAS_ORACLE_STROKE_THICKNESS: f32 = 8.0;
+    const ATLAS_ORACLE_STROKE_JOIN: StrokeJoin = StrokeJoin::Miter;
+    const ATLAS_ORACLE_STROKE_CAP: StrokeCap = StrokeCap::Butt;
+    const ATLAS_ORACLE_FEATHER: f32 = 20.0;
+    const ATLAS_ORACLE_JOIN_PROBE: (usize, usize) = (8, 8);
+    const ATLAS_ORACLE_JOIN_MIN_COVERAGE: f32 = 0.5;
+    const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
+        atlas_mask_oracle::MaskComparisonTolerances {
+            support: 1.0 / 1024.0,
+            value: 1.0 / 512.0,
+        };
+
     #[test]
     fn oversized_atlas_layout_returns_renderer_error_before_wgpu() {
         let result = pack_atlas_for_device(1920, 2048, &[(1920, 100); 21]);
@@ -1984,18 +2000,25 @@ mod tests {
     }
 
     fn fixed_feather_atlas_mask() -> atlas_mask_oracle::AtlasMask {
-        let factory = WgpuFactory::new(64, 64).unwrap();
+        let factory = WgpuFactory::new(ATLAS_ORACLE_SIZE, ATLAS_ORACLE_SIZE).unwrap();
         let mut raw_path = RawPath::new();
-        raw_path.move_to(16.0, 16.0);
-        raw_path.line_to(48.0, 16.0);
-        raw_path.line_to(48.0, 48.0);
-        raw_path.line_to(16.0, 48.0);
+        raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MIN);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
-        let paint_feather = 80.0;
-        let atlas_scale = draw::feather_atlas_scale(paint_feather, Mat2D::IDENTITY);
-        let mut tessellation =
-            draw::build_feather_tessellation(&raw_path, Mat2D::IDENTITY, paint_feather, None)
-                .unwrap();
+        let atlas_scale = draw::feather_atlas_scale(ATLAS_ORACLE_FEATHER, Mat2D::IDENTITY);
+        let mut tessellation = draw::build_feather_atlas_tessellation(
+            &raw_path,
+            Mat2D::IDENTITY,
+            ATLAS_ORACLE_FEATHER,
+            Some((
+                ATLAS_ORACLE_STROKE_THICKNESS,
+                ATLAS_ORACLE_STROKE_JOIN,
+                ATLAS_ORACLE_STROKE_CAP,
+            )),
+        )
+        .unwrap();
         tessellation.path.atlas_transform = gpu::AtlasTransform {
             scale_factor: atlas_scale,
             translate_x: 0.0,
@@ -2007,13 +2030,16 @@ mod tests {
         let paths = [gpu::PathData::zeroed(), tessellation.path];
         let paints = [
             gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
-            gpu::PaintData::solid(0xffff_ffff, FillRule::NonZero, BlendMode::SrcOver),
+            gpu::PaintData::solid_stroke(0xffff_ffff, BlendMode::SrcOver),
         ];
         let paint_aux = [gpu::PaintAuxData::zeroed(); 2];
         let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
         let mut uniforms = analytic_uniforms(64, 64, tessellation_height);
-        uniforms.atlas_texture_inverse_size = [1.0 / 64.0; 2];
-        uniforms.atlas_content_inverse_viewport = [2.0 / 64.0, -2.0 / 64.0];
+        uniforms.atlas_texture_inverse_size = [1.0 / ATLAS_ORACLE_SIZE as f32; 2];
+        uniforms.atlas_content_inverse_viewport = [
+            2.0 / ATLAS_ORACLE_SIZE as f32,
+            -2.0 / ATLAS_ORACLE_SIZE as f32,
+        ];
         let mut encoder =
             factory
                 .context
@@ -2039,8 +2065,8 @@ mod tests {
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("nuxie-atlas-test-target"),
                 size: wgpu::Extent3d {
-                    width: 64,
-                    height: 64,
+                    width: ATLAS_ORACLE_SIZE,
+                    height: ATLAS_ORACLE_SIZE,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -2066,9 +2092,9 @@ mod tests {
             &tessellation.contours,
             tessellation.base_instance,
             tessellation.instance_count,
-            false,
             true,
-            [0, 0, 64, 64],
+            true,
+            [0, 0, ATLAS_ORACLE_SIZE, ATLAS_ORACLE_SIZE],
         );
         let bytes_per_row = 256;
         let readback = factory
@@ -2076,7 +2102,7 @@ mod tests {
             .device
             .create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atlas-test-readback"),
-                size: u64::from(bytes_per_row * 64),
+                size: u64::from(bytes_per_row * ATLAS_ORACLE_SIZE),
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             });
@@ -2087,7 +2113,7 @@ mod tests {
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(bytes_per_row),
-                    rows_per_image: Some(64),
+                    rows_per_image: Some(ATLAS_ORACLE_SIZE),
                 },
             },
             atlas.size(),
@@ -2105,9 +2131,10 @@ mod tests {
             .unwrap();
         receiver.recv().unwrap().unwrap();
         let mapped = slice.get_mapped_range().unwrap();
-        let mut pixels = Vec::with_capacity(64 * 64);
-        for y in 0..64usize {
-            let row = &mapped[y * bytes_per_row as usize..][..64 * 2];
+        let size = ATLAS_ORACLE_SIZE as usize;
+        let mut pixels = Vec::with_capacity(size * size);
+        for y in 0..size {
+            let row = &mapped[y * bytes_per_row as usize..][..size * 2];
             pixels.extend(
                 row.chunks_exact(2)
                     .map(|sample| u16::from_le_bytes(sample.try_into().unwrap())),
@@ -2115,27 +2142,46 @@ mod tests {
         }
         drop(mapped);
         readback.unmap();
-        atlas_mask_oracle::AtlasMask::new(64, 64, pixels).unwrap()
+        atlas_mask_oracle::AtlasMask::new(ATLAS_ORACLE_SIZE, ATLAS_ORACLE_SIZE, pixels).unwrap()
     }
 
     #[test]
-    fn feather_atlas_pass_writes_r16_mask_coverage() {
+    fn feather_atlas_stroke_pass_writes_r16_join_coverage() {
         let mask = fixed_feather_atlas_mask();
         let mask_value = |x: usize, y: usize| mask.sample_bits(x, y);
-        assert_eq!(mask_value(63, 63), 0);
-        let scaled_center = (32.0 * draw::feather_atlas_scale(80.0, Mat2D::IDENTITY)) as usize;
-        let nonzero = (0..64usize)
-            .flat_map(|y| (0..64usize).map(move |x| (x, y)))
+        let size = ATLAS_ORACLE_SIZE as usize;
+        assert_eq!(mask_value(size - 1, size - 1), 0);
+        let nonzero = (0..size)
+            .flat_map(|y| (0..size).map(move |x| (x, y)))
             .filter(|&(x, y)| mask_value(x, y) != 0 && mask_value(x, y) & 0x8000 == 0)
             .collect::<Vec<_>>();
+        assert!(!nonzero.is_empty(), "atlas stroke mask is empty");
+
+        let (join_x, join_y) = ATLAS_ORACLE_JOIN_PROBE;
+        let scaled_join = (ATLAS_ORACLE_SQUARE_MIN
+            * draw::feather_atlas_scale(ATLAS_ORACLE_FEATHER, Mat2D::IDENTITY))
+        .floor() as usize;
+        assert_eq!(ATLAS_ORACLE_JOIN_PROBE, (scaled_join, scaled_join));
+        let join_coverage = mask.sample_value(join_x, join_y);
         assert!(
-            !nonzero.is_empty(),
-            "scaled center={scaled_center}, atlas mask is empty"
+            join_coverage >= ATLAS_ORACLE_JOIN_MIN_COVERAGE,
+            "top-left miter join at ({join_x}, {join_y}) has weak coverage: {join_coverage}"
         );
-        assert!(
-            nonzero.contains(&(scaled_center, scaled_center)),
-            "{nonzero:?}"
-        );
+
+        let mut missing_join = mask.clone();
+        missing_join.set_sample_bits(join_x, join_y, 0);
+        assert!(matches!(
+            atlas_mask_oracle::compare_cpp_to_rust(
+                &mask,
+                &missing_join,
+                ATLAS_ORACLE_TOLERANCES,
+            ),
+            Err(atlas_mask_oracle::AtlasMaskComparisonError::Support {
+                x,
+                y,
+                ..
+            }) if (x, y) == ATLAS_ORACLE_JOIN_PROBE
+        ));
     }
 
     #[test]
@@ -2161,19 +2207,12 @@ mod tests {
             )
         });
         let rust_mask = fixed_feather_atlas_mask();
-        atlas_mask_oracle::compare_cpp_to_rust(
-            &cpp_mask,
-            &rust_mask,
-            atlas_mask_oracle::MaskComparisonTolerances {
-                support: 1.0 / 1024.0,
-                value: 1.0 / 512.0,
-            },
-        )
-        .unwrap_or_else(|error| {
-            panic!(
-                "C++ atlas-mask oracle mismatch at {}: {error}",
-                path.display()
-            )
-        });
+        atlas_mask_oracle::compare_cpp_to_rust(&cpp_mask, &rust_mask, ATLAS_ORACLE_TOLERANCES)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ atlas-mask oracle mismatch at {}: {error}",
+                    path.display()
+                )
+            });
     }
 }

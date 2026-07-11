@@ -90,16 +90,16 @@ impl AtlasMask {
         bytes
     }
 
-    pub(crate) fn width(&self) -> u32 {
-        self.width
-    }
-
-    pub(crate) fn height(&self) -> u32 {
-        self.height
-    }
-
     pub(crate) fn sample_bits(&self, x: usize, y: usize) -> u16 {
         self.samples[y * self.width as usize + x]
+    }
+
+    pub(crate) fn sample_value(&self, x: usize, y: usize) -> f32 {
+        f16_bits_to_f32(self.sample_bits(x, y))
+    }
+
+    pub(crate) fn set_sample_bits(&mut self, x: usize, y: usize, bits: u16) {
+        self.samples[y * self.width as usize + x] = bits;
     }
 }
 

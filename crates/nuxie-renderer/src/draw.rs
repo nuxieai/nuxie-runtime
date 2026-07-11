@@ -1,8 +1,9 @@
 //! CPU path preparation translated from `renderer/src/draw.cpp`.
 
 use crate::gpu::{
-    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan, CONTOUR_ID_MASK,
-    MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN, PARAMETRIC_PRECISION,
+    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan, TriangleVertex,
+    CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS,
+    MIDPOINT_FAN_PATCH_SEGMENT_SPAN, OUTER_CURVE_PATCH_SEGMENT_SPAN, PARAMETRIC_PRECISION,
 };
 use bytemuck::Zeroable;
 use nuxie_render_api::{Mat2D, PathVerb, RawPath, Vec2D};
@@ -19,6 +20,176 @@ pub(crate) struct FillTessellation {
     pub contours: Vec<ContourData>,
     pub base_instance: u32,
     pub instance_count: u32,
+}
+
+pub(crate) struct InteriorTessellation {
+    pub spans: Vec<TessVertexSpan>,
+    pub path: PathData,
+    pub contours: Vec<ContourData>,
+    pub triangles: Vec<TriangleVertex>,
+    pub base_instance: u32,
+    pub instance_count: u32,
+}
+
+pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
+    if path.verbs().len() >= 1000 || path.points().is_empty() {
+        return false;
+    }
+    let mut min = path.points()[0];
+    let mut max = min;
+    for point in &path.points()[1..] {
+        min.x = min.x.min(point.x);
+        min.y = min.y.min(point.y);
+        max.x = max.x.max(point.x);
+        max.y = max.y.max(point.y);
+    }
+    let [xx, yx, xy, yy, _, _] = transform.0;
+    let transformed_area = (xx * yy - xy * yx).abs() * (max.x - min.x) * (max.y - min.y);
+    transformed_area > 512.0 * 512.0
+}
+
+pub(crate) fn build_interior_tessellation(
+    path: &RawPath,
+    transform: Mat2D,
+) -> Option<InteriorTessellation> {
+    let cubic_contours = cubic_contours(path)
+        .into_iter()
+        .map(|curves| {
+            curves
+                .into_iter()
+                .flat_map(|curve| {
+                    let subdivision_count = outer_cubic_subdivision_count(curve, transform);
+                    subdivide_cubic(curve, subdivision_count)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    if cubic_contours.is_empty() {
+        return None;
+    }
+    let base = OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+    let curve_count = cubic_contours.iter().map(Vec::len).sum::<usize>();
+    let half_vertex_count = (curve_count * OUTER_CURVE_PATCH_SEGMENT_SPAN) as i32;
+    let mut spans = Vec::with_capacity(curve_count + 1);
+    push_padding_span(&mut spans, 0, base);
+    let mut contours = Vec::with_capacity(cubic_contours.len());
+    let mut triangles = Vec::new();
+    let mut curve_offset = 0i32;
+    for (contour_index, curves) in cubic_contours.iter().enumerate() {
+        let points = curves.iter().map(|curve| curve[0]).collect::<Vec<_>>();
+        let indices = triangulate_contour(&points)?;
+        let transformed = points
+            .iter()
+            .copied()
+            .map(|point| transform.transform_point(point))
+            .collect::<Vec<_>>();
+        let winding = if signed_area(&transformed) >= 0.0 {
+            -1
+        } else {
+            1
+        };
+        triangles.extend(indices.into_iter().map(|index| {
+            let point = points[index as usize];
+            TriangleVertex::new([point.x, point.y], winding, 1)
+        }));
+        contours.push(ContourData::new(
+            [0.0, 0.0],
+            1,
+            (base + half_vertex_count + curve_offset) as u32,
+        ));
+        for curve in curves {
+            let reflection_x0 = base + half_vertex_count - curve_offset;
+            let reflection_x1 = reflection_x0 - OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+            let x0 = base + half_vertex_count + curve_offset;
+            let x1 = x0 + OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+            let mut span = TessVertexSpan::without_reflection(
+                curve.map(|point| [point.x, point.y]),
+                [0.0, 0.0],
+                0.0,
+                x0,
+                x1,
+                16,
+                1,
+                1,
+                ((contour_index as u32 + 1) & CONTOUR_ID_MASK)
+                    | CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
+            );
+            span.set_ranges(x0, x1, reflection_x0, reflection_x1, 0.0);
+            spans.push(span);
+            curve_offset += OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+        }
+    }
+    Some(InteriorTessellation {
+        spans,
+        path: PathData::new(
+            transform,
+            0.0,
+            0.0,
+            0,
+            AtlasTransform::zeroed(),
+            CoverageBufferRange::zeroed(),
+        ),
+        contours,
+        triangles,
+        base_instance: 1,
+        instance_count: (curve_count * 2) as u32,
+    })
+}
+
+fn outer_cubic_subdivision_count(points: [Vec2D; 4], transform: Mat2D) -> u32 {
+    let [xx, yx, xy, yy, _, _] = transform.0;
+    let transformed_second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
+        let x = a.x - 2.0 * b.x + c.x;
+        let y = a.y - 2.0 * b.y + c.y;
+        let transformed_x = xx * x + xy * y;
+        let transformed_y = yx * x + yy * y;
+        transformed_x * transformed_x + transformed_y * transformed_y
+    };
+    let max_length_squared = transformed_second_difference(points[0], points[1], points[2]).max(
+        transformed_second_difference(points[1], points[2], points[3]),
+    );
+    let length_term_squared = (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
+    let wang_segments = (max_length_squared * length_term_squared).sqrt().sqrt();
+    (wang_segments / 16.0)
+        .ceil()
+        .clamp(1.0, MAX_PARAMETRIC_SEGMENTS.div_ceil(16) as f32) as u32
+}
+
+fn subdivide_cubic(mut curve: [Vec2D; 4], subdivision_count: u32) -> Vec<[Vec2D; 4]> {
+    let mut result = Vec::with_capacity(subdivision_count as usize);
+    let mut remaining = subdivision_count;
+    while remaining >= 3 {
+        let t0 = 1.0 / remaining as f32;
+        let t1 = 2.0 / remaining as f32;
+        let ab0 = lerp(curve[0], curve[1], t0);
+        let bc0 = lerp(curve[1], curve[2], t0);
+        let cd0 = lerp(curve[2], curve[3], t0);
+        let abc0 = lerp(ab0, bc0, t0);
+        let bcd0 = lerp(bc0, cd0, t0);
+        let split0 = lerp(abc0, bcd0, t0);
+        let ab1 = lerp(curve[0], curve[1], t1);
+        let bc1 = lerp(curve[1], curve[2], t1);
+        let cd1 = lerp(curve[2], curve[3], t1);
+        let abc1 = lerp(ab1, bc1, t1);
+        let bcd1 = lerp(bc1, cd1, t1);
+        let split1 = lerp(abc1, bcd1, t1);
+        result.push([curve[0], ab0, abc0, split0]);
+        result.push([split0, lerp(abc0, bcd0, t1), lerp(abc1, bcd1, t0), split1]);
+        curve = [split1, bcd1, cd1, curve[3]];
+        remaining -= 2;
+    }
+    if remaining == 2 {
+        let ab = lerp(curve[0], curve[1], 0.5);
+        let bc = lerp(curve[1], curve[2], 0.5);
+        let cd = lerp(curve[2], curve[3], 0.5);
+        let abc = lerp(ab, bc, 0.5);
+        let bcd = lerp(bc, cd, 0.5);
+        let split = lerp(abc, bcd, 0.5);
+        result.push([curve[0], ab, abc, split]);
+        curve = [split, bcd, cd, curve[3]];
+    }
+    result.push(curve);
+    result
 }
 
 impl FillTessellation {
@@ -529,5 +700,56 @@ mod tests {
         assert_eq!(tessellation.contours[0].vertex_index0, 16);
         assert_eq!(tessellation.spans[1].x_range(), (16, 20));
         assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x000c_0010);
+    }
+
+    #[test]
+    fn interior_layout_emits_outer_patches_and_weighted_triangles() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(100.0, 0.0);
+        path.line_to(100.0, 100.0);
+        path.line_to(0.0, 100.0);
+        path.close();
+        let tessellation = build_interior_tessellation(&path, Mat2D::IDENTITY).unwrap();
+        assert_eq!(tessellation.spans.len(), 5);
+        assert_eq!(tessellation.base_instance, 1);
+        assert_eq!(tessellation.instance_count, 8);
+        assert_eq!(tessellation.triangles.len(), 6);
+        assert_eq!(tessellation.triangles[0].weight_path_id >> 16, -1);
+        assert_eq!(tessellation.triangles[0].weight_path_id as u16, 1);
+        assert_eq!(tessellation.contours[0].vertex_index0, 85);
+        assert_eq!(
+            tessellation.spans[1].contour_id_with_flags,
+            CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG | 1
+        );
+    }
+
+    #[test]
+    fn interior_selection_matches_upstream_area_threshold() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(512.0, 0.0);
+        path.line_to(512.0, 512.0);
+        path.close();
+        assert!(!should_use_interior_tessellation(&path, Mat2D::IDENTITY));
+        assert!(should_use_interior_tessellation(
+            &path,
+            Mat2D([1.01, 0.0, 0.0, 1.0, 0.0, 0.0])
+        ));
+    }
+
+    #[test]
+    fn interior_layout_chops_large_cubics_into_outer_patches() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.cubic_to(0.0, 100.0, 100.0, 100.0, 100.0, 0.0);
+        path.close();
+        let tessellation =
+            build_interior_tessellation(&path, Mat2D([100.0, 0.0, 0.0, 100.0, 0.0, 0.0])).unwrap();
+        assert!(tessellation.spans.len() > 3);
+        assert_eq!(
+            tessellation.instance_count as usize,
+            (tessellation.spans.len() - 1) * 2
+        );
     }
 }

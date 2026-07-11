@@ -244,6 +244,7 @@ pub(crate) const OUTER_CURVE_PATCH_INDEX_COUNT: usize = 249;
 pub(crate) const PATCH_VERTEX_BUFFER_COUNT: usize = 269;
 pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize = 441;
 pub(crate) const CONTOUR_ID_MASK: u32 = 0xffff;
+pub(crate) const CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG: u32 = 1 << 29;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PatchType {
@@ -567,6 +568,18 @@ pub(crate) struct TriangleVertex {
 }
 
 impl TriangleVertex {
+    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: 0,
+                shader_location: 0,
+            }],
+        }
+    }
+
     pub(crate) const fn new(point: [f32; 2], weight: i16, path_id: u16) -> Self {
         Self {
             point,

@@ -697,23 +697,66 @@ impl WgpuFrame {
             let padded_width = align_to(self.width, 32);
             let padded_height = align_to(self.height, 32);
             for draw in &self.draws {
-                let mut tessellation =
-                    draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                        .expect("atomic eligibility already validated tessellation");
-                tessellation.make_double_sided();
-                tessellation.contours[0].path_id = 1;
-                tessellation.path.coverage_buffer_range.pitch = padded_width;
+                let (
+                    spans,
+                    mut path,
+                    mut contours,
+                    base_instance,
+                    instance_count,
+                    patch_index_range,
+                    triangles,
+                ) = if draw::should_use_interior_tessellation(
+                    &draw.path.raw_path,
+                    draw.state.transform,
+                ) {
+                    let tessellation = draw::build_interior_tessellation(
+                        &draw.path.raw_path,
+                        draw.state.transform,
+                    )
+                    .expect("atomic eligibility already validated tessellation");
+                    (
+                        tessellation.spans,
+                        tessellation.path,
+                        tessellation.contours,
+                        tessellation.base_instance,
+                        tessellation.instance_count,
+                        (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                            + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                            as u32
+                            ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT
+                                + gpu::OUTER_CURVE_PATCH_INDEX_COUNT)
+                                as u32,
+                        tessellation.triangles,
+                    )
+                } else {
+                    let mut tessellation =
+                        draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                            .expect("atomic eligibility already validated tessellation");
+                    tessellation.make_double_sided();
+                    (
+                        tessellation.spans,
+                        tessellation.path,
+                        tessellation.contours,
+                        tessellation.base_instance,
+                        tessellation.instance_count,
+                        0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                        Vec::new(),
+                    )
+                };
+                contours[0].path_id = 1;
+                path.coverage_buffer_range.pitch = padded_width;
                 let mut uniforms = analytic_uniforms(self.width, self.height, 1);
                 uniforms.render_target_update_bounds =
                     [0, 0, self.width as i32, self.height as i32];
-                let paths = [gpu::PathData::zeroed(), tessellation.path];
+                let paths = [gpu::PathData::zeroed(), path];
                 let tessellation_texture = self.context.tessellator.encode(
                     &self.context.device,
                     &mut encoder,
-                    &tessellation.spans,
+                    &spans,
                     &uniforms,
                     &paths,
-                    &tessellation.contours,
+                    &contours,
                     1,
                 );
                 let tessellation_view =
@@ -737,9 +780,11 @@ impl WgpuFrame {
                     &paths,
                     &paints,
                     &[gpu::PaintAuxData::zeroed(); 2],
-                    &tessellation.contours,
-                    tessellation.base_instance,
-                    tessellation.instance_count,
+                    &contours,
+                    base_instance,
+                    instance_count,
+                    patch_index_range,
+                    &triangles,
                     padded_width as usize * padded_height as usize,
                 );
             }

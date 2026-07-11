@@ -124,3 +124,9 @@ Run `make renderer-golden`.
   `convex_lineonly_ths` to 14, promoting both and moving exact to 9. The prior
   solid-fill passes improved to 0-2 pixels. `batchedtriangulations` remains a
   named interior-triangulation gap at 2,136 pixels.
+- 2026-07-11: Ported clockwise-atomic interior triangulation for large fills:
+  the C++ area/verb selector, fixed outer-curve patches, Wang-based cubic
+  chopping, excess-segment culling, weighted interior triangles, and generated
+  atomic interior shaders. Negating triangulator winding to Rive's coverage
+  convention reduced `batchedtriangulations` from 2,136 differing pixels (max
+  delta 48) to 17 (max delta 9), promoting it and moving exact to 10.

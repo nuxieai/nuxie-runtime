@@ -26,10 +26,14 @@ local include_dirs = {
     '/usr/include',
 }
 
-local harfbuzz = first_dir(dep_cache .. '/*/harfbuzz-*/src')
-local sheenbidi = first_dir(dep_cache .. '/*/SheenBidi-*/Headers')
-local yoga = first_dir(dep_cache .. '/*/yoga-*')
-local miniaudio = first_dir(dep_cache .. '/*/miniaudio-*')
+local harfbuzz = first_dir(rive_runtime .. '/dependencies/rive-app_harfbuzz_*/src') or
+    first_dir(dep_cache .. '/*/harfbuzz-*/src')
+local sheenbidi = first_dir(rive_runtime .. '/dependencies/Tehreer_SheenBidi_*/Headers') or
+    first_dir(dep_cache .. '/*/SheenBidi-*/Headers')
+local yoga = first_dir(rive_runtime .. '/dependencies/rive-app_yoga_*') or
+    first_dir(dep_cache .. '/*/yoga-*')
+local miniaudio = first_dir(rive_runtime .. '/dependencies/rive-app_miniaudio_*') or
+    first_dir(dep_cache .. '/*/miniaudio-*')
 local luau = first_dir(rive_runtime .. '/dependencies/luigi-rosso_luau_*')
 local libhydrogen = first_dir(rive_runtime .. '/dependencies/luigi-rosso_libhydrogen_*')
 

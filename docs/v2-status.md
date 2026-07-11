@@ -3842,6 +3842,21 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-10: [M8] Matched C++ paint-owned render-path identity for shape
+  effects. Ordinary paints still share their container path, while effect and
+  feather paths now bypass command-based path-slot deduplication and retain
+  paint-local identity. In `data_viz_demo.riv`, the Pie Chart's second stroke
+  now allocates path 12 like C++, and the subsequent effect paths retain exact
+  allocation order through path 22. The first mismatch advances to a separate
+  text outline at paint 431: Rust emits 161 verbs / 369 points while C++ emits
+  259 verbs / 616 points, with the first 136 verbs shared. This triggers the
+  behavior-family stop rule: do not continue changing path caches; next trace
+  that text's live value from its scripted binding source. `cargo test
+  --workspace`, scripted compare, regular compare, formatting, and diff checks
+  pass. Metrics remain scripted exact=25 / exact-segments=33 / diverges=1 /
+  unsupported-feature=1 and regular exact=263 / exact-segments=584 /
+  diverges=26 / unsupported-feature=6.
+
 - 2026-07-10: [M8] Ported converter-owned context propagation exercised by
   `data_viz_demo.riv`. Formula-token bindings retain their established
   file-wide runtime construction but now carry converter-graph reachability

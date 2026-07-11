@@ -8688,6 +8688,7 @@ fn runtime_draw_command(
         // layout paints.
         let draw_path_cache_local = foreground_layout_path_cache_local
             .filter(|_| !paint.has_effect_path && paint.feather_state.is_none())
+            .or_else(|| paint.has_effect_path.then_some(paint.paint_local))
             .or(command.local_id);
         let inner_feather_path_cache_local = if paint
             .feather_state

@@ -74,3 +74,7 @@ Run `make renderer-golden`.
   fills. The `oval` probe's topology is correct; its remaining 3,136-pixel,
   max-delta-73 difference is confined to flattened cubic edge coverage, so it
   stays gated pending analytic patches.
+- 2026-07-11: Ported `gpu.cpp`'s immutable analytic patch-buffer generator,
+  including mirrored border diagonals and middle-out fan indices. Its 269
+  vertices and 441 indices are invariant-tested and now uploaded once per wgpu
+  context for the forthcoming tessellation/draw passes.

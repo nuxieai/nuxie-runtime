@@ -42,6 +42,8 @@ struct Context {
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
     cover_pipeline: wgpu::RenderPipeline,
+    _patch_vertex_buffer: wgpu::Buffer,
+    _patch_index_buffer: wgpu::Buffer,
 }
 
 pub struct WgpuFactory {
@@ -177,6 +179,17 @@ impl WgpuFactory {
             }),
             Some(stencil_state(cover_stencil_face, cover_stencil_face)),
         ));
+        let (patch_vertices, patch_indices) = gpu::generate_patch_buffer_data();
+        let patch_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("nuxie-patch-vertices"),
+            contents: bytemuck::cast_slice(&patch_vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let patch_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("nuxie-patch-indices"),
+            contents: bytemuck::cast_slice(&patch_indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
         Ok(Self {
             context: Arc::new(Context {
                 device,
@@ -184,6 +197,8 @@ impl WgpuFactory {
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
                 cover_pipeline,
+                _patch_vertex_buffer: patch_vertex_buffer,
+                _patch_index_buffer: patch_index_buffer,
             }),
             width,
             height,

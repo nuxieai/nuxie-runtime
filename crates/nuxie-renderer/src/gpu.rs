@@ -168,6 +168,184 @@ impl PatchVertex {
     }
 }
 
+pub(crate) const MIDPOINT_FAN_PATCH_SEGMENT_SPAN: usize = 8;
+pub(crate) const OUTER_CURVE_PATCH_SEGMENT_SPAN: usize = 17;
+pub(crate) const MIDPOINT_FAN_PATCH_VERTEX_COUNT: usize = 42;
+pub(crate) const MIDPOINT_FAN_PATCH_INDEX_COUNT: usize = 72;
+pub(crate) const MIDPOINT_FAN_CENTER_AA_PATCH_VERTEX_COUNT: usize = 74;
+pub(crate) const MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT: usize = 120;
+pub(crate) const OUTER_CURVE_PATCH_VERTEX_COUNT: usize = 153;
+pub(crate) const OUTER_CURVE_PATCH_INDEX_COUNT: usize = 249;
+pub(crate) const PATCH_VERTEX_BUFFER_COUNT: usize = 269;
+pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize = 441;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatchType {
+    MidpointFan,
+    MidpointFanCenterAa,
+    OuterCurves,
+}
+
+pub(crate) fn generate_patch_buffer_data() -> (Vec<PatchVertex>, Vec<u16>) {
+    let mut vertices = Vec::with_capacity(PATCH_VERTEX_BUFFER_COUNT);
+    let mut indices = Vec::with_capacity(PATCH_INDEX_BUFFER_COUNT);
+    generate_patch(PatchType::MidpointFan, &mut vertices, &mut indices);
+    generate_patch(PatchType::MidpointFanCenterAa, &mut vertices, &mut indices);
+    generate_patch(PatchType::OuterCurves, &mut vertices, &mut indices);
+    debug_assert_eq!(vertices.len(), PATCH_VERTEX_BUFFER_COUNT);
+    debug_assert_eq!(indices.len(), PATCH_INDEX_BUFFER_COUNT);
+    (vertices, indices)
+}
+
+fn generate_patch(patch_type: PatchType, vertices: &mut Vec<PatchVertex>, indices: &mut Vec<u16>) {
+    const STROKE_VERTEX: i32 = 0;
+    const FAN_VERTEX: i32 = 1;
+    const FAN_MIDPOINT_VERTEX: i32 = 2;
+    let base_vertex = vertices.len() as u16;
+    let base_index = indices.len();
+    let segment_span = if patch_type == PatchType::OuterCurves {
+        OUTER_CURVE_PATCH_SEGMENT_SPAN
+    } else {
+        MIDPOINT_FAN_PATCH_SEGMENT_SPAN
+    };
+    let params = |vertex_type| ((segment_span as i32) << 2) | vertex_type;
+
+    for segment in 0..segment_span {
+        let left = segment as f32;
+        let right = left + 1.0;
+        let start = vertices.len();
+        match patch_type {
+            PatchType::OuterCurves | PatchType::MidpointFanCenterAa => {
+                vertices.extend([
+                    PatchVertex::new(left, 0.0, 0.5, params(STROKE_VERTEX)),
+                    PatchVertex::new(left, 1.0, 0.0, params(STROKE_VERTEX)),
+                    PatchVertex::new(right, 0.0, 0.5, params(STROKE_VERTEX)),
+                    PatchVertex::new(right, 1.0, 0.0, params(STROKE_VERTEX)),
+                ]);
+                let shift = if patch_type == PatchType::OuterCurves {
+                    0.0
+                } else {
+                    -1.0
+                };
+                vertices[start].set_mirrored_position(right + shift, 0.0, 0.5);
+                vertices[start + 1].set_mirrored_position(left + shift, 0.0, 0.5);
+                vertices[start + 2].set_mirrored_position(right + shift, 1.0, 0.0);
+                vertices[start + 3].set_mirrored_position(left + shift, 1.0, 0.0);
+            }
+            PatchType::MidpointFan => {
+                vertices.extend([
+                    PatchVertex::new(left, -1.0, 1.0, params(STROKE_VERTEX)),
+                    PatchVertex::new(left, 1.0, 0.0, params(STROKE_VERTEX)),
+                    PatchVertex::new(right, -1.0, 1.0, params(STROKE_VERTEX)),
+                    PatchVertex::new(right, 1.0, 0.0, params(STROKE_VERTEX)),
+                ]);
+                vertices[start].set_mirrored_position(right - 1.0, -1.0, 1.0);
+                vertices[start + 1].set_mirrored_position(left - 1.0, -1.0, 1.0);
+                vertices[start + 2].set_mirrored_position(right - 1.0, 1.0, 0.0);
+                vertices[start + 3].set_mirrored_position(left - 1.0, 1.0, 0.0);
+            }
+        }
+    }
+
+    if patch_type != PatchType::MidpointFan {
+        for segment in 0..segment_span {
+            let left = segment as f32;
+            let right = left + 1.0;
+            let start = vertices.len();
+            vertices.extend([
+                PatchVertex::new(left, -0.0, 0.5, params(STROKE_VERTEX)),
+                PatchVertex::new(right, -0.0, 0.5, params(STROKE_VERTEX)),
+                PatchVertex::new(left, -1.0, 0.0, params(STROKE_VERTEX)),
+                PatchVertex::new(right, -1.0, 0.0, params(STROKE_VERTEX)),
+            ]);
+            let shift = if patch_type == PatchType::OuterCurves {
+                0.0
+            } else {
+                -1.0
+            };
+            vertices[start].set_mirrored_position(right + shift, -0.0, 0.5);
+            vertices[start + 1].set_mirrored_position(right + shift, -1.0, 0.0);
+            vertices[start + 2].set_mirrored_position(left + shift, -0.0, 0.5);
+            vertices[start + 3].set_mirrored_position(left + shift, -1.0, 0.0);
+        }
+    }
+
+    let fan_vertices = vertices.len() as u16;
+    let fan_segment_span = if patch_type == PatchType::OuterCurves {
+        segment_span - 1
+    } else {
+        segment_span
+    };
+    for segment in 0..=fan_segment_span {
+        let local_id = segment as f32;
+        let outset = if patch_type == PatchType::MidpointFan {
+            -1.0
+        } else {
+            0.0
+        };
+        let mut vertex = PatchVertex::new(local_id, outset, 1.0, params(FAN_VERTEX));
+        if patch_type != PatchType::OuterCurves {
+            vertex.set_mirrored_position(local_id - 1.0, outset, 1.0);
+        }
+        vertices.push(vertex);
+    }
+    let midpoint = vertices.len() as u16;
+    if patch_type != PatchType::OuterCurves {
+        vertices.push(PatchVertex::new(0.0, 0.0, 1.0, params(FAN_MIDPOINT_VERTEX)));
+    }
+
+    const BORDER: [u16; 6] = [0, 1, 2, 2, 1, 3];
+    const NEGATIVE_BORDER: [u16; 6] = [0, 2, 1, 1, 2, 3];
+    let mut edge_vertex = base_vertex;
+    for _ in 0..segment_span {
+        indices.extend(BORDER.map(|index| edge_vertex + index));
+        edge_vertex += 4;
+    }
+    if patch_type != PatchType::MidpointFan {
+        for _ in 0..segment_span {
+            indices.extend(NEGATIVE_BORDER.map(|index| edge_vertex + index));
+            edge_vertex += 4;
+        }
+    }
+    debug_assert_eq!(edge_vertex, fan_vertices);
+
+    let mut step = 1;
+    while step < fan_segment_span {
+        for segment in (0..fan_segment_span).step_by(step * 2) {
+            indices.extend([
+                fan_vertices + segment as u16,
+                fan_vertices + (segment + step) as u16,
+                fan_vertices + (segment + step * 2) as u16,
+            ]);
+        }
+        step *= 2;
+    }
+    if patch_type != PatchType::OuterCurves {
+        indices.extend([
+            fan_vertices,
+            fan_vertices + fan_segment_span as u16,
+            midpoint,
+        ]);
+    }
+
+    let expected = match patch_type {
+        PatchType::MidpointFan => (
+            MIDPOINT_FAN_PATCH_VERTEX_COUNT,
+            MIDPOINT_FAN_PATCH_INDEX_COUNT,
+        ),
+        PatchType::MidpointFanCenterAa => (
+            MIDPOINT_FAN_CENTER_AA_PATCH_VERTEX_COUNT,
+            MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT,
+        ),
+        PatchType::OuterCurves => (
+            OUTER_CURVE_PATCH_VERTEX_COUNT,
+            OUTER_CURVE_PATCH_INDEX_COUNT,
+        ),
+    };
+    debug_assert_eq!(vertices.len() - base_vertex as usize, expected.0);
+    debug_assert_eq!(indices.len() - base_index, expected.1);
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DrawType {
@@ -439,5 +617,22 @@ mod tests {
         assert_eq!(patch.mirrored_vertex_id, 0.0);
         assert_eq!(patch.mirrored_outset, -2.0);
         assert_eq!(patch.mirrored_fill_coverage, -0.5);
+    }
+
+    #[test]
+    fn patch_buffers_match_cpp_counts_and_topology() {
+        let (vertices, indices) = generate_patch_buffer_data();
+        assert_eq!(vertices.len(), PATCH_VERTEX_BUFFER_COUNT);
+        assert_eq!(indices.len(), PATCH_INDEX_BUFFER_COUNT);
+        assert_eq!(&indices[..6], &[0, 1, 2, 2, 1, 3]);
+        assert_eq!(
+            indices[MIDPOINT_FAN_PATCH_INDEX_COUNT - 3..MIDPOINT_FAN_PATCH_INDEX_COUNT],
+            [32, 40, 41]
+        );
+        assert_eq!(
+            indices[MIDPOINT_FAN_PATCH_INDEX_COUNT..][..6],
+            [42, 43, 44, 44, 43, 45]
+        );
+        assert!(indices.iter().all(|index| *index < vertices.len() as u16));
     }
 }

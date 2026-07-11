@@ -665,15 +665,20 @@ the only memory the next session has. Update it every commit.
         Its four reused circle-path lines are structurally identical with a
         maximum local-space cancellation delta of 0.0002442, accepted by a
         0.00025 tolerance; the byte-identical transform reduces that to about
-        9.5e-6 in world space. All previously runnable scripted entries remain
-        exact. Component-list instancing now retains ordered list-item
+        9.5e-6 in world space. All scripted entries are now exact.
+        Component-list instancing retains ordered list-item
         contexts, maps each item to a persistent child artboard/state machine,
         advances those children, and renders the formerly fenced fixture with
-        the same 182-line draw envelope as C++.
-        `script_create_viewmodel_instance.riv` is promoted from unsupported to
-        the runnable divergence lane; its remaining structural mismatch is
-        four child-paint allocations that occur during item draw instead of
-        before `sample seconds=0`.
+        the same 182-line draw envelope as C++. Dependency-order preparation
+        allocates item paints before `sample seconds=0`, making
+        `script_create_viewmodel_instance.riv` scripted-exact and raising the
+        scripted summary to `exact=27`, `exact-segments=35`, `diverges=0`,
+        `unsupported-feature=0`. Rechecking the two convention residuals,
+        `data_viz_demo.riv` and `data_binding_artboards_test.riv`, confirms both
+        remain scripted-exact. The instance-0 decision is therefore closed
+        without changing the coordinated blank-default runner convention:
+        live component-list instancing resolved the cited gap directly, while
+        named instance 0 previously regressed 48 exact entries.
     (b) C ABI COMPLETE: pointer events, owned view-model contexts, explicit
         cache-holding draw with instance affinity and balanced handle release,
         and the recorded default-SM rule (authored default, else first) are
@@ -688,9 +693,8 @@ the only memory the next session has. Update it every commit.
         README positioning, MIT license/third-party notices, and checksum-pinned
         upstream fixture fetching are complete; only four project-generated
         malformed fuzz reproducers remain tracked as `.riv` files. Remaining:
-        close component-list allocation-order parity, then perform the final
-        history rewrite after the user confirms email and destructive
-        force-push authorization.
+        perform the final history rewrite after the user confirms email and
+        destructive force-push authorization.
     Phase R remains gated on explicit user activation; its map now also
     records a Bun-style big-bang execution option to choose at
     activation.
@@ -1008,18 +1012,16 @@ the only memory the next session has. Update it every commit.
     caveat-doc removal in capi-vm surfaces, warn burn-down, and the
     Nuxie rename sweep LAST (map item 26/#V2-9.5).
 
-30. M8 SCOPE ADDITION (user decision 2026-07-10; map #V2-9 item 4b):
-    port ArtboardComponentList runtime instancing — per-item artboard
+30. M8 SCOPE ADDITION COMPLETE (user decision 2026-07-10; map #V2-9 item 4b):
+    ArtboardComponentList runtime instancing now provides per-item artboard
     instances, item VM context binding, map rules, list layout, draw
-    (virtualization as far as acceptance needs). Last unported runtime
-    feature; paywall-core. Acceptance: script_create_viewmodel_instance
-    scripted-exact, retiring scripted-rust-runner-unsupported:
-    component-list-instancing; then revisit the instance-0 convention
-    reopen condition (Decision, item 8) which cited exactly this
-    feature. C++ sources: src/artboard_component_list.cpp,
-    artboard_list_map_rule.cpp; static projection already in
-    nuxie-graph. Schedule before the licensing/history-rewrite finale
-    so the release ships with zero unported runtime features.
+    (including the acceptance-needed list inset), persistent child caches, and
+    dependency-order paint preparation. `script_create_viewmodel_instance`
+    is scripted-exact and its diagnostic is retired. The two cited residuals
+    remain scripted-exact, so the reopened instance-0 decision keeps the
+    blank-default runner convention. C++ sources: src/artboard_component_list.cpp
+    and artboard_list_map_rule.cpp. This closes the last unported runtime
+    feature before the licensing/history-rewrite finale.
 
 ## Known Divergences
 

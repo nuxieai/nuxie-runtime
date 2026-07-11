@@ -367,7 +367,7 @@ raised from "corpus-verified" to "hardened."
 4. **Residuals:** drain or explicitly re-gate the remaining `harness` bucket;
    the two view-model-convention residuals stay gated on component-list
    instancing per the recorded decision.
-4b. **Component-list instancing (added 2026-07-10 by user decision).** Port
+4b. **Component-list instancing COMPLETE (added 2026-07-10 by user decision).** Port
    `ArtboardComponentList` runtime behavior — per-item artboard instancing,
    item view-model context binding, map-rule selection, list layout, and the
    draw path (virtualization to the extent the corpus/acceptance file needs

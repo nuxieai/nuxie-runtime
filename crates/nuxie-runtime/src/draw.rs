@@ -1344,6 +1344,22 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
+        for command in commands {
+            if command.object_kind != RuntimeDrawCommandObjectKind::ArtboardComponentList {
+                continue;
+            }
+            self.prepare_static_component_list_paints(
+                runtime,
+                artboards,
+                factory,
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
+                command,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )?;
+        }
+
         let mut nested_command_by_local = Vec::new();
         for command in commands {
             if command.referenced_artboard_global.is_none()

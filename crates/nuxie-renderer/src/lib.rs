@@ -54,7 +54,6 @@ struct Context {
     path_pipeline: path_pipeline::PathPipeline,
     atomic_pipeline: atomic_pipeline::AtomicPipeline,
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
-    #[allow(dead_code)]
     composite_pipeline: composite_pipeline::CompositePipeline,
     feather_lut: feather_lut::FeatherLut,
 }
@@ -1223,66 +1222,109 @@ impl WgpuFrame {
             }
         }
         if !used_atomic {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("nuxie-solid-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &multisample_view,
+            let fallback_texture = self
+                .context
+                .device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("nuxie-fallback-resolve-target"),
+                    size: texture.size(),
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                });
+            let fallback_view = fallback_texture.create_view(&Default::default());
+            {
+                let attachments = [Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
                     depth_slice: None,
-                    resolve_target: Some(&view),
+                    resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(color(self.clear_color)),
                         store: wgpu::StoreOp::Store,
                     },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &stencil_view,
-                    depth_ops: None,
-                    stencil_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0),
-                        store: wgpu::StoreOp::Discard,
+                })];
+                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nuxie-fallback-frame-clear"),
+                    color_attachments: &attachments,
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+            }
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nuxie-solid-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &multisample_view,
+                        depth_slice: None,
+                        resolve_target: Some(&fallback_view),
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &stencil_view,
+                        depth_ops: None,
+                        stencil_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0),
+                            store: wgpu::StoreOp::Discard,
+                        }),
                     }),
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_stencil_reference(0);
-            for prepared in &prepared_draws {
-                match prepared {
-                    PreparedDraw::Analytic(draw) => {
-                        pass.set_pipeline(&self.context.path_pipeline.pipeline);
-                        pass.set_bind_group(0, &draw.flush_group, &[]);
-                        pass.set_bind_group(1, &draw.image_group, &[]);
-                        pass.set_bind_group(3, &draw.sampler_group, &[]);
-                        pass.set_vertex_buffer(0, self.context.patch_vertex_buffer.slice(..));
-                        pass.set_index_buffer(
-                            self.context.patch_index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
-                        pass.draw_indexed(
-                            0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
-                            0,
-                            draw.base_instance..draw.base_instance + draw.instance_count,
-                        );
-                    }
-                    PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
-                        pass.set_pipeline(match fill_rule {
-                            FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
-                            FillRule::NonZero | FillRule::Clockwise => {
-                                &self.context.non_zero_stencil_pipeline
-                            }
-                        });
-                        pass.set_vertex_buffer(0, path_buffer.slice(..));
-                        pass.draw(
-                            0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64) as u32,
-                            0..1,
-                        );
-                        pass.set_pipeline(&self.context.cover_pipeline);
-                        pass.set_vertex_buffer(0, cover_buffer.slice(..));
-                        pass.draw(0..6, 0..1);
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_stencil_reference(0);
+                for prepared in &prepared_draws {
+                    match prepared {
+                        PreparedDraw::Analytic(draw) => {
+                            pass.set_pipeline(&self.context.path_pipeline.pipeline);
+                            pass.set_bind_group(0, &draw.flush_group, &[]);
+                            pass.set_bind_group(1, &draw.image_group, &[]);
+                            pass.set_bind_group(3, &draw.sampler_group, &[]);
+                            pass.set_vertex_buffer(0, self.context.patch_vertex_buffer.slice(..));
+                            pass.set_index_buffer(
+                                self.context.patch_index_buffer.slice(..),
+                                wgpu::IndexFormat::Uint16,
+                            );
+                            pass.draw_indexed(
+                                0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                                0,
+                                draw.base_instance..draw.base_instance + draw.instance_count,
+                            );
+                        }
+                        PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
+                            pass.set_pipeline(match fill_rule {
+                                FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
+                                FillRule::NonZero | FillRule::Clockwise => {
+                                    &self.context.non_zero_stencil_pipeline
+                                }
+                            });
+                            pass.set_vertex_buffer(0, path_buffer.slice(..));
+                            pass.draw(
+                                0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64)
+                                    as u32,
+                                0..1,
+                            );
+                            pass.set_pipeline(&self.context.cover_pipeline);
+                            pass.set_vertex_buffer(0, cover_buffer.slice(..));
+                            pass.draw(0..6, 0..1);
+                        }
                     }
                 }
             }
+            self.context.composite_pipeline.encode(
+                &self.context.device,
+                &mut encoder,
+                &view,
+                &fallback_view,
+            );
         }
 
         let unpadded_bytes_per_row = self.width * 4;

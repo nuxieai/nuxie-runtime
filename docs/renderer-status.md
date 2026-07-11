@@ -349,3 +349,11 @@ Run `make renderer-golden`.
   `emptystroke` from 1,320/81 to 1,464/128 and was removed completely. Next,
   render contiguous fallback runs into transparent 4x targets and feed their
   resolves through this compositor between atomic runs.
+- 2026-07-11: Wired whole-frame fallback through the ordered compositor as the
+  parity proof for future per-run routing. Fallback draws now render over
+  transparent into the existing 4x target, resolve into a sampled RGBA8
+  texture, and premultiplied-SrcOver composite onto a separately cleared main
+  target. The ratcheted `emptystroke` probe returns to zero pixels beyond its
+  tolerance/max delta 81, proving the extra resolve/composite pass preserves
+  the existing 4x analytic AA. Next, reuse this exact pass for each contiguous
+  fallback run instead of only the all-fallback frame.

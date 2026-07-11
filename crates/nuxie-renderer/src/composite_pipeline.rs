@@ -1,6 +1,5 @@
 //! Ordered composition of resolved fallback runs into the main color target.
 
-#[allow(dead_code)]
 pub(crate) struct CompositePipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
@@ -77,7 +76,6 @@ impl CompositePipeline {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn encode(
         &self,
         device: &wgpu::Device,

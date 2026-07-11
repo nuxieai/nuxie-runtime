@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=14, diverges=0, gated=1,451, total=1,465.
+- Rust wgpu: exact=15, diverges=0, gated=1,450, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -20,7 +20,8 @@ Run `make renderer-golden`.
   `gm-zerolinestroke-clockwise-atomic`,
   `gm-CubicStroke-clockwise-atomic`, and
   `gm-zero_control_stroke-clockwise-atomic`, and
-  `gm-roundjoinstrokes-clockwise-atomic`.
+  `gm-roundjoinstrokes-clockwise-atomic`, and
+  `gm-widebuttcaps-clockwise-atomic`.
 
 ## Milestones
 
@@ -166,3 +167,10 @@ Run `make renderer-golden`.
   coverage. A sibling sweep proves `roundjoinstrokes` pixel-exact at zero
   differing pixels and promotes it, moving exact to 14. `widebuttcaps` remains
   gated at 5,004 differing pixels (max delta 254).
+- 2026-07-11: Matched upstream `gpu.cpp`'s counterclockwise-face culling for
+  forward stroke midpoint-fan patches by culling wgpu front faces after the
+  port's viewport-orientation conversion. This removes the wrong-facing half
+  of self-overlapping wide cubic strokes while preserving all prior stroke
+  goldens. `widebuttcaps` moves from 5,004 differing pixels to zero and is
+  promoted, moving exact to 15. `emptystroke` is unchanged at 1,320 differing
+  pixels and remains the next isolated round-cap coverage gap.

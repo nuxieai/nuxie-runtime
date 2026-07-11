@@ -2712,10 +2712,9 @@ stream = "fixtures/renderer/streams/gm/widebuttcaps.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/widebuttcaps.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

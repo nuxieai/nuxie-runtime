@@ -128,7 +128,7 @@ impl AtomicPipeline {
                 buffers: &[Some(PatchVertex::layout())],
             },
             primitive: wgpu::PrimitiveState {
-                cull_mode: None,
+                cull_mode: Some(wgpu::Face::Front),
                 ..Default::default()
             },
             depth_stencil: None,

@@ -2,6 +2,7 @@
 
 mod atlas_pipeline;
 mod atomic_pipeline;
+mod composite_pipeline;
 mod draw;
 mod feather_lut;
 mod gpu;
@@ -53,6 +54,8 @@ struct Context {
     path_pipeline: path_pipeline::PathPipeline,
     atomic_pipeline: atomic_pipeline::AtomicPipeline,
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
+    #[allow(dead_code)]
+    composite_pipeline: composite_pipeline::CompositePipeline,
     feather_lut: feather_lut::FeatherLut,
 }
 
@@ -218,6 +221,7 @@ impl WgpuFactory {
         let path_pipeline = path_pipeline::PathPipeline::new(&device);
         let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
         let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device);
+        let composite_pipeline = composite_pipeline::CompositePipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
         Ok(Self {
             context: Arc::new(Context {
@@ -232,6 +236,7 @@ impl WgpuFactory {
                 path_pipeline,
                 atomic_pipeline,
                 atlas_pipeline,
+                composite_pipeline,
                 feather_lut,
             }),
             width,
@@ -1608,6 +1613,119 @@ mod tests {
             64,
             32,
         ));
+    }
+
+    #[test]
+    fn resolved_fallback_composites_with_premultiplied_src_over() {
+        let factory = WgpuFactory::new_with_mode(2, 2, RenderMode::ClockwiseAtomic).unwrap();
+        let source = factory
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-composite-test-source"),
+                size: wgpu::Extent3d {
+                    width: 2,
+                    height: 2,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+        factory.context.queue.write_texture(
+            source.as_image_copy(),
+            &[128, 0, 0, 128].repeat(4),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(8),
+                rows_per_image: Some(2),
+            },
+            source.size(),
+        );
+        let target = factory
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-composite-test-target"),
+                size: source.size(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+        let target_view = target.create_view(&Default::default());
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-composite-test-encoder"),
+                });
+        {
+            let attachments = [Some(wgpu::RenderPassColorAttachment {
+                view: &target_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
+                    store: wgpu::StoreOp::Store,
+                },
+            })];
+            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("nuxie-composite-test-clear"),
+                color_attachments: &attachments,
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+        }
+        factory.context.composite_pipeline.encode(
+            &factory.context.device,
+            &mut encoder,
+            &target_view,
+            &source.create_view(&Default::default()),
+        );
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-composite-test-readback"),
+                size: 512,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(256),
+                    rows_per_image: Some(2),
+                },
+            },
+            target.size(),
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+        let slice = readback.slice(..);
+        let (sender, receiver) = mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        assert_eq!(&mapped[..4], &[128, 0, 127, 255]);
     }
 
     #[test]

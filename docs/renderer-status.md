@@ -339,3 +339,13 @@ Run `make renderer-golden`.
   probe also shows direct feathered strokes still lose draws during atomic
   resolution. The runtime no longer rejects the feature, while promotion waits
   on coverage convergence.
+- 2026-07-11: Added the ordered fallback-run compositor required to replace
+  the all-or-nothing atomic frame gate without changing fallback AA. Resolved
+  4x fallback textures can now blend into the main single-sample target with
+  a full-screen triangle, nearest sampling, and premultiplied SrcOver. A
+  submitted GPU readback test composites half-alpha premultiplied red over
+  opaque blue and verifies `[128, 0, 127, 255]`, proving the pass blends rather
+  than replaces. A rejected one-sample fallback probe regressed ratcheted
+  `emptystroke` from 1,320/81 to 1,464/128 and was removed completely. Next,
+  render contiguous fallback runs into transparent 4x targets and feed their
+  resolves through this compositor between atomic runs.

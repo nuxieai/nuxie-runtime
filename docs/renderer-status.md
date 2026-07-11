@@ -247,3 +247,11 @@ Run `make renderer-golden`.
   144 pixels are confined to the red marker AA edges, so it promotes with the
   same bounded-edge policy used by `OverStroke`; exact moves to 21. Real
   feather convolution remains the next R2 target.
+- 2026-07-11: Replaced the analytic pipelines' placeholder feather binding
+  with the canonical 512x2 `R16Float` Gaussian lookup texture. The Rust port
+  reproduces C++'s seven-sample integral, 32x inverse integral, finite
+  float-to-half conversion, and both full table hashes byte-for-byte. The
+  texture is retained once per renderer context and shared by MSAA and atomic
+  draw bindings. Feather specialization remains disabled until its matching
+  `draw.cpp` geometry lands; all 28 renderer tests pass and the corpus remains
+  exact=21/diverges=0.

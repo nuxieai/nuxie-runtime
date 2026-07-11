@@ -2,6 +2,7 @@
 
 mod atomic_pipeline;
 mod draw;
+mod feather_lut;
 mod gpu;
 mod path_pipeline;
 mod tessellator;
@@ -50,6 +51,7 @@ struct Context {
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
     atomic_pipeline: atomic_pipeline::AtomicPipeline,
+    feather_lut: feather_lut::FeatherLut,
 }
 
 pub struct WgpuFactory {
@@ -213,6 +215,7 @@ impl WgpuFactory {
         let tessellator = tessellator::Tessellator::new(&device);
         let path_pipeline = path_pipeline::PathPipeline::new(&device);
         let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
+        let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
         Ok(Self {
             context: Arc::new(Context {
                 device,
@@ -225,6 +228,7 @@ impl WgpuFactory {
                 tessellator,
                 path_pipeline,
                 atomic_pipeline,
+                feather_lut,
             }),
             width,
             height,
@@ -878,6 +882,7 @@ impl WgpuFrame {
                 &self.context.device,
                 &mut encoder,
                 &view,
+                &self.context.feather_lut.view,
                 &self.context.patch_vertex_buffer,
                 &self.context.patch_index_buffer,
                 &atomic_draws,
@@ -952,6 +957,7 @@ impl WgpuFrame {
                             self.context.path_pipeline.prepare(
                                 &self.context.device,
                                 &tessellation_view,
+                                &self.context.feather_lut.view,
                                 &uniforms,
                                 &tessellation.path,
                                 &paint,

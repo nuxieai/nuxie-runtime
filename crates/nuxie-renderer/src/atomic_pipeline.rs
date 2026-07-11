@@ -232,6 +232,7 @@ impl AtomicPipeline {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        feather_lut: &wgpu::TextureView,
         patch_vertices: &wgpu::Buffer,
         patch_indices: &wgpu::Buffer,
         draws: &[AtomicDraw<'_>],
@@ -328,7 +329,7 @@ impl AtomicPipeline {
                         binding(6, contours.as_entire_binding()),
                         binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
                         binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
-                        binding(10, wgpu::BindingResource::TextureView(&dummy_view)),
+                        binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                     ],
                 })
             })

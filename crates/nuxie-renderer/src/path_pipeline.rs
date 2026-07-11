@@ -131,6 +131,7 @@ impl PathPipeline {
         &self,
         device: &wgpu::Device,
         tessellation_view: &wgpu::TextureView,
+        feather_lut: &wgpu::TextureView,
         uniforms: &FlushUniforms,
         path: &PathData,
         paint: &PaintData,
@@ -196,7 +197,7 @@ impl PathPipeline {
                 binding(6, contour_buffer.as_entire_binding()),
                 binding(8, wgpu::BindingResource::TextureView(tessellation_view)),
                 binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(10, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
         let image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

@@ -200,6 +200,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         decimals: u64,
     },
     RangeMapper {
+        global_id: u32,
         min_input: f32,
         max_input: f32,
         min_output: f32,
@@ -229,6 +230,69 @@ pub(crate) enum RuntimeDataBindGraphConverter {
     },
     Group(Vec<RuntimeDataBindGraphConverter>),
     Unsupported,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RuntimeDataBindGraphRangeMapperProperty {
+    MinInput,
+    MaxInput,
+    MinOutput,
+    MaxOutput,
+}
+
+pub(crate) fn runtime_data_bind_graph_converter_contains_global_id(
+    converter: &RuntimeDataBindGraphConverter,
+    global_id: u32,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::Scripted {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::NumberToList {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::ToString {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::OperationValue {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::SystemOperationValue {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::RangeMapper {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::StringTrim {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::StringPad {
+            global_id: candidate,
+            ..
+        }
+        | RuntimeDataBindGraphConverter::Interpolator {
+            global_id: candidate,
+            ..
+        } => *candidate == global_id,
+        RuntimeDataBindGraphConverter::Formula { tokens } => tokens.iter().any(|token| {
+            matches!(
+                token,
+                RuntimeDataBindGraphFormulaToken::Value { token_id, .. }
+                    if *token_id == global_id
+            )
+        }),
+        RuntimeDataBindGraphConverter::Group(converters) => converters.iter().any(|converter| {
+            runtime_data_bind_graph_converter_contains_global_id(converter, global_id)
+        }),
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -472,6 +536,43 @@ impl RuntimeDataBindGraphConverter {
                     changed |= converter.set_interpolator_duration(target_global_id, value);
                 }
                 changed
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_range_mapper_value(
+        &mut self,
+        target_global_id: u32,
+        property: RuntimeDataBindGraphRangeMapperProperty,
+        value: f32,
+    ) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::RangeMapper {
+                global_id,
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                ..
+            } if *global_id == target_global_id => {
+                let target = match property {
+                    RuntimeDataBindGraphRangeMapperProperty::MinInput => min_input,
+                    RuntimeDataBindGraphRangeMapperProperty::MaxInput => max_input,
+                    RuntimeDataBindGraphRangeMapperProperty::MinOutput => min_output,
+                    RuntimeDataBindGraphRangeMapperProperty::MaxOutput => max_output,
+                };
+                if *target == value {
+                    false
+                } else {
+                    *target = value;
+                    true
+                }
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                converters.iter_mut().fold(false, |changed, converter| {
+                    converter.set_range_mapper_value(target_global_id, property, value) || changed
+                })
             }
             _ => false,
         }
@@ -1133,7 +1234,7 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_c
     }
 }
 
-fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
     converter: &mut RuntimeDataBindGraphConverter,
     context: &RuntimeOwnedViewModelInstance,
 ) -> bool {
@@ -1546,6 +1647,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
                 flags,
                 interpolation_type,
                 interpolator,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -1722,6 +1824,7 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
                 flags,
                 interpolation_type,
                 interpolator,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -2363,6 +2466,7 @@ fn runtime_data_bind_graph_range_mapper_converter(
     };
 
     RuntimeDataBindGraphConverter::RangeMapper {
+        global_id: converter.id,
         min_input: converter.double_property("minInput").unwrap_or(1.0),
         max_input: converter.double_property("maxInput").unwrap_or(1.0),
         min_output: converter.double_property("minOutput").unwrap_or(1.0),

@@ -138,6 +138,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelInstance>,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
+    pub(crate) data_bind_context_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
     animations: Vec<RuntimeNestedAnimationInstance>,
     is_paused: bool,
     speed: f32,
@@ -3061,6 +3062,7 @@ fn build_runtime_nested_artboard_instance(
         stateful_view_model_context,
         data_bind_property_source_locals,
         data_bind_image_source_locals,
+        data_bind_context_source_locals_by_path: data_bind_source_locals_by_path,
         animations,
         is_paused,
         speed,
@@ -3653,6 +3655,7 @@ mod tests {
     #[test]
     fn range_mapper_reverse_conversion_swaps_input_and_output_ranges() {
         let converter = RuntimeDataBindGraphConverter::RangeMapper {
+            global_id: 0,
             min_input: 0.0,
             max_input: 10.0,
             min_output: 100.0,
@@ -3680,6 +3683,7 @@ mod tests {
     #[test]
     fn range_mapper_reverse_conversion_preserves_reverse_flag() {
         let converter = RuntimeDataBindGraphConverter::RangeMapper {
+            global_id: 0,
             min_input: 0.0,
             max_input: 10.0,
             min_output: 100.0,
@@ -4020,6 +4024,7 @@ mod tests {
                 stateful_view_model_context: None,
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
+                data_bind_context_source_locals_by_path: BTreeMap::new(),
                 animations: Vec::new(),
                 is_paused: false,
                 speed: 1.0,

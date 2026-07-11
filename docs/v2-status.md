@@ -653,10 +653,14 @@ the only memory the next session has. Update it every commit.
         order. The first structural mismatch has moved past `sample seconds=0`
         through the root background envelope. Artboard background paints now
         follow C++ `ShapePaint::draw`, including retained-path clipping and the
-        padded/reversed inner-feather path. The first normalized mismatch is
-        now the centered variable-font Text local 100 transform: Rust measures
-        the bound `"30%"` run about 0.14 wider than C++, shifting its origin by
-        0.0698. Component-list instancing remains the sole explicit scripted
+        padded/reversed inner-feather path. Converter-owned formula operands
+        and single-property RangeMapper bindings now follow converter-graph
+        reachability, and relative nested contexts publish the parent model's
+        precise percentage values. All six FollowPath transforms now match
+        C++ within the comparator epsilon. The first structural mismatch is
+        now retained render-path identity: C++ allocates a second path for the
+        Pie Chart's second stroke paint, while Rust reuses the first path.
+        Component-list instancing remains the sole explicit scripted
         unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
@@ -3837,6 +3841,23 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Ported converter-owned context propagation exercised by
+  `data_viz_demo.riv`. Formula-token bindings retain their established
+  file-wide runtime construction but now carry converter-graph reachability
+  for owned/nested context updates; converter-property bindings are scoped by
+  the same graph. Nested relative contexts publish only reachable formula and
+  converter paths. RangeMapper fields carry converter identity and support
+  live single-property bindings; converters with multiple bound range fields
+  remain on authored values until C++'s atomic multi-property queue timing is
+  ported. The six Pie Chart FollowPath transforms now match C++ within the
+  comparator epsilon, moving the first structural mismatch to retained path
+  identity for the second stroke paint. `cargo test --workspace`, scripted
+  compare, and regular compare pass. Metrics remain scripted exact=25 /
+  exact-segments=33 / diverges=1 / unsupported-feature=1 and regular
+  exact=263 / exact-segments=584 / diverges=26 / unsupported-feature=6.
+  Next: port C++ per-paint render-path identity for the Pie Chart strokes,
+  then revisit atomic multi-property RangeMapper updates separately.
 
 - 2026-07-10: [M8] Ported `FollowPathConstraint::markConstraintDirty` property
   invalidation: distance, orient, and inherited strength changes now dirty

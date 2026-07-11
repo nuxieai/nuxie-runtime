@@ -1,8 +1,10 @@
 use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
-    runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
+    RuntimeDataBindGraphRangeMapperProperty, runtime_data_bind_graph_convert_value,
+    runtime_data_bind_graph_converter, runtime_data_bind_graph_converter_contains_global_id,
     runtime_data_bind_graph_converter_contains_source_change_random,
     runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
+    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context,
     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
 };
 use crate::objects::{InstanceObjectArena, InstanceSlot};
@@ -160,7 +162,10 @@ pub(crate) fn build_nested_host_data_bind_source_locals(
     view_model_instance_locals_by_id: &BTreeMap<u32, usize>,
     child: &ArtboardInstance,
 ) -> BTreeMap<Vec<u32>, usize> {
-    if child.artboard_property_bindings.is_empty() && child.artboard_image_asset_bindings.is_empty()
+    if child.artboard_property_bindings.is_empty()
+        && child.artboard_image_asset_bindings.is_empty()
+        && child.artboard_formula_token_bindings.is_empty()
+        && child.artboard_converter_property_bindings.is_empty()
     {
         return BTreeMap::new();
     }
@@ -173,6 +178,19 @@ pub(crate) fn build_nested_host_data_bind_source_locals(
         .chain(
             child
                 .artboard_image_asset_bindings
+                .iter()
+                .map(|binding| binding.path.as_slice()),
+        )
+        .chain(
+            child
+                .artboard_formula_token_bindings
+                .iter()
+                .filter(|binding| binding.artboard_converter_reachable)
+                .map(|binding| binding.path.as_slice()),
+        )
+        .chain(
+            child
+                .artboard_converter_property_bindings
                 .iter()
                 .map(|binding| binding.path.as_slice()),
         )
@@ -334,6 +352,7 @@ pub(super) struct RuntimeArtboardImageAssetBindingInstance {
 pub(crate) enum RuntimeNestedChildContextUpdate {
     Property(usize, RuntimeDataBindGraphValue),
     ImageAsset(usize, RuntimeDataBindGraphValue),
+    ContextPath(Vec<u32>, RuntimeDataBindGraphValue),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -825,6 +844,7 @@ pub(super) struct RuntimeArtboardNumericSourceBindingInstance {
 pub(super) struct RuntimeArtboardFormulaTokenBindingInstance {
     target: RuntimeArtboardFormulaBindingTarget,
     path: Vec<u32>,
+    artboard_converter_reachable: bool,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
@@ -847,25 +867,74 @@ pub(super) struct RuntimeArtboardConverterPropertyBindingInstance {
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum RuntimeArtboardConverterPropertyBindingTarget {
-    ToStringDecimals { global_id: u32 },
-    ToStringColorFormat { global_id: u32 },
-    StringTrimTrimType { global_id: u32 },
-    StringPadLength { global_id: u32 },
-    StringPadText { global_id: u32 },
-    StringPadPadType { global_id: u32 },
-    InterpolatorDuration { global_id: u32 },
-    NumberToListViewModelId { global_id: u32 },
+    ToStringDecimals {
+        global_id: u32,
+    },
+    ToStringColorFormat {
+        global_id: u32,
+    },
+    StringTrimTrimType {
+        global_id: u32,
+    },
+    StringPadLength {
+        global_id: u32,
+    },
+    StringPadText {
+        global_id: u32,
+    },
+    StringPadPadType {
+        global_id: u32,
+    },
+    InterpolatorDuration {
+        global_id: u32,
+    },
+    RangeMapper {
+        global_id: u32,
+        property: RuntimeDataBindGraphRangeMapperProperty,
+    },
+    NumberToListViewModelId {
+        global_id: u32,
+    },
 }
 
 enum RuntimeArtboardConverterPropertyBindingUpdate {
-    ToStringDecimals { global_id: u32, value: u64 },
-    ToStringColorFormat { global_id: u32, value: Vec<u8> },
-    StringTrimTrimType { global_id: u32, value: u64 },
-    StringPadLength { global_id: u32, value: u64 },
-    StringPadText { global_id: u32, value: Vec<u8> },
-    StringPadPadType { global_id: u32, value: u64 },
-    InterpolatorDuration { global_id: u32, value: f32 },
-    NumberToListViewModelId { global_id: u32, value: u64 },
+    ToStringDecimals {
+        global_id: u32,
+        value: u64,
+    },
+    ToStringColorFormat {
+        global_id: u32,
+        value: Vec<u8>,
+    },
+    StringTrimTrimType {
+        global_id: u32,
+        value: u64,
+    },
+    StringPadLength {
+        global_id: u32,
+        value: u64,
+    },
+    StringPadText {
+        global_id: u32,
+        value: Vec<u8>,
+    },
+    StringPadPadType {
+        global_id: u32,
+        value: u64,
+    },
+    InterpolatorDuration {
+        global_id: u32,
+        value: f32,
+    },
+    RangeMapper {
+        global_id: u32,
+        property: RuntimeDataBindGraphRangeMapperProperty,
+        value: f32,
+    },
+    NumberToListViewModelId {
+        global_id: u32,
+        value: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1896,12 +1965,15 @@ pub(super) fn build_artboard_formula_token_bindings(
         return Vec::new();
     }
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
-
+    let artboard_converters = file
+        .artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| runtime_data_bind_graph_converter(file, data_bind.object))
+        .collect::<Vec<_>>();
     file.objects
         .iter()
         .flatten()
         .filter(|object| object.type_name == "DataBindContext")
-        .into_iter()
         .filter_map(|data_bind| {
             let data_bind_id = usize::try_from(data_bind.id).ok()?;
             if file.import_status(data_bind_id) != Some(rive_binary::RuntimeImportStatus::Imported)
@@ -1914,6 +1986,9 @@ pub(super) fn build_artboard_formula_token_bindings(
                 return None;
             }
             let target = file.data_bind_target_for_object(data_bind)?;
+            let artboard_converter_reachable = artboard_converters.iter().any(|converter| {
+                runtime_data_bind_graph_converter_contains_global_id(converter, target.id)
+            });
             let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
             let target = match target.type_name {
                 "FormulaTokenValue" if Some(property_key) == formula_token_operation_value_key => {
@@ -1960,6 +2035,7 @@ pub(super) fn build_artboard_formula_token_bindings(
             Some(RuntimeArtboardFormulaTokenBindingInstance {
                 target,
                 path,
+                artboard_converter_reachable,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
                     converter.as_ref(),
                 ),
@@ -1990,6 +2066,14 @@ pub(super) fn build_artboard_converter_property_bindings(
         runtime_data_bind_property_key_for_name("DataConverterStringPad", "padType");
     let interpolator_duration_key =
         runtime_data_bind_property_key_for_name("DataConverterInterpolator", "duration");
+    let range_mapper_min_input_key =
+        runtime_data_bind_property_key_for_name("DataConverterRangeMapper", "minInput");
+    let range_mapper_max_input_key =
+        runtime_data_bind_property_key_for_name("DataConverterRangeMapper", "maxInput");
+    let range_mapper_min_output_key =
+        runtime_data_bind_property_key_for_name("DataConverterRangeMapper", "minOutput");
+    let range_mapper_max_output_key =
+        runtime_data_bind_property_key_for_name("DataConverterRangeMapper", "maxOutput");
     let number_to_list_view_model_id_key =
         runtime_data_bind_property_key_for_name("DataConverterNumberToList", "viewModelId");
     if decimals_key.is_none()
@@ -1999,11 +2083,51 @@ pub(super) fn build_artboard_converter_property_bindings(
         && string_pad_text_key.is_none()
         && string_pad_pad_type_key.is_none()
         && interpolator_duration_key.is_none()
+        && range_mapper_min_input_key.is_none()
+        && range_mapper_max_input_key.is_none()
+        && range_mapper_min_output_key.is_none()
+        && range_mapper_max_output_key.is_none()
         && number_to_list_view_model_id_key.is_none()
     {
         return Vec::new();
     }
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
+    let artboard_converters = file
+        .artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| runtime_data_bind_graph_converter(file, data_bind.object))
+        .collect::<Vec<_>>();
+    let mut range_mapper_property_counts = BTreeMap::<u32, usize>::new();
+    for data_bind in file
+        .objects
+        .iter()
+        .flatten()
+        .filter(|object| object.type_name == "DataBindContext")
+    {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        let Some(property_key) = data_bind
+            .uint_property("propertyKey")
+            .and_then(|value| u16::try_from(value).ok())
+        else {
+            continue;
+        };
+        if target.type_name == "DataConverterRangeMapper"
+            && [
+                range_mapper_min_input_key,
+                range_mapper_max_input_key,
+                range_mapper_min_output_key,
+                range_mapper_max_output_key,
+            ]
+            .contains(&Some(property_key))
+            && artboard_converters.iter().any(|converter| {
+                runtime_data_bind_graph_converter_contains_global_id(converter, target.id)
+            })
+        {
+            *range_mapper_property_counts.entry(target.id).or_default() += 1;
+        }
+    }
 
     file.objects
         .iter()
@@ -2021,6 +2145,11 @@ pub(super) fn build_artboard_converter_property_bindings(
                 return None;
             }
             let target = file.data_bind_target_for_object(data_bind)?;
+            if !artboard_converters.iter().any(|converter| {
+                runtime_data_bind_graph_converter_contains_global_id(converter, target.id)
+            }) {
+                return None;
+            }
             let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
             let target = match target.type_name {
                 "DataConverterToString" if Some(property_key) == decimals_key => {
@@ -2056,6 +2185,29 @@ pub(super) fn build_artboard_converter_property_bindings(
                 "DataConverterInterpolator" if Some(property_key) == interpolator_duration_key => {
                     RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration {
                         global_id: target.id,
+                    }
+                }
+                "DataConverterRangeMapper" => {
+                    if range_mapper_property_counts
+                        .get(&target.id)
+                        .is_some_and(|count| *count > 1)
+                    {
+                        return None;
+                    }
+                    let property = if Some(property_key) == range_mapper_min_input_key {
+                        RuntimeDataBindGraphRangeMapperProperty::MinInput
+                    } else if Some(property_key) == range_mapper_max_input_key {
+                        RuntimeDataBindGraphRangeMapperProperty::MaxInput
+                    } else if Some(property_key) == range_mapper_min_output_key {
+                        RuntimeDataBindGraphRangeMapperProperty::MinOutput
+                    } else if Some(property_key) == range_mapper_max_output_key {
+                        RuntimeDataBindGraphRangeMapperProperty::MaxOutput
+                    } else {
+                        return None;
+                    };
+                    RuntimeArtboardConverterPropertyBindingTarget::RangeMapper {
+                        global_id: target.id,
+                        property,
                     }
                 }
                 "DataConverterNumberToList"
@@ -2104,6 +2256,9 @@ pub(super) fn build_artboard_converter_property_bindings(
                     RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration {
                         ..
                     } => RuntimeDataBindGraphValue::Number(1.0),
+                    RuntimeArtboardConverterPropertyBindingTarget::RangeMapper { .. } => {
+                        RuntimeDataBindGraphValue::Number(1.0)
+                    }
                     RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId {
                         ..
                     } => RuntimeDataBindGraphValue::Enum(u64::from(u32::MAX)),
@@ -2149,7 +2304,8 @@ fn runtime_artboard_converter_property_binding_target_accepts_value(
                 RuntimeDataBindGraphValue::Number(_) | RuntimeDataBindGraphValue::Enum(_)
             )
         }
-        RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration { .. } => {
+        RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration { .. }
+        | RuntimeArtboardConverterPropertyBindingTarget::RangeMapper { .. } => {
             matches!(value, RuntimeDataBindGraphValue::Number(_))
         }
         RuntimeArtboardConverterPropertyBindingTarget::ToStringColorFormat { .. }
@@ -2245,6 +2401,17 @@ fn runtime_artboard_converter_property_binding_update(
                 value,
             },
         ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::RangeMapper {
+                global_id,
+                property,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeArtboardConverterPropertyBindingUpdate::RangeMapper {
+            global_id,
+            property,
+            value,
+        }),
         (
             RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId { global_id },
             RuntimeDataBindGraphValue::Number(value),
@@ -2800,7 +2967,12 @@ impl ArtboardInstance {
     ) -> bool {
         let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
         let mut changed = if bind_self && rebind_self {
-            let changed = self.bind_owned_view_model_artboard_values(
+            let mut changed = self.refresh_artboard_converter_dependents(|converter| {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                    converter, context,
+                )
+            });
+            changed |= self.bind_owned_view_model_artboard_values(
                 file,
                 context,
                 context_chain,
@@ -2996,6 +3168,51 @@ impl ArtboardInstance {
                 }
                 let path = self.artboard_custom_property_bindings[index].path.clone();
                 changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
+            }
+        }
+
+        for index in 0..self.artboard_formula_token_bindings.len() {
+            if !self.artboard_formula_token_bindings[index].artboard_converter_reachable {
+                continue;
+            }
+            let update = {
+                let binding = &self.artboard_formula_token_bindings[index];
+                context_chain.iter().find_map(|context_path| {
+                    binding
+                        .default_value
+                        .resolve_from_owned_view_model_context_path(
+                            file,
+                            context,
+                            context_path,
+                            &binding.path,
+                        )
+                })
+            };
+            if let Some(value) = update {
+                let path = self.artboard_formula_token_bindings[index].path.clone();
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+
+        for index in 0..self.artboard_converter_property_bindings.len() {
+            let update = {
+                let binding = &self.artboard_converter_property_bindings[index];
+                context_chain.iter().find_map(|context_path| {
+                    binding
+                        .default_value
+                        .resolve_from_owned_view_model_context_path(
+                            file,
+                            context,
+                            context_path,
+                            &binding.path,
+                        )
+                })
+            };
+            if let Some(value) = update {
+                let path = self.artboard_converter_property_bindings[index]
+                    .path
+                    .clone();
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
         }
 
@@ -3523,6 +3740,11 @@ impl ArtboardInstance {
                         global_id,
                         value,
                     } => self.set_artboard_interpolator_converter_duration(global_id, value),
+                    RuntimeArtboardConverterPropertyBindingUpdate::RangeMapper {
+                        global_id,
+                        property,
+                        value,
+                    } => self.set_artboard_range_mapper_converter_value(global_id, property, value),
                     RuntimeArtboardConverterPropertyBindingUpdate::NumberToListViewModelId {
                         global_id,
                         value,
@@ -3705,6 +3927,17 @@ impl ArtboardInstance {
     ) -> bool {
         self.refresh_artboard_converter_dependents(|converter| {
             converter.set_interpolator_duration(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_range_mapper_converter_value(
+        &mut self,
+        target_global_id: u32,
+        property: RuntimeDataBindGraphRangeMapperProperty,
+        value: f32,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_range_mapper_value(target_global_id, property, value)
         })
     }
 
@@ -4314,6 +4547,8 @@ impl ArtboardInstance {
             };
             if nested.child.artboard_property_bindings.is_empty()
                 && nested.child.artboard_image_asset_bindings.is_empty()
+                && nested.child.artboard_formula_token_bindings.is_empty()
+                && nested.child.artboard_converter_property_bindings.is_empty()
             {
                 continue;
             }
@@ -4364,6 +4599,42 @@ impl ArtboardInstance {
                     updates.push(RuntimeNestedChildContextUpdate::ImageAsset(index, value));
                 }
             }
+            for path in nested
+                .child
+                .artboard_formula_token_bindings
+                .iter()
+                .filter(|binding| binding.artboard_converter_reachable)
+                .map(|binding| (binding.path.as_slice(), &binding.default_value))
+                .chain(
+                    nested
+                        .child
+                        .artboard_converter_property_bindings
+                        .iter()
+                        .map(|binding| (binding.path.as_slice(), &binding.default_value)),
+                )
+            {
+                let (path, default_value) = path;
+                let value = nested
+                    .data_bind_context_source_locals_by_path
+                    .get(path)
+                    .copied()
+                    .and_then(|source_local| {
+                        self.stateful_nested_host_binding_value_for_local(
+                            source_local,
+                            default_value,
+                        )
+                    })
+                    .or_else(|| self.artboard_data_bind_values.get(path).cloned());
+                let Some(value) = value else {
+                    continue;
+                };
+                if nested.child.artboard_data_bind_values.get(path) != Some(&value) {
+                    updates.push(RuntimeNestedChildContextUpdate::ContextPath(
+                        path.to_vec(),
+                        value,
+                    ));
+                }
+            }
             if updates.is_empty() {
                 continue;
             };
@@ -4387,6 +4658,7 @@ impl ArtboardInstance {
                         };
                         (binding.path.clone(), value)
                     }
+                    RuntimeNestedChildContextUpdate::ContextPath(path, value) => (path, value),
                 };
                 child_context_changed |= nested
                     .child
@@ -4695,6 +4967,7 @@ mod tests {
                 15,
                 16,
                 Some(RuntimeDataBindGraphConverter::RangeMapper {
+                    global_id: 0,
                     min_input: 0.0,
                     max_input: 1.0,
                     min_output: 0.0,

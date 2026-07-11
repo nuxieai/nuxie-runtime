@@ -955,41 +955,34 @@ impl WgpuFrame {
                         is_feather: draw.paint.feather != 0.0,
                     });
                 }
-                let max_atlas_region_width = prepared
+                let atlas_regions = prepared
                     .iter()
-                    .filter_map(|draw| draw.atlas.map(|atlas| atlas.width))
+                    .filter_map(|draw| draw.atlas.map(|atlas| (atlas.width, atlas.height)))
+                    .collect::<Vec<_>>();
+                let max_atlas_region_width = atlas_regions
+                    .iter()
+                    .map(|&(width, _)| width)
                     .max()
                     .unwrap_or(1);
                 let pack_width = self.width.max(1).max(max_atlas_region_width);
-                let pack_height = prepared
-                    .iter()
-                    .filter_map(|draw| draw.atlas.map(|atlas| atlas.height))
-                    .sum::<u32>()
-                    .max(1);
-                let mut atlas_packer = skyline::Skyline::new(pack_width as i32, pack_height as i32);
-                let mut atlas_width = 1;
+                let atlas_layout = skyline::pack_atlas_regions(pack_width, &atlas_regions)
+                    .expect("atlas regions must fit in the skyline allocator");
+                let mut atlas_origins = atlas_layout.origins().iter().copied();
                 for (index, draw) in prepared.iter_mut().enumerate() {
                     let Some(atlas) = &mut draw.atlas else {
                         continue;
                     };
-                    let mut atlas_x = 0;
-                    let mut atlas_y = 0;
-                    assert!(atlas_packer.add_rect(
-                        atlas.width as i32,
-                        atlas.height as i32,
-                        &mut atlas_x,
-                        &mut atlas_y,
-                    ));
-                    let atlas_x = atlas_x as u32;
-                    let atlas_y = atlas_y as u32;
+                    let [atlas_x, atlas_y] = atlas_origins
+                        .next()
+                        .expect("atlas layout must include every atlas region");
                     atlas.origin = [atlas_x, atlas_y];
                     atlas.translate[0] += atlas_x as f32;
                     atlas.translate[1] += atlas_y as f32;
                     paths[index + 1].atlas_transform.translate_x = atlas.translate[0];
                     paths[index + 1].atlas_transform.translate_y = atlas.translate[1];
-                    atlas_width = atlas_width.max(atlas_x + atlas.width);
                 }
-                let atlas_height = pack_height;
+                debug_assert!(atlas_origins.next().is_none());
+                let [atlas_width, atlas_height] = atlas_layout.extent();
                 let tessellation_height = prepared
                     .iter()
                     .map(|draw| draw::tessellation_texture_height(&draw.spans))

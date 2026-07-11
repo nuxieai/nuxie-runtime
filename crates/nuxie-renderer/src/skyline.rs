@@ -26,6 +26,58 @@ pub(crate) struct Skyline {
     area_so_far: i32,
 }
 
+/// The packed origins and occupied extent of an atlas layout.
+pub(crate) struct AtlasLayout {
+    origins: Vec<[u32; 2]>,
+    extent: [u32; 2],
+}
+
+impl AtlasLayout {
+    pub(crate) fn origins(&self) -> &[[u32; 2]] {
+        &self.origins
+    }
+
+    pub(crate) fn extent(&self) -> [u32; 2] {
+        self.extent
+    }
+}
+
+/// Packs atlas regions with enough vertical capacity for the worst case, then
+/// reports the actually occupied extent.
+pub(crate) fn pack_atlas_regions(width: u32, regions: &[(u32, u32)]) -> Option<AtlasLayout> {
+    let capacity_height = regions
+        .iter()
+        .try_fold(0_u32, |height, &(_, region_height)| {
+            height.checked_add(region_height)
+        })?
+        .max(1);
+    let width = i32::try_from(width).ok()?;
+    let capacity_height = i32::try_from(capacity_height).ok()?;
+    if width > i32::from(i16::MAX) || capacity_height > i32::from(i16::MAX) {
+        return None;
+    }
+
+    let mut skyline = Skyline::new(width, capacity_height);
+    let mut origins = Vec::with_capacity(regions.len());
+    let mut extent = [1, 1];
+    for &(region_width, region_height) in regions {
+        let region_width = i32::try_from(region_width).ok()?;
+        let region_height = i32::try_from(region_height).ok()?;
+        let mut x = 0;
+        let mut y = 0;
+        if !skyline.add_rect(region_width, region_height, &mut x, &mut y) {
+            return None;
+        }
+        let x = u32::try_from(x).ok()?;
+        let y = u32::try_from(y).ok()?;
+        extent[0] = extent[0].max(x.checked_add(region_width as u32)?);
+        extent[1] = extent[1].max(y.checked_add(region_height as u32)?);
+        origins.push([x, y]);
+    }
+
+    Some(AtlasLayout { origins, extent })
+}
+
 impl Skyline {
     pub(crate) fn new(width: i32, height: i32) -> Self {
         let mut skyline = Self {
@@ -201,7 +253,7 @@ impl Skyline {
 
 #[cfg(test)]
 mod tests {
-    use super::Skyline;
+    use super::{pack_atlas_regions, Skyline};
 
     fn add_rect(skyline: &mut Skyline, width: i32, height: i32) -> Option<(i16, i16)> {
         let mut x = -1;
@@ -308,5 +360,19 @@ mod tests {
 
         assert!(skyline.is_empty());
         assert_eq!(add_rect(&mut skyline, 7, 5), Some((0, 0)));
+    }
+
+    #[test]
+    fn atlas_layout_uses_the_occupied_extent_instead_of_vertical_capacity() {
+        let layout = pack_atlas_regions(1920, &[(50, 100); 30]).unwrap();
+
+        assert_eq!(layout.extent(), [1500, 100]);
+        assert!(layout.extent()[1] <= 2048);
+        assert!(layout.origins().iter().all(|&[_, y]| y == 0));
+    }
+
+    #[test]
+    fn atlas_layout_rejects_capacity_overflow() {
+        assert!(pack_atlas_regions(1920, &[(50, u32::MAX), (50, 1)]).is_none());
     }
 }

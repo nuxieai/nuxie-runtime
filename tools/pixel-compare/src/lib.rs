@@ -38,13 +38,14 @@ pub struct ReferenceIdentity<'a> {
 }
 
 pub fn validate_reference_identities<'a>(
+    base: &Path,
     entries: impl IntoIterator<Item = ReferenceIdentity<'a>>,
 ) -> Result<(), String> {
     let mut owners = HashMap::<PathBuf, (PathBuf, usize, &str, &str)>::new();
     for entry in entries {
-        let reference = normalize_path(entry.reference);
+        let reference = normalize_path(base, entry.reference);
         let identity = (
-            normalize_path(entry.stream),
+            normalize_path(base, entry.stream),
             entry.frame,
             entry.mode,
             entry.id,
@@ -66,7 +67,12 @@ pub fn validate_reference_identities<'a>(
     Ok(())
 }
 
-fn normalize_path(path: &Path) -> PathBuf {
+fn normalize_path(base: &Path, path: &Path) -> PathBuf {
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    };
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -313,13 +319,18 @@ mod tests {
 
     #[test]
     fn normalizes_reference_aliases_without_collapsing_leading_parents() {
+        let base = Path::new("/repo/project");
         assert_eq!(
-            normalize_path(Path::new("a/sub/../shared.png")),
-            Path::new("a/shared.png")
+            normalize_path(base, Path::new("a/sub/../shared.png")),
+            Path::new("/repo/project/a/shared.png")
         );
         assert_eq!(
-            normalize_path(Path::new("../../shared.png")),
-            Path::new("../../shared.png")
+            normalize_path(base, Path::new("../../shared.png")),
+            Path::new("/shared.png")
+        );
+        assert_eq!(
+            normalize_path(base, Path::new("fixtures/shared.png")),
+            normalize_path(base, Path::new("/repo/project/fixtures/shared.png"))
         );
     }
 

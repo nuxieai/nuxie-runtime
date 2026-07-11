@@ -29,7 +29,7 @@ struct Entry {
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
-    validate_reference_identity(&manifest.entry)?;
+    validate_reference_identity(&std::env::current_dir()?, &manifest.entry)?;
     fs::create_dir_all(&options.output_dir)?;
     let mut exact = 0usize;
     let mut diverges = 0usize;
@@ -107,14 +107,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn validate_reference_identity(entries: &[Entry]) -> Result<(), String> {
-    validate_reference_identities(entries.iter().map(|entry| ReferenceIdentity {
-        id: &entry.id,
-        stream: &entry.stream,
-        frame: entry.frame,
-        mode: &entry.mode,
-        reference: &entry.reference,
-    }))
+fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), String> {
+    validate_reference_identities(
+        base,
+        entries.iter().map(|entry| ReferenceIdentity {
+            id: &entry.id,
+            stream: &entry.stream,
+            frame: entry.frame,
+            mode: &entry.mode,
+            reference: &entry.reference,
+        }),
+    )
 }
 
 struct Options {
@@ -186,7 +189,7 @@ mod tests {
             entry("atomic", "clockwise-atomic", "shared.png"),
             entry("msaa", "msaa", "shared.png"),
         ];
-        let error = validate_reference_identity(&entries).unwrap_err();
+        let error = validate_reference_identity(Path::new("/repo"), &entries).unwrap_err();
         assert!(error.contains("keyed by stream, frame, and mode"));
     }
 
@@ -196,7 +199,7 @@ mod tests {
             entry("atomic", "clockwise-atomic", "atomic.png"),
             entry("msaa", "msaa", "msaa.png"),
         ];
-        validate_reference_identity(&entries).unwrap();
+        validate_reference_identity(Path::new("/repo"), &entries).unwrap();
     }
 
     #[test]
@@ -205,6 +208,15 @@ mod tests {
             entry("atomic", "clockwise-atomic", "alias/shared.png"),
             entry("msaa", "msaa", "alias/sub/../shared.png"),
         ];
-        validate_reference_identity(&entries).unwrap_err();
+        validate_reference_identity(Path::new("/repo"), &entries).unwrap_err();
+    }
+
+    #[test]
+    fn rejects_absolute_and_relative_aliases() {
+        let entries = [
+            entry("one", "clockwise-atomic", "fixtures/shared.png"),
+            entry("two", "msaa", "/repo/fixtures/shared.png"),
+        ];
+        validate_reference_identity(Path::new("/repo"), &entries).unwrap_err();
     }
 }

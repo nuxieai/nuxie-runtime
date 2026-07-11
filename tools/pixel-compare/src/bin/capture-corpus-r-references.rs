@@ -24,13 +24,16 @@ struct Entry {
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
-    validate_reference_identities(manifest.entry.iter().map(|entry| ReferenceIdentity {
-        id: &entry.id,
-        stream: &entry.stream,
-        frame: entry.frame,
-        mode: &entry.mode,
-        reference: &entry.reference,
-    }))?;
+    validate_reference_identities(
+        &std::env::current_dir()?,
+        manifest.entry.iter().map(|entry| ReferenceIdentity {
+            id: &entry.id,
+            stream: &entry.stream,
+            frame: entry.frame,
+            mode: &entry.mode,
+            reference: &entry.reference,
+        }),
+    )?;
     require_supported_mode(&options.mode)?;
     let mut captured = 0usize;
 
@@ -65,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 entry.id
             )
         })?;
-        fs::rename(&temporary, &entry.reference)?;
+        install_reference(&temporary, &entry.reference)?;
         captured += 1;
         println!(
             "captured {}: frame={} mode={} reference={}",
@@ -140,6 +143,14 @@ fn require_supported_mode(mode: &str) -> Result<(), Box<dyn Error>> {
     }
 }
 
+fn install_reference(temporary: &Path, reference: &Path) -> Result<(), std::io::Error> {
+    if let Err(error) = fs::rename(temporary, reference) {
+        let _ = fs::remove_file(temporary);
+        return Err(error);
+    }
+    Ok(())
+}
+
 fn usage() -> &'static str {
     "usage: capture-corpus-r-references [--manifest FILE] [--replay FILE] [--status STATUS] [--mode MODE] [--id ID]"
 }
@@ -152,5 +163,24 @@ mod tests {
     fn rejects_msaa_capture_before_launching_replay() {
         let error = require_supported_mode("msaa").unwrap_err();
         assert!(error.to_string().contains("only supports clockwise-atomic"));
+    }
+
+    #[test]
+    fn removes_temporary_png_when_install_fails() {
+        let root = std::env::temp_dir().join(format!(
+            "pixel-compare-install-reference-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let temporary = root.join("temporary.png");
+        fs::write(&temporary, b"png").unwrap();
+        let destination = root.join("destination");
+        fs::create_dir(&destination).unwrap();
+
+        install_reference(&temporary, &destination).unwrap_err();
+
+        assert!(!temporary.exists());
+        fs::remove_dir_all(root).unwrap();
     }
 }

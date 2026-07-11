@@ -7,11 +7,9 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=22, diverges=0, gated=1,444, total=1,466.
+- Rust wgpu: exact=19, diverges=0, gated=1,447, total=1,466.
 - Stub baseline: exact=0 for every active entry.
-- Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
-  `artboardclipping-frame-0-msaa`, plus
-  `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
+- Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
   `gm-path_skbug_11886-clockwise-atomic`,
   `gm-convex_lineonly_ths-clockwise-atomic`, and
@@ -34,8 +32,8 @@ Run `make renderer-golden`.
 
 - [x] R0: Pixel golden harness. Parser/replay, PNG comparator, artifacts,
   manifest ratchet, checked-in references, stub baseline, and CI are landed.
-  The oracle contains 108 upstream GM streams, 294 valid `.riv` streams, 731
-  native Metal references, and 1,465 clockwise-atomic/MSAA entries. The
+  The oracle contains 108 upstream GM streams, 294 valid `.riv` streams, 735
+  legacy native Metal references, and 1,466 clockwise-atomic/MSAA entries. The
   pre-existing `solar-system` import error and 33 direct RenderContext/ORE GM
   source files have named gates.
 - [x] R1: wgpu foundation and first light. Device/queue/offscreen readback,
@@ -73,6 +71,9 @@ Run `make renderer-golden`.
 - 2026-07-10: `nuxie-render-stream` is the renderer isolation boundary. Runtime
   and GM capture both produce the same typed stream; C++ FFI and Rust wgpu
   replay consume it independently.
+- 2026-07-11: A renderer reference is identified by stream, frame, and mode.
+  C++ Metal is the clockwise-atomic oracle; MSAA rows remain harness-gated
+  until a C++ backend with implemented MSAA flush is wired into replay.
 
 ## Log
 
@@ -394,3 +395,11 @@ Run `make renderer-golden`.
   `OverStroke`; there is no shape or coverage-mask mismatch. This closes the
   routing verification finding from the two-axis review and moves the corpus
   to exact=22/diverges=0 without promoting the still-broken atlas stress case.
+- 2026-07-11: Re-keyed renderer references by stream, frame, and mode and added
+  a manifest validator that rejects cross-mode reference reuse. A hermetic C++
+  Metal capture command regenerated all 19 active clockwise-atomic references.
+  Upstream Metal explicitly leaves MSAA flush unimplemented, so the three
+  previously exact MSAA rows are now harness-gated instead of comparing against
+  default-mode images. Two large atomic fixtures need only channel delta 3,
+  with 2 and 10 pixels above that threshold inside their existing 32-pixel
+  budgets. The corrected ratchet is exact=19/diverges=0/gated=1,447.

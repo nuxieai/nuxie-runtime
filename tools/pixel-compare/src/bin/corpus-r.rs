@@ -1,5 +1,6 @@
-use pixel_compare::{artifact, compare, RgbaImage, Tolerance};
+use pixel_compare::{RgbaImage, Tolerance, artifact, compare};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,6 +28,7 @@ struct Entry {
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
+    validate_reference_identity(&manifest.entry)?;
     fs::create_dir_all(&options.output_dir)?;
     let mut exact = 0usize;
     let mut diverges = 0usize;
@@ -104,6 +106,32 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn validate_reference_identity(entries: &[Entry]) -> Result<(), String> {
+    let mut owners = HashMap::<&Path, (&Path, usize, &str, &str)>::new();
+    for entry in entries {
+        let identity = (
+            entry.stream.as_path(),
+            entry.frame,
+            entry.mode.as_str(),
+            entry.id.as_str(),
+        );
+        if let Some((stream, frame, mode, id)) = owners.insert(&entry.reference, identity) {
+            if (stream, frame, mode) != (identity.0, identity.1, identity.2) {
+                return Err(format!(
+                    "reference {} is shared by incompatible entries {id} ({}, frame {frame}, {mode}) and {} ({}, frame {}, {}); references must be keyed by stream, frame, and mode",
+                    entry.reference.display(),
+                    stream.display(),
+                    entry.id,
+                    entry.stream.display(),
+                    entry.frame,
+                    entry.mode,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 struct Options {
     manifest: PathBuf,
     replay: PathBuf,
@@ -147,4 +175,42 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error>> {
 
 fn usage() -> &'static str {
     "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal] [--output-dir DIR] [--expect-all-fail]"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: &str, mode: &str, reference: &str) -> Entry {
+        Entry {
+            id: id.to_owned(),
+            stream: PathBuf::from("fixture.rive-stream"),
+            reference: PathBuf::from(reference),
+            status: "gated".to_owned(),
+            frame: 0,
+            max_channel_delta: 2,
+            max_different_pixels: 0,
+            gated: Some("algorithm-core".to_owned()),
+            mode: mode.to_owned(),
+        }
+    }
+
+    #[test]
+    fn rejects_reference_reuse_across_modes() {
+        let entries = [
+            entry("atomic", "clockwise-atomic", "shared.png"),
+            entry("msaa", "msaa", "shared.png"),
+        ];
+        let error = validate_reference_identity(&entries).unwrap_err();
+        assert!(error.contains("keyed by stream, frame, and mode"));
+    }
+
+    #[test]
+    fn accepts_mode_specific_reference_paths() {
+        let entries = [
+            entry("atomic", "clockwise-atomic", "atomic.png"),
+            entry("msaa", "msaa", "msaa.png"),
+        ];
+        validate_reference_identity(&entries).unwrap();
+    }
 }

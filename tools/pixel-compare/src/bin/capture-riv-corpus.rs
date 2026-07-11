@@ -114,23 +114,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         fs::write(&stream_path, stream_text)?;
 
         for frame in 0..stream.frames.len() {
-            let reference = options
-                .reference_dir
-                .join(format!("{}-frame-{frame}.png", entry.id));
-            let replay = Command::new(&options.replay)
-                .args(["--stream", path_str(&stream_path)?])
-                .args(["--output", path_str(&reference)?])
-                .args(["--backend", "ffi-metal"])
-                .args(["--frame", &frame.to_string()])
-                .status()?;
-            if !replay.success() {
-                failures.push(format!(
-                    "{} frame {frame}: reference replay failed",
-                    entry.id
-                ));
-                break;
+            // The upstream Metal backend explicitly leaves MSAA flush unimplemented.
+            for mode in ["clockwise-atomic"] {
+                let reference = options
+                    .reference_dir
+                    .join(format!("{}-frame-{frame}-{mode}.png", entry.id));
+                let replay = Command::new(&options.replay)
+                    .args(["--stream", path_str(&stream_path)?])
+                    .args(["--output", path_str(&reference)?])
+                    .args(["--backend", "ffi-metal"])
+                    .args(["--frame", &frame.to_string()])
+                    .args(["--mode", mode])
+                    .status()?;
+                if !replay.success() {
+                    failures.push(format!(
+                        "{} frame {frame} mode {mode}: reference replay failed",
+                        entry.id
+                    ));
+                    break;
+                }
+                frame_count += 1;
             }
-            frame_count += 1;
         }
         if (index + 1) % 10 == 0 {
             println!(

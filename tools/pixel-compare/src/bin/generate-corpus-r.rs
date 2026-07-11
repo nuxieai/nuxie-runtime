@@ -26,10 +26,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut output = format!("{prefix}\n\n{GENERATED_MARKER}\n");
     for name in &names {
         for mode in ["clockwise-atomic", "msaa"] {
-            let (status, gate) = if name == "rect" && mode == "msaa" {
-                ("exact", "")
+            let gate = if mode == "msaa" {
+                "gated = \"reference-harness: C++ Metal does not implement MSAA flush\"\n"
             } else {
-                ("gated", "gated = \"algorithm-core\"\n")
+                "gated = \"algorithm-core\"\n"
             };
             output.push_str(&format!(
                 r#"
@@ -37,10 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 id = "gm-{name}-{mode}"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/{name}.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/{name}.png"
+reference = "fixtures/renderer/reference/metal/gm/{name}-{mode}.png"
 mode = "{mode}"
 backend = "metal"
-status = "{status}"
+status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
 {gate}
@@ -65,20 +65,25 @@ max_different_pixels = 32
                 nuxie_render_stream::RenderStream::parse(&fs::read_to_string(&stream_path)?)?;
             for frame in 0..stream.frames.len() {
                 for mode in ["clockwise-atomic", "msaa"] {
+                    let gate = if mode == "msaa" {
+                        "reference-harness: C++ Metal does not implement MSAA flush"
+                    } else {
+                        "algorithm-core"
+                    };
                     output.push_str(&format!(
                         r#"
 [[entry]]
 id = "riv-{name}-frame-{frame}-{mode}"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/{name}.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/{name}-frame-{frame}.png"
+reference = "fixtures/renderer/reference/metal/riv/{name}-frame-{frame}-{mode}.png"
 mode = "{mode}"
 backend = "metal"
 frame = {frame}
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "{gate}"
 "#
                     ));
                 }

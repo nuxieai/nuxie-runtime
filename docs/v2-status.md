@@ -522,19 +522,19 @@ the only memory the next session has. Update it every commit.
 - [x] M5: Data binding exact incl. external view-model mutation
 - [x] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
 - [x] M7: Public `rive` API + C ABI; perf within target of C++
-- [ ] M8: Closeout hardening — scripting integrated, C ABI complete, audits/fuzzing clean, PORTING.md (#V2-9, added 2026-07-09)
+- [x] M8: Closeout hardening — scripting integrated, C ABI complete, audits/fuzzing clean, PORTING.md (#V2-9, added 2026-07-09)
 
 ## Next
 
-1. M0-M7 remain complete; M8 is active. The regular ratchet passes at
+1. M0-M8 are complete. The regular ratchet passes at
    exact=263 / exact-segments=584 / diverges=27 / unsupported-feature=5;
    the scripting-enabled M8 lane is fully exact at exact=27 /
    exact-segments=35 / diverges=0 / unsupported-feature=0; `cargo test
    --workspace` passes.
-2. All substantive M8 runtime, SDK, hardening, and publishability work is
-   complete. The sole remaining exit item is the explicitly destructive full
-   history rewrite and force-push, pending user confirmation of the configured
-   identity and authorization.
+2. The full repository history has been rewritten to the sole identity
+   `Levi McCallum <levi@levimccallum.com>`, all `Co-Authored-By` trailers have
+   been removed, and the rewritten history passed tree, inventory, identity,
+   and `git fsck` audits. No V2 work remains.
 3. Do not start Phase R from the V2 goal loop; it requires explicit user
    activation.
 
@@ -690,14 +690,13 @@ the only memory the next session has. Update it every commit.
         fuzzers and guarded regressions run in CI with no known reachable panic
         from accepted files.
     (d) `docs/PORTING.md` COMPLETE: the C++->Rust idiom codex is committed.
-    (e) RELEASE PREP IN PROGRESS: the Nuxie rename sweep is complete across
+    (e) RELEASE PREP COMPLETE: the Nuxie rename sweep is complete across
         crate/package/module names and the `nux_*` C ABI/header; the renamed
         `libnux_capi` is 2.61 MiB scripting-off against the <=2.75 MiB budget.
         README positioning, MIT license/third-party notices, and checksum-pinned
         upstream fixture fetching are complete; only four project-generated
-        malformed fuzz reproducers remain tracked as `.riv` files. Remaining:
-        perform the final history rewrite after the user confirms email and
-        destructive force-push authorization.
+        malformed fuzz reproducers remain tracked as `.riv` files. The full
+        history rewrite and release audit are complete.
     Phase R remains gated on explicit user activation; its map now also
     records a Bun-style big-bang execution option to choose at
     activation.
@@ -3880,6 +3879,12 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Completed V2. With explicit user authorization, rewrote all
+  1,513 commits to `Levi McCallum <levi@levimccallum.com>`, removed every
+  `Co-Authored-By:` trailer, preserved the 719-file tip tree exactly, and
+  passed the full identity and `git fsck` audits. M0-M8 are complete; Phase R
+  remains gated on explicit user activation.
 
 - 2026-07-10: [M8] Closed component-list instancing and rehearsed the final
   history rewrite. `script_create_viewmodel_instance.riv` is scripted-exact;

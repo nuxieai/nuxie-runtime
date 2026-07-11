@@ -21,6 +21,7 @@ use std::path::PathBuf;
 fn fixture_bytes(name: &str) -> Vec<u8> {
     let fixture = PathBuf::from(
         std::env::var_os("NUX_RUNTIME_DIR")
+            .or_else(|| std::env::var_os("RIVE_RUNTIME_DIR"))
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
     )
     .join("tests/unit_tests/assets")

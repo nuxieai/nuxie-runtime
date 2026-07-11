@@ -47,9 +47,11 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Port `draw.cpp` feather geometry, then continue R2 in source dependency
-   order with `render_context.cpp`, robust triangulation, and the intersection
-   board.
+1. Finish feather routing in source dependency order: partition atomic-capable
+   draws instead of rejecting the whole frame, port the large-radius feather
+   atlas path, then enable the prepared feathered-stroke path. Continue R2
+   with the remaining `render_context.cpp` behavior, robust triangulation, and
+   the intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -254,4 +256,18 @@ Run `make renderer-golden`.
   texture is retained once per renderer context and shared by MSAA and atomic
   draw bindings. Feather specialization remains disabled until its matching
   `draw.cpp` geometry lands; all 28 renderer tests pass and the corpus remains
+  exact=21/diverges=0.
+- 2026-07-11: Ported direct clockwise-atomic feathered-fill geometry from
+  `draw.cpp`: implicit contour closure, stroke-style cubic chopping, capped
+  polar budgets, six-or-more-segment feather joins, real contour midpoints,
+  reverse-plus-forward tessellation, center-AA patches, and the canonical
+  `paintFeather * 1.5` radius. The same builder records both radii and ordinary
+  join flags for future feathered strokes. A binding audit also found and
+  fixed the tessellation pass still sampling a 1x1 placeholder instead of the
+  inverse Gaussian LUT; this changes `feather_ellipse` from faceted diamonds
+  to smooth ellipses and drops its max delta from 230 to 53. Its remaining
+  broad differences begin where C++ switches feathers at 32 device pixels to
+  the quarter-resolution atlas. Compound feather fills now enter the direct
+  path; feathered strokes remain runtime-gated until mixed direct/atlas draw
+  partitioning lands. All 30 renderer tests pass and the corpus remains
   exact=21/diverges=0.

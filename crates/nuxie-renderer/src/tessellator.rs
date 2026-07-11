@@ -115,6 +115,7 @@ impl Tessellator {
         &self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
+        feather_lut: &wgpu::TextureView,
         spans: &[TessVertexSpan],
         uniforms: &FlushUniforms,
         paths: &[PathData],
@@ -146,22 +147,12 @@ impl Tessellator {
             contours,
             wgpu::BufferUsages::STORAGE,
         );
-        let atlas = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nuxie-tessellation-dummy-atlas"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("nuxie-tessellation-linear-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
         });
-        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
         let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-flush-group"),
             layout: &self.flush_layout,
@@ -169,7 +160,7 @@ impl Tessellator {
                 binding(0, uniform_buffer.as_entire_binding()),
                 binding(3, path_buffer.as_entire_binding()),
                 binding(6, contour_buffer.as_entire_binding()),
-                binding(10, wgpu::BindingResource::TextureView(&atlas_view)),
+                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
         let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

@@ -679,20 +679,31 @@ impl WgpuFrame {
             && !self.draws.is_empty()
             && self.draws.iter().all(|draw| {
                 draw.paint.shader.is_none()
-                    && draw.paint.feather == 0.0
-                    && match draw.paint.style {
-                        RenderPaintStyle::Fill => {
-                            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                                .is_some_and(|tessellation| tessellation.contours.len() == 1)
+                    && if draw.paint.feather != 0.0 {
+                        draw.paint.style == RenderPaintStyle::Fill
+                            && draw::build_feather_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
+                                draw.paint.feather,
+                                None,
+                            )
+                            .is_some()
+                    } else {
+                        match draw.paint.style {
+                            RenderPaintStyle::Fill => draw::build_fill_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
+                            )
+                            .is_some_and(|tessellation| tessellation.contours.len() == 1),
+                            RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
+                                draw.paint.thickness,
+                                draw.paint.join,
+                                draw.paint.cap,
+                            )
+                            .is_some(),
                         }
-                        RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
-                            &draw.path.raw_path,
-                            draw.state.transform,
-                            draw.paint.thickness,
-                            draw.paint.join,
-                            draw.paint.cap,
-                        )
-                        .is_some(),
                     }
             });
         let used_atomic = if atomic_eligible {
@@ -703,6 +714,7 @@ impl WgpuFrame {
                 patch_index_range: std::ops::Range<u32>,
                 triangles: Vec<gpu::TriangleVertex>,
                 is_stroke: bool,
+                is_feather: bool,
             }
 
             {
@@ -744,7 +756,38 @@ impl WgpuFrame {
                     instance_count,
                     patch_index_range,
                     mut triangles,
-                ) = if draw.paint.style == RenderPaintStyle::Stroke {
+                ) = if draw.paint.feather != 0.0 {
+                    let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
+                    let stroke = is_stroke.then_some((
+                        draw.paint.thickness,
+                        draw.paint.join,
+                        draw.paint.cap,
+                    ));
+                    let tessellation = draw::build_feather_tessellation(
+                        &draw.path.raw_path,
+                        draw.state.transform,
+                        draw.paint.feather,
+                        stroke,
+                    )
+                    .expect("atomic eligibility already validated feather tessellation");
+                    let patch_index_range = if is_stroke {
+                        0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
+                    } else {
+                        gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
+                            ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                as u32
+                    };
+                    (
+                        tessellation.spans,
+                        tessellation.path,
+                        tessellation.contours,
+                        tessellation.base_instance,
+                        tessellation.instance_count,
+                        patch_index_range,
+                        Vec::new(),
+                    )
+                } else if draw.paint.style == RenderPaintStyle::Stroke {
                     let tessellation = draw::build_stroke_tessellation(
                         &draw.path.raw_path,
                         draw.state.transform,
@@ -840,6 +883,7 @@ impl WgpuFrame {
                     patch_index_range,
                     triangles,
                     is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
+                    is_feather: draw.paint.feather != 0.0,
                 });
             }
             let tessellation_height = prepared
@@ -854,6 +898,7 @@ impl WgpuFrame {
                 let tessellation_texture = self.context.tessellator.encode(
                     &self.context.device,
                     &mut encoder,
+                    &self.context.feather_lut.view,
                     &draw.spans,
                     &uniforms,
                     &paths,
@@ -876,6 +921,7 @@ impl WgpuFrame {
                     patch_index_range: draw.patch_index_range.clone(),
                     triangle_vertices: &draw.triangles,
                     is_stroke: draw.is_stroke,
+                    is_feather: draw.is_feather,
                 })
                 .collect::<Vec<_>>();
             self.context.atomic_pipeline.encode_batch(
@@ -933,6 +979,7 @@ impl WgpuFrame {
                         let tessellation_texture = self.context.tessellator.encode(
                             &self.context.device,
                             &mut encoder,
+                            &self.context.feather_lut.view,
                             &tessellation.spans,
                             &uniforms,
                             std::slice::from_ref(&tessellation.path),
@@ -1444,6 +1491,7 @@ mod tests {
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
             &mut encoder,
+            &factory.context.feather_lut.view,
             &[first, second],
             &uniforms,
             &paths,

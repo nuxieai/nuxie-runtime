@@ -3,9 +3,10 @@
 use crate::gpu::{
     AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan, TriangleVertex,
     BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
-    EMULATED_STROKE_CAP_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN,
-    MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG, OUTER_CURVE_PATCH_SEGMENT_SPAN,
-    PARAMETRIC_PRECISION, POLAR_PRECISION, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH,
+    EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS,
+    MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG,
+    OUTER_CURVE_PATCH_SEGMENT_SPAN, PARAMETRIC_PRECISION, POLAR_PRECISION, ROUND_JOIN_CONTOUR_FLAG,
+    TESS_TEXTURE_WIDTH,
 };
 use bytemuck::Zeroable;
 use nuxie_render_api::{Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
@@ -62,13 +63,49 @@ pub(crate) fn build_stroke_tessellation(
     join: StrokeJoin,
     cap: StrokeCap,
 ) -> Option<FillTessellation> {
-    let contours = stroke_contours(path)?;
+    build_stroke_or_feather_tessellation(path, transform, Some((thickness, join, cap)), 0.0)
+}
+
+pub(crate) fn build_feather_tessellation(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+) -> Option<FillTessellation> {
+    let feather_radius = paint_feather * 1.5;
+    if feather_radius <= 0.0 || !feather_radius.is_finite() {
+        return None;
+    }
+    let mut tessellation =
+        build_stroke_or_feather_tessellation(path, transform, stroke, feather_radius)?;
+    if stroke.is_none() {
+        tessellation.make_double_sided();
+    }
+    Some(tessellation)
+}
+
+fn build_stroke_or_feather_tessellation(
+    path: &RawPath,
+    transform: Mat2D,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    feather_radius: f32,
+) -> Option<FillTessellation> {
+    let mut contours = stroke_contours(path)?;
+    let is_stroke = stroke.is_some();
+    if !is_stroke {
+        for contour in &mut contours {
+            contour.closed = true;
+        }
+    }
+    let (thickness, join, cap) = stroke.unwrap_or((0.0, StrokeJoin::Bevel, StrokeCap::Butt));
     let stroke_radius = thickness * 0.5;
-    if stroke_radius <= 0.0 || contours.is_empty() {
+    if (is_stroke && stroke_radius <= 0.0) || contours.is_empty() {
         return None;
     }
     let matrix_scale = max_matrix_scale(transform);
-    let polar_segments_per_radian = polar_segments_per_radian(stroke_radius * matrix_scale);
+    let feather_screen_radius = (feather_radius * matrix_scale).min(feather_max_screen_radius());
+    let polar_segments_per_radian =
+        polar_segments_per_radian(feather_screen_radius + stroke_radius * matrix_scale);
     let cap_segments = match cap {
         StrokeCap::Round => ((polar_segments_per_radian * std::f32::consts::PI).ceil() + 2.0)
             .min(crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32,
@@ -79,11 +116,19 @@ pub(crate) fn build_stroke_tessellation(
         StrokeCap::Round => ROUND_JOIN_CONTOUR_FLAG,
         StrokeCap::Square => MITER_CLIP_JOIN_CONTOUR_FLAG,
     } | EMULATED_STROKE_CAP_CONTOUR_FLAG;
-    let join_flags = match join {
-        StrokeJoin::Miter => MITER_REVERT_JOIN_CONTOUR_FLAG,
-        StrokeJoin::Round => ROUND_JOIN_CONTOUR_FLAG,
-        StrokeJoin::Bevel => BEVEL_JOIN_CONTOUR_FLAG,
+    let join_flags = if is_stroke {
+        match join {
+            StrokeJoin::Miter => MITER_REVERT_JOIN_CONTOUR_FLAG,
+            StrokeJoin::Round => ROUND_JOIN_CONTOUR_FLAG,
+            StrokeJoin::Bevel => BEVEL_JOIN_CONTOUR_FLAG,
+        }
+    } else {
+        FEATHER_JOIN_CONTOUR_FLAG
     };
+    let feather_join_segments = ((polar_segments_per_radian * std::f32::consts::PI).ceil() as u32
+        + 4)
+    .max(6)
+    .min(crate::gpu::MAX_POLAR_SEGMENTS);
     let mut spans = Vec::new();
     let mut contour_data = Vec::with_capacity(contours.len());
     let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
@@ -101,6 +146,9 @@ pub(crate) fn build_stroke_tessellation(
         let contour_start = location as u32;
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
         let mut pending = Vec::new();
+        if curves.is_empty() && !is_stroke {
+            continue;
+        }
         if curves.is_empty() {
             let empty_cap = if contour.closed {
                 match join {
@@ -160,11 +208,15 @@ pub(crate) fn build_stroke_tessellation(
                         let transformed = cubic.map(|point| transform.transform_point(point));
                         (
                             cubic_segment_count(transformed),
-                            round_join_segment_count(
-                                tangents[0],
-                                tangents[1],
-                                polar_segments_per_radian,
-                            ),
+                            if is_stroke {
+                                round_join_segment_count(
+                                    tangents[0],
+                                    tangents[1],
+                                    polar_segments_per_radian,
+                                )
+                            } else {
+                                1
+                            },
                         )
                     };
                     prepared.push(PreparedStrokeCurve {
@@ -201,7 +253,9 @@ pub(crate) fn build_stroke_tessellation(
                     (prepared[index + 1].tangents[0], 1, contour_id | join_flags)
                 } else {
                     let next_tangent = prepared[(index + 1) % prepared.len()].tangents[0];
-                    let segment_count = if join == StrokeJoin::Round {
+                    let segment_count = if !is_stroke {
+                        feather_join_segments
+                    } else if join == StrokeJoin::Round {
                         round_join_segment_count(
                             curve.tangents[1],
                             next_tangent,
@@ -227,11 +281,12 @@ pub(crate) fn build_stroke_tessellation(
             .map(|(_, _, parametric, polar, join, _)| parametric + polar + join - 1)
             .sum::<u32>() as i32;
         let padding = align_up(vertex_count, MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32) - vertex_count;
-        contour_data.push(ContourData::new(
-            [if contour.closed { 1.0 } else { 0.0 }, 0.0],
-            0,
-            contour_start,
-        ));
+        let midpoint = if is_stroke {
+            Vec2D::new(if contour.closed { 1.0 } else { 0.0 }, 0.0)
+        } else {
+            contour_midpoint(&curves.iter().map(|curve| curve.cubic).collect::<Vec<_>>())
+        };
+        contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, contour_start));
         for (index, (curve, tangent, parametric, polar, join, flags)) in
             pending.into_iter().enumerate()
         {
@@ -259,7 +314,7 @@ pub(crate) fn build_stroke_tessellation(
         path: PathData::new(
             transform,
             stroke_radius,
-            0.0,
+            feather_radius,
             0,
             AtlasTransform::zeroed(),
             CoverageBufferRange::zeroed(),
@@ -268,6 +323,10 @@ pub(crate) fn build_stroke_tessellation(
         base_instance: 1,
         instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
     })
+}
+
+fn feather_max_screen_radius() -> f32 {
+    1.0 / (POLAR_PRECISION as f32 * (1.0 - (std::f32::consts::PI / 32.0).cos()))
 }
 
 fn stroke_contours(path: &RawPath) -> Option<Vec<StrokeContour>> {
@@ -1335,6 +1394,45 @@ mod tests {
         .unwrap();
         assert!(tessellation.spans[2].segment_counts & 1023 > 1);
         assert!(tessellation.spans[2].segment_counts >> 10 & 1023 > 1);
+    }
+
+    #[test]
+    fn feather_fill_uses_closed_double_sided_join_geometry() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(12.0, 0.0);
+        path.line_to(12.0, 6.0);
+        let tessellation = build_feather_tessellation(&path, Mat2D::IDENTITY, 10.0, None).unwrap();
+
+        assert_eq!(tessellation.path.stroke_radius, 0.0);
+        assert_eq!(tessellation.path.feather_radius, 15.0);
+        assert_eq!(tessellation.contours[0].midpoint, [8.0, 2.0]);
+        assert_eq!(tessellation.contours[0].vertex_index0, 64);
+        assert_eq!(tessellation.instance_count % 2, 0);
+        assert!(tessellation.spans[1..]
+            .iter()
+            .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
+    }
+
+    #[test]
+    fn feathered_stroke_keeps_stroke_join_flags_and_both_radii() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(12.0, 0.0);
+        let tessellation = build_feather_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            4.0,
+            Some((10.0, StrokeJoin::Round, StrokeCap::Round)),
+        )
+        .unwrap();
+
+        assert_eq!(tessellation.path.stroke_radius, 5.0);
+        assert_eq!(tessellation.path.feather_radius, 6.0);
+        assert_eq!(tessellation.contours[0].vertex_index0, 8);
+        assert!(tessellation.spans[1..]
+            .iter()
+            .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 }));
     }
 
     #[test]

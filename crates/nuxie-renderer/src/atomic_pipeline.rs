@@ -5,6 +5,8 @@ use wgpu::util::DeviceExt;
 
 pub(crate) struct AtomicPipeline {
     path: wgpu::RenderPipeline,
+    feather_path: wgpu::RenderPipeline,
+    feather_stroke_path: wgpu::RenderPipeline,
     stroke_path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
@@ -21,6 +23,7 @@ pub(crate) struct AtomicDraw<'a> {
     pub patch_index_range: std::ops::Range<u32>,
     pub triangle_vertices: &'a [crate::gpu::TriangleVertex],
     pub is_stroke: bool,
+    pub is_feather: bool,
 }
 
 impl AtomicPipeline {
@@ -127,6 +130,74 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let feather_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-feather-path-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &path_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(PatchVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &path_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 0.0),
+                    ("1", 1.0),
+                    ("3", 1.0),
+                    ("4", 0.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let feather_stroke_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-feather-stroke-path-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &path_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(PatchVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &path_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 0.0),
+                    ("1", 1.0),
+                    ("3", 1.0),
+                    ("4", 0.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let stroke_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-stroke-path-pipeline"),
             layout: Some(&layout),
@@ -216,6 +287,8 @@ impl AtomicPipeline {
         });
         Self {
             path,
+            feather_path,
+            feather_stroke_path,
             stroke_path,
             interior,
             resolve,
@@ -314,7 +387,7 @@ impl AtomicPipeline {
             view_formats: &[],
         });
         let dummy_view = dummy.create_view(&Default::default());
-        let sampler = device.create_sampler(&Default::default());
+        let sampler = device.create_sampler(&linear_sampler());
         let flush_groups = draws
             .iter()
             .map(|draw| {
@@ -364,7 +437,11 @@ impl AtomicPipeline {
                 "nuxie-atomic-path-pass",
                 &attachments,
             ));
-            pass.set_pipeline(if draw.is_stroke {
+            pass.set_pipeline(if draw.is_feather && draw.is_stroke {
+                &self.feather_stroke_path
+            } else if draw.is_feather {
+                &self.feather_path
+            } else if draw.is_stroke {
                 &self.stroke_path
             } else {
                 &self.path
@@ -485,6 +562,14 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
         count: None,
+    }
+}
+fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
+    wgpu::SamplerDescriptor {
+        label: Some("nuxie-atomic-linear-sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
     }
 }
 fn color_attachment(

@@ -1,4 +1,6 @@
 /target/
+/fixtures/**/*.riv
+/fuzz/seeds/**/*.riv
 /tools/cpp-probe/build/Makefile
 /tools/cpp-probe/build/*.make
 /tools/cpp-probe/build/linux/

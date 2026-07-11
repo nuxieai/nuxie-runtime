@@ -18,7 +18,7 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/nuxieai/nuxie-runtime"
 
 # Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).

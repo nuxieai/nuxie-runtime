@@ -679,9 +679,11 @@ the only memory the next session has. Update it every commit.
     (e) RELEASE PREP IN PROGRESS: the Nuxie rename sweep is complete across
         crate/package/module names and the `nux_*` C ABI/header; the renamed
         `libnux_capi` is 2.61 MiB scripting-off against the <=2.75 MiB budget.
-        Remaining: README positioning, license/notice hygiene, upstream corpus
-        fetch instead of vendored assets, then final history rewrite after the
-        user confirms email.
+        README positioning, MIT license/third-party notices, and checksum-pinned
+        upstream fixture fetching are complete; only four project-generated
+        malformed fuzz reproducers remain tracked as `.riv` files. Remaining:
+        final history rewrite after the user confirms email and destructive
+        force-push authorization.
     Phase R remains gated on explicit user activation; its map now also
     records a Bun-style big-bang execution option to choose at
     activation.
@@ -3866,6 +3868,22 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Completed the non-destructive publishability work. Root
+  README positions Nuxie Runtime as an independent pure-Rust runtime with
+  factual `.riv` compatibility and the required Rive non-affiliation notice.
+  The workspace is MIT-only; `LICENSE` preserves Rive's upstream copyright and
+  `THIRD_PARTY_NOTICES.md` preserves luaur, Luau/Lua, and mlua/rlua attribution.
+  Removed all 28 tracked upstream fixture/seed binaries. `make fixtures` now
+  copies from `RIVE_RUNTIME_DIR` or downloads from pinned upstream commit
+  `7c778d13`, verifies seven SHA-256 values, and materializes ignored test and
+  fuzz seed trees; CI invokes it before golden, C smoke, and fuzz jobs. Only
+  four project-generated malformed fuzz reproducers remain tracked. Workspace
+  tests, C smoke, both corpus lanes, formatting, and diff checks pass; metrics
+  remain regular 263/584/26/6 and scripted 26/34/0/1. Next: obtain explicit
+  confirmation for `Levi McCallum <levi@levimccallum.com>` and authorization
+  to rewrite and force-push all history; that destructive operation is the sole
+  remaining M8 exit item.
 
 - 2026-07-10: [M8] Completed the publish-facing Nuxie rename. The public crate
   is `nuxie`; internal crates and codegen are `nuxie-*`; the embedded SDK is

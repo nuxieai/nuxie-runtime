@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -26,6 +26,9 @@ PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-pa
 CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
 CC ?= cc
 
+fixtures:
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/fetch-test-assets.sh
+
 schema:
 	cargo run -p nuxie-codegen -- --defs "$(DEFS_DIR)" --out crates/nuxie-schema/src/generated/schema.rs
 	cargo fmt --all
@@ -33,7 +36,7 @@ schema:
 check:
 	cargo check --workspace
 
-test:
+test: fixtures
 	cargo test --workspace
 
 # --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------
@@ -88,11 +91,11 @@ scripted-rust-golden-runner:
 	cargo build --quiet $(RUST_GOLDEN_RUNNER_FLAGS) -p rust-golden-runner --features scripting
 	cp "$(RUST_GOLDEN_RUNNER)" "$(SCRIPTED_RUST_GOLDEN_RUNNER)"
 
-golden-compare: golden-runner rust-golden-runner
+golden-compare: fixtures golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 scripted-golden-compare: CPP_CONFIG=release
-scripted-golden-compare: scripted-golden-runner scripted-rust-golden-runner
+scripted-golden-compare: fixtures scripted-golden-runner scripted-rust-golden-runner
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --milestone M8 --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 perf-compare: CPP_CONFIG=release
@@ -116,7 +119,7 @@ perf-json: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --aggregate "$(PERF_AGGREGATE)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
 	@echo "perf-json wrote $(PERF_JSON_OUT)"
 
-capi-smoke:
+capi-smoke: fixtures
 	cargo build --quiet -p nux-capi
 	mkdir -p target/capi-smoke
 	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include -o target/capi-smoke/capi_smoke crates/nux-capi/smoke/capi_smoke.c -Ltarget/debug -lnux_capi
@@ -160,11 +163,12 @@ FUZZ_RSS_LIMIT_MB ?= 4096
 FUZZ_TIMEOUT ?= 25
 
 # Build every libfuzzer target (also the CI "build-only" gate).
-fuzz-build:
+fuzz-build: fixtures
 	cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz build
 
-# The committed seed corpus lives in fuzz/seeds/<target>/; libFuzzer's writable
-# working corpus (fuzz/corpus/<target>/) and any crash artifacts are gitignored.
+# `make fixtures` materializes the pinned upstream seed corpus under
+# fuzz/seeds/<target>/; libFuzzer's writable working corpus
+# (fuzz/corpus/<target>/) and crash artifacts are gitignored.
 # NOTE: the smoke gate deliberately does NOT replay fuzz/regressions/ -- that
 # tree also archives reproducers for KNOWN-OPEN findings (see
 # fuzz/regressions/README.md), which would wedge the gate. Fixed-bug

@@ -44,6 +44,10 @@ jobs:
           RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
           echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
 
+      - name: Fetch pinned test assets
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make fixtures
+
       - name: Run golden compare
         working-directory: ${{ github.workspace }}/rive-rust
         run: make golden-compare
@@ -67,6 +71,9 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
+
+      - name: Fetch pinned test assets
+        run: make fixtures
 
       - name: Build and run C smoke test
         run: make capi-smoke
@@ -119,8 +126,8 @@ jobs:
           if-no-files-found: ignore
 
   # Negative-input fuzz smoke gate. This is additive and self-contained: it
-  # needs neither the reference C++ runtime nor any golden fixtures beyond the
-  # committed seed corpus under fuzz/corpus/. cargo-fuzz requires the nightly
+  # fetches its pinned upstream seed corpus before running and needs no built
+  # C++ reference runtime. cargo-fuzz requires the nightly
   # toolchain (libFuzzer + `-Z sanitizer`), pinned here via `rustup default
   # nightly`. The time budget is deliberately short -- this proves the harness
   # builds and runs, it is not a fuzzing campaign. If the nightly install ever
@@ -142,6 +149,9 @@ jobs:
           rustup toolchain install nightly --profile minimal --no-self-update
           rustup default nightly
           cargo install cargo-fuzz --locked
+
+      - name: Fetch pinned test assets
+        run: make fixtures
 
       - name: Build and smoke-run fuzz targets
         run: make fuzz-smoke FUZZ_CARGO=cargo FUZZ_SMOKE_SECONDS=20

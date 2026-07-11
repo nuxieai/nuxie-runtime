@@ -94,3 +94,10 @@ Run `make renderer-golden`.
   line/quad/cubic normalization, device-space Wang counts, contour records,
   the leading invalid eight-vertex range, and per-path eight-vertex padding.
   The first-light triangle lays out one midpoint-fan patch at base instance 1.
+- 2026-07-11: Wired the generated `draw_msaa_path` shaders to the tessellation
+  texture and immutable patch buffers. Corrected WebGPU viewport orientation,
+  one-polar-endpoint fill counts, per-contour pre-padding, and absolute contour
+  starts against C++ source. The first-light triangle now reproduces the known
+  MSAA-vs-atomic edge delta exactly (112 pixels, max delta 43); the active
+  corpus remains exact=3/diverges=0. Compound fills stay on the prior correct
+  stencil fallback until the upstream MSAA stencil/cover pass lands.

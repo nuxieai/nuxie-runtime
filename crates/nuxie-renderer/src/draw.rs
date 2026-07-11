@@ -36,14 +36,23 @@ pub(crate) fn build_fill_tessellation(
     let mut contour_data = Vec::with_capacity(contours.len());
     let path_start = location;
     for (index, curves) in contours.iter().enumerate() {
-        let vertex_index0 = (location - path_start) as u32;
+        let vertex_index0 = location as u32;
         let midpoint = contour_midpoint(curves);
         contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, vertex_index0));
-        for curve in curves {
-            let transformed = curve.map(|point| transform.transform_point(point));
-            let segments = cubic_segment_count(transformed);
+        let segment_counts = curves
+            .iter()
+            .map(|curve| cubic_segment_count(curve.map(|point| transform.transform_point(point))))
+            .collect::<Vec<_>>();
+        let raw_vertex_count = segment_counts.iter().sum::<u32>() + curves.len() as u32;
+        let padding = align_up(
+            raw_vertex_count as i32,
+            MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32,
+        ) - raw_vertex_count as i32;
+        for (curve_index, (curve, segments)) in
+            curves.iter().zip(segment_counts.into_iter()).enumerate()
+        {
             let x0 = location;
-            location += segments as i32;
+            location += segments as i32 + 1 + i32::from(curve_index == 0) * padding;
             spans.push(TessVertexSpan::without_reflection(
                 curve.map(|point| [point.x, point.y]),
                 [0.0, 0.0],
@@ -51,17 +60,11 @@ pub(crate) fn build_fill_tessellation(
                 x0,
                 location,
                 segments,
-                0,
+                1,
                 1,
                 (index as u32 + 1) & CONTOUR_ID_MASK,
             ));
         }
-    }
-    let used = location - path_start;
-    let aligned = align_up(used, MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32);
-    if aligned > used {
-        push_padding_span(&mut spans, location, location + aligned - used);
-        location += aligned - used;
     }
     Some(FillTessellation {
         spans,
@@ -478,9 +481,10 @@ mod tests {
         assert_eq!(tessellation.base_instance, 1);
         assert_eq!(tessellation.instance_count, 1);
         assert_eq!(tessellation.contours.len(), 1);
-        assert_eq!(tessellation.spans.len(), 5);
+        assert_eq!(tessellation.contours[0].vertex_index0, 8);
+        assert_eq!(tessellation.spans.len(), 4);
         assert_eq!(tessellation.spans[0].x0_x1 as u32, 0x0008_0000);
-        assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x0009_0008);
-        assert_eq!(tessellation.spans[4].x0_x1 as u32, 0x0010_000b);
+        assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x000c_0008);
+        assert_eq!(tessellation.spans[3].x0_x1 as u32, 0x0010_000e);
     }
 }

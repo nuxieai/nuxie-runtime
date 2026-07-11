@@ -2,6 +2,7 @@
 
 mod draw;
 mod gpu;
+mod path_pipeline;
 mod tessellator;
 
 use bytemuck::{Pod, Zeroable};
@@ -43,9 +44,10 @@ struct Context {
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
     cover_pipeline: wgpu::RenderPipeline,
-    _patch_vertex_buffer: wgpu::Buffer,
-    _patch_index_buffer: wgpu::Buffer,
-    _tessellator: tessellator::Tessellator,
+    patch_vertex_buffer: wgpu::Buffer,
+    patch_index_buffer: wgpu::Buffer,
+    tessellator: tessellator::Tessellator,
+    path_pipeline: path_pipeline::PathPipeline,
 }
 
 pub struct WgpuFactory {
@@ -193,6 +195,7 @@ impl WgpuFactory {
             usage: wgpu::BufferUsages::INDEX,
         });
         let tessellator = tessellator::Tessellator::new(&device);
+        let path_pipeline = path_pipeline::PathPipeline::new(&device);
         Ok(Self {
             context: Arc::new(Context {
                 device,
@@ -200,9 +203,10 @@ impl WgpuFactory {
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
                 cover_pipeline,
-                _patch_vertex_buffer: patch_vertex_buffer,
-                _patch_index_buffer: patch_index_buffer,
-                _tessellator: tessellator,
+                patch_vertex_buffer,
+                patch_index_buffer,
+                tessellator,
+                path_pipeline,
             }),
             width,
             height,
@@ -641,11 +645,54 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
-        let vertex_buffers = self
-            .draws
-            .iter()
-            .filter_map(|draw| {
-                let path_vertices = tessellate_solid(draw, self.width, self.height)?;
+        enum PreparedDraw {
+            Analytic(path_pipeline::PreparedPathDraw),
+            Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
+        }
+        let mut prepared_draws = Vec::with_capacity(self.draws.len());
+        for draw in &self.draws {
+            if draw.paint.style == RenderPaintStyle::Fill && draw.paint.shader.is_none() {
+                if let Some(tessellation) =
+                    draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                {
+                    if tessellation.contours.len() != 1 {
+                        // Compound fills require the upstream stencil-then-cover path.
+                    } else {
+                        let uniforms = analytic_uniforms(self.width, self.height, 1);
+                        let tessellation_texture = self.context.tessellator.encode(
+                            &self.context.device,
+                            &mut encoder,
+                            &tessellation.spans,
+                            &uniforms,
+                            std::slice::from_ref(&tessellation.path),
+                            &tessellation.contours,
+                            1,
+                        );
+                        let tessellation_view = tessellation_texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        let paint = gpu::PaintData::solid(
+                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                            draw.path.fill_rule,
+                            draw.paint.blend_mode,
+                        );
+                        prepared_draws.push(PreparedDraw::Analytic(
+                            self.context.path_pipeline.prepare(
+                                &self.context.device,
+                                &tessellation_view,
+                                &uniforms,
+                                &tessellation.path,
+                                &paint,
+                                &gpu::PaintAuxData::zeroed(),
+                                &tessellation.contours,
+                                tessellation.base_instance,
+                                tessellation.instance_count,
+                            ),
+                        ));
+                        continue;
+                    }
+                }
+            }
+            if let Some(path_vertices) = tessellate_solid(draw, self.width, self.height) {
                 let cover_vertices = cover_vertices(&path_vertices);
                 let path_buffer =
                     self.context
@@ -663,9 +710,13 @@ impl WgpuFrame {
                             contents: bytemuck::cast_slice(&cover_vertices),
                             usage: wgpu::BufferUsages::VERTEX,
                         });
-                Some((path_buffer, cover_buffer, draw.path.fill_rule))
-            })
-            .collect::<Vec<_>>();
+                prepared_draws.push(PreparedDraw::Bootstrap(
+                    path_buffer,
+                    cover_buffer,
+                    draw.path.fill_rule,
+                ));
+            }
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nuxie-solid-pass"),
@@ -691,21 +742,41 @@ impl WgpuFrame {
                 multiview_mask: None,
             });
             pass.set_stencil_reference(0);
-            for (path_buffer, cover_buffer, fill_rule) in &vertex_buffers {
-                pass.set_pipeline(match fill_rule {
-                    FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
-                    FillRule::NonZero | FillRule::Clockwise => {
-                        &self.context.non_zero_stencil_pipeline
+            for prepared in &prepared_draws {
+                match prepared {
+                    PreparedDraw::Analytic(draw) => {
+                        pass.set_pipeline(&self.context.path_pipeline.pipeline);
+                        pass.set_bind_group(0, &draw.flush_group, &[]);
+                        pass.set_bind_group(1, &draw.image_group, &[]);
+                        pass.set_bind_group(3, &draw.sampler_group, &[]);
+                        pass.set_vertex_buffer(0, self.context.patch_vertex_buffer.slice(..));
+                        pass.set_index_buffer(
+                            self.context.patch_index_buffer.slice(..),
+                            wgpu::IndexFormat::Uint16,
+                        );
+                        pass.draw_indexed(
+                            0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                            0,
+                            draw.base_instance..draw.base_instance + draw.instance_count,
+                        );
                     }
-                });
-                pass.set_vertex_buffer(0, path_buffer.slice(..));
-                pass.draw(
-                    0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64) as u32,
-                    0..1,
-                );
-                pass.set_pipeline(&self.context.cover_pipeline);
-                pass.set_vertex_buffer(0, cover_buffer.slice(..));
-                pass.draw(0..6, 0..1);
+                    PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
+                        pass.set_pipeline(match fill_rule {
+                            FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
+                            FillRule::NonZero | FillRule::Clockwise => {
+                                &self.context.non_zero_stencil_pipeline
+                            }
+                        });
+                        pass.set_vertex_buffer(0, path_buffer.slice(..));
+                        pass.draw(
+                            0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64) as u32,
+                            0..1,
+                        );
+                        pass.set_pipeline(&self.context.cover_pipeline);
+                        pass.set_vertex_buffer(0, cover_buffer.slice(..));
+                        pass.draw(0..6, 0..1);
+                    }
+                }
             }
         }
 
@@ -755,6 +826,28 @@ impl WgpuFrame {
         readback.unmap();
         Ok(pixels)
     }
+}
+
+fn analytic_uniforms(width: u32, height: u32, tessellation_height: u32) -> gpu::FlushUniforms {
+    let mut uniforms = gpu::FlushUniforms::zeroed();
+    uniforms.inverse_viewports = [
+        2.0,
+        2.0 / tessellation_height.max(1) as f32,
+        2.0 / width as f32,
+        -2.0 / height as f32,
+    ];
+    uniforms.render_target_width = width;
+    uniforms.render_target_height = height;
+    uniforms.path_id_granularity = 1;
+    uniforms.vertex_discard_value = f32::NAN;
+    uniforms.mip_map_lod_bias = gpu::MIP_MAP_LOD_BIAS;
+    uniforms.max_path_id = 1;
+    uniforms
+}
+
+fn modulate_color_alpha(color: ColorInt, opacity: f32) -> ColorInt {
+    let alpha = ((color >> 24) as f32 * opacity.clamp(0.0, 1.0)).round() as u32;
+    alpha << 24 | color & 0x00ff_ffff
 }
 
 fn cover_vertices(path_vertices: &[Vertex]) -> [Vertex; 6] {
@@ -1011,7 +1104,7 @@ mod tests {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-tessellation-test-encoder"),
                 });
-        let _texture = factory.context._tessellator.encode(
+        let _texture = factory.context.tessellator.encode(
             &factory.context.device,
             &mut encoder,
             &[span],

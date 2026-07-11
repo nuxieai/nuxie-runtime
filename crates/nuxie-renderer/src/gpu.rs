@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use bytemuck::{Pod, Zeroable};
-use nuxie_render_api::{BlendMode, ColorInt, Mat2D};
+use nuxie_render_api::{BlendMode, ColorInt, FillRule, Mat2D};
 
 pub(crate) const PARAMETRIC_PRECISION: u32 = 4;
 pub(crate) const POLAR_PRECISION: u32 = 8;
@@ -172,6 +172,25 @@ pub(crate) struct PatchVertex {
 }
 
 impl PatchVertex {
+    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 16,
+                    shader_location: 1,
+                },
+            ],
+        }
+    }
+
     pub(crate) fn new(local_vertex_id: f32, outset: f32, fill_coverage: f32, params: i32) -> Self {
         Self {
             local_vertex_id,
@@ -483,6 +502,19 @@ pub(crate) struct PaintData {
     pub value: u32,
 }
 
+impl PaintData {
+    pub(crate) fn solid(color: ColorInt, fill_rule: FillRule, blend_mode: BlendMode) -> Self {
+        let fill_flag = match fill_rule {
+            FillRule::NonZero | FillRule::Clockwise => 0x100,
+            FillRule::EvenOdd => 0x200,
+        };
+        Self {
+            params: PaintType::SolidColor as u32 | fill_flag | blend_mode_id(blend_mode) << 4,
+            value: swizzle_rive_color_to_rgba(color),
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub(crate) struct PaintAuxData {
@@ -647,6 +679,10 @@ mod tests {
         assert_eq!(patch.mirrored_vertex_id, 0.0);
         assert_eq!(patch.mirrored_outset, -2.0);
         assert_eq!(patch.mirrored_fill_coverage, -0.5);
+
+        let paint = PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply);
+        assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
+        assert_eq!(paint.value, 0x8010_2040);
     }
 
     #[test]

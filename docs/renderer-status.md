@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=16, diverges=0, gated=1,449, total=1,465.
+- Rust wgpu: exact=18, diverges=0, gated=1,447, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -22,7 +22,9 @@ Run `make renderer-golden`.
   `gm-zero_control_stroke-clockwise-atomic`, and
   `gm-roundjoinstrokes-clockwise-atomic`, and
   `gm-widebuttcaps-clockwise-atomic`, and
-  `gm-emptystroke-clockwise-atomic`.
+  `gm-emptystroke-clockwise-atomic`,
+  `gm-bevel180strokes-clockwise-atomic`, and
+  `gm-OverStroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -42,8 +44,8 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Complete `draw.cpp` stroke geometry, using `bevel180strokes`, `OverStroke`,
-   and `lots_of_tess_spans_stroke` as the next focused probes.
+1. Complete `draw.cpp` stroke geometry by porting the tessellation-span
+   range/chunking behavior exposed by `lots_of_tess_spans_stroke`.
 2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
@@ -182,3 +184,10 @@ Run `make renderer-golden`.
   max-channel threshold of 2 and receives a bounded 1,400-pixel Metal-vs-wgpu
   allowance under Phase R's per-backend perceptual policy. It is promoted,
   moving exact to 16.
+- 2026-07-11: Swept the next stroke stress cases. `bevel180strokes` is exact at
+  zero differing pixels. `OverStroke` differs at 103 AA-edge pixels, while a
+  50% coverage-mask comparison differs at only two pixels; it receives a
+  bounded 128-pixel Metal-vs-wgpu allowance. Both are promoted, moving exact
+  to 18. `lots_of_tess_spans_stroke` remains the next real source gap at
+  749,360 differing pixels because Rust emits materially fewer concentric
+  strokes, indicating missing span range/chunking behavior rather than AA.

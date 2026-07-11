@@ -68,10 +68,9 @@ stream = "fixtures/renderer/streams/gm/OverStroke.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/OverStroke.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 128
 
 
 [[entry]]
@@ -144,10 +143,9 @@ stream = "fixtures/renderer/streams/gm/bevel180strokes.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bevel180strokes.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

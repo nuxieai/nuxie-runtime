@@ -11,6 +11,7 @@ struct Options {
     backend: String,
     frame: usize,
     clear: Option<u32>,
+    mode: String,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -22,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let clear = options.clear.or(stream.clear_color).unwrap_or(0);
     let pixels = match options.backend.as_str() {
         "stub" => clear_pixels(width, height, clear),
-        "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear)?,
+        "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
         #[cfg(all(feature = "ffi", target_os = "macos"))]
         "ffi-metal" => replay_ffi(&stream, options.frame, width, height, clear)?,
         backend => {
@@ -55,8 +56,14 @@ fn replay_wgpu(
     width: u32,
     height: u32,
     clear: u32,
+    mode: &str,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let mut factory = nuxie_renderer::WgpuFactory::new(width, height)?;
+    let mode = match mode {
+        "msaa" => nuxie_renderer::RenderMode::Msaa,
+        "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
+        value => return Err(format!("unsupported renderer mode `{value}`").into()),
+    };
+    let mut factory = nuxie_renderer::WgpuFactory::new_with_mode(width, height, mode)?;
     let mut frame = factory.begin_frame(clear);
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;
     Ok(frame.finish()?)
@@ -106,6 +113,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
     let mut backend = "stub".to_owned();
     let mut frame = 0;
     let mut clear = None;
+    let mut mode = "msaa".to_owned();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--stream" => stream = Some(PathBuf::from(args.next().ok_or(usage())?)),
@@ -116,6 +124,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
                 let value = args.next().ok_or(usage())?;
                 clear = Some(u32::from_str_radix(value.trim_start_matches("0x"), 16)?);
             }
+            "--mode" => mode = args.next().ok_or(usage())?,
             _ => return Err(format!("unknown argument `{arg}`\n{}", usage()).into()),
         }
     }
@@ -125,11 +134,12 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
         backend,
         frame,
         clear,
+        mode,
     })
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|ffi-metal] [--frame N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|ffi-metal] [--mode msaa|clockwise-atomic] [--frame N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]

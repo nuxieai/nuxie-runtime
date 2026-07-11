@@ -19,10 +19,9 @@ stream = "fixtures/renderer/streams/first-light-triangle.rive-stream"
 reference = "fixtures/renderer/reference/metal/first-light-triangle.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "analytic edge coverage thirds differ from bootstrap 4x MSAA quarters"
 
 [[entry]]
 id = "artboardclipping-frame-0-msaa"

@@ -7,13 +7,11 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=3, diverges=0, gated=1,462, total=1,465.
+- Rust wgpu: exact=4, diverges=0, gated=1,461, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
-  `artboardclipping-frame-0-msaa`.
-- Gated: `first-light-triangle-clockwise-atomic`; the geometry and interior
-  pixels match, but C++ analytic edge coverage emits thirds while bootstrap
-  4x MSAA emits quarters on 112 edge pixels.
+  `artboardclipping-frame-0-msaa`, plus
+  `first-light-triangle-clockwise-atomic`.
 
 ## Milestones
 
@@ -101,3 +99,9 @@ Run `make renderer-golden`.
   MSAA-vs-atomic edge delta exactly (112 pixels, max delta 43); the active
   corpus remains exact=3/diverges=0. Compound fills stay on the prior correct
   stencil fallback until the upstream MSAA stencil/cover pass lands.
+- 2026-07-11: Wired the generated clockwise-atomic path/resolve shaders with
+  tiled storage buffers and the C++ clear/path ID convention. Threaded render
+  mode through `corpus-r` and `renderer-replay` so MSAA and atomic entries no
+  longer execute the same backend mode. The atomic triangle passes at 30
+  differing edge pixels within its 32-pixel cross-backend budget, moving the
+  metric to exact=4 with no divergence.

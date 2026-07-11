@@ -1,5 +1,6 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
+mod atomic_pipeline;
 mod draw;
 mod gpu;
 mod path_pipeline;
@@ -48,20 +49,32 @@ struct Context {
     patch_index_buffer: wgpu::Buffer,
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
+    atomic_pipeline: atomic_pipeline::AtomicPipeline,
 }
 
 pub struct WgpuFactory {
     context: Arc<Context>,
     width: u32,
     height: u32,
+    mode: RenderMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderMode {
+    Msaa,
+    ClockwiseAtomic,
 }
 
 impl WgpuFactory {
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
-        pollster::block_on(Self::new_async(width, height))
+        Self::new_with_mode(width, height, RenderMode::Msaa)
     }
 
-    pub async fn new_async(width: u32, height: u32) -> Result<Self, RendererError> {
+    pub fn new_with_mode(width: u32, height: u32, mode: RenderMode) -> Result<Self, RendererError> {
+        pollster::block_on(Self::new_async(width, height, mode))
+    }
+
+    async fn new_async(width: u32, height: u32, mode: RenderMode) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -76,7 +89,10 @@ impl WgpuFactory {
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("nuxie-renderer-device"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                required_limits: wgpu::Limits {
+                    max_storage_buffers_per_shader_stage: 6,
+                    ..wgpu::Limits::downlevel_defaults()
+                },
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
@@ -196,6 +212,7 @@ impl WgpuFactory {
         });
         let tessellator = tessellator::Tessellator::new(&device);
         let path_pipeline = path_pipeline::PathPipeline::new(&device);
+        let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
         Ok(Self {
             context: Arc::new(Context {
                 device,
@@ -207,9 +224,11 @@ impl WgpuFactory {
                 patch_index_buffer,
                 tessellator,
                 path_pipeline,
+                atomic_pipeline,
             }),
             width,
             height,
+            mode,
         })
     }
 
@@ -223,6 +242,7 @@ impl WgpuFactory {
             stack: Vec::new(),
             draws: Vec::new(),
             unsupported: None,
+            mode: self.mode,
         }
     }
 }
@@ -521,6 +541,7 @@ pub struct WgpuFrame {
     stack: Vec<DrawState>,
     draws: Vec<SolidDraw>,
     unsupported: Option<&'static str>,
+    mode: RenderMode,
 }
 
 impl Renderer for WgpuFrame {
@@ -645,12 +666,86 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
+        let used_atomic = if self.mode == RenderMode::ClockwiseAtomic && self.draws.len() == 1 {
+            let draw = &self.draws[0];
+            if draw.paint.style == RenderPaintStyle::Fill && draw.paint.shader.is_none() {
+                if let Some(mut tessellation) =
+                    draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                {
+                    if tessellation.contours.len() == 1 {
+                        tessellation.contours[0].path_id = 1;
+                        let padded_width = align_to(self.width, 32);
+                        let padded_height = align_to(self.height, 32);
+                        tessellation.path.coverage_buffer_range.pitch = padded_width;
+                        let mut uniforms = analytic_uniforms(self.width, self.height, 1);
+                        uniforms.color_clear_value =
+                            gpu::swizzle_rive_color_to_rgba_premul(self.clear_color);
+                        uniforms.render_target_update_bounds =
+                            [0, 0, self.width as i32, self.height as i32];
+                        let paths = [gpu::PathData::zeroed(), tessellation.path];
+                        let tessellation_texture = self.context.tessellator.encode(
+                            &self.context.device,
+                            &mut encoder,
+                            &tessellation.spans,
+                            &uniforms,
+                            &paths,
+                            &tessellation.contours,
+                            1,
+                        );
+                        let tessellation_view = tessellation_texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        let paints = [
+                            gpu::PaintData::solid(
+                                self.clear_color,
+                                FillRule::NonZero,
+                                BlendMode::SrcOver,
+                            ),
+                            gpu::PaintData::solid(
+                                modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                draw.path.fill_rule,
+                                draw.paint.blend_mode,
+                            ),
+                        ];
+                        let paint_aux = [gpu::PaintAuxData::zeroed(); 2];
+                        self.context.atomic_pipeline.encode(
+                            &self.context.device,
+                            &mut encoder,
+                            &view,
+                            &self.context.patch_vertex_buffer,
+                            &self.context.patch_index_buffer,
+                            &tessellation_view,
+                            &uniforms,
+                            &paths,
+                            &paints,
+                            &paint_aux,
+                            &tessellation.contours,
+                            tessellation.base_instance,
+                            tessellation.instance_count,
+                            padded_width as usize * padded_height as usize,
+                        );
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
         enum PreparedDraw {
             Analytic(path_pipeline::PreparedPathDraw),
             Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
         }
         let mut prepared_draws = Vec::with_capacity(self.draws.len());
-        for draw in &self.draws {
+        for draw in self
+            .draws
+            .iter()
+            .take(if used_atomic { 0 } else { usize::MAX })
+        {
             if draw.paint.style == RenderPaintStyle::Fill && draw.paint.shader.is_none() {
                 if let Some(tessellation) =
                     draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
@@ -717,7 +812,7 @@ impl WgpuFrame {
                 ));
             }
         }
-        {
+        if !used_atomic {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nuxie-solid-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {

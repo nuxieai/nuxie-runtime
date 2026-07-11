@@ -21,6 +21,7 @@ struct Entry {
     max_channel_delta: u8,
     max_different_pixels: u64,
     gated: Option<String>,
+    mode: String,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -47,6 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .args(["--output", path_str(&actual)?])
             .args(["--backend", &options.backend])
             .args(["--frame", &entry.frame.to_string()])
+            .args(["--mode", &entry.mode])
             .status()?;
         if !replay.success() {
             return Err(format!("renderer replay failed for {}", entry.id).into());

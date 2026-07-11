@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=11, diverges=0, gated=1,454, total=1,465.
+- Rust wgpu: exact=13, diverges=0, gated=1,452, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -17,7 +17,9 @@ Run `make renderer-golden`.
   `gm-convex_lineonly_ths-clockwise-atomic`, and
   `gm-rotatedcubicpath-clockwise-atomic`,
   `gm-batchedtriangulations-clockwise-atomic`, and
-  `gm-zerolinestroke-clockwise-atomic`.
+  `gm-zerolinestroke-clockwise-atomic`,
+  `gm-CubicStroke-clockwise-atomic`, and
+  `gm-zero_control_stroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -139,3 +141,9 @@ Run `make renderer-golden`.
   its MSAA entry remains gated at 204 differing pixels pending MSAA stroke
   state convergence, and cubic strokes remain explicitly rejected by this
   builder until cusp/chop handling lands.
+- 2026-07-11: Extended stroke preparation to analytic cubic and quad records,
+  including C++ tangent fallback, Wang parametric counts, tangent-rotation
+  polar counts, and original-verb cap/join ownership. `CubicStroke` and
+  `zero_control_stroke` both pass clockwise-atomic at 0 differing pixels (max
+  delta 1), moving exact to 13. The C++ convex/180-degree detector rejects
+  cubics requiring a chop until straddled cusp and inflection chopping lands.

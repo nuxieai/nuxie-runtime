@@ -43,10 +43,9 @@ stream = "fixtures/renderer/streams/gm/CubicStroke.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/CubicStroke.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2792,10 +2791,9 @@ stream = "fixtures/renderer/streams/gm/zero_control_stroke.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/zero_control_stroke.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

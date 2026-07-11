@@ -676,7 +676,7 @@ impl WgpuFrame {
                             draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
                                 .is_some_and(|tessellation| tessellation.contours.len() == 1)
                         }
-                        RenderPaintStyle::Stroke => draw::build_line_stroke_tessellation(
+                        RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
                             &draw.path.raw_path,
                             draw.state.transform,
                             draw.paint.thickness,
@@ -718,7 +718,7 @@ impl WgpuFrame {
                     patch_index_range,
                     triangles,
                 ) = if draw.paint.style == RenderPaintStyle::Stroke {
-                    let tessellation = draw::build_line_stroke_tessellation(
+                    let tessellation = draw::build_stroke_tessellation(
                         &draw.path.raw_path,
                         draw.state.transform,
                         draw.paint.thickness,
@@ -847,7 +847,7 @@ impl WgpuFrame {
                     RenderPaintStyle::Fill => {
                         draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
                     }
-                    RenderPaintStyle::Stroke => draw::build_line_stroke_tessellation(
+                    RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
                         &draw.path.raw_path,
                         draw.state.transform,
                         draw.paint.thickness,

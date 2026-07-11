@@ -33,14 +33,27 @@ pub(crate) struct InteriorTessellation {
     pub instance_count: u32,
 }
 
-pub(crate) fn build_line_stroke_tessellation(
+#[derive(Clone)]
+struct StrokeCurve {
+    cubic: [Vec2D; 4],
+    is_line: bool,
+}
+
+struct StrokeContour {
+    curves: Vec<StrokeCurve>,
+    first: Vec2D,
+    current: Vec2D,
+    closed: bool,
+}
+
+pub(crate) fn build_stroke_tessellation(
     path: &RawPath,
     transform: Mat2D,
     thickness: f32,
     join: StrokeJoin,
     cap: StrokeCap,
 ) -> Option<FillTessellation> {
-    let contours = line_contours(path)?;
+    let contours = stroke_contours(path)?;
     let stroke_radius = thickness * 0.5;
     if stroke_radius <= 0.0 || contours.is_empty() {
         return None;
@@ -68,62 +81,68 @@ pub(crate) fn build_line_stroke_tessellation(
     push_padding_span(&mut spans, 0, location);
     let path_start = location;
     for (contour_index, contour) in contours.iter().enumerate() {
-        let mut points = contour.points.clone();
-        if contour.closed && !same_point(points[0], *points.last().unwrap()) {
-            points.push(points[0]);
+        let mut curves = contour.curves.clone();
+        if contour.closed && !same_point(contour.first, contour.current) {
+            curves.push(StrokeCurve {
+                cubic: line_cubic(contour.current, contour.first),
+                is_line: true,
+            });
         }
-        let segments = points
-            .windows(2)
-            .filter(|points| !same_point(points[0], points[1]))
-            .map(|points| [points[0], points[1]])
-            .collect::<Vec<_>>();
-        if segments.is_empty() {
+        curves.retain(|curve| !curve.is_line || !same_point(curve.cubic[0], curve.cubic[3]));
+        if curves.is_empty() {
             continue;
         }
+        let prepared = curves
+            .iter()
+            .map(|curve| {
+                let tangents = cubic_tangents(curve.cubic);
+                let (parametric, polar) = if curve.is_line {
+                    (1, 1)
+                } else {
+                    if cubic_requires_convex_180_chop(curve.cubic) {
+                        return None;
+                    }
+                    let transformed = curve.cubic.map(|point| transform.transform_point(point));
+                    (
+                        cubic_segment_count(transformed),
+                        round_join_segment_count(
+                            tangents[0],
+                            tangents[1],
+                            polar_segments_per_radian,
+                        ),
+                    )
+                };
+                Some((curve.cubic, tangents, parametric, polar))
+            })
+            .collect::<Option<Vec<_>>>()?;
         let contour_start = location as u32;
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
         let mut pending = Vec::new();
         if !contour.closed {
-            let cubic = line_cubic(segments[0][0], segments[0][1]);
+            let (cubic, tangents, _, _) = prepared[0];
             pending.push((
                 [cubic[3], cubic[2], cubic[1], cubic[0]],
-                subtract(segments[0][1], segments[0][0]),
+                tangents[0],
                 0,
                 0,
                 cap_segments,
                 contour_id | cap_flags,
             ));
         }
-        for (index, segment) in segments.iter().enumerate() {
-            let final_open = !contour.closed && index + 1 == segments.len();
+        for (index, (cubic, tangents, parametric, polar)) in prepared.iter().copied().enumerate() {
+            let final_open = !contour.closed && index + 1 == prepared.len();
             let (join_tangent, join_segments, flags) = if final_open {
-                (
-                    subtract(segment[0], segment[1]),
-                    cap_segments,
-                    contour_id | cap_flags,
-                )
+                (negate(tangents[1]), cap_segments, contour_id | cap_flags)
             } else {
-                let next = &segments[(index + 1) % segments.len()];
-                let tangent = subtract(next[1], next[0]);
+                let next_tangent = prepared[(index + 1) % prepared.len()].1[0];
                 let segment_count = if join == StrokeJoin::Round {
-                    round_join_segment_count(
-                        subtract(segment[1], segment[0]),
-                        tangent,
-                        polar_segments_per_radian,
-                    )
+                    round_join_segment_count(tangents[1], next_tangent, polar_segments_per_radian)
                 } else {
                     5
                 };
-                (tangent, segment_count, contour_id | join_flags)
+                (next_tangent, segment_count, contour_id | join_flags)
             };
-            pending.push((
-                line_cubic(segment[0], segment[1]),
-                join_tangent,
-                1,
-                1,
-                join_segments,
-                flags,
-            ));
+            pending.push((cubic, join_tangent, parametric, polar, join_segments, flags));
         }
         let vertex_count = pending
             .iter()
@@ -173,32 +192,133 @@ pub(crate) fn build_line_stroke_tessellation(
     })
 }
 
-fn line_contours(path: &RawPath) -> Option<Vec<Contour>> {
+fn stroke_contours(path: &RawPath) -> Option<Vec<StrokeContour>> {
     let mut contours = Vec::new();
-    let mut contour = None::<Contour>;
+    let mut contour = None::<StrokeContour>;
     let mut point_index = 0;
     for verb in path.verbs() {
         match verb {
             PathVerb::Move => {
-                finish_contour(&mut contours, contour.take());
-                contour = Some(Contour {
-                    points: vec![path.points()[point_index]],
+                if let Some(contour) = contour.take() {
+                    contours.push(contour);
+                }
+                let point = path.points()[point_index];
+                contour = Some(StrokeContour {
+                    curves: Vec::new(),
+                    first: point,
+                    current: point,
                     closed: false,
                 });
                 point_index += 1;
             }
             PathVerb::Line => {
-                ensure_contour(&mut contour)
-                    .points
-                    .push(path.points()[point_index]);
+                let end = path.points()[point_index];
+                let contour = contour.as_mut()?;
+                contour.curves.push(StrokeCurve {
+                    cubic: line_cubic(contour.current, end),
+                    is_line: true,
+                });
+                contour.current = end;
                 point_index += 1;
             }
-            PathVerb::Close => ensure_contour(&mut contour).closed = true,
-            PathVerb::Quad | PathVerb::Cubic => return None,
+            PathVerb::Quad => {
+                let control = path.points()[point_index];
+                let end = path.points()[point_index + 1];
+                let contour = contour.as_mut()?;
+                contour.curves.push(StrokeCurve {
+                    cubic: [
+                        contour.current,
+                        lerp(contour.current, control, 2.0 / 3.0),
+                        lerp(end, control, 2.0 / 3.0),
+                        end,
+                    ],
+                    is_line: false,
+                });
+                contour.current = end;
+                point_index += 2;
+            }
+            PathVerb::Cubic => {
+                let control0 = path.points()[point_index];
+                let control1 = path.points()[point_index + 1];
+                let end = path.points()[point_index + 2];
+                let contour = contour.as_mut()?;
+                contour.curves.push(StrokeCurve {
+                    cubic: [contour.current, control0, control1, end],
+                    is_line: false,
+                });
+                contour.current = end;
+                point_index += 3;
+            }
+            PathVerb::Close => contour.as_mut()?.closed = true,
         }
     }
-    finish_contour(&mut contours, contour);
+    if let Some(contour) = contour {
+        contours.push(contour);
+    }
     Some(contours)
+}
+
+fn cubic_tangents(curve: [Vec2D; 4]) -> [Vec2D; 2] {
+    let start_control = if !same_point(curve[0], curve[1]) {
+        curve[1]
+    } else if !same_point(curve[1], curve[2]) {
+        curve[2]
+    } else {
+        curve[3]
+    };
+    let end_control = if !same_point(curve[3], curve[2]) {
+        curve[2]
+    } else if !same_point(curve[2], curve[1]) {
+        curve[1]
+    } else {
+        curve[0]
+    };
+    [
+        subtract(start_control, curve[0]),
+        subtract(curve[3], end_control),
+    ]
+}
+
+fn cubic_requires_convex_180_chop(points: [Vec2D; 4]) -> bool {
+    const TESS_EPSILON: f32 = 1.0 / 1024.0;
+    let c_vector = subtract(points[1], points[0]);
+    let d = subtract(points[2], points[1]);
+    let e = subtract(points[3], points[0]);
+    let b_vector = subtract(d, c_vector);
+    let a_vector = subtract(e, scale(d, 3.0));
+    let mut a = vector_cross(a_vector, b_vector);
+    let b = vector_cross(a_vector, c_vector);
+    let mut c = vector_cross(b_vector, c_vector);
+    let mut b_over_minus_2 = -0.5 * b;
+    let mut discriminant_over_4 = b_over_minus_2 * b_over_minus_2 - a * c;
+    let cusp_threshold = (a * (TESS_EPSILON * 0.5)).powi(2);
+    let inside = |root: f32| root.is_finite() && root >= TESS_EPSILON && root < 1.0 - TESS_EPSILON;
+    if discriminant_over_4 < -cusp_threshold {
+        return inside(c / b_over_minus_2);
+    }
+    if discriminant_over_4 <= cusp_threshold {
+        if a != 0.0 || b_over_minus_2 != 0.0 || c != 0.0 {
+            return inside(b_over_minus_2 / a);
+        }
+        let base = subtract(points[3], points[0]);
+        let ordered = points
+            .windows(2)
+            .all(|points| dot(points[1], base) > dot(points[0], base));
+        if ordered {
+            return false;
+        }
+        let tangent0 = if c_vector.x != 0.0 || c_vector.y != 0.0 {
+            c_vector
+        } else {
+            subtract(points[2], points[0])
+        };
+        a = dot(tangent0, a_vector);
+        b_over_minus_2 = -dot(tangent0, b_vector);
+        c = dot(tangent0, c_vector);
+        discriminant_over_4 = (b_over_minus_2 * b_over_minus_2 - a * c).max(0.0);
+    }
+    let q = discriminant_over_4.sqrt().copysign(b_over_minus_2) + b_over_minus_2;
+    inside(q / a) || inside(c / q)
 }
 
 fn max_matrix_scale(transform: Mat2D) -> f32 {
@@ -239,6 +359,22 @@ fn round_join_segment_count(incoming: Vec2D, outgoing: Vec2D, per_radian: f32) -
 
 fn subtract(a: Vec2D, b: Vec2D) -> Vec2D {
     Vec2D::new(a.x - b.x, a.y - b.y)
+}
+
+fn negate(vector: Vec2D) -> Vec2D {
+    Vec2D::new(-vector.x, -vector.y)
+}
+
+fn scale(vector: Vec2D, amount: f32) -> Vec2D {
+    Vec2D::new(vector.x * amount, vector.y * amount)
+}
+
+fn dot(a: Vec2D, b: Vec2D) -> f32 {
+    a.x * b.x + a.y * b.y
+}
+
+fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
+    a.x * b.y - a.y * b.x
 }
 
 pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
@@ -968,7 +1104,7 @@ mod tests {
         let mut path = RawPath::new();
         path.move_to(10.0, 20.0);
         path.line_to(50.0, 20.0);
-        let tessellation = build_line_stroke_tessellation(
+        let tessellation = build_stroke_tessellation(
             &path,
             Mat2D::IDENTITY,
             20.0,
@@ -990,11 +1126,28 @@ mod tests {
     }
 
     #[test]
-    fn line_stroke_rejects_curves_until_curve_chopping_is_ported() {
+    fn simple_cubic_stroke_uses_analytic_curve_budgets() {
         let mut path = RawPath::new();
         path.move_to(0.0, 0.0);
         path.cubic_to(0.0, 10.0, 10.0, 10.0, 10.0, 0.0);
-        assert!(build_line_stroke_tessellation(
+        let tessellation = build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            2.0,
+            StrokeJoin::Round,
+            StrokeCap::Round,
+        )
+        .unwrap();
+        assert!(tessellation.spans[2].segment_counts & 1023 > 1);
+        assert!(tessellation.spans[2].segment_counts >> 10 & 1023 > 1);
+    }
+
+    #[test]
+    fn cusp_cubic_stroke_waits_for_straddled_chop_port() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.cubic_to(100.0, 0.0, -100.0, 0.0, 0.0, 0.0);
+        assert!(build_stroke_tessellation(
             &path,
             Mat2D::IDENTITY,
             2.0,

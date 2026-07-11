@@ -6,6 +6,9 @@ mod composite_pipeline;
 mod draw;
 mod feather_lut;
 mod gpu;
+// Kept standalone until a renderer path has a proven grouping integration.
+#[allow(dead_code)]
+mod intersection_board;
 mod path_pipeline;
 mod skyline;
 mod tessellator;

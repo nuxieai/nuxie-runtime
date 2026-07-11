@@ -89,7 +89,12 @@ pub(crate) fn feather_requires_atlas(
     transform: Mat2D,
     force_atlas: bool,
 ) -> bool {
-    force_atlas || paint_feather * 1.5 * max_matrix_scale(transform) >= 32.0
+    force_atlas || feather_atlas_scale(paint_feather, transform) <= 0.5
+}
+
+pub(crate) fn feather_atlas_scale(paint_feather: f32, transform: Mat2D) -> f32 {
+    let device_radius = paint_feather * 1.5 * max_matrix_scale(transform);
+    16.0 / device_radius.max(16.0)
 }
 
 fn build_stroke_or_feather_tessellation(

@@ -1,5 +1,4 @@
 //! Offscreen feather-mask rendering translated from Rive's atlas pipeline.
-#![allow(dead_code)] // Removed when the atlas blit checkpoint wires frame ordering.
 
 use crate::gpu::{
     ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData,
@@ -80,7 +79,10 @@ impl AtlasPipeline {
                     compilation_options: Default::default(),
                     buffers: &[Some(PatchVertex::layout())],
                 },
-                primitive: wgpu::PrimitiveState::default(),
+                primitive: wgpu::PrimitiveState {
+                    front_face: wgpu::FrontFace::Cw,
+                    ..Default::default()
+                },
                 depth_stencil: None,
                 multisample: Default::default(),
                 fragment: Some(wgpu::FragmentState {
@@ -130,9 +132,9 @@ impl AtlasPipeline {
         tessellation: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
         uniforms: &FlushUniforms,
-        path: &PathData,
-        paint: &PaintData,
-        paint_aux: &PaintAuxData,
+        paths: &[PathData],
+        paints: &[PaintData],
+        paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         base_instance: u32,
         instance_count: u32,
@@ -143,13 +145,9 @@ impl AtlasPipeline {
             "nuxie-atlas-uniforms",
             std::slice::from_ref(uniforms),
         );
-        let path = upload(device, "nuxie-atlas-path", std::slice::from_ref(path));
-        let paint = upload(device, "nuxie-atlas-paint", std::slice::from_ref(paint));
-        let paint_aux = upload(
-            device,
-            "nuxie-atlas-paint-aux",
-            std::slice::from_ref(paint_aux),
-        );
+        let path = upload(device, "nuxie-atlas-path", paths);
+        let paint = upload(device, "nuxie-atlas-paint", paints);
+        let paint_aux = upload(device, "nuxie-atlas-paint-aux", paint_aux);
         let contours = upload(device, "nuxie-atlas-contours", contours);
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-atlas-dummy-texture"),

@@ -47,11 +47,12 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Finish feather routing in source dependency order: partition atomic-capable
-   draws instead of rejecting the whole frame, port the large-radius feather
-   atlas path, then enable the prepared feathered-stroke path. Continue R2
-   with the remaining `render_context.cpp` behavior, robust triangulation, and
-   the intersection board.
+1. Finish feather routing in source dependency order: replace the temporary
+   full-target per-draw atlas textures with C++ bounds, padding, and packing;
+   converge atlas coverage; partition atomic-capable draws instead of rejecting
+   the whole frame; then enable the prepared feathered-stroke path. Continue
+   R2 with the remaining `render_context.cpp` behavior, robust triangulation,
+   and the intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -285,3 +286,14 @@ Run `make renderer-golden`.
   test proves a real feathered rectangle leaves zero background and nonzero
   center coverage. Atlas blitting, packing, and frame-order integration remain
   the next checkpoint.
+- 2026-07-11: Wired atlas masks through generated
+  `atomic_draw_atlas_blit` shaders in monotonic draw order. Atomic bindings now
+  carry atlas texture/sampler slot 11, mask rectangles use the canonical
+  `TriangleVertex` path-ID encoding, and large fills retain direct fills' shared
+  coverage/color buffers. A submitted large-feather oracle caught and locked
+  two WebGPU orientation requirements: negative atlas inverse-viewport Y and
+  clockwise atlas front faces, so scaled masks are both correctly located and
+  positive. `feather_ellipse` now renders all atlas-routed rows instead of
+  dropping them; its max delta is 179 pending C++ bounds/padding/packing and
+  coverage convergence. All 32 renderer tests and the exact=21/diverges=0
+  corpus gate pass.

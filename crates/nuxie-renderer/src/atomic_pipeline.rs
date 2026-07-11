@@ -1,6 +1,8 @@
 //! Clockwise-atomic draw and resolve translated from Rive's WebGPU shaders.
 
-use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData};
+use crate::gpu::{
+    ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData, TriangleVertex,
+};
 use wgpu::util::DeviceExt;
 
 pub(crate) struct AtomicPipeline {
@@ -9,6 +11,7 @@ pub(crate) struct AtomicPipeline {
     feather_stroke_path: wgpu::RenderPipeline,
     stroke_path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
+    atlas_blit: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
@@ -22,6 +25,8 @@ pub(crate) struct AtomicDraw<'a> {
     pub instance_count: u32,
     pub patch_index_range: std::ops::Range<u32>,
     pub triangle_vertices: &'a [crate::gpu::TriangleVertex],
+    pub atlas: Option<&'a wgpu::TextureView>,
+    pub atlas_blit_vertices: &'a [TriangleVertex],
     pub is_stroke: bool,
     pub is_feather: bool,
 }
@@ -58,6 +63,16 @@ impl AtomicPipeline {
             "nuxie-atomic-interior-fragment",
             include_str!("generated/atomic_draw_interior_triangles.webgpu_fixedcolor_frag.wgsl"),
         );
+        let atlas_blit_vertex = shader(
+            device,
+            "nuxie-atomic-atlas-blit-vertex",
+            include_str!("generated/atomic_draw_atlas_blit.webgpu_vert.wgsl"),
+        );
+        let atlas_blit_fragment = shader(
+            device,
+            "nuxie-atomic-atlas-blit-fragment",
+            include_str!("generated/atomic_draw_atlas_blit.webgpu_fixedcolor_frag.wgsl"),
+        );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-flush-layout"),
             entries: &[
@@ -69,6 +84,7 @@ impl AtomicPipeline {
                 texture_entry(8, wgpu::TextureSampleType::Uint),
                 texture_entry(9, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(10, wgpu::TextureSampleType::Float { filterable: true }),
+                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -84,7 +100,7 @@ impl AtomicPipeline {
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-sampler-layout"),
-            entries: &[sampler_entry(9), sampler_entry(10)],
+            entries: &[sampler_entry(9), sampler_entry(10), sampler_entry(11)],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nuxie-atomic-pipeline-layout"),
@@ -285,12 +301,41 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let atlas_blit = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-atlas-blit-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &atlas_blit_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(TriangleVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &atlas_blit_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         Self {
             path,
             feather_path,
             feather_stroke_path,
             stroke_path,
             interior,
+            atlas_blit,
             resolve,
             flush_layout,
             image_layout,
@@ -362,11 +407,16 @@ impl AtomicPipeline {
         let triangle_buffers = draws
             .iter()
             .map(|draw| {
-                (!draw.triangle_vertices.is_empty()).then(|| {
+                let vertices = if draw.atlas.is_some() {
+                    draw.atlas_blit_vertices
+                } else {
+                    draw.triangle_vertices
+                };
+                (!vertices.is_empty()).then(|| {
                     upload(
                         device,
-                        "nuxie-atomic-interior-triangles",
-                        draw.triangle_vertices,
+                        "nuxie-atomic-triangles",
+                        vertices,
                         wgpu::BufferUsages::VERTEX,
                     )
                 })
@@ -403,6 +453,10 @@ impl AtomicPipeline {
                         binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
                         binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
                         binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                        binding(
+                            11,
+                            wgpu::BindingResource::TextureView(draw.atlas.unwrap_or(&dummy_view)),
+                        ),
                     ],
                 })
             })
@@ -429,9 +483,25 @@ impl AtomicPipeline {
             entries: &[
                 binding(9, wgpu::BindingResource::Sampler(&sampler)),
                 binding(10, wgpu::BindingResource::Sampler(&sampler)),
+                binding(11, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         for (draw_index, draw) in draws.iter().enumerate() {
+            if draw.atlas.is_some() {
+                let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    "nuxie-atomic-atlas-blit-pass",
+                    &attachments,
+                ));
+                pass.set_pipeline(&self.atlas_blit);
+                pass.set_bind_group(0, &flush_groups[draw_index], &[]);
+                pass.set_bind_group(1, &image, &[]);
+                pass.set_bind_group(2, &atomics, &[]);
+                pass.set_bind_group(3, &samplers, &[]);
+                pass.set_vertex_buffer(0, triangle_buffers[draw_index].as_ref().unwrap().slice(..));
+                pass.draw(0..draw.atlas_blit_vertices.len() as u32, 0..1);
+                continue;
+            }
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-path-pass",

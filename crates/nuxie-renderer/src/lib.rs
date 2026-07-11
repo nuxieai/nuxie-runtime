@@ -52,7 +52,6 @@ struct Context {
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
     atomic_pipeline: atomic_pipeline::AtomicPipeline,
-    #[allow(dead_code)]
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
     feather_lut: feather_lut::FeatherLut,
 }
@@ -686,11 +685,6 @@ impl WgpuFrame {
                 draw.paint.shader.is_none()
                     && if draw.paint.feather != 0.0 {
                         draw.paint.style == RenderPaintStyle::Fill
-                            && !draw::feather_requires_atlas(
-                                draw.paint.feather,
-                                draw.state.transform,
-                                false,
-                            )
                             && draw::build_feather_tessellation(
                                 &draw.path.raw_path,
                                 draw.state.transform,
@@ -723,6 +717,8 @@ impl WgpuFrame {
                 instance_count: u32,
                 patch_index_range: std::ops::Range<u32>,
                 triangles: Vec<gpu::TriangleVertex>,
+                atlas_scale: Option<f32>,
+                atlas_blit_vertices: Vec<gpu::TriangleVertex>,
                 is_stroke: bool,
                 is_feather: bool,
             }
@@ -871,6 +867,20 @@ impl WgpuFrame {
                     triangle.weight_path_id =
                         (triangle.weight_path_id & !0xffff) | i32::from(path_id);
                 }
+                let atlas_scale = (draw.paint.feather != 0.0
+                    && draw::feather_requires_atlas(
+                        draw.paint.feather,
+                        draw.state.transform,
+                        false,
+                    ))
+                .then(|| draw::feather_atlas_scale(draw.paint.feather, draw.state.transform));
+                if let Some(scale_factor) = atlas_scale {
+                    path.atlas_transform = gpu::AtlasTransform {
+                        scale_factor,
+                        translate_x: 0.0,
+                        translate_y: 0.0,
+                    };
+                }
                 path.coverage_buffer_range.pitch = padded_width;
                 paths.push(path);
                 paints.push(if draw.paint.style == RenderPaintStyle::Stroke {
@@ -886,12 +896,30 @@ impl WgpuFrame {
                     )
                 });
                 contours.extend(draw_contours);
+                let atlas_blit_vertices = atlas_scale
+                    .map(|_| {
+                        let left = 0.0;
+                        let top = 0.0;
+                        let right = self.width as f32;
+                        let bottom = self.height as f32;
+                        vec![
+                            gpu::TriangleVertex::new([left, bottom], 1, path_id),
+                            gpu::TriangleVertex::new([left, top], 1, path_id),
+                            gpu::TriangleVertex::new([right, bottom], 1, path_id),
+                            gpu::TriangleVertex::new([right, bottom], 1, path_id),
+                            gpu::TriangleVertex::new([left, top], 1, path_id),
+                            gpu::TriangleVertex::new([right, top], 1, path_id),
+                        ]
+                    })
+                    .unwrap_or_default();
                 prepared.push(PreparedAtomicDraw {
                     spans,
                     base_instance,
                     instance_count,
                     patch_index_range,
                     triangles,
+                    atlas_scale,
+                    atlas_blit_vertices,
                     is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
                     is_feather: draw.paint.feather != 0.0,
                 });
@@ -903,6 +931,14 @@ impl WgpuFrame {
                 .unwrap_or(1);
             let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
             uniforms.render_target_update_bounds = [0, 0, self.width as i32, self.height as i32];
+            uniforms.atlas_texture_inverse_size = [
+                1.0 / self.width.max(1) as f32,
+                1.0 / self.height.max(1) as f32,
+            ];
+            uniforms.atlas_content_inverse_viewport = [
+                2.0 / self.width.max(1) as f32,
+                -2.0 / self.height.max(1) as f32,
+            ];
             let mut tessellation_textures = Vec::with_capacity(prepared.len());
             for draw in &prepared {
                 let tessellation_texture = self.context.tessellator.encode(
@@ -921,18 +957,77 @@ impl WgpuFrame {
                 .iter()
                 .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()))
                 .collect::<Vec<_>>();
+            let paint_aux = vec![gpu::PaintAuxData::zeroed(); paths.len()];
+            let atlas_textures = prepared
+                .iter()
+                .enumerate()
+                .map(|(index, draw)| {
+                    draw.atlas_scale.map(|_| {
+                        let texture =
+                            self.context
+                                .device
+                                .create_texture(&wgpu::TextureDescriptor {
+                                    label: Some("nuxie-feather-atlas"),
+                                    size: wgpu::Extent3d {
+                                        width: self.width.max(1),
+                                        height: self.height.max(1),
+                                        depth_or_array_layers: 1,
+                                    },
+                                    mip_level_count: 1,
+                                    sample_count: 1,
+                                    dimension: wgpu::TextureDimension::D2,
+                                    format: wgpu::TextureFormat::R16Float,
+                                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                                    view_formats: &[],
+                                });
+                        let view = texture.create_view(&Default::default());
+                        self.context.atlas_pipeline.encode_mask(
+                            &self.context.device,
+                            &mut encoder,
+                            &view,
+                            &self.context.patch_vertex_buffer,
+                            &self.context.patch_index_buffer,
+                            &tessellation_views[index],
+                            &self.context.feather_lut.view,
+                            &uniforms,
+                            &paths,
+                            &paints,
+                            &paint_aux,
+                            &contours,
+                            draw.base_instance,
+                            draw.instance_count,
+                            draw.is_stroke,
+                        );
+                        texture
+                    })
+                })
+                .collect::<Vec<_>>();
+            let atlas_views = atlas_textures
+                .iter()
+                .map(|texture| {
+                    texture
+                        .as_ref()
+                        .map(|texture| texture.create_view(&Default::default()))
+                })
+                .collect::<Vec<_>>();
             let atomic_draws = prepared
                 .iter()
                 .zip(&tessellation_views)
-                .map(|(draw, tessellation)| atomic_pipeline::AtomicDraw {
-                    tessellation,
-                    base_instance: draw.base_instance,
-                    instance_count: draw.instance_count,
-                    patch_index_range: draw.patch_index_range.clone(),
-                    triangle_vertices: &draw.triangles,
-                    is_stroke: draw.is_stroke,
-                    is_feather: draw.is_feather,
-                })
+                .enumerate()
+                .map(
+                    |(index, (draw, tessellation))| atomic_pipeline::AtomicDraw {
+                        tessellation,
+                        base_instance: draw.base_instance,
+                        instance_count: draw.instance_count,
+                        patch_index_range: draw.patch_index_range.clone(),
+                        triangle_vertices: &draw.triangles,
+                        atlas: atlas_views[index].as_ref(),
+                        atlas_blit_vertices: &draw.atlas_blit_vertices,
+                        is_stroke: draw.is_stroke,
+                        is_feather: draw.is_feather,
+                    },
+                )
                 .collect::<Vec<_>>();
             self.context.atomic_pipeline.encode_batch(
                 &self.context.device,
@@ -945,7 +1040,7 @@ impl WgpuFrame {
                 &uniforms,
                 &paths,
                 &paints,
-                &vec![gpu::PaintAuxData::zeroed(); paths.len()],
+                &paint_aux,
                 &contours,
                 padded_width as usize * padded_height as usize,
             );
@@ -1569,17 +1664,29 @@ mod tests {
         raw_path.line_to(48.0, 48.0);
         raw_path.line_to(16.0, 48.0);
         raw_path.close();
+        let paint_feather = 80.0;
+        let atlas_scale = draw::feather_atlas_scale(paint_feather, Mat2D::IDENTITY);
         let mut tessellation =
-            draw::build_feather_tessellation(&raw_path, Mat2D::IDENTITY, 8.0, None).unwrap();
+            draw::build_feather_tessellation(&raw_path, Mat2D::IDENTITY, paint_feather, None)
+                .unwrap();
         tessellation.path.atlas_transform = gpu::AtlasTransform {
-            scale_factor: 1.0,
+            scale_factor: atlas_scale,
             translate_x: 0.0,
             translate_y: 0.0,
         };
+        for contour in &mut tessellation.contours {
+            contour.path_id = 1;
+        }
+        let paths = [gpu::PathData::zeroed(), tessellation.path];
+        let paints = [
+            gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+            gpu::PaintData::solid(0xffff_ffff, FillRule::NonZero, BlendMode::SrcOver),
+        ];
+        let paint_aux = [gpu::PaintAuxData::zeroed(); 2];
         let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
         let mut uniforms = analytic_uniforms(64, 64, tessellation_height);
         uniforms.atlas_texture_inverse_size = [1.0 / 64.0; 2];
-        uniforms.atlas_content_inverse_viewport = [2.0 / 64.0; 2];
+        uniforms.atlas_content_inverse_viewport = [2.0 / 64.0, -2.0 / 64.0];
         let mut encoder =
             factory
                 .context
@@ -1593,7 +1700,7 @@ mod tests {
             &factory.context.feather_lut.view,
             &tessellation.spans,
             &uniforms,
-            std::slice::from_ref(&tessellation.path),
+            &paths,
             &tessellation.contours,
             tessellation_height,
         );
@@ -1626,9 +1733,9 @@ mod tests {
             &tessellation_view,
             &factory.context.feather_lut.view,
             &uniforms,
-            &tessellation.path,
-            &gpu::PaintData::solid(0xffff_ffff, FillRule::NonZero, BlendMode::SrcOver),
-            &gpu::PaintAuxData::zeroed(),
+            &paths,
+            &paints,
+            &paint_aux,
             &tessellation.contours,
             tessellation.base_instance,
             tessellation.instance_count,
@@ -1673,7 +1780,19 @@ mod tests {
             let offset = y * bytes_per_row as usize + x * 2;
             u16::from_ne_bytes(mapped[offset..offset + 2].try_into().unwrap())
         };
-        assert_eq!(mask_value(0, 0), 0);
-        assert_ne!(mask_value(32, 32), 0);
+        assert_eq!(mask_value(63, 63), 0);
+        let scaled_center = (32.0 * atlas_scale) as usize;
+        let nonzero = (0..64usize)
+            .flat_map(|y| (0..64usize).map(move |x| (x, y)))
+            .filter(|&(x, y)| mask_value(x, y) != 0 && mask_value(x, y) & 0x8000 == 0)
+            .collect::<Vec<_>>();
+        assert!(
+            !nonzero.is_empty(),
+            "scaled center={scaled_center}, atlas mask is empty"
+        );
+        assert!(
+            nonzero.contains(&(scaled_center, scaled_center)),
+            "{nonzero:?}"
+        );
     }
 }

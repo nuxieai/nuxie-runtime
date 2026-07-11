@@ -1,5 +1,7 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
+#[cfg(test)]
+mod atlas_mask_oracle;
 mod atlas_pipeline;
 mod atomic_pipeline;
 mod composite_pipeline;
@@ -1981,8 +1983,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn feather_atlas_pass_writes_r16_mask_coverage() {
+    fn fixed_feather_atlas_mask() -> atlas_mask_oracle::AtlasMask {
         let factory = WgpuFactory::new(64, 64).unwrap();
         let mut raw_path = RawPath::new();
         raw_path.move_to(16.0, 16.0);
@@ -2104,12 +2105,25 @@ mod tests {
             .unwrap();
         receiver.recv().unwrap().unwrap();
         let mapped = slice.get_mapped_range().unwrap();
-        let mask_value = |x: usize, y: usize| {
-            let offset = y * bytes_per_row as usize + x * 2;
-            u16::from_ne_bytes(mapped[offset..offset + 2].try_into().unwrap())
-        };
+        let mut pixels = Vec::with_capacity(64 * 64);
+        for y in 0..64usize {
+            let row = &mapped[y * bytes_per_row as usize..][..64 * 2];
+            pixels.extend(
+                row.chunks_exact(2)
+                    .map(|sample| u16::from_le_bytes(sample.try_into().unwrap())),
+            );
+        }
+        drop(mapped);
+        readback.unmap();
+        atlas_mask_oracle::AtlasMask::new(64, 64, pixels).unwrap()
+    }
+
+    #[test]
+    fn feather_atlas_pass_writes_r16_mask_coverage() {
+        let mask = fixed_feather_atlas_mask();
+        let mask_value = |x: usize, y: usize| mask.sample_bits(x, y);
         assert_eq!(mask_value(63, 63), 0);
-        let scaled_center = (32.0 * atlas_scale) as usize;
+        let scaled_center = (32.0 * draw::feather_atlas_scale(80.0, Mat2D::IDENTITY)) as usize;
         let nonzero = (0..64usize)
             .flat_map(|y| (0..64usize).map(move |x| (x, y)))
             .filter(|&(x, y)| mask_value(x, y) != 0 && mask_value(x, y) & 0x8000 == 0)
@@ -2122,5 +2136,44 @@ mod tests {
             nonzero.contains(&(scaled_center, scaled_center)),
             "{nonzero:?}"
         );
+    }
+
+    #[test]
+    fn cpp_webgpu_atlas_mask_oracle_matches_fixed_rust_mask_when_configured() {
+        let Some(path) = std::env::var_os("RIVE_CPP_ATLAS_MASK") else {
+            return;
+        };
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_MASK is set but empty; set it to a C++ atlas-mask oracle file"
+        );
+        let path = PathBuf::from(path);
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-mask oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_mask = atlas_mask_oracle::AtlasMask::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-mask oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_mask = fixed_feather_atlas_mask();
+        atlas_mask_oracle::compare_cpp_to_rust(
+            &cpp_mask,
+            &rust_mask,
+            atlas_mask_oracle::MaskComparisonTolerances {
+                support: 1.0 / 1024.0,
+                value: 1.0 / 512.0,
+            },
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ atlas-mask oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
     }
 }

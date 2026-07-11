@@ -1,0 +1,10 @@
+rive-golden-stream-v1
+source file="first-light:direct-feather-stroke" artboard="" scene="direct-feather-stroke"
+frameSize width=128 height=128
+clearColor value=0xff000000
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+save
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(32,32),(96,32),(96,96),(32,96)]}} paint={id=1,style=stroke,color=0xffffffff,thickness=8,join=0,cap=0,feather=2,blendMode=3,shader=0}
+restore
+frame

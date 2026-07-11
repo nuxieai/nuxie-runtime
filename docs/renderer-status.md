@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=21, diverges=0, gated=1,444, total=1,465.
+- Rust wgpu: exact=22, diverges=0, gated=1,444, total=1,466.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -27,7 +27,8 @@ Run `make renderer-golden`.
   `gm-OverStroke-clockwise-atomic`,
   `gm-strokes3-clockwise-atomic`, and
   `gm-lots_of_tess_spans_stroke-clockwise-atomic`, and
-  `gm-emptyfeather-clockwise-atomic`.
+  `gm-emptyfeather-clockwise-atomic`, plus
+  `first-light-direct-feather-stroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -47,12 +48,11 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Finish feather routing in source dependency order: converge atlas coverage,
-   partition atomic-capable draws instead of rejecting the whole frame, and
-   close the remaining direct-stroke atomic resolution gap before considering
-   wgpu's `alwaysFeatherToAtlas` policy optional. Continue R2 with the remaining
-   `render_context.cpp` behavior, robust triangulation, and the intersection
-   board.
+1. Finish feather coverage in source dependency order. Ordered atomic/fallback
+   partitioning and C++ direct/atlas threshold routing are complete. Fix the
+   isolated atlas-stroke join cutouts, then converge the remaining atlas
+   filtering/corner cases. Continue R2 with the remaining `render_context.cpp`
+   behavior, robust triangulation, and the intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -388,3 +388,9 @@ Run `make renderer-golden`.
   hard corner cutouts even without packing or culling. Direct-only routing was
   rejected because large radii produce long-range join rays. Continue with the
   atlas join tessellation/coverage records; do not replace the atlas threshold.
+- 2026-07-11: Added a mode-correct C++ clockwise-atomic first-light golden for
+  a low-radius direct feathered stroke. Rust differs at 103 localized AA-edge
+  pixels and passes the existing bounded 128-pixel backend allowance used by
+  `OverStroke`; there is no shape or coverage-mask mismatch. This closes the
+  routing verification finding from the two-axis review and moves the corpus
+  to exact=22/diverges=0 without promoting the still-broken atlas stress case.

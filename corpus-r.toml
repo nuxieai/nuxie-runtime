@@ -24,6 +24,17 @@ max_channel_delta = 2
 max_different_pixels = 32
 
 [[entry]]
+id = "first-light-direct-feather-stroke-clockwise-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-direct-feather-stroke.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-direct-feather-stroke.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 128
+
+[[entry]]
 id = "artboardclipping-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/artboardclipping-frame-0.rive-stream"

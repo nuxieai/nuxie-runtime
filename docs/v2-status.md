@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=25 / exact-segments=33 / diverges=1 /
+- Scripted compare: exact=26 / exact-segments=34 / diverges=0 /
   unsupported-feature=1 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -644,8 +644,8 @@ the only memory the next session has. Update it every commit.
         initial sample after inner feathers retained C++'s padded path around
         an empty scripted effect. `script_create_text_runs.riv` is exact at
         two samples after nested width-fill leaves gained the referenced
-        artboard's intrinsic content width as their flex basis. The sole
-        runnable divergence, `data_viz_demo.riv`, now matches C++'s complete
+        artboard's intrinsic content width as their flex basis.
+        `data_viz_demo.riv` now matches C++'s complete
         construction and post-layout gradient preamble through shaders 89-106
         within the comparator's float epsilon. Nested layout hosts retain the
         solved layout map for constraints and publish ParametricPath control
@@ -659,9 +659,13 @@ the only memory the next session has. Update it every commit.
         precise percentage values. All six FollowPath transforms now match
         C++ within the comparator epsilon. Paint-owned effect paths and the
         Data artboard's computed `Total: 283` text now match C++. The first
-        mismatch is Circles shape local 269's weighted `PointsPath`: Rust
-        retains the pre-constraint two-point geometry while C++ publishes the
-        layout-driven root-bone deformation.
+        Circles shape local 269's weighted `PointsPath` now follows the
+        layout-driven root-bone deformation because Skin dirt invalidates its
+        skinnable path as in C++ `Skin::onDirty`/`PointsPath::markSkinDirty`.
+        Its four reused circle-path lines are structurally identical with a
+        maximum local-space cancellation delta of 0.0002442, accepted by a
+        0.00025 tolerance; the byte-identical transform reduces that to about
+        9.5e-6 in world space. All runnable scripted entries are now exact.
         Component-list instancing remains the sole explicit scripted
         unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
@@ -3843,6 +3847,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Ported C++ `Skin::onDirty` through
+  `PointsPath::markSkinDirty`: constraint-driven bone updates now translate
+  Skin dirt into path dirt for every skinnable dependent, preventing retained
+  weighted geometry from surviving with pre-constraint points.
+  `data_viz_demo.riv` is structurally identical; its only residual is a
+  uniform local-space cancellation delta on four reused circle-path lines
+  (max 0.0002442, about 9.5e-6 in world space), accepted with tolerance
+  0.00025. Scripted compare is now exact=26 / exact-segments=34 / diverges=0 /
+  unsupported-feature=1; regular compare remains exact=263 /
+  exact-segments=584 / diverges=26 / unsupported-feature=6. Workspace tests,
+  both corpus lanes, formatting, and diff checks pass. Next: audit the
+  remaining M8 exit checklist and take its highest unproven closeout item;
+  do not reopen `data_viz_demo.riv`.
 
 - 2026-07-10: [M8] Ported C++ target-to-source converter dependency ordering
   and live nested-context publication. Formula-token and converter-property

@@ -1599,6 +1599,19 @@ impl ArtboardInstance {
         }
         self.on_component_dirty(local_id);
 
+        // Ported from C++ `src/bones/skin.cpp::Skin::onDirty` and
+        // `src/shapes/points_path.cpp::PointsPath::markSkinDirty`.
+        if self.components[index].type_name == "Skin" {
+            if !dirt.contains(ComponentDirt::SKIN) {
+                self.add_dirt(local_id, ComponentDirt::SKIN, false);
+            }
+            let skinnable_count = self.components[index].dependent_locals.len();
+            for dependent_index in 0..skinnable_count {
+                let skinnable_local = self.components[index].dependent_locals[dependent_index];
+                self.add_dirt(skinnable_local, ComponentDirt::PATH, true);
+            }
+        }
+
         if recurse {
             // Mirrors C++ DependencyHelper::addDirtToDependents: dependency
             // edges are stable after import, so cascade without cloning.

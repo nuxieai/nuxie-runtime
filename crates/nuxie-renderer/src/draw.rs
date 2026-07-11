@@ -5,7 +5,7 @@ use crate::gpu::{
     BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
     EMULATED_STROKE_CAP_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN,
     MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG, OUTER_CURVE_PATCH_SEGMENT_SPAN,
-    PARAMETRIC_PRECISION, POLAR_PRECISION, ROUND_JOIN_CONTOUR_FLAG,
+    PARAMETRIC_PRECISION, POLAR_PRECISION, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH,
 };
 use bytemuck::Zeroable;
 use nuxie_render_api::{Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
@@ -238,17 +238,17 @@ pub(crate) fn build_stroke_tessellation(
             let x0 = location;
             location += parametric as i32 + polar as i32 + join as i32 - 1
                 + i32::from(index == 0) * padding;
-            spans.push(TessVertexSpan::without_reflection(
+            push_forward_tessellation_spans(
+                &mut spans,
                 curve.map(|point| [point.x, point.y]),
                 [tangent.x, tangent.y],
-                0.0,
                 x0,
                 location,
                 parametric,
                 polar,
                 join,
                 flags,
-            ));
+            );
         }
     }
     if contour_data.is_empty() {
@@ -890,6 +890,46 @@ fn push_padding_span(spans: &mut Vec<TessVertexSpan>, x0: i32, x1: i32) {
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
+fn push_forward_tessellation_spans(
+    spans: &mut Vec<TessVertexSpan>,
+    points: [[f32; 2]; 4],
+    join_tangent: [f32; 2],
+    logical_x0: i32,
+    logical_x1: i32,
+    parametric_segments: u32,
+    polar_segments: u32,
+    join_segments: u32,
+    contour_id_with_flags: u32,
+) {
+    let mut y = logical_x0 / TESS_TEXTURE_WIDTH;
+    let mut x0 = logical_x0 % TESS_TEXTURE_WIDTH;
+    let mut x1 = x0 + logical_x1 - logical_x0;
+    loop {
+        spans.push(TessVertexSpan::without_reflection(
+            points,
+            join_tangent,
+            y as f32,
+            x0,
+            x1,
+            parametric_segments,
+            polar_segments,
+            join_segments,
+            contour_id_with_flags,
+        ));
+        if x1 <= TESS_TEXTURE_WIDTH {
+            break;
+        }
+        y += 1;
+        x0 -= TESS_TEXTURE_WIDTH;
+        x1 -= TESS_TEXTURE_WIDTH;
+    }
+}
+
+pub(crate) fn tessellation_texture_height(spans: &[TessVertexSpan]) -> u32 {
+    spans.iter().map(|span| span.y as u32).max().unwrap_or(0) + 1
+}
+
 fn align_up(value: i32, alignment: i32) -> i32 {
     ((value + alignment - 1) / alignment) * alignment
 }
@@ -1343,5 +1383,27 @@ mod tests {
     fn stroke_budget_uses_maximum_singular_scale_under_shear() {
         let scale = max_matrix_scale(Mat2D([1.0, 0.0, 1.0, 1.0, 0.0, 0.0]));
         assert!((scale - 1.618_034).abs() < 1e-5);
+    }
+
+    #[test]
+    fn stroke_spans_wrap_across_tessellation_texture_rows() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        for index in 1..600 {
+            path.line_to(index as f32, (index % 2) as f32);
+        }
+        let tessellation = build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            2.0,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        assert!(tessellation_texture_height(&tessellation.spans) > 1);
+        assert!(tessellation
+            .spans
+            .iter()
+            .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0));
     }
 }

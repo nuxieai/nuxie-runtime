@@ -8,6 +8,7 @@ pub(crate) const PARAMETRIC_PRECISION: u32 = 4;
 pub(crate) const POLAR_PRECISION: u32 = 8;
 pub(crate) const MAX_PARAMETRIC_SEGMENTS: u32 = 1023;
 pub(crate) const MAX_POLAR_SEGMENTS: u32 = 1023;
+pub(crate) const TESS_TEXTURE_WIDTH: i32 = 2048;
 pub(crate) const MIP_MAP_LOD_BIAS: f32 = -0.5;
 
 #[repr(C)]

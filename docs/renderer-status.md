@@ -45,7 +45,7 @@ Run `make renderer-golden`.
 ## Next
 
 1. Complete `draw.cpp` stroke geometry by porting the tessellation-span
-   range/chunking behavior exposed by `lots_of_tess_spans_stroke`.
+   coverage accumulation behavior exposed by `lots_of_tess_spans_stroke`.
 2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
@@ -191,3 +191,11 @@ Run `make renderer-golden`.
   to 18. `lots_of_tess_spans_stroke` remains the next real source gap at
   749,360 differing pixels because Rust emits materially fewer concentric
   strokes, indicating missing span range/chunking behavior rather than AA.
+- 2026-07-11: Ported C++ `TessellationWriter::pushTessellationSpans` row
+  wrapping for forward stroke spans. Logical spans now map across 2,048-wide
+  tessellation-texture rows, straddling spans are duplicated at the next row's
+  negative edge, and texture height/uniforms grow from actual span rows.
+  `lots_of_tess_spans_stroke` now renders all 49 radii and drops from 749,360
+  to 375,640 differing pixels; its 25% coverage masks are pixel-identical, so
+  the remaining gap is dense-overlap coverage magnitude rather than missing
+  geometry. Exact remains 18 pending that separate accumulation slice.

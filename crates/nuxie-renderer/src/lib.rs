@@ -777,8 +777,9 @@ impl WgpuFrame {
                 for contour in &mut contours {
                     contour.path_id = 1;
                 }
+                let tessellation_height = draw::tessellation_texture_height(&spans);
                 path.coverage_buffer_range.pitch = padded_width;
-                let mut uniforms = analytic_uniforms(self.width, self.height, 1);
+                let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
                 uniforms.render_target_update_bounds =
                     [0, 0, self.width as i32, self.height as i32];
                 let paths = [gpu::PathData::zeroed(), path];
@@ -789,7 +790,7 @@ impl WgpuFrame {
                     &uniforms,
                     &paths,
                     &contours,
-                    1,
+                    tessellation_height,
                 );
                 let tessellation_view =
                     tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -861,7 +862,10 @@ impl WgpuFrame {
                     {
                         // Compound fills require the upstream stencil-then-cover path.
                     } else {
-                        let uniforms = analytic_uniforms(self.width, self.height, 1);
+                        let tessellation_height =
+                            draw::tessellation_texture_height(&tessellation.spans);
+                        let uniforms =
+                            analytic_uniforms(self.width, self.height, tessellation_height);
                         let tessellation_texture = self.context.tessellator.encode(
                             &self.context.device,
                             &mut encoder,
@@ -869,7 +873,7 @@ impl WgpuFrame {
                             &uniforms,
                             std::slice::from_ref(&tessellation.path),
                             &tessellation.contours,
-                            1,
+                            tessellation_height,
                         );
                         let tessellation_view = tessellation_texture
                             .create_view(&wgpu::TextureViewDescriptor::default());

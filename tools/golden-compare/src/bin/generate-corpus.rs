@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use rive_binary::{RuntimeFile, read_runtime_file};
+use nuxie_binary::{RuntimeFile, read_runtime_file};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::path::{Path, PathBuf};

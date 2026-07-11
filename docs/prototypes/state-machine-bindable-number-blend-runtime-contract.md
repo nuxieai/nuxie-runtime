@@ -14,10 +14,10 @@ per-instance bindable-property clones, and blend sources read the cloned
 
 The slice is complete when:
 
-- `rive-binary` exposes the C++ data-bind target and latest bindable-property
-  lookup needed by `rive-runtime` without making runtime reconstruct import
+- `nuxie-binary` exposes the C++ data-bind target and latest bindable-property
+  lookup needed by `nuxie-runtime` without making runtime reconstruct import
   stack state.
-- `rive-runtime` collects imported `BindablePropertyNumber.propertyValue`
+- `nuxie-runtime` collects imported `BindablePropertyNumber.propertyValue`
   values for state-machine-owned data binds whose targets are bindable numbers.
 - Each `StateMachineInstance` owns per-instance bindable-number values seeded
   from the imported runtime model.
@@ -52,13 +52,13 @@ If the answer is no to all three, defer it to later data-binding runtime work.
 Focused verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_bindable_blend_sources_match_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe state_machine_bindable_blend_sources_match_cpp_probe -- --nocapture
 ```
 
 Full verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe -- --nocapture
 cargo check --workspace
 make test
 make cpp-compare

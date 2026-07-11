@@ -28,4 +28,4 @@ The covered behavior is limited to absolute `viewModelId` /
 ## Tests
 
 - `cargo test --workspace --quiet`
-- `RIVE_CPP_PROBE=... cargo test -p rive-runtime --test cpp_probe --quiet`
+- `RIVE_CPP_PROBE=... cargo test -p nuxie-runtime --test cpp_probe --quiet`

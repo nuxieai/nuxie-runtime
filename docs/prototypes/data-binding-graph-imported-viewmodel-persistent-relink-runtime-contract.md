@@ -25,7 +25,7 @@ pointer.
 
 ## Out Of Scope
 
-- Mutating `RuntimeFile` or `rive-binary` imported object storage.
+- Mutating `RuntimeFile` or `nuxie-binary` imported object storage.
 - Sharing imported-instance mutations across independent `StateMachineInstance`
   values.
 - Stable public object handles exposing `referenceViewModelInstance` pointers.

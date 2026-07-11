@@ -5,7 +5,7 @@ Date: 2026-06-29
 This document continues roadmap item `#11` after transition animation reset
 parity. It defines the next smallest blend-transition surface: C++ probe
 coverage for transitions out of `BlendStateDirect` states that use the direct
-blend sources already supported by `rive-runtime`.
+blend sources already supported by `nuxie-runtime`.
 
 ## Formal Goal
 
@@ -81,8 +81,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_direct_blend_state_transition_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_direct_blend_state_transition_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

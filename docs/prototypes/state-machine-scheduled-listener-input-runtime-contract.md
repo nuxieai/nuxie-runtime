@@ -11,8 +11,8 @@ scheduled start/end occurrence.
 ## Formal Goal
 
 Implement scheduled listener input-change actions for simple state-machine
-advance in `rive-runtime`: carry imported state/transition listener input
-actions from `rive-binary`, honor the scheduled occurrence bit in
+advance in `nuxie-runtime`: carry imported state/transition listener input
+actions from `nuxie-binary`, honor the scheduled occurrence bit in
 `ListenerAction.flags`, mutate bool/number/trigger state-machine inputs
 synchronously, and compare the resulting immediate transition behavior against
 the C++ probe.
@@ -103,8 +103,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_scheduled_listener_input_changes_match_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_scheduled_listener_input_changes_match_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

@@ -8,7 +8,7 @@ shape that C++ supports for view-model bindable properties.
 
 ## Formal Goal
 
-Implement `BindablePropertyColor` transition conditions in `rive-runtime`: when
+Implement `BindablePropertyColor` transition conditions in `nuxie-runtime`: when
 the left comparator is a `TransitionPropertyViewModelComparator` resolved to
 `BindablePropertyColor` and the right comparator is
 `TransitionValueColorComparator`, read the per-instance color value and compare
@@ -63,7 +63,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_color_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_color_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

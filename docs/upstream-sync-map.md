@@ -1,7 +1,7 @@
 # Upstream Sync Map (Phase S)
 
 Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
-keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
+keeps Nuxie runtime current with `rive-app/nuxie-runtime` after the V2/M8
 migration completes. Activation: blocked by M8; the first run is manual; the
 nightly cadence is enabled only after two clean manual cycles.
 
@@ -31,7 +31,7 @@ beat giant ones).
 
 - `git -C $RIVE_RUNTIME_DIR fetch` and list new commits with stats.
 - Bucket every commit by path signature:
-  - `dev/defs/**` → schema (regenerate `rive-schema` via `make schema`;
+  - `dev/defs/**` → schema (regenerate `nuxie-schema` via `make schema`;
     usually mechanical, occasionally implies new runtime behavior)
   - `src/**`, `include/rive/**` → runtime (the core triage surface)
   - `renderer/**` → renderer (DEFER: auto-tag `phase-r-backlog` — this list
@@ -79,7 +79,7 @@ the next cycle's report (with a staleness counter) until approved or skipped.
 
 - Port approved commits in upstream order, V2 method: mechanical
   translation, cite the upstream sha in each commit message
-  (`[sync] Port rive-runtime <sha>: <title>`), goldens as the oracle.
+  (`[sync] Port nuxie-runtime <sha>: <title>`), goldens as the oracle.
 - Schema changes: regenerate, then port any runtime consumers.
 - New fixtures: add to corpus as `not-yet`, triage to exact/gated as usual.
 - THEN bump the pin (CI SHA + status file) in the same PR/batch; the full

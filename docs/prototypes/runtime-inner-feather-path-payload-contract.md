@@ -16,7 +16,7 @@ The slice is complete when:
 
 - `tools/cpp-probe` emits `Feather::innerPath()` raw path commands beside the
   existing feather scalar payload.
-- `rive-runtime::RuntimeFeatherState` exposes the matching
+- `nuxie-runtime::RuntimeFeatherState` exposes the matching
   `inner_path_commands` payload.
 - Rust computes inner-feather geometry from the already selected shape-paint
   source path by matching `Feather::rebuildInnerPath()`:
@@ -62,7 +62,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

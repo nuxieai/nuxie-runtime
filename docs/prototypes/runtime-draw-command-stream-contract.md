@@ -17,7 +17,7 @@ The slice is complete when:
 - `tools/cpp-probe` emits `drawCommandStream` by walking
   `firstDrawable()->prevDrawable()` and applying the same pending clip-operation
   and `willDraw()` gate as `Artboard::drawInternal()`.
-- `rive-runtime` exposes `ArtboardInstance::draw_commands(&ArtboardGraph)`.
+- `nuxie-runtime` exposes `ArtboardInstance::draw_commands(&ArtboardGraph)`.
 - Commands are logical records only: `Draw`, `ClipStart`, and `ClipEnd`, with
   local IDs, clipping-shape IDs where known, and save-operation flags.
 - Runtime filtering uses imported hidden facts plus runtime render opacity for
@@ -49,7 +49,7 @@ Before adding behavior to this slice, answer:
 1. Does it affect whether a logical drawable/proxy record appears in
    `Artboard::drawInternal()` for the current runtime instance?
 2. Can it be compared as JSON without real renderer calls?
-3. Is the needed runtime state already modeled in `rive-runtime`?
+3. Is the needed runtime state already modeled in `nuxie-runtime`?
 
 If not, defer it to a later renderer, geometry, text, nested-artboard, list, or
 script runtime slice.
@@ -61,7 +61,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

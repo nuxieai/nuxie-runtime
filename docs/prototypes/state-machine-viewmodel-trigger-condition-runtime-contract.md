@@ -9,7 +9,7 @@ implementing the full data-binding scheduler.
 
 ## Formal Goal
 
-Implement `BindablePropertyTrigger` transition conditions in `rive-runtime`
+Implement `BindablePropertyTrigger` transition conditions in `nuxie-runtime`
 for the case where the left side is a
 `TransitionPropertyViewModelComparator` resolved to `BindablePropertyTrigger`
 and the right side is either `TransitionValueTriggerComparator` or
@@ -73,7 +73,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_trigger_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_trigger_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

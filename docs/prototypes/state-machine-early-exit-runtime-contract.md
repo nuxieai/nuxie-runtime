@@ -10,7 +10,7 @@ still mixing when the active transition has `EnableEarlyExit`.
 ## Formal Goal
 
 Implement early-exit transition interruption for simple
-`AnimationState -> AnimationState` transitions in `rive-runtime`: keep blocking
+`AnimationState -> AnimationState` transitions in `nuxie-runtime`: keep blocking
 additional transitions while a timed transition is mixing unless the active
 transition enables early exit, allow normal transition search to continue when
 early exit is enabled, start the interrupting transition from the current state
@@ -97,8 +97,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_early_exit_transition_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_early_exit_transition_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

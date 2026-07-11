@@ -25,19 +25,19 @@ Reproducers (now replayed by `make fuzz-regressions` under `fuzz_runtime/`):
 
 - `fuzz_runtime-hang-layout-parent-cycle-min.riv` (39 bytes, minimized) and
   `fuzz_runtime-hang-layout-parent-cycle-orig.riv` (581 bytes, original) —
-  hung in `crates/rive-runtime/src/components.rs`
+  hung in `crates/nuxie-runtime/src/components.rs`
   `runtime_layout_chain_has_layout_component` (and its sibling
   `runtime_constrained_layout_ancestor`), reached from
   `ArtboardInstance::from_graph_with_artboards`. The
   `while let Some(...) { local_id = parent_local; }` layout-parent walk never
   terminated on a `parentId` cycle.
 - `fuzz_runtime-hang-drawrules-refchain.riv` (297 bytes) — hung in
-  `crates/rive-graph/src/lib.rs` `flattened_draw_rules_local` /
+  `crates/nuxie-graph/src/lib.rs` `flattened_draw_rules_local` /
   `runtime_object_for_local` / `object_parent_id`, reached from
   `GraphFile::from_runtime_file` during draw-order computation. A cyclic
   draw-rule / object reference chain looped forever.
 
-C++ parity: the reference `rive-runtime` **also hangs** on the original input
+C++ parity: the reference `nuxie-runtime` **also hangs** on the original input
 (confirmed with the C++ golden runner — it spins in `Artboard::initialize` ->
 `Path::onAddedClean`'s unbounded shape-parent walk). `Component::validate` only
 checks that a parent resolves to a `ContainerComponent`; it does not reject

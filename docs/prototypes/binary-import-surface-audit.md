@@ -2,16 +2,16 @@
 
 Date: 2026-06-28
 
-This audit classifies the current public `rive-binary` surface against
+This audit classifies the current public `nuxie-binary` surface against
 [`binary-import-completion-contract.md`](binary-import-completion-contract.md).
-It exists to keep the completion goal finite: `rive-binary` should finish binary
+It exists to keep the completion goal finite: `nuxie-binary` should finish binary
 import parity, not quietly become the post-import runtime.
 
 ## Evidence
 
 Current inventory:
 
-- `RuntimeFile` public methods live in `crates/rive-binary/src/lib.rs`.
+- `RuntimeFile` public methods live in `crates/nuxie-binary/src/lib.rs`.
 - The `RuntimeFile` implementation currently exposes 296 public methods.
 - The widest families are view-model imported-data helpers, data-bind runtime
   behavior helpers, artboard import collections, converter helpers, and import-time
@@ -23,19 +23,19 @@ classification as their family unless called out separately.
 
 ## Classification Labels
 
-- **Import-owned**: belongs in `rive-binary`; it describes bytes, decoded objects,
+- **Import-owned**: belongs in `nuxie-binary`; it describes bytes, decoded objects,
   import status, generated defaults, or immediate C++ import relationships.
 - **Test-supporting**: acceptable while proving parity, but should not become a
   reason to keep expanding the public interface.
 - **Move-later**: existing surface that models post-import runtime behavior. Keep
-  frozen for now, but move to `rive-graph` or a future runtime crate when that
+  frozen for now, but move to `nuxie-graph` or a future runtime crate when that
   crate owns the corresponding state.
 - **Do-not-expand**: no new helpers should be added in this family unless the
   completion contract's admission rule proves the work changes immediate import.
 
 ## Import-Owned Surface
 
-These families are within the `rive-binary` seam.
+These families are within the `nuxie-binary` seam.
 
 | Family | Representative helpers | Reason |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ supporting evidence rather than the desired long-term interface.
 | Data-bind target/output facts | `data_bind_target_supports_push`, `data_bind_uses_persisting_list`, `data_bind_source_output_type`, `data_bind_output_type` | Static over imported target/converter relationships today; avoid expanding into live target mutation. |
 | Data-converter static facts | `data_converter_output_type`, `data_converter_group_items`, `data_converter_formula_tokens` | Useful to compare imported converter graphs. Runtime converter execution should not grow here. |
 | Data context imported lookup | `data_context_view_model_property`, `data_context_relative_view_model_property`, `data_context_view_model_instance`, `data_context_relative_view_model_instance` | Uses imported view-model chains and manifest maps. Keep as a parity helper; future live data contexts belong in runtime. |
-| Source-data snapshots | `view_model_instance_source_data_value` | Useful bridge from imported values to converter tests. Further source synchronization belongs outside `rive-binary`. |
+| Source-data snapshots | `view_model_instance_source_data_value` | Useful bridge from imported values to converter tests. Further source synchronization belongs outside `nuxie-binary`. |
 
 The rule for this group: maintenance is allowed, but expansion requires a fresh
 contract admission check.
@@ -78,7 +78,7 @@ contract admission check.
 
 These families model post-import runtime behavior. They exist because earlier
 parity exploration reached into data-binding and converter lifecycle semantics.
-They should be frozen, not used as precedent for more `rive-binary` work.
+They should be frozen, not used as precedent for more `nuxie-binary` work.
 
 | Family | Representative helpers | Why it should move |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ They should be frozen, not used as precedent for more `rive-binary` work.
 | Artboard component list selection | `artboard_component_list_map_rules`, `resolved_artboard_for_artboard_component_list_item` | Map rules are imported facts, but list-item artboard selection is close to runtime data-driven behavior. Treat as frozen unless needed for corpus parity. |
 
 Existing tests around these helpers may remain as regression locks while the port
-is young. New work should move toward extraction, not deeper `rive-binary`
+is young. New work should move toward extraction, not deeper `nuxie-binary`
 coverage.
 
 ## Current Completion Implications
@@ -106,8 +106,8 @@ and `_for_object` variants are mechanically equivalent for scope purposes.
 The goal is not complete merely because this audit exists. The remaining closure
 work is:
 
-- Use this audit as the gate for new `rive-binary` work.
-- Stop adding new data-bind or converter runtime helpers to `rive-binary`.
+- Use this audit as the gate for new `nuxie-binary` work.
+- Stop adding new data-bind or converter runtime helpers to `nuxie-binary`.
 - Decide later whether the move-later families should be hidden, feature-gated, or
   physically moved into a future runtime crate.
 - Build a final completion matrix for the whole contract: schema coverage, binary
@@ -130,4 +130,4 @@ Decision:
 ```
 
 If the decision is not clearly import-owned or narrowly test-supporting, it should
-not be added to `rive-binary`.
+not be added to `nuxie-binary`.

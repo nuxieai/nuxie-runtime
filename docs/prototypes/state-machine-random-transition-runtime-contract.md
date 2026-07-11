@@ -11,7 +11,7 @@ first allowed transition.
 ## Formal Goal
 
 Implement random transition selection for simple `AnimationState ->
-AnimationState` transitions in `rive-runtime`: read the source state's `flags`,
+AnimationState` transitions in `nuxie-runtime`: read the source state's `flags`,
 read each transition's `randomWeight`, evaluate all outgoing transitions from a
 random state, sum the weights for allowed transitions, choose the weighted
 transition with the same default C++ test random value, consume inputs only for
@@ -106,8 +106,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_random_transition_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_random_transition_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

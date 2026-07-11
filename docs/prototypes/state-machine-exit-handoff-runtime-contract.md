@@ -10,7 +10,7 @@ target state and can hold the source animation while a timed transition mixes.
 ## Formal Goal
 
 Implement the remaining simple animation-state transition handoff behavior in
-`rive-runtime`: when a source animation spills past its end before a transition
+`nuxie-runtime`: when a source animation spills past its end before a transition
 is taken, advance the target animation by that spilled time; when a transition
 uses `PauseOnExit`, keep the source animation fixed while mixing; when
 `PauseOnExit` combines with absolute exit time, hold the source at the absolute
@@ -102,8 +102,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_transition_handoff_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_transition_handoff_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

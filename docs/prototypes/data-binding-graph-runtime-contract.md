@@ -13,7 +13,7 @@ lookups, target writes, update scheduling, converters, and re-entry rules.
 
 The graph starts as a runtime module over imported `RuntimeFile` and
 `ArtboardGraph` facts. It does not move binary decoding, import-time schema
-projection, or static dependency graph ownership into `rive-runtime`.
+projection, or static dependency graph ownership into `nuxie-runtime`.
 
 ## Boundary
 
@@ -35,9 +35,9 @@ The data-binding graph owns these live runtime responsibilities:
 The graph does not own these responsibilities:
 
 - byte decoding, schema generation, import-stack behavior, or unknown-property
-  handling in `rive-binary`;
+  handling in `nuxie-binary`;
 - static object dependency edges, draw ordering, host registries, or other
-  import-time facts owned by `rive-graph`;
+  import-time facts owned by `nuxie-graph`;
 - animation advancement, transition selection, hit testing, layout solving,
   text shaping, rendering, audio playback, or scripting execution;
 - public scene callback side effects except where callback events later mutate
@@ -57,7 +57,7 @@ If the answer is yes, the implementation should be added through the graph
 boundary rather than by adding another per-type dirty flag or apply method to
 `StateMachineInstance`.
 
-`rive-binary` must not grow live runtime data-binding helpers. It may expose
+`nuxie-binary` must not grow live runtime data-binding helpers. It may expose
 only import-time facts needed to construct the graph.
 
 ## First Implementation Path
@@ -99,6 +99,6 @@ Roadmap item `#12` is complete when:
   are either C++ probe-backed or explicitly deferred with rationale;
 - relative, parent, and nested path handling is covered or intentionally split
   into named nested-artboard/listener follow-up slices;
-- no new live data-binding behavior is implemented in `rive-binary`;
+- no new live data-binding behavior is implemented in `nuxie-binary`;
 - remaining data-binding runtime gaps are listed in the runtime audit rather
   than hidden in broad parity language.

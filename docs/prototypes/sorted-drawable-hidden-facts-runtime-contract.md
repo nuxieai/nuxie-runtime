@@ -17,7 +17,7 @@ The slice is complete when:
 
 - `tools/cpp-probe` exposes `Drawable::isHidden()` for each
   `sortedDrawableOrder` node.
-- `rive-graph` exposes `SortedDrawableNode::is_hidden`.
+- `nuxie-graph` exposes `SortedDrawableNode::is_hidden`.
 - Imported drawable nodes derive the hidden fact from `Drawable.drawableFlags`.
 - Layout proxy nodes inherit the hidden fact from their owning layout drawable.
 - Clipping proxy nodes are always visible, matching
@@ -54,7 +54,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-graph --test cpp_probe cpp_probe_matches_rust_sorted_drawable_hidden_flags_when_available -- --nocapture
+  cargo test -p nuxie-graph --test cpp_probe cpp_probe_matches_rust_sorted_drawable_hidden_flags_when_available -- --nocapture
 ```
 
 Full verification:

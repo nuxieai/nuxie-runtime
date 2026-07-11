@@ -10,7 +10,7 @@ percentage of the source animation duration, matching C++.
 ## Formal Goal
 
 Implement percentage timing for simple `AnimationState -> AnimationState`
-transitions in `rive-runtime`: when `DurationIsPercentage` is set, compute mix
+transitions in `nuxie-runtime`: when `DurationIsPercentage` is set, compute mix
 duration from the source animation duration; when `ExitTimeIsPercentage` is
 set, compute the exit threshold from the source animation duration, using the
 source start time only for pause-on-exit seeking just like C++. Compare advance
@@ -94,8 +94,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_percentage_timing_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_percentage_timing_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

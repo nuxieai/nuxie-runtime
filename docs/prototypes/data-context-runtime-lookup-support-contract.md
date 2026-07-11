@@ -11,7 +11,7 @@ graph-callable runtime API without admitting live data-bind scheduling.
 - one current `ViewModelInstance`
 - zero or more parent `ViewModelInstance` contexts
 
-It delegates to the existing C++-audited `rive-binary` lookup helpers for
+It delegates to the existing C++-audited `nuxie-binary` lookup helpers for
 absolute property/instance lookup, manifest-relative property/instance lookup,
 and `ViewModelInstance::propertyFromPath`.
 

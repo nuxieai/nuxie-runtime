@@ -52,7 +52,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_component_viewmodel_pointer_unsupported_matches_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_component_viewmodel_pointer_unsupported_matches_cpp_probe -- --nocapture
 ```
 
 Full verification:

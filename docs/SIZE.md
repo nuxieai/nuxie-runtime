@@ -1,6 +1,6 @@
 # SDK Binary Size
 
-Tracks the `rive-capi` cdylib size — the artifact embedded in customers' iOS /
+Tracks the `nux-capi` cdylib size — the artifact embedded in customers' iOS /
 Android apps. Since the Nuxie runtime ships as an SDK, cdylib size is an
 adoption gate, so size is a tracked metric alongside the perf ratio
 (docs/v2-status.md item 26(d)).
@@ -30,7 +30,7 @@ strip = "symbols"
 ```
 
 Override the opt-level ad hoc without editing the file:
-`CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL=s cargo build --profile release-size -p rive-capi`.
+`CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL=s cargo build --profile release-size -p nux-capi`.
 
 ## Baseline table
 
@@ -38,15 +38,15 @@ Override the opt-level ad hoc without editing the file:
 |---|---:|---:|---:|
 | `release` (opt=3), unstripped — **baseline** | 4,179,920 | 3.99 | — |
 | `release` (opt=3), `strip -x` | 3,691,640 | 3.52 | −11.7% |
-| **`release-size` (opt=z + strip=symbols), scripting OFF** | **2,617,024** | **2.50** | **−37.4%** |
-| `release-size` (opt=z + strip), scripting ON | 2,800,640 | 2.67 | −33.0% |
+| **`release-size` (opt=z + strip=symbols), scripting OFF** | **2,735,088** | **2.61** | **−34.6%** |
+| `release-size` (opt=z + strip), scripting ON | 2,918,704 | 2.78 | −30.2% |
 
-Scripting cost, apples-to-apples on the size profile: **+183,616 B (+7.0%)**.
+Scripting cost, apples-to-apples on the size profile: **+183,616 B (+6.7%)**.
 On the unoptimized `release` profile the same feature costs +351,712 B (raw
 4,179,920 → 4,531,632), because `opt-level=z` compresses the Luau VM harder
 than `opt=3` does.
 
-## Per-lever deltas (each measured separately)
+## Original per-lever deltas (each measured separately)
 
 Starting from the unstripped `release` baseline (4,179,920 B):
 
@@ -88,18 +88,18 @@ crate, so this is `nm`-based):
 
 | Crate | KiB | Note |
 |---|---:|---|
-| `rive_runtime` | 797 | core object/state-machine/draw model |
+| `nuxie_runtime` | 797 | core object/state-machine/draw model |
 | fonts: `skrifa` + `harfrust` + `read-fonts` | 737 | **the text/shaping stack** |
 | `std`/`core`/`alloc` | 501 | fmt + panic formatting + collections |
 | generic trait impls (monomorphization) | 319 | |
 | `taffy` | 190 | layout engine |
-| `rive_binary` | 118 | .riv reader |
-| `rive_graph` | 98 | |
-| `rive_schema` | 58 | generated schema (code; table data lives in `__const`) |
+| `nuxie_binary` | 118 | .riv reader |
+| `nuxie_graph` | 98 | |
+| `nuxie_schema` | 58 | generated schema (code; table data lives in `__const`) |
 | `luaur*` (Luau VM) | +194 | only present with scripting ON |
 
 Answering the brief's question — the biggest contributors are **not** the
-schema tables (58 KiB of code). They are `rive_runtime`, then the **text
+schema tables (58 KiB of code). They are `nuxie_runtime`, then the **text
 stack** (skrifa/harfrust ≈ 737 KiB), then `std` formatting machinery. The
 Luau VM adds ≈194 KiB of `.text` but compresses to +180 KiB net at opt=z.
 Note also `__DATA_CONST/__const` ≈ 297 KiB of read-only table data (schema

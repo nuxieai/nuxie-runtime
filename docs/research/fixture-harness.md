@@ -100,8 +100,8 @@ Rules:
 
 ```text
 tools/cpp-probe/
-crates/rive-binary/tests/cpp_import.rs
-crates/rive-graph/tests/cpp_probe.rs
+crates/nuxie-binary/tests/cpp_import.rs
+crates/nuxie-graph/tests/cpp_probe.rs
 ```
 
 Build and run:
@@ -119,7 +119,7 @@ If the reference runtime has not been built yet, build the core archive without 
 RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" ./build/build_rive.sh
 ```
 
-The binary comparison currently writes synthetic forward-compatibility `.riv` files, imports them through the C++ probe and `rive-binary`, and compares import success. The graph comparison checks artboard counts/names, compact artboard object counts, local type keys, component names, serialized parent IDs, and resolved parent local IDs.
+The binary comparison currently writes synthetic forward-compatibility `.riv` files, imports them through the C++ probe and `nuxie-binary`, and compares import success. The graph comparison checks artboard counts/names, compact artboard object counts, local type keys, component names, serialized parent IDs, and resolved parent local IDs.
 
 ## Source Anchors
 

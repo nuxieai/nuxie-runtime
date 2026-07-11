@@ -20,7 +20,7 @@ lookup or the wider string converter family.
 - `DataConverterToString` as the direct converter on the data bind.
 - Imported `DataConverterToString.colorFormat` bytes on the runtime graph
   converter descriptor.
-- C++ color-to-string conversion semantics already pinned in `rive-binary`,
+- C++ color-to-string conversion semantics already pinned in `nuxie-binary`,
   including empty-format signed integer fallback and `%r/%g/%b/%a/%R/%G/%B/%A`
   marker expansion.
 - Forward source-to-target writes before existing state-machine transition

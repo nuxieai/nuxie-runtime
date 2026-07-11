@@ -10,7 +10,7 @@ explicit data-context advance step resets that trigger value.
 ## Formal Goal
 
 Implement the narrow `ViewModelInstanceTrigger::advanced()` behavior exposed
-through C++ `StateMachineInstance::advancedDataContext()` in `rive-runtime`:
+through C++ `StateMachineInstance::advancedDataContext()` in `nuxie-runtime`:
 when a state machine is bound to the minimal authored default view-model data
 context, advancing that context resets imported trigger counts to zero.
 
@@ -60,7 +60,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_trigger_reset_matches_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_trigger_reset_matches_cpp_probe -- --nocapture
 ```
 
 Full verification:

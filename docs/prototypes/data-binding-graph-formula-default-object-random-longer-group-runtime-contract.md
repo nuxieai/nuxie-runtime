@@ -15,7 +15,7 @@ This contract covers the first six longer `DataConverterGroup` shapes:
 - `DataConverterGroup<OperationValue, OperationValue, OperationValue, FormulaFallback>`
 
 The purpose is to close the first longer-group hole without turning
-`rive-runtime`'s data-bind graph admission rule into a general runtime
+`nuxie-runtime`'s data-bind graph admission rule into a general runtime
 scheduler. The runtime admission rule is intentionally limited to groups with
 exactly one formula fallback child and only operation-value children around it;
 the C++ oracle coverage in this contract is the three- and four-child shapes

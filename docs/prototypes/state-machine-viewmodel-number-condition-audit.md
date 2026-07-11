@@ -57,7 +57,7 @@ Already available:
 - State-machine-owned `DataBind` targets create per-instance bindable-number
   values in `StateMachineInstance`.
 - Those values can now be explicitly mutated by data-bind index.
-- `rive-binary` already accepts `TransitionViewModelCondition`,
+- `nuxie-binary` already accepts `TransitionViewModelCondition`,
   `TransitionPropertyViewModelComparator`, and
   `TransitionValueNumberComparator` with C++ import-stack parity.
 - `RuntimeTransitionCondition` already evaluates regular bool, number, and
@@ -65,10 +65,10 @@ Already available:
 
 Missing before runtime admission:
 
-- `rive-binary` does not project comparator children alongside each
+- `nuxie-binary` does not project comparator children alongside each
   `TransitionViewModelCondition`; `RuntimeStateTransition.conditions` currently
   stores only the condition object.
-- `rive-runtime` has no representation for view-model condition comparands.
+- `nuxie-runtime` has no representation for view-model condition comparands.
 - `StateMachineInstance` has no data-context-present gate, so it cannot mirror
   C++ `canEvaluate()` yet.
 - `tools/cpp-probe` has no action that binds even a minimal data context to a

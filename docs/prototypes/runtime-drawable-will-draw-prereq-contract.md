@@ -14,13 +14,13 @@ whose visibility depends on resolved import-time references.
 
 The slice is complete when:
 
-- `rive-graph::DrawableOrderNode` and `SortedDrawableNode` expose the resolved
+- `nuxie-graph::DrawableOrderNode` and `SortedDrawableNode` expose the resolved
   image asset global id for exact `Image` drawables.
 - The same nodes expose the resolved referenced artboard global id for
   `NestedArtboard` drawables and its exact drawable subclasses.
-- `rive-runtime::draw_commands()` mirrors C++ `Image::willDraw()` by requiring
+- `nuxie-runtime::draw_commands()` mirrors C++ `Image::willDraw()` by requiring
   non-hidden state, non-zero render opacity, and a resolved `ImageAsset`.
-- `rive-runtime::draw_commands()` mirrors C++ `NestedArtboard::willDraw()` by
+- `nuxie-runtime::draw_commands()` mirrors C++ `NestedArtboard::willDraw()` by
   requiring non-hidden state and a resolved referenced artboard.
 - A C++ probe-backed test covers valid and invalid image asset references plus
   valid and invalid nested-artboard references.
@@ -48,7 +48,7 @@ Before extending this slice, ask:
 
 1. Does C++ `willDraw()` make the decision from static imported references plus
    existing mutable render opacity?
-2. Can the fact be projected through `rive-graph` without owning live runtime
+2. Can the fact be projected through `nuxie-graph` without owning live runtime
    state?
 3. Can it be compared through `tools/cpp-probe` draw-command stream output?
 
@@ -61,7 +61,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_filters_image_and_nested_artboard_will_draw_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_filters_image_and_nested_artboard_will_draw_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

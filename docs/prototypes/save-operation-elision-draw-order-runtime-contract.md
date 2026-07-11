@@ -16,7 +16,7 @@ The slice is complete when:
 
 - `tools/cpp-probe` exposes `Drawable::m_needsSaveOperation` for each
   `sortedDrawableOrder` node without changing the reference runtime.
-- `rive-graph` exposes `SortedDrawableNode::needs_save_operation`.
+- `nuxie-graph` exposes `SortedDrawableNode::needs_save_operation`.
 - Rust applies the same stack algorithm as `Artboard::clearRedundantOperations()`
   over `firstDrawable()->prevDrawable()` order.
 - Consecutive clip-start operations and drawables tightly wrapped by clip
@@ -53,7 +53,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-graph --test cpp_probe cpp_probe_matches_rust_save_operation_elision_when_available -- --nocapture
+  cargo test -p nuxie-graph --test cpp_probe cpp_probe_matches_rust_save_operation_elision_when_available -- --nocapture
 ```
 
 Full verification:

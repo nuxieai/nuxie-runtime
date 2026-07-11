@@ -10,7 +10,7 @@ properties compared through numeric transition comparators.
 ## Formal Goal
 
 Implement the narrow integer-as-number `TransitionViewModelCondition` runtime
-behavior in `rive-runtime`: when the left comparator is a
+behavior in `nuxie-runtime`: when the left comparator is a
 `TransitionPropertyViewModelComparator` resolved to `BindablePropertyInteger`
 and the right comparator is `TransitionValueNumberComparator`, read the
 per-instance integer value, cast it to `f32`, and evaluate it using the same
@@ -68,7 +68,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_integer_number_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_integer_number_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

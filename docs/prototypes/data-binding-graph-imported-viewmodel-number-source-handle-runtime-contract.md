@@ -1,7 +1,7 @@
 # Imported ViewModel Number Source Handle Runtime Contract
 
 Purpose: admit the first stable public source handle without widening
-`rive-runtime` into a general mutable object graph API.
+`nuxie-runtime` into a general mutable object graph API.
 
 The C++ runtime lets callers resolve a file-backed imported
 `ViewModelInstanceRuntime::propertyNumber(name)` source and mutate its

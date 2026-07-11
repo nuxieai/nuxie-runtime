@@ -1,16 +1,16 @@
 # Graph Runtime Completion Matrix
 
-This document is the operating checklist for the active `rive-graph` goal. It
+This document is the operating checklist for the active `nuxie-graph` goal. It
 turns the broader graph contract into a finite audit so the port can finish this
 slice without letting every C++ runtime helper pull the work into frame
 execution.
 
 ## Scope Statement
 
-`rive-graph` parity means static post-import artboard graph parity:
+`nuxie-graph` parity means static post-import artboard graph parity:
 
-- `.riv` bytes have already become a verified `rive_binary::RuntimeFile`.
-- `rive-graph` projects the artboard-local object arena, file/artboard/runtime
+- `.riv` bytes have already become a verified `nuxie_binary::RuntimeFile`.
+- `nuxie-graph` projects the artboard-local object arena, file/artboard/runtime
   collections, component hierarchy, dependency relationships, graph order, and
   structural diagnostics that C++ establishes during import, `onAddedDirty`,
   `onAddedClean`, validation, initialization, or `buildDependencies`.
@@ -35,7 +35,7 @@ The active graph goal is complete when all of these are true:
   `graphOrder` parity.
 - The C++ probe comparison validates the supported corpus for the covered graph
   facts.
-- No new post-import runtime behavior is added to `rive-binary` for this graph
+- No new post-import runtime behavior is added to `nuxie-binary` for this graph
   work.
 - Remaining runtime behavior is documented under "Deferred Runtime Work" below.
 
@@ -101,11 +101,11 @@ The remaining C++ `addDependent()` calls should be handled as follows:
 | `DataBind`, `DataConverter*`, `ArtboardComponentList` value dependencies | Deferred runtime work | These need live source/target values, dirty queues, collapse state, or data-context mutation. |
 | `ViewModelInstance*`, `StateMachineInstance`, Lua/script runtime dependents | Deferred runtime work | These are instance/runtime execution relationships, not static artboard graph facts. |
 | `ListPath` y-value dependency | Deferred runtime work | This depends on live view-model/list data evaluation. |
-| Active draw target linked lists and draw-command emission | Partially graph/runtime-owned | Active target grouping, before/after placement, clipping proxy interleaving, save-operation elision, and imported hidden facts are represented by `sorted_drawable_order`; `PathComposerNode` records imported path hidden facts; `ShapePaintNode` records structural Fill/Stroke visibility, path-kind, SolidColor state facts, local-space gradient facts, authored blend mode values, scalar feather facts, and TrimPath scalar facts; `PathGeometryNode` records rectangle, ellipse, polygon, star, and triangle parametric scalar facts; `PathVertexNode` records `Weight`/`CubicWeight` payload words, while `SkeletalSkinNode`/`SkeletalTendonNode` record skin matrices and tendon inverse-bind facts required for weighted path deformation; `DrawableOrderNode`/`SortedDrawableNode` record resolved `ImageAsset` and referenced-artboard draw prerequisites; `rive-runtime` emits the logical draw command stream for simple hidden/render-opacity filtering, image/nested-artboard reference-gated filtering, pathless/hidden/collapsed source-path empty-clip suppression, shape-paint payloads, SolidColor authored/render-color paint state, local-space gradient paint state, authored/resolved blend mode state, scalar feather paint state plus no-effect inner-feather path payloads, line-only `TrimPath` effect path payloads, straight/cubic/rounded and skinned weighted `PointsPath` raw path commands, rounded `Rectangle` parametric raw path commands, `Ellipse` parametric raw path commands, rounded `Polygon` parametric raw path commands, rounded `Star` parametric raw path commands, and `Triangle` parametric raw path commands. Broader effect path mutation, feather renderer save/translate/clip/draw behavior, effect-path-aware feather rebuilding, and remaining text/list/scripted drawability remain deferred draw runtime work. |
+| Active draw target linked lists and draw-command emission | Partially graph/runtime-owned | Active target grouping, before/after placement, clipping proxy interleaving, save-operation elision, and imported hidden facts are represented by `sorted_drawable_order`; `PathComposerNode` records imported path hidden facts; `ShapePaintNode` records structural Fill/Stroke visibility, path-kind, SolidColor state facts, local-space gradient facts, authored blend mode values, scalar feather facts, and TrimPath scalar facts; `PathGeometryNode` records rectangle, ellipse, polygon, star, and triangle parametric scalar facts; `PathVertexNode` records `Weight`/`CubicWeight` payload words, while `SkeletalSkinNode`/`SkeletalTendonNode` record skin matrices and tendon inverse-bind facts required for weighted path deformation; `DrawableOrderNode`/`SortedDrawableNode` record resolved `ImageAsset` and referenced-artboard draw prerequisites; `nuxie-runtime` emits the logical draw command stream for simple hidden/render-opacity filtering, image/nested-artboard reference-gated filtering, pathless/hidden/collapsed source-path empty-clip suppression, shape-paint payloads, SolidColor authored/render-color paint state, local-space gradient paint state, authored/resolved blend mode state, scalar feather paint state plus no-effect inner-feather path payloads, line-only `TrimPath` effect path payloads, straight/cubic/rounded and skinned weighted `PointsPath` raw path commands, rounded `Rectangle` parametric raw path commands, `Ellipse` parametric raw path commands, rounded `Polygon` parametric raw path commands, rounded `Star` parametric raw path commands, and `Triangle` parametric raw path commands. Broader effect path mutation, feather renderer save/translate/clip/draw behavior, effect-path-aware feather rebuilding, and remaining text/list/scripted drawability remain deferred draw runtime work. |
 
 ## Deferred Runtime Work
 
-These are not blockers for completing the current `rive-graph` milestone:
+These are not blockers for completing the current `nuxie-graph` milestone:
 
 - Dirt propagation, dirt bit mutation, collapse propagation, and frame scheduling.
 - Mutable artboard instances and cloning.
@@ -124,7 +124,7 @@ These are not blockers for completing the current `rive-graph` milestone:
 
 ## Next Narrow Slice
 
-The next implementation slice should only touch `rive-graph` if it fails this
+The next implementation slice should only touch `nuxie-graph` if it fails this
 matrix. Good candidates are:
 
 - Add a missing static graph projection that satisfies the admission rule.

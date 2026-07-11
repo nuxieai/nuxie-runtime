@@ -6,7 +6,7 @@ Admit the first deterministic `DataConverterFormula` forward-conversion path in
 the runtime data-binding graph.
 
 This slice consumes the formula output-queue parity already modeled by
-`rive-binary` and keeps runtime scope narrow: default-context number sources
+`nuxie-binary` and keeps runtime scope narrow: default-context number sources
 feeding number targets can execute formula input/value/operation tokens without
 adding randoms, functions, reverse propagation, or formula-owned source binding.
 

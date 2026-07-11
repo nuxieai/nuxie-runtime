@@ -38,7 +38,7 @@ target-to-source propagation, converters, observer registration, polling
 fallback, pending add/remove, re-entry protection beyond the existing one-shot
 dirty bit, list/symbol/view-model bindables, relative paths, parent paths,
 nested paths, listener-owned data binding, nested artboard propagation, callback
-driven data binding, or any new `rive-binary` helper.
+driven data binding, or any new `nuxie-binary` helper.
 
 The per-bindable default source metadata remains as construction input for the
 first graph queue. Moving that metadata fully into a static graph definition is a

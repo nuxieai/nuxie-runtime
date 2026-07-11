@@ -22,7 +22,7 @@ what is idiomatic Rust.
 - Port *code, not behaviors*: one C++ class/file, translated coarsely in one
   sitting, with a comment naming its C++ source. Goldens judge correctness, not
   you; mark uncertain lines `// TODO(golden):` rather than researching each one.
-- `rive-schema` and `rive-binary` are frozen — do not touch them.
+- `nuxie-schema` and `nuxie-binary` are frozen — do not touch them.
 - Never add skip/cache logic, widen a tolerance, or restructure float math for
   performance unless it mirrors an audited C++ gate. The golden harness only
   samples corpus timelines; invented invalidation breaks the timelines it does
@@ -39,13 +39,13 @@ C++ heap objects are `rcp<Core>` with per-object reference counting. In Rust the
 entries addressed by a dense `local_id` index. No `Rc`/`Arc` per object.
 
 ```rust
-// crates/rive-runtime/src/objects.rs:61
+// crates/nuxie-runtime/src/objects.rs:61
 pub(crate) struct InstanceObjectArena {
     objects: Vec<Option<InstanceObjectStorage>>,   // indexed by dense local_id
 }
 ```
 
-`ArtboardInstance` (`crates/rive-runtime/src/artboard.rs:61`) holds `slots`,
+`ArtboardInstance` (`crates/nuxie-runtime/src/artboard.rs:61`) holds `slots`,
 `objects`, and `components` side by side, each a `Vec` indexed by `local_id`.
 Lifetime is the arena's lifetime; there is no shared ownership to reason about.
 
@@ -62,7 +62,7 @@ back-references become index fields. There are two id spaces:
 - **`global_id: u32`** — index into the whole file's object table.
 
 ```rust
-// crates/rive-graph/src/lib.rs:325
+// crates/nuxie-graph/src/lib.rs:325
 pub struct ComponentNode {
     pub local_id: usize,
     pub global_id: u32,
@@ -90,7 +90,7 @@ interpolators, converters, constraints, and object-type storage are all closed
 sets known at build time.
 
 ```rust
-// crates/rive-runtime/src/animation.rs:16
+// crates/nuxie-runtime/src/animation.rs:16
 pub(crate) enum RuntimeInterpolator {
     CubicEase { x1: f32, y1: f32, x2: f32, y2: f32 },
     CubicValue { .. },
@@ -104,7 +104,7 @@ factory, and the scripting VM are pluggable (FFI backend, host VM), so they stay
 traits mirroring the C++ abstract base classes.
 
 ```rust
-// crates/rive-render-api/src/lib.rs:310 — mirrors abstract rive::Renderer
+// crates/nuxie-render-api/src/lib.rs:310 — mirrors abstract rive::Renderer
 pub trait Renderer {
     fn save(&mut self);
     fn restore(&mut self);
@@ -113,8 +113,8 @@ pub trait Renderer {
 }
 ```
 
-Also `Factory` (`rive-render-api/src/lib.rs:338`) and
-`ScriptingVm`/`ScriptInstance`/`ScriptHost` (`rive-runtime/src/scripting.rs`).
+Also `Factory` (`nuxie-render-api/src/lib.rs:338`) and
+`ScriptingVm`/`ScriptInstance`/`ScriptHost` (`nuxie-runtime/src/scripting.rs`).
 
 ### 1.4 `std::vector` clear-and-refill → retained `Vec` by dense slot
 
@@ -123,7 +123,7 @@ capacity. The Rust port does the same, and additionally indexes retained caches
 by dense `local_id`, invalidating by graph identity rather than reallocating:
 
 ```rust
-// crates/rive-runtime/src/draw.rs:5912
+// crates/nuxie-runtime/src/draw.rs:5912
 struct RuntimePathGeometryCommandSlots {
     graph_global_id: Option<u32>,
     by_local: Vec<Option<RuntimeCachedPathGeometryCommands>>,
@@ -142,7 +142,7 @@ removed.
 Rive's C++ object model is a deep generated class hierarchy
 (`NodeBase : ContainerComponent : ...`) with `virtual coreType()`, per-property
 `xChanged()` hooks, and a `CoreRegistry` key→field deserialization switch. The
-Rust port **flattens** this. `crates/rive-runtime/build.rs` generates (included
+Rust port **flattens** this. `crates/nuxie-runtime/build.rs` generates (included
 at `objects.rs:9`):
 
 - An `enum InstanceObjectStorage` with one variant per object type, replacing the
@@ -155,7 +155,7 @@ The change-notification hook (`xChanged()`) becomes a shared generic helper that
 early-returns when the value is unchanged — this is load-bearing (see 3.6):
 
 ```rust
-// crates/rive-runtime/src/objects.rs:51
+// crates/nuxie-runtime/src/objects.rs:51
 pub(crate) fn set_optional_field<T: PartialEq>(field: &mut Option<T>, value: T) -> bool {
     if field.as_ref().is_some_and(|current| current == &value) {
         return false;                 // unchanged: no write, no change hook
@@ -168,7 +168,7 @@ pub(crate) fn set_optional_field<T: PartialEq>(field: &mut Option<T>, value: T) 
 `InstanceObjectArena::set_property_value` (`objects.rs:245`) validates the field
 kind against the schema, handles bitmask-passthrough packing, then routes to the
 generated per-type setter. Schema metadata (`Property { key, runtime_type,
-stores_field, bitmask_passthrough, ... }`) lives in `crates/rive-schema`.
+stores_field, bitmask_passthrough, ... }`) lives in `crates/nuxie-schema`.
 
 ---
 
@@ -184,7 +184,7 @@ A bit-exact port of C++ `include/rive/component_dirt.hpp` — a hand-rolled `u16
 newtype (not `bitflags`), with the *same bit positions and the same aliases*:
 
 ```rust
-// crates/rive-runtime/src/components.rs:18
+// crates/nuxie-runtime/src/components.rs:18
 pub struct ComponentDirt(pub u16);
 impl ComponentDirt {
     pub const PATH: Self = Self(1 << 4);
@@ -339,7 +339,7 @@ There is **zero** `partial_cmp().unwrap()` in the tree, and sorts use
 `f32::total_cmp` for a total, deterministic order across all bit patterns:
 
 ```rust
-// crates/rive-runtime/src/draw.rs:13554
+// crates/nuxie-runtime/src/draw.rs:13554
 stops.sort_by(f32::total_cmp);          // gradient / nslicer stop sort
 ```
 
@@ -354,7 +354,7 @@ is deliberate.
 divergence*. The only constructible true divergence found:
 
 ```rust
-// crates/rive-runtime/src/animation.rs:801 — PingPong direction
+// crates/nuxie-runtime/src/animation.rs:801 — PingPong direction
 let direction = (seconds / duration) as i32 % 2;   // duration==0 → inf as i32 saturates
 ```
 
@@ -378,7 +378,7 @@ Two profiles, one landed and one planned:
   whether this profile has landed before relying on it.
 
 At the parser/hostile-input boundary, use explicit `checked_*` and reject on
-overflow (e.g. `bytecode.rs`, `rive-binary/src/lib.rs:12689`,
+overflow (e.g. `bytecode.rs`, `nuxie-binary/src/lib.rs:12689`,
 `draw.rs:13136` `point_count.checked_mul(2)`). Do not let a mutated file's length
 field wrap into a small allocation.
 
@@ -388,7 +388,7 @@ field wrap into a small allocation.
 early-signal guard, never load-bearing logic (it vanishes in release):
 
 ```rust
-// crates/rive-runtime/src/draw.rs:7383
+// crates/nuxie-runtime/src/draw.rs:7383
 debug_assert_eq!(target.len(), bytes.len());   // pure .len() reads
 target.copy_from_slice(bytes);                 // would panic anyway on mismatch
 ```
@@ -402,7 +402,7 @@ Every generated/bindable setter returns `bool` (changed?) and early-returns when
 the value is unchanged:
 
 ```rust
-// crates/rive-runtime/src/state_machine/bindables.rs:237
+// crates/nuxie-runtime/src/state_machine/bindables.rs:237
 pub(crate) fn set_value(&mut self, value: f32) -> bool {
     if self.value == value { return false; }
     self.value = value;
@@ -432,7 +432,7 @@ performance. Translate the C++ arithmetic *in the C++ grouping*. The grouping is
 part of the contract:
 
 ```rust
-// crates/rive-runtime/src/components.rs:390 — Mat2D::mapPoints
+// crates/nuxie-runtime/src/components.rs:390 — Mat2D::mapPoints
 // The grouping matters for cancellation-heavy local path composition.
 if b == 0.0 && c == 0.0 { (a.mul_add(x, e), d.mul_add(y, f)) }
 else { (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f))) }
@@ -446,14 +446,14 @@ never contracts automatically). To match C++'s rounding you must reach for
 `f32::mul_add` *at exactly the sites clang would fuse* — and *not* elsewhere:
 
 ```rust
-// crates/rive-runtime/src/draw.rs:13840 — geometry path: FUSE (matches contracted C++)
+// crates/nuxie-runtime/src/draw.rs:13840 — geometry path: FUSE (matches contracted C++)
 // Mirrors C++ Vec2D::scaleAndAdd after compiler contraction; rounded midpoint
 // pruning can depend on the one-ulp split this preserves.
 (vector.0.mul_add(scale, point.0), vector.1.mul_add(scale, point.1))
 ```
 
 ```rust
-// crates/rive-scripting/src/vm.rs:347 — script VM: do NOT fuse
+// crates/nuxie-scripting/src/vm.rs:347 — script VM: do NOT fuse
 Ok(LuaVector::new(a.x() + b.x() * scale, ...))   // C++ Lua binding runs through
                                                  // the interpreter, uncontracted
 ```
@@ -489,7 +489,7 @@ points. To preserve C++ ordering, the port picks the conversion style by whether
 the font is variable:
 
 ```rust
-// crates/rive-runtime/src/text.rs:1098
+// crates/nuxie-runtime/src/text.rs:1098
 let path_style = if style_font.axes().is_empty() {
     PathStyle::FreeType     // non-variable: preserve authored contour starts (C++ order)
 } else {
@@ -524,7 +524,7 @@ image decoders, and audio remain paper decisions.
 | Bidi | `unicode-bidi` | No | — | — |
 | Image decode | `image`/`png`/`zune-jpeg`/`image-webp` | No (headers only) | — | `Factory::decode_image` (render-api:365) |
 | Audio | `cpal`/`rodio`/`kira` | No (schema enums only) | — | — |
-| Scripting | `luaur-rt` (+ common/vm) | **Yes** (feat `luau`, default) | =0.1.8 | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `rive-runtime/src/scripting.rs` |
+| Scripting | `luaur-rt` (+ common/vm) | **Yes** (feat `luau`, default) | =0.1.8 | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `nuxie-runtime/src/scripting.rs` |
 
 **Per-library gotchas actually discovered:**
 
@@ -545,7 +545,7 @@ image decoders, and audio remain paper decisions.
   disabled for advances (`text.rs:916`) and custom line metrics reproduce
   HarfBuzz ascent/descent (`text.rs:927`).
 - **Image decoding.** Only *encoded-header dimension parsing* is implemented in
-  Rust (`rive-render-api/src/lib.rs:1327`); real pixel decode is delegated to C++
+  Rust (`nuxie-render-api/src/lib.rs:1327`); real pixel decode is delegated to C++
   over FFI. Golden streams carry `decodeImage id=… width=… height=…` with **no
   payload hashes** — cross-runtime image comparison uses decoded dimensions +
   tolerant pixel sampling (PNG is lossless → exact; JPEG is not bit-identical
@@ -561,7 +561,7 @@ image decoders, and audio remain paper decisions.
   **Sandbox order (landed):** install all Rive globals first, *then*
   `sandbox(true)` — Luau's `GETIMPORT` resolves globals at load time, so globals
   must exist before any bytecode loads (`vm.rs:112`). The seam traits are owned by
-  `rive-runtime` and implemented by the optional `rive-scripting` crate (inverted
+  `nuxie-runtime` and implemented by the optional `nuxie-scripting` crate (inverted
   so the runtime never depends on the VM). `mlua`+`luau` remains the untriggered
   fallback behind the same seam. **TODO:** the "iOS no-JIT" property is implicit
   in the pure-Rust interpreter choice; there is no explicit in-code note for it.

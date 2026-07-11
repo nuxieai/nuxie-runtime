@@ -14,7 +14,7 @@ Expose C++-matching `line` plus `cubic` raw path commands for authored
 
 The slice is complete when:
 
-- `rive-runtime::RuntimeShapePaintCommand::path_commands` accepts supported
+- `nuxie-runtime::RuntimeShapePaintCommand::path_commands` accepts supported
   nonzero-radius `StraightVertex` children instead of dropping the whole path.
 - Rust ports the import-independent C++ `Path::buildPath()` rounded-corner math:
   adjacent edge normalization, clamped render radius, ideal control-point
@@ -59,7 +59,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

@@ -14,11 +14,11 @@ straight `PointsPath` objects with zero-radius `StraightVertex` children.
 
 The slice is complete when:
 
-- `rive-graph::PathGeometryNode` records imported `PointsPath` closure/hole
+- `nuxie-graph::PathGeometryNode` records imported `PointsPath` closure/hole
   flags and straight-vertex position/radius facts.
 - `tools/cpp-probe` emits picked `ShapePaintPath::rawPath()` command payloads
   for runtime shape-paint commands.
-- `rive-runtime::RuntimeShapePaintCommand` carries matching `path_commands`
+- `nuxie-runtime::RuntimeShapePaintCommand` carries matching `path_commands`
   for supported straight point paths after the same local/world path selection
   used by C++ `ShapePaint::pickPath()`.
 - Focused C++ probe coverage proves a closed straight `PointsPath` produces the
@@ -60,7 +60,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

@@ -18,7 +18,7 @@ into general converter lifecycle or data-binding scheduler behavior.
   `DataBindContext.sourcePathIds`.
 - `ViewModelInstanceString.propertyValue` sources.
 - `DataConverterToNumber` as the direct converter on the data bind.
-- Raw string bytes preserved by `rive-binary`.
+- Raw string bytes preserved by `nuxie-binary`.
 - C++ `std::atof`-style numeric-prefix parsing as modeled by the binary
   crate's data-converter parity helpers.
 - Forward source-to-target writes before existing state-machine/blend-state

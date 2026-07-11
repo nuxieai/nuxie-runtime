@@ -676,9 +676,12 @@ the only memory the next session has. Update it every commit.
         fuzzers and guarded regressions run in CI with no known reachable panic
         from accepted files.
     (d) `docs/PORTING.md` COMPLETE: the C++->Rust idiom codex is committed.
-    (e) REMAINING: release prep item 26/#V2-9.5 — Nuxie rename sweep, README
-        positioning, license/notice hygiene, upstream corpus fetch instead of
-        vendored assets, then final history rewrite after user confirms email.
+    (e) RELEASE PREP IN PROGRESS: the Nuxie rename sweep is complete across
+        crate/package/module names and the `nux_*` C ABI/header; the renamed
+        `libnux_capi` is 2.61 MiB scripting-off against the <=2.75 MiB budget.
+        Remaining: README positioning, license/notice hygiene, upstream corpus
+        fetch instead of vendored assets, then final history rewrite after the
+        user confirms email.
     Phase R remains gated on explicit user activation; its map now also
     records a Bun-style big-bang execution option to choose at
     activation.
@@ -3850,6 +3853,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Completed the publish-facing Nuxie rename. The public crate
+  is `nuxie`; internal crates and codegen are `nuxie-*`; the embedded SDK is
+  `nux-capi` with `Nux*` types, `NUX_*` constants, `nux_*` functions, and
+  `nux_capi.h`. Cargo metadata contains no old runtime package names, the C
+  dylib exports 31 `_nux_*` symbols and zero `_rive_*` symbols, and its C smoke
+  loop passes. Upstream C++/`.riv` identifiers remain factual Rive references.
+  Post-rename `libnux_capi` size is 2.61 MiB scripting-off (within the 2.75 MiB
+  budget) and 2.78 MiB scripting-on. Workspace tests, both corpus lanes, lint,
+  formatting, and diff checks pass; metrics remain regular 263/584/26/6 and
+  scripted 26/34/0/1. Next: README plus license/notice hygiene, then replace
+  the 32 tracked `.riv` assets with pinned upstream fetch/bootstrap machinery.
 
 - 2026-07-10: [M8] Completed the C ABI embed-loop surface with retained draw.
   The public Rust facade now exposes `ArtboardRenderCache`, while the C ABI

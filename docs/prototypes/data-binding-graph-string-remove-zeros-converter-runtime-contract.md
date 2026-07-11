@@ -7,7 +7,7 @@ default-context string sources feeding `BindablePropertyString.propertyValue`
 targets.
 
 This slice reuses the C++-modeled trailing-zero removal behavior in
-`rive-binary` and keeps the runtime graph limited to direct source-to-target
+`nuxie-binary` and keeps the runtime graph limited to direct source-to-target
 conversion.
 
 ## In Scope

@@ -70,7 +70,7 @@ name = "golden-compare"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "rive-binary",
+ "nuxie-binary",
 ]
 
 [[package]]
@@ -171,6 +171,106 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
+name = "nux-capi"
+version = "0.1.0"
+dependencies = [
+ "nuxie",
+]
+
+[[package]]
+name = "nuxie"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-runtime",
+ "nuxie-scripting",
+]
+
+[[package]]
+name = "nuxie-binary"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nuxie-schema",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nuxie-codegen"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nuxie-graph"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nuxie-binary",
+ "nuxie-schema",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nuxie-render-api"
+version = "0.1.0"
+
+[[package]]
+name = "nuxie-renderer-ffi"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cc",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-runtime",
+]
+
+[[package]]
+name = "nuxie-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "harfrust",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-schema",
+ "serde",
+ "serde_json",
+ "skrifa",
+ "taffy",
+]
+
+[[package]]
+name = "nuxie-schema"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "nuxie-scripting"
+version = "0.1.0"
+dependencies = [
+ "luaur-common",
+ "luaur-rt",
+ "luaur-vm",
+ "nuxie-binary",
+ "nuxie-render-api",
+ "nuxie-runtime",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -210,116 +310,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "rive"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rive-binary",
- "rive-graph",
- "rive-render-api",
- "rive-runtime",
- "rive-scripting",
-]
-
-[[package]]
-name = "rive-binary"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rive-schema",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rive-capi"
-version = "0.1.0"
-dependencies = [
- "rive",
-]
-
-[[package]]
-name = "rive-codegen"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rive-graph"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rive-binary",
- "rive-schema",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rive-render-api"
-version = "0.1.0"
-
-[[package]]
-name = "rive-renderer-ffi"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cc",
- "rive-binary",
- "rive-graph",
- "rive-render-api",
- "rive-runtime",
-]
-
-[[package]]
-name = "rive-runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "harfrust",
- "rive-binary",
- "rive-graph",
- "rive-render-api",
- "rive-schema",
- "serde",
- "serde_json",
- "skrifa",
- "taffy",
-]
-
-[[package]]
-name = "rive-schema"
-version = "0.1.0"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "rive-scripting"
-version = "0.1.0"
-dependencies = [
- "luaur-common",
- "luaur-rt",
- "luaur-vm",
- "rive-binary",
- "rive-render-api",
- "rive-runtime",
-]
-
-[[package]]
 name = "rust-golden-runner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "rive-binary",
- "rive-graph",
- "rive-render-api",
- "rive-runtime",
- "rive-schema",
- "rive-scripting",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-runtime",
+ "nuxie-schema",
+ "nuxie-scripting",
 ]
 
 [[package]]

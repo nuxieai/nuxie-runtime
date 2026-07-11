@@ -10,8 +10,8 @@ layout, or rendering too early.
 ## Formal Goal
 
 Define and implement the first mutable headless runtime slice around
-`rive-runtime`: consume a verified `rive_binary::RuntimeFile` plus
-`rive_graph::ArtboardGraph`, create mutable artboard component state, and
+`nuxie-runtime`: consume a verified `nuxie_binary::RuntimeFile` plus
+`nuxie_graph::ArtboardGraph`, create mutable artboard component state, and
 reproduce C++ component dirt scheduling and basic transform update semantics.
 
 The goal is complete when the runtime slice can:
@@ -31,19 +31,19 @@ The goal is complete when the runtime slice can:
 
 ## Scope Lock
 
-`rive-runtime` owns mutable headless runtime state. It does not own file loading
+`nuxie-runtime` owns mutable headless runtime state. It does not own file loading
 or static graph discovery.
 
 The external seam for this slice is:
 
-- Input: `rive_binary::RuntimeFile` and `rive_graph::ArtboardGraph`.
+- Input: `nuxie_binary::RuntimeFile` and `nuxie_graph::ArtboardGraph`.
 - Output: a mutable `ArtboardInstance` with per-component dirt and transform
   state, plus update reports that expose scheduler behavior for tests.
 - Errors: construction errors when graph IDs no longer resolve into the imported
   file model.
 
-`rive-binary` remains frozen for this work. `rive-graph` remains a static
-projection. New live runtime behavior belongs in `rive-runtime` or a later
+`nuxie-binary` remains frozen for this work. `nuxie-graph` remains a static
+projection. New live runtime behavior belongs in `nuxie-runtime` or a later
 runtime crate.
 
 ## Owned By This Slice
@@ -97,7 +97,7 @@ If the answer is no to all three, do not add it to this goal.
 
 The first implementation slice should add:
 
-- `crates/rive-runtime`.
+- `crates/nuxie-runtime`.
 - `ComponentDirt` and `Mat2D` primitives.
 - `ArtboardInstance::from_graph`.
 - `ArtboardInstance::add_dirt`.
@@ -111,7 +111,7 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

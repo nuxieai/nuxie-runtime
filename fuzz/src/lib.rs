@@ -1,17 +1,17 @@
 //! Shared drivers for the negative-input fuzz targets.
 //!
 //! These functions mirror the exact call sequence that
-//! `tools/rust-golden-runner` performs against `rive-runtime`/`rive-graph`
+//! `tools/rust-golden-runner` performs against `nuxie-runtime`/`nuxie-graph`
 //! (the non-`scripting` path), but they deliberately swallow every recoverable
 //! `Result`/`Option` error. The *only* thing a fuzz target cares about is a
 //! panic: the runtime ships inside customer apps under `panic = "abort"`, so a
 //! reachable panic is a host-app kill. Any input that the importer *accepts*
 //! must be drivable through instantiate -> advance -> draw without panicking.
 
-use rive_binary::read_runtime_file;
-use rive_graph::{ArtboardGraph, GraphFile};
-use rive_render_api::NullFactory;
-use rive_runtime::{
+use nuxie_binary::read_runtime_file;
+use nuxie_graph::{ArtboardGraph, GraphFile};
+use nuxie_render_api::NullFactory;
+use nuxie_runtime::{
     preallocate_render_paint_cache_for_artboard_tree, ArtboardInstance,
     RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
 };
@@ -154,7 +154,7 @@ fn drive(data: &[u8], pointer_events: &[PointerEvent]) -> Option<()> {
 
 fn advance_scene_to(
     instance: &mut ArtboardInstance,
-    runtime: &rive_binary::RuntimeFile,
+    runtime: &nuxie_binary::RuntimeFile,
     state_machine: Option<&mut StateMachineInstance>,
     owned_context: Option<&RuntimeOwnedViewModelInstance>,
     target_seconds: f32,
@@ -242,7 +242,7 @@ fn apply_pointer_event(
 
 /// Mirrors `select_scene`'s default branch in the golden runner.
 fn default_state_machine_index(
-    runtime: &rive_binary::RuntimeFile,
+    runtime: &nuxie_binary::RuntimeFile,
     artboard_index: usize,
     artboard: &ArtboardGraph,
 ) -> Option<usize> {
@@ -259,7 +259,7 @@ fn default_state_machine_index(
 
 /// Mirrors `selected_artboard_owned_view_model_context` (non-scripting).
 fn owned_view_model_context(
-    runtime: &rive_binary::RuntimeFile,
+    runtime: &nuxie_binary::RuntimeFile,
     artboard_index: usize,
 ) -> Option<RuntimeOwnedViewModelInstance> {
     let view_model_index = runtime

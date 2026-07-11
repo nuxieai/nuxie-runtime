@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "crates/rive-binary",
-    "crates/rive-graph",
-    "crates/rive-render-api",
-    "crates/rive-renderer-ffi",
-    "crates/rive",
-    "crates/rive-capi",
-    "crates/rive-runtime",
-    "crates/rive-schema",
-    "crates/rive-scripting",
+    "crates/nuxie-binary",
+    "crates/nuxie-graph",
+    "crates/nuxie-render-api",
+    "crates/nuxie-renderer-ffi",
+    "crates/nuxie",
+    "crates/nux-capi",
+    "crates/nuxie-runtime",
+    "crates/nuxie-schema",
+    "crates/nuxie-scripting",
     "tools/golden-compare",
     "tools/perf-compare",
-    "tools/rive-codegen",
+    "tools/nuxie-codegen",
     "tools/rust-golden-runner",
 ]
 resolver = "3"
@@ -19,17 +19,17 @@ resolver = "3"
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/rive-app/rive-rust"
+repository = "https://github.com/nuxieai/nuxie-runtime"
 
 # Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates
-# only (rive-runtime, rive-binary, rive-graph, rive-schema, rive, rive-capi) --
-# NOT the tools/ crates and NOT rive-scripting (active external work area).
+# only (nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-schema, nuxie, nux-capi) --
+# NOT the tools/ crates and NOT nuxie-scripting (active external work area).
 # These are `[lints.clippy]` entries, so they fire only under `cargo clippy`
 # (no cargo build/check noise). All three sit at WARN because the pre-existing
 # site counts are far above one lane's fix budget (hundreds of indexing and
 # arithmetic sites, ~170 unwraps; see `make lint-gate`); `make lint-gate`
-# DENIES them per-crate wherever a crate is already clean (rive, rive-schema
+# DENIES them per-crate wherever a crate is already clean (nuxie, nuxie-schema
 # today) and reports the counts for the rest so the ratchet direction is
 # visible. Escalate a lint to "deny" here once its last runtime-crate sites
 # are cleared.

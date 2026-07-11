@@ -14,11 +14,11 @@ payloads.
 
 The slice is complete when:
 
-- `rive-graph::ShapePaintNode` records authored `SolidColor.colorValue` for
+- `nuxie-graph::ShapePaintNode` records authored `SolidColor.colorValue` for
   Fill/Stroke paints whose mutator is a `SolidColor`.
 - `tools/cpp-probe` emits a `paintState` object for SolidColor-backed
   `shapePaintCommands`, including authored `color` and C++ `renderColor`.
-- `rive-runtime::RuntimeShapePaintCommand` carries matching SolidColor state and
+- `nuxie-runtime::RuntimeShapePaintCommand` carries matching SolidColor state and
   computes `render_color` with C++ `colorModulateOpacity(colorValue,
   renderOpacity)`.
 - Focused C++ probe coverage proves a non-opaque shape produces the same
@@ -54,7 +54,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

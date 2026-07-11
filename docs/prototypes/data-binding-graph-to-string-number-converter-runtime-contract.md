@@ -20,7 +20,7 @@ family.
 - `DataConverterToString` as the direct converter on the data bind.
 - Imported `DataConverterToString.flags` and `decimals` settings needed for
   C++ number formatting.
-- C++ number-to-string formatting semantics already pinned in `rive-binary`,
+- C++ number-to-string formatting semantics already pinned in `nuxie-binary`,
   including rounding, trailing-zero removal, and comma insertion.
 - Forward source-to-target writes before existing state-machine transition
   evaluation.

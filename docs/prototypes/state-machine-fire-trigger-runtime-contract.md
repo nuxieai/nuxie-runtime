@@ -12,7 +12,7 @@ the bound data context.
 ## Formal Goal
 
 Implement the narrow `StateMachineFireTrigger` runtime behavior in
-`rive-runtime`: carry imported fire-trigger actions from `rive-binary`, bind an
+`nuxie-runtime`: carry imported fire-trigger actions from `nuxie-binary`, bind an
 authored view-model instance as the state-machine data context, resolve encoded
 `viewModelPathIds` against that context, increment matching
 `ViewModelInstanceTrigger.propertyValue` on scheduled state/transition
@@ -26,7 +26,7 @@ The goal is complete when the runtime slice can:
 - Bind a minimal authored view-model-instance data context for a
   `StateMachineInstance`.
 - Resolve absolute `viewModelPathIds` to imported `ViewModelInstanceTrigger`
-  values through existing `rive-binary` data-context lookup rules.
+  values through existing `nuxie-binary` data-context lookup rules.
 - Preserve the C++ boundary for claimed relative `DataBindPath` fire-trigger
   actions in this scheduled state-machine slice: the imported action remains
   present, but the trigger source is treated as unresolved and no trigger count
@@ -74,7 +74,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_fire_trigger -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_fire_trigger -- --nocapture
 ```
 
 Full verification:

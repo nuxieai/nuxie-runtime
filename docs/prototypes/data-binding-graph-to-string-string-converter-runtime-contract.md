@@ -16,7 +16,7 @@ string binds. It does not expand into the wider string converter family.
 - Default root view-model contexts resolved through serialized
   `DataBindContext.sourcePathIds`.
 - `ViewModelInstanceString.propertyValue` sources with raw bytes preserved by
-  `rive-binary`.
+  `nuxie-binary`.
 - `DataConverterToString` as the direct converter on the data bind.
 - C++ string-to-string conversion semantics: preserve and forward the source
   bytes unchanged.

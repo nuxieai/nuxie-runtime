@@ -10,8 +10,8 @@ input.
 
 ## Formal Goal
 
-Implement direct blend-state runtime support in `rive-runtime`: import
-`BlendStateDirect` blend animations from `rive-binary`, instantiate
+Implement direct blend-state runtime support in `nuxie-runtime`: import
+`BlendStateDirect` blend animations from `nuxie-binary`, instantiate
 per-blend-animation linear animation instances, advance them with the state
 machine, compute C++-matching direct mix values for supported blend sources,
 and apply the weighted animations to the artboard.
@@ -110,8 +110,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_blend_state_direct_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_blend_state_direct_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

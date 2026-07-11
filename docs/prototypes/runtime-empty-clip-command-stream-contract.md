@@ -14,7 +14,7 @@ source path and therefore its proxy drawables return non-zero
 
 The slice is complete when:
 
-- `rive-runtime::ArtboardInstance::draw_commands(&ArtboardGraph)` applies the
+- `nuxie-runtime::ArtboardInstance::draw_commands(&ArtboardGraph)` applies the
   same `emptyClips` counter shape as C++ for clip start/end proxy drawables.
 - A visible `ClippingShape` whose source shape has no imported path
   registrations suppresses logical draw commands between its start and end
@@ -25,7 +25,7 @@ The slice is complete when:
 ## Scope Lock
 
 This slice admits only static imported path-presence facts already projected by
-`rive-graph`:
+`nuxie-graph`:
 
 - `ClippingShapeNode::shape_locals`
 - `PathComposerNode::path_locals`
@@ -48,8 +48,8 @@ Before extending empty-clip behavior further, answer:
 
 1. Is the C++ behavior observable in `Artboard::drawInternal()` before renderer
    callbacks?
-2. Is the required path/shape state already represented in `rive-graph` or
-   `rive-runtime`?
+2. Is the required path/shape state already represented in `nuxie-graph` or
+   `nuxie-runtime`?
 3. Can the case be compared through `drawCommandStream` JSON without real
    rendering?
 
@@ -63,7 +63,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

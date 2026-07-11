@@ -1,26 +1,26 @@
 use anyhow::{Context, Result, anyhow, bail};
-use rive_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
-use rive_graph::{
+use nuxie_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
+use nuxie_graph::{
     ArtboardGraph, GraphFile, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
     ShapePaintStateNode,
 };
-use rive_render_api::{
+use nuxie_render_api::{
     Factory as RenderFactory, NullFactory, RecordingFactory, Renderer as RenderRenderer,
 };
-use rive_runtime::{
+use nuxie_runtime::{
     ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelInstance,
     RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paint_cache_for_artboard_tree,
     static_text_support_error,
 };
 #[cfg(feature = "scripting")]
-use rive_runtime::{
+use nuxie_runtime::{
     NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue, ScriptViewModel,
     ScriptViewModelProperty, preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use rive_scripting::vm::ScriptVm;
+use nuxie_scripting::vm::ScriptVm;
 #[cfg(feature = "scripting")]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -222,7 +222,7 @@ fn run() -> Result<String> {
         }
         (state, cache)
     } else {
-        let cache = rive_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
+        let cache = nuxie_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
             &runtime,
             artboard,
             &graph.artboards,
@@ -508,7 +508,7 @@ fn refresh_bound_script_artboard_inputs(
             continue;
         };
         let Some(bound_artboard_id) =
-            rive_runtime::bound_script_artboard_input(runtime, context, input)
+            nuxie_runtime::bound_script_artboard_input(runtime, context, input)
         else {
             continue;
         };
@@ -1455,7 +1455,7 @@ struct RunnerScriptArtboard {
     artboard_index: usize,
     instance: ArtboardInstance,
     state_machine: Option<StateMachineInstance>,
-    view_model: Option<rive_runtime::ScriptViewModel>,
+    view_model: Option<nuxie_runtime::ScriptViewModel>,
     width: f32,
     height: f32,
     frame_origin: bool,
@@ -1469,7 +1469,7 @@ struct RunnerScriptArtboard {
 struct RunnerScriptArtboardRenderState {
     next_instance_id: u64,
     pending: Vec<(u64, usize)>,
-    caches: BTreeMap<u64, rive_runtime::RuntimeRenderPaintCache>,
+    caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
 }
 
 #[cfg(feature = "scripting")]
@@ -1532,7 +1532,7 @@ impl RunnerScriptArtboard {
             state_machine,
             view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
                 .as_ref()
-                .and_then(|context| rive_runtime::script_view_model_from_owned(runtime, context)),
+                .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context)),
             width: object
                 .and_then(|object| object.double_property("width"))
                 .unwrap_or(0.0),
@@ -1590,13 +1590,13 @@ impl ScriptArtboard for RunnerScriptArtboard {
         self.frame_origin = frame_origin;
     }
 
-    fn data(&self) -> Option<rive_runtime::ScriptViewModel> {
+    fn data(&self) -> Option<nuxie_runtime::ScriptViewModel> {
         self.view_model.clone()
     }
 
     fn instance(
         &self,
-        view_model: Option<rive_runtime::ScriptViewModel>,
+        view_model: Option<nuxie_runtime::ScriptViewModel>,
     ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
         let mut instance = RunnerScriptArtboard::new(
             &self.runtime,
@@ -1628,13 +1628,13 @@ impl ScriptArtboard for RunnerScriptArtboard {
     fn animation(
         &self,
         name: &str,
-    ) -> std::result::Result<Option<rive_runtime::ScriptAnimation>, ScriptError> {
-        Ok(rive_runtime::ScriptAnimation::named(&self.instance, name))
+    ) -> std::result::Result<Option<nuxie_runtime::ScriptAnimation>, ScriptError> {
+        Ok(nuxie_runtime::ScriptAnimation::named(&self.instance, name))
     }
 
     fn advance_animation(
         &mut self,
-        animation: &mut rive_runtime::ScriptAnimation,
+        animation: &mut nuxie_runtime::ScriptAnimation,
         seconds: f32,
     ) -> std::result::Result<bool, ScriptError> {
         Ok(animation.advance(&mut self.instance, seconds))
@@ -1642,9 +1642,9 @@ impl ScriptArtboard for RunnerScriptArtboard {
 
     fn set_animation_time(
         &mut self,
-        animation: &mut rive_runtime::ScriptAnimation,
+        animation: &mut nuxie_runtime::ScriptAnimation,
         value: f32,
-        mode: rive_runtime::ScriptAnimationTime,
+        mode: nuxie_runtime::ScriptAnimationTime,
     ) -> std::result::Result<(), ScriptError> {
         animation.set_time(&mut self.instance, value, mode);
         Ok(())
@@ -1653,14 +1653,14 @@ impl ScriptArtboard for RunnerScriptArtboard {
     fn node(
         &self,
         name: &str,
-    ) -> std::result::Result<Option<rive_runtime::ScriptNode>, ScriptError> {
+    ) -> std::result::Result<Option<nuxie_runtime::ScriptNode>, ScriptError> {
         let graph = self.artboards.get(self.artboard_index).ok_or_else(|| {
             ScriptError::new(format!(
                 "missing scripted artboard index {}",
                 self.artboard_index
             ))
         })?;
-        Ok(rive_runtime::script_node_for_artboard(
+        Ok(nuxie_runtime::script_node_for_artboard(
             &self.instance,
             graph,
             name,
@@ -1894,7 +1894,7 @@ fn initialize_scripted_drawables_for_artboard(
     script_context_is_bound: bool,
 ) -> Result<()> {
     let mut vm = ScriptVm::new();
-    vm.set_view_models(rive_runtime::script_view_models(runtime));
+    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
     let bound_context_model = context_model.clone();
     vm.set_default_context_view_model_chain(context_model, parent_context_models);
     let mut host = NoopScriptHost;
@@ -2053,7 +2053,7 @@ fn initialize_scripted_data_converters(
             let value = context_model
                 .and_then(|model| {
                     let owned = model.owned_instance();
-                    rive_runtime::bound_script_input_value(runtime, &owned.borrow(), input)
+                    nuxie_runtime::bound_script_input_value(runtime, &owned.borrow(), input)
                 })
                 .or_else(|| default_script_input_value(input));
             if let Some(value) = value {
@@ -2087,7 +2087,7 @@ fn initialize_scripted_data_converters(
 fn scripted_data_converter_inputs(
     runtime: &RuntimeFile,
     converter_global_id: u32,
-) -> Vec<&rive_binary::RuntimeObject> {
+) -> Vec<&nuxie_binary::RuntimeObject> {
     ((converter_global_id as usize + 1)..runtime.object_count())
         .map_while(|global_id| {
             let object = runtime.object(global_id)?;
@@ -2100,7 +2100,7 @@ fn scripted_data_converter_inputs(
 }
 
 #[cfg(feature = "scripting")]
-fn default_script_input_value(input: &rive_binary::RuntimeObject) -> Option<ScriptValue> {
+fn default_script_input_value(input: &nuxie_binary::RuntimeObject) -> Option<ScriptValue> {
     match input.type_name {
         "ScriptInputBoolean" => input.bool_property("propertyValue").map(ScriptValue::Bool),
         "ScriptInputColor" => input
@@ -2123,7 +2123,7 @@ fn selected_script_view_model(
 ) -> Option<ScriptViewModel> {
     selected_artboard_owned_view_model_context(runtime, artboard_index)
         .as_ref()
-        .and_then(|context| rive_runtime::script_view_model_from_owned(runtime, context))
+        .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
 }
 
 #[cfg(feature = "scripting")]
@@ -2206,7 +2206,7 @@ fn hydrate_script_inputs(
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     scripted_local_id: usize,
-    script_instance: &mut dyn rive_runtime::ScriptInstance,
+    script_instance: &mut dyn nuxie_runtime::ScriptInstance,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
 ) -> Result<()> {
     let object_range = artboard_object_range(runtime, artboard, artboards);
@@ -2273,7 +2273,7 @@ fn rebind_scripted_drawables(
     owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
 ) -> Result<()> {
     let context_view_model = owned_view_model_context
-        .and_then(|context| rive_runtime::script_view_model_from_owned(runtime, context));
+        .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
     instance
         .set_script_context_view_model(context_view_model)
         .context("failed to bind scripted context view model")?;
@@ -2352,7 +2352,7 @@ fn rehydrate_script_inputs(
         }
         if type_name == "ScriptInputViewModelProperty" {
             let Some(view_model) = owned_view_model_context.and_then(|context| {
-                rive_runtime::bound_script_view_model(runtime, context, object)
+                nuxie_runtime::bound_script_view_model(runtime, context, object)
             }) else {
                 continue;
             };
@@ -2362,7 +2362,7 @@ fn rehydrate_script_inputs(
             continue;
         }
         let value = owned_view_model_context
-            .and_then(|context| rive_runtime::bound_script_input_value(runtime, context, object))
+            .and_then(|context| nuxie_runtime::bound_script_input_value(runtime, context, object))
             .or_else(|| match type_name {
                 "ScriptInputBoolean" => {
                     object.bool_property("propertyValue").map(ScriptValue::Bool)
@@ -2685,7 +2685,7 @@ fn bound_nonempty_component_list_local(
         .iter()
         .position(|candidate| candidate.global_id == artboard.global_id)?;
     let context = selected_artboard_owned_view_model_context(runtime, artboard_index)?;
-    let model = rive_runtime::script_view_model_from_owned(runtime, &context)?;
+    let model = nuxie_runtime::script_view_model_from_owned(runtime, &context)?;
     if !script_view_model_has_nonempty_list(&model) {
         return None;
     }
@@ -2778,7 +2778,7 @@ fn first_layout_dependent_draw_global(artboard: &ArtboardGraph) -> Option<u32> {
 
 fn layout_dependent_drawable(
     artboard: &ArtboardGraph,
-    drawable: &rive_graph::SortedDrawableNode,
+    drawable: &nuxie_graph::SortedDrawableNode,
 ) -> bool {
     if drawable.layout_local.is_some() {
         return true;
@@ -3242,7 +3242,7 @@ fn simple_flex_layout_component_paint_supported(
 fn simple_flex_layout_child_supported(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
-    child: &rive_graph::ComponentNode,
+    child: &nuxie_graph::ComponentNode,
     parent_is_row: bool,
 ) -> bool {
     let Some(child_object) = runtime.object(child.global_id as usize) else {
@@ -3339,7 +3339,7 @@ fn layout_style_has_zero_corners(style_object: &RuntimeObject) -> bool {
     .all(|property| nearly_equal(style_object.double_property(property).unwrap_or(0.0), 0.0))
 }
 
-fn root_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
+fn root_layout_background_paint_supported(paint: &nuxie_graph::ShapePaintNode) -> bool {
     paint.is_visible
         && paint.paint_type == ShapePaintKind::Fill
         && matches!(
@@ -3357,7 +3357,7 @@ fn root_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) ->
         && paint.effects.is_empty()
 }
 
-fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
+fn simple_layout_background_paint_supported(paint: &nuxie_graph::ShapePaintNode) -> bool {
     if !paint.is_visible {
         return paint.feather.is_none() && paint.effects.is_empty();
     }
@@ -3435,7 +3435,7 @@ fn nested_stateful_view_model_object(
     })
 }
 
-fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
     if data_bind.target_type_name == Some("SolidColor") {
         return true;
     }
@@ -3593,7 +3593,7 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
 }
 
 fn nested_child_data_bind_unsupported_feature(
-    data_bind: &rive_graph::DataBindNode,
+    data_bind: &nuxie_graph::DataBindNode,
 ) -> &'static str {
     match (data_bind.target_type_name, data_bind.property_key) {
         (Some("TrimPath"), 114 | 115 | 116) => "nested-trim-path-data-bind",
@@ -3616,7 +3616,7 @@ fn nested_child_data_bind_unsupported_feature(
     }
 }
 
-fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+fn solid_color_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
     // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
     const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
     let source_to_target = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
@@ -3627,7 +3627,7 @@ fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool
             || data_bind.converter_type_name == Some("DataConverterInterpolator"))
 }
 
-fn custom_property_enum_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+fn custom_property_enum_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
     // CustomPropertyEnumBase::propertyValuePropertyKey in C++ generated/custom_property_enum_base.hpp.
     const CUSTOM_PROPERTY_ENUM_VALUE_PROPERTY_KEY: u64 = 872;
     let target_to_source = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
@@ -3637,7 +3637,7 @@ fn custom_property_enum_data_bind_supported(data_bind: &rive_graph::DataBindNode
         && target_to_source
 }
 
-fn nested_child_data_bind_is_text(data_bind: &rive_graph::DataBindNode) -> bool {
+fn nested_child_data_bind_is_text(data_bind: &nuxie_graph::DataBindNode) -> bool {
     matches!(
         data_bind.target_type_name,
         Some("Text" | "TextValueRun" | "TextStylePaint" | "TextFollowPathModifier")
@@ -3647,7 +3647,7 @@ fn nested_child_data_bind_is_text(data_bind: &rive_graph::DataBindNode) -> bool 
 fn nested_artboard_host_control_data_bind<'a>(
     graph: &GraphFile,
     artboard: &'a ArtboardGraph,
-) -> Option<&'a rive_graph::DataBindNode> {
+) -> Option<&'a nuxie_graph::DataBindNode> {
     artboard.data_binds.iter().find(|data_bind| {
         if data_bind.target_type_name != Some("NestedArtboard") {
             return false;
@@ -3708,7 +3708,7 @@ fn nested_unsupported_listener_propagation_child_global(
 fn state_machine_listener_has_event_type(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
-    listener: &rive_graph::StateMachineListenerGraph,
+    listener: &nuxie_graph::StateMachineListenerGraph,
 ) -> bool {
     let Some(listener_object) = runtime.object(listener.global_id as usize) else {
         return false;

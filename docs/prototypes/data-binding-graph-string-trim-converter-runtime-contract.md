@@ -6,7 +6,7 @@ Add the first dedicated string-converter runtime graph path:
 `DataConverterStringTrim` for default-context string sources feeding
 `BindablePropertyString.propertyValue` targets.
 
-This slice reuses the C++-modeled trim behavior in `rive-binary` and keeps the
+This slice reuses the C++-modeled trim behavior in `nuxie-binary` and keeps the
 runtime graph focused on applying the imported `trimType` descriptor at the
 existing graph-owned source-to-target apply point.
 

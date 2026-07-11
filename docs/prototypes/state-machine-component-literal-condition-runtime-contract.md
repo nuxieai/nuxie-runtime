@@ -10,7 +10,7 @@ and a literal value comparator on the right.
 ## Formal Goal
 
 Implement `TransitionPropertyComponentComparator` transition conditions in
-`rive-runtime` when the left side resolves to an artboard-local component
+`nuxie-runtime` when the left side resolves to an artboard-local component
 property and the right side is a literal value comparator.
 
 The goal is complete when the runtime slice can:
@@ -74,7 +74,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_component_literal_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_component_literal_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

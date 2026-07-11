@@ -9,7 +9,7 @@ data binding, drawing, or full keyframe support into scope.
 
 ## Formal Goal
 
-Implement direct linear-animation application in `rive-runtime`: build the
+Implement direct linear-animation application in `nuxie-runtime`: build the
 smallest runtime-owned animation model needed to apply `KeyFrameDouble` values
 for transform properties onto an `ArtboardInstance` at a supplied time and mix,
 compare the behavior against the C++ probe, and keep full state-machine
@@ -104,7 +104,7 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

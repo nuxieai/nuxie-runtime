@@ -10,7 +10,7 @@ without admitting the full state-machine scheduler yet.
 
 ## Formal Goal
 
-Implement a narrow first `StateMachineInstance` runtime seam in `rive-runtime`:
+Implement a narrow first `StateMachineInstance` runtime seam in `nuxie-runtime`:
 add runtime-owned state-machine instance/layer/animation-state playback for the
 simplest C++ path where a state-machine layer enters an `AnimationState` backed
 by a linear animation, reuse the existing `LinearAnimationInstance`
@@ -91,7 +91,7 @@ If the answer is no to all three, do not add it to this goal.
 
 The first implementation slice should add:
 
-- Runtime state-machine definitions in `rive-runtime`.
+- Runtime state-machine definitions in `nuxie-runtime`.
 - A state-machine instance object with per-layer current state.
 - Minimal transition following for unconditional zero-duration transitions into
   animation states.
@@ -104,7 +104,7 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

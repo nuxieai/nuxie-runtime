@@ -15,9 +15,9 @@ but no currently drawable source path according to the non-geometry parts of
 
 The slice is complete when:
 
-- `rive-graph::PathComposerNode` records per-path imported hidden facts from
+- `nuxie-graph::PathComposerNode` records per-path imported hidden facts from
   `Path.pathFlags`.
-- `rive-runtime::ArtboardInstance::draw_commands(&ArtboardGraph)` treats a
+- `nuxie-runtime::ArtboardInstance::draw_commands(&ArtboardGraph)` treats a
   clipping source as empty when every source path is hidden or live-collapsed.
 - `tools/cpp-probe` can apply a runtime component collapse mutation before
   `updateComponents()` and draw-command emission.
@@ -31,7 +31,7 @@ This slice admits only facts needed by C++ `Shape::isEmpty()` and
 
 - imported `Path.pathFlags & 1` hidden state;
 - live `Component::isCollapsed()` state for path components;
-- existing clipping-shape source shape membership from `rive-graph`.
+- existing clipping-shape source shape membership from `nuxie-graph`.
 
 It does not implement `PathComposer::worldPath()`, path raw geometry,
 parametric path building, points-path vertices, path effects, deformers,
@@ -59,9 +59,9 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe -- --nocapture
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

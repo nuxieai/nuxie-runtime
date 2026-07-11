@@ -14,12 +14,12 @@ registered stroke effects contain a supported `TrimPath`.
 
 The slice is complete when:
 
-- `rive-graph::StrokeEffectNode` carries the imported `TrimPath` scalar fields
+- `nuxie-graph::StrokeEffectNode` carries the imported `TrimPath` scalar fields
   needed by C++ `TrimPath::trimPath`: `start`, `end`, `offset`, and
   `modeValue`.
 - `tools/cpp-probe` emits `ShapePaint::lastEffectPath(shapePaint)` as
   `effectPathCommands` beside the existing picked source `pathCommands`.
-- `rive-runtime` computes the same effect path for single-contour line-only
+- `nuxie-runtime` computes the same effect path for single-contour line-only
   source paths in sequential and synchronized trim modes.
 - A C++ probe-backed test covers a visible stroke, an open straight
   `PointsPath`, and a nontrivial trim range.
@@ -62,7 +62,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_line_trim_path_effect_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_line_trim_path_effect_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

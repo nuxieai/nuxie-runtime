@@ -13,12 +13,12 @@ stream.
 
 The slice is complete when:
 
-- `rive-graph::SkeletalSkinNode` exposes the authored C++ `Skin` matrix in
+- `nuxie-graph::SkeletalSkinNode` exposes the authored C++ `Skin` matrix in
   `Mat2D` slot order: `[xx, xy, yx, yy, tx, ty]`.
-- `rive-graph::SkeletalTendonNode` exposes the C++ `Tendon::inverseBind()`
+- `nuxie-graph::SkeletalTendonNode` exposes the C++ `Tendon::inverseBind()`
   matrix in the same slot order, including identity fallback for singular bind
   matrices.
-- `rive-runtime` finds the skin whose skinnable is the `PointsPath`, builds a
+- `nuxie-runtime` finds the skin whose skinnable is the `PointsPath`, builds a
   bone-transform buffer matching C++ order with identity at slot `0`, then one
   `bone.worldTransform * tendon.inverseBind` entry per tendon.
 - Weighted straight and cubic path vertices are deformed before the existing
@@ -51,15 +51,15 @@ Before extending this code, ask:
    command stream C++ emits?
 2. Can it be verified by a headless C++ probe comparison?
 3. Does it avoid pulling renderer, mesh, constraint, or deformer execution into
-   `rive-runtime` prematurely?
+   `nuxie-runtime` prematurely?
 
 If not, it belongs in a later deformer, mesh, renderer, or scheduler slice.
 
 ## Verification
 
 ```sh
-cargo test -p rive-graph graph_projects_skeletal_registration_facts --test cpp_probe
-cargo test -p rive-runtime runtime_draw_command_stream_deforms_weighted_points_path_payloads_like_cpp_probe --test cpp_probe
+cargo test -p nuxie-graph graph_projects_skeletal_registration_facts --test cpp_probe
+cargo test -p nuxie-runtime runtime_draw_command_stream_deforms_weighted_points_path_payloads_like_cpp_probe --test cpp_probe
 cargo check --workspace
 make test
 make cpp-compare

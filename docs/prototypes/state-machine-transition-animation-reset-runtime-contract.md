@@ -5,12 +5,12 @@ Date: 2026-06-29
 This document continues roadmap item `#11` after blend-state transition exit
 timing. It defines the next smallest reset surface: C++-style transition
 animation reset for the transform `KeyFrameDouble` subset already supported by
-`rive-runtime`.
+`nuxie-runtime`.
 
 ## Formal Goal
 
 Implement transition animation reset parity for simple state-machine transition
-mixing in `rive-runtime`: when a non-zero-duration transition starts, record
+mixing in `nuxie-runtime`: when a non-zero-duration transition starts, record
 the live values of transform properties keyed by the outgoing and incoming
 `AnimationState` animations, then reapply those values before every transition
 mix apply. This prevents repeated mixed animation application from accumulating
@@ -105,8 +105,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_blend_state_transition_reset_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_blend_state_transition_reset_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

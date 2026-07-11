@@ -10,7 +10,7 @@ transitions can be conditionally allowed but delayed until the current
 ## Formal Goal
 
 Implement absolute exit-time gating for simple
-`AnimationState -> AnimationState` transitions in `rive-runtime`: evaluate the
+`AnimationState -> AnimationState` transitions in `nuxie-runtime`: evaluate the
 same input conditions as the existing transition path, report a waiting state
 when conditions pass before the source animation reaches the configured exit
 time, keep the state machine advancing while waiting, take the transition once
@@ -109,8 +109,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_exit_time_transition_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_exit_time_transition_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

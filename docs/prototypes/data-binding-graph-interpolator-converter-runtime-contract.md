@@ -10,7 +10,7 @@ number source into a `BindablePropertyNumber.propertyValue` target observed by
 The graph owns the per-source interpolator state. Imported converter metadata is
 reduced to the finite runtime descriptor needed after import: duration and the
 optional resolved key-frame interpolator descriptor. Live conversion no longer
-needs to ask `rive-binary` for object data on every frame.
+needs to ask `nuxie-binary` for object data on every frame.
 
 ## C++ Behavior To Match
 

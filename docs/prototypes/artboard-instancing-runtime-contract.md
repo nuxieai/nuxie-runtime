@@ -9,11 +9,11 @@ in full C++ clone behavior too early.
 
 ## Formal Goal
 
-Define and implement the first `rive-runtime` artboard instancing seam: separate
+Define and implement the first `nuxie-runtime` artboard instancing seam: separate
 imported source artboard data from mutable instance state, preserve C++
 artboard-local slot identity, expose typed mutable property state for the
-transform/component properties needed by animation, keep `rive-binary` and
-`rive-graph` frozen except for true parity bugs, and back the seam with focused
+transform/component properties needed by animation, keep `nuxie-binary` and
+`nuxie-graph` frozen except for true parity bugs, and back the seam with focused
 Rust tests plus C++ probe comparisons for initial runtime state.
 
 The goal is complete when the runtime slice can:
@@ -34,18 +34,18 @@ The goal is complete when the runtime slice can:
 
 ## Scope Lock
 
-`rive-runtime` owns mutable headless runtime instances. It does not own file
+`nuxie-runtime` owns mutable headless runtime instances. It does not own file
 loading or static graph discovery.
 
 The external seam for this slice is:
 
-- Input: `rive_binary::RuntimeFile` and `rive_graph::ArtboardGraph`.
+- Input: `nuxie_binary::RuntimeFile` and `nuxie_graph::ArtboardGraph`.
 - Output: a mutable `ArtboardInstance` with stable local slots, component state,
   transform property state, and update reports.
 - Errors: construction errors when graph slot/global IDs no longer resolve into
   the imported file model.
 
-`rive-binary` remains frozen for this work. `rive-graph` remains a static
+`nuxie-binary` remains frozen for this work. `nuxie-graph` remains a static
 projection. New file-loading facts or static graph facts must first pass their
 own contracts.
 
@@ -104,7 +104,7 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

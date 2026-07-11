@@ -9,7 +9,7 @@ conditions whose authored comparand reads a property from the current artboard.
 ## Formal Goal
 
 Implement the narrow `TransitionPropertyArtboardComparator` runtime behavior in
-`rive-runtime`: build `TransitionViewModelCondition` objects whose left
+`nuxie-runtime`: build `TransitionViewModelCondition` objects whose left
 comparator is an artboard property and whose right comparator is a numeric
 value, read the imported artboard width, height, or ratio, and evaluate the
 condition with the same `StateMachineOp` comparison rules as C++.
@@ -64,7 +64,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_artboard_comparand_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_artboard_comparand_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

@@ -7,4 +7,4 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1"
-rive-binary = { path = "../../crates/rive-binary" }
+nuxie-binary = { path = "../../crates/nuxie-binary" }

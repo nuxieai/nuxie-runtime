@@ -9,7 +9,7 @@ exit-time gating.
 
 ## Formal Goal
 
-Implement blend-state transition runtime support in `rive-runtime`: carry the
+Implement blend-state transition runtime support in `nuxie-runtime`: carry the
 imported `BlendStateTransition` exit blend-animation index, use the selected
 backing linear animation instance for exit-time checks, and allow a simple
 blend state to transition into an animation state while mixing the outgoing
@@ -18,7 +18,7 @@ blend state against the incoming state for millisecond transition durations.
 The goal is complete when the runtime slice can:
 
 - Import and retain `BlendStateTransition.exitBlendAnimationId` as the
-  resolved blend-animation index already exposed by `rive-binary`.
+  resolved blend-animation index already exposed by `nuxie-binary`.
 - Evaluate exit time for a `BlendStateTransition` from `BlendState1DInput` or
   `BlendStateDirect` using the selected backing `LinearAnimationInstance`.
 - Wait for the selected backing animation instance to reach the authored exit
@@ -109,8 +109,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_blend_state_transition_exit_time_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_blend_state_transition_exit_time_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

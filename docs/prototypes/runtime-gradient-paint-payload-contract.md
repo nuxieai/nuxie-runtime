@@ -14,10 +14,10 @@ commands whose mutator is `LinearGradient` or `RadialGradient`.
 
 The slice is complete when:
 
-- `rive-graph::GradientStopNode` records imported stop color and position.
-- `rive-graph::ShapePaintStateNode` records authored linear/radial gradient
+- `nuxie-graph::GradientStopNode` records imported stop color and position.
+- `nuxie-graph::ShapePaintStateNode` records authored linear/radial gradient
   start/end coordinates, opacity, and gradient stops.
-- `rive-runtime::RuntimeShapePaintState` exposes linear/radial gradient payloads
+- `nuxie-runtime::RuntimeShapePaintState` exposes linear/radial gradient payloads
   with authored coordinates, authored opacity, inherited render opacity, sorted
   stops, clamped stop positions, and opacity-modulated render colors.
 - C++ probe-backed coverage proves Rust matches C++ for a local-space gradient
@@ -59,7 +59,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

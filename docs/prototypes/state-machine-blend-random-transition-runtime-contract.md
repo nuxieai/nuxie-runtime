@@ -58,13 +58,13 @@ If the answer is no to all three, leave it for a later runtime crate/slice.
 Suggested focused verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_blend_state_random_transition_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe state_machine_blend_state_random_transition_matches_cpp_probe -- --nocapture
 ```
 
 Full verification remains:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe -- --nocapture
 cargo check --workspace
 make test
 make cpp-compare

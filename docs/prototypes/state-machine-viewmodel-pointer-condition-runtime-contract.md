@@ -9,7 +9,7 @@ live data-binding scheduler.
 
 ## Formal Goal
 
-Implement `BindablePropertyViewModel` transition conditions in `rive-runtime`
+Implement `BindablePropertyViewModel` transition conditions in `nuxie-runtime`
 for the case where both sides of a `TransitionViewModelCondition` are
 `TransitionPropertyViewModelComparator` objects resolved to
 `BindablePropertyViewModel` targets.
@@ -69,7 +69,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_pointer_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_pointer_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

@@ -54,13 +54,13 @@ The C++ text implementation is not one feature. It is a stack:
 
 Rust already imports and projects a useful amount of text structure:
 
-- `rive-binary` validates text parentage and tracks text-style asset references.
-- `rive-graph` projects `Text`, `TextStylePaint`, `TextValueRun`, text style
+- `nuxie-binary` validates text parentage and tracks text-style asset references.
+- `nuxie-graph` projects `Text`, `TextStylePaint`, `TextValueRun`, text style
   variation helpers, text follow-path dependencies, and shape-paint containers
   for `TextStylePaint`.
-- `rive-render-api` already has `RawPath`, render path creation, path builders,
+- `nuxie-render-api` already has `RawPath`, render path creation, path builders,
   and recording output compatible with the C++ golden stream.
-- `rive-runtime` now has a private text runtime module for the first static
+- `nuxie-runtime` now has a private text runtime module for the first static
   embedded-font tracer.
 - `tools/rust-golden-runner` currently gates any artboard-local `Text` with
   `unsupported: text`, and gates nested child data binds targeting `Text`,
@@ -118,8 +118,8 @@ Support only this subset:
 
 Implementation shape:
 
-1. Add a private text runtime module, probably `crates/rive-runtime/src/text.rs`.
-   Keep the first API internal to `rive-runtime`; do not design the final
+1. Add a private text runtime module, probably `crates/nuxie-runtime/src/text.rs`.
+   Keep the first API internal to `nuxie-runtime`; do not design the final
    public text API yet.
 2. Add the font/shaping dependency stack from `docs/porting-map-v2.md`
    (`harfrust` over fontations) behind a very small adapter:

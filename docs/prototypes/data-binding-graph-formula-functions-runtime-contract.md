@@ -8,7 +8,7 @@ through the direct number scheduling paths.
 
 This slice extends the existing imported formula output-queue path from
 input/value/operation tokens to C++ function tokens whose result is fully
-deterministic. It relies on `rive-binary`'s C++ shunting-yard mirror so runtime
+deterministic. It relies on `nuxie-binary`'s C++ shunting-yard mirror so runtime
 execution consumes each function token with the same argument count C++ records
 while resolving `DataConverterFormula`.
 

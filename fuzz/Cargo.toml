@@ -3,7 +3,7 @@
 # build it (cargo-fuzz requires nightly), and `cargo test --workspace` ignores
 # it. Path dependencies still point at the in-repo crates.
 [package]
-name = "rive-fuzz"
+name = "nuxie-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -13,10 +13,10 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rive-binary = { path = "../crates/rive-binary" }
-rive-graph = { path = "../crates/rive-graph" }
-rive-render-api = { path = "../crates/rive-render-api" }
-rive-runtime = { path = "../crates/rive-runtime" }
+nuxie-binary = { path = "../crates/nuxie-binary" }
+nuxie-graph = { path = "../crates/nuxie-graph" }
+nuxie-render-api = { path = "../crates/nuxie-render-api" }
+nuxie-runtime = { path = "../crates/nuxie-runtime" }
 
 [lib]
 path = "src/lib.rs"

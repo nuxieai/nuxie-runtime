@@ -13,11 +13,11 @@ Expose C++-matching authored and resolved blend mode values for shape-owned
 
 The slice is complete when:
 
-- `rive-graph::ShapePaintContainerNode` records the owning container's authored
+- `nuxie-graph::ShapePaintContainerNode` records the owning container's authored
   drawable `blendModeValue`.
-- `rive-graph::ShapePaintNode` records the authored shape-paint
+- `nuxie-graph::ShapePaintNode` records the authored shape-paint
   `blendModeValue`, including C++ default `127` for inherit.
-- `rive-runtime::RuntimeShapePaintCommand` exposes both `blend_mode_value` and
+- `nuxie-runtime::RuntimeShapePaintCommand` exposes both `blend_mode_value` and
   `render_blend_mode_value`.
 - Runtime command emission mirrors C++ `Shape::buildDependencies()` /
   `ShapePaint::blendMode()`: paint value `127` resolves to the owning shape's
@@ -57,7 +57,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

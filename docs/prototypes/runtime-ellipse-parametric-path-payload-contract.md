@@ -12,9 +12,9 @@ Expose C++-matching raw path commands for shape-owned `Ellipse` paths.
 
 The slice is complete when:
 
-- `rive-graph::PathGeometryNode` records imported ellipse parametric scalar
+- `nuxie-graph::PathGeometryNode` records imported ellipse parametric scalar
   fields: width, height, and origin.
-- `rive-runtime::RuntimeShapePaintCommand::path_commands` emits matching
+- `nuxie-runtime::RuntimeShapePaintCommand::path_commands` emits matching
   `move`/`cubic`/`close` commands using C++'s `circleConstant`.
 - C++ probe-backed coverage proves Rust matches C++ for a transformed ellipse.
 
@@ -51,7 +51,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_ellipse_parametric_path_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_ellipse_parametric_path_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

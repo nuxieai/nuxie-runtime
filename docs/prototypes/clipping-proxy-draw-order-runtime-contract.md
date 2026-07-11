@@ -15,7 +15,7 @@ start/end operations around clipped drawable runs.
 
 The slice is complete when:
 
-- `rive-graph` inserts `ClipStartProxy` and `ClipEndProxy` nodes into
+- `nuxie-graph` inserts `ClipStartProxy` and `ClipEndProxy` nodes into
   `ArtboardGraph::sorted_drawable_order`.
 - Proxy insertion follows the C++ clipping-stack pass over
   `firstDrawable()->prevDrawable()` order.
@@ -56,7 +56,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-graph --test cpp_probe cpp_probe_matches_rust_clipping_proxy_drawable_order_when_available -- --nocapture
+  cargo test -p nuxie-graph --test cpp_probe cpp_probe_matches_rust_clipping_proxy_drawable_order_when_available -- --nocapture
 ```
 
 Full verification:

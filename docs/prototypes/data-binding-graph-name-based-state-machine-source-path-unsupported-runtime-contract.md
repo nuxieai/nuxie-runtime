@@ -9,7 +9,7 @@ use `file()->dataResolver()` to expand manifest-backed source-path ids. For
 this shape, C++ leaves the data bind source unresolved even when the file has a
 manifest path that would otherwise resolve.
 
-This slice prevents `rive-runtime` from using the import-time manifest
+This slice prevents `nuxie-runtime` from using the import-time manifest
 resolution helper for cloned state-machine binds that C++ would not resolve at
 runtime.
 

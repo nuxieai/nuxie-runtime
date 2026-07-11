@@ -188,57 +188,57 @@ dependencies = [
 ]
 
 [[package]]
-name = "rive-binary"
+name = "nuxie-binary"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "rive-schema",
+ "nuxie-schema",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "rive-fuzz"
+name = "nuxie-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
- "rive-binary",
- "rive-graph",
- "rive-render-api",
- "rive-runtime",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-runtime",
 ]
 
 [[package]]
-name = "rive-graph"
+name = "nuxie-graph"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "rive-binary",
- "rive-schema",
+ "nuxie-binary",
+ "nuxie-schema",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "rive-render-api"
+name = "nuxie-render-api"
 version = "0.1.0"
 
 [[package]]
-name = "rive-runtime"
+name = "nuxie-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "harfrust",
- "rive-binary",
- "rive-graph",
- "rive-render-api",
- "rive-schema",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-schema",
  "skrifa",
  "taffy",
 ]
 
 [[package]]
-name = "rive-schema"
+name = "nuxie-schema"
 version = "0.1.0"
 
 [[package]]

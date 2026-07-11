@@ -1,0 +1,32 @@
+[package]
+name = "nuxie-renderer-ffi"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+native = []
+
+[[example]]
+name = "ffi_null_draw"
+path = "examples/ffi_null_draw.rs"
+required-features = ["native"]
+
+[[example]]
+name = "ffi_metal_draw"
+path = "examples/ffi_metal_draw.rs"
+required-features = ["native"]
+
+[dependencies]
+nuxie-render-api = { path = "../nuxie-render-api" }
+
+[dev-dependencies]
+anyhow = "1"
+nuxie-binary = { path = "../nuxie-binary" }
+nuxie-graph = { path = "../nuxie-graph" }
+nuxie-runtime = { path = "../nuxie-runtime" }
+
+[build-dependencies]
+cc = "1"

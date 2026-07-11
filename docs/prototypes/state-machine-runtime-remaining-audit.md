@@ -1552,7 +1552,7 @@ slice.
   default-context number and symbol-list-index sources feeding number targets
   now execute `FormulaTokenFunction` output-queue tokens for deterministic
   function types, using the C++ formula argument counts exposed by
-  `rive-binary`. Direct number-source explicit target-to-source and public
+  `nuxie-binary`. Direct number-source explicit target-to-source and public
   update target-to-source scheduling now run the same function-token formula
   conversion before source writes and same-bind source-to-target reapplication,
   and direct main-`ToTarget | TwoWay` target-dirty scheduling preserves then

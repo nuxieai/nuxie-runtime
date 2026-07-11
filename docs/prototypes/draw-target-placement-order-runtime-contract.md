@@ -17,7 +17,7 @@ The slice is complete when:
 
 - `tools/cpp-probe` exposes the post-`sortDrawOrder()` drawable linked list by
   walking `Artboard::firstDrawable()` through `Drawable::prevDrawable()`.
-- `rive-graph` exposes `ArtboardGraph::sorted_drawable_order`.
+- `nuxie-graph` exposes `ArtboardGraph::sorted_drawable_order`.
 - Rust uses existing `drawable_order`, `draw_rules`, `draw_targets`, and
   `draw_target_order` facts to mirror C++ active target grouping.
 - `DrawTarget.placementValue == 0` splices grouped drawables before the target
@@ -54,7 +54,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-graph --test cpp_probe cpp_probe_matches_rust_sorted_drawable_order_when_available -- --nocapture
+  cargo test -p nuxie-graph --test cpp_probe cpp_probe_matches_rust_sorted_drawable_order_when_available -- --nocapture
 ```
 
 Full verification:

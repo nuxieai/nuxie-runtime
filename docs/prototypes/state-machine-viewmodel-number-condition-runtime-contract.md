@@ -15,9 +15,9 @@ is a `TransitionPropertyViewModelComparator` bound to a
 
 The slice is complete when:
 
-- `rive-binary` exposes the two comparator children attached to each imported
+- `nuxie-binary` exposes the two comparator children attached to each imported
   `TransitionViewModelCondition` in C++ import order.
-- `rive-runtime` builds a number-only transition condition from the imported
+- `nuxie-runtime` builds a number-only transition condition from the imported
   comparator pair.
 - The condition reads the per-state-machine-instance bindable number clone,
   including explicit mutations made through the existing bindable-number
@@ -71,13 +71,13 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_number_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_number_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe -- --nocapture
 cargo check --workspace
 make test
 make cpp-compare

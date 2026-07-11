@@ -14,9 +14,9 @@ commands whose paint has an attached `Feather`.
 
 The slice is complete when:
 
-- `rive-graph::ShapePaintNode` carries a structured `FeatherNode` for attached
+- `nuxie-graph::ShapePaintNode` carries a structured `FeatherNode` for attached
   `Feather` objects.
-- `rive-runtime::RuntimeShapePaintCommand` exposes the attached feather's
+- `nuxie-runtime::RuntimeShapePaintCommand` exposes the attached feather's
   `spaceValue`, `strength`, `offsetX`, `offsetY`, and `inner` fields.
 - `tools/cpp-probe` emits the same feather payload beside C++ shape-paint draw
   commands.
@@ -55,7 +55,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

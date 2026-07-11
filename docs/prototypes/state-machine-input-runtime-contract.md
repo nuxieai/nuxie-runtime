@@ -10,7 +10,7 @@ transitions without admitting the full state-machine scheduler.
 ## Formal Goal
 
 Implement the next narrow `StateMachineInstance` runtime seam in
-`rive-runtime`: add runtime-owned bool, number, and trigger input instances for
+`nuxie-runtime`: add runtime-owned bool, number, and trigger input instances for
 imported state machines; expose input lookup and mutation on
 `StateMachineInstance`; evaluate simple bool/number/trigger transition
 conditions for zero-duration transitions; compare input-driven state changes and
@@ -81,7 +81,7 @@ Before adding behavior to this slice, answer:
 1. Is it required for bool, number, or trigger inputs to drive a simple
    zero-duration state transition?
 2. Does it use imported state-machine input and transition-condition facts that
-   already exist in `rive-binary`?
+   already exist in `nuxie-binary`?
 3. Can it be compared against the C++ probe without admitting transition
    mixing, events, listeners, data binding, nested artboards, or rendering?
 
@@ -102,8 +102,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime --test cpp_probe
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

@@ -10,7 +10,7 @@ component property on the right.
 ## Formal Goal
 
 Implement C++-compatible `TransitionPropertyArtboardComparator` versus
-`TransitionPropertyComponentComparator` numeric comparisons in `rive-runtime`.
+`TransitionPropertyComponentComparator` numeric comparisons in `nuxie-runtime`.
 
 The goal is complete when the runtime slice can:
 
@@ -72,7 +72,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_artboard_component_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_artboard_component_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

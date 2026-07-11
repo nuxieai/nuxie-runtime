@@ -13,11 +13,11 @@ Expose renderer-independent shape-paint payloads for `Shape` draw commands.
 
 The slice is complete when:
 
-- `rive-graph::ShapePaintNode` records the static C++ paint gate and path-family
+- `nuxie-graph::ShapePaintNode` records the static C++ paint gate and path-family
   choice for imported `Fill` and `Stroke` paints.
 - `tools/cpp-probe` emits `shapePaintCommands` for each shape draw command,
   after the same `Shape::draw()` paint visibility and `pickPath()` checks.
-- `rive-runtime::RuntimeDrawCommand` carries matching `shape_paints` payloads
+- `nuxie-runtime::RuntimeDrawCommand` carries matching `shape_paints` payloads
   with paint local ID, mutator local ID, paint kind, path kind, and per-paint
   save-operation flag.
 - Focused C++ probe coverage proves visible fills/strokes are included while
@@ -58,7 +58,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

@@ -11,8 +11,8 @@ animations.
 ## Formal Goal
 
 Implement the first runtime seam for input-backed one-dimensional blend states
-in `rive-runtime`: import authored `BlendState1DInput` blend animations from
-`rive-binary`, instantiate per-blend-animation linear animation instances,
+in `nuxie-runtime`: import authored `BlendState1DInput` blend animations from
+`nuxie-binary`, instantiate per-blend-animation linear animation instances,
 advance them with the state machine, compute C++-matching blend weights from
 the number input, and apply the weighted animations to the artboard.
 
@@ -109,8 +109,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_blend_state_1d_input_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_blend_state_1d_input_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

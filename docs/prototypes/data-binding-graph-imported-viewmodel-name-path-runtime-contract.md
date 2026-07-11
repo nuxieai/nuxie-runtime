@@ -31,7 +31,7 @@ runtime name API depends on `ViewModelInstanceValue::viewModelProperty()`.
 
 - Sharing imported-instance mutations across independent
   `StateMachineInstance` values.
-- Mutating `RuntimeFile` or `rive-binary` imported object storage.
+- Mutating `RuntimeFile` or `nuxie-binary` imported object storage.
 - Stable public object handles exposing `referenceViewModelInstance` pointers.
 - Scalar, list, symbol, asset, artboard, or trigger imported mutation.
 - Name-path mutation through owned imported intermediates beyond already pinned

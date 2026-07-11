@@ -45,7 +45,7 @@ path is covered separately by
 ## Completion Checks
 
 - The runtime graph stores a group as an ordered list of child graph
-  converters resolved through `rive-binary` group-item metadata.
+  converters resolved through `nuxie-binary` group-item metadata.
 - Group conversion feeds each child output into the next child in C++ order.
 - Cyclic or unresolved child converters remain unsupported rather than
   recursing indefinitely.

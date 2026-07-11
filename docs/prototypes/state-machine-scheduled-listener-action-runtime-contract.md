@@ -11,8 +11,8 @@ events through the existing `StateMachineInstance` event buffer.
 ## Formal Goal
 
 Implement scheduled `ListenerFireEvent` actions for simple state-machine
-advance in `rive-runtime`: carry imported state/transition listener actions
-from `rive-binary`, admit only `ListenerFireEvent` actions with resolved target
+advance in `nuxie-runtime`: carry imported state/transition listener actions
+from `nuxie-binary`, admit only `ListenerFireEvent` actions with resolved target
 events, honor the scheduled occurrence bit in `ListenerAction.flags`, run them
 after the matching state/transition fire-event actions like C++, and compare
 reported event identity/order against the C++ probe.
@@ -107,8 +107,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_scheduled_listener_fire_events_match_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_scheduled_listener_fire_events_match_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

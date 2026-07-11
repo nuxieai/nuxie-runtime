@@ -55,7 +55,7 @@ Rust currently supports only the first path.
 
 ## Current Rust State
 
-`rive-runtime` now collects imported state-machine-owned
+`nuxie-runtime` now collects imported state-machine-owned
 `BindablePropertyNumber` targets and stores per-`StateMachineInstance`
 `StateMachineBindableNumberInstance` values. Blend sources read those values by
 authored bindable-property identity.

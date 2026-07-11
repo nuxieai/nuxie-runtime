@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SDK binary-size report for the rive-capi cdylib.
+# SDK binary-size report for the nux-capi cdylib.
 #
 # Builds the dedicated size-optimized profile (`release-size`: opt-level "z",
 # strip = "symbols", fat LTO + codegen-units=1 + panic=abort inherited from
@@ -16,8 +16,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-DEFAULT_DY="target/release-size/librive_capi.dylib"
-BASELINE_DY="target/release/librive_capi.dylib"
+DEFAULT_DY="target/release-size/libnux_capi.dylib"
+BASELINE_DY="target/release/libnux_capi.dylib"
 WANT_BASELINE=0
 [ "${1:-}" = "--baseline" ] && WANT_BASELINE=1
 
@@ -37,27 +37,27 @@ row() { # label bytes [baseline_bytes]
 }
 
 echo "=================================================================="
-echo " rive-capi SDK cdylib size report"
+echo " nux-capi SDK cdylib size report"
 echo " profile: release-size (opt-level=z, strip=symbols, fat LTO,"
 echo "          codegen-units=1, panic=abort)"
 echo "=================================================================="
 
 echo
 echo "Building size-profile cdylib (scripting OFF, default features)..."
-cargo build --profile release-size -p rive-capi >/dev/null 2>&1
+cargo build --profile release-size -p nux-capi >/dev/null 2>&1
 SIZE_OFF=$(fsize "$DEFAULT_DY")
 
 echo "Building size-profile cdylib (scripting ON)..."
-cargo build --profile release-size -p rive-capi --features rive/scripting >/dev/null 2>&1
+cargo build --profile release-size -p nux-capi --features nuxie/scripting >/dev/null 2>&1
 SIZE_ON=$(fsize "$DEFAULT_DY")
 
 # Restore the scripting-off artifact as the canonical release-size output.
-cargo build --profile release-size -p rive-capi >/dev/null 2>&1
+cargo build --profile release-size -p nux-capi >/dev/null 2>&1
 
 BASE_OFF=""
 if [ "$WANT_BASELINE" = "1" ]; then
   echo "Building baseline (release, opt-level=3, unstripped) for comparison..."
-  cargo build --release -p rive-capi >/dev/null 2>&1
+  cargo build --release -p nux-capi >/dev/null 2>&1
   BASE_OFF=$(fsize "$BASELINE_DY")
 fi
 

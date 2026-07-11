@@ -10,7 +10,7 @@ component property on the right.
 ## Formal Goal
 
 Implement `TransitionPropertyComponentComparator` pair comparisons in
-`rive-runtime` when both sides resolve to component property comparators.
+`nuxie-runtime` when both sides resolve to component property comparators.
 
 The goal is complete when the runtime slice can:
 
@@ -67,7 +67,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_component_pair_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_component_pair_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

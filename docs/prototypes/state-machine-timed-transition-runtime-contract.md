@@ -10,7 +10,7 @@ previous animation state to the current one across advances.
 ## Formal Goal
 
 Implement the next narrow `StateMachineInstance` runtime seam in
-`rive-runtime`: add timed transition state for simple
+`nuxie-runtime`: add timed transition state for simple
 `AnimationState -> AnimationState` transitions with nonzero duration, track
 source/current states and transition mix across advances, apply both backing
 linear animations with C++-matching mix weights, block additional transitions
@@ -106,8 +106,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime --test cpp_probe
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

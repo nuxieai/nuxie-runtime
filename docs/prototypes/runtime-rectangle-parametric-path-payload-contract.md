@@ -12,9 +12,9 @@ Expose C++-matching raw path commands for shape-owned `Rectangle` paths.
 
 The slice is complete when:
 
-- `rive-graph::PathGeometryNode` records imported rectangle parametric scalar
+- `nuxie-graph::PathGeometryNode` records imported rectangle parametric scalar
   fields: width, height, origin, linked corner-radius flag, and corner radii.
-- `rive-runtime::RuntimeShapePaintCommand::path_commands` emits matching
+- `nuxie-runtime::RuntimeShapePaintCommand::path_commands` emits matching
   `move`/`line`/`cubic`/`close` commands for rectangle paths, including rounded
   corner radii through the existing straight-vertex corner builder.
 - C++ probe-backed coverage proves Rust matches C++ for a transformed rectangle
@@ -55,7 +55,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_rectangle_parametric_path_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_rectangle_parametric_path_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

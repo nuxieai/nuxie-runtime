@@ -10,7 +10,7 @@ against authored boolean values.
 ## Formal Goal
 
 Implement the narrow boolean `TransitionViewModelCondition` runtime behavior in
-`rive-runtime`: when the left comparator is a
+`nuxie-runtime`: when the left comparator is a
 `TransitionPropertyViewModelComparator` resolved to `BindablePropertyBoolean`
 and the right comparator is `TransitionValueBooleanComparator`, evaluate the
 condition using the same C++ data-context presence gate and equality operation
@@ -65,7 +65,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_viewmodel_boolean_conditions_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_viewmodel_boolean_conditions_match_cpp_probe -- --nocapture
 ```
 
 Full verification:

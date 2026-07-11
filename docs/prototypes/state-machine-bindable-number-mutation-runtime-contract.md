@@ -70,13 +70,13 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_mutable_bindable_blend_sources_match_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe state_machine_mutable_bindable_blend_sources_match_cpp_probe -- --nocapture
 ```
 
 Full verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe -- --nocapture
 cargo check --workspace
 make test
 make cpp-compare

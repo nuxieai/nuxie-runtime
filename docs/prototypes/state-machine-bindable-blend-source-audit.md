@@ -47,14 +47,14 @@ state-machine-owned data binds that target `BindablePropertyNumber`.
 
 Already available:
 
-- `rive-schema` exposes `BlendState1DViewModel`, `BlendAnimationDirect`,
+- `nuxie-schema` exposes `BlendState1DViewModel`, `BlendAnimationDirect`,
   `BindablePropertyNumber`, `DataBind`, and related property metadata.
-- `rive-binary` tracks C++ import-stack acceptance for
+- `nuxie-binary` tracks C++ import-stack acceptance for
   `BlendState1DViewModel` and `BlendAnimationDirect.blendSource == 2`.
-- `rive-binary` already projects state-machine-owned data binds and identifies
+- `nuxie-binary` already projects state-machine-owned data binds and identifies
   bindable-property targets as state-machine-owned.
-- `rive-runtime` supports `BlendState1DInput`.
-- `rive-runtime` supports `BlendStateDirect` with direct input and authored
+- `nuxie-runtime` supports `BlendState1DInput`.
+- `nuxie-runtime` supports `BlendStateDirect` with direct input and authored
   `mixValue` sources.
 
 Missing before runtime admission:

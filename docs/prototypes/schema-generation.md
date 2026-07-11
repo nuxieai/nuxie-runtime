@@ -13,12 +13,12 @@ make schema
 Expected output:
 
 ```text
-crates/rive-schema/src/generated/schema.rs
+crates/nuxie-schema/src/generated/schema.rs
 ```
 
 `make schema` also runs `cargo fmt --all`, so the checked-in generated file matches the formatted codegen output.
 
-Verdict: the shape works as the first durable slice. `rive-codegen` reads the C++ runtime definitions and generates:
+Verdict: the shape works as the first durable slice. `nuxie-codegen` reads the C++ runtime definitions and generates:
 
 - `ObjectKind` variants for every runtime definition.
 - `Definition` metadata with type keys, runtime parent names, raw parent files, mixins, generic/generic-passthrough targets, export-with-context flags, abstract/cloneable flags, and ancestor names for `is_a` checks.
@@ -34,10 +34,10 @@ Generated count from the current C++ runtime: 336 runtime definitions and 588 ru
 
 Test coverage added:
 
-- `crates/rive-schema/tests/generated_schema.rs` checks generated metadata counts, object-kind/type-key lookup, runtime inheritance lookup, alternate property keys, C++ generator metadata flags, stored-field initializers, callback keys, object-support checks, setter/getter family checks, and passthrough property metadata.
-- `crates/rive-schema/tests/cpp_generated_headers.rs` compares every Rust runtime definition's `typeKey`, property keys, alternate property keys, stored-field member presence, effective stored-field initializers, generated value-setter body presence and stored-field/passthrough body shape, pure-virtual value setter declarations, generated stored-field getter bodies and passthrough getter declarations, encoded `decode*`/`copy*` declarations, generated bitmask passthrough `Bitmask`/`BitOffset`/`FieldMask` constants, generated `Changed()` hook presence, generated `copy(...)` stored-member assignments, encoded-property copy hooks, and parent delegation, C++ `isTypeOf` ancestry switch, C++ `deserialize` switch entries, `CoreRegistry::makeCoreInstance` constructibility, generated `clone()` declaration presence and `src/generated` clone body shape, `CoreRegistry::propertyFieldId` fallback family, `CoreRegistry::set*`/`get*` switch families, `CoreRegistry::isCallback` callback-key table, and `CoreRegistry::objectSupportsProperty` support table against the generated C++ headers. Set `RIVE_RUNTIME_DIR` to override the default reference runtime path.
-- `tools/rive-codegen/tests/generated_schema.rs` regenerates the schema from the current C++ `dev/defs`, formats it with the workspace Rust edition, byte-compares it with the checked-in `crates/rive-schema/src/generated/schema.rs`, separately parses the raw JSON to lock the runtime definition/property counts, declared/runtime field-type surface, definition mixin/generic/export-context metadata, encoded payloads, alternate keys, descriptions, bindable and animates counts, C++ generator property flags, raw annotation counts, passthrough/bitmask metadata, and runtime initializer overrides, and feeds synthetic invalid key and bitmask passthrough definitions through `rive-codegen` to prove they are rejected.
+- `crates/nuxie-schema/tests/generated_schema.rs` checks generated metadata counts, object-kind/type-key lookup, runtime inheritance lookup, alternate property keys, C++ generator metadata flags, stored-field initializers, callback keys, object-support checks, setter/getter family checks, and passthrough property metadata.
+- `crates/nuxie-schema/tests/cpp_generated_headers.rs` compares every Rust runtime definition's `typeKey`, property keys, alternate property keys, stored-field member presence, effective stored-field initializers, generated value-setter body presence and stored-field/passthrough body shape, pure-virtual value setter declarations, generated stored-field getter bodies and passthrough getter declarations, encoded `decode*`/`copy*` declarations, generated bitmask passthrough `Bitmask`/`BitOffset`/`FieldMask` constants, generated `Changed()` hook presence, generated `copy(...)` stored-member assignments, encoded-property copy hooks, and parent delegation, C++ `isTypeOf` ancestry switch, C++ `deserialize` switch entries, `CoreRegistry::makeCoreInstance` constructibility, generated `clone()` declaration presence and `src/generated` clone body shape, `CoreRegistry::propertyFieldId` fallback family, `CoreRegistry::set*`/`get*` switch families, `CoreRegistry::isCallback` callback-key table, and `CoreRegistry::objectSupportsProperty` support table against the generated C++ headers. Set `RIVE_RUNTIME_DIR` to override the default reference runtime path.
+- `tools/nuxie-codegen/tests/generated_schema.rs` regenerates the schema from the current C++ `dev/defs`, formats it with the workspace Rust edition, byte-compares it with the checked-in `crates/nuxie-schema/src/generated/schema.rs`, separately parses the raw JSON to lock the runtime definition/property counts, declared/runtime field-type surface, definition mixin/generic/export-context metadata, encoded payloads, alternate keys, descriptions, bindable and animates counts, C++ generator property flags, raw annotation counts, passthrough/bitmask metadata, and runtime initializer overrides, and feeds synthetic invalid key and bitmask passthrough definitions through `nuxie-codegen` to prove they are rejected.
 
 Known limit: this does not yet generate concrete runtime object structs or setter bodies. That belongs in the `rive-core` slice after binary import proves the metadata is sufficient.
 
-Ticket `#5` should consume `rive-schema::generated::DEFINITIONS` to create objects by type key and dispatch property keys while decoding `.riv` files.
+Ticket `#5` should consume `nuxie-schema::generated::DEFINITIONS` to create objects by type key and dispatch property keys while decoding `.riv` files.

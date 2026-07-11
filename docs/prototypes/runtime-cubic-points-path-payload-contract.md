@@ -14,9 +14,9 @@ cubic vertex objects.
 
 The slice is complete when:
 
-- `rive-graph::PathVertexNode` records the cubic scalar fields needed to compute
+- `nuxie-graph::PathVertexNode` records the cubic scalar fields needed to compute
   concrete cubic in/out points.
-- `rive-runtime::RuntimeShapePaintCommand::path_commands` emits matching
+- `nuxie-runtime::RuntimeShapePaintCommand::path_commands` emits matching
   `RuntimePathCommand::Cubic` commands for supported `CubicDetachedVertex`,
   `CubicAsymmetricVertex`, and `CubicMirroredVertex` path vertices.
 - The C++ probe-backed runtime test covers a mixed straight/cubic closed
@@ -58,7 +58,7 @@ Focused verification:
 ```sh
 make cpp-probe
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
+  cargo test -p nuxie-runtime --test cpp_probe runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe -- --nocapture
 ```
 
 Full verification:

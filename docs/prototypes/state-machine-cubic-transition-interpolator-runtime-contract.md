@@ -10,7 +10,7 @@ transition can ease its source and target mix values through a resolved
 ## Formal Goal
 
 Implement `CubicEaseInterpolator` support for simple
-`AnimationState -> AnimationState` transition mixing in `rive-runtime`: resolve
+`AnimationState -> AnimationState` transition mixing in `nuxie-runtime`: resolve
 the already-imported transition interpolator reference, transform `mixFrom` and
 `mix` through C++ cubic-bezier solver semantics when applying the outgoing and
 incoming animation states, compare advance reports and resulting component
@@ -18,7 +18,7 @@ state against the C++ probe, and keep other interpolator families out of scope.
 
 The goal is complete when the runtime slice can:
 
-- Read transition interpolator metadata resolved by `rive-binary`.
+- Read transition interpolator metadata resolved by `nuxie-binary`.
 - Admit transitions whose interpolator is a `CubicEaseInterpolator`.
 - Transform source `mixFrom` and target `mix` with C++ cubic solver semantics.
 - Preserve existing linear behavior when no supported interpolator is present.
@@ -99,8 +99,8 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime --test cpp_probe state_machine_cubic_transition_interpolator_matches_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_cubic_transition_interpolator_matches_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

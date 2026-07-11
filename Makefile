@@ -27,7 +27,7 @@ CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
 CC ?= cc
 
 schema:
-	cargo run -p rive-codegen -- --defs "$(DEFS_DIR)" --out crates/rive-schema/src/generated/schema.rs
+	cargo run -p nuxie-codegen -- --defs "$(DEFS_DIR)" --out crates/nuxie-schema/src/generated/schema.rs
 	cargo fmt --all
 
 check:
@@ -46,10 +46,10 @@ test:
 #   regressions are visible in review. Move a crate into the deny list (and
 #   switch its lints table to the deny form) once its counts reach zero.
 # Library targets only (src/); deliberately NOT tests and NOT tools/ or
-# rive-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
+# nuxie-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
 # flags leak to dependency crates; the per-crate lints tables scope correctly.
-LINT_GATE_DENY_CRATES = rive rive-schema
-LINT_GATE_WARN_CRATES = rive-runtime rive-binary rive-graph rive-capi
+LINT_GATE_DENY_CRATES = nuxie nuxie-schema
+LINT_GATE_WARN_CRATES = nuxie-runtime nuxie-binary nuxie-graph nux-capi
 
 .PHONY: lint-gate
 lint-gate:
@@ -65,10 +65,10 @@ lint-gate:
 	done
 
 inspect:
-	@cargo run --quiet -p rive-binary --bin riv-inspect -- fixtures/graph/dependency_test.riv
+	@cargo run --quiet -p nuxie-binary --bin riv-inspect -- fixtures/graph/dependency_test.riv
 
 graph:
-	@cargo run --quiet -p rive-graph --bin graph-inspect -- fixtures/graph/dependency_test.riv
+	@cargo run --quiet -p nuxie-graph --bin graph-inspect -- fixtures/graph/dependency_test.riv
 
 cpp-probe:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/cpp-probe/build.sh "$(CPP_CONFIG)"
@@ -117,9 +117,9 @@ perf-json: golden-runner rust-golden-runner
 	@echo "perf-json wrote $(PERF_JSON_OUT)"
 
 capi-smoke:
-	cargo build --quiet -p rive-capi
+	cargo build --quiet -p nux-capi
 	mkdir -p target/capi-smoke
-	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/rive-capi/include -o target/capi-smoke/capi_smoke crates/rive-capi/smoke/capi_smoke.c -Ltarget/debug -lrive_capi
+	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include -o target/capi-smoke/capi_smoke crates/nux-capi/smoke/capi_smoke.c -Ltarget/debug -lnux_capi
 	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
 
 # SDK binary-size report: builds the `release-size` cdylib (never the perf
@@ -131,13 +131,13 @@ size-report:
 	tools/size-report.sh $(if $(SIZE_BASELINE),--baseline,)
 
 cpp-binary-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p rive-binary --test cpp_import -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture
 
 cpp-graph-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p rive-graph --test cpp_probe -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-graph --test cpp_probe -- --nocapture
 
 cpp-runtime-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p rive-runtime --test cpp_probe -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --test cpp_probe -- --nocapture
 
 cpp-compare: cpp-binary-compare cpp-graph-compare cpp-runtime-compare
 

@@ -14,7 +14,7 @@ can reproduce `Skin::deform()` and `Path::buildPath()` for weighted paths.
 
 The slice is complete when:
 
-- `rive-graph::PathVertexNode` records the resolved `Weight`/`CubicWeight`
+- `nuxie-graph::PathVertexNode` records the resolved `Weight`/`CubicWeight`
   object identity already attached during import.
 - `PathVertexNode` also records the C++ weight payload words needed by
   `Vertex::deform()` and `CubicVertex::deform()`: `values`, `indices`,
@@ -27,7 +27,7 @@ This slice covers only static imported weight inputs for path vertices.
 
 It does not implement:
 
-- `Weight::deform()` or `CubicVertex::deform()` math in `rive-runtime`;
+- `Weight::deform()` or `CubicVertex::deform()` math in `nuxie-runtime`;
 - `Skin::update()` bone transform buffers;
 - `PointsPath::pathTransform()` identity behavior for skinned paths;
 - NSlicer or other `RenderPathDeformer` mutation of completed paths;
@@ -40,7 +40,7 @@ Before extending this payload, answer:
 1. Is the data a direct imported `Weight` or `CubicWeight` field used by C++
    vertex deformation?
 2. Is it static after import, independent of frame update order?
-3. Can a later runtime slice consume it without re-reading `rive-binary`
+3. Can a later runtime slice consume it without re-reading `nuxie-binary`
    internals?
 
 If not, defer it to the skin-deformation, NSlicer/deformer, mesh, or renderer

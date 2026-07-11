@@ -10,8 +10,8 @@ produce reported events during simple state-machine advance.
 ## Formal Goal
 
 Implement reported event collection for simple state-machine fire actions in
-`rive-runtime`: carry imported `StateMachineFireEvent` actions from
-`rive-binary` into runtime states and transitions, clear previously reported
+`nuxie-runtime`: carry imported `StateMachineFireEvent` actions from
+`nuxie-binary` into runtime states and transitions, clear previously reported
 events at the start of each state-machine advance, collect matching
 `occursValue` actions when states and transitions start or end, expose pending
 reported events through the Rust `StateMachineInstance`, and compare event
@@ -108,8 +108,8 @@ Suggested verification:
 
 ```sh
 tools/cpp-probe/build.sh debug
-cargo test -p rive-runtime --test cpp_probe state_machine_fire_events_match_cpp_probe -- --nocapture
-cargo test -p rive-runtime --test cpp_probe
+cargo test -p nuxie-runtime --test cpp_probe state_machine_fire_events_match_cpp_probe -- --nocapture
+cargo test -p nuxie-runtime --test cpp_probe
 make test
 make cpp-compare
 ```

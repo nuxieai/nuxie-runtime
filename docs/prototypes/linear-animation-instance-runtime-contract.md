@@ -8,7 +8,7 @@ instance state needed before state-machine animation states can be modeled.
 
 ## Formal Goal
 
-Implement a narrow `LinearAnimationInstance` runtime seam in `rive-runtime`: add
+Implement a narrow `LinearAnimationInstance` runtime seam in `nuxie-runtime`: add
 a mutable animation-instance state object that wraps the existing direct
 linear-animation apply path, supports C++-parity time advancement for transform
 `KeyFrameDouble` animations, compares against the C++ probe, and keeps state
@@ -82,7 +82,7 @@ If the answer is no to all three, do not add it to this goal.
 
 The first implementation slice should add:
 
-- `LinearAnimationInstance` state in `rive-runtime`.
+- `LinearAnimationInstance` state in `nuxie-runtime`.
 - Loop/work-area/speed advancement helpers on `RuntimeLinearAnimation`.
 - C++ probe option `--runtime-advance-animation animationIndex seconds mix`.
 - C++ probe JSON reports for time, direction, loop, spill, totals, and
@@ -93,7 +93,7 @@ The first implementation slice should add:
 Suggested verification:
 
 ```sh
-cargo test -p rive-runtime
+cargo test -p nuxie-runtime
 make test
 make cpp-compare
 ```

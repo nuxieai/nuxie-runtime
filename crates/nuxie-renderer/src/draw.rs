@@ -72,13 +72,32 @@ pub(crate) fn build_feather_tessellation(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<FillTessellation> {
+    build_feather_tessellation_with_directions(path, transform, paint_feather, stroke, true)
+}
+
+pub(crate) fn build_feather_atlas_tessellation(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+) -> Option<FillTessellation> {
+    build_feather_tessellation_with_directions(path, transform, paint_feather, stroke, false)
+}
+
+fn build_feather_tessellation_with_directions(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    double_sided_fill: bool,
+) -> Option<FillTessellation> {
     let feather_radius = paint_feather * 1.5;
     if feather_radius <= 0.0 || !feather_radius.is_finite() {
         return None;
     }
     let mut tessellation =
         build_stroke_or_feather_tessellation(path, transform, stroke, feather_radius)?;
-    if stroke.is_none() {
+    if stroke.is_none() && double_sided_fill {
         tessellation.make_double_sided();
     }
     Some(tessellation)
@@ -1454,6 +1473,18 @@ mod tests {
         assert!(tessellation.spans[1..]
             .iter()
             .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
+    }
+
+    #[test]
+    fn feather_atlas_fill_keeps_forward_contour_only() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(12.0, 0.0);
+        path.line_to(12.0, 6.0);
+        let direct = build_feather_tessellation(&path, Mat2D::IDENTITY, 10.0, None).unwrap();
+        let atlas = build_feather_atlas_tessellation(&path, Mat2D::IDENTITY, 10.0, None).unwrap();
+        assert_eq!(atlas.contours[0].vertex_index0, 8);
+        assert_eq!(atlas.instance_count * 2, direct.instance_count);
     }
 
     #[test]

@@ -309,3 +309,13 @@ Run `make renderer-golden`.
   border leakage and missing stroke/miter/cap outset, so runtime stroke enablement
   remains intentionally gated. All 33 renderer tests and exact=21/diverges=0
   corpus checks pass.
+- 2026-07-11: Corrected atlas contour directions. C++ renders atlas fills with
+  forward tessellation only, while direct atomic fills use reverse-plus-forward;
+  the shared Rust builder had doubled both. A dedicated atlas builder and
+  topology test now preserve one forward half for additive mask rendering.
+  `feather_ellipse` drops from max delta 178 to 51; its `exp(0)` and `exp(1)`
+  direct rows are max delta 1, while remaining error concentrates in near-cusp
+  direct cells and broad cross-backend atlas filtering (atlas rows max 51, 22,
+  33, and 25). `feather_shapes` remains max 116 and names corner/cusp geometry
+  as separate work. All 34 renderer tests and exact=21/diverges=0 corpus gates
+  pass; neither fixture is promoted by widening around broad residuals.

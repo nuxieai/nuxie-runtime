@@ -774,17 +774,31 @@ impl WgpuFrame {
                     mut triangles,
                 ) = if draw.paint.feather != 0.0 {
                     let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
+                    let requires_atlas = draw::feather_requires_atlas(
+                        draw.paint.feather,
+                        draw.state.transform,
+                        false,
+                    );
                     let stroke = is_stroke.then_some((
                         draw.paint.thickness,
                         draw.paint.join,
                         draw.paint.cap,
                     ));
-                    let tessellation = draw::build_feather_tessellation(
-                        &draw.path.raw_path,
-                        draw.state.transform,
-                        draw.paint.feather,
-                        stroke,
-                    )
+                    let tessellation = if requires_atlas {
+                        draw::build_feather_atlas_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.paint.feather,
+                            stroke,
+                        )
+                    } else {
+                        draw::build_feather_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.paint.feather,
+                            stroke,
+                        )
+                    }
                     .expect("atomic eligibility already validated feather tessellation");
                     let patch_index_range = if is_stroke {
                         0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32

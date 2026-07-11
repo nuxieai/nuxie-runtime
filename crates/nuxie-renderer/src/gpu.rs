@@ -207,6 +207,7 @@ pub(crate) const OUTER_CURVE_PATCH_VERTEX_COUNT: usize = 153;
 pub(crate) const OUTER_CURVE_PATCH_INDEX_COUNT: usize = 249;
 pub(crate) const PATCH_VERTEX_BUFFER_COUNT: usize = 269;
 pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize = 441;
+pub(crate) const CONTOUR_ID_MASK: u32 = 0xffff;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PatchType {

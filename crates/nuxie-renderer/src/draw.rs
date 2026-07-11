@@ -1,12 +1,195 @@
 //! CPU path preparation translated from `renderer/src/draw.cpp`.
 
-use crate::gpu::{MAX_PARAMETRIC_SEGMENTS, PARAMETRIC_PRECISION};
+use crate::gpu::{
+    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan, CONTOUR_ID_MASK,
+    MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN, PARAMETRIC_PRECISION,
+};
+use bytemuck::Zeroable;
 use nuxie_render_api::{Mat2D, PathVerb, RawPath, Vec2D};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Contour {
     pub points: Vec<Vec2D>,
     pub closed: bool,
+}
+
+pub(crate) struct FillTessellation {
+    pub spans: Vec<TessVertexSpan>,
+    pub path: PathData,
+    pub contours: Vec<ContourData>,
+    pub base_instance: u32,
+    pub instance_count: u32,
+}
+
+pub(crate) fn build_fill_tessellation(
+    path: &RawPath,
+    transform: Mat2D,
+) -> Option<FillTessellation> {
+    let contours = cubic_contours(path);
+    if contours.is_empty() {
+        return None;
+    }
+    let mut spans = Vec::new();
+    let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
+    push_padding_span(&mut spans, 0, location);
+    let base_instance = location as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+    let mut contour_data = Vec::with_capacity(contours.len());
+    let path_start = location;
+    for (index, curves) in contours.iter().enumerate() {
+        let vertex_index0 = (location - path_start) as u32;
+        let midpoint = contour_midpoint(curves);
+        contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, vertex_index0));
+        for curve in curves {
+            let transformed = curve.map(|point| transform.transform_point(point));
+            let segments = cubic_segment_count(transformed);
+            let x0 = location;
+            location += segments as i32;
+            spans.push(TessVertexSpan::without_reflection(
+                curve.map(|point| [point.x, point.y]),
+                [0.0, 0.0],
+                0.0,
+                x0,
+                location,
+                segments,
+                0,
+                1,
+                (index as u32 + 1) & CONTOUR_ID_MASK,
+            ));
+        }
+    }
+    let used = location - path_start;
+    let aligned = align_up(used, MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32);
+    if aligned > used {
+        push_padding_span(&mut spans, location, location + aligned - used);
+        location += aligned - used;
+    }
+    Some(FillTessellation {
+        spans,
+        path: PathData::new(
+            transform,
+            0.0,
+            0.0,
+            0,
+            AtlasTransform::zeroed(),
+            CoverageBufferRange::zeroed(),
+        ),
+        contours: contour_data,
+        base_instance,
+        instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+    })
+}
+
+fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
+    let mut result = Vec::new();
+    let mut curves = Vec::new();
+    let mut first = None;
+    let mut current = None;
+    let mut point_index = 0;
+    let finish = |result: &mut Vec<Vec<[Vec2D; 4]>>,
+                  curves: &mut Vec<[Vec2D; 4]>,
+                  first: &mut Option<Vec2D>,
+                  current: &mut Option<Vec2D>| {
+        if let (Some(start), Some(end)) = (*first, *current) {
+            if !same_point(start, end) {
+                curves.push(line_cubic(end, start));
+            }
+        }
+        if !curves.is_empty() {
+            result.push(std::mem::take(curves));
+        }
+        *first = None;
+        *current = None;
+    };
+    for verb in path.verbs() {
+        match verb {
+            PathVerb::Move => {
+                finish(&mut result, &mut curves, &mut first, &mut current);
+                let point = path.points()[point_index];
+                point_index += 1;
+                first = Some(point);
+                current = Some(point);
+            }
+            PathVerb::Line => {
+                let end = path.points()[point_index];
+                point_index += 1;
+                if let Some(start) = current {
+                    curves.push(line_cubic(start, end));
+                }
+                current = Some(end);
+            }
+            PathVerb::Quad => {
+                let control = path.points()[point_index];
+                let end = path.points()[point_index + 1];
+                point_index += 2;
+                if let Some(start) = current {
+                    curves.push([
+                        start,
+                        lerp(start, control, 2.0 / 3.0),
+                        lerp(end, control, 2.0 / 3.0),
+                        end,
+                    ]);
+                }
+                current = Some(end);
+            }
+            PathVerb::Cubic => {
+                let control0 = path.points()[point_index];
+                let control1 = path.points()[point_index + 1];
+                let end = path.points()[point_index + 2];
+                point_index += 3;
+                if let Some(start) = current {
+                    curves.push([start, control0, control1, end]);
+                }
+                current = Some(end);
+            }
+            PathVerb::Close => {
+                if let (Some(start), Some(end)) = (first, current) {
+                    if !same_point(start, end) {
+                        curves.push(line_cubic(end, start));
+                    }
+                    current = Some(start);
+                }
+            }
+        }
+    }
+    finish(&mut result, &mut curves, &mut first, &mut current);
+    result
+}
+
+fn line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
+    [
+        start,
+        lerp(start, end, 1.0 / 3.0),
+        lerp(start, end, 2.0 / 3.0),
+        end,
+    ]
+}
+
+fn contour_midpoint(curves: &[[Vec2D; 4]]) -> Vec2D {
+    let mut sum = Vec2D::new(0.0, 0.0);
+    for curve in curves {
+        sum.x += curve[0].x;
+        sum.y += curve[0].y;
+    }
+    let scale = 1.0 / curves.len() as f32;
+    Vec2D::new(sum.x * scale, sum.y * scale)
+}
+
+fn push_padding_span(spans: &mut Vec<TessVertexSpan>, x0: i32, x1: i32) {
+    spans.push(TessVertexSpan::without_reflection(
+        [[0.0; 2]; 4],
+        [0.0; 2],
+        0.0,
+        x0,
+        x1,
+        0,
+        0,
+        1,
+        0,
+    ));
+}
+
+fn align_up(value: i32, alignment: i32) -> i32 {
+    ((value + alignment - 1) / alignment) * alignment
 }
 
 pub(crate) fn flatten_path(path: &RawPath, transform: Mat2D) -> Vec<Contour> {
@@ -282,5 +465,22 @@ mod tests {
         let contour = flatten_path(&path, Mat2D::IDENTITY).remove(0);
         assert_ne!(contour.points.first(), contour.points.last());
         assert!(triangulate_contour(&contour.points).is_some());
+    }
+
+    #[test]
+    fn fill_tessellation_obeys_eight_vertex_patch_layout() {
+        let mut path = RawPath::new();
+        path.move_to(4.0, 4.0);
+        path.line_to(60.0, 4.0);
+        path.line_to(32.0, 60.0);
+        path.close();
+        let tessellation = build_fill_tessellation(&path, Mat2D::IDENTITY).unwrap();
+        assert_eq!(tessellation.base_instance, 1);
+        assert_eq!(tessellation.instance_count, 1);
+        assert_eq!(tessellation.contours.len(), 1);
+        assert_eq!(tessellation.spans.len(), 5);
+        assert_eq!(tessellation.spans[0].x0_x1 as u32, 0x0008_0000);
+        assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x0009_0008);
+        assert_eq!(tessellation.spans[4].x0_x1 as u32, 0x0010_000b);
     }
 }

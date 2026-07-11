@@ -82,3 +82,7 @@ Run `make renderer-golden`.
   pipeline through wgpu. A submitted smoke test binds real flush/path/contour
   storage and a `TessVertexSpan`, renders through the canonical 12-index span
   topology, and completes against an `rgba32uint` tessellation target.
+- 2026-07-11: Ported fill tessellation layout from `LogicalFlush`: local
+  line/quad/cubic normalization, device-space Wang counts, contour records,
+  the leading invalid eight-vertex range, and per-path eight-vertex padding.
+  The first-light triangle lays out one midpoint-fan patch at base instance 1.

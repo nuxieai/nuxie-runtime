@@ -860,7 +860,8 @@ rive::rcp<rive::RenderImage> RecordingFactory::decodeImage(
     auto dimensions = encodedImageDimensions(data);
     std::ostringstream out;
     out << "decodeImage id=" << id << " width=" << dimensions.first
-        << " height=" << dimensions.second;
+        << " height=" << dimensions.second << " data="
+        << hexBytes(std::vector<uint8_t>(data.begin(), data.end()));
     m_stream.line(out.str());
     return rive::make_rcp<RecordingRenderImage>(id,
                                                 dimensions.first,

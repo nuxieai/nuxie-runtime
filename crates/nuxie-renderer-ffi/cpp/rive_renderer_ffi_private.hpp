@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nuxie_renderer_ffi.h"
+#include "rive_renderer_ffi.h"
 
 #include "rive/renderer.hpp"
 #include "rive/renderer/render_context.hpp"

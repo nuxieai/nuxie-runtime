@@ -1,0 +1,15 @@
+[package]
+name = "renderer-replay"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[features]
+default = []
+ffi = ["dep:nuxie-renderer-ffi"]
+
+[dependencies]
+nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
+nuxie-renderer = { path = "../../crates/nuxie-renderer" }
+nuxie-renderer-ffi = { path = "../../crates/nuxie-renderer-ffi", features = ["native"], optional = true }
+pixel-compare = { path = "../pixel-compare" }

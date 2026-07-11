@@ -1,0 +1,11 @@
+[package]
+name = "nuxie-renderer"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+bytemuck = { version = "1.24", features = ["derive"] }
+nuxie-render-api = { path = "../nuxie-render-api" }
+pollster = "0.4"
+wgpu = "30.0.0"

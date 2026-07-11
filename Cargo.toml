@@ -3,6 +3,8 @@ members = [
     "crates/nuxie-binary",
     "crates/nuxie-graph",
     "crates/nuxie-render-api",
+    "crates/nuxie-render-stream",
+    "crates/nuxie-renderer",
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
     "crates/nux-capi",
@@ -11,6 +13,8 @@ members = [
     "crates/nuxie-scripting",
     "tools/golden-compare",
     "tools/perf-compare",
+    "tools/pixel-compare",
+    "tools/renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
 ]

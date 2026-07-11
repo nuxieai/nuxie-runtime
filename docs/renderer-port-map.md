@@ -93,6 +93,12 @@ the other side of it.
 
 ## Execution Strategy: Incremental vs Big-Bang (decide at activation)
 
+**Decision (2026-07-10): incremental.** The user explicitly activated Phase R
+after V2 completion. The default R0-R5 sequence remains authoritative: establish
+the independent pixel oracle first, keep the corpus ratchet green, and port the
+algorithm behind the existing render-api boundary. The big-bang variant remains
+documented but inactive.
+
 Added 2026-07-09, informed by Bun's Zig→Rust migration
 (https://bun.com/blog/bun-in-rust): 1,448 files mechanically translated in 11
 days by ~64 parallel agents — translate everything (tree deliberately

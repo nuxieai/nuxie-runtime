@@ -1,0 +1,36 @@
+# Phase R pixel corpus. Paths are repository-relative.
+# Status advances from stub-fails -> exact as the Rust renderer converges.
+
+[[entry]]
+id = "first-light-rectangle-clockwise-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-rectangle.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-rectangle.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 0
+
+[[entry]]
+id = "first-light-triangle-clockwise-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-triangle.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-triangle.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "gated"
+max_channel_delta = 2
+max_different_pixels = 32
+gated = "analytic edge coverage thirds differ from bootstrap 4x MSAA quarters"
+
+[[entry]]
+id = "artboardclipping-frame-0-clockwise-atomic"
+kind = "riv-stream"
+stream = "fixtures/renderer/streams/artboardclipping-frame-0.rive-stream"
+reference = "fixtures/renderer/reference/metal/artboardclipping-frame-0.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 32

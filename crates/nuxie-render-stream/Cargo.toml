@@ -1,0 +1,8 @@
+[package]
+name = "nuxie-render-stream"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+nuxie-render-api = { path = "../nuxie-render-api" }

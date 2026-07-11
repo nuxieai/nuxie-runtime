@@ -626,9 +626,10 @@ impl Factory for RecordingFactory {
         let id = self.next_image_id;
         self.next_image_id += 1;
         let (width, height) = encoded_image_dimensions(data);
-        self.stream
-            .borrow_mut()
-            .line(format!("decodeImage id={id} width={width} height={height}"));
+        self.stream.borrow_mut().line(format!(
+            "decodeImage id={id} width={width} height={height} data={}",
+            hex_bytes(data)
+        ));
         Box::new(RecordingRenderImage { id, width, height })
     }
 }

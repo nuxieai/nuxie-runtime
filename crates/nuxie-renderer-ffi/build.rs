@@ -2,8 +2,8 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rerun-if-changed=cpp/nuxie_renderer_ffi.cpp");
-    println!("cargo:rerun-if-changed=cpp/nuxie_renderer_ffi.h");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.cpp");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.h");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_private.hpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_metal.mm");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
@@ -65,7 +65,7 @@ fn main() {
     build
         .cpp(true)
         .std("c++17")
-        .file("cpp/nuxie_renderer_ffi.cpp")
+        .file("cpp/rive_renderer_ffi.cpp")
         .file(runtime_dir.join("tests/common/render_context_null.cpp"))
         .include("cpp")
         .include(runtime_dir.join("dependencies"))

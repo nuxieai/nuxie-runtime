@@ -78,6 +78,27 @@ jobs:
       - name: Build and run C smoke test
         run: make capi-smoke
 
+  renderer-golden:
+    name: Phase R pixel golden
+    runs-on: macos-14
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Verify stub baseline and Rust renderer pixels
+        run: |
+          make renderer-stub-baseline
+          make renderer-golden
+
   # Optional perf artifact: continue-on-error keeps this job from affecting
   # the workflow's pass/fail status.
   perf-json:

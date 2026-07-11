@@ -98,93 +98,129 @@ pub(crate) fn build_stroke_tessellation(
             });
         }
         curves.retain(|curve| !curve.is_line || !same_point(curve.cubic[0], curve.cubic[3]));
-        if curves.is_empty() {
-            continue;
-        }
-        let mut prepared = Vec::new();
-        for curve in &curves {
-            let chopped = if curve.is_line {
-                vec![curve.cubic]
-            } else {
-                let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
-                if are_cusps {
-                    chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
-                } else {
-                    chop_cubic_at_values(curve.cubic, &roots)
-                }
-            };
-            let chopped_count = chopped.len();
-            for (index, cubic) in chopped.into_iter().enumerate() {
-                let tangents = cubic_tangents(cubic);
-                let (parametric_segments, polar_segments) = if curve.is_line {
-                    (1, 1)
-                } else {
-                    let transformed = cubic.map(|point| transform.transform_point(point));
-                    (
-                        cubic_segment_count(transformed),
-                        round_join_segment_count(
-                            tangents[0],
-                            tangents[1],
-                            polar_segments_per_radian,
-                        ),
-                    )
-                };
-                prepared.push(PreparedStrokeCurve {
-                    cubic,
-                    tangents,
-                    parametric_segments,
-                    polar_segments,
-                    ends_original_curve: index + 1 == chopped_count,
-                });
-            }
-        }
         let contour_start = location as u32;
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
         let mut pending = Vec::new();
-        if !contour.closed {
-            let PreparedStrokeCurve {
-                cubic, tangents, ..
-            } = prepared[0];
-            pending.push((
-                [cubic[3], cubic[2], cubic[1], cubic[0]],
-                tangents[0],
-                0,
-                0,
-                cap_segments,
-                contour_id | cap_flags,
-            ));
-        }
-        for (index, curve) in prepared.iter().copied().enumerate() {
-            let final_open = !contour.closed && index + 1 == prepared.len();
-            let (join_tangent, join_segments, flags) = if final_open {
-                (
-                    negate(curve.tangents[1]),
+        if curves.is_empty() {
+            let empty_cap = if contour.closed {
+                match join {
+                    StrokeJoin::Round => StrokeCap::Round,
+                    StrokeJoin::Miter => StrokeCap::Square,
+                    StrokeJoin::Bevel => StrokeCap::Butt,
+                }
+            } else {
+                cap
+            };
+            if empty_cap == StrokeCap::Butt {
+                continue;
+            }
+            let empty_cap_segments = match empty_cap {
+                StrokeCap::Round => {
+                    ((polar_segments_per_radian * std::f32::consts::PI).ceil() + 2.0)
+                        .min(crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32
+                }
+                StrokeCap::Square => 5,
+                StrokeCap::Butt => unreachable!(),
+            };
+            let empty_cap_flags = (match empty_cap {
+                StrokeCap::Round => ROUND_JOIN_CONTOUR_FLAG,
+                StrokeCap::Square => MITER_CLIP_JOIN_CONTOUR_FLAG,
+                StrokeCap::Butt => unreachable!(),
+            }) | EMULATED_STROKE_CAP_CONTOUR_FLAG;
+            for direction in [1.0, -1.0] {
+                let pivot = Vec2D::new(contour.first.x + direction, contour.first.y);
+                pending.push((
+                    [pivot, pivot, pivot, contour.first],
+                    Vec2D::new(direction, 0.0),
+                    0,
+                    0,
+                    empty_cap_segments,
+                    contour_id | empty_cap_flags,
+                ));
+            }
+        } else {
+            let mut prepared = Vec::new();
+            for curve in &curves {
+                let chopped = if curve.is_line {
+                    vec![curve.cubic]
+                } else {
+                    let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
+                    if are_cusps {
+                        chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
+                    } else {
+                        chop_cubic_at_values(curve.cubic, &roots)
+                    }
+                };
+                let chopped_count = chopped.len();
+                for (index, cubic) in chopped.into_iter().enumerate() {
+                    let tangents = cubic_tangents(cubic);
+                    let (parametric_segments, polar_segments) = if curve.is_line {
+                        (1, 1)
+                    } else {
+                        let transformed = cubic.map(|point| transform.transform_point(point));
+                        (
+                            cubic_segment_count(transformed),
+                            round_join_segment_count(
+                                tangents[0],
+                                tangents[1],
+                                polar_segments_per_radian,
+                            ),
+                        )
+                    };
+                    prepared.push(PreparedStrokeCurve {
+                        cubic,
+                        tangents,
+                        parametric_segments,
+                        polar_segments,
+                        ends_original_curve: index + 1 == chopped_count,
+                    });
+                }
+            }
+            if !contour.closed {
+                let PreparedStrokeCurve {
+                    cubic, tangents, ..
+                } = prepared[0];
+                pending.push((
+                    [cubic[3], cubic[2], cubic[1], cubic[0]],
+                    tangents[0],
+                    0,
+                    0,
                     cap_segments,
                     contour_id | cap_flags,
-                )
-            } else if !curve.ends_original_curve {
-                (prepared[index + 1].tangents[0], 1, contour_id | join_flags)
-            } else {
-                let next_tangent = prepared[(index + 1) % prepared.len()].tangents[0];
-                let segment_count = if join == StrokeJoin::Round {
-                    round_join_segment_count(
-                        curve.tangents[1],
-                        next_tangent,
-                        polar_segments_per_radian,
+                ));
+            }
+            for (index, curve) in prepared.iter().copied().enumerate() {
+                let final_open = !contour.closed && index + 1 == prepared.len();
+                let (join_tangent, join_segments, flags) = if final_open {
+                    (
+                        negate(curve.tangents[1]),
+                        cap_segments,
+                        contour_id | cap_flags,
                     )
+                } else if !curve.ends_original_curve {
+                    (prepared[index + 1].tangents[0], 1, contour_id | join_flags)
                 } else {
-                    5
+                    let next_tangent = prepared[(index + 1) % prepared.len()].tangents[0];
+                    let segment_count = if join == StrokeJoin::Round {
+                        round_join_segment_count(
+                            curve.tangents[1],
+                            next_tangent,
+                            polar_segments_per_radian,
+                        )
+                    } else {
+                        5
+                    };
+                    (next_tangent, segment_count, contour_id | join_flags)
                 };
-                (next_tangent, segment_count, contour_id | join_flags)
-            };
-            pending.push((
-                curve.cubic,
-                join_tangent,
-                curve.parametric_segments,
-                curve.polar_segments,
-                join_segments,
-                flags,
-            ));
+                pending.push((
+                    curve.cubic,
+                    join_tangent,
+                    curve.parametric_segments,
+                    curve.polar_segments,
+                    join_segments,
+                    flags,
+                ));
+            }
         }
         let vertex_count = pending
             .iter()
@@ -1280,6 +1316,27 @@ mod tests {
             assert_eq!(pivot[0], pivot[3]);
             assert_eq!(pivot[1], pivot[2]);
         }
+    }
+
+    #[test]
+    fn empty_round_stroke_emits_opposed_cap_joins() {
+        let mut path = RawPath::new();
+        path.move_to(20.0, 30.0);
+        let tessellation = build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            10.0,
+            StrokeJoin::Bevel,
+            StrokeCap::Round,
+        )
+        .unwrap();
+        assert_eq!(tessellation.spans.len(), 3);
+        assert_eq!(tessellation.spans[1].points[3], [20.0, 30.0]);
+        assert_eq!(tessellation.spans[2].points[3], [20.0, 30.0]);
+        assert_eq!(
+            tessellation.spans[1].contour_id_with_flags,
+            1 | ROUND_JOIN_CONTOUR_FLAG | EMULATED_STROKE_CAP_CONTOUR_FLAG
+        );
     }
 
     #[test]

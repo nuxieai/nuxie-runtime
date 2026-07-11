@@ -39,12 +39,13 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. Port `gpu.cpp` data contracts and `draw.cpp` path processing. The first
-   convergence target is analytic edge coverage for the triangle fixture.
-2. Promote the upstream `rect` GM first; it exercises state, transforms,
-   overlapping fills, and alpha blending without curves or clips.
-3. Expand corpus entries as features become replayable. Do not tune broad
-   tolerances around missing algorithm work.
+1. Complete `draw.cpp` stroke geometry, using `emptystroke`,
+   `widebuttcaps`, and `roundjoinstrokes` as the next focused probes.
+2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
+   order with `render_context.cpp`, robust triangulation, and the intersection
+   board.
+3. Expand corpus entries only as focused pixel replay proves each feature.
+   Do not tune broad tolerances around missing algorithm work.
 
 4. Bun-lesson hardening additions (user decision 2026-07-11; details in
    the map): mid-R2 adversarial review of the invented wgpu
@@ -153,3 +154,12 @@ Run `make renderer-golden`.
   No corpus entry was promoted in this slice: the replay rebuild was cancelled
   after unrelated system-wide compiler I/O repeatedly exhausted the disk;
   pixel probing remains required before changing the exact count.
+- 2026-07-11: Ported C++ empty-stroke cap geometry. Open empty contours use
+  their authored cap; closed empty contours map round joins to round caps,
+  miter joins to square caps, and bevel joins to no geometry. Round and square
+  cases emit the two opposed emulated-cap records expected by the analytic
+  stroke pipeline. All 24 `nuxie-renderer` tests pass, including a focused
+  record-layout test and the upstream GPU execution smoke test. Focused
+  `emptystroke` replay produces the expected shape placement but remains gated
+  at 1,320 differing pixels (max delta 81), concentrated on round-cap edge
+  coverage; exact remains 13.

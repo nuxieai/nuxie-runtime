@@ -63,3 +63,7 @@ Run `make renderer-golden`.
 - 2026-07-11: Completed R0 corpus capture: 108 renderer-interface GMs and 294
   valid `.riv` files produced 731 references and 1,465 mode entries. One known
   invalid `.riv` and 33 direct-context/ORE GM source files remain named-gated.
+- 2026-07-11: Began R2 with a reproducible upstream shader pipeline. All 50
+  generated WebGPU WGSL modules validate through naga. Ported the `gpu.hpp`
+  host upload records, enum encodings, packed tessellation fields, color
+  swizzles, and blend IDs with C++ ABI size/offset tests.

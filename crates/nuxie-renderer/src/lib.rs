@@ -1,5 +1,7 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
+mod gpu;
+
 use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, RawPath, RenderBuffer,
@@ -782,6 +784,8 @@ fn align_to(value: u32, alignment: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn matrix_composition_matches_renderer_post_concat() {
@@ -826,5 +830,29 @@ mod tests {
             64,
             32,
         ));
+    }
+
+    #[test]
+    fn generated_upstream_wgsl_validates_with_naga() {
+        let generated = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/generated");
+        let mut modules = fs::read_dir(&generated)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("wgsl"))
+            .collect::<Vec<_>>();
+        modules.sort();
+        assert!(!modules.is_empty(), "no generated WGSL modules found");
+        for path in modules {
+            let source = fs::read_to_string(&path).unwrap();
+            let module = naga::front::wgsl::parse_str(&source)
+                .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        }
     }
 }

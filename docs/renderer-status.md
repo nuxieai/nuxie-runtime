@@ -147,3 +147,9 @@ Run `make renderer-golden`.
   `zero_control_stroke` both pass clockwise-atomic at 0 differing pixels (max
   delta 1), moving exact to 13. The C++ convex/180-degree detector rejects
   cubics requiring a chop until straddled cusp and inflection chopping lands.
+- 2026-07-11: Ported convex/180-degree cubic chop emission, including sorted
+  inflection/turnaround roots, internal one-segment joins, and C++-style cusp
+  straddles with subpixel pivot cubics. A flat two-cusp structural test passes.
+  No corpus entry was promoted in this slice: the replay rebuild was cancelled
+  after unrelated system-wide compiler I/O repeatedly exhausted the disk;
+  pixel probing remains required before changing the exact count.

@@ -386,8 +386,8 @@ impl IntersectionTile {
 pub struct IntersectionBoard {
     grouping_type: GroupingType,
     viewport_size: (i32, i32),
-    cols: i32,
-    rows: i32,
+    cols: u32,
+    rows: u32,
     tiles: Vec<IntersectionTile>,
 }
 
@@ -409,20 +409,39 @@ impl IntersectionBoard {
     }
 
     pub fn resize_and_reset(&mut self, viewport_width: u32, viewport_height: u32) {
+        let tile_dim = u32::try_from(Self::TILE_DIM).expect("tile dimension is negative");
+        let rounding = tile_dim - 1;
+        let cols = viewport_width
+            .checked_add(rounding)
+            .expect("intersection board width rounding overflow")
+            / tile_dim;
+        let rows = viewport_height
+            .checked_add(rounding)
+            .expect("intersection board height rounding overflow")
+            / tile_dim;
+        let tile_count = cols
+            .checked_mul(rows)
+            .expect("intersection board tile count overflow");
+        let tile_count =
+            usize::try_from(tile_count).expect("intersection board tile count exceeds usize");
         let width = i32::try_from(viewport_width).expect("viewport width exceeds i32");
         let height = i32::try_from(viewport_height).expect("viewport height exceeds i32");
-        self.viewport_size = (width, height);
-        self.cols = (width + Self::TILE_DIM - 1) / Self::TILE_DIM;
-        self.rows = (height + Self::TILE_DIM - 1) / Self::TILE_DIM;
-        let tile_count = usize::try_from(self.cols * self.rows).expect("tile count is negative");
+
         if self.tiles.len() < tile_count {
+            self.tiles
+                .try_reserve_exact(tile_count - self.tiles.len())
+                .expect("intersection board tile allocation failed");
             self.tiles
                 .resize_with(tile_count, IntersectionTile::default);
         }
+
+        self.viewport_size = (width, height);
+        self.cols = cols;
+        self.rows = rows;
         for y in 0..self.rows {
             for x in 0..self.cols {
-                self.tiles[usize::try_from(y * self.cols + x).expect("tile index is negative")]
-                    .reset(x * Self::TILE_DIM, y * Self::TILE_DIM, 0, 0);
+                let tile_index = self.tile_index(x, y);
+                self.tiles[tile_index].reset(Self::tile_origin(x), Self::tile_origin(y), 0, 0);
             }
         }
     }
@@ -453,10 +472,17 @@ impl IntersectionBoard {
             return 0;
         }
         let ltrb = ltrb.clamp_to(width, height);
-        let min_x = ltrb.left / Self::TILE_DIM;
-        let min_y = ltrb.top / Self::TILE_DIM;
-        let max_x = (ltrb.right - 1) / Self::TILE_DIM;
-        let max_y = (ltrb.bottom - 1) / Self::TILE_DIM;
+        if !ltrb.is_non_empty() {
+            return 0;
+        }
+        let min_x = u32::try_from(ltrb.left / Self::TILE_DIM)
+            .expect("clamped rectangle has negative left tile");
+        let min_y = u32::try_from(ltrb.top / Self::TILE_DIM)
+            .expect("clamped rectangle has negative top tile");
+        let max_x = u32::try_from((ltrb.right - 1) / Self::TILE_DIM)
+            .expect("clamped rectangle has negative right tile");
+        let max_y = u32::try_from((ltrb.bottom - 1) / Self::TILE_DIM)
+            .expect("clamped rectangle has negative bottom tile");
         assert!(min_x <= max_x && min_y <= max_y);
 
         let mut results = FindResult::default();
@@ -504,8 +530,24 @@ impl IntersectionBoard {
         bottom_group_index
     }
 
-    fn tile_index(&self, x: i32, y: i32) -> usize {
-        usize::try_from(y * self.cols + x).expect("tile index is negative")
+    fn tile_index(&self, x: u32, y: u32) -> usize {
+        assert!(
+            x < self.cols && y < self.rows,
+            "tile coordinates outside board"
+        );
+        let index = y
+            .checked_mul(self.cols)
+            .and_then(|row| row.checked_add(x))
+            .expect("intersection board tile index overflow");
+        usize::try_from(index).expect("intersection board tile index exceeds usize")
+    }
+
+    fn tile_origin(coordinate: u32) -> i32 {
+        let tile_dim = u32::try_from(Self::TILE_DIM).expect("tile dimension is negative");
+        let origin = coordinate
+            .checked_mul(tile_dim)
+            .expect("intersection board tile origin overflow");
+        i32::try_from(origin).expect("intersection board tile origin exceeds i32")
     }
 }
 
@@ -537,15 +579,18 @@ mod tests {
                 || ltrb.top >= height
                 || ltrb.right <= 0
                 || ltrb.bottom <= 0
-                || !ltrb.is_non_empty()
+                || !reference_is_non_empty(ltrb)
             {
                 return 0;
             }
-            let ltrb = ltrb.clamp_to(width, height);
+            let ltrb = reference_clamp(ltrb, width, height);
+            if !reference_is_non_empty(ltrb) {
+                return 0;
+            }
             let mut max_group = 0;
             let mut max_overlap_bits = 0;
             for (existing, group, existing_overlap_bits) in &self.rectangles {
-                if existing.intersects(ltrb) {
+                if reference_intersects(*existing, ltrb) {
                     if *group > max_group {
                         max_group = *group;
                         max_overlap_bits = *existing_overlap_bits;
@@ -565,6 +610,23 @@ mod tests {
                 .push((ltrb, bottom_group + layers - 1, overlap_bits));
             bottom_group
         }
+    }
+
+    fn reference_is_non_empty(rect: Rect) -> bool {
+        rect.left < rect.right && rect.top < rect.bottom
+    }
+
+    fn reference_clamp(rect: Rect, width: i32, height: i32) -> Rect {
+        Rect {
+            left: rect.left.max(0).min(width),
+            top: rect.top.max(0).min(height),
+            right: rect.right.max(0).min(width),
+            bottom: rect.bottom.max(0).min(height),
+        }
+    }
+
+    fn reference_intersects(a: Rect, b: Rect) -> bool {
+        a.left < b.right && a.top < b.bottom && a.right > b.left && a.bottom > b.top
     }
 
     struct Lcg(u64);
@@ -590,6 +652,14 @@ mod tests {
             .filter_map(|(group, overlap)| (group == max_group).then_some(overlap))
             .fold(0, |bits, overlap| bits | overlap);
         (max_group, overlap_bits)
+    }
+
+    fn tile_max(tile: &IntersectionTile, rect: Rect) -> i16 {
+        tile.find_max_intersecting_group_index(GroupingType::Disjoint, rect, FindResult::default())
+            .max_group_indices
+            .into_iter()
+            .max()
+            .unwrap()
     }
 
     #[test]
@@ -638,6 +708,196 @@ mod tests {
         assert_eq!(board.add_rectangle(Rect::new(999, 1000, 1001, 1001), 1), 0);
         assert_eq!(board.add_rectangle(Rect::new(8, 8, 8, 9), 1), 0);
         assert_eq!(board.add_rectangle(Rect::new(8, 8, 9, 8), 1), 0);
+    }
+
+    #[test]
+    fn zero_sized_viewports_discard_rectangles_that_clamp_to_empty() {
+        for (width, height) in [(0, 100), (100, 0), (0, 0)] {
+            let mut board = IntersectionBoard::new(GroupingType::Disjoint);
+            board.resize_and_reset(width, height);
+            assert_eq!(board.add_rectangle(Rect::new(-1, -1, 1, 1), 1), 0);
+        }
+    }
+
+    #[test]
+    fn checked_arithmetic_accepts_valid_tile_boundaries() {
+        let mut board = IntersectionBoard::new(GroupingType::Disjoint);
+        board.resize_and_reset(256, 256);
+        assert_eq!((board.cols, board.rows), (2, 2));
+        assert_eq!(board.tile_index(1, 1), 3);
+        assert_eq!(IntersectionBoard::tile_origin(1), 255);
+    }
+
+    #[test]
+    #[should_panic(expected = "intersection board width rounding overflow")]
+    fn checked_arithmetic_rejects_width_rounding_overflow() {
+        IntersectionBoard::new(GroupingType::Disjoint).resize_and_reset(u32::MAX, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "intersection board height rounding overflow")]
+    fn checked_arithmetic_rejects_height_rounding_overflow() {
+        IntersectionBoard::new(GroupingType::Disjoint).resize_and_reset(0, u32::MAX);
+    }
+
+    #[test]
+    #[should_panic(expected = "intersection board tile count overflow")]
+    fn checked_arithmetic_rejects_tile_count_overflow() {
+        let max_i32 = u32::try_from(i32::MAX).unwrap();
+        IntersectionBoard::new(GroupingType::Disjoint).resize_and_reset(max_i32, max_i32);
+    }
+
+    #[test]
+    #[should_panic(expected = "viewport width exceeds i32")]
+    fn checked_arithmetic_rejects_unrepresentable_viewport_coordinates() {
+        let beyond_i32 = u32::try_from(i32::MAX).unwrap() + 1;
+        IntersectionBoard::new(GroupingType::Disjoint).resize_and_reset(beyond_i32, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "intersection board tile index overflow")]
+    fn checked_arithmetic_rejects_tile_index_overflow() {
+        let board = IntersectionBoard {
+            grouping_type: GroupingType::Disjoint,
+            viewport_size: (0, 0),
+            cols: u32::MAX,
+            rows: u32::MAX,
+            tiles: Vec::new(),
+        };
+        let _ = board.tile_index(u32::MAX - 1, u32::MAX - 1);
+    }
+
+    #[test]
+    fn translated_tile_origins_match_cpp_contract() {
+        for (left, top) in [(0, 0), (-100, -65), (8, 7)] {
+            let mut tile = IntersectionTile::default();
+            tile.reset(left, top, 3, 0);
+            assert_eq!(tile_max(&tile, Rect::new(-1, -1, 10, 10)), 3);
+
+            tile.add_rectangle(GroupingType::Disjoint, Rect::new(-1, -1, 10, 10), 4, 0);
+            assert_eq!(tile_max(&tile, Rect::new(-1, -1, 10, 10)), 4);
+            tile.add_rectangle(GroupingType::Disjoint, Rect::new(10, 10, 100, 100), 5, 0);
+            assert_eq!(tile_max(&tile, Rect::new(-1, -1, 10, 10)), 4);
+            assert_eq!(tile_max(&tile, Rect::new(-1, -1, 11, 11)), 5);
+
+            tile.add_rectangle(GroupingType::Disjoint, Rect::new(9, 10, 100, 100), 6, 0);
+            tile.add_rectangle(GroupingType::Disjoint, Rect::new(10, 9, 100, 100), 7, 0);
+            assert_eq!(tile_max(&tile, Rect::new(-1, -1, 10, 10)), 4);
+            tile.add_rectangle(GroupingType::Disjoint, Rect::new(9, 9, 100, 100), 8, 0);
+            assert_eq!(tile_max(&tile, Rect::new(-1, -1, 10, 10)), 8);
+        }
+    }
+
+    #[test]
+    fn maximal_i16_group_indices_match_cpp_contract() {
+        let mut tile = IntersectionTile::default();
+        tile.reset(0, 0, i16::MAX, 0);
+        assert_eq!(tile_max(&tile, Rect::new(59, 131, 205, 181)), i16::MAX);
+
+        tile.reset(0, 0, 32764, 0);
+        tile.add_rectangle(
+            GroupingType::Disjoint,
+            Rect::new(59, 131, 205, 181),
+            32765,
+            0,
+        );
+        tile.add_rectangle(
+            GroupingType::Disjoint,
+            Rect::new(79, -90, 182, 324),
+            32766,
+            0,
+        );
+        tile.add_rectangle(
+            GroupingType::Disjoint,
+            Rect::new(145, 93, 166, 214),
+            32767,
+            0,
+        );
+        assert_eq!(tile_max(&tile, Rect::new(12, -133, 104, 328)), 32766);
+        assert_eq!(tile_max(&tile, Rect::new(12, -133, 150, 328)), 32767);
+    }
+
+    #[test]
+    fn extreme_i32_rectangle_matches_cpp_contract() {
+        let mut board = IntersectionBoard::new(GroupingType::Disjoint);
+        board.resize_and_reset(1000, 1000);
+        assert_eq!(board.add_rectangle(Rect::new(1, 1, 800, 600), 1), 1);
+        assert_eq!(board.add_rectangle(Rect::new(799, 599, 999, 999), 1), 2);
+        assert_eq!(
+            board.add_rectangle(Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX), 1),
+            3
+        );
+    }
+
+    #[test]
+    fn running_find_result_preserves_all_eight_cpp_lanes() {
+        let mut tile = IntersectionTile::default();
+        tile.reset(0, 0, 0, 0);
+        for group_index in 1_i16..=9 {
+            tile.add_rectangle(
+                GroupingType::OverlapAllowed,
+                Rect::new(0, 0, 10, 10),
+                group_index,
+                1 << (group_index - 1),
+            );
+        }
+        let running = FindResult {
+            max_group_indices: [5, 10, 0, 0, 0, 0, 0, 0],
+            overlap_bits: [0x8000; 8],
+        };
+        let result = tile.find_max_intersecting_group_index(
+            GroupingType::OverlapAllowed,
+            Rect::new(0, 0, 20, 20),
+            running,
+        );
+        assert_eq!(result.max_group_indices, [9, 10, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(
+            result.overlap_bits,
+            [0x0100, 0x8000, 0x0004, 0x0008, 0x0010, 0x0020, 0x0040, 0x0080]
+        );
+    }
+
+    #[test]
+    fn baseline_transitions_match_full_cpp_sequence() {
+        let mut tile = IntersectionTile::default();
+        tile.reset(0, 0, 0, 0);
+        let full = Rect::new(0, 0, IntersectionTile::TILE_DIM, IntersectionTile::TILE_DIM);
+        tile.add_rectangle(GroupingType::OverlapAllowed, full, 1, 0x1001);
+
+        for (rect, bits) in [
+            (Rect::new(0, 0, 20, 20), 0x0010),
+            (Rect::new(20, 20, 40, 40), 0x1040),
+            (Rect::new(40, 40, 60, 60), 0x0021),
+            (Rect::new(60, 60, 80, 80), 0x2181),
+        ] {
+            tile.add_rectangle(GroupingType::OverlapAllowed, rect, 1, bits);
+        }
+        assert_eq!(tile.overlap_bits_for_max_group, 0x31f1);
+
+        tile.add_rectangle(GroupingType::OverlapAllowed, full, 1, 0x8002);
+        assert_eq!(tile.rectangles.len(), 4);
+        assert_eq!(tile.baseline_overlap_bits, 0x9003);
+        assert_eq!(tile.overlap_bits_for_max_group, 0xb1f3);
+
+        tile.add_rectangle(GroupingType::OverlapAllowed, full, 1, 0x9003);
+        assert_eq!(tile.rectangles.len(), 4);
+        tile.add_rectangle(GroupingType::OverlapAllowed, full, 1, 0x0030);
+        assert_eq!(tile.rectangles.len(), 2);
+        assert_eq!(tile.baseline_overlap_bits, 0x9033);
+        assert_eq!(tile.overlap_bits_for_max_group, 0xb1f3);
+
+        tile.add_rectangle(GroupingType::OverlapAllowed, full, 1, 0x21c0);
+        assert!(tile.rectangles.is_empty());
+        assert_eq!(tile.baseline_group_index, 1);
+        assert_eq!(tile.baseline_overlap_bits, 0xb1f3);
+
+        tile.add_rectangle(GroupingType::OverlapAllowed, full, 2, 0x000c);
+        assert!(tile.rectangles.is_empty());
+        assert_eq!(tile.baseline_group_index, 2);
+        assert_eq!(tile.max_group_index, 2);
+        assert_eq!(tile.baseline_overlap_bits, 0x000c);
+        assert_eq!(tile.overlap_bits_for_max_group, 0x000c);
+        assert!(tile.invariants_hold());
     }
 
     #[test]

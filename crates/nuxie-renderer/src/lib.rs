@@ -2,6 +2,7 @@
 
 mod draw;
 mod gpu;
+mod tessellator;
 
 use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
@@ -44,6 +45,7 @@ struct Context {
     cover_pipeline: wgpu::RenderPipeline,
     _patch_vertex_buffer: wgpu::Buffer,
     _patch_index_buffer: wgpu::Buffer,
+    _tessellator: tessellator::Tessellator,
 }
 
 pub struct WgpuFactory {
@@ -190,6 +192,7 @@ impl WgpuFactory {
             contents: bytemuck::cast_slice(&patch_indices),
             usage: wgpu::BufferUsages::INDEX,
         });
+        let tessellator = tessellator::Tessellator::new(&device);
         Ok(Self {
             context: Arc::new(Context {
                 device,
@@ -199,6 +202,7 @@ impl WgpuFactory {
                 cover_pipeline,
                 _patch_vertex_buffer: patch_vertex_buffer,
                 _patch_index_buffer: patch_index_buffer,
+                _tessellator: tessellator,
             }),
             width,
             height,
@@ -980,5 +984,47 @@ mod tests {
             .validate(&module)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         }
+    }
+
+    #[test]
+    fn upstream_tessellation_pass_executes() {
+        let factory = WgpuFactory::new(64, 64).unwrap();
+        let mut uniforms = gpu::FlushUniforms::zeroed();
+        uniforms.inverse_viewports[1] = 2.0;
+        let span = gpu::TessVertexSpan::without_reflection(
+            [[4.0, 4.0], [20.0, 4.0], [44.0, 4.0], [60.0, 4.0]],
+            [1.0, 0.0],
+            0.0,
+            0,
+            2,
+            1,
+            0,
+            1,
+            1,
+        );
+        let paths = [gpu::PathData::zeroed()];
+        let contours = [gpu::ContourData::new([32.0, 4.0], 0, 0)];
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-tessellation-test-encoder"),
+                });
+        let _texture = factory.context._tessellator.encode(
+            &factory.context.device,
+            &mut encoder,
+            &[span],
+            &uniforms,
+            &paths,
+            &contours,
+            1,
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
     }
 }

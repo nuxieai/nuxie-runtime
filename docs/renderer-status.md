@@ -78,3 +78,7 @@ Run `make renderer-golden`.
   including mirrored border diagonals and middle-out fan indices. Its 269
   vertices and 441 indices are invariant-tested and now uploaded once per wgpu
   context for the forthcoming tessellation/draw passes.
+- 2026-07-11: Instantiated and executed the upstream `tessellate.glsl` WebGPU
+  pipeline through wgpu. A submitted smoke test binds real flush/path/contour
+  storage and a `TessVertexSpan`, renders through the canonical 12-index span
+  topology, and completes against an `rgba32uint` tessellation target.

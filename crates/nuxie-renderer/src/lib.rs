@@ -7,6 +7,7 @@ mod draw;
 mod feather_lut;
 mod gpu;
 mod path_pipeline;
+mod skyline;
 mod tessellator;
 
 use bytemuck::{Pod, Zeroable};
@@ -957,29 +958,35 @@ impl WgpuFrame {
                     .max()
                     .unwrap_or(1);
                 let pack_width = self.width.max(1).max(max_atlas_region_width);
-                let mut atlas_x = 0;
-                let mut atlas_y = 0;
-                let mut atlas_row_height = 0;
+                let pack_height = prepared
+                    .iter()
+                    .filter_map(|draw| draw.atlas.map(|atlas| atlas.height))
+                    .sum::<u32>()
+                    .max(1);
+                let mut atlas_packer = skyline::Skyline::new(pack_width as i32, pack_height as i32);
                 let mut atlas_width = 1;
                 for (index, draw) in prepared.iter_mut().enumerate() {
                     let Some(atlas) = &mut draw.atlas else {
                         continue;
                     };
-                    if atlas_x != 0 && atlas_x + atlas.width > pack_width {
-                        atlas_x = 0;
-                        atlas_y += atlas_row_height;
-                        atlas_row_height = 0;
-                    }
+                    let mut atlas_x = 0;
+                    let mut atlas_y = 0;
+                    assert!(atlas_packer.add_rect(
+                        atlas.width as i32,
+                        atlas.height as i32,
+                        &mut atlas_x,
+                        &mut atlas_y,
+                    ));
+                    let atlas_x = atlas_x as u32;
+                    let atlas_y = atlas_y as u32;
                     atlas.origin = [atlas_x, atlas_y];
                     atlas.translate[0] += atlas_x as f32;
                     atlas.translate[1] += atlas_y as f32;
                     paths[index + 1].atlas_transform.translate_x = atlas.translate[0];
                     paths[index + 1].atlas_transform.translate_y = atlas.translate[1];
-                    atlas_x += atlas.width;
-                    atlas_row_height = atlas_row_height.max(atlas.height);
-                    atlas_width = atlas_width.max(atlas_x);
+                    atlas_width = atlas_width.max(atlas_x + atlas.width);
                 }
-                let atlas_height = (atlas_y + atlas_row_height).max(1);
+                let atlas_height = pack_height;
                 let tessellation_height = prepared
                     .iter()
                     .map(|draw| draw::tessellation_texture_height(&draw.spans))

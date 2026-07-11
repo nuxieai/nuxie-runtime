@@ -357,3 +357,11 @@ Run `make renderer-golden`.
   tolerance/max delta 81, proving the extra resolve/composite pass preserves
   the existing 4x analytic AA. Next, reuse this exact pass for each contiguous
   fallback run instead of only the all-fallback frame.
+- 2026-07-11: Extracted the validated atomic frame body into a callable
+  `encode_atomic_run(draws, clear_target, encoder)` unit without changing frame
+  selection. Path/paint IDs, tessellation textures, feather atlas packing,
+  shared coverage buffers, and draw ordering are now scoped to the supplied
+  contiguous slice, and target clearing is explicit. This is the mechanical
+  prerequisite for alternating atomic and resolved-fallback runs; the next
+  slice extracts the matching fallback-run encoder and replaces the global
+  `all()` gate with contiguous eligibility ranges.

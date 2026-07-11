@@ -716,407 +716,418 @@ impl WgpuFrame {
                             }
                         }
                 });
-        let used_atomic = if atomic_eligible {
-            #[derive(Clone, Copy)]
-            struct AtlasPlacement {
-                scale: f32,
-                translate: [f32; 2],
-                bounds: [f32; 4],
-                origin: [u32; 2],
-                width: u32,
-                height: u32,
-            }
+        let encode_atomic_run =
+            |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
+                #[derive(Clone, Copy)]
+                struct AtlasPlacement {
+                    scale: f32,
+                    translate: [f32; 2],
+                    bounds: [f32; 4],
+                    origin: [u32; 2],
+                    width: u32,
+                    height: u32,
+                }
 
-            struct PreparedAtomicDraw {
-                spans: Vec<gpu::TessVertexSpan>,
-                base_instance: u32,
-                instance_count: u32,
-                patch_index_range: std::ops::Range<u32>,
-                triangles: Vec<gpu::TriangleVertex>,
-                atlas: Option<AtlasPlacement>,
-                atlas_blit_vertices: Vec<gpu::TriangleVertex>,
-                is_stroke: bool,
-                is_feather: bool,
-            }
+                struct PreparedAtomicDraw {
+                    spans: Vec<gpu::TessVertexSpan>,
+                    base_instance: u32,
+                    instance_count: u32,
+                    patch_index_range: std::ops::Range<u32>,
+                    triangles: Vec<gpu::TriangleVertex>,
+                    atlas: Option<AtlasPlacement>,
+                    atlas_blit_vertices: Vec<gpu::TriangleVertex>,
+                    is_stroke: bool,
+                    is_feather: bool,
+                }
 
-            {
-                let attachments = [Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(color(self.clear_color)),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })];
-                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("nuxie-atomic-frame-clear"),
-                    color_attachments: &attachments,
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-            }
-            let padded_width = align_to(self.width, 32);
-            let padded_height = align_to(self.height, 32);
-            let mut prepared = Vec::with_capacity(self.draws.len());
-            let mut paths = vec![gpu::PathData::zeroed()];
-            let mut paints = vec![gpu::PaintData::solid(
-                0,
-                FillRule::NonZero,
-                BlendMode::SrcOver,
-            )];
-            let mut contours = Vec::new();
-            for (draw_index, draw) in self.draws.iter().enumerate() {
-                let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
-                let (
-                    mut spans,
-                    mut path,
-                    mut draw_contours,
-                    base_instance,
-                    instance_count,
-                    patch_index_range,
-                    mut triangles,
-                ) = if draw.paint.feather != 0.0 {
-                    let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
-                    // wgpu uses C++'s alwaysFeatherToAtlas policy for strokes.
-                    let requires_atlas = draw::feather_requires_atlas(
-                        draw.paint.feather,
-                        draw.state.transform,
-                        is_stroke,
-                    );
-                    let stroke = is_stroke.then_some((
-                        draw.paint.thickness,
-                        draw.paint.join,
-                        draw.paint.cap,
-                    ));
-                    let tessellation = if requires_atlas {
-                        draw::build_feather_atlas_tessellation(
-                            &draw.path.raw_path,
-                            draw.state.transform,
-                            draw.paint.feather,
-                            stroke,
-                        )
-                    } else {
-                        draw::build_feather_tessellation(
-                            &draw.path.raw_path,
-                            draw.state.transform,
-                            draw.paint.feather,
-                            stroke,
-                        )
-                    }
-                    .expect("atomic eligibility already validated feather tessellation");
-                    let patch_index_range = if is_stroke {
-                        0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
-                    } else {
-                        gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
-                            ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
-                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
-                                as u32
-                    };
-                    (
-                        tessellation.spans,
-                        tessellation.path,
-                        tessellation.contours,
-                        tessellation.base_instance,
-                        tessellation.instance_count,
+                if clear_target {
+                    let attachments = [Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(color(self.clear_color)),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })];
+                    let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nuxie-atomic-frame-clear"),
+                        color_attachments: &attachments,
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                }
+                let padded_width = align_to(self.width, 32);
+                let padded_height = align_to(self.height, 32);
+                let mut prepared = Vec::with_capacity(draws.len());
+                let mut paths = vec![gpu::PathData::zeroed()];
+                let mut paints = vec![gpu::PaintData::solid(
+                    0,
+                    FillRule::NonZero,
+                    BlendMode::SrcOver,
+                )];
+                let mut contours = Vec::new();
+                for (draw_index, draw) in draws.iter().enumerate() {
+                    let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
+                    let (
+                        mut spans,
+                        mut path,
+                        mut draw_contours,
+                        base_instance,
+                        instance_count,
                         patch_index_range,
-                        Vec::new(),
-                    )
-                } else if draw.paint.style == RenderPaintStyle::Stroke {
-                    let tessellation = draw::build_stroke_tessellation(
-                        &draw.path.raw_path,
-                        draw.state.transform,
-                        draw.paint.thickness,
-                        draw.paint.join,
-                        draw.paint.cap,
-                    )
-                    .expect("atomic eligibility already validated stroke tessellation");
-                    (
-                        tessellation.spans,
-                        tessellation.path,
-                        tessellation.contours,
-                        tessellation.base_instance,
-                        tessellation.instance_count,
-                        0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
-                        Vec::new(),
-                    )
-                } else if draw::should_use_interior_tessellation(
-                    &draw.path.raw_path,
-                    draw.state.transform,
-                ) {
-                    let tessellation = draw::build_interior_tessellation(
-                        &draw.path.raw_path,
-                        draw.state.transform,
-                    )
-                    .expect("atomic eligibility already validated tessellation");
-                    (
-                        tessellation.spans,
-                        tessellation.path,
-                        tessellation.contours,
-                        tessellation.base_instance,
-                        tessellation.instance_count,
-                        (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
-                            + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
-                            as u32
-                            ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
-                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT
-                                + gpu::OUTER_CURVE_PATCH_INDEX_COUNT)
-                                as u32,
-                        tessellation.triangles,
-                    )
-                } else {
-                    let mut tessellation =
-                        draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                            .expect("atomic eligibility already validated tessellation");
-                    tessellation.make_double_sided();
-                    (
-                        tessellation.spans,
-                        tessellation.path,
-                        tessellation.contours,
-                        tessellation.base_instance,
-                        tessellation.instance_count,
-                        0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
-                        Vec::new(),
-                    )
-                };
-                let contour_offset = contours.len() as u32;
-                for span in &mut spans {
-                    let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
-                    if local_id != 0 {
-                        let global_id = contour_offset + local_id;
-                        assert!(global_id <= gpu::CONTOUR_ID_MASK);
-                        span.contour_id_with_flags =
-                            (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK) | global_id;
-                    }
-                }
-                for contour in &mut draw_contours {
-                    contour.path_id = u32::from(path_id);
-                }
-                for triangle in &mut triangles {
-                    triangle.weight_path_id =
-                        (triangle.weight_path_id & !0xffff) | i32::from(path_id);
-                }
-                let atlas = (draw.paint.feather != 0.0
-                    && draw::feather_requires_atlas(
-                        draw.paint.feather,
-                        draw.state.transform,
-                        draw.paint.style == RenderPaintStyle::Stroke,
-                    ))
-                .then(|| {
-                    let scale = draw::feather_atlas_scale(draw.paint.feather, draw.state.transform);
-                    let [left, top, right, bottom] = draw::feather_pixel_bounds(
-                        &draw.path.raw_path,
-                        draw.state.transform,
-                        draw.paint.feather,
-                        (draw.paint.style == RenderPaintStyle::Stroke).then_some((
+                        mut triangles,
+                    ) = if draw.paint.feather != 0.0 {
+                        let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
+                        // wgpu uses C++'s alwaysFeatherToAtlas policy for strokes.
+                        let requires_atlas = draw::feather_requires_atlas(
+                            draw.paint.feather,
+                            draw.state.transform,
+                            is_stroke,
+                        );
+                        let stroke = is_stroke.then_some((
                             draw.paint.thickness,
                             draw.paint.join,
                             draw.paint.cap,
-                        )),
-                    )
-                    .expect("atomic eligibility already validated feather bounds");
-                    let left = left.clamp(0, self.width as i32);
-                    let top = top.clamp(0, self.height as i32);
-                    let right = right.clamp(left, self.width as i32);
-                    let bottom = bottom.clamp(top, self.height as i32);
-                    const PADDING: f32 = 2.0;
-                    AtlasPlacement {
-                        scale,
-                        translate: [PADDING - left as f32 * scale, PADDING - top as f32 * scale],
-                        bounds: [left as f32, top as f32, right as f32, bottom as f32],
-                        origin: [0, 0],
-                        width: ((right - left) as f32 * scale).ceil() as u32 + 4,
-                        height: ((bottom - top) as f32 * scale).ceil() as u32 + 4,
-                    }
-                });
-                if let Some(placement) = atlas {
-                    path.atlas_transform = gpu::AtlasTransform {
-                        scale_factor: placement.scale,
-                        translate_x: placement.translate[0],
-                        translate_y: placement.translate[1],
+                        ));
+                        let tessellation = if requires_atlas {
+                            draw::build_feather_atlas_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
+                                draw.paint.feather,
+                                stroke,
+                            )
+                        } else {
+                            draw::build_feather_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
+                                draw.paint.feather,
+                                stroke,
+                            )
+                        }
+                        .expect("atomic eligibility already validated feather tessellation");
+                        let patch_index_range = if is_stroke {
+                            0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
+                        } else {
+                            gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
+                                ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                    + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                    as u32
+                        };
+                        (
+                            tessellation.spans,
+                            tessellation.path,
+                            tessellation.contours,
+                            tessellation.base_instance,
+                            tessellation.instance_count,
+                            patch_index_range,
+                            Vec::new(),
+                        )
+                    } else if draw.paint.style == RenderPaintStyle::Stroke {
+                        let tessellation = draw::build_stroke_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.paint.thickness,
+                            draw.paint.join,
+                            draw.paint.cap,
+                        )
+                        .expect("atomic eligibility already validated stroke tessellation");
+                        (
+                            tessellation.spans,
+                            tessellation.path,
+                            tessellation.contours,
+                            tessellation.base_instance,
+                            tessellation.instance_count,
+                            0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                            Vec::new(),
+                        )
+                    } else if draw::should_use_interior_tessellation(
+                        &draw.path.raw_path,
+                        draw.state.transform,
+                    ) {
+                        let tessellation = draw::build_interior_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                        )
+                        .expect("atomic eligibility already validated tessellation");
+                        (
+                            tessellation.spans,
+                            tessellation.path,
+                            tessellation.contours,
+                            tessellation.base_instance,
+                            tessellation.instance_count,
+                            (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                as u32
+                                ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                    + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT
+                                    + gpu::OUTER_CURVE_PATCH_INDEX_COUNT)
+                                    as u32,
+                            tessellation.triangles,
+                        )
+                    } else {
+                        let mut tessellation = draw::build_fill_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                        )
+                        .expect("atomic eligibility already validated tessellation");
+                        tessellation.make_double_sided();
+                        (
+                            tessellation.spans,
+                            tessellation.path,
+                            tessellation.contours,
+                            tessellation.base_instance,
+                            tessellation.instance_count,
+                            0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                            Vec::new(),
+                        )
                     };
+                    let contour_offset = contours.len() as u32;
+                    for span in &mut spans {
+                        let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+                        if local_id != 0 {
+                            let global_id = contour_offset + local_id;
+                            assert!(global_id <= gpu::CONTOUR_ID_MASK);
+                            span.contour_id_with_flags =
+                                (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK) | global_id;
+                        }
+                    }
+                    for contour in &mut draw_contours {
+                        contour.path_id = u32::from(path_id);
+                    }
+                    for triangle in &mut triangles {
+                        triangle.weight_path_id =
+                            (triangle.weight_path_id & !0xffff) | i32::from(path_id);
+                    }
+                    let atlas = (draw.paint.feather != 0.0
+                        && draw::feather_requires_atlas(
+                            draw.paint.feather,
+                            draw.state.transform,
+                            draw.paint.style == RenderPaintStyle::Stroke,
+                        ))
+                    .then(|| {
+                        let scale =
+                            draw::feather_atlas_scale(draw.paint.feather, draw.state.transform);
+                        let [left, top, right, bottom] = draw::feather_pixel_bounds(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.paint.feather,
+                            (draw.paint.style == RenderPaintStyle::Stroke).then_some((
+                                draw.paint.thickness,
+                                draw.paint.join,
+                                draw.paint.cap,
+                            )),
+                        )
+                        .expect("atomic eligibility already validated feather bounds");
+                        let left = left.clamp(0, self.width as i32);
+                        let top = top.clamp(0, self.height as i32);
+                        let right = right.clamp(left, self.width as i32);
+                        let bottom = bottom.clamp(top, self.height as i32);
+                        const PADDING: f32 = 2.0;
+                        AtlasPlacement {
+                            scale,
+                            translate: [
+                                PADDING - left as f32 * scale,
+                                PADDING - top as f32 * scale,
+                            ],
+                            bounds: [left as f32, top as f32, right as f32, bottom as f32],
+                            origin: [0, 0],
+                            width: ((right - left) as f32 * scale).ceil() as u32 + 4,
+                            height: ((bottom - top) as f32 * scale).ceil() as u32 + 4,
+                        }
+                    });
+                    if let Some(placement) = atlas {
+                        path.atlas_transform = gpu::AtlasTransform {
+                            scale_factor: placement.scale,
+                            translate_x: placement.translate[0],
+                            translate_y: placement.translate[1],
+                        };
+                    }
+                    path.coverage_buffer_range.pitch = padded_width;
+                    paths.push(path);
+                    paints.push(if draw.paint.style == RenderPaintStyle::Stroke {
+                        gpu::PaintData::solid_stroke(
+                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                            draw.paint.blend_mode,
+                        )
+                    } else {
+                        gpu::PaintData::solid(
+                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                            draw.path.fill_rule,
+                            draw.paint.blend_mode,
+                        )
+                    });
+                    contours.extend(draw_contours);
+                    let atlas_blit_vertices = atlas
+                        .map(|placement| {
+                            let [left, top, right, bottom] = placement.bounds;
+                            vec![
+                                gpu::TriangleVertex::new([left, bottom], 1, path_id),
+                                gpu::TriangleVertex::new([left, top], 1, path_id),
+                                gpu::TriangleVertex::new([right, bottom], 1, path_id),
+                                gpu::TriangleVertex::new([right, bottom], 1, path_id),
+                                gpu::TriangleVertex::new([left, top], 1, path_id),
+                                gpu::TriangleVertex::new([right, top], 1, path_id),
+                            ]
+                        })
+                        .unwrap_or_default();
+                    prepared.push(PreparedAtomicDraw {
+                        spans,
+                        base_instance,
+                        instance_count,
+                        patch_index_range,
+                        triangles,
+                        atlas,
+                        atlas_blit_vertices,
+                        is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
+                        is_feather: draw.paint.feather != 0.0,
+                    });
                 }
-                path.coverage_buffer_range.pitch = padded_width;
-                paths.push(path);
-                paints.push(if draw.paint.style == RenderPaintStyle::Stroke {
-                    gpu::PaintData::solid_stroke(
-                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                        draw.paint.blend_mode,
-                    )
-                } else {
-                    gpu::PaintData::solid(
-                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                        draw.path.fill_rule,
-                        draw.paint.blend_mode,
-                    )
+                let max_atlas_region_width = prepared
+                    .iter()
+                    .filter_map(|draw| draw.atlas.map(|atlas| atlas.width))
+                    .max()
+                    .unwrap_or(1);
+                let pack_width = self.width.max(1).max(max_atlas_region_width);
+                let mut atlas_x = 0;
+                let mut atlas_y = 0;
+                let mut atlas_row_height = 0;
+                let mut atlas_width = 1;
+                for (index, draw) in prepared.iter_mut().enumerate() {
+                    let Some(atlas) = &mut draw.atlas else {
+                        continue;
+                    };
+                    if atlas_x != 0 && atlas_x + atlas.width > pack_width {
+                        atlas_x = 0;
+                        atlas_y += atlas_row_height;
+                        atlas_row_height = 0;
+                    }
+                    atlas.origin = [atlas_x, atlas_y];
+                    atlas.translate[0] += atlas_x as f32;
+                    atlas.translate[1] += atlas_y as f32;
+                    paths[index + 1].atlas_transform.translate_x = atlas.translate[0];
+                    paths[index + 1].atlas_transform.translate_y = atlas.translate[1];
+                    atlas_x += atlas.width;
+                    atlas_row_height = atlas_row_height.max(atlas.height);
+                    atlas_width = atlas_width.max(atlas_x);
+                }
+                let atlas_height = (atlas_y + atlas_row_height).max(1);
+                let tessellation_height = prepared
+                    .iter()
+                    .map(|draw| draw::tessellation_texture_height(&draw.spans))
+                    .max()
+                    .unwrap_or(1);
+                let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
+                uniforms.render_target_update_bounds =
+                    [0, 0, self.width as i32, self.height as i32];
+                uniforms.atlas_texture_inverse_size =
+                    [1.0 / atlas_width as f32, 1.0 / atlas_height as f32];
+                uniforms.atlas_content_inverse_viewport =
+                    [2.0 / atlas_width as f32, -2.0 / atlas_height as f32];
+                let mut tessellation_textures = Vec::with_capacity(prepared.len());
+                for draw in &prepared {
+                    let tessellation_texture = self.context.tessellator.encode(
+                        &self.context.device,
+                        encoder,
+                        &self.context.feather_lut.view,
+                        &draw.spans,
+                        &uniforms,
+                        &paths,
+                        &contours,
+                        tessellation_height,
+                    );
+                    tessellation_textures.push(tessellation_texture);
+                }
+                let tessellation_views = tessellation_textures
+                    .iter()
+                    .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()))
+                    .collect::<Vec<_>>();
+                let paint_aux = vec![gpu::PaintAuxData::zeroed(); paths.len()];
+                let atlas_texture = prepared.iter().any(|draw| draw.atlas.is_some()).then(|| {
+                    let texture = self
+                        .context
+                        .device
+                        .create_texture(&wgpu::TextureDescriptor {
+                            label: Some("nuxie-feather-atlas"),
+                            size: wgpu::Extent3d {
+                                width: atlas_width,
+                                height: atlas_height,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::R16Float,
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                | wgpu::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        });
+                    let view = texture.create_view(&Default::default());
+                    let mut clear = true;
+                    for (index, draw) in prepared.iter().enumerate() {
+                        if let Some(atlas) = draw.atlas {
+                            self.context.atlas_pipeline.encode_mask(
+                                &self.context.device,
+                                encoder,
+                                &view,
+                                &self.context.patch_vertex_buffer,
+                                &self.context.patch_index_buffer,
+                                &tessellation_views[index],
+                                &self.context.feather_lut.view,
+                                &uniforms,
+                                &paths,
+                                &paints,
+                                &paint_aux,
+                                &contours,
+                                draw.base_instance,
+                                draw.instance_count,
+                                draw.is_stroke,
+                                clear,
+                                [atlas.origin[0], atlas.origin[1], atlas.width, atlas.height],
+                            );
+                            clear = false;
+                        }
+                    }
+                    texture
                 });
-                contours.extend(draw_contours);
-                let atlas_blit_vertices = atlas
-                    .map(|placement| {
-                        let [left, top, right, bottom] = placement.bounds;
-                        vec![
-                            gpu::TriangleVertex::new([left, bottom], 1, path_id),
-                            gpu::TriangleVertex::new([left, top], 1, path_id),
-                            gpu::TriangleVertex::new([right, bottom], 1, path_id),
-                            gpu::TriangleVertex::new([right, bottom], 1, path_id),
-                            gpu::TriangleVertex::new([left, top], 1, path_id),
-                            gpu::TriangleVertex::new([right, top], 1, path_id),
-                        ]
+                let atlas_view = atlas_texture
+                    .as_ref()
+                    .map(|texture| texture.create_view(&Default::default()));
+                let atomic_draws = prepared
+                    .iter()
+                    .zip(&tessellation_views)
+                    .map(|(draw, tessellation)| atomic_pipeline::AtomicDraw {
+                        tessellation,
+                        base_instance: draw.base_instance,
+                        instance_count: draw.instance_count,
+                        patch_index_range: draw.patch_index_range.clone(),
+                        triangle_vertices: &draw.triangles,
+                        atlas: draw.atlas.and(atlas_view.as_ref()),
+                        atlas_blit_vertices: &draw.atlas_blit_vertices,
+                        is_stroke: draw.is_stroke,
+                        is_feather: draw.is_feather,
                     })
-                    .unwrap_or_default();
-                prepared.push(PreparedAtomicDraw {
-                    spans,
-                    base_instance,
-                    instance_count,
-                    patch_index_range,
-                    triangles,
-                    atlas,
-                    atlas_blit_vertices,
-                    is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
-                    is_feather: draw.paint.feather != 0.0,
-                });
-            }
-            let max_atlas_region_width = prepared
-                .iter()
-                .filter_map(|draw| draw.atlas.map(|atlas| atlas.width))
-                .max()
-                .unwrap_or(1);
-            let pack_width = self.width.max(1).max(max_atlas_region_width);
-            let mut atlas_x = 0;
-            let mut atlas_y = 0;
-            let mut atlas_row_height = 0;
-            let mut atlas_width = 1;
-            for (index, draw) in prepared.iter_mut().enumerate() {
-                let Some(atlas) = &mut draw.atlas else {
-                    continue;
-                };
-                if atlas_x != 0 && atlas_x + atlas.width > pack_width {
-                    atlas_x = 0;
-                    atlas_y += atlas_row_height;
-                    atlas_row_height = 0;
-                }
-                atlas.origin = [atlas_x, atlas_y];
-                atlas.translate[0] += atlas_x as f32;
-                atlas.translate[1] += atlas_y as f32;
-                paths[index + 1].atlas_transform.translate_x = atlas.translate[0];
-                paths[index + 1].atlas_transform.translate_y = atlas.translate[1];
-                atlas_x += atlas.width;
-                atlas_row_height = atlas_row_height.max(atlas.height);
-                atlas_width = atlas_width.max(atlas_x);
-            }
-            let atlas_height = (atlas_y + atlas_row_height).max(1);
-            let tessellation_height = prepared
-                .iter()
-                .map(|draw| draw::tessellation_texture_height(&draw.spans))
-                .max()
-                .unwrap_or(1);
-            let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
-            uniforms.render_target_update_bounds = [0, 0, self.width as i32, self.height as i32];
-            uniforms.atlas_texture_inverse_size =
-                [1.0 / atlas_width as f32, 1.0 / atlas_height as f32];
-            uniforms.atlas_content_inverse_viewport =
-                [2.0 / atlas_width as f32, -2.0 / atlas_height as f32];
-            let mut tessellation_textures = Vec::with_capacity(prepared.len());
-            for draw in &prepared {
-                let tessellation_texture = self.context.tessellator.encode(
+                    .collect::<Vec<_>>();
+                self.context.atomic_pipeline.encode_batch(
                     &self.context.device,
-                    &mut encoder,
+                    encoder,
+                    &view,
                     &self.context.feather_lut.view,
-                    &draw.spans,
+                    &self.context.patch_vertex_buffer,
+                    &self.context.patch_index_buffer,
+                    &atomic_draws,
                     &uniforms,
                     &paths,
+                    &paints,
+                    &paint_aux,
                     &contours,
-                    tessellation_height,
+                    padded_width as usize * padded_height as usize,
                 );
-                tessellation_textures.push(tessellation_texture);
-            }
-            let tessellation_views = tessellation_textures
-                .iter()
-                .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()))
-                .collect::<Vec<_>>();
-            let paint_aux = vec![gpu::PaintAuxData::zeroed(); paths.len()];
-            let atlas_texture = prepared.iter().any(|draw| draw.atlas.is_some()).then(|| {
-                let texture = self
-                    .context
-                    .device
-                    .create_texture(&wgpu::TextureDescriptor {
-                        label: Some("nuxie-feather-atlas"),
-                        size: wgpu::Extent3d {
-                            width: atlas_width,
-                            height: atlas_height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::R16Float,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    });
-                let view = texture.create_view(&Default::default());
-                let mut clear = true;
-                for (index, draw) in prepared.iter().enumerate() {
-                    if let Some(atlas) = draw.atlas {
-                        self.context.atlas_pipeline.encode_mask(
-                            &self.context.device,
-                            &mut encoder,
-                            &view,
-                            &self.context.patch_vertex_buffer,
-                            &self.context.patch_index_buffer,
-                            &tessellation_views[index],
-                            &self.context.feather_lut.view,
-                            &uniforms,
-                            &paths,
-                            &paints,
-                            &paint_aux,
-                            &contours,
-                            draw.base_instance,
-                            draw.instance_count,
-                            draw.is_stroke,
-                            clear,
-                            [atlas.origin[0], atlas.origin[1], atlas.width, atlas.height],
-                        );
-                        clear = false;
-                    }
-                }
-                texture
-            });
-            let atlas_view = atlas_texture
-                .as_ref()
-                .map(|texture| texture.create_view(&Default::default()));
-            let atomic_draws = prepared
-                .iter()
-                .zip(&tessellation_views)
-                .map(|(draw, tessellation)| atomic_pipeline::AtomicDraw {
-                    tessellation,
-                    base_instance: draw.base_instance,
-                    instance_count: draw.instance_count,
-                    patch_index_range: draw.patch_index_range.clone(),
-                    triangle_vertices: &draw.triangles,
-                    atlas: draw.atlas.and(atlas_view.as_ref()),
-                    atlas_blit_vertices: &draw.atlas_blit_vertices,
-                    is_stroke: draw.is_stroke,
-                    is_feather: draw.is_feather,
-                })
-                .collect::<Vec<_>>();
-            self.context.atomic_pipeline.encode_batch(
-                &self.context.device,
-                &mut encoder,
-                &view,
-                &self.context.feather_lut.view,
-                &self.context.patch_vertex_buffer,
-                &self.context.patch_index_buffer,
-                &atomic_draws,
-                &uniforms,
-                &paths,
-                &paints,
-                &paint_aux,
-                &contours,
-                padded_width as usize * padded_height as usize,
-            );
+            };
+        let used_atomic = if atomic_eligible {
+            encode_atomic_run(&self.draws, true, &mut encoder);
             true
         } else {
             false

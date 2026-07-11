@@ -527,13 +527,16 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. M0-M7 remain complete; M8 is active. The regular ratchet passes at
-   exact=263 / exact-segments=584 / diverges=26 / unsupported-feature=6;
-   `cargo test --workspace` passes.
-2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
-   loop; it requires explicit user activation.
-3. Parked `unsupported-feature`, `gated`, and `harness` entries are M8 work
-   only where #V2-9 explicitly names them (notably scripting and residual
-   harness drainage).
+   exact=263 / exact-segments=584 / diverges=27 / unsupported-feature=5;
+   the scripting-enabled M8 lane is fully exact at exact=27 /
+   exact-segments=35 / diverges=0 / unsupported-feature=0; `cargo test
+   --workspace` passes.
+2. All substantive M8 runtime, SDK, hardening, and publishability work is
+   complete. The sole remaining exit item is the explicitly destructive full
+   history rewrite and force-push, pending user confirmation of the configured
+   identity and authorization.
+3. Do not start Phase R from the V2 goal loop; it requires explicit user
+   activation.
 
 19. M8 OPENED (user decision 2026-07-09; scope in porting-map-v2 #V2-9).
     Queue, in order:
@@ -3877,6 +3880,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Closed component-list instancing and rehearsed the final
+  history rewrite. `script_create_viewmodel_instance.riv` is scripted-exact;
+  the scripting lane is now exact=27 / exact-segments=35 / diverges=0 /
+  unsupported-feature=0, while the regular ratchet remains exact=263 /
+  exact-segments=584. Workspace tests and both corpus gates pass. The old
+  instance-0 decision remains blank-default because its two cited residuals
+  are exact after live component-list support. `git-filter-repo` 2.47.0 is
+  installed, and a fresh-clone rehearsal rewrote all 1,512 commits to
+  `Levi McCallum <levi@levimccallum.com>`, removed every `Co-Authored-By:`
+  trailer, preserved the 719-file tip tree and commit count, and passed
+  `git fsck`. Remaining: explicit user authorization for the real rewrite and
+  force-push of the working branch plus `main`.
 
 - 2026-07-10: [M8] Completed the non-destructive publishability work. Root
   README positions Nuxie Runtime as an independent pure-Rust runtime with

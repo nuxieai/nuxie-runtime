@@ -1,10 +1,11 @@
 use rive_capi::{
-    RiveArtboardInstance, RiveFile, RiveRenderCallbacks, RiveStateMachineInstance, RiveStatus,
-    RiveStringView, RiveViewModelInstance, rive_artboard_instance_advance,
+    RiveArtboardInstance, RiveFile, RiveRenderCache, RiveRenderCallbacks, RiveStateMachineInstance,
+    RiveStatus, RiveStringView, RiveViewModelInstance, rive_artboard_instance_advance,
     rive_artboard_instance_bind_view_model, rive_artboard_instance_draw,
-    rive_artboard_instance_free, rive_artboard_instance_new, rive_file_artboard_animation_count,
-    rive_file_artboard_count, rive_file_artboard_name, rive_file_artboard_state_machine_count,
-    rive_file_artboard_state_machine_name, rive_file_free, rive_file_import,
+    rive_artboard_instance_draw_cached, rive_artboard_instance_free, rive_artboard_instance_new,
+    rive_file_artboard_animation_count, rive_file_artboard_count, rive_file_artboard_name,
+    rive_file_artboard_state_machine_count, rive_file_artboard_state_machine_name, rive_file_free,
+    rive_file_import, rive_render_cache_free, rive_render_cache_new,
     rive_state_machine_instance_advance, rive_state_machine_instance_fire_trigger,
     rive_state_machine_instance_free, rive_state_machine_instance_new,
     rive_state_machine_instance_new_default, rive_state_machine_instance_pointer_down,
@@ -324,6 +325,56 @@ fn c_api_draw_with_empty_vtable_behaves_like_null_renderer() {
     let status = unsafe { rive_artboard_instance_draw(instance, &callbacks) };
     assert_eq!(status, RiveStatus::Ok);
 
+    unsafe {
+        rive_artboard_instance_free(instance);
+        rive_file_free(file);
+    }
+}
+
+#[test]
+fn c_api_retained_draw_reuses_and_releases_render_handles() {
+    let file = import_repo_fixture(SMI_FIXTURE);
+    let mut instance: *mut RiveArtboardInstance = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { rive_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) },
+        RiveStatus::Ok
+    );
+
+    let mut counters_data = RenderCounters::default();
+    let callbacks = RiveRenderCallbacks {
+        user_data: (&mut counters_data as *mut RenderCounters).cast::<c_void>(),
+        make_render_path: Some(counting_make_render_path),
+        make_empty_render_path: Some(counting_make_handle),
+        make_render_paint: Some(counting_make_handle),
+        release_render_path: Some(counting_release),
+        release_render_paint: Some(counting_release),
+        release_render_shader: Some(counting_release),
+        draw_path: Some(counting_draw_path),
+        ..RiveRenderCallbacks::default()
+    };
+    let mut cache: *mut RiveRenderCache = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { rive_render_cache_new(instance, &callbacks, &mut cache) },
+        RiveStatus::Ok
+    );
+    assert!(!cache.is_null());
+
+    assert_eq!(
+        unsafe { rive_artboard_instance_draw_cached(instance, cache) },
+        RiveStatus::Ok
+    );
+    let made_after_first_draw = counters_data.made;
+    let released_after_first_draw = counters_data.released;
+    assert!(made_after_first_draw > 0);
+    assert_eq!(
+        unsafe { rive_artboard_instance_draw_cached(instance, cache) },
+        RiveStatus::Ok
+    );
+    assert_eq!(counters_data.made, made_after_first_draw);
+    assert_eq!(counters_data.released, released_after_first_draw);
+
+    unsafe { rive_render_cache_free(cache) };
+    assert_eq!(counters_data.released, counters_data.made);
     unsafe {
         rive_artboard_instance_free(instance);
         rive_file_free(file);

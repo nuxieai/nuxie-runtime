@@ -209,10 +209,22 @@ int main(int argc, char** argv)
     callbacks.save = smoke_save;
     callbacks.restore = smoke_restore;
 
-    CHECK(rive_artboard_instance_draw(instance, &callbacks) == RIVE_STATUS_OK);
+    RiveRenderCache* render_cache = NULL;
+    CHECK(rive_render_cache_new(instance, &callbacks, &render_cache) ==
+          RIVE_STATUS_OK);
+    CHECK(render_cache != NULL);
+    CHECK(rive_artboard_instance_draw_cached(instance, render_cache) ==
+          RIVE_STATUS_OK);
+    size_t made_after_first_draw = counters.made;
+    size_t released_after_first_draw = counters.released;
+    CHECK(rive_artboard_instance_draw_cached(instance, render_cache) ==
+          RIVE_STATUS_OK);
+    CHECK(counters.made == made_after_first_draw);
+    CHECK(counters.released == released_after_first_draw);
     CHECK(counters.draw_paths > 0);
     CHECK(counters.saves == counters.restores);
     CHECK(counters.made > 0);
+    rive_render_cache_free(render_cache);
     CHECK(counters.made == counters.released);
 
     /* A fully NULL vtable must also draw cleanly (null renderer). */

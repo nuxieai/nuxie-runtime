@@ -668,14 +668,17 @@ the only memory the next session has. Update it every commit.
         9.5e-6 in world space. All runnable scripted entries are now exact.
         Component-list instancing remains the sole explicit scripted
         unsupported gap.
-    (b) C ABI: pointer events, view-model contexts, cache-holding draw
-        reusing render handles, default-SM selection alignment decision.
-    (c) Hardening: two audit scouts are running NOW (cross-language
-        semantic traps; adversarial review of retention/epoch + unsafe
-        code) — fix or explicitly accept each finding when their reports
-        land here. Extend cargo-fuzz to advance/draw/pointer paths in CI.
-    (d) PORTING.md: distill the C++->Rust idiom codex from the status
-        archives (prep artifact for Phase R).
+    (b) C ABI COMPLETE: pointer events, owned view-model contexts, explicit
+        cache-holding draw with instance affinity and balanced handle release,
+        and the recorded default-SM rule (authored default, else first) are
+        covered by Rust integration tests and the real C smoke loop.
+    (c) Hardening COMPLETE: both audits are resolved; import/runtime/pointer
+        fuzzers and guarded regressions run in CI with no known reachable panic
+        from accepted files.
+    (d) `docs/PORTING.md` COMPLETE: the C++->Rust idiom codex is committed.
+    (e) REMAINING: release prep item 26/#V2-9.5 — Nuxie rename sweep, README
+        positioning, license/notice hygiene, upstream corpus fetch instead of
+        vendored assets, then final history rewrite after user confirms email.
     Phase R remains gated on explicit user activation; its map now also
     records a Bun-style big-bang execution option to choose at
     activation.
@@ -3847,6 +3850,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Completed the C ABI embed-loop surface with retained draw.
+  The public Rust facade now exposes `ArtboardRenderCache`, while the C ABI
+  exposes an instance-bound opaque cache create/draw/free lifecycle that owns
+  callback-created paint/path handles across frames. Rust and C smoke coverage
+  prove a second clean draw creates and releases no handles, then cache
+  destruction balances every created object. Pointer events, owned view-model
+  contexts, and the authored-default-else-first state-machine rule were already
+  present; stale number-rebind caveats were removed after the landed mutation
+  generation fix. Workspace tests, C smoke, both corpus lanes, formatting, and
+  diff checks pass; metrics remain regular 263/584/26/6 and scripted 26/34/0/1.
+  Next: execute release prep item 26, beginning with a complete rename/file and
+  licensing inventory before the mechanical Nuxie sweep.
 
 - 2026-07-10: [M8] Ported C++ `Skin::onDirty` through
   `PointsPath::markSkinDirty`: constraint-driven bone updates now translate

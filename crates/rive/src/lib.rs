@@ -8,7 +8,8 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
 use rive_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeOwnedViewModelInstance,
-    RuntimeRenderPathCache, preallocate_render_paint_cache_for_artboard_tree,
+    RuntimeRenderPaintCache, RuntimeRenderPathCache,
+    preallocate_render_paint_cache_for_artboard_tree,
 };
 
 pub use rive_render_api::{
@@ -151,6 +152,16 @@ pub struct ArtboardInstance<'a> {
     raw: RuntimeArtboardInstance,
 }
 
+/// Render resources retained across draws of one [`ArtboardInstance`].
+///
+/// Create this from [`ArtboardInstance::new_render_cache`] with the same
+/// factory that will back subsequent draws. The factory's render resources
+/// remain owned by this cache until it is dropped.
+pub struct ArtboardRenderCache {
+    paint: RuntimeRenderPaintCache,
+    path: RuntimeRenderPathCache,
+}
+
 impl<'a> ArtboardInstance<'a> {
     pub fn artboard(&self) -> Artboard<'a> {
         Artboard {
@@ -240,10 +251,6 @@ impl<'a> ArtboardInstance<'a> {
     /// [`StateMachineInstance::bind_owned_view_model_context`] using
     /// [`ViewModelInstance::raw`].
     ///
-    /// Caveat: re-binding after a *number* mutation does not yet re-propagate on
-    /// this runtime (the number setter misses the mutation bump; a known runtime
-    /// issue tracked separately), so set number properties before the first bind
-    /// to be safe. String and boolean mutations re-propagate correctly.
     pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
         let mut changed = self
             .raw
@@ -280,23 +287,43 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
+        let mut cache = self.new_render_cache(factory);
+        self.draw_with_render_cache(factory, renderer, &mut cache)
+    }
+
+    /// Allocate the render resources retained by [`Self::draw_with_render_cache`].
+    pub fn new_render_cache(&self, factory: &mut dyn Factory) -> ArtboardRenderCache {
+        ArtboardRenderCache {
+            paint: preallocate_render_paint_cache_for_artboard_tree(
+                &self.file.runtime,
+                self.artboard().graph(),
+                &self.file.graph.artboards,
+                factory,
+            ),
+            path: RuntimeRenderPathCache::default(),
+        }
+    }
+
+    /// Draw while retaining paint and path handles across frames.
+    ///
+    /// `cache` must have been created by this instance with a factory backed
+    /// by the same renderer integration.
+    pub fn draw_with_render_cache(
+        &mut self,
+        factory: &mut dyn Factory,
+        renderer: &mut dyn Renderer,
+        cache: &mut ArtboardRenderCache,
+    ) -> Result<()> {
         self.raw.update_pass();
         let artboard = self.artboard().graph();
-        let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
-            &self.file.runtime,
-            artboard,
-            &self.file.graph.artboards,
-            factory,
-        );
-        let mut path_cache = RuntimeRenderPathCache::default();
         self.raw
             .prepare_static_artboard_tree_paints(
                 &self.file.runtime,
                 artboard,
                 &self.file.graph.artboards,
                 factory,
-                &mut paint_cache,
-                &mut path_cache,
+                &mut cache.paint,
+                &mut cache.path,
             )
             .context("failed to prepare Rive paints")?;
         self.raw
@@ -306,8 +333,8 @@ impl<'a> ArtboardInstance<'a> {
                 &self.file.graph.artboards,
                 factory,
                 renderer,
-                &mut paint_cache,
-                &mut path_cache,
+                &mut cache.paint,
+                &mut cache.path,
             )
             .context("failed to draw Rive artboard")
     }

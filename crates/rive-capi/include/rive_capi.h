@@ -18,6 +18,7 @@ extern "C" {
  *   RiveFile
  *     |- RiveArtboardInstance      (borrows the RiveFile)
  *          |- RiveStateMachineInstance
+ *          |- RiveRenderCache
  *
  * 1. A RiveFile must stay alive (not passed to rive_file_free) for as long
  *    as ANY RiveArtboardInstance created from it exists. Freeing the file
@@ -38,6 +39,9 @@ extern "C" {
  *    no free-ordering constraint relative to the file or artboard instance.
  *    It is only useful while bound to the artboard instance it was created
  *    from, which must be alive at bind time.
+ * 6. A RiveRenderCache is bound to the RiveArtboardInstance and render
+ *    callbacks used to create it. Free it before that artboard instance and
+ *    keep its callback user_data valid until rive_render_cache_free returns.
  *
  * PANIC SAFETY: no function ever unwinds across this ABI. When an internal
  * error is caught, functions returning RiveStatus report
@@ -59,6 +63,7 @@ typedef struct RiveFile RiveFile;
 typedef struct RiveArtboardInstance RiveArtboardInstance;
 typedef struct RiveStateMachineInstance RiveStateMachineInstance;
 typedef struct RiveViewModelInstance RiveViewModelInstance;
+typedef struct RiveRenderCache RiveRenderCache;
 
 typedef struct RiveStringView
 {
@@ -336,6 +341,19 @@ RiveStatus rive_artboard_instance_draw(
     RiveArtboardInstance* instance,
     const RiveRenderCallbacks* callbacks);
 
+/* Create a cache that retains render handles across frames. The callbacks and
+ * their user_data must remain usable until the cache is freed. */
+RiveStatus rive_render_cache_new(
+    const RiveArtboardInstance* instance,
+    const RiveRenderCallbacks* callbacks,
+    RiveRenderCache** out_cache);
+
+/* Draw using a cache created for this exact artboard instance. */
+RiveStatus rive_artboard_instance_draw_cached(
+    RiveArtboardInstance* instance,
+    RiveRenderCache* cache);
+void rive_render_cache_free(RiveRenderCache* cache);
+
 /* State machine instances. Free them before the artboard instance they were
  * created from. */
 
@@ -425,11 +443,7 @@ void rive_view_model_instance_free(RiveViewModelInstance* view_model);
 /* Properties are addressed by NUL-terminated UTF-8 name path, using '/' to
  * descend into nested view models (for example "child/width"). Each setter
  * returns RIVE_STATUS_NOT_FOUND when no settable property of the matching kind
- * exists at that path.
- *
- * Number mutations that follow an initial bind do not yet re-propagate through
- * a re-bind on this runtime (a known runtime issue, tracked separately); set
- * number properties before the first bind to be safe. */
+ * exists at that path. */
 RiveStatus rive_view_model_instance_set_number(
     RiveViewModelInstance* view_model,
     const char* name_path,

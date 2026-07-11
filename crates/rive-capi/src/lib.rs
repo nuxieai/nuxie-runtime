@@ -3,7 +3,7 @@ mod render_callbacks;
 pub use render_callbacks::{RiveImageSampler, RiveRawPathView, RiveRenderCallbacks};
 
 use render_callbacks::{CallbackFactory, CallbackRenderer};
-use rive::{ArtboardInstance, File, StateMachineInstance, ViewModelInstance};
+use rive::{ArtboardInstance, ArtboardRenderCache, File, StateMachineInstance, ViewModelInstance};
 use std::ffi::{CStr, c_char};
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
@@ -120,6 +120,13 @@ pub struct RiveArtboardInstance {
     /// use-after-free footgun in [`liveness`].
     #[cfg(debug_assertions)]
     file: *const RiveFile,
+}
+
+/// Render resources retained across draws of one artboard instance.
+pub struct RiveRenderCache {
+    instance: *const RiveArtboardInstance,
+    callbacks: RiveRenderCallbacks,
+    cache: ArtboardRenderCache,
 }
 
 /// Owned state machine instance. Advance it through the
@@ -443,6 +450,80 @@ pub unsafe extern "C" fn rive_artboard_instance_draw(
         match instance.instance.draw(&mut factory, &mut renderer) {
             Ok(()) => RiveStatus::Ok,
             Err(_) => RiveStatus::RuntimeError,
+        }
+    })
+}
+
+/// Create a retained render cache for `instance`. The callback table and its
+/// `user_data` must remain valid until `rive_render_cache_free` returns.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_render_cache_new(
+    instance: *const RiveArtboardInstance,
+    callbacks: *const RiveRenderCallbacks,
+    out_cache: *mut *mut RiveRenderCache,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        if out_cache.is_null() {
+            return RiveStatus::NullArgument;
+        }
+        unsafe {
+            *out_cache = ptr::null_mut();
+        }
+        let Some(instance_ref) = (unsafe { instance.as_ref() }) else {
+            return RiveStatus::NullArgument;
+        };
+        let Some(callbacks) = (unsafe { callbacks.as_ref() }).copied() else {
+            return RiveStatus::NullArgument;
+        };
+        let mut factory = CallbackFactory::new(callbacks);
+        let cache = instance_ref.instance.new_render_cache(&mut factory);
+        unsafe {
+            *out_cache = Box::into_raw(Box::new(RiveRenderCache {
+                instance,
+                callbacks,
+                cache,
+            }));
+        }
+        RiveStatus::Ok
+    })
+}
+
+/// Draw using render handles retained in `cache` from previous calls.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_artboard_instance_draw_cached(
+    instance: *mut RiveArtboardInstance,
+    cache: *mut RiveRenderCache,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        let Some(instance_ref) = (unsafe { instance.as_mut() }) else {
+            return RiveStatus::NullArgument;
+        };
+        let Some(cache) = (unsafe { cache.as_mut() }) else {
+            return RiveStatus::NullArgument;
+        };
+        if !std::ptr::eq(instance.cast_const(), cache.instance) {
+            return RiveStatus::InvalidArgument;
+        }
+        let mut factory = CallbackFactory::new(cache.callbacks);
+        let mut renderer = CallbackRenderer::new(cache.callbacks);
+        match instance_ref.instance.draw_with_render_cache(
+            &mut factory,
+            &mut renderer,
+            &mut cache.cache,
+        ) {
+            Ok(()) => RiveStatus::Ok,
+            Err(_) => RiveStatus::RuntimeError,
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_render_cache_free(cache: *mut RiveRenderCache) {
+    ffi_guard((), || {
+        if !cache.is_null() {
+            unsafe {
+                drop(Box::from_raw(cache));
+            }
         }
     })
 }
@@ -791,9 +872,6 @@ pub unsafe extern "C" fn rive_view_model_instance_free(view_model: *mut RiveView
 ///
 /// Note: for the mutation to reach the artboard, call
 /// `rive_artboard_instance_bind_view_model` after setting and before advancing.
-/// Re-binding after a *number* mutation does not yet re-propagate on this
-/// runtime (a known runtime issue, tracked separately); set number properties
-/// before the first bind to be safe.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rive_view_model_instance_set_number(
     view_model: *mut RiveViewModelInstance,

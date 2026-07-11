@@ -1,0 +1,31 @@
+rive-golden-stream-v1
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=5,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=6,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/two_bone_ik.riv" artboard="New Artboard" scene="New Artboard"
+frameSize width=500 height=500
+sample seconds=0
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=1,fillRule=2,path={verbs=[move,line,line,line,close],points=[(0,0),(500,0),(500,500),(0,500)]}}
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,0,0]
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,-0),(500,-0),(500,500),(-0,500)]}} paint={id=6,style=fill,color=0xff313131,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[0.995425224,-0.095543474,0.095543474,0.995425284,126.668762,369.542938]
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,cubic,cubic,cubic,cubic,close],points=[(7.84495205e-06,-63.2580566),(34.93647,-63.2580566),(63.2580643,-34.9364624),(63.2580643,-1.04492273e-07),(63.2580643,34.9364624),(34.93647,63.2580566),(7.41383701e-06,63.2580566),(-34.9364548,63.2580566),(-63.258049,34.9364624),(-63.258049,1.04492273e-07),(-63.258049,-34.9364624),(-34.9364548,-63.2580566),(7.84495205e-06,-63.2580566)]}} paint={id=5,style=fill,color=0xff747474,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[0.79412961,0.577124238,-0.587888777,0.808941722,169.369659,221.630203]
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,cubic,cubic,cubic,cubic,close],points=[(3.02736298e-05,-31.2729416),(17.2716045,-31.2729416),(31.2729797,-17.2715664),(31.2729797,8.30082172e-06),(31.2729797,17.2715816),(17.2716045,31.2729568),(3.07615264e-05,31.2729568),(-17.2715435,31.2729568),(-31.2729187,17.2715816),(-31.2729187,6.95796689e-06),(-31.2729187,-17.2715664),(-17.2715435,-31.2729416),(3.02736298e-05,-31.2729416)]}} paint={id=4,style=fill,color=0xff747474,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+frame

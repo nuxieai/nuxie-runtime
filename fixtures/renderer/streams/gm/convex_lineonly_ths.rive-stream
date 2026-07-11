@@ -1,0 +1,1047 @@
+rive-golden-stream-v1
+source file="gm:convex_lineonly_ths" artboard="" scene="convex_lineonly_ths"
+frameSize width=540 height=680
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,-50),(1.5,-50),(1.5,50),(-1.5,50)]}} paint={id=1,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,50),(1.5,50),(1.5,-50),(-1.5,-50)]}} paint={id=1,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=7,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=8,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=7,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,-50),(1.5,-50),(1.5,50),(-1.5,50)]}} paint={id=1,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=9,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=10,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=9,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,50),(1.5,50),(1.5,-50),(-1.5,-50)]}} paint={id=1,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=11,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=12,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=11,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,-50),(1.5,-50),(1.5,50),(-1.5,50)]}} paint={id=1,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=13,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=14,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=13,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,50),(1.5,50),(1.5,-50),(-1.5,-50)]}} paint={id=1,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=15,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=16,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,65]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=15,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-1.5,-50),(1.5,-50),(1.5,50),(-1.5,50)]}} paint={id=1,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=17,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=18,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=19,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=20,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=19,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-49),(-49,-50),(50,49),(49,50)]}} paint={id=2,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=21,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=22,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=21,fillRule=0,path={verbs=[move,line,line,line,close],points=[(49,50),(50,49),(-49,-50),(-50,-49)]}} paint={id=2,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=23,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=24,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=23,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-49),(-49,-50),(50,49),(49,50)]}} paint={id=2,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=25,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=26,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=25,fillRule=0,path={verbs=[move,line,line,line,close],points=[(49,50),(50,49),(-49,-50),(-50,-49)]}} paint={id=2,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=27,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=28,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=27,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-49),(-49,-50),(50,49),(49,50)]}} paint={id=2,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=29,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=30,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=29,fillRule=0,path={verbs=[move,line,line,line,close],points=[(49,50),(50,49),(-49,-50),(-50,-49)]}} paint={id=2,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=31,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=32,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,65]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=31,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-49),(-49,-50),(50,49),(49,50)]}} paint={id=2,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=33,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=34,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=35,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=36,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=35,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-10,-50),(10,-50),(50,50),(-50,50)]}} paint={id=3,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=37,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=38,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=37,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,50),(50,50),(10,-50),(-10,-50)]}} paint={id=3,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=39,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=40,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=39,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-10,-50),(10,-50),(50,50),(-50,50)]}} paint={id=3,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=41,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=42,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=41,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,50),(50,50),(10,-50),(-10,-50)]}} paint={id=3,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=43,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=44,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=43,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-10,-50),(10,-50),(50,50),(-50,50)]}} paint={id=3,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=45,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=46,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=45,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,50),(50,50),(10,-50),(-10,-50)]}} paint={id=3,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=47,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=48,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,65]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=47,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-10,-50),(10,-50),(50,50),(-50,50)]}} paint={id=3,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=49,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=50,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=51,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=52,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=51,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-50),(0,-50),(50,50),(0,50)]}} paint={id=4,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=53,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=54,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=53,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,50),(50,50),(0,-50),(-50,-50)]}} paint={id=4,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=55,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=56,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=55,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-50),(0,-50),(50,50),(0,50)]}} paint={id=4,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=57,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=58,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=57,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,50),(50,50),(0,-50),(-50,-50)]}} paint={id=4,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=59,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=60,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=59,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-50),(0,-50),(50,50),(0,50)]}} paint={id=4,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=61,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=62,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=61,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,50),(50,50),(0,-50),(-50,-50)]}} paint={id=4,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=63,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=64,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,65]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=63,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-50,-50),(0,-50),(50,50),(0,50)]}} paint={id=4,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=65,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=66,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=5,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=67,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=68,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=67,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-6,-50),(4,-50),(5,-25),(6,0),(5,25),(4,50),(-4,50)]}} paint={id=5,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=69,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=70,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=69,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-4,50),(4,50),(5,25),(6,0),(5,-25),(4,-50),(-6,-50)]}} paint={id=5,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=71,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=72,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=71,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-6,-50),(4,-50),(5,-25),(6,0),(5,25),(4,50),(-4,50)]}} paint={id=5,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=73,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=74,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=73,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-4,50),(4,50),(5,25),(6,0),(5,-25),(4,-50),(-6,-50)]}} paint={id=5,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=75,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=76,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=75,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-6,-50),(4,-50),(5,-25),(6,0),(5,25),(4,50),(-4,50)]}} paint={id=5,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=77,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=78,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=77,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-4,50),(4,50),(5,25),(6,0),(5,-25),(4,-50),(-6,-50)]}} paint={id=5,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=79,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=80,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,195]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=79,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-6,-50),(4,-50),(5,-25),(6,0),(5,25),(4,50),(-4,50)]}} paint={id=5,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=81,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=82,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=6,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=83,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=84,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=83,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,-0.0250000004),(0.0250000004,-0.0250000004),(0.0250000004,0.0250000004),(-0.0250000004,0.0250000004)]}} paint={id=6,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=85,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=86,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=85,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,0.0250000004),(0.0250000004,0.0250000004),(0.0250000004,-0.0250000004),(-0.0250000004,-0.0250000004)]}} paint={id=6,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=87,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=88,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=87,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,-0.0250000004),(0.0250000004,-0.0250000004),(0.0250000004,0.0250000004),(-0.0250000004,0.0250000004)]}} paint={id=6,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=89,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=90,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=89,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,0.0250000004),(0.0250000004,0.0250000004),(0.0250000004,-0.0250000004),(-0.0250000004,-0.0250000004)]}} paint={id=6,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=91,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=92,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=91,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,-0.0250000004),(0.0250000004,-0.0250000004),(0.0250000004,0.0250000004),(-0.0250000004,0.0250000004)]}} paint={id=6,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=93,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=94,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=93,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,0.0250000004),(0.0250000004,0.0250000004),(0.0250000004,-0.0250000004),(-0.0250000004,-0.0250000004)]}} paint={id=6,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=95,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=96,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,195]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=95,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0.0250000004,-0.0250000004),(0.0250000004,-0.0250000004),(0.0250000004,0.0250000004),(-0.0250000004,0.0250000004)]}} paint={id=6,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=97,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=98,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=7,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=99,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=100,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=99,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-20,-13),(-20,-13.0500002),(20,-13),(20,27)]}} paint={id=7,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=101,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=102,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=101,fillRule=0,path={verbs=[move,line,line,line,close],points=[(20,27),(20,-13),(-20,-13.0500002),(-20,-13)]}} paint={id=7,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=103,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=104,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=103,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-20,-13),(-20,-13.0500002),(20,-13),(20,27)]}} paint={id=7,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=105,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=106,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=105,fillRule=0,path={verbs=[move,line,line,line,close],points=[(20,27),(20,-13),(-20,-13.0500002),(-20,-13)]}} paint={id=7,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=107,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=108,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=107,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-20,-13),(-20,-13.0500002),(20,-13),(20,27)]}} paint={id=7,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=109,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=110,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=109,fillRule=0,path={verbs=[move,line,line,line,close],points=[(20,27),(20,-13),(-20,-13.0500002),(-20,-13)]}} paint={id=7,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=111,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=112,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,195]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=111,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-20,-13),(-20,-13.0500002),(20,-13),(20,27)]}} paint={id=7,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=113,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=114,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=8,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=115,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=116,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=115,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(10,-25),(10,0),(10,25),(10,50),(-10,50)]}} paint={id=8,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=117,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=118,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=117,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,50),(10,50),(10,25),(10,0),(10,-25),(10,-50),(-10,-50)]}} paint={id=8,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=119,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=120,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=119,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(10,-25),(10,0),(10,25),(10,50),(-10,50)]}} paint={id=8,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=121,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=122,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=121,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,50),(10,50),(10,25),(10,0),(10,-25),(10,-50),(-10,-50)]}} paint={id=8,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=123,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=124,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=123,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(10,-25),(10,0),(10,25),(10,50),(-10,50)]}} paint={id=8,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=125,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=126,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=125,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,50),(10,50),(10,25),(10,0),(10,-25),(10,-50),(-10,-50)]}} paint={id=8,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=127,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=128,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,195]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=127,fillRule=0,path={verbs=[move,line,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(10,-25),(10,0),(10,25),(10,50),(-10,50)]}} paint={id=8,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=129,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=130,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=9,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=131,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=132,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=131,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,50),(0,50),(-15.4499998,47.5499992),(-29.3899994,40.4500008),(-40.4500008,29.3899994),(-47.5499992,15.4499998),(-50,0),(-47.5499992,-15.4499998),(-40.4500008,-29.3899994),(-29.3899994,-40.4500008),(-15.4499998,-47.5499992),(0,-50),(50,-50)]}} paint={id=9,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=133,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=134,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=133,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,-50),(0,-50),(-15.4499998,-47.5499992),(-29.3899994,-40.4500008),(-40.4500008,-29.3899994),(-47.5499992,-15.4499998),(-50,0),(-47.5499992,15.4499998),(-40.4500008,29.3899994),(-29.3899994,40.4500008),(-15.4499998,47.5499992),(0,50),(50,50)]}} paint={id=9,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=135,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=136,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=135,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,50),(0,50),(-15.4499998,47.5499992),(-29.3899994,40.4500008),(-40.4500008,29.3899994),(-47.5499992,15.4499998),(-50,0),(-47.5499992,-15.4499998),(-40.4500008,-29.3899994),(-29.3899994,-40.4500008),(-15.4499998,-47.5499992),(0,-50),(50,-50)]}} paint={id=9,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=137,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=138,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=137,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,-50),(0,-50),(-15.4499998,-47.5499992),(-29.3899994,-40.4500008),(-40.4500008,-29.3899994),(-47.5499992,-15.4499998),(-50,0),(-47.5499992,15.4499998),(-40.4500008,29.3899994),(-29.3899994,40.4500008),(-15.4499998,47.5499992),(0,50),(50,50)]}} paint={id=9,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=139,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=140,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=139,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,50),(0,50),(-15.4499998,47.5499992),(-29.3899994,40.4500008),(-40.4500008,29.3899994),(-47.5499992,15.4499998),(-50,0),(-47.5499992,-15.4499998),(-40.4500008,-29.3899994),(-29.3899994,-40.4500008),(-15.4499998,-47.5499992),(0,-50),(50,-50)]}} paint={id=9,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=141,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=142,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=141,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,-50),(0,-50),(-15.4499998,-47.5499992),(-29.3899994,-40.4500008),(-40.4500008,-29.3899994),(-47.5499992,-15.4499998),(-50,0),(-47.5499992,15.4499998),(-40.4500008,29.3899994),(-29.3899994,40.4500008),(-15.4499998,47.5499992),(0,50),(50,50)]}} paint={id=9,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=143,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=144,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,325]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=143,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(50,50),(0,50),(-15.4499998,47.5499992),(-29.3899994,40.4500008),(-40.4500008,29.3899994),(-47.5499992,15.4499998),(-50,0),(-47.5499992,-15.4499998),(-40.4500008,-29.3899994),(-29.3899994,-40.4500008),(-15.4499998,-47.5499992),(0,-50),(50,-50)]}} paint={id=9,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=145,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=146,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=10,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=147,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=148,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=147,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.38999987,40.4500008),(-9.55000019,47.5499992),(-25,50),(-40.4500008,47.5499992),(-54.3899994,40.4500008),(-65.4499969,29.3899994),(-72.5500031,15.4499998),(-75,0),(-72.5500031,-15.4499998),(-65.4499969,-29.3899994),(-54.3899994,-40.4500008),(-40.4500008,-47.5499992),(-25,-50),(-9.55000019,-47.5499992),(4.38999987,-40.4500008),(75,0)]}} paint={id=10,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=149,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=150,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=149,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(75,0),(4.38999987,-40.4500008),(-9.55000019,-47.5499992),(-25,-50),(-40.4500008,-47.5499992),(-54.3899994,-40.4500008),(-65.4499969,-29.3899994),(-72.5500031,-15.4499998),(-75,0),(-72.5500031,15.4499998),(-65.4499969,29.3899994),(-54.3899994,40.4500008),(-40.4500008,47.5499992),(-25,50),(-9.55000019,47.5499992),(4.38999987,40.4500008)]}} paint={id=10,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=151,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=152,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=151,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.38999987,40.4500008),(-9.55000019,47.5499992),(-25,50),(-40.4500008,47.5499992),(-54.3899994,40.4500008),(-65.4499969,29.3899994),(-72.5500031,15.4499998),(-75,0),(-72.5500031,-15.4499998),(-65.4499969,-29.3899994),(-54.3899994,-40.4500008),(-40.4500008,-47.5499992),(-25,-50),(-9.55000019,-47.5499992),(4.38999987,-40.4500008),(75,0)]}} paint={id=10,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=153,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=154,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=153,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(75,0),(4.38999987,-40.4500008),(-9.55000019,-47.5499992),(-25,-50),(-40.4500008,-47.5499992),(-54.3899994,-40.4500008),(-65.4499969,-29.3899994),(-72.5500031,-15.4499998),(-75,0),(-72.5500031,15.4499998),(-65.4499969,29.3899994),(-54.3899994,40.4500008),(-40.4500008,47.5499992),(-25,50),(-9.55000019,47.5499992),(4.38999987,40.4500008)]}} paint={id=10,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=155,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=156,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=155,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.38999987,40.4500008),(-9.55000019,47.5499992),(-25,50),(-40.4500008,47.5499992),(-54.3899994,40.4500008),(-65.4499969,29.3899994),(-72.5500031,15.4499998),(-75,0),(-72.5500031,-15.4499998),(-65.4499969,-29.3899994),(-54.3899994,-40.4500008),(-40.4500008,-47.5499992),(-25,-50),(-9.55000019,-47.5499992),(4.38999987,-40.4500008),(75,0)]}} paint={id=10,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=157,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=158,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=157,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(75,0),(4.38999987,-40.4500008),(-9.55000019,-47.5499992),(-25,-50),(-40.4500008,-47.5499992),(-54.3899994,-40.4500008),(-65.4499969,-29.3899994),(-72.5500031,-15.4499998),(-75,0),(-72.5500031,15.4499998),(-65.4499969,29.3899994),(-54.3899994,40.4500008),(-40.4500008,47.5499992),(-25,50),(-9.55000019,47.5499992),(4.38999987,40.4500008)]}} paint={id=10,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=159,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=160,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,325]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=159,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.38999987,40.4500008),(-9.55000019,47.5499992),(-25,50),(-40.4500008,47.5499992),(-54.3899994,40.4500008),(-65.4499969,29.3899994),(-72.5500031,15.4499998),(-75,0),(-72.5500031,-15.4499998),(-65.4499969,-29.3899994),(-54.3899994,-40.4500008),(-40.4500008,-47.5499992),(-25,-50),(-9.55000019,-47.5499992),(4.38999987,-40.4500008),(75,0)]}} paint={id=10,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=161,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=162,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=11,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=163,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=164,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=163,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(50,31),(40,50),(-40,50),(-50,31)]}} paint={id=11,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=165,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=166,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=165,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-50,31),(-40,50),(40,50),(50,31),(10,-50),(-10,-50)]}} paint={id=11,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=167,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=168,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=167,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(50,31),(40,50),(-40,50),(-50,31)]}} paint={id=11,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=169,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=170,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=169,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-50,31),(-40,50),(40,50),(50,31),(10,-50),(-10,-50)]}} paint={id=11,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=171,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=172,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=171,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(50,31),(40,50),(-40,50),(-50,31)]}} paint={id=11,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=173,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=174,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=173,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-50,31),(-40,50),(40,50),(50,31),(10,-50),(-10,-50)]}} paint={id=11,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=175,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=176,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,325]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=175,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-10,-50),(10,-50),(50,31),(40,50),(-40,50),(-50,31)]}} paint={id=11,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=177,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=178,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=12,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=179,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=180,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=179,fillRule=0,path={verbs=[move,line,line,close],points=[(-56.2916527,32.4999962),(5.68248061e-06,-65),(56.2916374,32.5000229)]}} paint={id=12,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=181,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=182,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=181,fillRule=0,path={verbs=[move,line,line,close],points=[(56.2916374,32.5000229),(5.68248061e-06,-65),(-56.2916527,32.4999962)]}} paint={id=12,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=183,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=184,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=183,fillRule=0,path={verbs=[move,line,line,close],points=[(-56.2916527,32.4999962),(5.68248061e-06,-65),(56.2916374,32.5000229)]}} paint={id=12,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=185,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=186,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=185,fillRule=0,path={verbs=[move,line,line,close],points=[(56.2916374,32.5000229),(5.68248061e-06,-65),(-56.2916527,32.4999962)]}} paint={id=12,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=187,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=188,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=187,fillRule=0,path={verbs=[move,line,line,close],points=[(-56.2916527,32.4999962),(5.68248061e-06,-65),(56.2916374,32.5000229)]}} paint={id=12,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=189,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=190,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=189,fillRule=0,path={verbs=[move,line,line,close],points=[(56.2916374,32.5000229),(5.68248061e-06,-65),(-56.2916527,32.4999962)]}} paint={id=12,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=191,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=192,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,325]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=191,fillRule=0,path={verbs=[move,line,line,close],points=[(-56.2916527,32.4999962),(5.68248061e-06,-65),(56.2916374,32.5000229)]}} paint={id=12,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=193,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=194,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=13,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=195,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=196,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=195,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,65),(-65,-2.8412403e-06),(5.68248061e-06,-65),(65,7.75117257e-07)]}} paint={id=13,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=197,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=198,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=197,fillRule=0,path={verbs=[move,line,line,line,close],points=[(65,7.75117257e-07),(5.68248061e-06,-65),(-65,-2.8412403e-06),(-0,65)]}} paint={id=13,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=199,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=200,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=199,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,65),(-65,-2.8412403e-06),(5.68248061e-06,-65),(65,7.75117257e-07)]}} paint={id=13,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=201,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=202,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=201,fillRule=0,path={verbs=[move,line,line,line,close],points=[(65,7.75117257e-07),(5.68248061e-06,-65),(-65,-2.8412403e-06),(-0,65)]}} paint={id=13,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=203,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=204,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=203,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,65),(-65,-2.8412403e-06),(5.68248061e-06,-65),(65,7.75117257e-07)]}} paint={id=13,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=205,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=206,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=205,fillRule=0,path={verbs=[move,line,line,line,close],points=[(65,7.75117257e-07),(5.68248061e-06,-65),(-65,-2.8412403e-06),(-0,65)]}} paint={id=13,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=207,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=208,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,455]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=207,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,65),(-65,-2.8412403e-06),(5.68248061e-06,-65),(65,7.75117257e-07)]}} paint={id=13,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=209,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=210,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=14,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=211,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=212,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=211,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-38.2060394,52.5861053),(-61.8186722,-20.0861073),(5.68248061e-06,-65),(61.8186798,-20.0860825),(38.2060432,52.5861015)]}} paint={id=14,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=213,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=214,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=213,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(38.2060432,52.5861015),(61.8186798,-20.0860825),(5.68248061e-06,-65),(-61.8186722,-20.0861073),(-38.2060394,52.5861053)]}} paint={id=14,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=215,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=216,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=215,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-38.2060394,52.5861053),(-61.8186722,-20.0861073),(5.68248061e-06,-65),(61.8186798,-20.0860825),(38.2060432,52.5861015)]}} paint={id=14,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=217,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=218,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=217,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(38.2060432,52.5861015),(61.8186798,-20.0860825),(5.68248061e-06,-65),(-61.8186722,-20.0861073),(-38.2060394,52.5861053)]}} paint={id=14,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=219,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=220,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=219,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-38.2060394,52.5861053),(-61.8186722,-20.0861073),(5.68248061e-06,-65),(61.8186798,-20.0860825),(38.2060432,52.5861015)]}} paint={id=14,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=221,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=222,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=221,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(38.2060432,52.5861015),(61.8186798,-20.0860825),(5.68248061e-06,-65),(-61.8186722,-20.0861073),(-38.2060394,52.5861053)]}} paint={id=14,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=223,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=224,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,455]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=223,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-38.2060394,52.5861053),(-61.8186722,-20.0861073),(5.68248061e-06,-65),(61.8186798,-20.0860825),(38.2060432,52.5861015)]}} paint={id=14,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=225,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=226,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=15,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=227,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=228,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=227,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-15.2824163,52.5861053),(-24.7274685,-20.0861073),(2.27299211e-06,-65),(24.7274723,-20.0860825),(15.2824183,52.5861015)]}} paint={id=15,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=229,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=230,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=229,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(15.2824183,52.5861015),(24.7274723,-20.0860825),(2.27299211e-06,-65),(-24.7274685,-20.0861073),(-15.2824163,52.5861053)]}} paint={id=15,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=231,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=232,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=231,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-15.2824163,52.5861053),(-24.7274685,-20.0861073),(2.27299211e-06,-65),(24.7274723,-20.0860825),(15.2824183,52.5861015)]}} paint={id=15,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=233,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=234,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=233,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(15.2824183,52.5861015),(24.7274723,-20.0860825),(2.27299211e-06,-65),(-24.7274685,-20.0861073),(-15.2824163,52.5861053)]}} paint={id=15,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=235,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=236,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=235,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-15.2824163,52.5861053),(-24.7274685,-20.0861073),(2.27299211e-06,-65),(24.7274723,-20.0860825),(15.2824183,52.5861015)]}} paint={id=15,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=237,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=238,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=237,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(15.2824183,52.5861015),(24.7274723,-20.0860825),(2.27299211e-06,-65),(-24.7274685,-20.0861073),(-15.2824163,52.5861053)]}} paint={id=15,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=239,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=240,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,455]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=239,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(-15.2824163,52.5861053),(-24.7274685,-20.0861073),(2.27299211e-06,-65),(24.7274723,-20.0860825),(15.2824183,52.5861015)]}} paint={id=15,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=241,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=242,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=16,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=243,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=244,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=243,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-0,65),(-56.2916527,32.4999962),(-56.2916489,-32.5000038),(5.68248061e-06,-65),(56.2916527,-32.4999924),(56.2916374,32.5000229)]}} paint={id=16,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=245,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=246,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=245,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(56.2916374,32.5000229),(56.2916527,-32.4999924),(5.68248061e-06,-65),(-56.2916489,-32.5000038),(-56.2916527,32.4999962),(-0,65)]}} paint={id=16,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=247,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=248,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=247,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-0,65),(-56.2916527,32.4999962),(-56.2916489,-32.5000038),(5.68248061e-06,-65),(56.2916527,-32.4999924),(56.2916374,32.5000229)]}} paint={id=16,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=249,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=250,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=249,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(56.2916374,32.5000229),(56.2916527,-32.4999924),(5.68248061e-06,-65),(-56.2916489,-32.5000038),(-56.2916527,32.4999962),(-0,65)]}} paint={id=16,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=251,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=252,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=251,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-0,65),(-56.2916527,32.4999962),(-56.2916489,-32.5000038),(5.68248061e-06,-65),(56.2916527,-32.4999924),(56.2916374,32.5000229)]}} paint={id=16,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=253,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=254,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=253,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(56.2916374,32.5000229),(56.2916527,-32.4999924),(5.68248061e-06,-65),(-56.2916489,-32.5000038),(-56.2916527,32.4999962),(-0,65)]}} paint={id=16,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=255,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=256,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,455]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=255,fillRule=0,path={verbs=[move,line,line,line,line,line,close],points=[(-0,65),(-56.2916527,32.4999962),(-56.2916489,-32.5000038),(5.68248061e-06,-65),(56.2916527,-32.4999924),(56.2916374,32.5000229)]}} paint={id=16,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=257,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=258,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=17,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=259,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=260,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=259,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-45.9619408,45.9619408),(-65,-2.8412403e-06),(-45.9619408,-45.9619408),(5.68248061e-06,-65),(45.961937,-45.9619446),(65,7.75117257e-07),(45.9619484,45.9619331)]}} paint={id=17,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=261,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=262,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=261,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(45.9619484,45.9619331),(65,7.75117257e-07),(45.961937,-45.9619446),(5.68248061e-06,-65),(-45.9619408,-45.9619408),(-65,-2.8412403e-06),(-45.9619408,45.9619408),(-0,65)]}} paint={id=17,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=263,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=264,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=263,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-45.9619408,45.9619408),(-65,-2.8412403e-06),(-45.9619408,-45.9619408),(5.68248061e-06,-65),(45.961937,-45.9619446),(65,7.75117257e-07),(45.9619484,45.9619331)]}} paint={id=17,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=265,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=266,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=265,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(45.9619484,45.9619331),(65,7.75117257e-07),(45.961937,-45.9619446),(5.68248061e-06,-65),(-45.9619408,-45.9619408),(-65,-2.8412403e-06),(-45.9619408,45.9619408),(-0,65)]}} paint={id=17,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=267,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=268,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=267,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-45.9619408,45.9619408),(-65,-2.8412403e-06),(-45.9619408,-45.9619408),(5.68248061e-06,-65),(45.961937,-45.9619446),(65,7.75117257e-07),(45.9619484,45.9619331)]}} paint={id=17,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=269,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=270,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=269,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(45.9619484,45.9619331),(65,7.75117257e-07),(45.961937,-45.9619446),(5.68248061e-06,-65),(-45.9619408,-45.9619408),(-65,-2.8412403e-06),(-45.9619408,45.9619408),(-0,65)]}} paint={id=17,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=271,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=272,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,65,585]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=271,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-45.9619408,45.9619408),(-65,-2.8412403e-06),(-45.9619408,-45.9619408),(5.68248061e-06,-65),(45.961937,-45.9619446),(65,7.75117257e-07),(45.9619484,45.9619331)]}} paint={id=17,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=273,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=274,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=18,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=275,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=276,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=275,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-18.3847752,45.9619408),(-26,-2.8412403e-06),(-18.3847752,-45.9619408),(2.27299211e-06,-65),(18.3847752,-45.9619446),(26,7.75117257e-07),(18.384779,45.9619331)]}} paint={id=18,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=277,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=278,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=277,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(18.384779,45.9619331),(26,7.75117257e-07),(18.3847752,-45.9619446),(2.27299211e-06,-65),(-18.3847752,-45.9619408),(-26,-2.8412403e-06),(-18.3847752,45.9619408),(-0,65)]}} paint={id=18,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=279,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=280,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=279,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-18.3847752,45.9619408),(-26,-2.8412403e-06),(-18.3847752,-45.9619408),(2.27299211e-06,-65),(18.3847752,-45.9619446),(26,7.75117257e-07),(18.384779,45.9619331)]}} paint={id=18,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=281,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=282,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=281,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(18.384779,45.9619331),(26,7.75117257e-07),(18.3847752,-45.9619446),(2.27299211e-06,-65),(-18.3847752,-45.9619408),(-26,-2.8412403e-06),(-18.3847752,45.9619408),(-0,65)]}} paint={id=18,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=283,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=284,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=283,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-18.3847752,45.9619408),(-26,-2.8412403e-06),(-18.3847752,-45.9619408),(2.27299211e-06,-65),(18.3847752,-45.9619446),(26,7.75117257e-07),(18.384779,45.9619331)]}} paint={id=18,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=285,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=286,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=285,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(18.384779,45.9619331),(26,7.75117257e-07),(18.3847752,-45.9619446),(2.27299211e-06,-65),(-18.3847752,-45.9619408),(-26,-2.8412403e-06),(-18.3847752,45.9619408),(-0,65)]}} paint={id=18,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=287,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=288,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,195,585]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=287,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(-0,65),(-18.3847752,45.9619408),(-26,-2.8412403e-06),(-18.3847752,-45.9619408),(2.27299211e-06,-65),(18.3847752,-45.9619446),(26,7.75117257e-07),(18.384779,45.9619331)]}} paint={id=18,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=289,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=290,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=19,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=291,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=292,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=291,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-20.0861053,61.818676),(-38.2060394,52.5861053),(-52.5861053,38.2060394),(-61.818676,20.0861034),(-65,-2.8412403e-06),(-61.8186722,-20.0861073),(-52.5860977,-38.2060509),(-38.2060356,-52.5861092),(-20.0861073,-61.8186722),(5.68248061e-06,-65),(20.0861034,-61.818676),(38.2060471,-52.5861015),(52.586113,-38.206028),(61.8186798,-20.0860825),(65,7.75117257e-07),(61.8186722,20.086113),(52.5860939,38.2060547),(38.2060432,52.5861015),(20.0861015,61.818676)]}} paint={id=19,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=293,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=294,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=293,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(20.0861015,61.818676),(38.2060432,52.5861015),(52.5860939,38.2060547),(61.8186722,20.086113),(65,7.75117257e-07),(61.8186798,-20.0860825),(52.586113,-38.206028),(38.2060471,-52.5861015),(20.0861034,-61.818676),(5.68248061e-06,-65),(-20.0861073,-61.8186722),(-38.2060356,-52.5861092),(-52.5860977,-38.2060509),(-61.8186722,-20.0861073),(-65,-2.8412403e-06),(-61.818676,20.0861034),(-52.5861053,38.2060394),(-38.2060394,52.5861053),(-20.0861053,61.818676),(-0,65)]}} paint={id=19,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=295,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=296,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=295,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-20.0861053,61.818676),(-38.2060394,52.5861053),(-52.5861053,38.2060394),(-61.818676,20.0861034),(-65,-2.8412403e-06),(-61.8186722,-20.0861073),(-52.5860977,-38.2060509),(-38.2060356,-52.5861092),(-20.0861073,-61.8186722),(5.68248061e-06,-65),(20.0861034,-61.818676),(38.2060471,-52.5861015),(52.586113,-38.206028),(61.8186798,-20.0860825),(65,7.75117257e-07),(61.8186722,20.086113),(52.5860939,38.2060547),(38.2060432,52.5861015),(20.0861015,61.818676)]}} paint={id=19,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=297,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=298,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=297,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(20.0861015,61.818676),(38.2060432,52.5861015),(52.5860939,38.2060547),(61.8186722,20.086113),(65,7.75117257e-07),(61.8186798,-20.0860825),(52.586113,-38.206028),(38.2060471,-52.5861015),(20.0861034,-61.818676),(5.68248061e-06,-65),(-20.0861073,-61.8186722),(-38.2060356,-52.5861092),(-52.5860977,-38.2060509),(-61.8186722,-20.0861073),(-65,-2.8412403e-06),(-61.818676,20.0861034),(-52.5861053,38.2060394),(-38.2060394,52.5861053),(-20.0861053,61.818676),(-0,65)]}} paint={id=19,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=299,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=300,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=299,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-20.0861053,61.818676),(-38.2060394,52.5861053),(-52.5861053,38.2060394),(-61.818676,20.0861034),(-65,-2.8412403e-06),(-61.8186722,-20.0861073),(-52.5860977,-38.2060509),(-38.2060356,-52.5861092),(-20.0861073,-61.8186722),(5.68248061e-06,-65),(20.0861034,-61.818676),(38.2060471,-52.5861015),(52.586113,-38.206028),(61.8186798,-20.0860825),(65,7.75117257e-07),(61.8186722,20.086113),(52.5860939,38.2060547),(38.2060432,52.5861015),(20.0861015,61.818676)]}} paint={id=19,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=301,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=302,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=301,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(20.0861015,61.818676),(38.2060432,52.5861015),(52.5860939,38.2060547),(61.8186722,20.086113),(65,7.75117257e-07),(61.8186798,-20.0860825),(52.586113,-38.206028),(38.2060471,-52.5861015),(20.0861034,-61.818676),(5.68248061e-06,-65),(-20.0861073,-61.8186722),(-38.2060356,-52.5861092),(-52.5860977,-38.2060509),(-61.8186722,-20.0861073),(-65,-2.8412403e-06),(-61.818676,20.0861034),(-52.5861053,38.2060394),(-38.2060394,52.5861053),(-20.0861053,61.818676),(-0,65)]}} paint={id=19,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=303,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=304,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,325,585]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=303,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-20.0861053,61.818676),(-38.2060394,52.5861053),(-52.5861053,38.2060394),(-61.818676,20.0861034),(-65,-2.8412403e-06),(-61.8186722,-20.0861073),(-52.5860977,-38.2060509),(-38.2060356,-52.5861092),(-20.0861073,-61.8186722),(5.68248061e-06,-65),(20.0861034,-61.818676),(38.2060471,-52.5861015),(52.586113,-38.206028),(61.8186798,-20.0860825),(65,7.75117257e-07),(61.8186722,20.086113),(52.5860939,38.2060547),(38.2060432,52.5861015),(20.0861015,61.818676)]}} paint={id=19,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=305,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=306,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=20,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=307,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=308,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=307,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-4.08138323,64.8717346),(-8.1466589,64.4874573),(-12.1797848,63.848671),(-16.1648426,62.9579048),(-20.0861053,61.818676),(-23.9280968,60.4354706),(-27.6756535,58.8137589),(-31.3139915,56.9599342),(-34.8287468,54.8813171),(-38.2060394,52.5861053),(-41.43256,50.0833588),(-44.4955597,47.3829651),(-47.3829575,44.4955673),(-50.0833549,41.4325638),(-52.5860977,38.2060471),(-54.8813095,34.8287468),(-56.9599304,31.3139992),(-58.8137512,27.6756687),(-60.4354668,23.9281082),(-61.8186722,20.0861168),(-62.957901,16.164854),(-63.848671,12.1798029),(-64.4874496,8.14668369),(-64.8717346,4.08141327),(-65,2.040457e-05),(-64.8717346,-4.081357),(-64.4874573,-8.14663506),(-63.8486786,-12.1797552),(-62.9579124,-16.1648064),(-61.8186836,-20.0860786),(-60.435482,-23.9280643),(-58.8137741,-27.6756191),(-56.9599533,-31.3139553),(-54.8813362,-34.8287125),(-52.5861244,-38.2060127),(-50.0833855,-41.4325333),(-47.3829842,-44.4955406),(-44.4955826,-47.3829422),(-41.4325676,-50.0833511),(-38.2060471,-52.5860977),(-34.8287506,-54.8813095),(-31.313982,-56.959938),(-27.6756458,-58.8137627),(-23.9280853,-60.4354744),(-20.0860786,-61.8186836),(-16.1648293,-62.9579086),(-12.1797543,-63.8486786),(-8.14662743,-64.4874573),(-4.08133364,-64.8717422),(5.21741058e-05,-65),(4.08143759,-64.8717346),(8.14673138,-64.487442),(12.1798573,-63.8486595),(16.1649151,-62.9578857),(20.0861931,-61.8186455),(23.9281826,-60.4354362),(27.6757412,-58.8137169),(31.3140869,-56.9598808),(34.8288383,-54.8812523),(38.2061348,-52.5860367),(41.4326591,-50.0832748),(44.4956589,-47.3828659),(47.3830528,-44.4954643),(50.0834503,-41.4324532),(52.5862045,-38.2059059),(54.8814087,-34.8285942),(56.9600182,-31.3138351),(58.8138313,-27.6754951),(60.4355392,-23.9279308),(61.8187294,-20.0859356),(62.9579544,-16.1646385),(63.8487053,-12.1796074),(64.4874802,-8.1464777),(64.8717499,-4.08119869),(65,0.000217736015),(64.8717194,4.08160257),(64.4874268,8.1468792),(63.8486328,12.1800041),(62.9578514,16.16506),(61.8185921,20.0863495),(60.4353752,23.9283352),(58.8136482,27.67589),(56.9598083,31.3142185),(54.881176,34.8289642),(52.5859489,38.2062569),(50.0831718,41.4327888),(47.3827553,44.4957809),(44.4953423,47.3831673),(41.4323273,50.0835533),(38.2057953,52.5862846),(34.8284569,54.8814964),(31.3136921,56.9600983),(27.6753445,58.8139038),(23.9277477,60.4356079),(20.0857773,61.818779),(16.1644783,62.9580002),(12.1794138,63.8487434),(8.14628315,64.4875031),(4.08100271,64.8717575)]}} paint={id=20,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=309,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=310,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[0.75,0,0,0.75,0,0]
+drawPath path={id=309,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.08100271,64.8717575),(8.14628315,64.4875031),(12.1794138,63.8487434),(16.1644783,62.9580002),(20.0857773,61.818779),(23.9277477,60.4356079),(27.6753445,58.8139038),(31.3136921,56.9600983),(34.8284569,54.8814964),(38.2057953,52.5862846),(41.4323273,50.0835533),(44.4953423,47.3831673),(47.3827553,44.4957809),(50.0831718,41.4327888),(52.5859489,38.2062569),(54.881176,34.8289642),(56.9598083,31.3142185),(58.8136482,27.67589),(60.4353752,23.9283352),(61.8185921,20.0863495),(62.9578514,16.16506),(63.8486328,12.1800041),(64.4874268,8.1468792),(64.8717194,4.08160257),(65,0.000217736015),(64.8717499,-4.08119869),(64.4874802,-8.1464777),(63.8487053,-12.1796074),(62.9579544,-16.1646385),(61.8187294,-20.0859356),(60.4355392,-23.9279308),(58.8138313,-27.6754951),(56.9600182,-31.3138351),(54.8814087,-34.8285942),(52.5862045,-38.2059059),(50.0834503,-41.4324532),(47.3830528,-44.4954643),(44.4956589,-47.3828659),(41.4326591,-50.0832748),(38.2061348,-52.5860367),(34.8288383,-54.8812523),(31.3140869,-56.9598808),(27.6757412,-58.8137169),(23.9281826,-60.4354362),(20.0861931,-61.8186455),(16.1649151,-62.9578857),(12.1798573,-63.8486595),(8.14673138,-64.487442),(4.08143759,-64.8717346),(5.21741058e-05,-65),(-4.08133364,-64.8717422),(-8.14662743,-64.4874573),(-12.1797543,-63.8486786),(-16.1648293,-62.9579086),(-20.0860786,-61.8186836),(-23.9280853,-60.4354744),(-27.6756458,-58.8137627),(-31.313982,-56.959938),(-34.8287506,-54.8813095),(-38.2060471,-52.5860977),(-41.4325676,-50.0833511),(-44.4955826,-47.3829422),(-47.3829842,-44.4955406),(-50.0833855,-41.4325333),(-52.5861244,-38.2060127),(-54.8813362,-34.8287125),(-56.9599533,-31.3139553),(-58.8137741,-27.6756191),(-60.435482,-23.9280643),(-61.8186836,-20.0860786),(-62.9579124,-16.1648064),(-63.8486786,-12.1797552),(-64.4874573,-8.14663506),(-64.8717346,-4.081357),(-65,2.040457e-05),(-64.8717346,4.08141327),(-64.4874496,8.14668369),(-63.848671,12.1798029),(-62.957901,16.164854),(-61.8186722,20.0861168),(-60.4354668,23.9281082),(-58.8137512,27.6756687),(-56.9599304,31.3139992),(-54.8813095,34.8287468),(-52.5860977,38.2060471),(-50.0833549,41.4325638),(-47.3829575,44.4955673),(-44.4955597,47.3829651),(-41.43256,50.0833588),(-38.2060394,52.5861053),(-34.8287468,54.8813171),(-31.3139915,56.9599342),(-27.6756535,58.8137589),(-23.9280968,60.4354706),(-20.0861053,61.818676),(-16.1648426,62.9579048),(-12.1797848,63.848671),(-8.1466589,64.4874573),(-4.08138323,64.8717346),(-0,65)]}} paint={id=20,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=311,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=312,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[0.5,0,0,0.5,0,0]
+drawPath path={id=311,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-4.08138323,64.8717346),(-8.1466589,64.4874573),(-12.1797848,63.848671),(-16.1648426,62.9579048),(-20.0861053,61.818676),(-23.9280968,60.4354706),(-27.6756535,58.8137589),(-31.3139915,56.9599342),(-34.8287468,54.8813171),(-38.2060394,52.5861053),(-41.43256,50.0833588),(-44.4955597,47.3829651),(-47.3829575,44.4955673),(-50.0833549,41.4325638),(-52.5860977,38.2060471),(-54.8813095,34.8287468),(-56.9599304,31.3139992),(-58.8137512,27.6756687),(-60.4354668,23.9281082),(-61.8186722,20.0861168),(-62.957901,16.164854),(-63.848671,12.1798029),(-64.4874496,8.14668369),(-64.8717346,4.08141327),(-65,2.040457e-05),(-64.8717346,-4.081357),(-64.4874573,-8.14663506),(-63.8486786,-12.1797552),(-62.9579124,-16.1648064),(-61.8186836,-20.0860786),(-60.435482,-23.9280643),(-58.8137741,-27.6756191),(-56.9599533,-31.3139553),(-54.8813362,-34.8287125),(-52.5861244,-38.2060127),(-50.0833855,-41.4325333),(-47.3829842,-44.4955406),(-44.4955826,-47.3829422),(-41.4325676,-50.0833511),(-38.2060471,-52.5860977),(-34.8287506,-54.8813095),(-31.313982,-56.959938),(-27.6756458,-58.8137627),(-23.9280853,-60.4354744),(-20.0860786,-61.8186836),(-16.1648293,-62.9579086),(-12.1797543,-63.8486786),(-8.14662743,-64.4874573),(-4.08133364,-64.8717422),(5.21741058e-05,-65),(4.08143759,-64.8717346),(8.14673138,-64.487442),(12.1798573,-63.8486595),(16.1649151,-62.9578857),(20.0861931,-61.8186455),(23.9281826,-60.4354362),(27.6757412,-58.8137169),(31.3140869,-56.9598808),(34.8288383,-54.8812523),(38.2061348,-52.5860367),(41.4326591,-50.0832748),(44.4956589,-47.3828659),(47.3830528,-44.4954643),(50.0834503,-41.4324532),(52.5862045,-38.2059059),(54.8814087,-34.8285942),(56.9600182,-31.3138351),(58.8138313,-27.6754951),(60.4355392,-23.9279308),(61.8187294,-20.0859356),(62.9579544,-16.1646385),(63.8487053,-12.1796074),(64.4874802,-8.1464777),(64.8717499,-4.08119869),(65,0.000217736015),(64.8717194,4.08160257),(64.4874268,8.1468792),(63.8486328,12.1800041),(62.9578514,16.16506),(61.8185921,20.0863495),(60.4353752,23.9283352),(58.8136482,27.67589),(56.9598083,31.3142185),(54.881176,34.8289642),(52.5859489,38.2062569),(50.0831718,41.4327888),(47.3827553,44.4957809),(44.4953423,47.3831673),(41.4323273,50.0835533),(38.2057953,52.5862846),(34.8284569,54.8814964),(31.3136921,56.9600983),(27.6753445,58.8139038),(23.9277477,60.4356079),(20.0857773,61.818779),(16.1644783,62.9580002),(12.1794138,63.8487434),(8.14628315,64.4875031),(4.08100271,64.8717575)]}} paint={id=20,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=313,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=314,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[0.25,0,0,0.25,0,0]
+drawPath path={id=313,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.08100271,64.8717575),(8.14628315,64.4875031),(12.1794138,63.8487434),(16.1644783,62.9580002),(20.0857773,61.818779),(23.9277477,60.4356079),(27.6753445,58.8139038),(31.3136921,56.9600983),(34.8284569,54.8814964),(38.2057953,52.5862846),(41.4323273,50.0835533),(44.4953423,47.3831673),(47.3827553,44.4957809),(50.0831718,41.4327888),(52.5859489,38.2062569),(54.881176,34.8289642),(56.9598083,31.3142185),(58.8136482,27.67589),(60.4353752,23.9283352),(61.8185921,20.0863495),(62.9578514,16.16506),(63.8486328,12.1800041),(64.4874268,8.1468792),(64.8717194,4.08160257),(65,0.000217736015),(64.8717499,-4.08119869),(64.4874802,-8.1464777),(63.8487053,-12.1796074),(62.9579544,-16.1646385),(61.8187294,-20.0859356),(60.4355392,-23.9279308),(58.8138313,-27.6754951),(56.9600182,-31.3138351),(54.8814087,-34.8285942),(52.5862045,-38.2059059),(50.0834503,-41.4324532),(47.3830528,-44.4954643),(44.4956589,-47.3828659),(41.4326591,-50.0832748),(38.2061348,-52.5860367),(34.8288383,-54.8812523),(31.3140869,-56.9598808),(27.6757412,-58.8137169),(23.9281826,-60.4354362),(20.0861931,-61.8186455),(16.1649151,-62.9578857),(12.1798573,-63.8486595),(8.14673138,-64.487442),(4.08143759,-64.8717346),(5.21741058e-05,-65),(-4.08133364,-64.8717422),(-8.14662743,-64.4874573),(-12.1797543,-63.8486786),(-16.1648293,-62.9579086),(-20.0860786,-61.8186836),(-23.9280853,-60.4354744),(-27.6756458,-58.8137627),(-31.313982,-56.959938),(-34.8287506,-54.8813095),(-38.2060471,-52.5860977),(-41.4325676,-50.0833511),(-44.4955826,-47.3829422),(-47.3829842,-44.4955406),(-50.0833855,-41.4325333),(-52.5861244,-38.2060127),(-54.8813362,-34.8287125),(-56.9599533,-31.3139553),(-58.8137741,-27.6756191),(-60.435482,-23.9280643),(-61.8186836,-20.0860786),(-62.9579124,-16.1648064),(-63.8486786,-12.1797552),(-64.4874573,-8.14663506),(-64.8717346,-4.081357),(-65,2.040457e-05),(-64.8717346,4.08141327),(-64.4874496,8.14668369),(-63.848671,12.1798029),(-62.957901,16.164854),(-61.8186722,20.0861168),(-60.4354668,23.9281082),(-58.8137512,27.6756687),(-56.9599304,31.3139992),(-54.8813095,34.8287468),(-52.5860977,38.2060471),(-50.0833549,41.4325638),(-47.3829575,44.4955673),(-44.4955597,47.3829651),(-41.43256,50.0833588),(-38.2060394,52.5861053),(-34.8287468,54.8813171),(-31.3139915,56.9599342),(-27.6756535,58.8137589),(-23.9280968,60.4354706),(-20.0861053,61.818676),(-16.1648426,62.9579048),(-12.1797848,63.848671),(-8.1466589,64.4874573),(-4.08138323,64.8717346),(-0,65)]}} paint={id=20,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=315,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=316,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[0.100000001,0,0,0.100000001,0,0]
+drawPath path={id=315,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-4.08138323,64.8717346),(-8.1466589,64.4874573),(-12.1797848,63.848671),(-16.1648426,62.9579048),(-20.0861053,61.818676),(-23.9280968,60.4354706),(-27.6756535,58.8137589),(-31.3139915,56.9599342),(-34.8287468,54.8813171),(-38.2060394,52.5861053),(-41.43256,50.0833588),(-44.4955597,47.3829651),(-47.3829575,44.4955673),(-50.0833549,41.4325638),(-52.5860977,38.2060471),(-54.8813095,34.8287468),(-56.9599304,31.3139992),(-58.8137512,27.6756687),(-60.4354668,23.9281082),(-61.8186722,20.0861168),(-62.957901,16.164854),(-63.848671,12.1798029),(-64.4874496,8.14668369),(-64.8717346,4.08141327),(-65,2.040457e-05),(-64.8717346,-4.081357),(-64.4874573,-8.14663506),(-63.8486786,-12.1797552),(-62.9579124,-16.1648064),(-61.8186836,-20.0860786),(-60.435482,-23.9280643),(-58.8137741,-27.6756191),(-56.9599533,-31.3139553),(-54.8813362,-34.8287125),(-52.5861244,-38.2060127),(-50.0833855,-41.4325333),(-47.3829842,-44.4955406),(-44.4955826,-47.3829422),(-41.4325676,-50.0833511),(-38.2060471,-52.5860977),(-34.8287506,-54.8813095),(-31.313982,-56.959938),(-27.6756458,-58.8137627),(-23.9280853,-60.4354744),(-20.0860786,-61.8186836),(-16.1648293,-62.9579086),(-12.1797543,-63.8486786),(-8.14662743,-64.4874573),(-4.08133364,-64.8717422),(5.21741058e-05,-65),(4.08143759,-64.8717346),(8.14673138,-64.487442),(12.1798573,-63.8486595),(16.1649151,-62.9578857),(20.0861931,-61.8186455),(23.9281826,-60.4354362),(27.6757412,-58.8137169),(31.3140869,-56.9598808),(34.8288383,-54.8812523),(38.2061348,-52.5860367),(41.4326591,-50.0832748),(44.4956589,-47.3828659),(47.3830528,-44.4954643),(50.0834503,-41.4324532),(52.5862045,-38.2059059),(54.8814087,-34.8285942),(56.9600182,-31.3138351),(58.8138313,-27.6754951),(60.4355392,-23.9279308),(61.8187294,-20.0859356),(62.9579544,-16.1646385),(63.8487053,-12.1796074),(64.4874802,-8.1464777),(64.8717499,-4.08119869),(65,0.000217736015),(64.8717194,4.08160257),(64.4874268,8.1468792),(63.8486328,12.1800041),(62.9578514,16.16506),(61.8185921,20.0863495),(60.4353752,23.9283352),(58.8136482,27.67589),(56.9598083,31.3142185),(54.881176,34.8289642),(52.5859489,38.2062569),(50.0831718,41.4327888),(47.3827553,44.4957809),(44.4953423,47.3831673),(41.4323273,50.0835533),(38.2057953,52.5862846),(34.8284569,54.8814964),(31.3136921,56.9600983),(27.6753445,58.8139038),(23.9277477,60.4356079),(20.0857773,61.818779),(16.1644783,62.9580002),(12.1794138,63.8487434),(8.14628315,64.4875031),(4.08100271,64.8717575)]}} paint={id=20,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=317,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=318,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[0.00999999978,0,0,0.00999999978,0,0]
+drawPath path={id=317,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(4.08100271,64.8717575),(8.14628315,64.4875031),(12.1794138,63.8487434),(16.1644783,62.9580002),(20.0857773,61.818779),(23.9277477,60.4356079),(27.6753445,58.8139038),(31.3136921,56.9600983),(34.8284569,54.8814964),(38.2057953,52.5862846),(41.4323273,50.0835533),(44.4953423,47.3831673),(47.3827553,44.4957809),(50.0831718,41.4327888),(52.5859489,38.2062569),(54.881176,34.8289642),(56.9598083,31.3142185),(58.8136482,27.67589),(60.4353752,23.9283352),(61.8185921,20.0863495),(62.9578514,16.16506),(63.8486328,12.1800041),(64.4874268,8.1468792),(64.8717194,4.08160257),(65,0.000217736015),(64.8717499,-4.08119869),(64.4874802,-8.1464777),(63.8487053,-12.1796074),(62.9579544,-16.1646385),(61.8187294,-20.0859356),(60.4355392,-23.9279308),(58.8138313,-27.6754951),(56.9600182,-31.3138351),(54.8814087,-34.8285942),(52.5862045,-38.2059059),(50.0834503,-41.4324532),(47.3830528,-44.4954643),(44.4956589,-47.3828659),(41.4326591,-50.0832748),(38.2061348,-52.5860367),(34.8288383,-54.8812523),(31.3140869,-56.9598808),(27.6757412,-58.8137169),(23.9281826,-60.4354362),(20.0861931,-61.8186455),(16.1649151,-62.9578857),(12.1798573,-63.8486595),(8.14673138,-64.487442),(4.08143759,-64.8717346),(5.21741058e-05,-65),(-4.08133364,-64.8717422),(-8.14662743,-64.4874573),(-12.1797543,-63.8486786),(-16.1648293,-62.9579086),(-20.0860786,-61.8186836),(-23.9280853,-60.4354744),(-27.6756458,-58.8137627),(-31.313982,-56.959938),(-34.8287506,-54.8813095),(-38.2060471,-52.5860977),(-41.4325676,-50.0833511),(-44.4955826,-47.3829422),(-47.3829842,-44.4955406),(-50.0833855,-41.4325333),(-52.5861244,-38.2060127),(-54.8813362,-34.8287125),(-56.9599533,-31.3139553),(-58.8137741,-27.6756191),(-60.435482,-23.9280643),(-61.8186836,-20.0860786),(-62.9579124,-16.1648064),(-63.8486786,-12.1797552),(-64.4874573,-8.14663506),(-64.8717346,-4.081357),(-65,2.040457e-05),(-64.8717346,4.08141327),(-64.4874496,8.14668369),(-63.848671,12.1798029),(-62.957901,16.164854),(-61.8186722,20.0861168),(-60.4354668,23.9281082),(-58.8137512,27.6756687),(-56.9599304,31.3139992),(-54.8813095,34.8287468),(-52.5860977,38.2060471),(-50.0833549,41.4325638),(-47.3829575,44.4955673),(-44.4955597,47.3829651),(-41.43256,50.0833588),(-38.2060394,52.5861053),(-34.8287468,54.8813171),(-31.3139915,56.9599342),(-27.6756535,58.8137589),(-23.9280968,60.4354706),(-20.0861053,61.818676),(-16.1648426,62.9579048),(-12.1797848,63.848671),(-8.1466589,64.4874573),(-4.08138323,64.8717346),(-0,65)]}} paint={id=20,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=319,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=320,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,455,585]
+transform matrix=[0.00100000005,0,0,0.00100000005,0,0]
+drawPath path={id=319,fillRule=0,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,close],points=[(-0,65),(-4.08138323,64.8717346),(-8.1466589,64.4874573),(-12.1797848,63.848671),(-16.1648426,62.9579048),(-20.0861053,61.818676),(-23.9280968,60.4354706),(-27.6756535,58.8137589),(-31.3139915,56.9599342),(-34.8287468,54.8813171),(-38.2060394,52.5861053),(-41.43256,50.0833588),(-44.4955597,47.3829651),(-47.3829575,44.4955673),(-50.0833549,41.4325638),(-52.5860977,38.2060471),(-54.8813095,34.8287468),(-56.9599304,31.3139992),(-58.8137512,27.6756687),(-60.4354668,23.9281082),(-61.8186722,20.0861168),(-62.957901,16.164854),(-63.848671,12.1798029),(-64.4874496,8.14668369),(-64.8717346,4.08141327),(-65,2.040457e-05),(-64.8717346,-4.081357),(-64.4874573,-8.14663506),(-63.8486786,-12.1797552),(-62.9579124,-16.1648064),(-61.8186836,-20.0860786),(-60.435482,-23.9280643),(-58.8137741,-27.6756191),(-56.9599533,-31.3139553),(-54.8813362,-34.8287125),(-52.5861244,-38.2060127),(-50.0833855,-41.4325333),(-47.3829842,-44.4955406),(-44.4955826,-47.3829422),(-41.4325676,-50.0833511),(-38.2060471,-52.5860977),(-34.8287506,-54.8813095),(-31.313982,-56.959938),(-27.6756458,-58.8137627),(-23.9280853,-60.4354744),(-20.0860786,-61.8186836),(-16.1648293,-62.9579086),(-12.1797543,-63.8486786),(-8.14662743,-64.4874573),(-4.08133364,-64.8717422),(5.21741058e-05,-65),(4.08143759,-64.8717346),(8.14673138,-64.487442),(12.1798573,-63.8486595),(16.1649151,-62.9578857),(20.0861931,-61.8186455),(23.9281826,-60.4354362),(27.6757412,-58.8137169),(31.3140869,-56.9598808),(34.8288383,-54.8812523),(38.2061348,-52.5860367),(41.4326591,-50.0832748),(44.4956589,-47.3828659),(47.3830528,-44.4954643),(50.0834503,-41.4324532),(52.5862045,-38.2059059),(54.8814087,-34.8285942),(56.9600182,-31.3138351),(58.8138313,-27.6754951),(60.4355392,-23.9279308),(61.8187294,-20.0859356),(62.9579544,-16.1646385),(63.8487053,-12.1796074),(64.4874802,-8.1464777),(64.8717499,-4.08119869),(65,0.000217736015),(64.8717194,4.08160257),(64.4874268,8.1468792),(63.8486328,12.1800041),(62.9578514,16.16506),(61.8185921,20.0863495),(60.4353752,23.9283352),(58.8136482,27.67589),(56.9598083,31.3142185),(54.881176,34.8289642),(52.5859489,38.2062569),(50.0831718,41.4327888),(47.3827553,44.4957809),(44.4953423,47.3831673),(41.4323273,50.0835533),(38.2057953,52.5862846),(34.8284569,54.8814964),(31.3136921,56.9600983),(27.6753445,58.8139038),(23.9277477,60.4356079),(20.0857773,61.818779),(16.1644783,62.9580002),(12.1794138,63.8487434),(8.14628315,64.4875031),(4.08100271,64.8717575)]}} paint={id=20,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+frame

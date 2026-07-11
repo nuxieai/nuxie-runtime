@@ -1,0 +1,11 @@
+rive-golden-stream-v1
+source file="gm:transparentclear_blendmode" artboard="" scene="transparentclear_blendmode"
+frameSize width=64 height=64
+clearColor value=0x8000ffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(64,0),(64,64),(0,64)]}} paint={id=1,style=stroke,color=0x80404000,thickness=10,join=0,cap=0,feather=0,blendMode=19,shader=0}
+restore
+frame

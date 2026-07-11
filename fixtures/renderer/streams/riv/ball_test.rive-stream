@@ -1,0 +1,41 @@
+rive-golden-stream-v1
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=5,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=6,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=7,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=8,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=9,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/ball_test.riv" artboard="Artboard" scene="State Machine 1"
+frameSize width=500 height=500
+sample seconds=0
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=1,fillRule=2,path={verbs=[move,line,line,line,close],points=[(0,0),(500,0),(500,500),(0,500)]}}
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,0,0]
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,-0),(500,-0),(500,500),(-0,500)]}} paint={id=9,style=fill,color=0xff313131,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,91.0000076,100]
+save
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=3,fillRule=2,path={verbs=[move,line,line,line,close],points=[(-0,-0),(300,-0),(300,300),(-0,300)]}}
+save
+transform matrix=[1,0,0,1,0,0]
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,-0),(300,-0),(300,300),(-0,300)]}} paint={id=8,style=fill,color=0xff313131,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,148.666672,216.996964]
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic,cubic,cubic,cubic,close],points=[(0,-78.3333359),(43.26231,-78.3333359),(78.3333359,-43.26231),(78.3333359,0),(78.3333359,43.26231),(43.26231,78.3333359),(0,78.3333359),(-43.26231,78.3333359),(-78.3333359,43.26231),(-78.3333359,0),(-78.3333359,-43.26231),(-43.26231,-78.3333359),(0,-78.3333359)]}} paint={id=7,style=fill,color=0xff2654ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+restore
+restore
+frame

@@ -1,0 +1,1 @@
+solar-system	import-error:drawable-object-13-Shape-has-invalid-blendModeValue-5

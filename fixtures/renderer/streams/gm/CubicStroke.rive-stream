@@ -1,0 +1,14 @@
+rive-golden-stream-v1
+source file="gm:CubicStroke" artboard="" scene="CubicStroke"
+frameSize width=384 height=384
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(-6000,-6000),(-3500,5500),(-500,5500),(2500,-6500)]}} paint={id=1,style=stroke,color=0xff000000,thickness=1.07200003,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,10,10]
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(-6000,-6000),(-3500,5500),(-500,5500),(2500,-6500)]}} paint={id=1,style=stroke,color=0xff000000,thickness=1.07210004,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,10,10]
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(-6000,-6000),(-3500,5500),(-500,5500),(2500,-6500)]}} paint={id=1,style=stroke,color=0xff000000,thickness=1.07219994,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

@@ -16,6 +16,8 @@ struct Entry {
     stream: PathBuf,
     reference: PathBuf,
     status: String,
+    #[serde(default)]
+    frame: usize,
     max_channel_delta: u8,
     max_different_pixels: u64,
     gated: Option<String>,
@@ -30,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut gated = 0usize;
 
     for entry in &manifest.entry {
-        if entry.status == "gated" && !options.expect_all_fail {
+        if entry.status == "gated" {
             gated += 1;
             println!(
                 "gated {}: {}",
@@ -44,6 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .args(["--stream", path_str(&entry.stream)?])
             .args(["--output", path_str(&actual)?])
             .args(["--backend", &options.backend])
+            .args(["--frame", &entry.frame.to_string()])
             .status()?;
         if !replay.success() {
             return Err(format!("renderer replay failed for {}", entry.id).into());

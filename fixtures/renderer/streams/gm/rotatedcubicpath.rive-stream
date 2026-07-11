@@ -1,0 +1,13 @@
+rive-golden-stream-v1
+source file="gm:rotatedcubicpath" artboard="" scene="rotatedcubicpath"
+frameSize width=100 height=100
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,20,40]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic,cubic,cubic,close],points=[(48,-23),(48,-29.5),(6,-30),(6,-30),(6,-30),(2,0),(2,0),(2,0),(44,-21.5),(48,-23)]}} paint={id=1,style=fill,color=0xff0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[-0.448073626,0.893996656,-0.893996656,-0.448073626,0,0]
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic,cubic,cubic,close],points=[(48,-23),(48,-29.5),(6,-30),(6,-30),(6,-30),(2,0),(2,0),(2,0),(44,-21.5),(48,-23)]}} paint={id=1,style=fill,color=0xffff0000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

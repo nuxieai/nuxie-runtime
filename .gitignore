@@ -11,3 +11,11 @@
 /tools/golden-runner/build/linux/
 /tools/golden-runner/build/macosx/
 /tools/golden-runner/build/windows/
+/tools/gm-stream-capture/build/Makefile
+/tools/gm-stream-capture/build/*.make
+/tools/gm-stream-capture/build/gm-files.txt
+/tools/gm-stream-capture/build/linux/
+/tools/gm-stream-capture/build/macosx/
+/tools/gm-stream-capture/build/windows/
+/tools/gm-stream-capture/generated-gates.txt
+/tools/gm-stream-capture/generated_registry.inc

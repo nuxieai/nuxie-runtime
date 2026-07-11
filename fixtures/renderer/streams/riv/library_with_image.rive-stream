@@ -1,0 +1,23 @@
+rive-golden-stream-v1
+decodeImage id=1 width=15 height=15 data=89504e470d0a1a0a0000000d494844520000000f0000000f08060000003bd6954a000000097048597300000b1300000b1301009a9c18000000017352474200aece1ce90000000467414d410000b18f0bfc61050000008a494441547801a5935b1183301000b7551009b150058d94560148c0097182042480037000c7cc65c20f8f1c3bb393fcdc2397046010971bf662253a949718c52fd7785d47f123ce14e0b5fad6458301a7c11346d20c785386d775a490403e737d967de2f8ca222738ad30ec4cc95a0c04f2943d06e293ea8edc7ec040a3c11d46d247fa953e928d7fdaacc322316b34f7f1170000000049454e44ae426082
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/library_with_image.riv" artboard="My Artboard" scene="My Artboard"
+frameSize width=500 height=500
+sample seconds=0
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=1,fillRule=2,path={verbs=[move,line,line,line,close],points=[(0,0),(500,0),(500,500),(0,500)]}}
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,1,2]
+save
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=2,fillRule=2,path={verbs=[move,line,line,line,close],points=[(-0,-0),(500,-0),(500,500),(-0,500)]}}
+save
+transform matrix=[1,0,0,1,0,0]
+transform matrix=[1,0,0,1,-7.5,-7.5]
+drawImage image=1 sampler={wrapX=0,wrapY=0,filter=0,key=0} blendMode=3 opacity=1
+restore
+restore
+restore
+restore
+frame

@@ -484,6 +484,12 @@ impl RecordingFactory {
             .line(format!("frameSize width={width} height={height}"));
     }
 
+    pub fn clear_color(&mut self, color: ColorInt) {
+        self.stream
+            .borrow_mut()
+            .line(format!("clearColor value=0x{color:08x}"));
+    }
+
     pub fn stream(&self) -> String {
         self.stream.borrow().lines.clone()
     }

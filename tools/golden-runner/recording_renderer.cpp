@@ -911,6 +911,11 @@ void RecordingFactory::frameSize(uint32_t width, uint32_t height)
     m_stream.line(out.str());
 }
 
+void RecordingFactory::clearColor(rive::ColorInt color)
+{
+    m_stream.line("clearColor value=" + colorToString(color));
+}
+
 std::string RecordingFactory::stream() const { return m_stream.str(); }
 
 void RecordingFactory::clear()

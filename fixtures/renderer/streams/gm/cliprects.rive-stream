@@ -1,0 +1,92 @@
+rive-golden-stream-v1
+source file="gm:cliprects" artboard="" scene="cliprects"
+frameSize width=600 height=600
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+save
+save
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,25),(175,25),(175,175),(25,175)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,30),(170,30),(170,170),(30,170)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,25),(175,25),(175,175),(25,175)]}} paint={id=2,style=fill,color=0xfff6aea6,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,200,0]
+save
+transform matrix=[1,0,0,1,100,100]
+transform matrix=[0.923879504,0.382683456,-0.382683456,0.923879504,0,0]
+transform matrix=[1,0,0,1,-100,-100]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,25),(175,25),(175,175),(25,175)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,30),(170,30),(170,170),(30,170)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,25),(175,25),(175,175),(25,175)]}} paint={id=2,style=fill,color=0xffc88f9c,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,200,0]
+save
+transform matrix=[1,0,0,1,100,100]
+transform matrix=[0.899999976,0.100000001,-0.300000012,0.699999988,0,0]
+transform matrix=[1,0,0,1,-100,-100]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,25),(175,25),(175,175),(25,175)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,30),(170,30),(170,170),(30,170)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,25),(175,25),(175,175),(25,175)]}} paint={id=2,style=fill,color=0xffe4d7f8,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+save
+save
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,225),(175,225),(175,375),(25,375)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,230),(170,230),(170,370),(30,370)]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,225),(175,225),(175,375),(25,375)]}} paint={id=2,style=fill,color=0xffb99392,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,200,0]
+save
+transform matrix=[1,0,0,1,100,300]
+transform matrix=[0.923879504,0.382683456,-0.382683456,0.923879504,0,0]
+transform matrix=[1,0,0,1,-100,-300]
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,225),(175,225),(175,375),(25,375)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,230),(170,230),(170,370),(30,370)]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,225),(175,225),(175,375),(25,375)]}} paint={id=2,style=fill,color=0xffd8e0cc,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,200,0]
+save
+transform matrix=[1,0,0,1,100,300]
+transform matrix=[0.899999976,0.100000001,-0.300000012,0.699999988,0,0]
+transform matrix=[1,0,0,1,-100,-300]
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,225),(175,225),(175,375),(25,375)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,230),(170,230),(170,370),(30,370)]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,225),(175,225),(175,375),(25,375)]}} paint={id=2,style=fill,color=0xffd1f2d6,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+transform matrix=[1,0,0,1,0,1000]
+transform matrix=[1,0,0,-1,0,0]
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+save
+save
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,425),(175,425),(175,575),(25,575)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=6,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,430),(170,430),(170,570),(30,570)]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,425),(175,425),(175,575),(25,575)]}} paint={id=2,style=fill,color=0xffabc0a1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,200,0]
+save
+transform matrix=[1,0,0,1,100,500]
+transform matrix=[0.923879504,0.382683456,-0.382683456,0.923879504,0,0]
+transform matrix=[1,0,0,1,-100,-500]
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,425),(175,425),(175,575),(25,575)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=6,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,430),(170,430),(170,570),(30,570)]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,425),(175,425),(175,575),(25,575)]}} paint={id=2,style=fill,color=0xff8de386,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,200,0]
+save
+transform matrix=[1,0,0,1,100,500]
+transform matrix=[0.899999976,0.100000001,-0.300000012,0.699999988,0,0]
+transform matrix=[1,0,0,1,-100,-500]
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,425),(175,425),(175,575),(25,575)]}} paint={id=1,style=fill,color=0xe0102040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+clipPath path={id=6,fillRule=0,path={verbs=[move,line,line,line,close],points=[(30,430),(170,430),(170,570),(30,570)]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,line,line,line,close],points=[(25,425),(175,425),(175,575),(25,575)]}} paint={id=2,style=fill,color=0xff829acc,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+restore
+frame

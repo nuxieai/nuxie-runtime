@@ -1,0 +1,16 @@
+rive-golden-stream-v1
+source file="gm:gamma_correction_clip" artboard="" scene="gamma_correction_clip"
+frameSize width=500 height=500
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(50,50),(450,50),(450,450),(50,450)]}} paint={id=1,style=fill,color=0xffb000b0,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(200,200),(300,200),(300,300),(200,300)]}} paint={id=2,style=fill,color=0xfff0b000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

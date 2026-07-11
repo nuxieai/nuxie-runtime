@@ -1,0 +1,15 @@
+rive-golden-stream-v1
+source file="gm:quadcap" artboard="" scene="quadcap"
+frameSize width=70 height=30
+clearColor value=0xffffffff
+save
+transform matrix=[1,0,0,1,-100,5]
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(105.412796,13.3456001),(105.412796,13.3456001),(111.635048,9.15730572),(124.079559,0.780717492)]}} paint={id=1,style=stroke,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,30,0]
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,cubic],points=[(105.738571,13.126318),(105.738571,13.126318),(111.743645,9.0842123),(123.753784,1)]}} paint={id=1,style=stroke,color=0xff000000,thickness=1,join=0,cap=1,feather=0,blendMode=3,shader=0}
+restore
+frame

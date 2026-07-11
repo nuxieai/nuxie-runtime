@@ -1,0 +1,52 @@
+rive-golden-stream-v1
+source file="gm:degengrad" artboard="" scene="degengrad"
+frameSize width=850 height=650
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,50,50]
+save
+makeLinearGradient id=1 start=(0,0) end=(150,150) stops=[{color=0xff0000ff,stop=0},{color=0xff00ff00,stop=0}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=1}
+transform matrix=[1,0,0,1,200,0]
+makeRadialGradient id=2 center=(75,75) radius=75 stops=[{color=0xff0000ff,stop=0},{color=0xff00ff00,stop=0}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=2}
+transform matrix=[1,0,0,1,200,0]
+makeLinearGradient id=3 start=(0,0) end=(150,150) stops=[{color=0xff0000ff,stop=0},{color=0xffff0000,stop=0},{color=0xff00ff00,stop=0}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=3}
+transform matrix=[1,0,0,1,200,0]
+makeRadialGradient id=4 center=(75,75) radius=75 stops=[{color=0xff0000ff,stop=0},{color=0xffff0000,stop=0},{color=0xff00ff00,stop=0}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=4}
+restore
+transform matrix=[1,0,0,1,0,200]
+save
+makeLinearGradient id=5 start=(0,0) end=(150,150) stops=[{color=0xff0000ff,stop=0.5},{color=0xff00ff00,stop=0.5}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=5}
+transform matrix=[1,0,0,1,200,0]
+makeRadialGradient id=6 center=(75,75) radius=75 stops=[{color=0xff0000ff,stop=0.5},{color=0xff00ff00,stop=0.5}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=6}
+transform matrix=[1,0,0,1,200,0]
+makeLinearGradient id=7 start=(0,0) end=(150,150) stops=[{color=0xff0000ff,stop=0.5},{color=0xffff0000,stop=0.5},{color=0xff00ff00,stop=0.5}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=7}
+transform matrix=[1,0,0,1,200,0]
+makeRadialGradient id=8 center=(75,75) radius=75 stops=[{color=0xff0000ff,stop=0.5},{color=0xffff0000,stop=0.5},{color=0xff00ff00,stop=0.5}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=8}
+restore
+transform matrix=[1,0,0,1,0,200]
+save
+makeLinearGradient id=9 start=(0,0) end=(150,150) stops=[{color=0xff0000ff,stop=1},{color=0xff00ff00,stop=1}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=9}
+transform matrix=[1,0,0,1,200,0]
+makeRadialGradient id=10 center=(75,75) radius=75 stops=[{color=0xff0000ff,stop=1},{color=0xff00ff00,stop=1}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=10}
+transform matrix=[1,0,0,1,200,0]
+makeLinearGradient id=11 start=(0,0) end=(150,150) stops=[{color=0xff0000ff,stop=1},{color=0xffff0000,stop=1},{color=0xff00ff00,stop=1}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=11}
+transform matrix=[1,0,0,1,200,0]
+makeRadialGradient id=12 center=(75,75) radius=75 stops=[{color=0xff0000ff,stop=1},{color=0xffff0000,stop=1},{color=0xff00ff00,stop=1}]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(150,0),(150,150),(0,150)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=12}
+restore
+transform matrix=[1,0,0,1,0,200]
+restore
+frame

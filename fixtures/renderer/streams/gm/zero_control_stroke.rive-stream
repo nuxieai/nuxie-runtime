@@ -1,0 +1,21 @@
+rive-golden-stream-v1
+source file="gm:zero_control_stroke" artboard="" scene="zero_control_stroke"
+frameSize width=400 height=400
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(157.473999,111.752998),(128.5,111.5),(35.5,29.5),(35.5,29.5)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=40,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,cubic],points=[(250,50),(270,70),(280,80),(280,80)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=40,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,cubic],points=[(150,50),(170,70),(180,80),(180,80)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=40,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,cubic],points=[(157.473999,311.752991),(157.473999,311.752991),(85.5,229.5),(35.5,229.5)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=40,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic],points=[(280,250),(280,250),(290,260),(310,280)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=40,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=7,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=6,fillRule=0,path={verbs=[move,cubic],points=[(180,250),(180,250),(190,260),(210,280)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=40,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

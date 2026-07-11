@@ -10,7 +10,7 @@ struct Options {
     output: PathBuf,
     backend: String,
     frame: usize,
-    clear: u32,
+    clear: Option<u32>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -19,11 +19,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (width, height) = stream
         .frame_size
         .ok_or("recorded stream does not declare frameSize")?;
+    let clear = options.clear.or(stream.clear_color).unwrap_or(0);
     let pixels = match options.backend.as_str() {
-        "stub" => clear_pixels(width, height, options.clear),
-        "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, options.clear)?,
+        "stub" => clear_pixels(width, height, clear),
+        "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear)?,
         #[cfg(all(feature = "ffi", target_os = "macos"))]
-        "ffi-metal" => replay_ffi(&stream, options.frame, width, height, options.clear)?,
+        "ffi-metal" => replay_ffi(&stream, options.frame, width, height, clear)?,
         backend => {
             return Err(format!(
                 "backend `{backend}` is unavailable; use `stub`, `rust-wgpu`{}",
@@ -104,7 +105,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
     let mut output = None;
     let mut backend = "stub".to_owned();
     let mut frame = 0;
-    let mut clear = 0;
+    let mut clear = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--stream" => stream = Some(PathBuf::from(args.next().ok_or(usage())?)),
@@ -113,7 +114,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
             "--frame" => frame = args.next().ok_or(usage())?.parse()?,
             "--clear" => {
                 let value = args.next().ok_or(usage())?;
-                clear = u32::from_str_radix(value.trim_start_matches("0x"), 16)?;
+                clear = Some(u32::from_str_radix(value.trim_start_matches("0x"), 16)?);
             }
             _ => return Err(format!("unknown argument `{arg}`\n{}", usage()).into()),
         }

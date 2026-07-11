@@ -1,0 +1,10 @@
+rive-golden-stream-v1
+source file="gm:path_skbug_11886" artboard="" scene="path_skbug_11886"
+frameSize width=128 height=256
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(0,770),(0,771),(20,20),(83,24)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

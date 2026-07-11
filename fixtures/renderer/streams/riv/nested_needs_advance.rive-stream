@@ -1,0 +1,15 @@
+rive-golden-stream-v1
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/nested_needs_advance.riv" artboard="node" scene="node_statemachine"
+frameSize width=160 height=220
+sample seconds=0
+save
+transform matrix=[1,0,0,1,80,110]
+save
+transform matrix=[1,0,0,1,0,0]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=2,path={verbs=[move,cubic,cubic,cubic,cubic,close],points=[(0,-30.6000004),(18.3910847,-30.6000004),(33.2999992,-16.8999157),(33.2999992,0),(33.2999992,16.8999157),(18.3910847,30.6000004),(0,30.6000004),(-18.3910847,30.6000004),(-33.2999992,16.8999157),(-33.2999992,0),(-33.2999992,-16.8999157),(-18.3910847,-30.6000004),(0,-30.6000004)]}} paint={id=2,style=stroke,color=0xffff0000,thickness=8,join=0,cap=1,feather=0,blendMode=3,shader=0}
+restore
+restore
+frame

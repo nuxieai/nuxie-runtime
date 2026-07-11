@@ -1,0 +1,28 @@
+rive-golden-stream-v1
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/scripted_string.riv" artboard="StringArtboard" scene="State Machine 1"
+frameSize width=500 height=500
+sample seconds=0
+save
+transform matrix=[1,0,0,1,0,0]
+restore
+frame
+sample seconds=0.25
+save
+transform matrix=[1,0,0,1,0,0]
+restore
+frame
+sample seconds=0.5
+save
+transform matrix=[1,0,0,1,0,0]
+restore
+frame
+sample seconds=0.75
+save
+transform matrix=[1,0,0,1,0,0]
+restore
+frame
+sample seconds=1
+save
+transform matrix=[1,0,0,1,0,0]
+restore
+frame

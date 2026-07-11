@@ -118,6 +118,7 @@ public:
                        int pointerId);
     void addFrame();
     void frameSize(uint32_t width, uint32_t height);
+    void clearColor(rive::ColorInt color);
     std::string stream() const;
     void clear();
 

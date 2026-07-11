@@ -1,0 +1,14 @@
+rive-golden-stream-v1
+source file="gm:zerolinestroke" artboard="" scene="zerolinestroke"
+frameSize width=90 height=120
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line],points=[(30,90),(30,90),(60,90),(60,90)]}} paint={id=1,style=stroke,color=0xff000000,thickness=20,join=0,cap=1,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line],points=[(30,30),(60,30)]}} paint={id=1,style=stroke,color=0xff000000,thickness=20,join=0,cap=1,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line],points=[(30,60),(30,60),(60,60)]}} paint={id=1,style=stroke,color=0xff000000,thickness=20,join=0,cap=1,feather=0,blendMode=3,shader=0}
+restore
+frame

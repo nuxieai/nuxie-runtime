@@ -1,0 +1,35 @@
+rive-golden-stream-v1
+source file="gm:poly_evenOdd" artboard="" scene="poly_evenOdd"
+frameSize width=480 height=480
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,120,120]
+transform matrix=[100,0,0,100,0,0]
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=1,fillRule=1,path={verbs=[move,line,line,line,line],points=[(1,0),(-0.809017062,0.587785184),(0.309017122,-0.95105648),(0.309016794,0.9510566),(-0.809016824,-0.587785482)]}} paint={id=1,style=fill,color=0xaaff0000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,360,120]
+transform matrix=[100,0,0,100,0,0]
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=2,fillRule=1,path={verbs=[move,line,line,move,line,line],points=[(1,0),(-0.50000006,0.866025388),(-0.499999911,-0.866025448),(-1,-8.74227766e-08),(0.499999911,-0.866025448),(0.50000006,0.866025388)]}} paint={id=2,style=fill,color=0xaa0000ff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,360,360]
+transform matrix=[100,0,0,100,0,0]
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=3,fillRule=1,path={verbs=[move,line,line,line,line],points=[(1,0),(-0.809017062,-0.587785184),(0.309017122,0.95105648),(0.309016794,-0.9510566),(-0.809016824,0.587785482)]}} paint={id=3,style=fill,color=0xaa00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,120,360]
+transform matrix=[100,0,0,100,0,0]
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=4,fillRule=1,path={verbs=[move,line,line,move,line,line],points=[(1,0),(-0.50000006,-0.866025388),(-0.499999911,0.866025448),(-1,-8.74227766e-08),(0.499999911,-0.866025448),(0.50000006,0.866025388)]}} paint={id=4,style=fill,color=0xaa000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+frame

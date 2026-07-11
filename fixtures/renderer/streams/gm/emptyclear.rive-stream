@@ -1,0 +1,7 @@
+rive-golden-stream-v1
+source file="gm:emptyclear" artboard="" scene="emptyclear"
+frameSize width=64 height=64
+clearColor value=0xff00ff00
+save
+restore
+frame

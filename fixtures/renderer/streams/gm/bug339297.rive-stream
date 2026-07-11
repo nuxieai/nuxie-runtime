@@ -1,0 +1,12 @@
+rive-golden-stream-v1
+source file="gm:bug339297" artboard="" scene="bug339297"
+frameSize width=640 height=480
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+transform matrix=[1,0,0,1,258,10365663]
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic,line,line,line,line,cubic,line,close],points=[(-469515,-10354890),(771919.625,-10411179),(2013360.12,-10243774),(3195542.75,-9860664),(3195550,-9860655),(3195539,-9860652),(3195539,-9860652),(3195539,-9860652),(2013358.12,-10243761),(771919.25,-10411166),(-469513.844,-10354877),(-469515,-10354890)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic,line,line,line,line,cubic,line,close],points=[(-469515,-10354890),(771919.625,-10411179),(2013360.12,-10243774),(3195542.75,-9860664),(3195550,-9860655),(3195539,-9860652),(3195539,-9860652),(3195539,-9860652),(2013358.12,-10243761),(771919.25,-10411166),(-469513.844,-10354877),(-469515,-10354890)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

@@ -1,0 +1,174 @@
+rive-golden-stream-v1
+source file="gm:cubicpath" artboard="" scene="cubicpath"
+frameSize width=825 height=175
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+save
+transform matrix=[1,0,0,1,10,30]
+save
+save
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=1,style=fill,color=0xff007000,thickness=10,join=2,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=2,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,140,0]
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=7,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=6,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=3,style=stroke,color=0xff007000,thickness=10,join=2,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=8,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=9,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=8,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=4,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,0,70]
+save
+makeRenderPaint {id=5,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=10,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=11,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=10,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=5,style=fill,color=0xff007000,thickness=10,join=2,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=6,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=12,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=13,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=12,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=6,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,140,0]
+makeRenderPaint {id=7,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=14,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=15,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=14,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=7,style=stroke,color=0xff007000,thickness=10,join=2,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=8,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=16,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=17,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=16,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=8,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+transform matrix=[1,0,0,1,280,0]
+save
+save
+makeRenderPaint {id=9,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=18,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=19,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=18,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=9,style=fill,color=0xff007000,thickness=10,join=1,cap=1,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=10,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=20,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=21,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=20,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=10,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,140,0]
+makeRenderPaint {id=11,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=22,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=23,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=22,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=11,style=stroke,color=0xff007000,thickness=10,join=1,cap=1,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=12,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=24,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=25,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=24,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=12,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,0,70]
+save
+makeRenderPaint {id=13,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=26,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=27,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=26,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=13,style=fill,color=0xff007000,thickness=10,join=1,cap=1,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=14,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=28,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=29,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=28,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=14,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,140,0]
+makeRenderPaint {id=15,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=30,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=31,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=30,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=15,style=stroke,color=0xff007000,thickness=10,join=1,cap=1,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=16,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=32,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=33,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=32,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=16,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+transform matrix=[1,0,0,1,280,0]
+save
+save
+makeRenderPaint {id=17,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=34,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=35,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=34,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=17,style=fill,color=0xff007000,thickness=10,join=2,cap=2,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=18,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=36,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=37,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=36,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=18,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,140,0]
+makeRenderPaint {id=19,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=38,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=39,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=38,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=19,style=stroke,color=0xff007000,thickness=10,join=2,cap=2,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=20,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=40,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=41,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=40,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=20,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+transform matrix=[1,0,0,1,0,70]
+save
+makeRenderPaint {id=21,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=42,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=43,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=42,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=21,style=fill,color=0xff007000,thickness=10,join=2,cap=2,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=22,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=44,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=45,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=44,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=22,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,140,0]
+makeRenderPaint {id=23,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=46,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=47,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=46,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic],points=[(25,10),(40,20),(60,20),(75,10)]}} paint={id=23,style=stroke,color=0xff007000,thickness=10,join=2,cap=2,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=24,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=48,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=49,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=48,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,30),(0,30)]}} paint={id=24,style=stroke,color=0xff000000,thickness=-1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+restore
+restore
+restore
+frame

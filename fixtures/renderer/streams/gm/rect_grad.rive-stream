@@ -1,0 +1,33 @@
+rive-golden-stream-v1
+source file="gm:rect_grad" artboard="" scene="rect_grad"
+frameSize width=220 height=220
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,10,10]
+save
+transform matrix=[1,0,0,1,0,0]
+makeLinearGradient id=1 start=(0,0) end=(100,100) stops=[{color=0xffff0000,stop=0},{color=0xff00ff00,stop=0.5},{color=0xff0000ff,stop=1}]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,100),(0,100)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=1}
+restore
+save
+transform matrix=[1,0,0,1,100,0]
+makeLinearGradient id=2 start=(100,0) end=(0,100) stops=[{color=0xffff0000,stop=0},{color=0xff00ff00,stop=0.5},{color=0xff0000ff,stop=1}]
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,100),(0,100)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=2}
+restore
+save
+transform matrix=[1,0,0,1,0,100]
+makeLinearGradient id=3 start=(100,0) end=(0,100) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,100),(0,100)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=3}
+restore
+save
+transform matrix=[1,0,0,1,100,100]
+makeLinearGradient id=4 start=(0,0) end=(100,100) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(100,0),(100,100),(0,100)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=4}
+restore
+restore
+frame

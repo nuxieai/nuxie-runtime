@@ -1,0 +1,212 @@
+rive-golden-stream-v1
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=5,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=6,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=7,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=8,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=9,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=10,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=11,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=12,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=13,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=14,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=15,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=16,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=17,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=18,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=19,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=20,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=21,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=22,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=23,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=24,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=25,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=26,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=27,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=28,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=29,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=30,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=31,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=32,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/script_create_text_runs.riv" artboard="main" scene="State Machine 1"
+frameSize width=750 height=500
+sample seconds=0
+save
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,0,0]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,-0),(749.898438,-0),(749.898438,500),(-0,500)]}} paint={id=28,style=fill,color=0xff313131,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,117]
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(0,0),(749.898438,0),(749.898438,383),(0,383),(0,0)]}} paint={id=29,style=fill,color=0xffcccccc,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+save
+transform matrix=[1,0,0,1,0,117]
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=2,path={verbs=[move,line,line,line,line,close,move,line,line,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,cubic,line,close,move,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,line,line,line,line,line,cubic,cubic,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,close,move,line,line,line,line,line,cubic,cubic,line,cubic,cubic,line,line,line,line,line,line,line,cubic,cubic,line,cubic,cubic,line,line,close,move,line,line,line,line,close,move,line,line,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,cubic,line,close],points=[(14.5996094,21.1425781),(14.5996094,24.9023438),(0.48828125,24.9023438),(0.48828125,21.1425781),(14.5996094,21.1425781),(4.58984375,14.6484375),(8.984375,14.6484375),(8.984375,41.3574219),(8.984375,42.578125),(9.232584,43.4692383),(9.72900391,44.0307617),(10.2254238,44.5922852),(11.0514317,44.8730469),(12.2070312,44.8730469),(12.4837246,44.8730469),(12.8377275,44.8404961),(13.269043,44.7753906),(13.7003584,44.7102852),(14.0950518,44.6451836),(14.453125,44.5800781),(15.3564453,48.2910156),(14.9007158,48.4537773),(14.3839521,48.5758476),(13.8061523,48.6572266),(13.2283525,48.7386055),(12.6546221,48.7792969),(12.0849609,48.7792969),(9.72493458,48.7792969),(7.88574219,48.1567383),(6.56738281,46.9116211),(5.24902344,45.6665039),(4.58984375,43.9290352),(4.58984375,41.6992188),(4.58984375,14.6484375),(31.2011719,49.0234375),(28.5644531,49.0234375),(26.2898769,48.4375),(24.3774414,47.265625),(22.4650059,46.09375),(20.9920254,44.4580078),(19.9584961,42.3583984),(18.9249668,40.2587891),(18.4082031,37.8092461),(18.4082031,35.0097656),(18.4082031,32.2102852),(18.9127598,29.7444649),(19.921875,27.6123047),(20.9309902,25.4801445),(22.359211,23.8118477),(24.206543,22.6074219),(26.053875,21.4029942),(28.2145176,20.8007812),(30.6884766,20.8007812),(32.137043,20.8007812),(33.5652657,21.0408535),(34.9731445,21.5209961),(36.3810234,22.0011387),(37.6586914,22.7742519),(38.8061523,23.840332),(39.9536133,24.906414),(40.8691406,26.3102226),(41.5527344,28.0517578),(42.2363281,29.793293),(42.578125,31.925457),(42.578125,34.4482422),(42.578125,36.2792969),(21.3867188,36.2792969),(21.3867188,32.5683594),(40.2099609,32.5683594),(38.1591797,33.9355469),(38.1591797,32.1451836),(37.878418,30.5541992),(37.3168945,29.1625977),(36.7553711,27.7709961),(35.9212227,26.6805),(34.8144531,25.8911133),(33.7076836,25.1017265),(32.3323555,24.7070312),(30.6884766,24.7070312),(29.0445976,24.7070312),(27.6367188,25.1098633),(26.4648438,25.9155273),(25.2929688,26.7211914),(24.3977871,27.7709961),(23.7792969,29.0649414),(23.1608067,30.3588867),(22.8515625,31.746418),(22.8515625,33.2275391),(22.8515625,35.6933594),(22.8515625,37.7115898),(23.201498,39.4246407),(23.9013672,40.8325195),(24.6012363,42.2403984),(25.5818691,43.3064766),(26.8432617,44.0307617),(28.1046543,44.7550468),(29.5654297,45.1171875),(31.2255859,45.1171875),(32.2998047,45.1171875),(33.2763672,44.9625664),(34.1552734,44.6533203),(35.0341797,44.3440742),(35.7910156,43.8761406),(36.4257812,43.2495117),(37.0605469,42.6228828),(37.5488281,41.8457031),(37.890625,40.9179688),(42.1386719,42.0898438),(41.7154922,43.4570312),(40.9993515,44.6614571),(39.9902344,45.703125),(38.9811211,46.7447929),(37.7319336,47.5585938),(36.2426758,48.1445312),(34.753418,48.7304688),(33.0729179,49.0234375),(31.2011719,49.0234375),(45.4833984,48.4375),(56.25,32.7392578),(56.2255859,36.1083984),(46.0449219,21.1425781),(51.171875,21.1425781),(54.5654297,26.4404297),(55.4443359,27.8076172),(56.2052422,29.0852852),(56.8481445,30.2734375),(57.4910469,31.4615898),(58.1542969,32.6090508),(58.8378906,33.7158203),(56.5429688,33.7158203),(57.2428398,32.6090508),(57.8816719,31.4615898),(58.4594727,30.2734375),(59.0372734,29.0852852),(59.7737617,27.8076172),(60.6689453,26.4404297),(64.1357422,21.1425781),(69.1650391,21.1425781),(58.9355469,36.3037109),(58.9355469,33.0566406),(69.6044922,48.4375),(64.5019531,48.4375),(60.4980469,42.3095703),(59.6354179,40.9749336),(58.890789,39.7338867),(58.2641602,38.5864258),(57.6375313,37.4389648),(56.9905586,36.3362617),(56.3232422,35.2783203),(58.6425781,35.2783203),(57.9752617,36.3362617),(57.3567696,37.4389648),(56.7871094,38.5864258),(56.2174492,39.7338867),(55.4931641,40.9749336),(54.6142578,42.3095703),(50.5615234,48.4375),(45.4833984,48.4375),(86.7675781,21.1425781),(86.7675781,24.9023438),(72.65625,24.9023438),(72.65625,21.1425781),(86.7675781,21.1425781),(76.7578125,14.6484375),(81.1523438,14.6484375),(81.1523438,41.3574219),(81.1523438,42.578125),(81.4005508,43.4692383),(81.8969727,44.0307617),(82.3933945,44.5922852),(83.2193985,44.8730469),(84.375,44.8730469),(84.6516953,44.8730469),(85.0056992,44.8404961),(85.4370117,44.7753906),(85.8683243,44.7102852),(86.2630234,44.6451836),(86.6210938,44.5800781),(87.5244141,48.2910156),(87.0686874,48.4537773),(86.551918,48.5758476),(85.9741211,48.6572266),(85.3963242,48.7386055),(84.8225937,48.7792969),(84.2529297,48.7792969),(81.8929062,48.7792969),(80.0537109,48.1567383),(78.7353516,46.9116211),(77.4169922,45.6665039),(76.7578125,43.9290352),(76.7578125,41.6992188),(76.7578125,14.6484375)]}} paint={id=31,style=fill,color=0xffb30000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=33,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,601.518738,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=26,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=4,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=27,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,453.139038,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=23,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=24,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,304.759369,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=6,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=20,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=6,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=21,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,156.379684,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+makeEmptyRenderPath {id=7,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=7,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=17,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=7,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=18,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,8,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+makeEmptyRenderPath {id=8,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=8,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=14,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=8,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=15,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+restore
+frame
+sample seconds=0.100000001
+save
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,0,0]
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,-0),(749.898438,-0),(749.898438,500),(-0,500)]}} paint={id=28,style=fill,color=0xff313131,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,117]
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(0,0),(749.898438,0),(749.898438,383),(0,383),(0,0)]}} paint={id=29,style=fill,color=0xffcccccc,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+save
+transform matrix=[1,0,0,1,0,117]
+drawPath path={id=3,fillRule=2,path={verbs=[move,line,line,line,line,close,move,line,line,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,cubic,line,close,move,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,line,line,line,line,line,cubic,cubic,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,close,move,line,line,line,line,line,cubic,cubic,line,cubic,cubic,line,line,line,line,line,line,line,cubic,cubic,line,cubic,cubic,line,line,close,move,line,line,line,line,close,move,line,line,cubic,cubic,cubic,cubic,line,cubic,cubic,cubic,cubic,line,close],points=[(14.5996094,21.1425781),(14.5996094,24.9023438),(0.48828125,24.9023438),(0.48828125,21.1425781),(14.5996094,21.1425781),(4.58984375,14.6484375),(8.984375,14.6484375),(8.984375,41.3574219),(8.984375,42.578125),(9.232584,43.4692383),(9.72900391,44.0307617),(10.2254238,44.5922852),(11.0514317,44.8730469),(12.2070312,44.8730469),(12.4837246,44.8730469),(12.8377275,44.8404961),(13.269043,44.7753906),(13.7003584,44.7102852),(14.0950518,44.6451836),(14.453125,44.5800781),(15.3564453,48.2910156),(14.9007158,48.4537773),(14.3839521,48.5758476),(13.8061523,48.6572266),(13.2283525,48.7386055),(12.6546221,48.7792969),(12.0849609,48.7792969),(9.72493458,48.7792969),(7.88574219,48.1567383),(6.56738281,46.9116211),(5.24902344,45.6665039),(4.58984375,43.9290352),(4.58984375,41.6992188),(4.58984375,14.6484375),(31.2011719,49.0234375),(28.5644531,49.0234375),(26.2898769,48.4375),(24.3774414,47.265625),(22.4650059,46.09375),(20.9920254,44.4580078),(19.9584961,42.3583984),(18.9249668,40.2587891),(18.4082031,37.8092461),(18.4082031,35.0097656),(18.4082031,32.2102852),(18.9127598,29.7444649),(19.921875,27.6123047),(20.9309902,25.4801445),(22.359211,23.8118477),(24.206543,22.6074219),(26.053875,21.4029942),(28.2145176,20.8007812),(30.6884766,20.8007812),(32.137043,20.8007812),(33.5652657,21.0408535),(34.9731445,21.5209961),(36.3810234,22.0011387),(37.6586914,22.7742519),(38.8061523,23.840332),(39.9536133,24.906414),(40.8691406,26.3102226),(41.5527344,28.0517578),(42.2363281,29.793293),(42.578125,31.925457),(42.578125,34.4482422),(42.578125,36.2792969),(21.3867188,36.2792969),(21.3867188,32.5683594),(40.2099609,32.5683594),(38.1591797,33.9355469),(38.1591797,32.1451836),(37.878418,30.5541992),(37.3168945,29.1625977),(36.7553711,27.7709961),(35.9212227,26.6805),(34.8144531,25.8911133),(33.7076836,25.1017265),(32.3323555,24.7070312),(30.6884766,24.7070312),(29.0445976,24.7070312),(27.6367188,25.1098633),(26.4648438,25.9155273),(25.2929688,26.7211914),(24.3977871,27.7709961),(23.7792969,29.0649414),(23.1608067,30.3588867),(22.8515625,31.746418),(22.8515625,33.2275391),(22.8515625,35.6933594),(22.8515625,37.7115898),(23.201498,39.4246407),(23.9013672,40.8325195),(24.6012363,42.2403984),(25.5818691,43.3064766),(26.8432617,44.0307617),(28.1046543,44.7550468),(29.5654297,45.1171875),(31.2255859,45.1171875),(32.2998047,45.1171875),(33.2763672,44.9625664),(34.1552734,44.6533203),(35.0341797,44.3440742),(35.7910156,43.8761406),(36.4257812,43.2495117),(37.0605469,42.6228828),(37.5488281,41.8457031),(37.890625,40.9179688),(42.1386719,42.0898438),(41.7154922,43.4570312),(40.9993515,44.6614571),(39.9902344,45.703125),(38.9811211,46.7447929),(37.7319336,47.5585938),(36.2426758,48.1445312),(34.753418,48.7304688),(33.0729179,49.0234375),(31.2011719,49.0234375),(45.4833984,48.4375),(56.25,32.7392578),(56.2255859,36.1083984),(46.0449219,21.1425781),(51.171875,21.1425781),(54.5654297,26.4404297),(55.4443359,27.8076172),(56.2052422,29.0852852),(56.8481445,30.2734375),(57.4910469,31.4615898),(58.1542969,32.6090508),(58.8378906,33.7158203),(56.5429688,33.7158203),(57.2428398,32.6090508),(57.8816719,31.4615898),(58.4594727,30.2734375),(59.0372734,29.0852852),(59.7737617,27.8076172),(60.6689453,26.4404297),(64.1357422,21.1425781),(69.1650391,21.1425781),(58.9355469,36.3037109),(58.9355469,33.0566406),(69.6044922,48.4375),(64.5019531,48.4375),(60.4980469,42.3095703),(59.6354179,40.9749336),(58.890789,39.7338867),(58.2641602,38.5864258),(57.6375313,37.4389648),(56.9905586,36.3362617),(56.3232422,35.2783203),(58.6425781,35.2783203),(57.9752617,36.3362617),(57.3567696,37.4389648),(56.7871094,38.5864258),(56.2174492,39.7338867),(55.4931641,40.9749336),(54.6142578,42.3095703),(50.5615234,48.4375),(45.4833984,48.4375),(86.7675781,21.1425781),(86.7675781,24.9023438),(72.65625,24.9023438),(72.65625,21.1425781),(86.7675781,21.1425781),(76.7578125,14.6484375),(81.1523438,14.6484375),(81.1523438,41.3574219),(81.1523438,42.578125),(81.4005508,43.4692383),(81.8969727,44.0307617),(82.3933945,44.5922852),(83.2193985,44.8730469),(84.375,44.8730469),(84.6516953,44.8730469),(85.0056992,44.8404961),(85.4370117,44.7753906),(85.8683243,44.7102852),(86.2630234,44.6451836),(86.6210938,44.5800781),(87.5244141,48.2910156),(87.0686874,48.4537773),(86.551918,48.5758476),(85.9741211,48.6572266),(85.3963242,48.7386055),(84.8225937,48.7792969),(84.2529297,48.7792969),(81.8929062,48.7792969),(80.0537109,48.1567383),(78.7353516,46.9116211),(77.4169922,45.6665039),(76.7578125,43.9290352),(76.7578125,41.6992188),(76.7578125,14.6484375)]}} paint={id=31,style=fill,color=0xffb30000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+save
+transform matrix=[1,0,0,1,601.518738,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=4,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=26,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=4,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=27,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,453.139038,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=23,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=24,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,304.759369,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=6,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=20,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=6,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=21,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,156.379684,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=7,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=17,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=7,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=18,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+save
+transform matrix=[1,0,0,1,8,20]
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=8,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=14,style=fill,color=0xfff1f1f1,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,0,18.5]
+drawPath path={id=8,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(0,8),(0,3.58172178),(3.58172178,0),(8,0),(132.379684,0),(136.797958,0),(140.379684,3.58172178),(140.379684,8),(140.379684,32),(140.379684,36.4182777),(136.797958,40),(132.379684,40),(8,40),(3.58172178,40),(0,36.4182777),(0,32),(0,8)]}} paint={id=15,style=stroke,color=0xff000000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+restore
+restore
+restore
+frame

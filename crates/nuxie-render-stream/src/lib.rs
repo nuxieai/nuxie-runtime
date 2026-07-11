@@ -11,6 +11,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderStream {
     pub frame_size: Option<(u32, u32)>,
+    pub clear_color: Option<ColorInt>,
     pub resources: Vec<Resource>,
     pub frames: Vec<Frame>,
 }
@@ -134,6 +135,7 @@ impl RenderStream {
         }
 
         let mut frame_size = None;
+        let mut clear_color = None;
         let mut resources = Vec::new();
         let mut frames = Vec::new();
         let mut commands = Vec::new();
@@ -171,6 +173,10 @@ impl RenderStream {
                     parse_field(value, "width", line_number)?,
                     parse_field(value, "height", line_number)?,
                 ));
+                continue;
+            }
+            if let Some(value) = line.strip_prefix("clearColor value=") {
+                clear_color = Some(parse_hex_u32(value, line_number)?);
                 continue;
             }
             if let Some(value) = line.strip_prefix("transform matrix=") {
@@ -268,6 +274,7 @@ impl RenderStream {
         }
         Ok(Self {
             frame_size,
+            clear_color,
             resources,
             frames,
         })
@@ -801,6 +808,7 @@ mod tests {
 
     const STREAM: &str = "rive-golden-stream-v1\n\
 frameSize width=64 height=32\n\
+clearColor value=0x11223344\n\
 makeLinearGradient id=7 start=(0,1) end=(2,3) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]\n\
 decodeImage id=2 width=1 height=1 data=89504e47\n\
 makeRenderBuffer id=3 type=1 flags=0 size=4\n\
@@ -815,6 +823,7 @@ frame\n";
     fn parses_complete_replay_facts() {
         let stream = RenderStream::parse(STREAM).unwrap();
         assert_eq!(stream.frame_size, Some((64, 32)));
+        assert_eq!(stream.clear_color, Some(0x11223344));
         assert_eq!(stream.resources.len(), 3);
         assert_eq!(stream.frames.len(), 1);
         assert_eq!(stream.frames[0].commands.len(), 4);

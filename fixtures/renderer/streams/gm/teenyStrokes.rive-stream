@@ -1,0 +1,62 @@
+rive-golden-stream-v1
+source file="gm:teenyStrokes" artboard="" scene="teenyStrokes"
+frameSize width=400 height=200
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,50,0]
+save
+transform matrix=[20000,0,0,20000,0,0]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(0.000999999931,0.000999999931),(0.000999999931,0.00499999989)]}} paint={id=1,style=stroke,color=0xff000000,thickness=0.000249999983,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line],points=[(0.000999999931,0.000999999931),(0.00499999989,0.00499999989)]}} paint={id=1,style=stroke,color=0xff000000,thickness=0.000249999983,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,50,0]
+save
+transform matrix=[22222.2227,0,0,22222.2227,0,0]
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,line],points=[(0.000899999985,0.000899999985),(0.000899999985,0.00450000027)]}} paint={id=2,style=stroke,color=0xffff0000,thickness=0.000224999996,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=7,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=8,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=7,fillRule=0,path={verbs=[move,line],points=[(0.000899999985,0.000899999985),(0.00450000027,0.00450000027)]}} paint={id=2,style=stroke,color=0xffff0000,thickness=0.000224999996,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,50,0]
+save
+transform matrix=[285714.281,0,0,285714.281,0,0]
+makeEmptyRenderPath {id=9,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=10,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=9,fillRule=0,path={verbs=[move,line],points=[(7.00000019e-05,7.00000019e-05),(7.00000019e-05,0.000350000017)]}} paint={id=3,style=stroke,color=0xff00ff00,thickness=1.75000005e-05,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=11,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=12,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=11,fillRule=0,path={verbs=[move,line],points=[(7.00000019e-05,7.00000019e-05),(0.000350000017,0.000350000017)]}} paint={id=3,style=stroke,color=0xff00ff00,thickness=1.75000005e-05,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,50,0]
+save
+transform matrix=[333333.312,0,0,333333.312,0,0]
+makeEmptyRenderPath {id=13,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=14,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=13,fillRule=0,path={verbs=[move,line],points=[(6.00000021e-05,6.00000021e-05),(6.00000021e-05,0.000300000014)]}} paint={id=4,style=stroke,color=0xff0000ff,thickness=1.50000005e-05,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=15,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=16,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=15,fillRule=0,path={verbs=[move,line],points=[(6.00000021e-05,6.00000021e-05),(0.000300000014,0.000300000014)]}} paint={id=4,style=stroke,color=0xff0000ff,thickness=1.50000005e-05,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+makeRenderPaint {id=5,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,50,0]
+save
+transform matrix=[500000,0,0,500000,0,0]
+makeEmptyRenderPath {id=17,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=18,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=17,fillRule=0,path={verbs=[move,line],points=[(3.9999999e-05,3.9999999e-05),(3.9999999e-05,0.000199999995)]}} paint={id=5,style=stroke,color=0xff000000,thickness=9.99999975e-06,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=19,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=20,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=19,fillRule=0,path={verbs=[move,line],points=[(3.9999999e-05,3.9999999e-05),(0.000199999995,0.000199999995)]}} paint={id=5,style=stroke,color=0xff000000,thickness=9.99999975e-06,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+frame

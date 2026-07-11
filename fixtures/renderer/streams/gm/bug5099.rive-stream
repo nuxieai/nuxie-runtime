@@ -1,0 +1,10 @@
+rive-golden-stream-v1
+source file="gm:bug5099" artboard="" scene="bug5099"
+frameSize width=50 height=50
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic],points=[(6,27),(31.5,1.5),(3.5,4.5),(29,29)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=10,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

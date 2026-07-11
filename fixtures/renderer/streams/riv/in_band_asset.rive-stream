@@ -1,0 +1,23 @@
+rive-golden-stream-v1
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+decodeImage id=1 width=1 height=1 data=89504e470d0a1a0a0000000d4948445200000001000000010100000000376ef924000000206348524d00007a26000080840000fa00000080e8000075300000ea6000003a98000017709cba513c0000000274524e5300007693cd3800000002624b47440001dd8a13a40000000774494d4507e7091b0e340212278ca40000000a4944415408d76360000000020001e221bc330000002574455874646174653a63726561746500323032332d30392d32375431343a35323a30322b30303a30307de9d86b0000002574455874646174653a6d6f6469667900323032332d30392d32375431343a35323a30322b30303a30300cb460d70000002874455874646174653a74696d657374616d7000323032332d30392d32375431343a35323a30322b30303a30305ba141080000000049454e44ae426082
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+source file="/Users/levi/dev/oss/rive-runtime/tests/unit_tests/assets/in_band_asset.riv" artboard="New Artboard" scene="State Machine 1"
+frameSize width=500 height=500
+sample seconds=0
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=1,fillRule=2,path={verbs=[move,line,line,line,close],points=[(0,0),(500,0),(500,500),(0,500)]}}
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,0,0]
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-0,-0),(500,-0),(500,500),(-0,500)]}} paint={id=2,style=fill,color=0xff313131,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,237.371094,92.5351562]
+transform matrix=[1,0,0,1,-0.5,-0.5]
+drawImage image=1 sampler={wrapX=0,wrapY=0,filter=0,key=0} blendMode=3 opacity=1
+restore
+restore
+frame

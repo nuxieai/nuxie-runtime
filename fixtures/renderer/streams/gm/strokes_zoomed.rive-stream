@@ -1,0 +1,12 @@
+rive-golden-stream-v1
+source file="gm:strokes_zoomed" artboard="" scene="strokes_zoomed"
+frameSize width=400 height=100
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1000,0,0,1000,0,0]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic,cubic,cubic,cubic,close],points=[(1.97000003,2),(1.97000003,3.08727264),(1.08727264,3.97000003),(0,3.97000003),(-1.08727264,3.97000003),(-1.97000003,3.08727264),(-1.97000003,2),(-1.97000003,0.912727356),(-1.08727264,0.0299999714),(0,0.0299999714),(1.08727264,0.0299999714),(1.97000003,0.912727356),(1.97000003,2)]}} paint={id=1,style=stroke,color=0xff000000,thickness=0.0549999997,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

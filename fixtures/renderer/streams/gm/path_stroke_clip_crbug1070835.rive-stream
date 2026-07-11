@@ -1,0 +1,12 @@
+rive-golden-stream-v1
+source file="gm:path_stroke_clip_crbug1070835" artboard="" scene="path_stroke_clip_crbug1070835"
+frameSize width=30 height=25
+clearColor value=0xffffffff
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[2.08333325,0,0,2.08333325,0,0]
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,cubic,cubic,cubic,cubic],points=[(11,12),(11,18.0751324),(6.07513189,23),(-4.80825292e-07,23),(-6.07513332,23),(-11,18.0751324),(-11,11.999999),(-10.999999,5.92486763),(-6.07513189,1),(1.31173692e-07,1),(6.07513142,1),(10.9999981,5.92486572),(11,11.9999971)]}} paint={id=1,style=stroke,color=0xffff0000,thickness=2,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

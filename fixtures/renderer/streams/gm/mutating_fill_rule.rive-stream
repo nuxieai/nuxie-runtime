@@ -1,0 +1,15 @@
+rive-golden-stream-v1
+source file="gm:mutating_fill_rule" artboard="" scene="mutating_fill_rule"
+frameSize width=600 height=300
+clearColor value=0xffffffff
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=1,fillRule=1,path={verbs=[move,cubic,cubic,cubic,cubic,close,move,cubic,cubic,cubic,cubic,close],points=[(290,150),(290,227.268112),(227.268112,290),(150,290),(72.7318954,290),(10,227.268112),(10,150),(10,72.7318954),(72.7318954,10),(150,10),(227.268112,10),(290,72.7318954),(290,150),(250,150),(250,205.191498),(205.191498,250),(150,250),(94.8084946,250),(50,205.191498),(50,150),(50,94.8084946),(94.8084946,50),(150,50),(205.191498,50),(250,94.8084946),(250,150)]}} paint={id=1,style=fill,color=0xffff4040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+transform matrix=[1,0,0,1,300,0]
+clipPath path={id=1,fillRule=1,path={verbs=[move,cubic,cubic,cubic,cubic,close,move,cubic,cubic,cubic,cubic,close],points=[(290,150),(290,227.268112),(227.268112,290),(150,290),(72.7318954,290),(10,227.268112),(10,150),(10,72.7318954),(72.7318954,10),(150,10),(227.268112,10),(290,72.7318954),(290,150),(250,150),(250,205.191498),(205.191498,250),(150,250),(94.8084946,250),(50,205.191498),(50,150),(50,94.8084946),(94.8084946,50),(150,50),(205.191498,50),(250,94.8084946),(250,150)]}}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(300,0),(300,300),(0,300)]}} paint={id=1,style=fill,color=0xffff4040,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+frame

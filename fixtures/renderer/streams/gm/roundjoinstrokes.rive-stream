@@ -1,0 +1,26 @@
+rive-golden-stream-v1
+source file="gm:roundjoinstrokes" artboard="" scene="roundjoinstrokes"
+frameSize width=800 height=600
+clearColor value=0xff000000
+save
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(30,170),(170,30)]}} paint={id=1,style=stroke,color=0xfff6aea6,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,close],points=[(230,170),(370,30)]}} paint={id=1,style=stroke,color=0xffc88f9c,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,line,line,close],points=[(570,170),(430,30),(570,170)]}} paint={id=1,style=stroke,color=0xffe4d7f8,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=4,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=4,fillRule=0,path={verbs=[move,line,line],points=[(770,170),(630,30),(770,170)]}} paint={id=1,style=stroke,color=0xffb99392,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=5,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=5,fillRule=0,path={verbs=[move,cubic],points=[(30,370),(230,230),(230,230),(30,370)]}} paint={id=1,style=stroke,color=0xffd8e0cc,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=6,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=6,fillRule=0,path={verbs=[move,cubic,close],points=[(770,370),(570,230),(570,230),(770,370)]}} paint={id=1,style=stroke,color=0xffd1f2d6,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=7,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=7,fillRule=0,path={verbs=[move,cubic,close],points=[(400,550),(-100,130),(900,130),(400,550)]}} paint={id=1,style=stroke,color=0xffabc0a1,thickness=30,join=1,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=8,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=8,fillRule=0,path={verbs=[move],points=[(100,500)]}} paint={id=1,style=stroke,color=0xff8de386,thickness=30,join=1,cap=1,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=9,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=9,fillRule=0,path={verbs=[move,close],points=[(700,500)]}} paint={id=1,style=stroke,color=0xff829acc,thickness=30,join=1,cap=1,feather=0,blendMode=3,shader=0}
+restore
+frame

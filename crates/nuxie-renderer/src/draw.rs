@@ -2,11 +2,13 @@
 
 use crate::gpu::{
     AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan, TriangleVertex,
-    CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS,
-    MIDPOINT_FAN_PATCH_SEGMENT_SPAN, OUTER_CURVE_PATCH_SEGMENT_SPAN, PARAMETRIC_PRECISION,
+    BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
+    EMULATED_STROKE_CAP_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN,
+    MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG, OUTER_CURVE_PATCH_SEGMENT_SPAN,
+    PARAMETRIC_PRECISION, POLAR_PRECISION, ROUND_JOIN_CONTOUR_FLAG,
 };
 use bytemuck::Zeroable;
-use nuxie_render_api::{Mat2D, PathVerb, RawPath, Vec2D};
+use nuxie_render_api::{Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Contour {
@@ -29,6 +31,214 @@ pub(crate) struct InteriorTessellation {
     pub triangles: Vec<TriangleVertex>,
     pub base_instance: u32,
     pub instance_count: u32,
+}
+
+pub(crate) fn build_line_stroke_tessellation(
+    path: &RawPath,
+    transform: Mat2D,
+    thickness: f32,
+    join: StrokeJoin,
+    cap: StrokeCap,
+) -> Option<FillTessellation> {
+    let contours = line_contours(path)?;
+    let stroke_radius = thickness * 0.5;
+    if stroke_radius <= 0.0 || contours.is_empty() {
+        return None;
+    }
+    let matrix_scale = max_matrix_scale(transform);
+    let polar_segments_per_radian = polar_segments_per_radian(stroke_radius * matrix_scale);
+    let cap_segments = match cap {
+        StrokeCap::Round => ((polar_segments_per_radian * std::f32::consts::PI).ceil() + 2.0)
+            .min(crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32,
+        StrokeCap::Butt | StrokeCap::Square => 5,
+    };
+    let cap_flags = match cap {
+        StrokeCap::Butt => BEVEL_JOIN_CONTOUR_FLAG,
+        StrokeCap::Round => ROUND_JOIN_CONTOUR_FLAG,
+        StrokeCap::Square => MITER_CLIP_JOIN_CONTOUR_FLAG,
+    } | EMULATED_STROKE_CAP_CONTOUR_FLAG;
+    let join_flags = match join {
+        StrokeJoin::Miter => MITER_REVERT_JOIN_CONTOUR_FLAG,
+        StrokeJoin::Round => ROUND_JOIN_CONTOUR_FLAG,
+        StrokeJoin::Bevel => BEVEL_JOIN_CONTOUR_FLAG,
+    };
+    let mut spans = Vec::new();
+    let mut contour_data = Vec::with_capacity(contours.len());
+    let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
+    push_padding_span(&mut spans, 0, location);
+    let path_start = location;
+    for (contour_index, contour) in contours.iter().enumerate() {
+        let mut points = contour.points.clone();
+        if contour.closed && !same_point(points[0], *points.last().unwrap()) {
+            points.push(points[0]);
+        }
+        let segments = points
+            .windows(2)
+            .filter(|points| !same_point(points[0], points[1]))
+            .map(|points| [points[0], points[1]])
+            .collect::<Vec<_>>();
+        if segments.is_empty() {
+            continue;
+        }
+        let contour_start = location as u32;
+        let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
+        let mut pending = Vec::new();
+        if !contour.closed {
+            let cubic = line_cubic(segments[0][0], segments[0][1]);
+            pending.push((
+                [cubic[3], cubic[2], cubic[1], cubic[0]],
+                subtract(segments[0][1], segments[0][0]),
+                0,
+                0,
+                cap_segments,
+                contour_id | cap_flags,
+            ));
+        }
+        for (index, segment) in segments.iter().enumerate() {
+            let final_open = !contour.closed && index + 1 == segments.len();
+            let (join_tangent, join_segments, flags) = if final_open {
+                (
+                    subtract(segment[0], segment[1]),
+                    cap_segments,
+                    contour_id | cap_flags,
+                )
+            } else {
+                let next = &segments[(index + 1) % segments.len()];
+                let tangent = subtract(next[1], next[0]);
+                let segment_count = if join == StrokeJoin::Round {
+                    round_join_segment_count(
+                        subtract(segment[1], segment[0]),
+                        tangent,
+                        polar_segments_per_radian,
+                    )
+                } else {
+                    5
+                };
+                (tangent, segment_count, contour_id | join_flags)
+            };
+            pending.push((
+                line_cubic(segment[0], segment[1]),
+                join_tangent,
+                1,
+                1,
+                join_segments,
+                flags,
+            ));
+        }
+        let vertex_count = pending
+            .iter()
+            .map(|(_, _, parametric, polar, join, _)| parametric + polar + join - 1)
+            .sum::<u32>() as i32;
+        let padding = align_up(vertex_count, MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32) - vertex_count;
+        contour_data.push(ContourData::new(
+            [if contour.closed { 1.0 } else { 0.0 }, 0.0],
+            0,
+            contour_start,
+        ));
+        for (index, (curve, tangent, parametric, polar, join, flags)) in
+            pending.into_iter().enumerate()
+        {
+            let x0 = location;
+            location += parametric as i32 + polar as i32 + join as i32 - 1
+                + i32::from(index == 0) * padding;
+            spans.push(TessVertexSpan::without_reflection(
+                curve.map(|point| [point.x, point.y]),
+                [tangent.x, tangent.y],
+                0.0,
+                x0,
+                location,
+                parametric,
+                polar,
+                join,
+                flags,
+            ));
+        }
+    }
+    if contour_data.is_empty() {
+        return None;
+    }
+    Some(FillTessellation {
+        spans,
+        path: PathData::new(
+            transform,
+            stroke_radius,
+            0.0,
+            0,
+            AtlasTransform::zeroed(),
+            CoverageBufferRange::zeroed(),
+        ),
+        contours: contour_data,
+        base_instance: 1,
+        instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+    })
+}
+
+fn line_contours(path: &RawPath) -> Option<Vec<Contour>> {
+    let mut contours = Vec::new();
+    let mut contour = None::<Contour>;
+    let mut point_index = 0;
+    for verb in path.verbs() {
+        match verb {
+            PathVerb::Move => {
+                finish_contour(&mut contours, contour.take());
+                contour = Some(Contour {
+                    points: vec![path.points()[point_index]],
+                    closed: false,
+                });
+                point_index += 1;
+            }
+            PathVerb::Line => {
+                ensure_contour(&mut contour)
+                    .points
+                    .push(path.points()[point_index]);
+                point_index += 1;
+            }
+            PathVerb::Close => ensure_contour(&mut contour).closed = true,
+            PathVerb::Quad | PathVerb::Cubic => return None,
+        }
+    }
+    finish_contour(&mut contours, contour);
+    Some(contours)
+}
+
+fn max_matrix_scale(transform: Mat2D) -> f32 {
+    let [xx, yx, xy, yy, _, _] = transform.0;
+    if xy == 0.0 && yx == 0.0 {
+        return xx.abs().max(yy.abs());
+    }
+    let a = xx * xx + xy * xy;
+    let b = xx * yx + yy * xy;
+    let c = yx * yx + yy * yy;
+    let result = if b * b <= f32::EPSILON * f32::EPSILON {
+        a.max(c)
+    } else {
+        (a + c) * 0.5 + ((a - c) * (a - c) + 4.0 * b * b).sqrt() * 0.5
+    };
+    if result.is_finite() {
+        result.max(0.0).sqrt()
+    } else {
+        0.0
+    }
+}
+
+fn polar_segments_per_radian(radius: f32) -> f32 {
+    let cos_theta = 1.0 - (1.0 / POLAR_PRECISION as f32) / radius;
+    0.5 / cos_theta.max(-1.0).acos()
+}
+
+fn round_join_segment_count(incoming: Vec2D, outgoing: Vec2D, per_radian: f32) -> u32 {
+    let denominator = ((incoming.x * incoming.x + incoming.y * incoming.y)
+        * (outgoing.x * outgoing.x + outgoing.y * outgoing.y))
+        .sqrt();
+    let cosine =
+        ((incoming.x * outgoing.x + incoming.y * outgoing.y) / denominator).clamp(-1.0, 1.0);
+    (cosine.acos() * per_radian)
+        .ceil()
+        .clamp(1.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32
+}
+
+fn subtract(a: Vec2D, b: Vec2D) -> Vec2D {
+    Vec2D::new(a.x - b.x, a.y - b.y)
 }
 
 pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
@@ -751,5 +961,52 @@ mod tests {
             tessellation.instance_count as usize,
             (tessellation.spans.len() - 1) * 2
         );
+    }
+
+    #[test]
+    fn open_butt_line_stroke_packs_caps_into_two_midpoint_patches() {
+        let mut path = RawPath::new();
+        path.move_to(10.0, 20.0);
+        path.line_to(50.0, 20.0);
+        let tessellation = build_line_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            20.0,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        assert_eq!(tessellation.path.stroke_radius, 10.0);
+        assert_eq!(tessellation.instance_count, 2);
+        assert_eq!(tessellation.contours[0].midpoint, [0.0, 0.0]);
+        assert_eq!(tessellation.contours[0].vertex_index0, 8);
+        assert_eq!(tessellation.spans.len(), 3);
+        assert_eq!(tessellation.spans[1].x_range(), (8, 18));
+        assert_eq!(tessellation.spans[2].x_range(), (18, 24));
+        assert_eq!(
+            tessellation.spans[1].contour_id_with_flags,
+            1 | BEVEL_JOIN_CONTOUR_FLAG | EMULATED_STROKE_CAP_CONTOUR_FLAG
+        );
+    }
+
+    #[test]
+    fn line_stroke_rejects_curves_until_curve_chopping_is_ported() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.cubic_to(0.0, 10.0, 10.0, 10.0, 10.0, 0.0);
+        assert!(build_line_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            2.0,
+            StrokeJoin::Round,
+            StrokeCap::Round,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn stroke_budget_uses_maximum_singular_scale_under_shear() {
+        let scale = max_matrix_scale(Mat2D([1.0, 0.0, 1.0, 1.0, 0.0, 0.0]));
+        assert!((scale - 1.618_034).abs() < 1e-5);
     }
 }

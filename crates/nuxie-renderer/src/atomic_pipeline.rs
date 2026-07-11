@@ -5,6 +5,7 @@ use wgpu::util::DeviceExt;
 
 pub(crate) struct AtomicPipeline {
     path: wgpu::RenderPipeline,
+    stroke_path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
@@ -117,6 +118,40 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let stroke_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-stroke-path-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &path_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(PatchVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &path_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 0.0),
+                    ("1", 1.0),
+                    ("3", 0.0),
+                    ("4", 0.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::empty(),
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let resolve = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-resolve-pipeline"),
             layout: Some(&layout),
@@ -172,6 +207,7 @@ impl AtomicPipeline {
         });
         Self {
             path,
+            stroke_path,
             interior,
             resolve,
             flush_layout,
@@ -199,6 +235,7 @@ impl AtomicPipeline {
         instance_count: u32,
         patch_index_range: std::ops::Range<u32>,
         triangle_vertices: &[crate::gpu::TriangleVertex],
+        is_stroke: bool,
         pixel_count: usize,
     ) {
         let uniform = upload(
@@ -311,7 +348,11 @@ impl AtomicPipeline {
                 "nuxie-atomic-path-pass",
                 &attachments,
             ));
-            pass.set_pipeline(&self.path);
+            pass.set_pipeline(if is_stroke {
+                &self.stroke_path
+            } else {
+                &self.path
+            });
             pass.set_bind_group(0, &flush, &[]);
             pass.set_bind_group(1, &image, &[]);
             pass.set_bind_group(2, &atomics, &[]);

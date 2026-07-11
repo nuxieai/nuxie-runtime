@@ -245,6 +245,11 @@ pub(crate) const PATCH_VERTEX_BUFFER_COUNT: usize = 269;
 pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize = 441;
 pub(crate) const CONTOUR_ID_MASK: u32 = 0xffff;
 pub(crate) const CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG: u32 = 1 << 29;
+pub(crate) const MITER_REVERT_JOIN_CONTOUR_FLAG: u32 = 4 << 26;
+pub(crate) const ROUND_JOIN_CONTOUR_FLAG: u32 = 2 << 26;
+pub(crate) const BEVEL_JOIN_CONTOUR_FLAG: u32 = 3 << 26;
+pub(crate) const MITER_CLIP_JOIN_CONTOUR_FLAG: u32 = 5 << 26;
+pub(crate) const EMULATED_STROKE_CAP_CONTOUR_FLAG: u32 = 1 << 25;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PatchType {
@@ -531,6 +536,13 @@ impl PaintData {
             value: swizzle_rive_color_to_rgba(color),
         }
     }
+
+    pub(crate) fn solid_stroke(color: ColorInt, blend_mode: BlendMode) -> Self {
+        Self {
+            params: PaintType::SolidColor as u32 | blend_mode_id(blend_mode) << 4,
+            value: swizzle_rive_color_to_rgba(color),
+        }
+    }
 }
 
 #[repr(C)]
@@ -713,6 +725,8 @@ mod tests {
         let paint = PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply);
         assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
         assert_eq!(paint.value, 0x8010_2040);
+        let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
+        assert_eq!(stroke.params, 1 | 11 << 4);
     }
 
     #[test]

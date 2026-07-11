@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=9, diverges=0, gated=1,456, total=1,465.
+- Rust wgpu: exact=11, diverges=0, gated=1,454, total=1,465.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`, `gm-rect-msaa`, and
   `artboardclipping-frame-0-msaa`, plus
@@ -15,7 +15,9 @@ Run `make renderer-golden`.
   `gm-batchedconvexpaths-clockwise-atomic`, and
   `gm-path_skbug_11886-clockwise-atomic`,
   `gm-convex_lineonly_ths-clockwise-atomic`, and
-  `gm-rotatedcubicpath-clockwise-atomic`.
+  `gm-rotatedcubicpath-clockwise-atomic`,
+  `gm-batchedtriangulations-clockwise-atomic`, and
+  `gm-zerolinestroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -130,3 +132,10 @@ Run `make renderer-golden`.
   atomic interior shaders. Negating triangulator winding to Rive's coverage
   convention reduced `batchedtriangulations` from 2,136 differing pixels (max
   delta 48) to 17 (max delta 9), promoting it and moving exact to 10.
+- 2026-07-11: Began stroke geometry with line-only contours, degenerate-line
+  removal, C++ cap emulation, miter/round/bevel join records, polar budgets,
+  stroke paint encoding, and a forward-only atomic pipeline state.
+  `zerolinestroke` is pixel-exact in clockwise-atomic mode, moving exact to 11;
+  its MSAA entry remains gated at 204 differing pixels pending MSAA stroke
+  state convergence, and cubic strokes remain explicitly rejected by this
+  builder until cusp/chop handling lands.

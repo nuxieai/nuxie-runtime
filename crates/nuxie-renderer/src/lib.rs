@@ -669,10 +669,22 @@ impl WgpuFrame {
         let atomic_eligible = self.mode == RenderMode::ClockwiseAtomic
             && !self.draws.is_empty()
             && self.draws.iter().all(|draw| {
-                draw.paint.style == RenderPaintStyle::Fill
-                    && draw.paint.shader.is_none()
-                    && draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                        .is_some_and(|tessellation| tessellation.contours.len() == 1)
+                draw.paint.shader.is_none()
+                    && draw.paint.feather == 0.0
+                    && match draw.paint.style {
+                        RenderPaintStyle::Fill => {
+                            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                                .is_some_and(|tessellation| tessellation.contours.len() == 1)
+                        }
+                        RenderPaintStyle::Stroke => draw::build_line_stroke_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.paint.thickness,
+                            draw.paint.join,
+                            draw.paint.cap,
+                        )
+                        .is_some(),
+                    }
             });
         let used_atomic = if atomic_eligible {
             {
@@ -705,7 +717,25 @@ impl WgpuFrame {
                     instance_count,
                     patch_index_range,
                     triangles,
-                ) = if draw::should_use_interior_tessellation(
+                ) = if draw.paint.style == RenderPaintStyle::Stroke {
+                    let tessellation = draw::build_line_stroke_tessellation(
+                        &draw.path.raw_path,
+                        draw.state.transform,
+                        draw.paint.thickness,
+                        draw.paint.join,
+                        draw.paint.cap,
+                    )
+                    .expect("atomic eligibility already validated stroke tessellation");
+                    (
+                        tessellation.spans,
+                        tessellation.path,
+                        tessellation.contours,
+                        tessellation.base_instance,
+                        tessellation.instance_count,
+                        0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                        Vec::new(),
+                    )
+                } else if draw::should_use_interior_tessellation(
                     &draw.path.raw_path,
                     draw.state.transform,
                 ) {
@@ -744,7 +774,9 @@ impl WgpuFrame {
                         Vec::new(),
                     )
                 };
-                contours[0].path_id = 1;
+                for contour in &mut contours {
+                    contour.path_id = 1;
+                }
                 path.coverage_buffer_range.pitch = padded_width;
                 let mut uniforms = analytic_uniforms(self.width, self.height, 1);
                 uniforms.render_target_update_bounds =
@@ -763,11 +795,18 @@ impl WgpuFrame {
                     tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let paints = [
                     gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
-                    gpu::PaintData::solid(
-                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                        draw.path.fill_rule,
-                        draw.paint.blend_mode,
-                    ),
+                    if draw.paint.style == RenderPaintStyle::Stroke {
+                        gpu::PaintData::solid_stroke(
+                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                            draw.paint.blend_mode,
+                        )
+                    } else {
+                        gpu::PaintData::solid(
+                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                            draw.path.fill_rule,
+                            draw.paint.blend_mode,
+                        )
+                    },
                 ];
                 self.context.atomic_pipeline.encode(
                     &self.context.device,
@@ -785,6 +824,7 @@ impl WgpuFrame {
                     instance_count,
                     patch_index_range,
                     &triangles,
+                    draw.paint.style == RenderPaintStyle::Stroke,
                     padded_width as usize * padded_height as usize,
                 );
             }
@@ -802,11 +842,23 @@ impl WgpuFrame {
             .iter()
             .take(if used_atomic { 0 } else { usize::MAX })
         {
-            if draw.paint.style == RenderPaintStyle::Fill && draw.paint.shader.is_none() {
-                if let Some(tessellation) =
-                    draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                {
-                    if tessellation.contours.len() != 1 {
+            if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
+                let tessellation = match draw.paint.style {
+                    RenderPaintStyle::Fill => {
+                        draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                    }
+                    RenderPaintStyle::Stroke => draw::build_line_stroke_tessellation(
+                        &draw.path.raw_path,
+                        draw.state.transform,
+                        draw.paint.thickness,
+                        draw.paint.join,
+                        draw.paint.cap,
+                    ),
+                };
+                if let Some(tessellation) = tessellation {
+                    if draw.paint.style == RenderPaintStyle::Fill
+                        && tessellation.contours.len() != 1
+                    {
                         // Compound fills require the upstream stencil-then-cover path.
                     } else {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
@@ -821,11 +873,18 @@ impl WgpuFrame {
                         );
                         let tessellation_view = tessellation_texture
                             .create_view(&wgpu::TextureViewDescriptor::default());
-                        let paint = gpu::PaintData::solid(
-                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                            draw.path.fill_rule,
-                            draw.paint.blend_mode,
-                        );
+                        let paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                            gpu::PaintData::solid_stroke(
+                                modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                draw.paint.blend_mode,
+                            )
+                        } else {
+                            gpu::PaintData::solid(
+                                modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                draw.path.fill_rule,
+                                draw.paint.blend_mode,
+                            )
+                        };
                         prepared_draws.push(PreparedDraw::Analytic(
                             self.context.path_pipeline.prepare(
                                 &self.context.device,

@@ -683,39 +683,6 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
-        let atomic_eligible =
-            self.mode == RenderMode::ClockwiseAtomic
-                && !self.draws.is_empty()
-                && self.draws.iter().all(|draw| {
-                    draw.paint.shader.is_none()
-                        && if draw.paint.feather != 0.0 {
-                            let stroke = (draw.paint.style == RenderPaintStyle::Stroke)
-                                .then_some((draw.paint.thickness, draw.paint.join, draw.paint.cap));
-                            draw::build_feather_tessellation(
-                                &draw.path.raw_path,
-                                draw.state.transform,
-                                draw.paint.feather,
-                                stroke,
-                            )
-                            .is_some()
-                        } else {
-                            match draw.paint.style {
-                                RenderPaintStyle::Fill => draw::build_fill_tessellation(
-                                    &draw.path.raw_path,
-                                    draw.state.transform,
-                                )
-                                .is_some_and(|tessellation| tessellation.contours.len() == 1),
-                                RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
-                                    &draw.path.raw_path,
-                                    draw.state.transform,
-                                    draw.paint.thickness,
-                                    draw.paint.join,
-                                    draw.paint.cap,
-                                )
-                                .is_some(),
-                            }
-                        }
-                });
         let encode_atomic_run =
             |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
                 #[derive(Clone, Copy)]
@@ -1126,216 +1093,230 @@ impl WgpuFrame {
                     padded_width as usize * padded_height as usize,
                 );
             };
-        let used_atomic = if atomic_eligible {
-            encode_atomic_run(&self.draws, true, &mut encoder);
-            true
-        } else {
-            false
-        };
-        enum PreparedDraw {
-            Analytic(path_pipeline::PreparedPathDraw),
-            Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
-        }
-        let mut prepared_draws = Vec::with_capacity(self.draws.len());
-        for draw in self
-            .draws
-            .iter()
-            .take(if used_atomic { 0 } else { usize::MAX })
-        {
-            if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
-                let tessellation = match draw.paint.style {
-                    RenderPaintStyle::Fill => {
-                        draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                    }
-                    RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
-                        &draw.path.raw_path,
-                        draw.state.transform,
-                        draw.paint.thickness,
-                        draw.paint.join,
-                        draw.paint.cap,
-                    ),
-                };
-                if let Some(tessellation) = tessellation {
-                    if draw.paint.style == RenderPaintStyle::Fill
-                        && tessellation.contours.len() != 1
-                    {
-                        // Compound fills require the upstream stencil-then-cover path.
-                    } else {
-                        let tessellation_height =
-                            draw::tessellation_texture_height(&tessellation.spans);
-                        let uniforms =
-                            analytic_uniforms(self.width, self.height, tessellation_height);
-                        let tessellation_texture = self.context.tessellator.encode(
-                            &self.context.device,
-                            &mut encoder,
-                            &self.context.feather_lut.view,
-                            &tessellation.spans,
-                            &uniforms,
-                            std::slice::from_ref(&tessellation.path),
-                            &tessellation.contours,
-                            tessellation_height,
-                        );
-                        let tessellation_view = tessellation_texture
-                            .create_view(&wgpu::TextureViewDescriptor::default());
-                        let paint = if draw.paint.style == RenderPaintStyle::Stroke {
-                            gpu::PaintData::solid_stroke(
-                                modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                draw.paint.blend_mode,
-                            )
-                        } else {
-                            gpu::PaintData::solid(
-                                modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                draw.path.fill_rule,
-                                draw.paint.blend_mode,
-                            )
-                        };
-                        prepared_draws.push(PreparedDraw::Analytic(
-                            self.context.path_pipeline.prepare(
-                                &self.context.device,
-                                &tessellation_view,
-                                &self.context.feather_lut.view,
-                                &uniforms,
-                                &tessellation.path,
-                                &paint,
-                                &gpu::PaintAuxData::zeroed(),
-                                &tessellation.contours,
-                                tessellation.base_instance,
-                                tessellation.instance_count,
+        let encode_fallback_run =
+            |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
+                enum PreparedDraw {
+                    Analytic(path_pipeline::PreparedPathDraw),
+                    Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
+                }
+                let mut prepared_draws = Vec::with_capacity(draws.len());
+                for draw in draws {
+                    if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
+                        let tessellation = match draw.paint.style {
+                            RenderPaintStyle::Fill => draw::build_fill_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
                             ),
+                            RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
+                                &draw.path.raw_path,
+                                draw.state.transform,
+                                draw.paint.thickness,
+                                draw.paint.join,
+                                draw.paint.cap,
+                            ),
+                        };
+                        if let Some(tessellation) = tessellation {
+                            if draw.paint.style == RenderPaintStyle::Fill
+                                && tessellation.contours.len() != 1
+                            {
+                                // Compound fills require the upstream stencil-then-cover path.
+                            } else {
+                                let tessellation_height =
+                                    draw::tessellation_texture_height(&tessellation.spans);
+                                let uniforms =
+                                    analytic_uniforms(self.width, self.height, tessellation_height);
+                                let tessellation_texture = self.context.tessellator.encode(
+                                    &self.context.device,
+                                    encoder,
+                                    &self.context.feather_lut.view,
+                                    &tessellation.spans,
+                                    &uniforms,
+                                    std::slice::from_ref(&tessellation.path),
+                                    &tessellation.contours,
+                                    tessellation_height,
+                                );
+                                let tessellation_view = tessellation_texture
+                                    .create_view(&wgpu::TextureViewDescriptor::default());
+                                let paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                                    gpu::PaintData::solid_stroke(
+                                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                        draw.paint.blend_mode,
+                                    )
+                                } else {
+                                    gpu::PaintData::solid(
+                                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                        draw.path.fill_rule,
+                                        draw.paint.blend_mode,
+                                    )
+                                };
+                                prepared_draws.push(PreparedDraw::Analytic(
+                                    self.context.path_pipeline.prepare(
+                                        &self.context.device,
+                                        &tessellation_view,
+                                        &self.context.feather_lut.view,
+                                        &uniforms,
+                                        &tessellation.path,
+                                        &paint,
+                                        &gpu::PaintAuxData::zeroed(),
+                                        &tessellation.contours,
+                                        tessellation.base_instance,
+                                        tessellation.instance_count,
+                                    ),
+                                ));
+                                continue;
+                            }
+                        }
+                    }
+                    if let Some(path_vertices) = tessellate_solid(draw, self.width, self.height) {
+                        let cover_vertices = cover_vertices(&path_vertices);
+                        let path_buffer = self.context.device.create_buffer_init(
+                            &wgpu::util::BufferInitDescriptor {
+                                label: Some("nuxie-path-vertices"),
+                                contents: bytemuck::cast_slice(&path_vertices),
+                                usage: wgpu::BufferUsages::VERTEX,
+                            },
+                        );
+                        let cover_buffer = self.context.device.create_buffer_init(
+                            &wgpu::util::BufferInitDescriptor {
+                                label: Some("nuxie-path-cover"),
+                                contents: bytemuck::cast_slice(&cover_vertices),
+                                usage: wgpu::BufferUsages::VERTEX,
+                            },
+                        );
+                        prepared_draws.push(PreparedDraw::Bootstrap(
+                            path_buffer,
+                            cover_buffer,
+                            draw.path.fill_rule,
                         ));
-                        continue;
                     }
                 }
-            }
-            if let Some(path_vertices) = tessellate_solid(draw, self.width, self.height) {
-                let cover_vertices = cover_vertices(&path_vertices);
-                let path_buffer =
+                let fallback_texture =
                     self.context
                         .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("nuxie-path-vertices"),
-                            contents: bytemuck::cast_slice(&path_vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
+                        .create_texture(&wgpu::TextureDescriptor {
+                            label: Some("nuxie-fallback-resolve-target"),
+                            size: texture.size(),
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                | wgpu::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
                         });
-                let cover_buffer =
-                    self.context
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("nuxie-path-cover"),
-                            contents: bytemuck::cast_slice(&cover_vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-                prepared_draws.push(PreparedDraw::Bootstrap(
-                    path_buffer,
-                    cover_buffer,
-                    draw.path.fill_rule,
-                ));
-            }
-        }
-        if !used_atomic {
-            let fallback_texture = self
-                .context
-                .device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some("nuxie-fallback-resolve-target"),
-                    size: texture.size(),
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                });
-            let fallback_view = fallback_texture.create_view(&Default::default());
-            {
-                let attachments = [Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(color(self.clear_color)),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })];
-                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("nuxie-fallback-frame-clear"),
-                    color_attachments: &attachments,
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-            }
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("nuxie-solid-pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &multisample_view,
+                let fallback_view = fallback_texture.create_view(&Default::default());
+                if clear_target {
+                    let attachments = [Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
                         depth_slice: None,
-                        resolve_target: Some(&fallback_view),
+                        resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            load: wgpu::LoadOp::Clear(color(self.clear_color)),
                             store: wgpu::StoreOp::Store,
                         },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &stencil_view,
-                        depth_ops: None,
-                        stencil_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0),
-                            store: wgpu::StoreOp::Discard,
+                    })];
+                    let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nuxie-fallback-frame-clear"),
+                        color_attachments: &attachments,
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                }
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nuxie-solid-pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &multisample_view,
+                            depth_slice: None,
+                            resolve_target: Some(&fallback_view),
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &stencil_view,
+                            depth_ops: None,
+                            stencil_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(0),
+                                store: wgpu::StoreOp::Discard,
+                            }),
                         }),
-                    }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-                pass.set_stencil_reference(0);
-                for prepared in &prepared_draws {
-                    match prepared {
-                        PreparedDraw::Analytic(draw) => {
-                            pass.set_pipeline(&self.context.path_pipeline.pipeline);
-                            pass.set_bind_group(0, &draw.flush_group, &[]);
-                            pass.set_bind_group(1, &draw.image_group, &[]);
-                            pass.set_bind_group(3, &draw.sampler_group, &[]);
-                            pass.set_vertex_buffer(0, self.context.patch_vertex_buffer.slice(..));
-                            pass.set_index_buffer(
-                                self.context.patch_index_buffer.slice(..),
-                                wgpu::IndexFormat::Uint16,
-                            );
-                            pass.draw_indexed(
-                                0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
-                                0,
-                                draw.base_instance..draw.base_instance + draw.instance_count,
-                            );
-                        }
-                        PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
-                            pass.set_pipeline(match fill_rule {
-                                FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
-                                FillRule::NonZero | FillRule::Clockwise => {
-                                    &self.context.non_zero_stencil_pipeline
-                                }
-                            });
-                            pass.set_vertex_buffer(0, path_buffer.slice(..));
-                            pass.draw(
-                                0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64)
-                                    as u32,
-                                0..1,
-                            );
-                            pass.set_pipeline(&self.context.cover_pipeline);
-                            pass.set_vertex_buffer(0, cover_buffer.slice(..));
-                            pass.draw(0..6, 0..1);
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                    pass.set_stencil_reference(0);
+                    for prepared in &prepared_draws {
+                        match prepared {
+                            PreparedDraw::Analytic(draw) => {
+                                pass.set_pipeline(&self.context.path_pipeline.pipeline);
+                                pass.set_bind_group(0, &draw.flush_group, &[]);
+                                pass.set_bind_group(1, &draw.image_group, &[]);
+                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                pass.set_vertex_buffer(
+                                    0,
+                                    self.context.patch_vertex_buffer.slice(..),
+                                );
+                                pass.set_index_buffer(
+                                    self.context.patch_index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint16,
+                                );
+                                pass.draw_indexed(
+                                    0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
+                                    0,
+                                    draw.base_instance..draw.base_instance + draw.instance_count,
+                                );
+                            }
+                            PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
+                                pass.set_pipeline(match fill_rule {
+                                    FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
+                                    FillRule::NonZero | FillRule::Clockwise => {
+                                        &self.context.non_zero_stencil_pipeline
+                                    }
+                                });
+                                pass.set_vertex_buffer(0, path_buffer.slice(..));
+                                pass.draw(
+                                    0..(path_buffer.size() / std::mem::size_of::<Vertex>() as u64)
+                                        as u32,
+                                    0..1,
+                                );
+                                pass.set_pipeline(&self.context.cover_pipeline);
+                                pass.set_vertex_buffer(0, cover_buffer.slice(..));
+                                pass.draw(0..6, 0..1);
+                            }
                         }
                     }
                 }
+                self.context.composite_pipeline.encode(
+                    &self.context.device,
+                    encoder,
+                    &view,
+                    &fallback_view,
+                );
+            };
+        if self.draws.is_empty() || self.mode == RenderMode::Msaa {
+            encode_fallback_run(&self.draws, true, &mut encoder);
+        } else {
+            let mut start = 0;
+            let mut clear_target = true;
+            while start < self.draws.len() {
+                let atomic = atomic_draw_is_eligible(&self.draws[start]);
+                let mut end = start + 1;
+                while end < self.draws.len() && atomic_draw_is_eligible(&self.draws[end]) == atomic
+                {
+                    end += 1;
+                }
+                if atomic {
+                    encode_atomic_run(&self.draws[start..end], clear_target, &mut encoder);
+                } else {
+                    encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder);
+                }
+                clear_target = false;
+                start = end;
             }
-            self.context.composite_pipeline.encode(
-                &self.context.device,
-                &mut encoder,
-                &view,
-                &fallback_view,
-            );
         }
 
         let unpadded_bytes_per_row = self.width * 4;
@@ -1571,6 +1552,40 @@ fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint, transform: Mat2D) -> bo
                 || fill_path_is_collinear(&path.raw_path)))
 }
 
+fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
+    if draw.paint.shader.is_some() {
+        return false;
+    }
+    if draw.paint.feather != 0.0 {
+        let stroke = (draw.paint.style == RenderPaintStyle::Stroke).then_some((
+            draw.paint.thickness,
+            draw.paint.join,
+            draw.paint.cap,
+        ));
+        return draw::build_feather_tessellation(
+            &draw.path.raw_path,
+            draw.state.transform,
+            draw.paint.feather,
+            stroke,
+        )
+        .is_some();
+    }
+    match draw.paint.style {
+        RenderPaintStyle::Fill => {
+            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                .is_some_and(|tessellation| tessellation.contours.len() == 1)
+        }
+        RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
+            &draw.path.raw_path,
+            draw.state.transform,
+            draw.paint.thickness,
+            draw.paint.join,
+            draw.paint.cap,
+        )
+        .is_some(),
+    }
+}
+
 fn fill_path_is_collinear(path: &RawPath) -> bool {
     let mut points = path.points().iter().copied();
     let Some(origin) = points.next() else {
@@ -1779,6 +1794,55 @@ mod tests {
         receiver.recv().unwrap().unwrap();
         let mapped = slice.get_mapped_range().unwrap();
         assert_eq!(&mapped[..4], &[128, 0, 127, 255]);
+    }
+
+    #[test]
+    fn atomic_and_fallback_runs_preserve_draw_order() {
+        fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> WgpuPath {
+            let [left, top, right, bottom] = bounds;
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(left, top);
+            raw_path.line_to(right, top);
+            raw_path.line_to(right, bottom);
+            raw_path.line_to(left, bottom);
+            raw_path.close();
+            WgpuPath {
+                raw_path,
+                fill_rule,
+            }
+        }
+
+        let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::ClockwiseAtomic).unwrap();
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let green = WgpuPaint {
+            color: 0xff00_ff00,
+            ..WgpuPaint::default()
+        };
+        let blue = WgpuPaint {
+            color: 0xff00_00ff,
+            ..WgpuPaint::default()
+        };
+        let background = rect_path([1.0, 1.0, 31.0, 31.0], FillRule::NonZero);
+        let mut compound = rect_path([4.0, 4.0, 28.0, 28.0], FillRule::EvenOdd);
+        compound.raw_path.add_path(
+            &rect_path([10.0, 10.0, 22.0, 22.0], FillRule::EvenOdd).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let foreground = rect_path([16.0, 16.0, 30.0, 30.0], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(&background, &red);
+        frame.draw_path(&compound, &green);
+        frame.draw_path(&foreground, &blue);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 32 + x) * 4..][..4];
+
+        assert_eq!(pixel(2, 2), [255, 0, 0, 255]);
+        assert_eq!(pixel(6, 6), [0, 255, 0, 255]);
+        assert_eq!(pixel(12, 12), [255, 0, 0, 255]);
+        assert_eq!(pixel(18, 18), [0, 0, 255, 255]);
     }
 
     #[test]

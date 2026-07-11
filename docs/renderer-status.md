@@ -365,3 +365,14 @@ Run `make renderer-golden`.
   prerequisite for alternating atomic and resolved-fallback runs; the next
   slice extracts the matching fallback-run encoder and replaces the global
   `all()` gate with contiguous eligibility ranges.
+- 2026-07-11: Replaced the global clockwise-atomic `all()` gate with ordered
+  contiguous atomic and fallback runs. Each fallback run renders into a
+  transparent 4x target, resolves, and composites between atomic runs; only the
+  first run clears the destination. A submitted GPU test proves an
+  atomic-background/fallback-middle/atomic-foreground sequence preserves all
+  three layers and their draw order. All 38 renderer tests pass and the corpus
+  remains exact=21/diverges=0. This routing changes the known `emptystroke`
+  residual from 1,320 differing pixels/max delta 81 to 546/max delta 255: fewer
+  pixels differ, but supported degenerate strokes now expose the already parked
+  direct-stroke atomic resolution gap instead of inheriting whole-frame
+  fallback output. Close that gap next; do not widen its corpus tolerance.

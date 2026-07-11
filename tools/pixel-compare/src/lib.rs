@@ -1,9 +1,10 @@
 use png::{BitDepth, ColorType, Decoder, Encoder, Transformations};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tolerance {
@@ -25,6 +26,66 @@ pub struct DiffReport {
     pub different_pixels: u64,
     pub max_channel_delta: u8,
     pub within_tolerance: bool,
+}
+
+#[derive(Clone, Copy)]
+pub struct ReferenceIdentity<'a> {
+    pub id: &'a str,
+    pub stream: &'a Path,
+    pub frame: usize,
+    pub mode: &'a str,
+    pub reference: &'a Path,
+}
+
+pub fn validate_reference_identities<'a>(
+    entries: impl IntoIterator<Item = ReferenceIdentity<'a>>,
+) -> Result<(), String> {
+    let mut owners = HashMap::<PathBuf, (PathBuf, usize, &str, &str)>::new();
+    for entry in entries {
+        let reference = normalize_path(entry.reference);
+        let identity = (
+            normalize_path(entry.stream),
+            entry.frame,
+            entry.mode,
+            entry.id,
+        );
+        if let Some((stream, frame, mode, id)) = owners.insert(reference, identity.clone()) {
+            if (stream.as_path(), frame, mode) != (identity.0.as_path(), identity.1, identity.2) {
+                return Err(format!(
+                    "reference {} is shared by incompatible entries {id} ({}, frame {frame}, {mode}) and {} ({}, frame {}, {}); references must be keyed by stream, frame, and mode",
+                    entry.reference.display(),
+                    stream.display(),
+                    entry.id,
+                    entry.stream.display(),
+                    entry.frame,
+                    entry.mode,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(Path::new(std::path::MAIN_SEPARATOR_STR)),
+            Component::CurDir => {}
+            Component::ParentDir => match normalized.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    normalized.pop();
+                }
+                Some(Component::ParentDir) | None if !normalized.has_root() => {
+                    normalized.push("..");
+                }
+                _ => {}
+            },
+            Component::Normal(part) => normalized.push(part),
+        }
+    }
+    normalized
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -248,6 +309,18 @@ mod tests {
         assert_eq!(report.different_pixels, 1);
         assert_eq!(report.max_channel_delta, 6);
         assert!(report.within_tolerance);
+    }
+
+    #[test]
+    fn normalizes_reference_aliases_without_collapsing_leading_parents() {
+        assert_eq!(
+            normalize_path(Path::new("a/sub/../shared.png")),
+            Path::new("a/shared.png")
+        );
+        assert_eq!(
+            normalize_path(Path::new("../../shared.png")),
+            Path::new("../../shared.png")
+        );
     }
 
     #[test]

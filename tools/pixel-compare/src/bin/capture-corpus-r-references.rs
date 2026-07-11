@@ -1,3 +1,4 @@
+use pixel_compare::{ReferenceIdentity, RgbaImage, validate_reference_identities};
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;
@@ -23,6 +24,14 @@ struct Entry {
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
+    validate_reference_identities(manifest.entry.iter().map(|entry| ReferenceIdentity {
+        id: &entry.id,
+        stream: &entry.stream,
+        frame: entry.frame,
+        mode: &entry.mode,
+        reference: &entry.reference,
+    }))?;
+    require_supported_mode(&options.mode)?;
     let mut captured = 0usize;
 
     for entry in manifest.entry.iter().filter(|entry| {
@@ -36,16 +45,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(parent) = entry.reference.parent() {
             fs::create_dir_all(parent)?;
         }
+        let temporary = temporary_path(&entry.reference, captured)?;
+        let _ = fs::remove_file(&temporary);
         let replay = Command::new(&options.replay)
             .args(["--stream", path_str(&entry.stream)?])
-            .args(["--output", path_str(&entry.reference)?])
+            .args(["--output", path_str(&temporary)?])
             .args(["--backend", "ffi-metal"])
             .args(["--frame", &entry.frame.to_string()])
             .args(["--mode", &entry.mode])
             .status()?;
         if !replay.success() {
+            let _ = fs::remove_file(&temporary);
             return Err(format!("C++ reference replay failed for {}", entry.id).into());
         }
+        RgbaImage::read_png(&temporary).map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            format!(
+                "C++ reference replay produced no valid PNG for {}: {error}",
+                entry.id
+            )
+        })?;
+        fs::rename(&temporary, &entry.reference)?;
         captured += 1;
         println!(
             "captured {}: frame={} mode={} reference={}",
@@ -104,6 +124,33 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error>> {
         .ok_or_else(|| "path is not valid UTF-8".into())
 }
 
+fn temporary_path(reference: &Path, index: usize) -> Result<PathBuf, Box<dyn Error>> {
+    let name = reference
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("reference has no UTF-8 file name")?;
+    Ok(reference.with_file_name(format!(".{name}.{}.{}.capture", std::process::id(), index)))
+}
+
+fn require_supported_mode(mode: &str) -> Result<(), Box<dyn Error>> {
+    if mode == "clockwise-atomic" {
+        Ok(())
+    } else {
+        Err("C++ Metal reference capture only supports clockwise-atomic mode".into())
+    }
+}
+
 fn usage() -> &'static str {
     "usage: capture-corpus-r-references [--manifest FILE] [--replay FILE] [--status STATUS] [--mode MODE] [--id ID]"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_msaa_capture_before_launching_replay() {
+        let error = require_supported_mode("msaa").unwrap_err();
+        assert!(error.to_string().contains("only supports clockwise-atomic"));
+    }
 }

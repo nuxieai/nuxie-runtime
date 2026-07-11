@@ -1,6 +1,7 @@
-use pixel_compare::{RgbaImage, Tolerance, artifact, compare};
+use pixel_compare::{
+    ReferenceIdentity, RgbaImage, Tolerance, artifact, compare, validate_reference_identities,
+};
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -107,29 +108,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn validate_reference_identity(entries: &[Entry]) -> Result<(), String> {
-    let mut owners = HashMap::<&Path, (&Path, usize, &str, &str)>::new();
-    for entry in entries {
-        let identity = (
-            entry.stream.as_path(),
-            entry.frame,
-            entry.mode.as_str(),
-            entry.id.as_str(),
-        );
-        if let Some((stream, frame, mode, id)) = owners.insert(&entry.reference, identity) {
-            if (stream, frame, mode) != (identity.0, identity.1, identity.2) {
-                return Err(format!(
-                    "reference {} is shared by incompatible entries {id} ({}, frame {frame}, {mode}) and {} ({}, frame {}, {}); references must be keyed by stream, frame, and mode",
-                    entry.reference.display(),
-                    stream.display(),
-                    entry.id,
-                    entry.stream.display(),
-                    entry.frame,
-                    entry.mode,
-                ));
-            }
-        }
-    }
-    Ok(())
+    validate_reference_identities(entries.iter().map(|entry| ReferenceIdentity {
+        id: &entry.id,
+        stream: &entry.stream,
+        frame: entry.frame,
+        mode: &entry.mode,
+        reference: &entry.reference,
+    }))
 }
 
 struct Options {
@@ -212,5 +197,14 @@ mod tests {
             entry("msaa", "msaa", "msaa.png"),
         ];
         validate_reference_identity(&entries).unwrap();
+    }
+
+    #[test]
+    fn rejects_lexical_aliases_of_the_same_reference() {
+        let entries = [
+            entry("atomic", "clockwise-atomic", "alias/shared.png"),
+            entry("msaa", "msaa", "alias/sub/../shared.png"),
+        ];
+        validate_reference_identity(&entries).unwrap_err();
     }
 }

@@ -657,9 +657,11 @@ the only memory the next session has. Update it every commit.
         and single-property RangeMapper bindings now follow converter-graph
         reachability, and relative nested contexts publish the parent model's
         precise percentage values. All six FollowPath transforms now match
-        C++ within the comparator epsilon. The first structural mismatch is
-        now retained render-path identity: C++ allocates a second path for the
-        Pie Chart's second stroke paint, while Rust reuses the first path.
+        C++ within the comparator epsilon. Paint-owned effect paths and the
+        Data artboard's computed `Total: 283` text now match C++. The first
+        mismatch is Circles shape local 269's weighted `PointsPath`: Rust
+        retains the pre-constraint two-point geometry while C++ publishes the
+        layout-driven root-bone deformation.
         Component-list instancing remains the sole explicit scripted
         unsupported gap.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
@@ -3841,6 +3843,23 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-10: [M8] Ported C++ target-to-source converter dependency ordering
+  and live nested-context publication. Formula-token and converter-property
+  dependents now refresh before custom-property sources apply, and nested
+  consumers of those source-owned paths read the resulting live context even
+  when a root-owned context has no object-arena source local. This advances
+  `data_viz_demo.riv` from the mismatched `Total: 0` outline at stream line 694
+  through matching `Total: 283` text to line 1018. The new boundary is a
+  separate weighted-geometry family: Circles shape local 269 / PointsPath 270
+  remains at `(0,-60)->(-8,-60)` while C++'s layout-driven transform
+  constraints deform it to `(0,-3.42)->(764,-3.42)`. `cargo test --workspace`,
+  scripted compare, regular compare, formatting, and diff checks pass. Metrics
+  remain scripted exact=25 / exact-segments=33 / diverges=1 /
+  unsupported-feature=1 and regular exact=263 / exact-segments=584 /
+  diverges=26 / unsupported-feature=6. Next: trace Circles root-bone constraint
+  updates against its retained nested layout bounds; do not reopen text or
+  path-cache work.
 
 - 2026-07-10: [M8] Matched C++ paint-owned render-path identity for shape
   effects. Ordinary paints still share their container path, while effect and

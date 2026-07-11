@@ -3510,6 +3510,10 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
     ) -> bool {
         let mut changed = false;
+        // C++ DataBindContainer::updateDataBind updates converter dependents
+        // before applying a target-to-source binding.
+        changed |= self.update_artboard_formula_token_bindings();
+        changed |= self.update_artboard_converter_property_bindings();
         if self
             .artboard_data_bind_source_queues
             .has_custom_property_update_indices()
@@ -3526,8 +3530,6 @@ impl ArtboardInstance {
         changed |= self.update_artboard_layout_computed_bindings(root_transform);
         changed |= self.update_artboard_solo_source_bindings();
         changed |= self.update_artboard_numeric_source_bindings();
-        changed |= self.update_artboard_formula_token_bindings();
-        changed |= self.update_artboard_converter_property_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.apply_artboard_image_asset_bindings();
         if elapsed_seconds != 0.0 {
@@ -4553,22 +4555,35 @@ impl ArtboardInstance {
                 continue;
             }
             for (index, binding) in nested.child.artboard_property_bindings.iter().enumerate() {
-                let Some(source_local) = nested
+                let source_local = nested
                     .data_bind_property_source_locals
                     .get(index)
                     .copied()
+                    .flatten();
+                let value = self
+                    .artboard_custom_property_bindings
+                    .iter()
+                    .any(|source| source.path.as_ref() == binding.path.as_slice())
+                    .then(|| {
+                        self.artboard_data_bind_values
+                            .get(binding.path.as_slice())
+                            .cloned()
+                    })
                     .flatten()
-                else {
-                    continue;
-                };
-                if let Some(value) = self.stateful_nested_host_binding_value_for_local(
-                    source_local,
-                    &binding.default_value,
-                ) && nested
-                    .child
-                    .artboard_data_bind_values
-                    .get(binding.path.as_slice())
-                    != Some(&value)
+                    .or_else(|| {
+                        source_local.and_then(|source_local| {
+                            self.stateful_nested_host_binding_value_for_local(
+                                source_local,
+                                &binding.default_value,
+                            )
+                        })
+                    });
+                if let Some(value) = value
+                    && nested
+                        .child
+                        .artboard_data_bind_values
+                        .get(binding.path.as_slice())
+                        != Some(&value)
                 {
                     updates.push(RuntimeNestedChildContextUpdate::Property(index, value));
                 }

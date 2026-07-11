@@ -70,7 +70,7 @@ impl AtlasPipeline {
             ],
             immediate_size: 0,
         });
-        let make_pipeline = |label, fragment: &wgpu::ShaderModule, operation, cull_mode| {
+        let make_pipeline = |label, fragment: &wgpu::ShaderModule, operation| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -82,7 +82,10 @@ impl AtlasPipeline {
                 },
                 primitive: wgpu::PrimitiveState {
                     front_face: wgpu::FrontFace::Cw,
-                    cull_mode,
+                    // Native WebGPU keeps atlas strokes two-sided so every
+                    // feathered join contributes to the max mask. See
+                    // renderer/src/webgpu/render_context_webgpu_impl.cpp:1238-1251.
+                    cull_mode: None,
                     ..Default::default()
                 },
                 depth_stencil: None,
@@ -108,13 +111,11 @@ impl AtlasPipeline {
             "nuxie-atlas-fill-pipeline",
             &fill_fragment,
             wgpu::BlendOperation::Add,
-            None,
         );
         let stroke = make_pipeline(
             "nuxie-atlas-stroke-pipeline",
             &stroke_fragment,
             wgpu::BlendOperation::Max,
-            None,
         );
         Self {
             fill,
@@ -322,5 +323,48 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
         count: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{RenderMode, WgpuFactory, WgpuPaint, WgpuPath};
+    use nuxie_render_api::{FillRule, RawPath, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin};
+
+    #[test]
+    fn atlas_stroke_keeps_miter_and_bevel_corner_coverage() {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(64.0, 64.0);
+        raw_path.line_to(192.0, 64.0);
+        raw_path.line_to(192.0, 192.0);
+        raw_path.line_to(64.0, 192.0);
+        raw_path.close();
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+
+        for join in [StrokeJoin::Miter, StrokeJoin::Bevel] {
+            let factory =
+                WgpuFactory::new_with_mode(256, 256, RenderMode::ClockwiseAtomic).unwrap();
+            let paint = WgpuPaint {
+                style: RenderPaintStyle::Stroke,
+                color: 0xffff_ffff,
+                thickness: 32.0,
+                join,
+                cap: StrokeCap::Butt,
+                feather: 80.0,
+                ..WgpuPaint::default()
+            };
+            let mut frame = factory.begin_frame(0xff00_0000);
+            frame.draw_path(&path, &paint);
+            let pixels = frame.finish().unwrap();
+            let corner = pixels[(191 * 256 + 205) * 4];
+
+            // With back-face culling this pixel is 75 (miter) or 72 (bevel),
+            // leaving a hard atlas corner cutout. The native WebGPU atlas pass
+            // is two-sided; renderer/src/webgpu/render_context_webgpu_impl.cpp:1238-1251.
+            assert!(corner >= 120, "{join:?} corner coverage was {corner}");
+        }
     }
 }

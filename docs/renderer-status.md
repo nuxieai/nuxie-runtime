@@ -45,8 +45,8 @@ Run `make renderer-golden`.
 ## Next
 
 1. Complete `draw.cpp` stroke geometry by porting the tessellation-span
-   thin-stroke coverage behavior exposed by `strokes3`, then confirm against
-   `lots_of_tess_spans_stroke` with the mode-correct C++ oracle.
+   stress behavior exposed by `lots_of_tess_spans_stroke` with the mode-correct
+   C++ oracle.
 2. Port `draw.cpp` feather geometry, then continue R2 in source dependency
    order with `render_context.cpp`, robust triangulation, and the intersection
    board.
@@ -221,3 +221,13 @@ Run `make renderer-golden`.
   pixels), while `strokes_zoomed` and both tricky-cubic stroke GMs are exact.
   The next source gap is therefore thin-stroke coverage, not span placement or
   render mode. Exact remains 18.
+- 2026-07-11: Closed the apparent `strokes3` thin-coverage gap by porting
+  `RiveRenderer::drawPath` no-op culling. A zero-width stroke at the beginning
+  of the stream had poisoned the frame-wide atomic eligibility check and sent
+  every later draw through the fallback path. Culling empty paths, non-positive
+  or NaN stroke widths, and NaN feather values before batching moves the Rust
+  result from 42,778 raw differences at delta 128 to 2,054 at delta 1 against
+  the checked-in Metal reference. Those differences are all below the existing
+  channel tolerance, so `strokes3` promotes without widening its allowance and
+  exact moves to 19. The remaining stroke target is the tessellation-span
+  stress case.

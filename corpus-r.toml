@@ -2423,10 +2423,9 @@ stream = "fixtures/renderer/streams/gm/strokes3.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/strokes3.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

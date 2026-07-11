@@ -560,9 +560,14 @@ impl Renderer for WgpuFrame {
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        let path = wgpu_path(path);
+        let paint = wgpu_paint(paint);
+        if path_draw_is_noop(path, paint) {
+            return;
+        }
         self.draws.push(SolidDraw {
-            path: wgpu_path(path).clone(),
-            paint: wgpu_paint(paint).clone(),
+            path: path.clone(),
+            paint: paint.clone(),
             state: self.state,
         });
     }
@@ -1272,6 +1277,12 @@ fn align_to(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
 }
 
+fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint) -> bool {
+    path.raw_path.verbs().is_empty()
+        || (paint.style == RenderPaintStyle::Stroke && !(paint.thickness > 0.0))
+        || !(paint.feather >= 0.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1284,6 +1295,30 @@ mod tests {
         let scaled = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
         let result = multiply(translated, scaled);
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+    }
+
+    #[test]
+    fn culls_empty_and_invalid_path_draws_like_cpp() {
+        let empty = WgpuPath {
+            raw_path: RawPath::new(),
+            fill_rule: FillRule::NonZero,
+        };
+        let mut path = empty.clone();
+        path.raw_path.move_to(0.0, 0.0);
+        path.raw_path.line_to(1.0, 1.0);
+        let mut paint = WgpuPaint::default();
+
+        assert!(path_draw_is_noop(&empty, &paint));
+        assert!(!path_draw_is_noop(&path, &paint));
+
+        paint.style = RenderPaintStyle::Stroke;
+        paint.thickness = 0.0;
+        assert!(path_draw_is_noop(&path, &paint));
+        paint.thickness = f32::NAN;
+        assert!(path_draw_is_noop(&path, &paint));
+        paint.thickness = 1.0;
+        paint.feather = f32::NAN;
+        assert!(path_draw_is_noop(&path, &paint));
     }
 
     #[test]

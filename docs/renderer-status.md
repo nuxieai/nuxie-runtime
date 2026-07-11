@@ -277,3 +277,11 @@ Run `make renderer-golden`.
   force atlas routing regardless of radius. Boundary tests cover identity,
   scaled transforms, equality, and forced routing. Until the atlas pass lands,
   these draws correctly keep the frame out of the direct atomic path.
+- 2026-07-11: Instantiated C++'s offscreen feather-mask pass with the generated
+  `render_atlas` shaders. Fill masks render center-AA patches into `R16Float`
+  with additive blending; stroke masks use border patches with max blending.
+  The pass shares canonical path/paint/contour records, tessellation texture,
+  patch buffers, feather LUT, and linear samplers. A submitted GPU readback
+  test proves a real feathered rectangle leaves zero background and nonzero
+  center coverage. Atlas blitting, packing, and frame-order integration remain
+  the next checkpoint.

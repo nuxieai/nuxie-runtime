@@ -1,5 +1,6 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
+mod atlas_pipeline;
 mod atomic_pipeline;
 mod draw;
 mod feather_lut;
@@ -51,6 +52,8 @@ struct Context {
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
     atomic_pipeline: atomic_pipeline::AtomicPipeline,
+    #[allow(dead_code)]
+    atlas_pipeline: atlas_pipeline::AtlasPipeline,
     feather_lut: feather_lut::FeatherLut,
 }
 
@@ -215,6 +218,7 @@ impl WgpuFactory {
         let tessellator = tessellator::Tessellator::new(&device);
         let path_pipeline = path_pipeline::PathPipeline::new(&device);
         let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
+        let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
         Ok(Self {
             context: Arc::new(Context {
@@ -228,6 +232,7 @@ impl WgpuFactory {
                 tessellator,
                 path_pipeline,
                 atomic_pipeline,
+                atlas_pipeline,
                 feather_lut,
             }),
             width,
@@ -1553,5 +1558,122 @@ mod tests {
             written,
             [(2046, 0), (2047, 0), (0, 1), (1, 1), (2, 1), (3, 1)]
         );
+    }
+
+    #[test]
+    fn feather_atlas_pass_writes_r16_mask_coverage() {
+        let factory = WgpuFactory::new(64, 64).unwrap();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(16.0, 16.0);
+        raw_path.line_to(48.0, 16.0);
+        raw_path.line_to(48.0, 48.0);
+        raw_path.line_to(16.0, 48.0);
+        raw_path.close();
+        let mut tessellation =
+            draw::build_feather_tessellation(&raw_path, Mat2D::IDENTITY, 8.0, None).unwrap();
+        tessellation.path.atlas_transform = gpu::AtlasTransform {
+            scale_factor: 1.0,
+            translate_x: 0.0,
+            translate_y: 0.0,
+        };
+        let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
+        let mut uniforms = analytic_uniforms(64, 64, tessellation_height);
+        uniforms.atlas_texture_inverse_size = [1.0 / 64.0; 2];
+        uniforms.atlas_content_inverse_viewport = [2.0 / 64.0; 2];
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-atlas-test-encoder"),
+                });
+        let tessellation_texture = factory.context.tessellator.encode(
+            &factory.context.device,
+            &mut encoder,
+            &factory.context.feather_lut.view,
+            &tessellation.spans,
+            &uniforms,
+            std::slice::from_ref(&tessellation.path),
+            &tessellation.contours,
+            tessellation_height,
+        );
+        let tessellation_view =
+            tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let atlas = factory
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-atlas-test-target"),
+                size: wgpu::Extent3d {
+                    width: 64,
+                    height: 64,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R16Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
+        factory.context.atlas_pipeline.encode_mask(
+            &factory.context.device,
+            &mut encoder,
+            &atlas_view,
+            &factory.context.patch_vertex_buffer,
+            &factory.context.patch_index_buffer,
+            &tessellation_view,
+            &factory.context.feather_lut.view,
+            &uniforms,
+            &tessellation.path,
+            &gpu::PaintData::solid(0xffff_ffff, FillRule::NonZero, BlendMode::SrcOver),
+            &gpu::PaintAuxData::zeroed(),
+            &tessellation.contours,
+            tessellation.base_instance,
+            tessellation.instance_count,
+            false,
+        );
+        let bytes_per_row = 256;
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-atlas-test-readback"),
+                size: u64::from(bytes_per_row * 64),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            atlas.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(64),
+                },
+            },
+            atlas.size(),
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+        let slice = readback.slice(..);
+        let (sender, receiver) = mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let mask_value = |x: usize, y: usize| {
+            let offset = y * bytes_per_row as usize + x * 2;
+            u16::from_ne_bytes(mapped[offset..offset + 2].try_into().unwrap())
+        };
+        assert_eq!(mask_value(0, 0), 0);
+        assert_ne!(mask_value(32, 32), 0);
     }
 }

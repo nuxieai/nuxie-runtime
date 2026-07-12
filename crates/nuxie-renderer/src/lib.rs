@@ -293,9 +293,11 @@ impl Factory for WgpuFactory {
         size_in_bytes: usize,
     ) -> Box<dyn RenderBuffer> {
         Box::new(WgpuBuffer {
+            context: Arc::clone(&self.context),
             buffer_type,
             flags,
             bytes: vec![0; size_in_bytes],
+            submitted: None,
         })
     }
 
@@ -581,9 +583,11 @@ impl RenderPaint for WgpuPaint {
 }
 
 struct WgpuBuffer {
+    context: Arc<Context>,
     buffer_type: RenderBufferType,
     flags: RenderBufferFlags,
     bytes: Vec<u8>,
+    submitted: Option<Arc<wgpu::Buffer>>,
 }
 
 impl RenderBuffer for WgpuBuffer {
@@ -602,7 +606,27 @@ impl RenderBuffer for WgpuBuffer {
     fn map_mut(&mut self) -> &mut [u8] {
         &mut self.bytes
     }
-    fn unmap(&mut self) {}
+    fn unmap(&mut self) {
+        let usage = match self.buffer_type {
+            RenderBufferType::Vertex => wgpu::BufferUsages::VERTEX,
+            RenderBufferType::Index => wgpu::BufferUsages::INDEX,
+        };
+        // C++'s RenderBufferWebGPUImpl advances a buffer ring on every unmap.
+        // Snapshotting here gives queued draws the same immutable submission.
+        let zero = [0u8; 4];
+        let contents = if self.bytes.is_empty() {
+            zero.as_slice()
+        } else {
+            self.bytes.as_slice()
+        };
+        self.submitted = Some(Arc::new(self.context.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("nuxie-render-buffer"),
+                contents,
+                usage,
+            },
+        )));
+    }
 }
 
 struct WgpuImage {
@@ -668,7 +692,7 @@ struct SolidDraw {
     paint: WgpuPaint,
     state: DrawState,
     role: DrawRole,
-    image: Option<ImageRectDraw>,
+    image: Option<ImageDraw>,
 }
 
 #[derive(Clone)]
@@ -677,6 +701,54 @@ struct ImageRectDraw {
     sampler: ImageSampler,
     opacity: f32,
     blend_mode: BlendMode,
+}
+
+#[derive(Clone)]
+struct ImageMeshDraw {
+    texture: Arc<WgpuImageTexture>,
+    sampler: ImageSampler,
+    opacity: f32,
+    blend_mode: BlendMode,
+    vertices: Arc<wgpu::Buffer>,
+    uvs: Arc<wgpu::Buffer>,
+    indices: Arc<wgpu::Buffer>,
+    index_count: u32,
+}
+
+#[derive(Clone)]
+enum ImageDraw {
+    Rect(ImageRectDraw),
+    Mesh(ImageMeshDraw),
+}
+
+impl ImageDraw {
+    fn texture(&self) -> &Arc<WgpuImageTexture> {
+        match self {
+            Self::Rect(draw) => &draw.texture,
+            Self::Mesh(draw) => &draw.texture,
+        }
+    }
+
+    fn sampler(&self) -> ImageSampler {
+        match self {
+            Self::Rect(draw) => draw.sampler,
+            Self::Mesh(draw) => draw.sampler,
+        }
+    }
+
+    fn opacity(&self) -> f32 {
+        match self {
+            Self::Rect(draw) => draw.opacity,
+            Self::Mesh(draw) => draw.opacity,
+        }
+    }
+
+    fn blend_mode(&self) -> BlendMode {
+        match self {
+            Self::Rect(draw) => draw.blend_mode,
+            Self::Mesh(draw) => draw.blend_mode,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -857,12 +929,12 @@ impl Renderer for WgpuFrame {
                 ..self.state
             },
             role: DrawRole::Content { clip_id },
-            image: Some(ImageRectDraw {
+            image: Some(ImageDraw::Rect(ImageRectDraw {
                 texture: Arc::clone(texture),
                 sampler,
                 opacity: (opacity * self.state.opacity).max(0.0),
                 blend_mode,
-            }),
+            })),
         };
         if !atomic_draw_is_eligible(&content) {
             self.unsupported
@@ -899,17 +971,117 @@ impl Renderer for WgpuFrame {
 
     fn draw_image_mesh(
         &mut self,
-        _image: Option<&dyn RenderImage>,
-        _sampler: ImageSampler,
-        _vertices: Option<&dyn RenderBuffer>,
-        _uv_coords: Option<&dyn RenderBuffer>,
-        _indices: Option<&dyn RenderBuffer>,
-        _vertex_count: u32,
-        _index_count: u32,
-        _blend_mode: BlendMode,
-        _opacity: f32,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
     ) {
-        self.unsupported.get_or_insert("image meshes");
+        if self.state.clip_is_empty {
+            return;
+        }
+        let Some(image) = image.and_then(|image| image.as_any().downcast_ref::<WgpuImage>()) else {
+            return;
+        };
+        let Some(texture) = &image.texture else {
+            return;
+        };
+        if !matches!(blend_mode, BlendMode::SrcOver) {
+            self.unsupported
+                .get_or_insert("advanced image mesh blend mode");
+            return;
+        }
+        let Some(vertices) = vertices.and_then(wgpu_buffer) else {
+            self.unsupported
+                .get_or_insert("invalid image mesh vertex buffer");
+            return;
+        };
+        let Some(uvs) = uv_coords.and_then(wgpu_buffer) else {
+            self.unsupported
+                .get_or_insert("invalid image mesh UV buffer");
+            return;
+        };
+        let Some(indices) = indices.and_then(wgpu_buffer) else {
+            self.unsupported
+                .get_or_insert("invalid image mesh index buffer");
+            return;
+        };
+        let required_vertex_bytes = usize::try_from(vertex_count)
+            .ok()
+            .and_then(|count| count.checked_mul(8));
+        let required_index_bytes = usize::try_from(index_count)
+            .ok()
+            .and_then(|count| count.checked_mul(2));
+        if vertices.buffer_type != RenderBufferType::Vertex
+            || uvs.buffer_type != RenderBufferType::Vertex
+            || indices.buffer_type != RenderBufferType::Index
+            || required_vertex_bytes
+                .is_none_or(|size| vertices.bytes.len() < size || uvs.bytes.len() < size)
+            || required_index_bytes.is_none_or(|size| indices.bytes.len() < size)
+        {
+            self.unsupported
+                .get_or_insert("malformed image mesh buffers");
+            return;
+        }
+        let (Some(vertex_buffer), Some(uv_buffer), Some(index_buffer)) =
+            (&vertices.submitted, &uvs.submitted, &indices.submitted)
+        else {
+            self.unsupported
+                .get_or_insert("unmapped image mesh buffers");
+            return;
+        };
+        let Ok(clip_id) = u16::try_from(self.state.clip_stack_height) else {
+            self.unsupported
+                .get_or_insert("more than 65535 nested clips");
+            return;
+        };
+        let content = SolidDraw {
+            path: WgpuPath {
+                raw_path: RawPath::new(),
+                fill_rule: FillRule::NonZero,
+            },
+            paint: WgpuPaint::default(),
+            state: self.state,
+            role: DrawRole::Content { clip_id },
+            image: Some(ImageDraw::Mesh(ImageMeshDraw {
+                texture: Arc::clone(texture),
+                sampler,
+                opacity: (opacity * self.state.opacity).max(0.0),
+                blend_mode,
+                vertices: Arc::clone(vertex_buffer),
+                uvs: Arc::clone(uv_buffer),
+                indices: Arc::clone(index_buffer),
+                index_count,
+            })),
+        };
+        if self.state.clip_stack_height != 0 {
+            for (index, clip) in self.clips[..self.state.clip_stack_height]
+                .iter()
+                .enumerate()
+            {
+                let parent_id = index as u16;
+                self.draws.push(SolidDraw {
+                    path: clip.path.clone(),
+                    paint: WgpuPaint::default(),
+                    state: DrawState {
+                        transform: clip.matrix,
+                        clip_rect: None,
+                        clip_stack_height: 0,
+                        ..self.state
+                    },
+                    role: DrawRole::ClipUpdate {
+                        replacement_id: parent_id + 1,
+                        parent_id,
+                    },
+                    image: None,
+                });
+            }
+        }
+        self.draws.push(content);
     }
 
     fn modulate_opacity(&mut self, opacity: f32) {
@@ -1010,6 +1182,14 @@ impl WgpuFrame {
                     image: Option<Arc<WgpuImageTexture>>,
                     image_sampler: ImageSampler,
                     image_uniforms: Option<gpu::ImageDrawUniforms>,
+                    image_mesh: Option<PreparedImageMesh>,
+                }
+
+                struct PreparedImageMesh {
+                    vertices: Arc<wgpu::Buffer>,
+                    uvs: Arc<wgpu::Buffer>,
+                    indices: Arc<wgpu::Buffer>,
+                    index_count: u32,
                 }
 
                 if clear_target {
@@ -1123,7 +1303,17 @@ impl WgpuFrame {
                         instance_count,
                         patch_index_range,
                         mut triangles,
-                    ) = if draw.paint.feather != 0.0 {
+                    ) = if matches!(draw.image, Some(ImageDraw::Mesh(_))) {
+                        (
+                            Vec::new(),
+                            gpu::PathData::zeroed(),
+                            Vec::new(),
+                            0,
+                            0,
+                            0..0,
+                            Vec::new(),
+                        )
+                    } else if draw.paint.feather != 0.0 {
                         let stroke = draw.paint.effective_stroke();
                         let is_stroke = stroke.is_some();
                         let requires_atlas = draw::feather_requires_atlas(
@@ -1344,25 +1534,34 @@ impl WgpuFrame {
                         atlas_blit_vertices,
                         is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
                         is_feather: draw.paint.feather != 0.0,
-                        image: draw.image.as_ref().map(|image| Arc::clone(&image.texture)),
+                        image: draw.image.as_ref().map(|image| Arc::clone(image.texture())),
                         image_sampler: draw
                             .image
                             .as_ref()
-                            .map(|image| image.sampler)
+                            .map(ImageDraw::sampler)
                             .unwrap_or_default(),
                         image_uniforms: draw.image.as_ref().map(|image| {
                             gpu::ImageDrawUniforms::new(
                                 draw.state.transform,
-                                image.opacity,
+                                image.opacity(),
                                 image_clip_rect_inverse_matrix(draw.state.clip_rect),
                                 match draw.role {
                                     DrawRole::Content { clip_id } => clip_id,
                                     DrawRole::ClipUpdate { .. } => 0,
                                 },
-                                image.blend_mode,
+                                image.blend_mode(),
                                 1,
                             )
                         }),
+                        image_mesh: match &draw.image {
+                            Some(ImageDraw::Mesh(mesh)) => Some(PreparedImageMesh {
+                                vertices: Arc::clone(&mesh.vertices),
+                                uvs: Arc::clone(&mesh.uvs),
+                                indices: Arc::clone(&mesh.indices),
+                                index_count: mesh.index_count,
+                            }),
+                            _ => None,
+                        },
                     });
                 }
                 let atlas_regions = prepared
@@ -1414,6 +1613,7 @@ impl WgpuFrame {
                     });
                 let mut tessellation_span_batches = Vec::new();
                 let mut tessellation_heights = Vec::new();
+                let mut needs_dummy_tessellation = false;
                 if share_midpoint_tessellation {
                     let mut packed = Vec::new();
                     let mut cursor_x = 0u32;
@@ -1467,10 +1667,15 @@ impl WgpuFrame {
                         tessellation_heights.push(packed_height);
                     }
                 } else {
-                    for (index, draw) in prepared.iter_mut().enumerate() {
+                    for draw in &mut prepared {
+                        if draw.spans.is_empty() {
+                            needs_dummy_tessellation = true;
+                            draw.tessellation_index = usize::MAX;
+                            continue;
+                        }
+                        draw.tessellation_index = tessellation_span_batches.len();
                         tessellation_heights.push(draw::tessellation_texture_height(&draw.spans));
                         tessellation_span_batches.push(std::mem::take(&mut draw.spans));
-                        draw.tessellation_index = index;
                     }
                     let common_height = tessellation_heights.iter().copied().max().unwrap_or(1);
                     tessellation_heights.fill(common_height);
@@ -1502,6 +1707,30 @@ impl WgpuFrame {
                         height,
                     );
                     tessellation_textures.push(tessellation_texture);
+                }
+                if needs_dummy_tessellation {
+                    let dummy_index = tessellation_textures.len();
+                    tessellation_textures.push(self.context.device.create_texture(
+                        &wgpu::TextureDescriptor {
+                            label: Some("nuxie-dummy-tessellation-data"),
+                            size: wgpu::Extent3d {
+                                width: 1,
+                                height: 1,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rgba32Uint,
+                            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        },
+                    ));
+                    for draw in &mut prepared {
+                        if draw.tessellation_index == usize::MAX {
+                            draw.tessellation_index = dummy_index;
+                        }
+                    }
                 }
                 let tessellation_views = tessellation_textures
                     .iter()
@@ -1573,6 +1802,14 @@ impl WgpuFrame {
                         image: draw.image.as_ref().map(|image| &image.view),
                         image_sampler: draw.image_sampler,
                         image_uniforms: draw.image_uniforms,
+                        image_mesh: draw.image_mesh.as_ref().map(|mesh| {
+                            atomic_pipeline::ImageMeshBuffers {
+                                vertices: &mesh.vertices,
+                                uvs: &mesh.uvs,
+                                indices: &mesh.indices,
+                                index_count: mesh.index_count,
+                            }
+                        }),
                     })
                     .collect::<Vec<_>>();
                 if use_clockwise_atomic_batch {
@@ -2336,6 +2573,10 @@ fn wgpu_paint(paint: &dyn RenderPaint) -> &WgpuPaint {
         .expect("nuxie-renderer received a foreign paint")
 }
 
+fn wgpu_buffer(buffer: &dyn RenderBuffer) -> Option<&WgpuBuffer> {
+    buffer.as_any().downcast_ref()
+}
+
 fn multiply(left: Mat2D, right: Mat2D) -> Mat2D {
     let [a, b, c, d, tx, ty] = left.0;
     let [e, f, g, h, ux, uy] = right.0;
@@ -2517,6 +2758,9 @@ fn invert_clockwise_path(
 fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     if matches!(draw.role, DrawRole::ClipUpdate { .. }) {
         return draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform).is_some();
+    }
+    if matches!(&draw.image, Some(ImageDraw::Mesh(_))) {
+        return true;
     }
     if draw.paint.shader.is_some() {
         return false;
@@ -2902,6 +3146,117 @@ mod tests {
     #[test]
     fn rejects_unknown_encoded_image_format() {
         assert!(decode_image_rgba(b"not an image").is_none());
+    }
+
+    #[test]
+    fn render_buffer_unmap_snapshots_submitted_contents() {
+        let mut factory = WgpuFactory::new_with_mode(4, 4, RenderMode::ClockwiseAtomic).unwrap();
+        let mut buffer =
+            factory.make_render_buffer(RenderBufferType::Vertex, RenderBufferFlags::None, 8);
+        buffer.map_mut().copy_from_slice(&[1; 8]);
+        buffer.unmap();
+        let first = Arc::clone(
+            wgpu_buffer(buffer.as_ref())
+                .unwrap()
+                .submitted
+                .as_ref()
+                .unwrap(),
+        );
+
+        buffer.map_mut().copy_from_slice(&[2; 8]);
+        buffer.unmap();
+        let second = Arc::clone(
+            wgpu_buffer(buffer.as_ref())
+                .unwrap()
+                .submitted
+                .as_ref()
+                .unwrap(),
+        );
+
+        assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn atomic_image_mesh_draws_indexed_position_and_uv_buffers() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded);
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [2.0f32, 2.0],
+            [14.0, 2.0],
+            [2.0, 14.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_image_mesh(
+            Some(image.as_ref()),
+            ImageSampler::default(),
+            Some(vertices.as_ref()),
+            Some(uvs.as_ref()),
+            Some(indices.as_ref()),
+            3,
+            3,
+            BlendMode::SrcOver,
+            1.0,
+        );
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+        assert_eq!(pixel(4, 4), [255, 0, 0, 255]);
+        assert_eq!(pixel(15, 15), [0, 0, 0, 255]);
+
+        let mut advanced_blend = factory.begin_frame(0xff00_0000);
+        advanced_blend.draw_image_mesh(
+            Some(image.as_ref()),
+            ImageSampler::default(),
+            Some(vertices.as_ref()),
+            Some(uvs.as_ref()),
+            Some(indices.as_ref()),
+            3,
+            3,
+            BlendMode::Multiply,
+            1.0,
+        );
+        assert!(matches!(
+            advanced_blend.finish(),
+            Err(RendererError::Unsupported("advanced image mesh blend mode"))
+        ));
     }
 
     #[test]

@@ -17,6 +17,7 @@ pub(crate) struct AtomicPipeline {
     interior: wgpu::RenderPipeline,
     atlas_blit: wgpu::RenderPipeline,
     image_rect: wgpu::RenderPipeline,
+    image_mesh: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     feather_resolve: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
@@ -45,6 +46,15 @@ pub(crate) struct AtomicDraw<'a> {
     pub image: Option<&'a wgpu::TextureView>,
     pub image_sampler: ImageSampler,
     pub image_uniforms: Option<ImageDrawUniforms>,
+    pub image_mesh: Option<ImageMeshBuffers<'a>>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ImageMeshBuffers<'a> {
+    pub vertices: &'a wgpu::Buffer,
+    pub uvs: &'a wgpu::Buffer,
+    pub indices: &'a wgpu::Buffer,
+    pub index_count: u32,
 }
 
 impl AtomicPipeline {
@@ -98,6 +108,16 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-image-rect-fragment",
             include_str!("generated/atomic_draw_image_rect.webgpu_fixedcolor_frag.wgsl"),
+        );
+        let image_mesh_vertex = shader(
+            device,
+            "nuxie-atomic-image-mesh-vertex",
+            include_str!("generated/atomic_draw_image_mesh.webgpu_vert.wgsl"),
+        );
+        let image_mesh_fragment = shader(
+            device,
+            "nuxie-atomic-image-mesh-fragment",
+            include_str!("generated/atomic_draw_image_mesh.webgpu_fixedcolor_frag.wgsl"),
         );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-flush-layout"),
@@ -153,6 +173,34 @@ impl AtomicPipeline {
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &image_rect_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let image_mesh = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-image-mesh-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &image_mesh_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(image_mesh_vertex_layout(0)),
+                    Some(image_mesh_vertex_layout(1)),
+                ],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &image_mesh_fragment,
                 entry_point: Some("main"),
                 compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
@@ -492,6 +540,7 @@ impl AtomicPipeline {
             interior,
             atlas_blit,
             image_rect,
+            image_mesh,
             resolve,
             feather_resolve,
             flush_layout,
@@ -550,10 +599,15 @@ impl AtomicPipeline {
             paint_aux,
             wgpu::BufferUsages::STORAGE,
         );
+        let dummy_contours = [ContourData::zeroed()];
         let contours = upload(
             device,
             "nuxie-atomic-contours",
-            contours,
+            if contours.is_empty() {
+                &dummy_contours
+            } else {
+                contours
+            },
             wgpu::BufferUsages::STORAGE,
         );
         let clips = upload(
@@ -762,6 +816,23 @@ impl AtomicPipeline {
                 if draw.atlas.is_some() {
                     continue;
                 }
+                if let Some(mesh) = draw.image_mesh {
+                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        "nuxie-atomic-image-mesh-pass",
+                        &attachments,
+                    ));
+                    pass.set_pipeline(&self.image_mesh);
+                    pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                    pass.set_bind_group(1, image_group(draw_index), &[]);
+                    pass.set_bind_group(2, &atomics, &[]);
+                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                    pass.set_vertex_buffer(1, mesh.uvs.slice(..));
+                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint16);
+                    pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                    continue;
+                }
                 if draw.image.is_some() {
                     let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
                     let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
@@ -842,6 +913,29 @@ impl AtomicPipeline {
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
         }
+    }
+}
+
+const IMAGE_MESH_POSITION_ATTRIBUTE: [wgpu::VertexAttribute; 1] = [wgpu::VertexAttribute {
+    format: wgpu::VertexFormat::Float32x2,
+    offset: 0,
+    shader_location: 0,
+}];
+const IMAGE_MESH_UV_ATTRIBUTE: [wgpu::VertexAttribute; 1] = [wgpu::VertexAttribute {
+    format: wgpu::VertexFormat::Float32x2,
+    offset: 0,
+    shader_location: 1,
+}];
+
+fn image_mesh_vertex_layout(shader_location: u32) -> wgpu::VertexBufferLayout<'static> {
+    wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<[f32; 2]>() as u64,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: match shader_location {
+            0 => &IMAGE_MESH_POSITION_ATTRIBUTE,
+            1 => &IMAGE_MESH_UV_ATTRIBUTE,
+            _ => unreachable!("image mesh only has position and UV streams"),
+        },
     }
 }
 

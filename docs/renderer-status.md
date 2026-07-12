@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=77, diverges=0, gated=1,390, total=1,467.
+- Rust wgpu: exact=78, diverges=0, gated=1,389, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -65,7 +65,8 @@ Run `make renderer-golden`.
   `gm-hittest_nonZero-clockwise-atomic`, plus
   `gm-image_filter_options-clockwise-atomic`,
   `gm-image_lod-clockwise-atomic`, and
-  `riv-clipping_and_draw_order-frame-0-clockwise-atomic`.
+  `riv-clipping_and_draw_order-frame-0-clockwise-atomic`, plus
+  `riv-tape-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -173,8 +174,13 @@ Run `make renderer-golden`.
    clipped and later unclipped image in `clipping_and_draw_order`; the clip
    boundary and authored draw order match C++ Metal. The remaining image queue
    is explicit: `image` and `image_aa_border` require embedded PNG
-   profile/color-management parity with Metal's platform decoder, while image
-   meshes remain unported. Continue R2 with `ImageMeshDraw`.
+   profile/color-management parity with Metal's platform decoder. C++'s
+   `ImageMeshDraw` is now ported with retained position/UV/index buffers,
+   immutable unmap snapshots, generated atomic mesh shaders, clip IDs, and
+   authored opacity/samplers. `tape` is promoted; `mesh` still needs advanced
+   image blending, and the larger `jellyfish_test` mesh surface remains to be
+   measured. Continue R2 with advanced atomic blending, then rescout the
+   remaining image corpus.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -193,6 +199,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: `ImageMeshDraw` follows C++'s retained-buffer contract: position
+  and UV streams are separate `float2` vertex buffers, indices are `u16`, and
+  every unmap snapshots a new submitted wgpu buffer so later mutations cannot
+  rewrite queued draws. The generated fixed-color atomic mesh shaders provide
+  `srcOver`, clipping, clip-rect, transform, opacity, and sampler parity.
+  `tape` retains delta 2 with a bounded 6,400-pixel allowance: 6,162 pixels
+  differ versus fresh C++ Metal (max delta 31), all inside the three decoded
+  image interiors; foreground-support masks differ at only 89-192 sparse edge
+  pixels across 1%-20% thresholds. Advanced image blend modes remain named
+  algorithm work and are not covered by this allowance.
 - 2026-07-12: Encoded-image dispatch supports both corpus formats: PNG and
   JPEG. `clipping_and_draw_order` was a decode gate, not a clip-buffer failure:
   its embedded bytes begin with JPEG SOI, and the PNG-only decoder returned an
@@ -920,3 +936,8 @@ Run `make renderer-golden`.
   clockwise-atomic reference for `clipping_and_draw_order`. Both image draws,
   including the circular clip, are restored; the renderer ratchet advances to
   exact=77/diverges=0/gated=1,390. `ImageMeshDraw` is the next R2 image slice.
+- 2026-07-12: Ported C++ `ImageMeshDraw` with snapshotted retained buffers and
+  the generated fixed-color atomic mesh shaders. A GPU regression pins indexed
+  position/UV sampling, and `tape` matches fresh C++ geometry and support under
+  its bounded decoder/filter allowance. The ratchet advances to
+  exact=78/diverges=0/gated=1,389; advanced image blending is next.

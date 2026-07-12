@@ -93,17 +93,20 @@ impl RawPath {
     }
 
     pub fn line_to(&mut self, x: f32, y: f32) {
+        self.inject_implicit_move_if_needed();
         self.verbs.push(PathVerb::Line);
         self.points.push(Vec2D::new(x, y));
     }
 
     pub fn quad_to(&mut self, ox: f32, oy: f32, x: f32, y: f32) {
+        self.inject_implicit_move_if_needed();
         self.verbs.push(PathVerb::Quad);
         self.points.push(Vec2D::new(ox, oy));
         self.points.push(Vec2D::new(x, y));
     }
 
     pub fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
+        self.inject_implicit_move_if_needed();
         self.verbs.push(PathVerb::Cubic);
         self.points.push(Vec2D::new(ox, oy));
         self.points.push(Vec2D::new(ix, iy));
@@ -111,7 +114,9 @@ impl RawPath {
     }
 
     pub fn close(&mut self) {
-        self.verbs.push(PathVerb::Close);
+        if !self.verbs.is_empty() && self.verbs.last() != Some(&PathVerb::Close) {
+            self.verbs.push(PathVerb::Close);
+        }
     }
 
     pub fn add_path(&mut self, path: &RawPath, transform: Mat2D) {
@@ -125,9 +130,114 @@ impl RawPath {
     }
 
     pub fn add_path_backwards(&mut self, path: &RawPath, transform: Mat2D) {
-        // TODO(golden): port RawPath::addPathBackwards when a golden divergence
-        // reaches this path operation.
-        self.add_path(path, transform);
+        if path.verbs.is_empty() {
+            return;
+        }
+
+        let initial_verb_count = self.verbs.len();
+        let initial_point_count = self.points.len();
+        self.points.reserve(path.points.len());
+        self.points.extend(
+            path.points
+                .iter()
+                .rev()
+                .copied()
+                .map(|point| transform.transform_point(point)),
+        );
+
+        // Reverse the verbs while moving each close from the end of its
+        // original contour to the end of the reversed contour.
+        self.verbs.reserve(path.verbs.len());
+        self.verbs.push(PathVerb::Move);
+        let mut closed = false;
+        for (index, verb) in path.verbs.iter().enumerate().rev() {
+            if *verb == PathVerb::Close {
+                debug_assert!(!closed, "a contour may contain only one close verb");
+                closed = true;
+                continue;
+            }
+
+            if *verb == PathVerb::Move && closed {
+                self.verbs.push(PathVerb::Close);
+                closed = false;
+            }
+
+            if index == 0 {
+                debug_assert_eq!(*verb, PathVerb::Move);
+                break;
+            }
+
+            self.verbs.push(*verb);
+        }
+        debug_assert!(!closed, "every close verb must have a preceding move verb");
+
+        self.prune_empty_segments_from(initial_verb_count, initial_point_count);
+    }
+
+    fn prune_empty_segments_from(&mut self, verb_start: usize, point_start: usize) {
+        let mut source_point = point_start;
+        let mut destination_verb = verb_start;
+        let mut destination_point = point_start;
+
+        for source_verb in verb_start..self.verbs.len() {
+            let verb = self.verbs[source_verb];
+            let point_count = match verb {
+                PathVerb::Move | PathVerb::Line => 1,
+                PathVerb::Quad => 2,
+                PathVerb::Cubic => 3,
+                PathVerb::Close => 0,
+            };
+            let has_geometry = match verb {
+                PathVerb::Move | PathVerb::Close => true,
+                PathVerb::Line => self.points[source_point] != self.points[source_point - 1],
+                PathVerb::Quad => {
+                    self.points[source_point + 1] != self.points[source_point]
+                        || self.points[source_point] != self.points[source_point - 1]
+                }
+                PathVerb::Cubic => {
+                    self.points[source_point + 2] != self.points[source_point + 1]
+                        || self.points[source_point + 1] != self.points[source_point]
+                        || self.points[source_point] != self.points[source_point - 1]
+                }
+            };
+
+            if has_geometry {
+                if source_verb != destination_verb {
+                    self.verbs[destination_verb] = verb;
+                    for point in 0..point_count {
+                        self.points[destination_point + point] = self.points[source_point + point];
+                    }
+                }
+                destination_verb += 1;
+                destination_point += point_count;
+            }
+            source_point += point_count;
+        }
+
+        self.verbs.truncate(destination_verb);
+        self.points.truncate(destination_point);
+    }
+
+    fn inject_implicit_move_if_needed(&mut self) {
+        if !self.verbs.is_empty() && self.verbs.last() != Some(&PathVerb::Close) {
+            return;
+        }
+
+        let mut point_index = 0;
+        let mut last_move = Vec2D::new(0.0, 0.0);
+        for verb in &self.verbs {
+            match verb {
+                PathVerb::Move => {
+                    last_move = self.points[point_index];
+                    point_index += 1;
+                }
+                PathVerb::Line => point_index += 1,
+                PathVerb::Quad => point_index += 2,
+                PathVerb::Cubic => point_index += 3,
+                PathVerb::Close => {}
+            }
+        }
+        self.move_to(last_move.x, last_move.y);
     }
 }
 
@@ -1497,6 +1607,249 @@ fn write_float(out: &mut String, value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_backwards_round_trip(path: &RawPath) {
+        let mut backwards = RawPath::new();
+        backwards.add_path_backwards(path, Mat2D::IDENTITY);
+
+        let mut restored = RawPath::new();
+        restored.add_path_backwards(&backwards, Mat2D::IDENTITY);
+
+        assert_eq!(&restored, path);
+    }
+
+    #[test]
+    fn raw_path_mutators_normalize_contours_for_backwards_reversal() {
+        let mut leading_line = RawPath::new();
+        leading_line.line_to(1.0, 2.0);
+        assert_eq!(leading_line.verbs(), &[PathVerb::Move, PathVerb::Line]);
+        assert_eq!(
+            leading_line.points(),
+            &[Vec2D::new(0.0, 0.0), Vec2D::new(1.0, 2.0)]
+        );
+        assert_backwards_round_trip(&leading_line);
+
+        let mut leading_quad = RawPath::new();
+        leading_quad.quad_to(1.0, 2.0, 3.0, 4.0);
+        assert_eq!(leading_quad.verbs(), &[PathVerb::Move, PathVerb::Quad]);
+        assert_backwards_round_trip(&leading_quad);
+
+        let mut path = RawPath::new();
+        path.cubic_to(1.0, 2.0, 3.0, 4.0, 5.0, 6.0);
+        path.close();
+        path.close();
+        path.cubic_to(7.0, 8.0, 9.0, 10.0, 11.0, 12.0);
+        assert_eq!(
+            path.verbs(),
+            &[
+                PathVerb::Move,
+                PathVerb::Cubic,
+                PathVerb::Close,
+                PathVerb::Move,
+                PathVerb::Cubic,
+            ]
+        );
+        assert_eq!(
+            path.points(),
+            &[
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(1.0, 2.0),
+                Vec2D::new(3.0, 4.0),
+                Vec2D::new(5.0, 6.0),
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(7.0, 8.0),
+                Vec2D::new(9.0, 10.0),
+                Vec2D::new(11.0, 12.0),
+            ]
+        );
+        assert_backwards_round_trip(&path);
+    }
+
+    #[test]
+    fn add_path_backwards_handles_empty_close_only_move_only_and_empty_contours() {
+        let empty = RawPath::new();
+        assert_backwards_round_trip(&empty);
+
+        let mut close_only = RawPath::new();
+        close_only.close();
+        assert_eq!(close_only, empty);
+        assert_backwards_round_trip(&close_only);
+
+        let mut move_only = RawPath::new();
+        move_only.move_to(1.0, 2.0);
+        assert_backwards_round_trip(&move_only);
+
+        let mut empty_contours = RawPath::new();
+        empty_contours.move_to(1.0, 2.0);
+        empty_contours.move_to(3.0, 4.0);
+        let mut reversed = RawPath::new();
+        reversed.add_path_backwards(&empty_contours, Mat2D::IDENTITY);
+        assert_eq!(reversed.verbs(), &[PathVerb::Move, PathVerb::Move]);
+        assert_eq!(
+            reversed.points(),
+            &[Vec2D::new(3.0, 4.0), Vec2D::new(1.0, 2.0)]
+        );
+        assert_backwards_round_trip(&empty_contours);
+    }
+
+    #[test]
+    fn add_path_backwards_reverses_open_line_quad_and_cubic_segments() {
+        let mut source = RawPath::new();
+        source.move_to(1.0, 2.0);
+        source.line_to(3.0, 4.0);
+        source.quad_to(5.0, 6.0, 7.0, 8.0);
+        source.cubic_to(9.0, 10.0, 11.0, 12.0, 13.0, 14.0);
+
+        let mut reversed = RawPath::new();
+        reversed.add_path_backwards(&source, Mat2D::IDENTITY);
+
+        assert_eq!(
+            reversed.verbs(),
+            &[
+                PathVerb::Move,
+                PathVerb::Cubic,
+                PathVerb::Quad,
+                PathVerb::Line
+            ]
+        );
+        assert_eq!(
+            reversed.points(),
+            &[
+                Vec2D::new(13.0, 14.0),
+                Vec2D::new(11.0, 12.0),
+                Vec2D::new(9.0, 10.0),
+                Vec2D::new(7.0, 8.0),
+                Vec2D::new(5.0, 6.0),
+                Vec2D::new(3.0, 4.0),
+                Vec2D::new(1.0, 2.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn add_path_backwards_reverses_contour_order_and_preserves_closes() {
+        let mut source = RawPath::new();
+        source.move_to(0.0, 0.0);
+        source.line_to(1.0, 0.0);
+        source.quad_to(2.0, 0.0, 3.0, 0.0);
+        source.close();
+        source.move_to(10.0, 0.0);
+        source.cubic_to(11.0, 0.0, 12.0, 0.0, 13.0, 0.0);
+        source.move_to(20.0, 0.0);
+        source.line_to(21.0, 0.0);
+        source.close();
+
+        let mut reversed = RawPath::new();
+        reversed.add_path_backwards(&source, Mat2D::IDENTITY);
+
+        assert_eq!(
+            reversed.verbs(),
+            &[
+                PathVerb::Move,
+                PathVerb::Line,
+                PathVerb::Close,
+                PathVerb::Move,
+                PathVerb::Cubic,
+                PathVerb::Move,
+                PathVerb::Quad,
+                PathVerb::Line,
+                PathVerb::Close,
+            ]
+        );
+        assert_eq!(
+            reversed.points(),
+            &[
+                Vec2D::new(21.0, 0.0),
+                Vec2D::new(20.0, 0.0),
+                Vec2D::new(13.0, 0.0),
+                Vec2D::new(12.0, 0.0),
+                Vec2D::new(11.0, 0.0),
+                Vec2D::new(10.0, 0.0),
+                Vec2D::new(3.0, 0.0),
+                Vec2D::new(2.0, 0.0),
+                Vec2D::new(1.0, 0.0),
+                Vec2D::new(0.0, 0.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn add_path_backwards_transforms_only_the_appended_reversed_path() {
+        let mut source = RawPath::new();
+        source.move_to(1.0, 2.0);
+        source.line_to(3.0, 4.0);
+
+        let mut destination = RawPath::new();
+        destination.move_to(-1.0, -2.0);
+        destination.add_path_backwards(&source, Mat2D([2.0, 0.0, 0.0, 3.0, 5.0, 7.0]));
+
+        assert_eq!(
+            destination.verbs(),
+            &[PathVerb::Move, PathVerb::Move, PathVerb::Line]
+        );
+        assert_eq!(
+            destination.points(),
+            &[
+                Vec2D::new(-1.0, -2.0),
+                Vec2D::new(11.0, 19.0),
+                Vec2D::new(7.0, 13.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn add_path_backwards_prunes_segments_collapsed_by_transform() {
+        let mut source = RawPath::new();
+        source.move_to(1.0, 2.0);
+        source.line_to(3.0, 4.0);
+
+        let mut reversed = RawPath::new();
+        reversed.add_path_backwards(&source, Mat2D([0.0, 0.0, 0.0, 0.0, 5.0, 7.0]));
+
+        assert_eq!(reversed.verbs(), &[PathVerb::Move]);
+        assert_eq!(reversed.points(), &[Vec2D::new(5.0, 7.0)]);
+    }
+
+    #[test]
+    fn add_path_backwards_keeps_transformed_curves_with_distinct_controls() {
+        let mut source = RawPath::new();
+        source.move_to(0.0, 0.0);
+        source.quad_to(1.0, 2.0, 0.0, 0.0);
+        source.cubic_to(3.0, 4.0, 5.0, 6.0, 0.0, 0.0);
+
+        let mut reversed = RawPath::new();
+        reversed.add_path_backwards(&source, Mat2D([2.0, 0.0, 0.0, 3.0, 5.0, 7.0]));
+
+        assert_eq!(
+            reversed.verbs(),
+            &[PathVerb::Move, PathVerb::Cubic, PathVerb::Quad]
+        );
+        assert_eq!(
+            reversed.points(),
+            &[
+                Vec2D::new(5.0, 7.0),
+                Vec2D::new(15.0, 25.0),
+                Vec2D::new(11.0, 19.0),
+                Vec2D::new(5.0, 7.0),
+                Vec2D::new(7.0, 13.0),
+                Vec2D::new(5.0, 7.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn add_path_backwards_prunes_fully_collapsed_transformed_curves() {
+        let mut source = RawPath::new();
+        source.move_to(1.0, 2.0);
+        source.quad_to(3.0, 4.0, 5.0, 6.0);
+        source.cubic_to(7.0, 8.0, 9.0, 10.0, 11.0, 12.0);
+
+        let mut reversed = RawPath::new();
+        reversed.add_path_backwards(&source, Mat2D([0.0, 0.0, 0.0, 0.0, 5.0, 7.0]));
+
+        assert_eq!(reversed.verbs(), &[PathVerb::Move]);
+        assert_eq!(reversed.points(), &[Vec2D::new(5.0, 7.0)]);
+    }
 
     #[test]
     fn recording_serializer_matches_cpp_smoke_stream() {

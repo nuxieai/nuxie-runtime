@@ -1999,7 +1999,7 @@ mod tests {
         );
     }
 
-    fn fixed_feather_atlas_mask() -> atlas_mask_oracle::AtlasMask {
+    fn fixed_feather_atlas_mask(join: StrokeJoin) -> atlas_mask_oracle::AtlasMask {
         let factory = WgpuFactory::new(ATLAS_ORACLE_SIZE, ATLAS_ORACLE_SIZE).unwrap();
         let mut raw_path = RawPath::new();
         raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
@@ -2012,11 +2012,7 @@ mod tests {
             &raw_path,
             Mat2D::IDENTITY,
             ATLAS_ORACLE_FEATHER,
-            Some((
-                ATLAS_ORACLE_STROKE_THICKNESS,
-                ATLAS_ORACLE_STROKE_JOIN,
-                ATLAS_ORACLE_STROKE_CAP,
-            )),
+            Some((ATLAS_ORACLE_STROKE_THICKNESS, join, ATLAS_ORACLE_STROKE_CAP)),
         )
         .unwrap();
         tessellation.path.atlas_transform = gpu::AtlasTransform {
@@ -2146,8 +2142,8 @@ mod tests {
     }
 
     #[test]
-    fn feather_atlas_stroke_pass_writes_r16_join_coverage() {
-        let mask = fixed_feather_atlas_mask();
+    fn feather_atlas_stroke_pass_writes_r16_coverage() {
+        let mask = fixed_feather_atlas_mask(ATLAS_ORACLE_STROKE_JOIN);
         let mask_value = |x: usize, y: usize| mask.sample_bits(x, y);
         let size = ATLAS_ORACLE_SIZE as usize;
         assert_eq!(mask_value(size - 1, size - 1), 0);
@@ -2167,20 +2163,17 @@ mod tests {
             join_coverage >= ATLAS_ORACLE_JOIN_MIN_COVERAGE,
             "top-left miter join at ({join_x}, {join_y}) has weak coverage: {join_coverage}"
         );
+    }
 
-        let mut missing_join = mask.clone();
-        missing_join.set_sample_bits(join_x, join_y, 0);
+    #[test]
+    fn feather_atlas_stroke_join_changes_mask_geometry() {
+        let miter = fixed_feather_atlas_mask(StrokeJoin::Miter);
+        let bevel = fixed_feather_atlas_mask(StrokeJoin::Bevel);
+
         assert!(matches!(
-            atlas_mask_oracle::compare_cpp_to_rust(
-                &mask,
-                &missing_join,
-                ATLAS_ORACLE_TOLERANCES,
-            ),
-            Err(atlas_mask_oracle::AtlasMaskComparisonError::Support {
-                x,
-                y,
-                ..
-            }) if (x, y) == ATLAS_ORACLE_JOIN_PROBE
+            atlas_mask_oracle::compare_cpp_to_rust(&miter, &bevel, ATLAS_ORACLE_TOLERANCES),
+            Err(atlas_mask_oracle::AtlasMaskComparisonError::Support { .. })
+                | Err(atlas_mask_oracle::AtlasMaskComparisonError::Value { .. })
         ));
     }
 
@@ -2206,7 +2199,7 @@ mod tests {
                 path.display()
             )
         });
-        let rust_mask = fixed_feather_atlas_mask();
+        let rust_mask = fixed_feather_atlas_mask(ATLAS_ORACLE_STROKE_JOIN);
         atlas_mask_oracle::compare_cpp_to_rust(&cpp_mask, &rust_mask, ATLAS_ORACLE_TOLERANCES)
             .unwrap_or_else(|error| {
                 panic!(

@@ -12,6 +12,8 @@ jobs="${RIVE_ATLAS_MASK_JOBS:-2}"
 output="${RIVE_ATLAS_MASK_OUTPUT:-$script_dir/out/atlas-mask.r16f}"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$script_dir/../../target/depot_tools/ninja}"
 gn_bin="${RIVE_ATLAS_MASK_GN:-$script_dir/../../target/depot_tools/gn}"
+naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"
+expected_naga_version="30.0.0"
 
 xcode_major() {
     xcodebuild -version 2>/dev/null | awk '/Xcode/ { split($2, version, "."); print version[1]; exit }'
@@ -81,13 +83,33 @@ usage() {
 
 preflight() {
     local missing=0
+    local naga_output
+    local naga_version
     python3 "$script_dir/format_test.py"
-    for command in git premake5 make naga python3; do
+    for command in git premake5 make python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
             missing=1
         fi
     done
+    if [[ ! -x "$naga_bin" ]]; then
+        echo "missing required tool: Naga $expected_naga_version ($naga_bin)" >&2
+        missing=1
+    elif [[ "$(basename "$naga_bin")" != "naga" ]]; then
+        echo "RIVE_ATLAS_MASK_NAGA must name an executable named naga: $naga_bin" >&2
+        missing=1
+    elif ! naga_output="$("$naga_bin" --version 2>&1)"; then
+        echo "could not query Naga version at $naga_bin: $naga_output" >&2
+        missing=1
+    else
+        naga_version="$(awk 'NR == 1 { print $NF }' <<< "$naga_output")"
+        if [[ "$naga_version" != "$expected_naga_version" ]]; then
+            echo "unsupported Naga version at $naga_bin: expected $expected_naga_version, got ${naga_version:-unknown}" >&2
+            missing=1
+        else
+            echo "Naga: $naga_bin ($naga_version)"
+        fi
+    fi
     if [[ ! -d "$runtime/.git" ]]; then
         echo "missing RIVE_RUNTIME_DIR git checkout: $runtime" >&2
         return 2
@@ -173,6 +195,7 @@ case "${1:-}" in
 esac
 
 preflight
+export PATH="$(dirname "$naga_bin"):$PATH"
 mkdir -p "$injected_dir" "$(dirname "$output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 applied=0

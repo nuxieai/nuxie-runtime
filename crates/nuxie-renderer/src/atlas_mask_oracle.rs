@@ -97,17 +97,19 @@ impl AtlasMask {
     pub(crate) fn sample_value(&self, x: usize, y: usize) -> f32 {
         f16_bits_to_f32(self.sample_bits(x, y))
     }
-
-    pub(crate) fn set_sample_bits(&mut self, x: usize, y: usize, bits: u16) {
-        self.samples[y * self.width as usize + x] = bits;
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MaskComparisonTolerances {
     /// Samples at or below this coverage are treated as outside the mask.
+    ///
+    /// The oracle uses 2^-10: one binary16 unit-scale ULP, which suppresses a
+    /// single quantization step at the zero-support boundary.
     pub(crate) support: f32,
     /// Absolute coverage difference allowed once both samples have support.
+    ///
+    /// The oracle uses 2^-9: two binary16 unit-scale ULPs, allowing the two
+    /// implementations to differ by at most two quantization steps.
     pub(crate) value: f32,
 }
 
@@ -443,10 +445,28 @@ mod tests {
     }
 
     #[test]
-    fn comparison_accepts_values_within_explicit_tolerances() {
-        let cpp = AtlasMask::new(1, 1, vec![0x3800]).unwrap();
-        let rust = AtlasMask::new(1, 1, vec![0x3801]).unwrap();
+    fn comparison_accepts_exact_support_boundary_and_rejects_next_f16() {
+        let zero = AtlasMask::new(1, 1, vec![0x0000]).unwrap();
+        let at_boundary = AtlasMask::new(1, 1, vec![0x1400]).unwrap();
+        let above_boundary = AtlasMask::new(1, 1, vec![0x1401]).unwrap();
 
-        compare_cpp_to_rust(&cpp, &rust, TOLERANCES).unwrap();
+        compare_cpp_to_rust(&at_boundary, &zero, TOLERANCES).unwrap();
+        assert!(matches!(
+            compare_cpp_to_rust(&above_boundary, &zero, TOLERANCES),
+            Err(AtlasMaskComparisonError::Support { .. })
+        ));
+    }
+
+    #[test]
+    fn comparison_accepts_exact_value_boundary_and_rejects_next_f16() {
+        let baseline = AtlasMask::new(1, 1, vec![0x3800]).unwrap();
+        let at_boundary = AtlasMask::new(1, 1, vec![0x3804]).unwrap();
+        let above_boundary = AtlasMask::new(1, 1, vec![0x3805]).unwrap();
+
+        compare_cpp_to_rust(&at_boundary, &baseline, TOLERANCES).unwrap();
+        assert!(matches!(
+            compare_cpp_to_rust(&above_boundary, &baseline, TOLERANCES),
+            Err(AtlasMaskComparisonError::Value { .. })
+        ));
     }
 }

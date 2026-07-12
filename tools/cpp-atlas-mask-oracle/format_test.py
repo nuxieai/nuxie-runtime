@@ -14,6 +14,7 @@ HEADER_BYTES = 20
 MAGIC = b"RIVEMSK\0"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXPORTER = pathlib.Path(__file__).with_name("runtime-src") / "main.cpp"
+BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
 RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
@@ -107,6 +108,16 @@ class FormatTests(unittest.TestCase):
         self.assertNotIn("WGPUBufferMapAsyncStatus", source)
         self.assertNotIn("context->makeRenderTarget(", source)
         self.assertNotIn("context->atlasMaskTextureForOracle()", source)
+
+    def test_build_pins_and_discovers_naga(self):
+        source = BUILD_SCRIPT.read_text()
+        for fragment in (
+            'naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"',
+            'expected_naga_version="30.0.0"',
+            '"$naga_bin" --version',
+            'export PATH="$(dirname "$naga_bin"):$PATH"',
+        ):
+            self.assertIn(fragment, source)
 
     def test_runtime_patch_applies_and_only_makes_atlas_copyable(self):
         files = (

@@ -18,6 +18,13 @@ pub(crate) struct AtomicPipeline {
     atlas_blit: wgpu::RenderPipeline,
     image_rect: wgpu::RenderPipeline,
     image_mesh: wgpu::RenderPipeline,
+    advanced_path: wgpu::RenderPipeline,
+    advanced_outer_path: wgpu::RenderPipeline,
+    advanced_interior: wgpu::RenderPipeline,
+    advanced_image_rect: wgpu::RenderPipeline,
+    advanced_image_mesh: wgpu::RenderPipeline,
+    advanced_init: wgpu::RenderPipeline,
+    advanced_resolve: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     feather_resolve: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
@@ -119,6 +126,46 @@ impl AtomicPipeline {
             "nuxie-atomic-image-mesh-fragment",
             include_str!("generated/atomic_draw_image_mesh.webgpu_fixedcolor_frag.wgsl"),
         );
+        let advanced_path_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-path-fragment",
+            include_str!("generated/atomic_draw_path.webgpu_frag.wgsl"),
+        );
+        let advanced_interior_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-interior-fragment",
+            include_str!("generated/atomic_draw_interior_triangles.webgpu_frag.wgsl"),
+        );
+        let advanced_image_mesh_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-image-mesh-fragment",
+            include_str!("generated/atomic_draw_image_mesh.webgpu_frag.wgsl"),
+        );
+        let advanced_image_rect_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-image-rect-fragment",
+            include_str!("generated/atomic_draw_image_rect.webgpu_frag.wgsl"),
+        );
+        let advanced_init_vertex = shader(
+            device,
+            "nuxie-atomic-advanced-init-vertex",
+            include_str!("generated/atomic_init.webgpu_vert.wgsl"),
+        );
+        let advanced_init_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-init-fragment",
+            include_str!("generated/atomic_init.webgpu_frag.wgsl"),
+        );
+        let advanced_resolve_vertex = shader(
+            device,
+            "nuxie-atomic-advanced-resolve-vertex",
+            include_str!("generated/atomic_resolve_coalesced.webgpu_vert.wgsl"),
+        );
+        let advanced_resolve_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-resolve-fragment",
+            include_str!("generated/atomic_resolve_coalesced.webgpu_frag.wgsl"),
+        );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-flush-layout"),
             entries: &[
@@ -143,7 +190,11 @@ impl AtomicPipeline {
         });
         let atomic_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-buffer-layout"),
-            entries: &[storage_entry(1, false), storage_entry(3, false)],
+            entries: &[
+                storage_entry(0, false),
+                storage_entry(1, false),
+                storage_entry(3, false),
+            ],
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-sampler-layout"),
@@ -206,6 +257,193 @@ impl AtomicPipeline {
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let make_advanced_path = |label, cull_mode| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &path_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(PatchVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &advanced_path_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[
+                        ("0", 1.0),
+                        ("1", 1.0),
+                        ("2", 1.0),
+                        ("3", 0.0),
+                        ("4", 0.0),
+                        ("6", 1.0),
+                        ("7", 0.0),
+                    ]),
+                    targets: &[Some(disabled_color_target())],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let advanced_path = make_advanced_path(
+            "nuxie-atomic-advanced-path-pipeline",
+            Some(wgpu::Face::Front),
+        );
+        let advanced_outer_path = make_advanced_path(
+            "nuxie-atomic-advanced-outer-path-pipeline",
+            Some(wgpu::Face::Back),
+        );
+        let advanced_interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-advanced-interior-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &interior_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(crate::gpu::TriangleVertex::layout())],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &advanced_interior_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("2", 1.0),
+                    ("4", 0.0),
+                    ("6", 1.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(disabled_color_target())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let advanced_image_mesh = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-advanced-image-mesh-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &image_mesh_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(image_mesh_vertex_layout(0)),
+                    Some(image_mesh_vertex_layout(1)),
+                ],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &advanced_image_mesh_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("2", 1.0),
+                    ("4", 0.0),
+                    ("6", 1.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(disabled_color_target())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let advanced_image_rect = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-advanced-image-rect-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &image_rect_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(ImageRectVertex::layout())],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &advanced_image_rect_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("2", 1.0),
+                    ("4", 0.0),
+                    ("6", 1.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(disabled_color_target())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let advanced_init = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-advanced-init-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &advanced_init_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &advanced_init_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 1.0), ("11", 0.0), ("12", 1.0)]),
+                targets: &[Some(disabled_color_target())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let advanced_resolve = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-advanced-resolve-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &advanced_resolve_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &advanced_resolve_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("2", 1.0),
+                    ("4", 0.0),
+                    ("6", 1.0),
+                ]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -541,6 +779,13 @@ impl AtomicPipeline {
             atlas_blit,
             image_rect,
             image_mesh,
+            advanced_path,
+            advanced_outer_path,
+            advanced_interior,
+            advanced_image_rect,
+            advanced_image_mesh,
+            advanced_init,
+            advanced_resolve,
             resolve,
             feather_resolve,
             flush_layout,
@@ -563,6 +808,7 @@ impl AtomicPipeline {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        load_color: Option<&wgpu::TextureView>,
         feather_lut: &wgpu::TextureView,
         patch_vertices: &wgpu::Buffer,
         patch_indices: &wgpu::Buffer,
@@ -575,6 +821,13 @@ impl AtomicPipeline {
         pixel_count: usize,
     ) {
         assert!(!draws.is_empty());
+        // C++ RenderContextWebGPUImpl::AtomicDrawRenderPass switches the whole
+        // flush to storage-buffer color when fixedFunctionColorOutput is false.
+        let advanced_blend = paints.iter().any(|paint| (paint.params >> 4) & 0xf != 0)
+            || draws.iter().any(|draw| {
+                draw.image_uniforms
+                    .is_some_and(|uniforms| uniforms.blend_mode != 0)
+            });
         let uniform = upload(
             device,
             "nuxie-atomic-uniforms",
@@ -620,6 +873,17 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-coverage",
             &vec![0u32; pixel_count],
+            wgpu::BufferUsages::STORAGE,
+        );
+        let color_words = if advanced_blend {
+            vec![0u32; pixel_count]
+        } else {
+            vec![0u32; 1]
+        };
+        let colors = upload(
+            device,
+            "nuxie-atomic-colors",
+            &color_words,
             wgpu::BufferUsages::STORAGE,
         );
         let triangle_buffers = draws
@@ -737,10 +1001,21 @@ impl AtomicPipeline {
                 .as_ref()
                 .unwrap_or(&self.dummy_image_group)
         };
+        let load_color_group = load_color.map(|view| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("nuxie-atomic-load-color-group"),
+                layout: &self.image_layout,
+                entries: &[
+                    binding(12, wgpu::BindingResource::TextureView(view)),
+                    binding(14, wgpu::BindingResource::Sampler(&self.image_samplers[0])),
+                ],
+            })
+        });
         let atomics = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-buffer-group"),
             layout: &self.atomic_layout,
             entries: &[
+                binding(0, colors.as_entire_binding()),
                 binding(1, clips.as_entire_binding()),
                 binding(3, coverage.as_entire_binding()),
             ],
@@ -754,6 +1029,22 @@ impl AtomicPipeline {
                 binding(11, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
+        if advanced_blend {
+            let load_color_group = load_color_group
+                .as_ref()
+                .expect("advanced atomic blending requires a destination-color copy");
+            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                "nuxie-atomic-advanced-init-pass",
+                &attachments,
+            ));
+            pass.set_pipeline(&self.advanced_init);
+            pass.set_bind_group(0, &flush_groups[0], &[]);
+            pass.set_bind_group(1, load_color_group, &[]);
+            pass.set_bind_group(2, &atomics, &[]);
+            pass.set_bind_group(3, &samplers, &[]);
+            pass.draw(0..4, 0..1);
+        }
         for (draw_index, draw) in draws.iter().enumerate() {
             if draw.atlas.is_none() {
                 continue;
@@ -822,7 +1113,11 @@ impl AtomicPipeline {
                         "nuxie-atomic-image-mesh-pass",
                         &attachments,
                     ));
-                    pass.set_pipeline(&self.image_mesh);
+                    pass.set_pipeline(if advanced_blend {
+                        &self.advanced_image_mesh
+                    } else {
+                        &self.image_mesh
+                    });
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
@@ -839,7 +1134,11 @@ impl AtomicPipeline {
                         "nuxie-atomic-image-rect-pass",
                         &attachments,
                     ));
-                    pass.set_pipeline(&self.image_rect);
+                    pass.set_pipeline(if advanced_blend {
+                        &self.advanced_image_rect
+                    } else {
+                        &self.image_rect
+                    });
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
@@ -857,7 +1156,11 @@ impl AtomicPipeline {
                     "nuxie-atomic-path-pass",
                     &attachments,
                 ));
-                pass.set_pipeline(if draw.is_feather && draw.is_stroke {
+                pass.set_pipeline(if advanced_blend && !draw.triangle_vertices.is_empty() {
+                    &self.advanced_outer_path
+                } else if advanced_blend {
+                    &self.advanced_path
+                } else if draw.is_feather && draw.is_stroke {
                     &self.feather_stroke_path
                 } else if draw.is_feather {
                     &self.feather_path
@@ -886,7 +1189,11 @@ impl AtomicPipeline {
                         "nuxie-atomic-interior-pass",
                         &attachments,
                     ));
-                    pass.set_pipeline(&self.interior);
+                    pass.set_pipeline(if advanced_blend {
+                        &self.advanced_interior
+                    } else {
+                        &self.interior
+                    });
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
@@ -902,7 +1209,9 @@ impl AtomicPipeline {
                 "nuxie-atomic-resolve-pass",
                 &attachments,
             ));
-            pass.set_pipeline(if draws.iter().any(|draw| draw.is_feather) {
+            pass.set_pipeline(if advanced_blend {
+                &self.advanced_resolve
+            } else if draws.iter().any(|draw| draw.is_feather) {
                 &self.feather_resolve
             } else {
                 &self.resolve
@@ -1060,6 +1369,13 @@ fn color_attachment(
             store: wgpu::StoreOp::Store,
         },
     })
+}
+fn disabled_color_target() -> wgpu::ColorTargetState {
+    wgpu::ColorTargetState {
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        blend: None,
+        write_mask: wgpu::ColorWrites::empty(),
+    }
 }
 fn render_pass_descriptor<'a>(
     label: &'static str,

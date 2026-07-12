@@ -1639,7 +1639,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "platform-image-decode-color-profile"
 
 
 [[entry]]

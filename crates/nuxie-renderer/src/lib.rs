@@ -116,7 +116,7 @@ impl WgpuFactory {
                 label: Some("nuxie-renderer-device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits {
-                    max_storage_buffers_per_shader_stage: 6,
+                    max_storage_buffers_per_shader_stage: 7,
                     ..wgpu::Limits::downlevel_defaults()
                 },
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -990,11 +990,6 @@ impl Renderer for WgpuFrame {
         let Some(texture) = &image.texture else {
             return;
         };
-        if !matches!(blend_mode, BlendMode::SrcOver) {
-            self.unsupported
-                .get_or_insert("advanced image mesh blend mode");
-            return;
-        }
         let Some(vertices) = vertices.and_then(wgpu_buffer) else {
             self.unsupported
                 .get_or_insert("invalid image mesh vertex buffer");
@@ -1166,6 +1161,7 @@ impl WgpuFrame {
             |draws: &[SolidDraw],
              clear_target: bool,
              force_clockwise_atomic_batch: bool,
+             load_color: Option<&wgpu::TextureView>,
              encoder: &mut wgpu::CommandEncoder| {
                 struct PreparedAtomicDraw {
                     spans: Vec<gpu::TessVertexSpan>,
@@ -1550,7 +1546,7 @@ impl WgpuFrame {
                                     DrawRole::ClipUpdate { .. } => 0,
                                 },
                                 image.blend_mode(),
-                                1,
+                                draw_index as u32 + 1,
                             )
                         }),
                         image_mesh: match &draw.image {
@@ -1682,6 +1678,7 @@ impl WgpuFrame {
                 }
                 let tessellation_height = tessellation_heights.iter().copied().max().unwrap_or(1);
                 let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
+                uniforms.color_clear_value = swizzle_rive_color_to_rgba_premul(self.clear_color);
                 uniforms.max_path_id = u32::try_from(paths.len() - 1).expect("path ID overflow");
                 uniforms.render_target_update_bounds =
                     [0, 0, self.width as i32, self.height as i32];
@@ -1908,6 +1905,7 @@ impl WgpuFrame {
                         &self.context.device,
                         encoder,
                         &view,
+                        load_color,
                         &self.context.feather_lut.view,
                         &self.context.patch_vertex_buffer,
                         &self.context.patch_index_buffer,
@@ -2150,11 +2148,70 @@ impl WgpuFrame {
                     let has_clip_updates = self.draws[start..end]
                         .iter()
                         .any(|draw| matches!(draw.role, DrawRole::ClipUpdate { .. }));
-                    if clockwise_atomic || has_clip_updates {
+                    let has_advanced_blend =
+                        self.draws[start..end].iter().any(draw_uses_advanced_blend);
+                    if has_advanced_blend {
+                        if self.draws[start..end]
+                            .iter()
+                            .any(|draw| draw.paint.feather != 0.0)
+                        {
+                            return Err(RendererError::Unsupported(
+                                "advanced atomic blending with feather",
+                            ));
+                        }
+                        if clear_target {
+                            let attachments = [Some(wgpu::RenderPassColorAttachment {
+                                view: &view,
+                                depth_slice: None,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(color(self.clear_color)),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })];
+                            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("nuxie-advanced-frame-clear"),
+                                color_attachments: &attachments,
+                                depth_stencil_attachment: None,
+                                timestamp_writes: None,
+                                occlusion_query_set: None,
+                                multiview_mask: None,
+                            });
+                        }
+                        let load_texture =
+                            self.context
+                                .device
+                                .create_texture(&wgpu::TextureDescriptor {
+                                    label: Some("nuxie-advanced-destination-copy"),
+                                    size: texture.size(),
+                                    mip_level_count: 1,
+                                    sample_count: 1,
+                                    dimension: wgpu::TextureDimension::D2,
+                                    format: wgpu::TextureFormat::Rgba8Unorm,
+                                    usage: wgpu::TextureUsages::COPY_DST
+                                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                                    view_formats: &[],
+                                });
+                        encoder.copy_texture_to_texture(
+                            texture.as_image_copy(),
+                            load_texture.as_image_copy(),
+                            texture.size(),
+                        );
+                        let load_view =
+                            load_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                        encode_atomic_run(
+                            &self.draws[start..end],
+                            false,
+                            clockwise_atomic,
+                            Some(&load_view),
+                            &mut encoder,
+                        )?;
+                    } else if clockwise_atomic || has_clip_updates {
                         encode_atomic_run(
                             &self.draws[start..end],
                             clear_target,
                             clockwise_atomic,
+                            None,
                             &mut encoder,
                         )?;
                     } else {
@@ -2163,7 +2220,7 @@ impl WgpuFrame {
                             self.width,
                             self.height,
                         ) {
-                            encode_atomic_run(&group, clear_target, false, &mut encoder)?;
+                            encode_atomic_run(&group, clear_target, false, None, &mut encoder)?;
                             let next_encoder = self.context.device.create_command_encoder(
                                 &wgpu::CommandEncoderDescriptor {
                                     label: Some("nuxie-frame-encoder"),
@@ -2711,6 +2768,12 @@ fn color(value: ColorInt) -> wgpu::Color {
     }
 }
 
+fn swizzle_rive_color_to_rgba_premul(value: ColorInt) -> u32 {
+    let [alpha, red, green, blue] = value.to_be_bytes();
+    let premul = |channel: u8| u32::from(channel) * u32::from(alpha) / 255;
+    premul(red) | premul(green) << 8 | premul(blue) << 16 | u32::from(alpha) << 24
+}
+
 fn align_to(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
 }
@@ -2797,6 +2860,14 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
         )
         .is_some(),
     }
+}
+
+fn draw_uses_advanced_blend(draw: &SolidDraw) -> bool {
+    draw.paint.blend_mode != BlendMode::SrcOver
+        || draw
+            .image
+            .as_ref()
+            .is_some_and(|image| image.blend_mode() != BlendMode::SrcOver)
 }
 
 fn disjoint_atomic_draw_groups(
@@ -3241,22 +3312,50 @@ mod tests {
         assert_eq!(pixel(4, 4), [255, 0, 0, 255]);
         assert_eq!(pixel(15, 15), [0, 0, 0, 255]);
 
-        let mut advanced_blend = factory.begin_frame(0xff00_0000);
-        advanced_blend.draw_image_mesh(
-            Some(image.as_ref()),
-            ImageSampler::default(),
-            Some(vertices.as_ref()),
-            Some(uvs.as_ref()),
-            Some(indices.as_ref()),
-            3,
-            3,
-            BlendMode::Multiply,
-            1.0,
-        );
-        assert!(matches!(
-            advanced_blend.finish(),
-            Err(RendererError::Unsupported("advanced image mesh blend mode"))
-        ));
+        for (blend_mode, expected) in [
+            (BlendMode::Screen, [255, 255, 0, 255]),
+            (BlendMode::Darken, [0, 0, 0, 255]),
+            (BlendMode::Exclusion, [255, 255, 0, 255]),
+            (BlendMode::Luminosity, [0, 130, 0, 255]),
+        ] {
+            let mut advanced_blend = factory.begin_frame(0xff00_ff00);
+            advanced_blend.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                blend_mode,
+                1.0,
+            );
+            let pixels = advanced_blend.finish().unwrap();
+            let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+            assert_eq!(pixel(4, 4), expected, "{blend_mode:?}");
+            assert_eq!(pixel(15, 15), [0, 255, 0, 255], "{blend_mode:?}");
+        }
+    }
+
+    #[test]
+    fn atomic_path_uses_shader_advanced_blending() {
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let mut path = RawPath::new();
+        path.move_to(2.0, 2.0);
+        path.line_to(14.0, 2.0);
+        path.line_to(2.0, 14.0);
+        path.close();
+        let path = factory.make_render_path(path, FillRule::NonZero);
+        let mut paint = factory.make_render_paint();
+        paint.color(0xffff_0000);
+        paint.blend_mode(BlendMode::Screen);
+
+        let mut frame = factory.begin_frame(0xff00_ff00);
+        frame.draw_path(path.as_ref(), paint.as_ref());
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+        assert_eq!(pixel(4, 4), [255, 255, 0, 255]);
+        assert_eq!(pixel(15, 15), [0, 255, 0, 255]);
     }
 
     #[test]

@@ -177,9 +177,13 @@ Run `make renderer-golden`.
    profile/color-management parity with Metal's platform decoder. C++'s
    `ImageMeshDraw` is now ported with retained position/UV/index buffers,
    immutable unmap snapshots, generated atomic mesh shaders, clip IDs, and
-   authored opacity/samplers. `tape` is promoted; `mesh` still needs advanced
-   image blending, and the larger `jellyfish_test` mesh surface remains to be
-   measured. Continue R2 with advanced atomic blending, then rescout the
+   authored opacity/samplers. The non-fixed atomic color path now adds C++'s
+   tiled color storage plane, destination-copy initialization, monotonic image
+   z indices, generated advanced-blend shaders, and coalesced resolve. GPU
+   regressions pin screen, darken, exclusion, and luminosity. `tape` is
+   promoted; `mesh` renders all twelve meshes but remains gated by its embedded
+   ICC profile, and the larger `jellyfish_test` mesh surface remains to be
+   measured. Continue R2 with color-managed PNG decode, then rescout the
    remaining image corpus.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
@@ -199,6 +203,18 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Advanced atomic image blending follows C++ WebGPU's non-fixed
+  color-output lifecycle rather than per-draw framebuffer copies: request the
+  seventh fragment storage binding, copy the current target before each
+  advanced atomic run, initialize a tiled `u32` color plane through
+  `loadColorFromDstTexture`, assign authored z indices, run the generated
+  non-fixed image/path shaders, and coalesced-resolve once. A 1x1 GPU oracle
+  pins screen, darken, exclusion, and luminosity over a known destination.
+  Fresh C++ `gm-mesh` renders all twelve meshes with matching geometry and
+  blend character, but its 319x320 PNG carries a large ICC profile; even the
+  srcOver control column differs at 19,752 pixels/max delta 56, while the full
+  file differs at 140,327 pixels/max delta 56. The entry is reclassified to
+  `platform-image-decode-color-profile`; no tolerance was widened.
 - 2026-07-12: `ImageMeshDraw` follows C++'s retained-buffer contract: position
   and UV streams are separate `float2` vertex buffers, indices are `u16`, and
   every unmap snapshots a new submitted wgpu buffer so later mutations cannot
@@ -941,3 +957,8 @@ Run `make renderer-golden`.
   position/UV sampling, and `tape` matches fresh C++ geometry and support under
   its bounded decoder/filter allowance. The ratchet advances to
   exact=78/diverges=0/gated=1,389; advanced image blending is next.
+- 2026-07-12: Ported the C++ WebGPU non-fixed atomic color lifecycle and
+  generated advanced image shaders. `gm-mesh` now renders every authored blend
+  and is reclassified from algorithm work to its measured ICC decoder gate;
+  the ratchet remains exact=78/diverges=0/gated=1,389 without widening a
+  tolerance. Color-managed PNG decode is next.

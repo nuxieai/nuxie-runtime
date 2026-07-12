@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=25, diverges=0, gated=1,442, total=1,467.
+- Rust wgpu: exact=27, diverges=0, gated=1,440, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -32,6 +32,8 @@ Run `make renderer-golden`.
   `gm-feather_shapes-clockwise-atomic`,
   `gm-feather_ellipse-clockwise-atomic`, and
   `gm-feather_polyshapes-clockwise-atomic`, and
+  `gm-feather_corner-clockwise-atomic`,
+  `gm-feather_roundcorner-clockwise-atomic`, and
   `gm-emptystrokefeather-clockwise-atomic`.
 
 ## Milestones
@@ -59,8 +61,9 @@ Run `make renderer-golden`.
    558-pixel/max-255 cusp-tip lobe is downstream of tessellation and stays
    named rather than tolerated. Double-sided tessellation now wraps paired
    forward/mirrored spans across texture rows, making all 42 isolated
-   `feather_polyshapes` cells exact. The active targets are now the clip-gated
-   corner GMs. The separate
+   `feather_polyshapes` cells exact. C++'s axis-aligned clip-rect fast path is
+   also ported and closes both clipped corner GMs. The active clipping target
+   is now arbitrary path clip stacks and clip IDs. The separate
    matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
    pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
    behavior, robust triangulation, and integration of the translated
@@ -546,3 +549,13 @@ Run `make renderer-golden`.
   opposite LEFT/RIGHT bits, a backend equivalence guarded narrowly by the
   comparator and superseded by exact isolated native-Metal pixels. The ratchet
   advances to exact=25/diverges=0.
+- 2026-07-11: Ported C++ `RiveRenderer::IsAABB`/`clipRectImpl` through the
+  shader contract. Clip rectangles now inherit through save/restore, intersect
+  in compatible matrix spaces, cull empty clips, set
+  `PAINT_FLAG_HAS_CLIP_RECT`, and upload the fragment-to-normalized-rect matrix
+  plus inverse-fwidth AA data. `feather_corner` and `feather_roundcorner` now
+  render instead of returning `Unsupported("clip paths")`; all 84 isolated
+  clipped cells are exact at max channel delta 2. Their overlapping composites
+  have 3,367/max12 and 4,495/max11 differences and pass bounded 8,192-pixel
+  backend budgets. The ratchet advances to exact=27/diverges=0; non-rectangular
+  clip stacks remain explicitly unsupported.

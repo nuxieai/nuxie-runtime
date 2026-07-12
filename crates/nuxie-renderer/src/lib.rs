@@ -21,7 +21,7 @@ mod tessellator;
 
 use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, RawPath, RenderBuffer,
+    BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer,
     RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
     RenderShader, Renderer, StrokeCap, StrokeJoin,
 };
@@ -564,9 +564,17 @@ impl RenderImage for WgpuImage {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct ClipRectState {
+    rect: [f32; 4],
+    matrix: Mat2D,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct DrawState {
     transform: Mat2D,
     opacity: f32,
+    clip_rect: Option<ClipRectState>,
+    clip_is_empty: bool,
 }
 
 impl Default for DrawState {
@@ -574,6 +582,8 @@ impl Default for DrawState {
         Self {
             transform: Mat2D::IDENTITY,
             opacity: 1.0,
+            clip_rect: None,
+            clip_is_empty: false,
         }
     }
 }
@@ -612,6 +622,9 @@ impl Renderer for WgpuFrame {
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        if self.state.clip_is_empty {
+            return;
+        }
         let path = wgpu_path(path);
         let paint = wgpu_paint(paint);
         if path_draw_is_noop(path, paint, self.state.transform) {
@@ -625,13 +638,21 @@ impl Renderer for WgpuFrame {
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
-        if !is_full_target_clip(
-            wgpu_path(path),
-            self.state.transform,
-            self.width,
-            self.height,
-        ) {
-            self.unsupported.get_or_insert("clip paths");
+        if self.state.clip_is_empty {
+            return;
+        }
+        let path = wgpu_path(path);
+        if path.raw_path.verbs().is_empty() {
+            self.state.clip_is_empty = true;
+            return;
+        }
+        let Some(rect) = path_aabb(&path.raw_path) else {
+            self.unsupported.get_or_insert("non-rectangular clip paths");
+            return;
+        };
+        if !apply_clip_rect(&mut self.state, rect) {
+            self.unsupported
+                .get_or_insert("incompatible clip rectangles");
         }
     }
 
@@ -765,6 +786,7 @@ impl WgpuFrame {
                     FillRule::NonZero,
                     BlendMode::SrcOver,
                 )];
+                let mut paint_aux = vec![gpu::PaintAuxData::zeroed()];
                 let mut contours = Vec::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
@@ -919,7 +941,7 @@ impl WgpuFrame {
                     }
                     path.coverage_buffer_range.pitch = padded_width;
                     paths.push(path);
-                    paints.push(if draw.paint.style == RenderPaintStyle::Stroke {
+                    let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
                         gpu::PaintData::solid_stroke(
                             modulate_color_alpha(draw.paint.color, draw.state.opacity),
                             draw.paint.blend_mode,
@@ -930,7 +952,12 @@ impl WgpuFrame {
                             draw.path.fill_rule,
                             draw.paint.blend_mode,
                         )
-                    });
+                    };
+                    if draw.state.clip_rect.is_some() {
+                        paint = paint.with_clip_rect();
+                    }
+                    paints.push(paint);
+                    paint_aux.push(clip_rect_paint_aux(draw.state.clip_rect));
                     contours.extend(draw_contours);
                     let atlas_blit_vertices = atlas
                         .map(|placement| {
@@ -1021,7 +1048,6 @@ impl WgpuFrame {
                     .iter()
                     .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()))
                     .collect::<Vec<_>>();
-                let paint_aux = vec![gpu::PaintAuxData::zeroed(); paths.len()];
                 let atlas_texture = prepared.iter().any(|draw| draw.atlas.is_some()).then(|| {
                     let texture = self
                         .context
@@ -1149,7 +1175,7 @@ impl WgpuFrame {
                                 );
                                 let tessellation_view = tessellation_texture
                                     .create_view(&wgpu::TextureViewDescriptor::default());
-                                let paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                                let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
                                     gpu::PaintData::solid_stroke(
                                         modulate_color_alpha(draw.paint.color, draw.state.opacity),
                                         draw.paint.blend_mode,
@@ -1161,6 +1187,10 @@ impl WgpuFrame {
                                         draw.paint.blend_mode,
                                     )
                                 };
+                                if draw.state.clip_rect.is_some() {
+                                    paint = paint.with_clip_rect();
+                                }
+                                let paint_aux = clip_rect_paint_aux(draw.state.clip_rect);
                                 prepared_draws.push(PreparedDraw::Analytic(
                                     self.context.path_pipeline.prepare(
                                         &self.context.device,
@@ -1169,7 +1199,7 @@ impl WgpuFrame {
                                         &uniforms,
                                         &tessellation.path,
                                         &paint,
-                                        &gpu::PaintAuxData::zeroed(),
+                                        &paint_aux,
                                         &tessellation.contours,
                                         tessellation.base_instance,
                                         tessellation.instance_count,
@@ -1516,34 +1546,114 @@ fn tessellate_solid(draw: &SolidDraw, width: u32, height: u32) -> Option<Vec<Ver
     (!vertices.is_empty()).then_some(vertices)
 }
 
-fn is_full_target_clip(path: &WgpuPath, transform: Mat2D, width: u32, height: u32) -> bool {
-    let points = path
-        .raw_path
-        .points()
-        .iter()
-        .copied()
-        .map(|point| transform.transform_point(point))
-        .collect::<Vec<_>>();
-    if points.len() != 4 {
-        return false;
+fn path_aabb(path: &RawPath) -> Option<[f32; 4]> {
+    let verbs = path.verbs();
+    if verbs.len() < 4
+        || verbs[..4]
+            != [
+                PathVerb::Move,
+                PathVerb::Line,
+                PathVerb::Line,
+                PathVerb::Line,
+            ]
+    {
+        return None;
     }
-    let min_x = points
-        .iter()
-        .map(|point| point.x)
-        .fold(f32::INFINITY, f32::min);
-    let max_x = points
-        .iter()
-        .map(|point| point.x)
-        .fold(f32::NEG_INFINITY, f32::max);
-    let min_y = points
-        .iter()
-        .map(|point| point.y)
-        .fold(f32::INFINITY, f32::min);
-    let max_y = points
-        .iter()
-        .map(|point| point.y)
-        .fold(f32::NEG_INFINITY, f32::max);
-    min_x <= 0.0 && min_y <= 0.0 && max_x >= width as f32 && max_y >= height as f32
+    let points = path.points();
+    if points.len() < 4 || points[4..].iter().any(|point| *point != points[0]) {
+        return None;
+    }
+    let [p0, p1, p2, p3] = points[..4] else {
+        unreachable!()
+    };
+    let is_rect = (p0.x == p3.x && p0.y == p1.y && p2.x == p1.x && p2.y == p3.y)
+        || (p0.x == p1.x && p0.y == p3.y && p2.x == p3.x && p2.y == p1.y);
+    is_rect.then_some([
+        p0.x.min(p2.x),
+        p0.y.min(p2.y),
+        p0.x.max(p2.x),
+        p0.y.max(p2.y),
+    ])
+}
+
+fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
+    if rect.iter().any(|value| value.is_nan()) || rect[0] >= rect[2] || rect[1] >= rect[3] {
+        state.clip_is_empty = true;
+        return true;
+    }
+    if let Some(existing) = state.clip_rect {
+        let Some(transformed) = transform_rect_to_new_space(rect, state.transform, existing.matrix)
+        else {
+            return false;
+        };
+        rect = [
+            existing.rect[0].max(transformed[0]),
+            existing.rect[1].max(transformed[1]),
+            existing.rect[2].min(transformed[2]),
+            existing.rect[3].min(transformed[3]),
+        ];
+        if rect[0] >= rect[2] || rect[1] >= rect[3] {
+            state.clip_is_empty = true;
+        }
+        state.clip_rect = Some(ClipRectState {
+            rect,
+            matrix: existing.matrix,
+        });
+    } else {
+        state.clip_rect = Some(ClipRectState {
+            rect,
+            matrix: state.transform,
+        });
+    }
+    true
+}
+
+fn transform_rect_to_new_space(
+    rect: [f32; 4],
+    current_matrix: Mat2D,
+    new_matrix: Mat2D,
+) -> Option<[f32; 4]> {
+    if current_matrix == new_matrix {
+        return Some(rect);
+    }
+    let current_to_new = multiply(invert(new_matrix)?, current_matrix);
+    let [xx, yx, xy, yy, _, _] = current_to_new.0;
+    let max_skew = xy.abs().max(yx.abs());
+    let max_scale = xx.abs().max(yy.abs());
+    if max_skew > 1e-5 && max_scale > 1e-5 {
+        return None;
+    }
+    let p0 = current_to_new.transform_point(nuxie_render_api::Vec2D::new(rect[0], rect[1]));
+    let p1 = current_to_new.transform_point(nuxie_render_api::Vec2D::new(rect[2], rect[3]));
+    Some([
+        p0.x.min(p1.x),
+        p0.y.min(p1.y),
+        p0.x.max(p1.x),
+        p0.y.max(p1.y),
+    ])
+}
+
+fn clip_rect_paint_aux(clip: Option<ClipRectState>) -> gpu::PaintAuxData {
+    let Some(clip) = clip else {
+        return gpu::PaintAuxData::zeroed();
+    };
+    let [left, top, right, bottom] = clip.rect;
+    let normalized_rect = Mat2D([
+        (right - left) * 0.5,
+        0.0,
+        0.0,
+        (bottom - top) * 0.5,
+        (left + right) * 0.5,
+        (top + bottom) * 0.5,
+    ]);
+    let inverse = invert(multiply(clip.matrix, normalized_rect)).unwrap_or(Mat2D([0.0; 6]));
+    let [xx, yx, xy, yy, _, _] = inverse.0;
+    gpu::PaintAuxData {
+        matrix: [0.0; 6],
+        paint_value: [0.0; 2],
+        clip_rect_inverse_matrix: inverse.0,
+        inverse_fwidth: [-1.0 / (xx.abs() + xy.abs()), -1.0 / (yx.abs() + yy.abs())],
+    }
 }
 
 fn wgpu_path(path: &dyn RenderPath) -> &WgpuPath {
@@ -1570,6 +1680,23 @@ fn multiply(left: Mat2D, right: Mat2D) -> Mat2D {
         a * ux + c * uy + tx,
         b * ux + d * uy + ty,
     ])
+}
+
+fn invert(matrix: Mat2D) -> Option<Mat2D> {
+    let [xx, yx, xy, yy, tx, ty] = matrix.0;
+    let determinant = xx * yy - xy * yx;
+    if determinant == 0.0 || !determinant.is_finite() {
+        return None;
+    }
+    let inverse_determinant = determinant.recip();
+    Some(Mat2D([
+        yy * inverse_determinant,
+        -yx * inverse_determinant,
+        -xy * inverse_determinant,
+        xx * inverse_determinant,
+        (xy * ty - yy * tx) * inverse_determinant,
+        (yx * tx - xx * ty) * inverse_determinant,
+    ]))
 }
 
 fn rgba(value: ColorInt, opacity: f32) -> [f32; 4] {
@@ -1692,6 +1819,20 @@ mod tests {
         let scaled = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
         let result = multiply(translated, scaled);
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+    }
+
+    fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> WgpuPath {
+        let [left, top, right, bottom] = bounds;
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(left, top);
+        raw_path.line_to(right, top);
+        raw_path.line_to(right, bottom);
+        raw_path.line_to(left, bottom);
+        raw_path.close();
+        WgpuPath {
+            raw_path,
+            fill_rule,
+        }
     }
 
     fn assert_post_contour_padding(tessellation: &draw::FillTessellation) {
@@ -1858,22 +1999,60 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_full_target_clip() {
+    fn recognizes_cpp_axis_aligned_clip_path() {
         let mut raw_path = RawPath::new();
         raw_path.move_to(0.0, 0.0);
         raw_path.line_to(64.0, 0.0);
         raw_path.line_to(64.0, 32.0);
         raw_path.line_to(0.0, 32.0);
         raw_path.close();
-        assert!(is_full_target_clip(
-            &WgpuPath {
-                raw_path,
-                fill_rule: FillRule::Clockwise,
-            },
-            Mat2D::IDENTITY,
-            64,
-            32,
-        ));
+        assert_eq!(path_aabb(&raw_path), Some([0.0, 0.0, 64.0, 32.0]));
+    }
+
+    #[test]
+    fn clip_rect_state_intersects_and_restores_like_cpp() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let outer = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::NonZero);
+        let inner = rect_path([16.0, 4.0, 60.0, 48.0], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.save();
+        frame.clip_path(&outer);
+        frame.clip_path(&inner);
+        assert_eq!(frame.state.clip_rect.unwrap().rect, [16.0, 8.0, 56.0, 48.0]);
+        let aux = clip_rect_paint_aux(frame.state.clip_rect);
+        for (actual, expected) in aux
+            .clip_rect_inverse_matrix
+            .into_iter()
+            .zip([0.05, 0.0, 0.0, 0.05, -1.8, -1.4])
+        {
+            assert!((actual - expected).abs() < 1e-6);
+        }
+        for value in aux.inverse_fwidth {
+            assert!((value + 20.0).abs() < 1e-5);
+        }
+        frame.restore();
+        assert!(frame.state.clip_rect.is_none());
+    }
+
+    #[test]
+    fn axis_aligned_clip_path_limits_atomic_fill_pixels() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::NonZero);
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
+        assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
+        assert_eq!(pixel(56, 56), [0, 0, 0, 255]);
     }
 
     #[test]
@@ -1991,20 +2170,6 @@ mod tests {
 
     #[test]
     fn atomic_and_fallback_runs_preserve_draw_order() {
-        fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> WgpuPath {
-            let [left, top, right, bottom] = bounds;
-            let mut raw_path = RawPath::new();
-            raw_path.move_to(left, top);
-            raw_path.line_to(right, top);
-            raw_path.line_to(right, bottom);
-            raw_path.line_to(left, bottom);
-            raw_path.close();
-            WgpuPath {
-                raw_path,
-                fill_rule,
-            }
-        }
-
         let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::ClockwiseAtomic).unwrap();
         let red = WgpuPaint {
             color: 0xffff_0000,

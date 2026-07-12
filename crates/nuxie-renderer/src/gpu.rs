@@ -248,6 +248,7 @@ pub(crate) const PATCH_VERTEX_BUFFER_COUNT: usize = 269;
 pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize = 441;
 pub(crate) const CONTOUR_ID_MASK: u32 = 0xffff;
 pub(crate) const CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG: u32 = 1 << 29;
+pub(crate) const PAINT_FLAG_HAS_CLIP_RECT: u32 = 0x400;
 pub(crate) const MITER_REVERT_JOIN_CONTOUR_FLAG: u32 = 4 << 26;
 pub(crate) const ROUND_JOIN_CONTOUR_FLAG: u32 = 2 << 26;
 pub(crate) const BEVEL_JOIN_CONTOUR_FLAG: u32 = 3 << 26;
@@ -546,6 +547,11 @@ impl PaintData {
             value: swizzle_rive_color_to_rgba(color),
         }
     }
+
+    pub(crate) fn with_clip_rect(mut self) -> Self {
+        self.params |= PAINT_FLAG_HAS_CLIP_RECT;
+        self
+    }
 }
 
 #[repr(C)]
@@ -728,6 +734,7 @@ mod tests {
         let paint = PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply);
         assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
         assert_eq!(paint.value, 0x8010_2040);
+        assert_eq!(paint.with_clip_rect().params, 1 | 0x200 | 0x400 | 11 << 4);
         let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
         assert_eq!(stroke.params, 1 | 11 << 4);
     }

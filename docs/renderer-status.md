@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=48, diverges=0, gated=1,419, total=1,467.
+- Rust wgpu: exact=52, diverges=0, gated=1,415, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -47,7 +47,8 @@ Run `make renderer-golden`.
   `riv-clip_tests-frame-{0..4}-clockwise-atomic`, and
   `gm-emptystrokefeather-clockwise-atomic`, plus
   `gm-largeclippedpath_clockwise-clockwise-atomic` and
-  `gm-largeclippedpath_clockwise_nested-clockwise-atomic`.
+  `gm-largeclippedpath_clockwise_nested-clockwise-atomic`, and the
+  `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix.
 
 ## Milestones
 
@@ -89,10 +90,12 @@ Run `make renderer-golden`.
    generated from upstream. The isolated family implements the global
    borrowed-to-main barrier, tiled visible-bounds allocations, a sampled
    WebGPU clip plane, and fixed-function `plus`/`min` clip attachments. The
-   large clockwise and nested-clockwise clip GMs are promoted. The next
-   large/negative gaps are winding/even-odd fill semantics and negative
-   interior-triangle clips; parent-tight clip bounds are a later performance
-   refinement, not a correctness gate. The separate matching WebGPU MSAA
+   full large-path clockwise/winding/even-odd matrix is promoted under the
+   forced-clockwise oracle. The next measured correctness gap is negative
+   interior triangles: unclipped differs at 16,845 pixels/max 255 and clipped
+   at 181,923/max 255. Diagnose the shared borrowed/main coverage path first,
+   then the additional clip amplification. Parent-tight clip bounds are a
+   later performance refinement, not a correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
    Continue R2 with those fill/clip semantics, remaining `render_context.cpp`
    behavior, and integration of the translated intersection board.
@@ -126,6 +129,11 @@ Run `make renderer-golden`.
   with a bounded 640-pixel Metal-vs-wgpu allowance. Their 50%-coverage masks
   are pixel-identical; the 592-593 residual pixels are confined to clip
   boundaries, with no missing or extra binary coverage.
+- 2026-07-12: Sol review confirmed that forced clockwise-atomic mode
+  intentionally replaces authored nonzero/even-odd fill semantics; preserving
+  parity would contradict the C++ oracle. Viewport-bounded nested inverses are
+  behaviorally equivalent while the parent clip remains active, so parent
+  content/tightened bounds stay a performance task unless pixels prove otherwise.
 
 ## Log
 
@@ -664,3 +672,12 @@ Run `make renderer-golden`.
   exact=48/diverges=0/gated=1,419; direct C++ preparation oracles, all 122
   active renderer unit tests, both V2 floors (584 and 35 exact segments), and
   the full workspace pass.
+- 2026-07-12: Captured fresh forced-CWA C++ references for the winding and
+  even-odd large-path variants after Terra reconnaissance and Sol review.
+  Winding and clockwise references are byte-identical; even-odd uses different
+  authored geometry but the same effective clockwise rule. All four Rust
+  comparisons have the already-proven 593 boundary pixels/max 128 and
+  pixel-identical 50% coverage masks, so they inherit the bounded 640-pixel,
+  delta-2 allowance and advance the ratchet to exact=52/diverges=0/gated=1,415.
+  The adjacent negative-interior probe remains a real geometry/coverage gap:
+  16,845 pixels unclipped and 181,923 as a clip, both max delta 255.

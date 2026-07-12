@@ -1501,10 +1501,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_evenodd-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 640
 
 
 [[entry]]
@@ -1527,10 +1526,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd_nested.rive-stre
 reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_evenodd_nested-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 640
 
 
 [[entry]]
@@ -1553,10 +1551,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_winding.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_winding-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 640
 
 
 [[entry]]
@@ -1579,10 +1576,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_winding_nested.rive-stre
 reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_winding_nested-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 640
 
 
 [[entry]]

@@ -747,12 +747,11 @@ impl ArtboardInstance {
         self.objects.color_property(local_id, property_key)
     }
 
-    pub(crate) fn set_color_property(
-        &mut self,
-        local_id: usize,
-        property_key: u16,
-        value: u32,
-    ) -> bool {
+    /// Typed property write with dirt propagation — the write path the
+    /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
+    /// embeddings): returns whether a matching property existed and its
+    /// value changed; invalidation is handled internally.
+    pub fn set_color_property(&mut self, local_id: usize, property_key: u16, value: u32) -> bool {
         let previous = self.color_property(local_id, property_key);
         if !self
             .objects
@@ -797,12 +796,11 @@ impl ArtboardInstance {
         self.objects.bool_property(local_id, property_key)
     }
 
-    pub(crate) fn set_bool_property(
-        &mut self,
-        local_id: usize,
-        property_key: u16,
-        value: bool,
-    ) -> bool {
+    /// Typed property write with dirt propagation — the write path the
+    /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
+    /// embeddings): returns whether a matching property existed and its
+    /// value changed; invalidation is handled internally.
+    pub fn set_bool_property(&mut self, local_id: usize, property_key: u16, value: bool) -> bool {
         if !self
             .objects
             .set_bool_property(local_id, property_key, value)
@@ -856,12 +854,11 @@ impl ArtboardInstance {
         self.objects.double_property(local_id, property_key)
     }
 
-    pub(crate) fn set_double_property(
-        &mut self,
-        local_id: usize,
-        property_key: u16,
-        value: f32,
-    ) -> bool {
+    /// Typed property write with dirt propagation — the write path the
+    /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
+    /// embeddings): returns whether a matching property existed and its
+    /// value changed; invalidation is handled internally.
+    pub fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
         if !self
             .objects
             .set_double_property(local_id, property_key, value)
@@ -906,12 +903,11 @@ impl ArtboardInstance {
         true
     }
 
-    pub(crate) fn set_uint_property(
-        &mut self,
-        local_id: usize,
-        property_key: u16,
-        value: u64,
-    ) -> bool {
+    /// Typed property write with dirt propagation — the write path the
+    /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
+    /// embeddings): returns whether a matching property existed and its
+    /// value changed; invalidation is handled internally.
+    pub fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
         if !self
             .objects
             .set_uint_property(local_id, property_key, value)
@@ -944,7 +940,11 @@ impl ArtboardInstance {
             .unwrap_or_default()
     }
 
-    pub(crate) fn set_string_property(
+    /// Typed property write with dirt propagation — the write path the
+    /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
+    /// embeddings): returns whether a matching property existed and its
+    /// value changed; invalidation is handled internally.
+    pub fn set_string_property(
         &mut self,
         local_id: usize,
         property_key: u16,

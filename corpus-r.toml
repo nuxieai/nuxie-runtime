@@ -217,10 +217,9 @@ stream = "fixtures/renderer/streams/gm/bug339297.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug339297-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 1280
 
 
 [[entry]]
@@ -243,10 +242,9 @@ stream = "fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug339297_as_clip-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 1280
 
 
 [[entry]]

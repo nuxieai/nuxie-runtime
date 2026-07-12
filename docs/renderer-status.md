@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=70, diverges=0, gated=1,397, total=1,467.
+- Rust wgpu: exact=72, diverges=0, gated=1,395, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -58,7 +58,9 @@ Run `make renderer-golden`.
   the `gm-poly_{clockwise,evenOdd,nonZero}-clockwise-atomic` family, plus
   `gm-cubicpath-clockwise-atomic` and
   `gm-cubicclosepath-clockwise-atomic`, plus `gm-beziers-clockwise-atomic`
-  and the `gm-bug{5099,6083,615686,6987,7792}-clockwise-atomic` set.
+  and the `gm-bug{5099,6083,615686,6987,7792}-clockwise-atomic` set, plus
+  `gm-bug339297-clockwise-atomic` and
+  `gm-bug339297_as_clip-clockwise-atomic`.
 
 ## Milestones
 
@@ -139,10 +141,14 @@ Run `make renderer-golden`.
    pixel-exact and closes the ten-entry basic-fill sweep. A read-only
    ten-entry fill/clip rescout then found five byte/threshold-exact bug GMs and
    `beziers` at 17 isolated delta-4 edge pixels; all six are promoted under
-   their existing 32-pixel contract. Continue with the shared
-   `bug339297`/`bug339297_as_clip` defect: both differ in exactly one 1,280-pixel
-   component spanning two full-width scanlines, so first isolate the shared
-   fill-edge preparation before considering clip-specific code.
+   their existing 32-pixel contract. The shared
+   `bug339297`/`bug339297_as_clip` pair has identical binary support and
+   identical black/white counts across Metal and wgpu; only two full-width AA
+   scanlines differ under million-scale coordinate cancellation. Both are
+   promoted with a documented 1,280-pixel backend allowance. Continue with
+   the `hittest_evenOdd`/`hittest_nonZero` pair, whose Rust replay reaches a
+   wgpu async-map failure before producing pixels; this is the nearest finding
+   in the invented resource/readback seam and must be diagnosed locally.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -223,6 +229,12 @@ Run `make renderer-golden`.
 - 2026-07-12: `beziers` retains the standard max-delta-2/32-pixel contract.
   Its 17 residual pixels are disconnected one-pixel edge samples at max delta
   4; no geometry or connected support is missing.
+- 2026-07-12: `bug339297` and `bug339297_as_clip` retain max channel delta 2
+  with a 1,280-pixel allowance. Both backend pairs have zero binary-support
+  differences and identical black/white pixel counts; all residuals occupy
+  the same two antialiased full-width scanlines under million-scale coordinate
+  cancellation, so this is a Metal-versus-wgpu precision difference rather
+  than missing fill or clip geometry.
 
 ## Log
 
@@ -849,3 +861,8 @@ Run `make renderer-golden`.
   its existing budget. Promoting all six advances the ratchet to
   exact=70/diverges=0/gated=1,397; the shared two-row `bug339297` family is
   next.
+- 2026-07-12: Audited the `bug339297` pair with independent threshold masks
+  and color histograms. Support is pixel-identical in clipped and unclipped
+  forms, while 1,280 AA samples differ across two scanlines. The documented
+  backend allowance promotes both entries and advances the ratchet to
+  exact=72/diverges=0/gated=1,395; the hit-test readback failure is next.

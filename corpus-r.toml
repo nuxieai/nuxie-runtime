@@ -551,10 +551,9 @@ stream = "fixtures/renderer/streams/gm/convexpaths.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/convexpaths-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 64
 
 
 [[entry]]

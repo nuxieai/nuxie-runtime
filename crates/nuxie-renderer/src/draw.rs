@@ -1349,17 +1349,17 @@ pub(crate) fn build_fill_tessellation(
         {
             let x0 = location;
             location += segments as i32 + 1 + i32::from(curve_index == 0) * padding;
-            spans.push(TessVertexSpan::without_reflection(
+            push_forward_tessellation_spans(
+                &mut spans,
                 curve.map(|point| [point.x, point.y]),
                 [0.0, 0.0],
-                0.0,
                 x0,
                 location,
                 segments,
                 1,
                 1,
                 (index as u32 + 1) & CONTOUR_ID_MASK,
-            ));
+            );
         }
     }
     push_midpoint_tail_padding(&mut spans, location);
@@ -1885,6 +1885,25 @@ mod tests {
         assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x000c_0008);
         assert_eq!(tessellation.spans[3].x0_x1 as u32, 0x0010_000e);
         assert_post_contour_padding(&tessellation);
+    }
+
+    #[test]
+    fn fill_tessellation_wraps_locations_before_i16_packing() {
+        let mut path = RawPath::new();
+        for x in 0..4_100 {
+            let x = x as f32;
+            path.move_to(x, 0.0);
+            path.line_to(x + 0.5, 1.0);
+            path.line_to(x + 1.0, 0.0);
+            path.close();
+        }
+        let tessellation = build_fill_tessellation(&path, Mat2D::IDENTITY).unwrap();
+
+        assert!(tessellation.spans.iter().any(|span| span.y >= 16.0));
+        assert!(tessellation
+            .spans
+            .iter()
+            .all(|span| span.x_range().0 >= -TESS_TEXTURE_WIDTH));
     }
 
     #[test]

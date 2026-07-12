@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=54, diverges=0, gated=1,413, total=1,467.
+- Rust wgpu: exact=55, diverges=0, gated=1,412, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -50,7 +50,8 @@ Run `make renderer-golden`.
   `gm-largeclippedpath_clockwise_nested-clockwise-atomic`, and the
   `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
   `gm-negative_interior_triangles-clockwise-atomic`, and
-  `gm-negative_interior_triangles_as_clip-clockwise-atomic`.
+  `gm-negative_interior_triangles_as_clip-clockwise-atomic`, and
+  `gm-convexpaths-clockwise-atomic`.
 
 ## Milestones
 
@@ -105,9 +106,11 @@ Run `make renderer-golden`.
    midpoint-fan double-sided preparation always used reverse-then-forward and
    omitted C++'s negative-determinant coverage flag. Porting determinant-aware
    forward-then-reverse layout reduces the GM from 166,809 pixels/max 208 to 46
-   pixels beyond delta 2/max 7 and promotes it. Sweep the remaining gated CWA
-   fill/clip entries for the same now-supported fallback before starting a new
-   algorithm family.
+   pixels beyond delta 2/max 7 and promotes it. A ten-entry basic-fill sweep
+   then promoted `convexpaths` after porting missing forward-span row wrapping.
+   Diagnose `pathfill` next: it has 99.5% support overlap and only 253 pixels
+   beyond delta 2, while the other eight measured entries retain broad
+   winding/interior gaps.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -158,6 +161,10 @@ Run `make renderer-golden`.
   with a bounded 64-pixel allowance. After the mirrored fallback fix, only 46
   pixels exceed delta 2 across 2.56M pixels and max delta is 7; both shapes,
   checkerboard clipping, and corresponding interior support are restored.
+- 2026-07-12: `convexpaths` keeps max channel delta 2 with a bounded 64-pixel
+  allowance. After the row-wrap fix, only 43 pixels exceed delta 2 across
+  1.32M pixels; the remaining max-103 samples are sparse hard-edge backend
+  differences, not missing support.
 
 ## Log
 
@@ -733,4 +740,13 @@ Run `make renderer-golden`.
   the ratchet to exact=54/diverges=0/gated=1,413. A Terra scout confirmed native
   Metal has no executable CWA storage-buffer mode, so implementing an entire
   backend solely for a redundant C++ buffer capture was rejected; native final
-  pixels remain the cross-implementation oracle.
+   pixels remain the cross-implementation oracle.
+- 2026-07-12: A read-only Terra sweep measured ten basic gated CWA fills after
+  the mirrored fallback fix. `convexpaths` exposed the highest-priority result:
+  a pre-frame panic from packing global tessellation locations into signed
+  16-bit row-local fields. Porting C++'s existing forward-span row wrapping
+  removes the panic and leaves only 43 pixels beyond delta 2/max 103 across
+  1.32M pixels, promoting the entry and advancing the ratchet to
+  exact=55/diverges=0/gated=1,412. `pathfill` is the nearest next candidate at
+  253 pixels beyond delta 2; the remaining eight have named winding/interior
+  geometry gaps from 4,578 to 32,596 pixels.

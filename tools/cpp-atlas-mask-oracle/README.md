@@ -70,6 +70,57 @@ that side oppositely for this polygon, while native Metal and wgpu produce
 isolated final pixels with no channel delta beyond 2; all other packed flags
 remain strict.
 
+`direct-grid-inputs.bin` is the bounded `direct-grid` atomic preparation
+oracle. It reproduces the 100 contours in
+`fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-stream`
+line 10: 50 horizontal then 50 vertical 20px strips, with alternating winding.
+It uses a `1000 x 1000` frame, zero feathering to select production interior
+triangulation, and `clockwiseFillOverride=true`; the mode rejects any result
+that is not atomic, lacks exactly 100 contours, or lacks interior triangle
+records.
+
+`direct-grid-inputs.bin` uses the `RIVEDGI` version 1 little-endian format.
+Its 64-byte header is `magic[8]`, then fourteen `u32` values: `version=1`,
+`headerBytes=64`, `flags=1` (`clockwiseFillOverride`), `interlockMode=1`
+(production `InterlockMode::atomics`),
+`drawBatchCount`, `tessWidth`, `tessHeight`, `contourCount=100`,
+`triangleVertexCount`, `drawBatchStride=20`, `contourStride=16`,
+`triangleVertexStride=12`, `tessTexelStride=16`, and `reserved=0`. The payload
+is exactly: draw-schedule records (`drawType`, `shaderFeatures`,
+`shaderMiscFlags`, `baseElement`, `elementCount`; five `u32`), contour records
+(`x` and `y` raw float bits, `pathID`, `vertexIndex0`; four `u32`), interior
+triangle records (`x` and `y` raw float bits, packed signed-weight/unsigned
+path-ID word; three `u32`), and the complete row-packed `RGBA32Uint`
+tessellation texture. The temporary runtime patch snapshots each interior
+`TriangleVertex` from its still-mapped CPU production buffer after
+triangulation and before `unmapResourceBuffers()` transfers it to the backend.
+No WebGPU row padding, normalization, or omitted records are permitted.
+
+The schedule is exactly four records in production `DrawType` order:
+`renderPassInitialize=15`, `outerCurvePatches=2`,
+`interiorTriangulation=3`, and `renderPassResolve=16`. The outer-cubic record
+must have a nonzero, non-overflowing `baseElement + elementCount` range whose
+17-vertex production patch spans fit in the tessellation texture, and the
+interior record's `elementCount` must equal `triangleVertexCount`. `build.sh`
+parses the generated artifact with these rules before reporting success.
+
+`direct-flower-inputs.bin` is the bounded `direct-flower` preparation oracle
+for line 7 of
+`fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-stream`.
+It reproduces the exact first clip path: one 9-cubic flower contour followed by
+its inner 4-cubic oval contour. Like `direct-grid`, it uses a `1000 x 1000`
+frame, zero feathering, `clockwiseFillOverride=true`, production atomic
+interlock, and the same pre-backend contour and `TriangleVertex` capture hooks.
+It isolates the global-triangulation inputs around the remaining oval-boundary
+pixel delta without replaying the second 100-contour grid clip.
+
+The flower artifact uses the separate `RIVEDFI` version 1 little-endian magic
+and otherwise has the same 64-byte header, record strides, payload order, and
+canonical four-draw schedule as `RIVEDGI`. Its parser requires exactly 2
+contours, a nonempty triangle count divisible by 3, a coherent outer-cubic
+range, and an interior draw `elementCount` equal to `triangleVertexCount`.
+`build.sh` emits and validates both direct artifacts independently.
+
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the

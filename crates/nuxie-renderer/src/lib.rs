@@ -2158,7 +2158,6 @@ mod tests {
     }
 
     fn fixed_feather_atlas_oracle(join: StrokeJoin) -> FixedFeatherAtlasOracle {
-        let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
         let paint = WgpuPaint {
             style: RenderPaintStyle::Stroke,
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
@@ -2167,13 +2166,69 @@ mod tests {
             feather: ATLAS_ORACLE_FEATHER,
             ..WgpuPaint::default()
         };
-        let stroke = paint.effective_stroke();
         let mut raw_path = RawPath::new();
         raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MIN);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
+        fixed_feather_atlas_oracle_for(raw_path, paint)
+    }
+
+    fn fixed_feather_atlas_fill_oracle() -> FixedFeatherAtlasOracle {
+        const CONTROL_OFFSET: f32 = 8.83064;
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let min = ATLAS_ORACLE_SQUARE_MIN;
+        let max = ATLAS_ORACLE_SQUARE_MAX;
+        let center = (min + max) * 0.5;
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(max, center);
+        raw_path.cubic_to(
+            max,
+            center + CONTROL_OFFSET,
+            center + CONTROL_OFFSET,
+            max,
+            center,
+            max,
+        );
+        raw_path.cubic_to(
+            center - CONTROL_OFFSET,
+            max,
+            min,
+            center + CONTROL_OFFSET,
+            min,
+            center,
+        );
+        raw_path.cubic_to(
+            min,
+            center - CONTROL_OFFSET,
+            center - CONTROL_OFFSET,
+            min,
+            center,
+            min,
+        );
+        raw_path.cubic_to(
+            center + CONTROL_OFFSET,
+            min,
+            max,
+            center - CONTROL_OFFSET,
+            max,
+            center,
+        );
+        raw_path.close();
+        fixed_feather_atlas_oracle_for(raw_path, paint)
+    }
+
+    fn fixed_feather_atlas_oracle_for(
+        raw_path: RawPath,
+        paint: WgpuPaint,
+    ) -> FixedFeatherAtlasOracle {
+        let stroke = paint.effective_stroke();
+        let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
         let mut placement = feather_atlas_placement(
             &raw_path,
             Mat2D::IDENTITY,
@@ -2215,7 +2270,11 @@ mod tests {
         let paths = [gpu::PathData::zeroed(), tessellation.path];
         let paints = [
             gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
-            gpu::PaintData::solid_stroke(0xffff_ffff, BlendMode::SrcOver),
+            if paint.style == RenderPaintStyle::Stroke {
+                gpu::PaintData::solid_stroke(0xffff_ffff, BlendMode::SrcOver)
+            } else {
+                gpu::PaintData::solid(0xffff_ffff, FillRule::Clockwise, BlendMode::SrcOver)
+            },
         ];
         let paint_aux = [gpu::PaintAuxData::zeroed(); 2];
         let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
@@ -2280,7 +2339,7 @@ mod tests {
             &tessellation.contours,
             tessellation.base_instance,
             tessellation.instance_count,
-            true,
+            paint.style == RenderPaintStyle::Stroke,
             true,
             [ATLAS_ORACLE_LOGICAL_SIZE; 2],
             [
@@ -2466,6 +2525,14 @@ mod tests {
     }
 
     #[test]
+    fn feather_atlas_fill_pass_writes_r16_coverage() {
+        let mask = fixed_feather_atlas_fill_oracle().mask;
+        assert!((0..ATLAS_ORACLE_PHYSICAL_SIZE as usize).any(|y| {
+            (0..ATLAS_ORACLE_PHYSICAL_SIZE as usize).any(|x| mask.sample_bits(x, y) != 0)
+        }));
+    }
+
+    #[test]
     fn feather_atlas_stroke_uses_the_same_mask_for_all_requested_joins() {
         let miter = fixed_feather_atlas_mask(StrokeJoin::Miter);
         let bevel = fixed_feather_atlas_mask(StrokeJoin::Bevel);
@@ -2611,6 +2678,74 @@ mod tests {
                 )
             },
         );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_FILL_MASK from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_fill_mask_oracle_matches_fixed_rust_mask_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_FILL_MASK").expect(
+            "RIVE_CPP_ATLAS_FILL_MASK is required for the ignored C++ atlas-fill mask test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_ATLAS_FILL_MASK is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_FILL_MASK must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-fill mask at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_mask = atlas_mask_oracle::AtlasMask::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-fill mask at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_mask = fixed_feather_atlas_fill_oracle().mask;
+        atlas_mask_oracle::compare_cpp_to_rust(&cpp_mask, &rust_mask, ATLAS_ORACLE_TOLERANCES)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ atlas-fill mask mismatch at {}: {error}",
+                    path.display()
+                )
+            });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_FILL_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_fill_input_oracle_matches_fixed_rust_inputs_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_FILL_INPUTS").expect(
+            "RIVE_CPP_ATLAS_FILL_INPUTS is required for the ignored C++ atlas-fill input test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_ATLAS_FILL_INPUTS is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_FILL_INPUTS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-fill inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-fill inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_inputs = fixed_feather_atlas_fill_oracle().inputs;
+        atlas_input_oracle::compare_cpp_to_rust_with_position_ulps(&cpp_inputs, &rust_inputs, 1)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ atlas-fill input mismatch at {}: {error}",
+                    path.display()
+                )
+            });
     }
 
     #[test]

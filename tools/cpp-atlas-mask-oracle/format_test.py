@@ -144,7 +144,7 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "length"):
             parse_blit(data + b"\0")
 
-    def test_exporter_configuration_matches_coordinated_stroke_fixture(self):
+    def test_exporter_configuration_matches_coordinated_fixtures(self):
         source = EXPORTER.read_text()
         for fragment in (
             "constexpr uint32_t kFrameWidth = 64;",
@@ -168,7 +168,11 @@ class FormatTests(unittest.TestCase):
             "path->lineTo(kSquareMax, kSquareMax);",
             "path->lineTo(kSquareMin, kSquareMax);",
             "path->close();",
-            "paint->style(rive::RenderPaintStyle::stroke);",
+            'const bool fillCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;',
+            "path->fillRule(rive::FillRule::clockwise);",
+            "paint->style(fillCase ? rive::RenderPaintStyle::fill",
+            ": rive::RenderPaintStyle::stroke);",
+            "path->cubicTo(kSquareMax,",
             "paint->thickness(kStrokeThickness);",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
@@ -193,8 +197,6 @@ class FormatTests(unittest.TestCase):
             "writeU32(header, 16, height);",
         ):
             self.assertIn(fragment, source)
-        self.assertNotIn("RenderPaintStyle::fill", source)
-        self.assertNotIn("path->cubicTo(", source)
         self.assertNotIn("WGPUBufferMapAsyncStatus", source)
         self.assertNotIn("context->makeRenderTarget(", source)
         self.assertNotIn("context->atlasMaskTextureForOracle()", source)
@@ -217,8 +219,11 @@ class FormatTests(unittest.TestCase):
             'rm -f "$output"',
             'rm -f "$output" "$inputs_output"',
             '"$output" "$inputs_output"',
+            '"$fill_output" "$fill_inputs_output" "$fill_blit_output" fill',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
+            'if [[ "$fill_output_bytes" != "4628" ]]',
+            'if [[ "$fill_blit_bytes" != "16404" ]]',
         ):
             self.assertIn(fragment, source)
 
@@ -235,6 +240,8 @@ class FormatTests(unittest.TestCase):
             "2.0 / placement.width as f32",
             "placement.width,",
             '#[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_FILL_MASK from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_FILL_INPUTS from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU MSAA oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
@@ -245,6 +252,10 @@ class FormatTests(unittest.TestCase):
         self.assertIn('RIVE_CPP_ATLAS_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f"',
                       readme)
         self.assertIn('RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_FILL_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-mask.r16f"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_FILL_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-inputs.bin"',
                       readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 
@@ -304,9 +315,11 @@ class FormatTests(unittest.TestCase):
                 "m_atlasMaskOracleFacts.contentWidth = desc.atlasContentWidth;",
                 "desc.atlasPathTranslateXForOracle;",
                 "desc.atlasPathTranslateYForOracle;",
-                "desc.atlasStrokeBatches[0].scissor",
-                "desc.atlasStrokeBatches[0].basePatch",
-                "desc.atlasStrokeBatches[0].patchCount",
+                "desc.atlasStrokeBatchCount + desc.atlasFillBatchCount",
+                "const AtlasDrawBatch* oracleBatch =",
+                "oracleBatch != nullptr ? oracleBatch->scissor",
+                "oracleBatch != nullptr ? oracleBatch->basePatch",
+                "oracleBatch != nullptr ? oracleBatch->patchCount",
                 "tessellationTextureForOracle() const",
                 "m_atlasMaskOracleFacts.contours.assign(",
             ):

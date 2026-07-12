@@ -162,6 +162,10 @@ fn build_stroke_or_feather_tessellation(
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     feather_radius: f32,
 ) -> Option<FillTessellation> {
+    let matrix_scale = max_matrix_scale(transform);
+    let softened_path = (stroke.is_none() && feather_radius / 1.5 * matrix_scale > 1.0)
+        .then(|| softened_path_for_feathering(path, feather_radius, matrix_scale));
+    let path = softened_path.as_ref().unwrap_or(path);
     let mut contours = stroke_contours(path)?;
     let is_stroke = stroke.is_some();
     if !is_stroke {
@@ -174,7 +178,6 @@ fn build_stroke_or_feather_tessellation(
     if (is_stroke && stroke_radius <= 0.0) || contours.is_empty() {
         return None;
     }
-    let matrix_scale = max_matrix_scale(transform);
     let feather_screen_radius = (feather_radius * matrix_scale).min(feather_max_screen_radius());
     let polar_segments_per_radian =
         polar_segments_per_radian(feather_screen_radius + stroke_radius * matrix_scale);
@@ -399,6 +402,171 @@ fn build_stroke_or_feather_tessellation(
         base_instance: 1,
         instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
     })
+}
+
+fn softened_path_for_feathering(path: &RawPath, feather_radius: f32, matrix_scale: f32) -> RawPath {
+    const POLAR_JOIN_PRECISION: f32 = 2.0;
+    const MIN_POLAR_ANGLE: f32 = std::f32::consts::PI / 16.0;
+    let radius = feather_radius * matrix_scale * 0.25;
+    let cos_theta = 1.0 - (1.0 / POLAR_JOIN_PRECISION) / radius;
+    let mut rotation_between_joins = 2.0 * cos_theta.max(-1.0).acos();
+    if rotation_between_joins < MIN_POLAR_ANGLE {
+        let delta = (MIN_POLAR_ANGLE - rotation_between_joins) * 5.0;
+        rotation_between_joins = MIN_POLAR_ANGLE + delta * (delta * delta);
+    }
+    rotation_between_joins = rotation_between_joins.min(std::f32::consts::FRAC_PI_2);
+
+    let mut softened = RawPath::new();
+    let mut point_index = 0;
+    let mut current = Vec2D::new(0.0, 0.0);
+    for verb in path.verbs() {
+        match verb {
+            PathVerb::Move => {
+                current = path.points()[point_index];
+                softened.move_to(current.x, current.y);
+                point_index += 1;
+            }
+            PathVerb::Line => {
+                current = path.points()[point_index];
+                softened.line_to(current.x, current.y);
+                point_index += 1;
+            }
+            PathVerb::Quad => {
+                let control = path.points()[point_index];
+                let end = path.points()[point_index + 1];
+                append_softened_cubic(
+                    &mut softened,
+                    [
+                        current,
+                        lerp(current, control, 2.0 / 3.0),
+                        lerp(end, control, 2.0 / 3.0),
+                        end,
+                    ],
+                    rotation_between_joins,
+                );
+                current = end;
+                point_index += 2;
+            }
+            PathVerb::Cubic => {
+                let cubic = [
+                    current,
+                    path.points()[point_index],
+                    path.points()[point_index + 1],
+                    path.points()[point_index + 2],
+                ];
+                append_softened_cubic(&mut softened, cubic, rotation_between_joins);
+                current = cubic[3];
+                point_index += 3;
+            }
+            PathVerb::Close => softened.close(),
+        }
+    }
+    softened
+}
+
+fn append_softened_cubic(path: &mut RawPath, cubic: [Vec2D; 4], rotation_between_joins: f32) {
+    const CUSP_PADDING: f32 = 1e-2;
+    let (roots, are_cusps) = find_cubic_convex_180_chops(cubic);
+    let roots = if are_cusps {
+        let mut straddles = Vec::with_capacity(roots.len() * 2);
+        for (index, root) in roots.iter().copied().enumerate() {
+            let min_t = if index == 0 {
+                0.0
+            } else {
+                (roots[index - 1] + root) * 0.5
+            };
+            let max_t = if index + 1 == roots.len() {
+                1.0
+            } else {
+                (roots[index + 1] + root) * 0.5
+            };
+            straddles.extend([
+                (root - CUSP_PADDING).max(min_t),
+                (root + CUSP_PADDING).min(max_t),
+            ]);
+        }
+        straddles
+    } else {
+        roots
+    };
+    for (index, segment) in chop_cubic_at_values(cubic, &roots).into_iter().enumerate() {
+        if are_cusps && index & 1 == 1 {
+            path.line_to(segment[3].x, segment[3].y);
+            continue;
+        }
+        append_cubic_at_uniform_rotation(path, segment, rotation_between_joins);
+    }
+}
+
+fn append_cubic_at_uniform_rotation(
+    path: &mut RawPath,
+    cubic: [Vec2D; 4],
+    rotation_between_joins: f32,
+) {
+    let tangents = cubic_tangents(cubic);
+    let rotation = angle_between(tangents[0], tangents[1]);
+    let chop_count = (rotation / rotation_between_joins) as usize;
+    if chop_count == 0 {
+        path.cubic_to(
+            cubic[1].x, cubic[1].y, cubic[2].x, cubic[2].y, cubic[3].x, cubic[3].y,
+        );
+        return;
+    }
+
+    let mut turn = vector_cross(subtract(cubic[2], cubic[0]), subtract(cubic[3], cubic[1]));
+    if turn == 0.0 {
+        turn = vector_cross(tangents[0], tangents[1]);
+    }
+    let signed_rotation = if turn >= 0.0 {
+        rotation_between_joins
+    } else {
+        -rotation_between_joins
+    };
+    let sin_rotation = signed_rotation.sin();
+    let cos_rotation = signed_rotation.cos();
+    let c = subtract(cubic[1], cubic[0]);
+    let d = subtract(cubic[2], cubic[1]);
+    let b = subtract(d, c);
+    let a = subtract(subtract(cubic[3], cubic[0]), scale(d, 3.0));
+    let mut tangent = tangents[0];
+    let mut max_t = 0.0;
+    let mut roots = Vec::with_capacity(chop_count);
+    for _ in 0..chop_count {
+        tangent = Vec2D::new(
+            cos_rotation * tangent.x - sin_rotation * tangent.y,
+            sin_rotation * tangent.x + cos_rotation * tangent.y,
+        );
+        let qa = a.x * tangent.y - a.y * tangent.x;
+        let qb = b.x * tangent.y - b.y * tangent.x;
+        let qc = c.x * tangent.y - c.y * tangent.x;
+        let discriminant = qb * qb - qa * qc;
+        let q = -qb - discriminant.sqrt().copysign(qb);
+        let root = qc / q;
+        if root > max_t + 1e-4 && root < 1.0 - 1e-4 {
+            max_t = root;
+            roots.push(root);
+        }
+    }
+    for segment in chop_cubic_at_values(cubic, &roots) {
+        path.cubic_to(
+            segment[1].x,
+            segment[1].y,
+            segment[2].x,
+            segment[2].y,
+            segment[3].x,
+            segment[3].y,
+        );
+    }
+}
+
+fn angle_between(a: Vec2D, b: Vec2D) -> f32 {
+    let denominator = ((a.x * a.x + a.y * a.y) * (b.x * b.x + b.y * b.y)).sqrt();
+    let cosine = (dot(a, b) / denominator).clamp(-1.0, 1.0);
+    if cosine.is_nan() {
+        0.0
+    } else {
+        cosine.acos()
+    }
 }
 
 fn feather_max_screen_radius() -> f32 {
@@ -1053,8 +1221,8 @@ fn line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
 fn contour_midpoint(curves: &[[Vec2D; 4]]) -> Vec2D {
     let mut sum = Vec2D::new(0.0, 0.0);
     for curve in curves {
-        sum.x += curve[0].x;
-        sum.y += curve[0].y;
+        sum.x += curve[3].x;
+        sum.y += curve[3].y;
     }
     let scale = 1.0 / curves.len() as f32;
     Vec2D::new(sum.x * scale, sum.y * scale)
@@ -1613,6 +1781,30 @@ mod tests {
         let atlas = build_feather_atlas_tessellation(&path, Mat2D::IDENTITY, 10.0, None).unwrap();
         assert_eq!(atlas.contours[0].vertex_index0, 8);
         assert_eq!(atlas.instance_count * 2, direct.instance_count);
+    }
+
+    #[test]
+    fn feather_fill_softens_circle_at_uniform_tangent_rotations() {
+        const CONTROL_OFFSET: f32 = 8.83064;
+        let mut path = RawPath::new();
+        path.move_to(48.0, 32.0);
+        path.cubic_to(48.0, 40.83064, 40.83064, 48.0, 32.0, 48.0);
+        path.cubic_to(32.0 - CONTROL_OFFSET, 48.0, 16.0, 40.83064, 16.0, 32.0);
+        path.cubic_to(16.0, 32.0 - CONTROL_OFFSET, 23.16936, 16.0, 32.0, 16.0);
+        path.cubic_to(40.83064, 16.0, 48.0, 23.16936, 48.0, 32.0);
+        path.close();
+
+        let softened = softened_path_for_feathering(&path, 30.0, 1.0);
+        assert_eq!(
+            softened
+                .verbs()
+                .iter()
+                .filter(|verb| **verb == PathVerb::Cubic)
+                .count(),
+            12
+        );
+        let atlas = build_feather_atlas_tessellation(&path, Mat2D::IDENTITY, 20.0, None).unwrap();
+        assert_eq!(atlas.instance_count, 34);
     }
 
     #[test]

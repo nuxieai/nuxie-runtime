@@ -12,6 +12,9 @@ jobs="${RIVE_ATLAS_MASK_JOBS:-2}"
 output="${RIVE_ATLAS_MASK_OUTPUT:-$script_dir/out/atlas-mask.r16f}"
 inputs_output="${RIVE_ATLAS_INPUT_OUTPUT:-$script_dir/out/atlas-inputs.bin}"
 blit_output="${RIVE_ATLAS_BLIT_OUTPUT:-$script_dir/out/atlas-blit.rgba}"
+fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
+fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
+fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -240,7 +243,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$injected_dir" "$(dirname "$output")" "$(dirname "$inputs_output")" "$(dirname "$blit_output")"
+mkdir -p "$injected_dir" \
+    "$(dirname "$output")" \
+    "$(dirname "$inputs_output")" \
+    "$(dirname "$blit_output")" \
+    "$(dirname "$fill_output")" \
+    "$(dirname "$fill_inputs_output")" \
+    "$(dirname "$fill_blit_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 git -C "$runtime" apply "$patch"
 applied=1
@@ -266,8 +275,9 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -283,6 +293,24 @@ if [[ "$blit_bytes" != "16404" ]]; then
     echo "atlas blit must be exactly 16404 bytes, got $blit_bytes: $blit_output" >&2
     exit 1
 fi
+fill_output_bytes="$(wc -c < "$fill_output" | tr -d ' ')"
+if [[ "$fill_output_bytes" != "4628" ]]; then
+    echo "atlas fill mask must be exactly 4628 bytes, got $fill_output_bytes: $fill_output" >&2
+    exit 1
+fi
+fill_inputs_bytes="$(wc -c < "$fill_inputs_output" | tr -d ' ')"
+if (( fill_inputs_bytes <= 56 )); then
+    echo "atlas fill inputs must contain a header, contour, and tessellation payload: $fill_inputs_output" >&2
+    exit 1
+fi
+fill_blit_bytes="$(wc -c < "$fill_blit_output" | tr -d ' ')"
+if [[ "$fill_blit_bytes" != "16404" ]]; then
+    echo "atlas fill blit must be exactly 16404 bytes, got $fill_blit_bytes: $fill_blit_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
 echo "atlas inputs: $inputs_output"
 echo "atlas blit: $blit_output"
+echo "atlas fill mask: $fill_output"
+echo "atlas fill inputs: $fill_inputs_output"
+echo "atlas fill blit: $fill_blit_output"

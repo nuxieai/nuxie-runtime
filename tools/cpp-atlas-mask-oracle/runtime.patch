@@ -48,7 +48,7 @@ index 4fcf8c0..52e7406 100644
  #include <webgpu/webgpu_cpp.h>
  
  #ifdef RIVE_WAGYU
-@@ -105,6 +106,40 @@ public:
+@@ -105,6 +106,41 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
@@ -60,6 +60,7 @@ index 4fcf8c0..52e7406 100644
 +        float pathTranslateY = 0;
 +        bool pathTransformValid = false;
 +        size_t strokeBatchCount = 0;
++        bool atlasBatchIsStroke = false;
 +        AABBu16 strokeScissor = {};
 +        uint32_t strokeBasePatch = 0;
 +        uint32_t strokePatchCount = 0;
@@ -89,7 +90,7 @@ index 4fcf8c0..52e7406 100644
  private:
      RenderContextWebGPUImpl(wgpu::Adapter,
                              wgpu::Device,
-@@ -227,6 +262,7 @@ private:
+@@ -227,6 +263,7 @@ private:
      std::unique_ptr<AtlasPipeline> m_atlasPipeline;
      wgpu::Texture m_atlasTexture;
      wgpu::TextureView m_atlasTextureView;
@@ -236,7 +237,7 @@ index ff41da4..7baa8b3 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
-@@ -3846,6 +3848,50 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
+@@ -3846,6 +3848,54 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
  
  void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
  {
@@ -263,16 +264,20 @@ index ff41da4..7baa8b3 100644
 +        desc.atlasPathTransformForOracleValid;
 +    m_atlasMaskOracleFacts.pathTranslateX = desc.atlasPathTranslateXForOracle;
 +    m_atlasMaskOracleFacts.pathTranslateY = desc.atlasPathTranslateYForOracle;
-+    m_atlasMaskOracleFacts.strokeBatchCount = desc.atlasStrokeBatchCount;
++    m_atlasMaskOracleFacts.strokeBatchCount =
++        desc.atlasStrokeBatchCount + desc.atlasFillBatchCount;
++    m_atlasMaskOracleFacts.atlasBatchIsStroke =
++        desc.atlasStrokeBatchCount == 1;
++    const AtlasDrawBatch* oracleBatch =
++        desc.atlasStrokeBatchCount == 1
++            ? desc.atlasStrokeBatches
++            : (desc.atlasFillBatchCount == 1 ? desc.atlasFillBatches : nullptr);
 +    m_atlasMaskOracleFacts.strokeScissor =
-+        desc.atlasStrokeBatchCount == 1 ? desc.atlasStrokeBatches[0].scissor
-+                                        : AABBu16{};
++        oracleBatch != nullptr ? oracleBatch->scissor : AABBu16{};
 +    m_atlasMaskOracleFacts.strokeBasePatch =
-+        desc.atlasStrokeBatchCount == 1 ? desc.atlasStrokeBatches[0].basePatch
-+                                        : 0;
++        oracleBatch != nullptr ? oracleBatch->basePatch : 0;
 +    m_atlasMaskOracleFacts.strokePatchCount =
-+        desc.atlasStrokeBatchCount == 1 ? desc.atlasStrokeBatches[0].patchCount
-+                                        : 0;
++        oracleBatch != nullptr ? oracleBatch->patchCount : 0;
 +    if (desc.atlasInputContourCount == 0)
 +    {
 +        m_atlasMaskOracleFacts.contours.clear();

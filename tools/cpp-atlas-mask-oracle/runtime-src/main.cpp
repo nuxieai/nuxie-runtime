@@ -296,9 +296,10 @@ int main(int argc, char** argv)
     const char* output = argc > 1 ? argv[1] : "atlas-mask.r16f";
     const char* inputsOutput = argc > 2 ? argv[2] : "atlas-inputs.bin";
     const char* blitOutput = argc > 3 ? argv[3] : "atlas-blit.rgba";
-    if (argc > 4)
+    const bool fillCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;
+    if (argc > 5 || (argc > 4 && !fillCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -367,17 +368,55 @@ int main(int argc, char** argv)
                          .msaaSampleCount = 4});
     rive::RiveRenderer renderer(context.get());
     auto path = context->makeEmptyRenderPath();
-    // Exact fixed_feather_atlas_mask() geometry from Rust's env test.
-    path->moveTo(kSquareMin, kSquareMin);
-    path->lineTo(kSquareMax, kSquareMin);
-    path->lineTo(kSquareMax, kSquareMax);
-    path->lineTo(kSquareMin, kSquareMax);
+    if (fillCase)
+    {
+        path->fillRule(rive::FillRule::clockwise);
+        constexpr float kControlOffset = 8.83064f;
+        constexpr float kCenter = (kSquareMin + kSquareMax) * .5f;
+        path->moveTo(kSquareMax, kCenter);
+        path->cubicTo(kSquareMax,
+                      kCenter + kControlOffset,
+                      kCenter + kControlOffset,
+                      kSquareMax,
+                      kCenter,
+                      kSquareMax);
+        path->cubicTo(kCenter - kControlOffset,
+                      kSquareMax,
+                      kSquareMin,
+                      kCenter + kControlOffset,
+                      kSquareMin,
+                      kCenter);
+        path->cubicTo(kSquareMin,
+                      kCenter - kControlOffset,
+                      kCenter - kControlOffset,
+                      kSquareMin,
+                      kCenter,
+                      kSquareMin);
+        path->cubicTo(kCenter + kControlOffset,
+                      kSquareMin,
+                      kSquareMax,
+                      kCenter - kControlOffset,
+                      kSquareMax,
+                      kCenter);
+    }
+    else
+    {
+        // Exact fixed_feather_atlas_mask() geometry from Rust's env test.
+        path->moveTo(kSquareMin, kSquareMin);
+        path->lineTo(kSquareMax, kSquareMin);
+        path->lineTo(kSquareMax, kSquareMax);
+        path->lineTo(kSquareMin, kSquareMax);
+    }
     path->close();
     auto paint = context->makeRenderPaint();
-    paint->style(rive::RenderPaintStyle::stroke);
-    paint->thickness(kStrokeThickness);
-    paint->join(rive::StrokeJoin::miter);
-    paint->cap(rive::StrokeCap::butt);
+    paint->style(fillCase ? rive::RenderPaintStyle::fill
+                          : rive::RenderPaintStyle::stroke);
+    if (!fillCase)
+    {
+        paint->thickness(kStrokeThickness);
+        paint->join(rive::StrokeJoin::miter);
+        paint->cap(rive::StrokeCap::butt);
+    }
     paint->feather(kFeather);
     paint->color(0xffffffff);
     renderer.drawPath(path.get(), paint.get());
@@ -416,6 +455,7 @@ int main(int argc, char** argv)
         facts.contentHeight != kExpectedLogicalAtlasSize ||
         !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
         facts.pathTranslateY != kAtlasPadding || facts.strokeBatchCount != 1 ||
+        facts.atlasBatchIsStroke == fillCase ||
         facts.strokeScissor.left != 0 || facts.strokeScissor.top != 0 ||
         facts.strokeScissor.right != kExpectedLogicalAtlasSize ||
         facts.strokeScissor.bottom != kExpectedLogicalAtlasSize)

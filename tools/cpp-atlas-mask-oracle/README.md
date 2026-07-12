@@ -6,16 +6,19 @@ This harness produces a deterministic readback of the C++ renderer's WebGPU
 renderer configuration, then reverses the patch and removes only the injected
 source directory.
 
-The exporter draws one fixed closed square stroke:
+The exporter draws two coordinated fixtures:
 
 * render target: `64 x 64`
-* closed square: `(16,16) -> (48,16) -> (48,48) -> (16,48)`
-* stroke: thickness `8`, miter join, butt cap, feather `20`
+* stroke fixture: closed square `(16,16) -> (48,16) -> (48,48) -> (16,48)`,
+  thickness `8`, miter join, butt cap, feather `20`
+* fill fixture: clockwise four-cubic circle bounded by `(16,16)..(48,48)`,
+  feather `20`; this exercises C++'s uniform-tangent-rotation softening pass
 * frame: 4x MSAA, which selects atlas feather rendering
 * atlas contract: `39 x 39` logical content at `(2,2)`, in the complete
   `48 x 48` physical allocation produced by C++'s 125% resource growth
 
-The harness emits three artifacts. The mask uses the exact `RIVEMSK` version 1
+The harness emits a mask, tessellation input, and final blit for each fixture.
+The masks (`atlas-mask.r16f` and `atlas-fill-mask.r16f`) use the exact `RIVEMSK` version 1
 Rust interchange format: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by a
 canonical, tightly row-packed `R16Float` payload. WebGPU's 256-byte copy rows
@@ -25,13 +28,13 @@ exactly `4628` bytes. The exporter validates the frame, logical allocation,
 placement, and physical allocation, then fails on drift without cropping,
 padding, or normalization.
 
-`atlas-inputs.bin` uses the `RIVEATI` version 1 contract. Its 40-byte
+`atlas-inputs.bin` and `atlas-fill-inputs.bin` use the `RIVEATI` version 1 contract. Their 40-byte
 little-endian header records the atlas batch range, contour count, and
 tessellation dimensions, followed by canonical 16-byte contour records and
 the complete tightly packed `RGBA32Uint` tessellation texture. Both artifacts
 come from the same submitted C++ frame.
 
-`atlas-blit.rgba` uses the `RIVEABL` version 1 contract for the matching MSAA
+`atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
 complete tightly packed `64 x 64` RGBA8 render target. Since the paired input
@@ -51,6 +54,10 @@ RIVE_CPP_ATLAS_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-inputs.bin" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_atlas_input_oracle_matches_fixed_rust_inputs_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATLAS_FILL_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-mask.r16f" \
+RIVE_CPP_ATLAS_FILL_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-inputs.bin" \
+  cargo test -p nuxie-renderer cpp_webgpu_atlas_fill_ \
+  -- --ignored --nocapture
 RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
@@ -58,7 +65,8 @@ RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
-nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`, or
+nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
+`RIVE_CPP_ATLAS_FILL_MASK`, `RIVE_CPP_ATLAS_FILL_INPUTS`, or
 `RIVE_CPP_ATLAS_BLIT` path;
 invoking either test without its variable is an error.
 

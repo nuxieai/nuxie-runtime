@@ -168,6 +168,14 @@ pub(crate) fn compare_cpp_to_rust(
     cpp: &AtlasInputs,
     rust: &AtlasInputs,
 ) -> Result<(), AtlasInputComparisonError> {
+    compare_cpp_to_rust_with_position_ulps(cpp, rust, 0)
+}
+
+pub(crate) fn compare_cpp_to_rust_with_position_ulps(
+    cpp: &AtlasInputs,
+    rust: &AtlasInputs,
+    max_ulps: u32,
+) -> Result<(), AtlasInputComparisonError> {
     compare_field("base_patch", cpp.base_patch, rust.base_patch)?;
     compare_field("patch_count", cpp.patch_count, rust.patch_count)?;
     if cpp.contours.len() != rust.contours.len() {
@@ -180,17 +188,19 @@ pub(crate) fn compare_cpp_to_rust(
     compare_field("tess_height", cpp.tess_height, rust.tess_height)?;
     for (index, (cpp_contour, rust_contour)) in cpp.contours.iter().zip(&rust.contours).enumerate()
     {
-        compare_contour_field(
+        compare_contour_float_field(
             index,
             "midpoint_x_bits",
             cpp_contour.midpoint_x_bits,
             rust_contour.midpoint_x_bits,
+            max_ulps,
         )?;
-        compare_contour_field(
+        compare_contour_float_field(
             index,
             "midpoint_y_bits",
             cpp_contour.midpoint_y_bits,
             rust_contour.midpoint_y_bits,
+            max_ulps,
         )?;
         compare_contour_field(index, "path_id", cpp_contour.path_id, rust_contour.path_id)?;
         compare_contour_field(
@@ -204,7 +214,12 @@ pub(crate) fn compare_cpp_to_rust(
         let x = (index % cpp.tess_width as usize) as u32;
         let y = (index / cpp.tess_width as usize) as u32;
         for channel in 0..4 {
-            if cpp_texel[channel] != rust_texel[channel] {
+            let matches = if channel < 2 {
+                float_bits_within_ulps(cpp_texel[channel], rust_texel[channel], max_ulps)
+            } else {
+                cpp_texel[channel] == rust_texel[channel]
+            };
+            if !matches {
                 return Err(AtlasInputComparisonError::Texel {
                     x,
                     y,
@@ -216,6 +231,41 @@ pub(crate) fn compare_cpp_to_rust(
         }
     }
     Ok(())
+}
+
+fn compare_contour_float_field(
+    index: usize,
+    field: &'static str,
+    cpp: u32,
+    rust: u32,
+    max_ulps: u32,
+) -> Result<(), AtlasInputComparisonError> {
+    if !float_bits_within_ulps(cpp, rust, max_ulps) {
+        return Err(AtlasInputComparisonError::ContourField {
+            index,
+            field,
+            cpp,
+            rust,
+        });
+    }
+    Ok(())
+}
+
+fn float_bits_within_ulps(a: u32, b: u32, max_ulps: u32) -> bool {
+    if a == b {
+        return true;
+    }
+    if !f32::from_bits(a).is_finite() || !f32::from_bits(b).is_finite() {
+        return false;
+    }
+    let ordered = |bits: u32| {
+        if bits & 0x8000_0000 == 0 {
+            bits | 0x8000_0000
+        } else {
+            !bits
+        }
+    };
+    ordered(a).abs_diff(ordered(b)) <= max_ulps
 }
 
 fn compare_field(
@@ -587,5 +637,30 @@ mod tests {
                 rust: 6,
             })
         );
+    }
+
+    #[test]
+    fn position_ulp_comparator_keeps_topology_and_packed_channels_exact() {
+        let original = inputs();
+        let mut one_ulp = original.clone();
+        one_ulp.contours[0].midpoint_x_bits += 1;
+        one_ulp.texels[0][0] = 32.0f32.to_bits() + 1;
+        one_ulp.texels[0][1] = (-8.0f32).to_bits() - 1;
+        let mut reference = original.clone();
+        reference.texels[0][0] = 32.0f32.to_bits();
+        reference.texels[0][1] = (-8.0f32).to_bits();
+        assert_eq!(
+            compare_cpp_to_rust_with_position_ulps(&reference, &one_ulp, 1),
+            Ok(())
+        );
+        assert!(compare_cpp_to_rust(&reference, &one_ulp).is_err());
+
+        let mut two_ulps = one_ulp.clone();
+        two_ulps.texels[0][0] += 1;
+        assert!(compare_cpp_to_rust_with_position_ulps(&reference, &two_ulps, 1).is_err());
+
+        let mut packed = reference.clone();
+        packed.texels[0][2] ^= 1;
+        assert!(compare_cpp_to_rust_with_position_ulps(&reference, &packed, 1).is_err());
     }
 }

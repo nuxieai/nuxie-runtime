@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=21, diverges=0, gated=1,446, total=1,467.
+- Rust wgpu: exact=22, diverges=0, gated=1,445, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -28,7 +28,8 @@ Run `make renderer-golden`.
   `gm-emptyfeather-clockwise-atomic`, plus
   `first-light-direct-feather-stroke-clockwise-atomic` and
   `first-light-atlas-feather-stroke-clockwise-atomic`, and
-  `gm-feather_strokes-clockwise-atomic`.
+  `gm-feather_strokes-clockwise-atomic`, and
+  `gm-feather_shapes-clockwise-atomic`.
 
 ## Milestones
 
@@ -484,3 +485,14 @@ Run `make renderer-golden`.
   is 0.001408 and 9,577 pixels exceed channel delta 2. The entry therefore keeps
   delta 2 with a bounded 16,384-pixel overlap budget. The ratchet advances to
   exact=21/diverges=0 without changing any renderer behavior.
+- 2026-07-11: Ported `RiveRenderPath::makeSoftenedCopyForFeathering` for
+  feathered fills, including convex/cusp preparation and uniform tangent-
+  rotation chops. A paired C++ WebGPU circle oracle now matches Rust's 34-patch
+  topology, contour and packed fields exactly, permits only one ULP across 44
+  scalar-versus-SIMD XY values, and matches the R16 atlas mask. The full native
+  clockwise-atomic `feather_shapes` GM fell from 1,583,729 pixels/max delta 117
+  to 458,194/max delta 11. Five of six isolated largest-radius shapes stay at
+  max delta 2; only the self-intersecting cusp reaches delta 3. The 12,427 full-
+  frame pixels above delta 2 occur under overlapping huge feather fields and
+  pass the existing bounded 16,384-pixel backend budget, advancing the ratchet
+  to exact=22/diverges=0.

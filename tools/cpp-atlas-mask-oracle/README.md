@@ -70,6 +70,31 @@ that side oppositely for this polygon, while native Metal and wgpu produce
 isolated final pixels with no channel delta beyond 2; all other packed flags
 remain strict.
 
+`direct-grid-inputs.bin` is the bounded `direct-grid` atomic preparation
+oracle. It reproduces the 100 contours in
+`fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-stream`
+line 10: 50 horizontal then 50 vertical 20px strips, with alternating winding.
+It uses a `1000 x 1000` frame, zero feathering to select production interior
+triangulation, and `clockwiseFillOverride=true`; the mode rejects any result
+that is not atomic, lacks exactly 100 contours, or lacks interior triangle
+records.
+
+`direct-grid-inputs.bin` uses the `RIVEDGI` version 1 little-endian format.
+Its 64-byte header is `magic[8]`, then fourteen `u32` values: `version=1`,
+`headerBytes=64`, `flags=1` (`clockwiseFillOverride`), `interlockMode`,
+`drawBatchCount`, `tessWidth`, `tessHeight`, `contourCount=100`,
+`triangleVertexCount`, `drawBatchStride=20`, `contourStride=16`,
+`triangleVertexStride=12`, `tessTexelStride=16`, and `reserved=0`. The payload
+is exactly: draw-schedule records (`drawType`, `shaderFeatures`,
+`shaderMiscFlags`, `baseElement`, `elementCount`; five `u32`), contour records
+(`x` and `y` raw float bits, `pathID`, `vertexIndex0`; four `u32`), interior
+triangle records (`x` and `y` raw float bits, packed signed-weight/unsigned
+path-ID word; three `u32`), and the complete row-packed `RGBA32Uint`
+tessellation texture. The temporary runtime patch snapshots each interior
+`TriangleVertex` from its still-mapped CPU production buffer after
+triangulation and before `unmapResourceBuffers()` transfers it to the backend.
+No WebGPU row padding, normalization, or omitted records are permitted.
+
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the

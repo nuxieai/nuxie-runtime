@@ -2,7 +2,7 @@ diff --git a/renderer/include/rive/renderer/gpu.hpp b/renderer/include/rive/rend
 index f831f3c..b53ce4c 100644
 --- a/renderer/include/rive/renderer/gpu.hpp
 +++ b/renderer/include/rive/renderer/gpu.hpp
-@@ -1383,6 +1383,20 @@ struct FlushDescriptor
+@@ -1383,6 +1383,28 @@ struct FlushDescriptor
      const AtlasDrawBatch* atlasStrokeBatches = nullptr;
      size_t atlasStrokeBatchCount = 0;
  
@@ -17,22 +17,67 @@ index f831f3c..b53ce4c 100644
 +        uint32_t pathID = 0;
 +        uint32_t vertexIndex0 = 0;
 +    };
++    struct AtlasInputTriangleForOracle
++    {
++        float x = 0;
++        float y = 0;
++        uint32_t weightPathID = 0;
++    };
 +    const AtlasInputContourForOracle* atlasInputContoursForOracle = nullptr;
 +    size_t atlasInputContourCount = 0;
++    const AtlasInputTriangleForOracle* atlasInputTrianglesForOracle = nullptr;
++    size_t atlasInputTriangleCount = 0;
 +
      // List of draws in the main render pass. These are rendered directly to the
      // renderTarget.
      const BlockAllocatedLinkedList<DrawBatch>* drawList = nullptr;
+@@ -1683,7 +1707,14 @@ struct TriangleVertex
+     TriangleVertex() = default;
+     TriangleVertex(Vec2D point, int16_t weight, uint16_t pathID) :
+         m_point(point),
+         m_weight_pathID((static_cast<int32_t>(weight) << 16) | pathID)
+     {}
++
++    // Temporary atlas-input oracle accessors. build.sh reverses this patch.
++    Vec2D pointForOracle() const { return {m_point.x, m_point.y}; }
++    uint32_t weightPathIDForOracle() const
++    {
++        return static_cast<uint32_t>(m_weight_pathID);
++    }
+ 
+ #ifdef TESTING
+@@ -1824,6 +1855,19 @@ template <typename T> class WriteOnlyMappedMemory
+ 
+     size_t elementsWritten() const { return bytesWritten() / sizeof(T); }
+ 
++    // Temporary atlas-input oracle hook. This runs while the resource is
++    // CPU-mapped, before unmapElements() hands it to the backend.
++    void copy_range_for_oracle(size_t begin, size_t count, T* destination) const
++    {
++        assert(destination != nullptr || count == 0);
++        assert(m_mappedMemory != nullptr);
++        assert(begin <= elementsWritten());
++        assert(count <= elementsWritten() - begin);
++        memcpy(static_cast<void*>(destination),
++               m_mappedMemory + begin,
++               count * sizeof(T));
++    }
++
+     // Is there room to push() itemCount items to the buffer?
+     bool hasRoomFor(size_t itemCount)
+     {
 diff --git a/renderer/include/rive/renderer/render_context.hpp b/renderer/include/rive/renderer/render_context.hpp
 index bf29125..83e7efb 100644
 --- a/renderer/include/rive/renderer/render_context.hpp
 +++ b/renderer/include/rive/renderer/render_context.hpp
-@@ -886,6 +886,8 @@ private:
+@@ -886,6 +886,10 @@ private:
          uint32_t m_atlasMaxX = 0;
          uint32_t m_atlasMaxY = 0;
          std::vector<PathDraw*> m_pendingAtlasDraws;
 +        std::vector<gpu::FlushDescriptor::AtlasInputContourForOracle>
 +            m_atlasInputContoursForOracle;
++        std::vector<gpu::FlushDescriptor::AtlasInputTriangleForOracle>
++            m_atlasInputTrianglesForOracle;
  
          // Total coverage allocated via allocateCoverageBufferRange().
          // (clockwiseAtomic mode only.)
@@ -48,7 +93,7 @@ index 4fcf8c0..52e7406 100644
  #include <webgpu/webgpu_cpp.h>
  
  #ifdef RIVE_WAGYU
-@@ -105,6 +106,43 @@ public:
+@@ -105,6 +106,44 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
@@ -65,6 +110,7 @@ index 4fcf8c0..52e7406 100644
 +        uint32_t strokeBasePatch = 0;
 +        uint32_t strokePatchCount = 0;
 +        std::vector<FlushDescriptor::AtlasInputContourForOracle> contours;
++        std::vector<FlushDescriptor::AtlasInputTriangleForOracle> triangles;
 +        struct DrawBatchFact
 +        {
 +            uint32_t drawType = 0;
@@ -164,24 +210,27 @@ diff --git a/renderer/src/render_context.cpp b/renderer/src/render_context.cpp
 index 5fdeb58..ff33e03 100644
 --- a/renderer/src/render_context.cpp
 +++ b/renderer/src/render_context.cpp
-@@ -330,6 +330,7 @@ void RenderContext::LogicalFlush::rewind()
+@@ -330,6 +330,8 @@ void RenderContext::LogicalFlush::rewind()
      m_atlasMaxX = 0;
      m_atlasMaxY = 0;
      m_pendingAtlasDraws.clear();
 +    m_atlasInputContoursForOracle.clear();
++    m_atlasInputTrianglesForOracle.clear();
  
      m_coverageBufferLength = 0;
  
-@@ -364,6 +365,8 @@ void RenderContext::LogicalFlush::resetContainers()
+@@ -364,6 +365,10 @@ void RenderContext::LogicalFlush::resetContainers()
  
      m_pendingAtlasDraws.clear();
      m_pendingAtlasDraws.shrink_to_fit();
 +    m_atlasInputContoursForOracle.clear();
 +    m_atlasInputContoursForOracle.shrink_to_fit();
++    m_atlasInputTrianglesForOracle.clear();
++    m_atlasInputTrianglesForOracle.shrink_to_fit();
      // Don't reserve any space in m_pendingAtlasDraws since there are many
      // usecases where it isn't used at all.
  }
-@@ -2289,8 +2292,21 @@ void RenderContext::LogicalFlush::writeResources()
+@@ -2289,8 +2292,25 @@ void RenderContext::LogicalFlush::writeResources()
          assert(m_flushDesc.atlasFillBatchCount +
                     m_flushDesc.atlasStrokeBatchCount <=
                 m_pendingAtlasDraws.size());
@@ -199,6 +248,10 @@ index 5fdeb58..ff33e03 100644
 +        m_atlasInputContoursForOracle.data();
 +    m_flushDesc.atlasInputContourCount =
 +        m_atlasInputContoursForOracle.size();
++    m_flushDesc.atlasInputTrianglesForOracle =
++        m_atlasInputTrianglesForOracle.data();
++    m_flushDesc.atlasInputTriangleCount =
++        m_atlasInputTrianglesForOracle.size();
 +
      // Pad our buffers to 256-byte alignment.
      m_ctx->m_pathData.push_back_n(nullptr, m_pathPaddingCount);
@@ -215,6 +268,33 @@ index 5fdeb58..ff33e03 100644
      m_ctx->m_contourData.emplace_back(midpoint, pathID, vertexIndex0);
  
      ++m_currentContourID;
+@@ -3381,9 +3397,26 @@ gpu::DrawBatch* RenderContext::LogicalFlush::pushInteriorTriangulationDraw(
+     size_t actualVertexCount =
+         draw->triangulator()->polysToTriangles(pathID,
+                                                windingFaces,
+                                                &m_ctx->m_triangleVertexData);
+     assert(baseVertex + actualVertexCount ==
+            m_ctx->m_triangleVertexData.elementsWritten());
++    if (actualVertexCount != 0)
++    {
++        std::vector<gpu::TriangleVertex> vertices(actualVertexCount);
++        // Capture the actual triangulator output before unmapResourceBuffers()
++        // transfers this mapped production buffer to the backend.
++        m_ctx->m_triangleVertexData.copy_range_for_oracle(baseVertex,
++                                                           actualVertexCount,
++                                                           vertices.data());
++        for (const auto& vertex : vertices)
++        {
++            const Vec2D point = vertex.pointForOracle();
++            m_atlasInputTrianglesForOracle.push_back(
++                {.x = point.x,
++                 .y = point.y,
++                 .weightPathID = vertex.weightPathIDForOracle()});
++        }
++    }
+     RIVE_DEBUG_CODE(*vertexCounter += actualVertexCount;)
+     if (actualVertexCount > 0)
+     {
 diff --git a/renderer/src/webgpu/render_context_webgpu_impl.cpp b/renderer/src/webgpu/render_context_webgpu_impl.cpp
 index ff41da4..7baa8b3 100644
 --- a/renderer/src/webgpu/render_context_webgpu_impl.cpp
@@ -239,7 +319,7 @@ index ff41da4..7baa8b3 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
-@@ -3846,6 +3848,69 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
+@@ -3846,6 +3848,80 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
  
  void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
  {
@@ -304,6 +384,17 @@ index ff41da4..7baa8b3 100644
 +        m_atlasMaskOracleFacts.contours.assign(
 +            desc.atlasInputContoursForOracle,
 +            desc.atlasInputContoursForOracle + desc.atlasInputContourCount);
++    }
++
++    if (desc.atlasInputTriangleCount == 0)
++    {
++        m_atlasMaskOracleFacts.triangles.clear();
++    }
++    else
++    {
++        m_atlasMaskOracleFacts.triangles.assign(
++            desc.atlasInputTrianglesForOracle,
++            desc.atlasInputTrianglesForOracle + desc.atlasInputTriangleCount);
 +    }
 +
      auto* const renderTarget =

@@ -15,6 +15,8 @@ MAGIC = b"RIVEMSK\0"
 INPUT_HEADER_BYTES = 40
 INPUT_MAGIC = b"RIVEATI\0"
 BLIT_MAGIC = b"RIVEABL\0"
+DIRECT_GRID_HEADER_BYTES = 64
+DIRECT_GRID_MAGIC = b"RIVEDGI\0"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXPORTER = pathlib.Path(__file__).with_name("runtime-src") / "main.cpp"
 BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
@@ -85,6 +87,85 @@ def make_inputs() -> bytes:
     return header + bytes(16) + bytes(2 * 16)
 
 
+def parse_direct_grid_inputs(data: bytes) -> dict:
+    if len(data) < DIRECT_GRID_HEADER_BYTES:
+        raise ValueError("file is shorter than the 64-byte RIVEDGI header")
+    if data[:8] != DIRECT_GRID_MAGIC:
+        raise ValueError("bad RIVEDGI magic")
+    fields = struct.unpack_from("<14I", data, 8)
+    (version, header_bytes, flags, interlock_mode, draw_batch_count,
+     tess_width, tess_height, contour_count, triangle_vertex_count,
+     draw_batch_stride, contour_stride, triangle_vertex_stride,
+     tess_texel_stride, reserved) = fields
+    if version != 1 or header_bytes != DIRECT_GRID_HEADER_BYTES:
+        raise ValueError("unsupported RIVEDGI header")
+    if flags != 1 or interlock_mode == 0:
+        raise ValueError("RIVEDGI requires clockwise-fill atomic facts")
+    if reserved != 0:
+        raise ValueError("RIVEDGI reserved header bytes must be zero")
+    if not tess_width or not tess_height:
+        raise ValueError("RIVEDGI tessellation dimensions must be nonzero")
+    if contour_count != 100:
+        raise ValueError("RIVEDGI must contain exactly 100 contours")
+    if draw_batch_count < 3 or not triangle_vertex_count or triangle_vertex_count % 3:
+        raise ValueError("RIVEDGI draw or triangle record count is invalid")
+    if (draw_batch_stride, contour_stride, triangle_vertex_stride, tess_texel_stride) != (20, 16, 12, 16):
+        raise ValueError("RIVEDGI stride mismatch")
+    expected = (DIRECT_GRID_HEADER_BYTES + draw_batch_count * draw_batch_stride
+                + contour_count * contour_stride
+                + triangle_vertex_count * triangle_vertex_stride
+                + tess_width * tess_height * tess_texel_stride)
+    if len(data) != expected:
+        raise ValueError("RIVEDGI length mismatch")
+    offset = DIRECT_GRID_HEADER_BYTES
+    batches = [struct.unpack_from("<5I", data, offset + i * draw_batch_stride)
+               for i in range(draw_batch_count)]
+    offset += draw_batch_count * draw_batch_stride
+    contours = [struct.unpack_from("<4I", data, offset + i * contour_stride)
+                for i in range(contour_count)]
+    offset += contour_count * contour_stride
+    triangles = [struct.unpack_from("<3I", data, offset + i * triangle_vertex_stride)
+                 for i in range(triangle_vertex_count)]
+    offset += triangle_vertex_count * triangle_vertex_stride
+    return {
+        "interlock_mode": interlock_mode,
+        "batches": batches,
+        "contours": contours,
+        "triangles": triangles,
+        "tess_width": tess_width,
+        "tess_height": tess_height,
+        "tessellation": data[offset:],
+    }
+
+
+def encode_direct_grid_inputs(parsed: dict) -> bytes:
+    batches = parsed["batches"]
+    contours = parsed["contours"]
+    triangles = parsed["triangles"]
+    header = DIRECT_GRID_MAGIC + struct.pack(
+        "<14I", 1, DIRECT_GRID_HEADER_BYTES, 1, parsed["interlock_mode"],
+        len(batches), parsed["tess_width"], parsed["tess_height"],
+        len(contours), len(triangles), 20, 16, 12, 16, 0,
+    )
+    return (header + b"".join(struct.pack("<5I", *batch) for batch in batches)
+            + b"".join(struct.pack("<4I", *contour) for contour in contours)
+            + b"".join(struct.pack("<3I", *triangle) for triangle in triangles)
+            + parsed["tessellation"])
+
+
+def make_direct_grid_inputs() -> bytes:
+    parsed = {
+        "interlock_mode": 3,
+        "batches": [(1, 0, 0, 0, 1)] * 4,
+        "contours": [(0, 0, 1, index) for index in range(100)],
+        "triangles": [(0, 0, 0x00010001)] * 6,
+        "tess_width": 2,
+        "tess_height": 1,
+        "tessellation": bytes(range(32)),
+    }
+    return encode_direct_grid_inputs(parsed)
+
+
 def parse_blit(data: bytes) -> dict:
     if len(data) < HEADER_BYTES:
         raise ValueError("file is shorter than the 20-byte RIVEABL header")
@@ -140,6 +221,30 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stride"):
             parse_inputs(bad_stride)
 
+    def test_direct_grid_format_round_trips_and_rejects_malformed_counts(self):
+        data = make_direct_grid_inputs()
+        parsed = parse_direct_grid_inputs(data)
+        self.assertEqual(len(parsed["batches"]), 4)
+        self.assertEqual(len(parsed["contours"]), 100)
+        self.assertEqual(len(parsed["triangles"]), 6)
+        self.assertEqual(parsed["tessellation"], bytes(range(32)))
+        self.assertEqual(encode_direct_grid_inputs(parsed), data)
+
+        bad_header = bytearray(data)
+        struct.pack_into("<I", bad_header, 12, 60)
+        with self.assertRaisesRegex(ValueError, "header"):
+            parse_direct_grid_inputs(bad_header)
+        bad_contours = bytearray(data)
+        struct.pack_into("<I", bad_contours, 36, 99)
+        with self.assertRaisesRegex(ValueError, "100 contours"):
+            parse_direct_grid_inputs(bad_contours)
+        bad_triangles = bytearray(data)
+        struct.pack_into("<I", bad_triangles, 40, 5)
+        with self.assertRaisesRegex(ValueError, "triangle"):
+            parse_direct_grid_inputs(bad_triangles)
+        with self.assertRaisesRegex(ValueError, "length"):
+            parse_direct_grid_inputs(data[:-1])
+
     def test_accepts_and_rejects_canonical_atlas_blit(self):
         data = BLIT_MAGIC + struct.pack("<3I", 1, 2, 1) + bytes(8)
         self.assertEqual(parse_blit(data), {"width": 2, "height": 1})
@@ -155,10 +260,13 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kExpectedPhysicalAtlasSize = 48;",
             "constexpr uint32_t kMaskHeaderBytes = 20;",
             "constexpr uint32_t kInputsHeaderBytes = 40;",
+            "constexpr uint32_t kDirectGridHeaderBytes = 64;",
             "constexpr uint32_t kBlitHeaderBytes = 20;",
             "constexpr uint32_t kExpectedPolySharkPatchCount = 786;",
             "constexpr uint32_t kExpectedPolySharkContourCount = 1;",
             "constexpr uint32_t kExpectedPolySharkTessHeight = 5;",
+            "constexpr uint32_t kDirectGridFrameSize = 1000;",
+            "constexpr uint32_t kDirectGridContourCount = 100;",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
             "facts.contentWidth != kExpectedLogicalAtlasSize",
@@ -176,7 +284,8 @@ class FormatTests(unittest.TestCase):
             'const bool circleCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;',
             'const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;',
             'argc > 4 && std::strcmp(argv[4], "direct-polyshark") == 0;',
-            "const bool directCase = directCuspCase || directPolySharkCase;",
+            'argc > 4 && std::strcmp(argv[4], "direct-grid") == 0;',
+            "directCuspCase || directPolySharkCase || directGridCase;",
             "const bool fillCase = circleCase || cuspCase || directCase;",
             "path->fillRule(rive::FillRule::clockwise);",
             "path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);",
@@ -184,13 +293,16 @@ class FormatTests(unittest.TestCase):
             '#include "generated_polyshark_path.inc"',
             "rive::Mat2D(kPolySharkStreamScale,",
             "addFeatherPolyShapesShark(path.get());",
+            "void addClockwiseNestedGrid(rive::RenderPath* path)",
+            "largeclippedpath_clockwise_nested.rive-stream:10",
+            "addClockwiseNestedGrid(path.get());",
             "paint->style(fillCase ? rive::RenderPaintStyle::fill",
             ": rive::RenderPaintStyle::stroke);",
             "path->cubicTo(kSquareMax,",
             "paint->thickness(kStrokeThickness);",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
-            "paint->feather(directCase ? 1.f : kFeather);",
+            "paint->feather(directGridCase ? 0.f : (directCase ? 1.f : kFeather));",
             ".msaaSampleCount = directCase ? 0u : 4u",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
@@ -199,6 +311,8 @@ class FormatTests(unittest.TestCase):
             "webgpuContext->atlasMaskTextureForOracle();",
             "webgpuContext->tessellationTextureForOracle();",
             "writeInputs(inputsOutput,",
+            "writeDirectGridInputs(inputsOutput,",
+            "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'G', 'I', '\\0'};",
             "writeBlit(blitOutput,",
             "readTexture(instance, device, queue, targetTexture, 4);",
             "atlasWidth = atlas.GetWidth();",
@@ -297,10 +411,12 @@ class FormatTests(unittest.TestCase):
             '"$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"',
             '"$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp',
             'direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"',
+            'direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"',
             'polyshark_generator="$script_dir/generate_polyshark_stream_path.py"',
             'python3 "$polyshark_generator" --stream "$polyshark_stream" --check',
             '--output "$injected_dir/generated_polyshark_path.inc"',
             '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
+            '"$direct_grid_inputs_output" /dev/null direct-grid',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
@@ -310,6 +426,7 @@ class FormatTests(unittest.TestCase):
             'if (( softened_cusp_bytes <= 20 ))',
             'if (( direct_cusp_inputs_bytes <= 56 ))',
             'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
+            'if (( direct_grid_inputs_bytes <= 64 + 20 * 3 + 16 * 100 + 12 ))',
         ):
             self.assertIn(fragment, source)
 
@@ -402,6 +519,8 @@ class FormatTests(unittest.TestCase):
                 "float atlasPathTranslateYForOracle = 0;",
                 "bool atlasPathTransformForOracleValid = false;",
                 "AtlasInputContourForOracle",
+                "AtlasInputTriangleForOracle",
+                "atlasInputTrianglesForOracle",
             ):
                 self.assertIn(fragment, gpu)
             self.assertIn(
@@ -422,9 +541,13 @@ class FormatTests(unittest.TestCase):
                 "oracleBatch != nullptr ? oracleBatch->patchCount",
                 "tessellationTextureForOracle() const",
                 "m_atlasMaskOracleFacts.contours.assign(",
+                "m_atlasMaskOracleFacts.triangles.assign(",
             ):
                 self.assertIn(fragment, webgpu_header + cpp)
             self.assertIn("m_atlasInputContoursForOracle.push_back(", logical_flush)
+            self.assertIn("m_atlasInputTrianglesForOracle.push_back(", logical_flush)
+            self.assertIn("copy_range_for_oracle", gpu + logical_flush)
+            self.assertIn("pointForOracle", gpu + logical_flush)
 
             premake = (temp / "renderer/premake5.lua").read_text()
             self.assertGreater(premake.index("project('rive_atlas_mask_oracle')"),

@@ -31,6 +31,7 @@ constexpr uint32_t kExpectedPhysicalAtlasSize = 48;
 constexpr uint32_t kMaskHeaderBytes = 20;
 constexpr uint32_t kBlitHeaderBytes = 20;
 constexpr uint32_t kInputsHeaderBytes = 40;
+constexpr uint32_t kDirectGridHeaderBytes = 64;
 constexpr uint32_t kBytesPerTexel = 2;
 constexpr uint32_t kTessBytesPerTexel = 16;
 constexpr uint32_t kCopyRowAlignment = 256;
@@ -38,6 +39,8 @@ constexpr uint32_t kExpectedTessWidth = 2048;
 constexpr uint32_t kExpectedPolySharkPatchCount = 786;
 constexpr uint32_t kExpectedPolySharkContourCount = 1;
 constexpr uint32_t kExpectedPolySharkTessHeight = 5;
+constexpr uint32_t kDirectGridFrameSize = 1000;
+constexpr uint32_t kDirectGridContourCount = 100;
 #include "generated_polyshark_path.inc"
 
 void fail(const char* message)
@@ -277,6 +280,141 @@ void writeInputs(
     }
 }
 
+// RIVEDGI v1 is a little-endian, tightly packed direct-grid preparation
+// snapshot. Header: magic[8], version, headerBytes, flags, interlockMode,
+// drawBatchCount, tessWidth, tessHeight, contourCount, triangleVertexCount,
+// drawBatchStride, contourStride, triangleVertexStride, tessTexelStride, and
+// reserved. It is followed by draw batches (5 u32), contours (XY float bits,
+// path ID, vertex index), interior triangle vertices (XY float bits, packed
+// weight/path ID), then the complete RGBA32Uint tessellation texture.
+void writeDirectGridInputs(
+    const char* output,
+    const rive::gpu::RenderContextWebGPUImpl::AtlasMaskOracleFacts& facts,
+    uint32_t tessWidth,
+    uint32_t tessHeight,
+    const uint8_t* paddedRows,
+    uint32_t paddedRowBytes)
+{
+    if (facts.contours.size() != kDirectGridContourCount ||
+        facts.triangles.empty() || facts.triangles.size() % 3 != 0 ||
+        facts.drawBatches.size() < 3)
+    {
+        fail("direct-grid preparation facts are incomplete");
+    }
+    const uint64_t packedRowBytes64 =
+        static_cast<uint64_t>(tessWidth) * kTessBytesPerTexel;
+    if (packedRowBytes64 > UINT32_MAX ||
+        facts.drawBatches.size() > UINT32_MAX ||
+        facts.contours.size() > UINT32_MAX || facts.triangles.size() > UINT32_MAX)
+    {
+        fail("direct-grid preparation data is too large to serialize");
+    }
+    const uint32_t packedRowBytes = static_cast<uint32_t>(packedRowBytes64);
+    std::array<uint8_t, kDirectGridHeaderBytes> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'G', 'I', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, kDirectGridHeaderBytes);
+    writeU32(header, 16, 1); // bit 0: clockwiseFillOverride was enabled.
+    writeU32(header, 20, facts.interlockMode);
+    writeU32(header, 24, static_cast<uint32_t>(facts.drawBatches.size()));
+    writeU32(header, 28, tessWidth);
+    writeU32(header, 32, tessHeight);
+    writeU32(header, 36, static_cast<uint32_t>(facts.contours.size()));
+    writeU32(header, 40, static_cast<uint32_t>(facts.triangles.size()));
+    writeU32(header, 44, 20);
+    writeU32(header, 48, 16);
+    writeU32(header, 52, 12);
+    writeU32(header, 56, kTessBytesPerTexel);
+    writeU32(header, 60, 0);
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open direct-grid input output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    for (const auto& batch : facts.drawBatches)
+    {
+        std::array<uint8_t, 20> record{};
+        writeU32(record, 0, batch.drawType);
+        writeU32(record, 4, batch.shaderFeatures);
+        writeU32(record, 8, batch.shaderMiscFlags);
+        writeU32(record, 12, batch.baseElement);
+        writeU32(record, 16, batch.elementCount);
+        file.write(reinterpret_cast<const char*>(record.data()), record.size());
+    }
+    for (const auto& contour : facts.contours)
+    {
+        std::array<uint8_t, 16> record{};
+        writeU32(record, 0, floatBits(contour.midpointX));
+        writeU32(record, 4, floatBits(contour.midpointY));
+        writeU32(record, 8, contour.pathID);
+        writeU32(record, 12, contour.vertexIndex0);
+        file.write(reinterpret_cast<const char*>(record.data()), record.size());
+    }
+    for (const auto& triangle : facts.triangles)
+    {
+        std::array<uint8_t, 12> record{};
+        writeU32(record, 0, floatBits(triangle.x));
+        writeU32(record, 4, floatBits(triangle.y));
+        writeU32(record, 8, triangle.weightPathID);
+        file.write(reinterpret_cast<const char*>(record.data()), record.size());
+    }
+    for (uint32_t y = 0; y != tessHeight; ++y)
+    {
+        file.write(reinterpret_cast<const char*>(paddedRows + y * paddedRowBytes),
+                   packedRowBytes);
+    }
+    if (!file)
+    {
+        fail("could not write direct-grid input output file");
+    }
+}
+
+void addClockwiseNestedGrid(rive::RenderPath* path)
+{
+    // Source citation: fixtures/renderer/streams/gm/
+    // largeclippedpath_clockwise_nested.rive-stream:10 serializes these 100
+    // 20px strips, 50 horizontal then 50 vertical, with alternating winding.
+    for (uint32_t y = 0; y != kDirectGridFrameSize; y += 20)
+    {
+        if ((y / 20) % 2 == 0)
+        {
+            path->moveTo(0, static_cast<float>(y));
+            path->lineTo(0, static_cast<float>(y + 20));
+            path->lineTo(kDirectGridFrameSize, static_cast<float>(y + 20));
+            path->lineTo(kDirectGridFrameSize, static_cast<float>(y));
+        }
+        else
+        {
+            path->moveTo(0, static_cast<float>(y));
+            path->lineTo(kDirectGridFrameSize, static_cast<float>(y));
+            path->lineTo(kDirectGridFrameSize, static_cast<float>(y + 20));
+            path->lineTo(0, static_cast<float>(y + 20));
+        }
+        path->close();
+    }
+    for (uint32_t x = 0; x != kDirectGridFrameSize; x += 20)
+    {
+        if ((x / 20) % 2 == 0)
+        {
+            path->moveTo(static_cast<float>(x), 0);
+            path->lineTo(static_cast<float>(x), kDirectGridFrameSize);
+            path->lineTo(static_cast<float>(x + 20), kDirectGridFrameSize);
+            path->lineTo(static_cast<float>(x + 20), 0);
+        }
+        else
+        {
+            path->moveTo(static_cast<float>(x), 0);
+            path->lineTo(static_cast<float>(x + 20), 0);
+            path->lineTo(static_cast<float>(x + 20), kDirectGridFrameSize);
+            path->lineTo(static_cast<float>(x), kDirectGridFrameSize);
+        }
+        path->close();
+    }
+}
+
 std::vector<uint8_t> readTexture(wgpu::Instance instance,
                                  wgpu::Device device,
                                  wgpu::Queue queue,
@@ -342,13 +480,15 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "direct-cusp") == 0;
     const bool directPolySharkCase =
         argc > 4 && std::strcmp(argv[4], "direct-polyshark") == 0;
-    const bool directCase = directCuspCase || directPolySharkCase;
+    const bool directGridCase = argc > 4 && std::strcmp(argv[4], "direct-grid") == 0;
+    const bool directCase =
+        directCuspCase || directPolySharkCase || directGridCase;
     const bool fillCase = circleCase || cuspCase || directCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 || (argc > 4 && !fillCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp|direct-polyshark] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp|direct-polyshark|direct-grid] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -401,17 +541,19 @@ int main(int argc, char** argv)
     targetDesc.usage =
         wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     targetDesc.dimension = wgpu::TextureDimension::e2D;
-    targetDesc.size = {kFrameWidth, kFrameHeight, 1};
+    const uint32_t frameWidth = directGridCase ? kDirectGridFrameSize : kFrameWidth;
+    const uint32_t frameHeight = directGridCase ? kDirectGridFrameSize : kFrameHeight;
+    targetDesc.size = {frameWidth, frameHeight, 1};
     targetDesc.format = wgpu::TextureFormat::RGBA8Unorm;
     wgpu::Texture targetTexture = device.CreateTexture(&targetDesc);
     auto target = webgpuContext->makeRenderTarget(
         wgpu::TextureFormat::RGBA8Unorm,
-        kFrameWidth,
-        kFrameHeight);
+        frameWidth,
+        frameHeight);
     target->setTargetTextureView(targetTexture.CreateView(), targetTexture);
 
-    context->beginFrame({.renderTargetWidth = kFrameWidth,
-                         .renderTargetHeight = kFrameHeight,
+    context->beginFrame({.renderTargetWidth = frameWidth,
+                         .renderTargetHeight = frameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
                          .clearColor = 0,
                          .msaaSampleCount = directCase ? 0u : 4u,
@@ -440,6 +582,10 @@ int main(int argc, char** argv)
                                        0,
                                        0));
         addFeatherPolyShapesShark(path.get());
+    }
+    else if (directGridCase)
+    {
+        addClockwiseNestedGrid(path.get());
     }
     else if (cuspCase)
     {
@@ -507,7 +653,7 @@ int main(int argc, char** argv)
         paint->join(rive::StrokeJoin::miter);
         paint->cap(rive::StrokeCap::butt);
     }
-    paint->feather(directCase ? 1.f : kFeather);
+    paint->feather(directGridCase ? 0.f : (directCase ? 1.f : kFeather));
     paint->color(0xffffffff);
     renderer.drawPath(path.get(), paint.get());
 
@@ -533,21 +679,45 @@ int main(int argc, char** argv)
     }
     if (directCase)
     {
+        bool directScheduleValid =
+            facts.drawBatches.size() == 3 &&
+            facts.drawBatches[0].drawType == static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::renderPassInitialize) &&
+            facts.drawBatches[1].drawType == static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::midpointFanCenterAAPatches) &&
+            facts.drawBatches[2].drawType == static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::renderPassResolve);
+        if (directGridCase)
+        {
+            directScheduleValid = facts.drawBatches.size() >= 4 &&
+                                  facts.drawBatches.front().drawType == static_cast<uint32_t>(
+                                      rive::gpu::DrawType::renderPassInitialize) &&
+                                  facts.drawBatches.back().drawType == static_cast<uint32_t>(
+                                      rive::gpu::DrawType::renderPassResolve);
+            bool hasInterior = false;
+            bool hasOuterCubics = false;
+            for (const auto& batch : facts.drawBatches)
+            {
+                hasInterior |= batch.drawType == static_cast<uint32_t>(
+                    rive::gpu::DrawType::interiorTriangulation);
+                hasOuterCubics |= batch.drawType == static_cast<uint32_t>(
+                    rive::gpu::DrawType::outerCurvePatches);
+            }
+            directScheduleValid &= hasInterior && hasOuterCubics;
+        }
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
-            facts.drawBatches.size() != 3 ||
-            facts.drawBatches[0].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::renderPassInitialize) ||
-            facts.drawBatches[1].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::midpointFanCenterAAPatches) ||
-            facts.drawBatches[2].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::renderPassResolve) ||
-            facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
-            facts.strokePatchCount == 0 ||
+            !directScheduleValid ||
+            (!directGridCase &&
+             (facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
+              facts.strokePatchCount == 0)) ||
             (directCuspCase && facts.contours.size() != 2) ||
             (directPolySharkCase &&
              (facts.strokePatchCount != kExpectedPolySharkPatchCount ||
-              facts.contours.size() != kExpectedPolySharkContourCount)))
+              facts.contours.size() != kExpectedPolySharkContourCount)) ||
+            (directGridCase &&
+             (facts.contours.size() != kDirectGridContourCount ||
+              facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
             fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
         }
@@ -629,17 +799,29 @@ int main(int argc, char** argv)
     }
     const std::vector<uint8_t> tessellationBytes =
         readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);
-    writeInputs(inputsOutput,
-                facts,
-                tessWidth,
-                tessHeight,
-                tessellationBytes.data(),
-                tessWidth * kTessBytesPerTexel);
+    if (directGridCase)
+    {
+        writeDirectGridInputs(inputsOutput,
+                              facts,
+                              tessWidth,
+                              tessHeight,
+                              tessellationBytes.data(),
+                              tessWidth * kTessBytesPerTexel);
+    }
+    else
+    {
+        writeInputs(inputsOutput,
+                    facts,
+                    tessWidth,
+                    tessHeight,
+                    tessellationBytes.data(),
+                    tessWidth * kTessBytesPerTexel);
+    }
     const std::vector<uint8_t> targetBytes =
         readTexture(instance, device, queue, targetTexture, 4);
     writeBlit(blitOutput,
-              kFrameWidth,
-              kFrameHeight,
+              frameWidth,
+              frameHeight,
               targetBytes.data());
     if (!directCase)
     {
@@ -648,16 +830,17 @@ int main(int argc, char** argv)
                     atlasWidth,
                     atlasHeight);
     }
-    std::printf("wrote %s: batch=%u+%u contours=%zu tessellation=%ux%u RGBA32Uint\\n",
+    std::printf("wrote %s: batch=%u+%u contours=%zu interiorTriangles=%zu tessellation=%ux%u RGBA32Uint\\n",
                 inputsOutput,
                 facts.strokeBasePatch,
                 facts.strokePatchCount,
                 facts.contours.size(),
+                facts.triangles.size(),
                 tessWidth,
                 tessHeight);
     std::printf("wrote %s: %ux%u tightly packed RGBA8 atlas blit\n",
                 blitOutput,
-                kFrameWidth,
-                kFrameHeight);
+                frameWidth,
+                frameHeight);
     return 0;
 }

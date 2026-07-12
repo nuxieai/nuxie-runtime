@@ -98,9 +98,15 @@ Run `make renderer-golden`.
    it. Counterclockwise culling on clip path/interior passes reduces the
    positive nested-clip draw from 15,408 pixels to 23. The remaining measured
    gap is the mirrored nested inverse clip, which is still blank and differs at
-   roughly 166,515 pixels; build a focused inverse-path preparation/coverage
-   oracle before changing scheduling or bounds. Parent-tight clip bounds are a
-   later performance refinement, not a correctness gate. The separate matching WebGPU MSAA
+   166,809 pixels/max 208. Rust preparation is determinant-invariant where it
+   should be: both inverse paths have 5 contours, 108 triangle vertices, 36
+   positive main faces, identical transformed face orientation and 1,632-square
+   coverage allocations; only the expected negate flag differs. Front/no/back
+   cull combinations, parent-tight inverse bounds, midpoint-fan routing, and a
+   signed-fragment diagnostic did not recover it. Capture the coverage buffer
+   after borrowed and main passes before changing more renderer code.
+   Parent-tight clip bounds are a later performance refinement, not a
+   correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
    Continue R2 with those fill/clip semantics, remaining `render_context.cpp`
    behavior, and integration of the translated intersection board.
@@ -702,3 +708,12 @@ Run `make renderer-golden`.
   an opaque standalone draw instead of the real borrowed/main split; its
   forced-CWA Dawn amendment then failed binding validation. Continue linearly
   with a narrow mirrored inverse-clip oracle rather than merging that lane.
+- 2026-07-12: Sol reviewed two read-only Terra scouts against direct probes for
+  the mirrored inverse clip. The first found real source differences in parent
+  clip bounds and fallback fan direction, but applying tight inverse bounds did
+  not move the 166,809-pixel result; the fallback is not active in this GM. The
+  second correctly ruled out coverage initialization and front-face mapping,
+  but its reported shader mismatch was a temporary `abs` diagnostic and was
+  rejected. A determinant-paired preparation probe then matched contour/face
+  counts, face orientation, and coverage ranges. The next useful evidence is a
+  borrowed/main coverage-buffer capture; all diagnostic code was reverted.

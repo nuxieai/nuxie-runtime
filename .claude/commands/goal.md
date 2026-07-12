@@ -190,6 +190,42 @@ tooling provides an isolated checkout), and merges back into this branch:
 
 Run scouts freely; keep at most 1–2 lanes in flight so merges stay reviewable.
 
+## Model routing (plan big, execute small)
+
+Two tiers (2026-07-11 user decision): **GPT 5.6 Sol High** (planner) and
+**GPT 5.6 Terra High** (executor). Route by VERIFIABILITY, not difficulty —
+in this project faithfulness is enforced by the harness (compiler, ratchet,
+pixel gates), so executor output either lands green or doesn't land; tier
+affects attempts-until-green, never what merges.
+
+**Terra executes anything harness-verifiable:** scout sweeps (first-blocker
+probes, diff attribution, corpus bookkeeping, reference regeneration, fuzz
+babysitting/minimization, lint burn-down), mechanical translation slices
+(PORTING.md + a precise brief with the C++ citation), compiler-error
+burn-down, regression tests from already-specified scenarios, and
+known-divergence-class fixes applied across entries.
+
+**Sol only, never delegated:** decomposition and queue construction,
+root-cause analysis of NOVEL divergences, adversarial review (implement
+small, review big — never the reverse), fence/tolerance/gate decisions,
+merges and ratchet verdicts, and anything touching invented seams or float
+semantics — the places where wrongness is silent.
+
+Rules:
+1. **Briefs derive from mechanical inventories only** (corpus queries,
+   compiler-error lists, grep sweeps) — never from model memory; Sol reviews
+   the queue once before any fan-out. (The audited-facts/unaudited-
+   decomposition failure mode.)
+2. **Batch briefs** — worker spawn costs a worktree + build; give Terra ~10
+   related entries per brief, not one.
+3. **Escalation ladder**: Terra fails its gate twice on the same item →
+   Sol takes the item directly with the failure context attached.
+   Infrastructure failures (rate limits, timeouts) re-assign to a fresh
+   Terra worker, no escalation.
+4. **A worker may NEVER loosen a gate to pass it** — no tolerance changes,
+   no corpus status flips, no test weakening from Terra; those are Sol
+   decisions recorded in the status file.
+
 ## Asking the user
 
 Work autonomously. Interrupt only for: destructive/irreversible actions,

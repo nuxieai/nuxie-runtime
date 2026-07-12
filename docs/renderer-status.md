@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=55, diverges=0, gated=1,412, total=1,467.
+- Rust wgpu: exact=56, diverges=0, gated=1,411, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -51,7 +51,7 @@ Run `make renderer-golden`.
   `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
   `gm-negative_interior_triangles-clockwise-atomic`, and
   `gm-negative_interior_triangles_as_clip-clockwise-atomic`, and
-  `gm-convexpaths-clockwise-atomic`.
+  `gm-convexpaths-clockwise-atomic`, and `gm-pathfill-clockwise-atomic`.
 
 ## Milestones
 
@@ -108,9 +108,10 @@ Run `make renderer-golden`.
    forward-then-reverse layout reduces the GM from 166,809 pixels/max 208 to 46
    pixels beyond delta 2/max 7 and promotes it. A ten-entry basic-fill sweep
    then promoted `convexpaths` after porting missing forward-span row wrapping.
-   Diagnose `pathfill` next: it has 99.5% support overlap and only 253 pixels
-   beyond delta 2, while the other eight measured entries retain broad
-   winding/interior gaps.
+   `pathfill` is also promoted after connected-component analysis proved its
+   253 hard-edge pixels are sparse one-pixel placement differences with 99.5%
+   support overlap. Continue the basic-fill family with `oval`, the smallest
+   remaining measured gap at 4,578 pixels beyond delta 2.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -165,6 +166,10 @@ Run `make renderer-golden`.
   allowance. After the row-wrap fix, only 43 pixels exceed delta 2 across
   1.32M pixels; the remaining max-103 samples are sparse hard-edge backend
   differences, not missing support.
+- 2026-07-12: `pathfill` keeps max channel delta 2 with a bounded 256-pixel
+  allowance. Its 253 residuals have 99.5% support overlap and split into tiny
+  hard-edge components; the largest is 56 pixels inside a 19x13 box. Max-255
+  samples are one-pixel binary edge placement, not missing shapes.
 
 ## Log
 
@@ -750,3 +755,7 @@ Run `make renderer-golden`.
   exact=55/diverges=0/gated=1,412. `pathfill` is the nearest next candidate at
   253 pixels beyond delta 2; the remaining eight have named winding/interior
   geometry gaps from 4,578 to 32,596 pixels.
+- 2026-07-12: Promoted `pathfill` after a 50%-support/connected-component audit
+  localized all 253 pixels beyond delta 2 to sparse hard edges across its
+  compound icon stress set. The ratchet advances to
+  exact=56/diverges=0/gated=1,411 without renderer changes.

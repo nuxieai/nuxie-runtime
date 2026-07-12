@@ -192,10 +192,9 @@ stream = "fixtures/renderer/streams/gm/beziers.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/beziers-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -270,10 +269,9 @@ stream = "fixtures/renderer/streams/gm/bug5099.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug5099-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -296,10 +294,9 @@ stream = "fixtures/renderer/streams/gm/bug6083.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug6083-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -322,10 +319,9 @@ stream = "fixtures/renderer/streams/gm/bug615686.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug615686-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -348,10 +344,9 @@ stream = "fixtures/renderer/streams/gm/bug6987.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug6987-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -374,10 +369,9 @@ stream = "fixtures/renderer/streams/gm/bug7792.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/bug7792-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=64, diverges=0, gated=1,403, total=1,467.
+- Rust wgpu: exact=70, diverges=0, gated=1,397, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -57,7 +57,8 @@ Run `make renderer-golden`.
   `gm-concavepaths-clockwise-atomic` and
   the `gm-poly_{clockwise,evenOdd,nonZero}-clockwise-atomic` family, plus
   `gm-cubicpath-clockwise-atomic` and
-  `gm-cubicclosepath-clockwise-atomic`.
+  `gm-cubicclosepath-clockwise-atomic`, plus `gm-beziers-clockwise-atomic`
+  and the `gm-bug{5099,6083,615686,6987,7792}-clockwise-atomic` set.
 
 ## Milestones
 
@@ -135,8 +136,13 @@ Run `make renderer-golden`.
    `cubicpath`/`cubicclosepath` gap was paint API parity: C++ stores the
    absolute value of stroke thickness, while Rust retained the GM's `-1` and
    rejected all twelve frame strokes. Porting the setter makes both files
-   pixel-exact and closes the ten-entry basic-fill sweep. Remeasure the gated
-   R2 fill/clip corpus before selecting the next implementation target.
+   pixel-exact and closes the ten-entry basic-fill sweep. A read-only
+   ten-entry fill/clip rescout then found five byte/threshold-exact bug GMs and
+   `beziers` at 17 isolated delta-4 edge pixels; all six are promoted under
+   their existing 32-pixel contract. Continue with the shared
+   `bug339297`/`bug339297_as_clip` defect: both differ in exactly one 1,280-pixel
+   component spanning two full-width scanlines, so first isolate the shared
+   fill-edge preparation before considering clip-specific code.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -214,6 +220,9 @@ Run `make renderer-golden`.
 - 2026-07-12: Render-paint stroke thickness follows C++ and stores `abs(value)`;
   invalid `NaN` remains invalid. Negative GM inputs therefore become positive
   strokes before draw-time culling.
+- 2026-07-12: `beziers` retains the standard max-delta-2/32-pixel contract.
+  Its 17 residual pixels are disconnected one-pixel edge samples at max delta
+  4; no geometry or connected support is missing.
 
 ## Log
 
@@ -834,3 +843,9 @@ Run `make renderer-golden`.
   This restores the twelve one-pixel rectangle frames shared by `cubicpath`
   and `cubicclosepath`; both become pixel-exact, the basic-fill sweep closes,
   and the ratchet advances to exact=64/diverges=0/gated=1,403.
+- 2026-07-12: A bounded Terra rescout measured ten gated fill/clip GMs.
+  `bug5099`, `bug6083`, `bug615686`, `bug6987`, and `bug7792` have zero pixels
+  beyond delta 2, while `beziers` has 17 isolated delta-4 edge pixels within
+  its existing budget. Promoting all six advances the ratchet to
+  exact=70/diverges=0/gated=1,397; the shared two-row `bug339297` family is
+  next.

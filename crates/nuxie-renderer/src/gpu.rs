@@ -641,6 +641,105 @@ pub(crate) struct ImageDrawUniforms {
     pub padding: [u8; 188],
 }
 
+impl ImageDrawUniforms {
+    pub(crate) fn new(
+        matrix: Mat2D,
+        opacity: f32,
+        clip_rect_inverse_matrix: [f32; 6],
+        clip_id: u16,
+        blend_mode: BlendMode,
+        z_index: u32,
+    ) -> Self {
+        Self {
+            matrix: matrix.0,
+            opacity,
+            padding0: 0.0,
+            clip_rect_inverse_matrix,
+            clip_id: u32::from(clip_id),
+            blend_mode: blend_mode_id(blend_mode),
+            z_index,
+            padding: [0; 188],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub(crate) struct ImageRectVertex {
+    pub position: [f32; 2],
+    pub aa_offset: [f32; 2],
+}
+
+impl ImageRectVertex {
+    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 0,
+                shader_location: 0,
+            }],
+        }
+    }
+}
+
+pub(crate) const IMAGE_RECT_VERTICES: [ImageRectVertex; 12] = [
+    ImageRectVertex {
+        position: [0.0, 0.0],
+        aa_offset: [0.0, -1.0],
+    },
+    ImageRectVertex {
+        position: [1.0, 0.0],
+        aa_offset: [0.0, -1.0],
+    },
+    ImageRectVertex {
+        position: [1.0, 0.0],
+        aa_offset: [1.0, 0.0],
+    },
+    ImageRectVertex {
+        position: [1.0, 1.0],
+        aa_offset: [1.0, 0.0],
+    },
+    ImageRectVertex {
+        position: [1.0, 1.0],
+        aa_offset: [0.0, 1.0],
+    },
+    ImageRectVertex {
+        position: [0.0, 1.0],
+        aa_offset: [0.0, 1.0],
+    },
+    ImageRectVertex {
+        position: [0.0, 1.0],
+        aa_offset: [-1.0, 0.0],
+    },
+    ImageRectVertex {
+        position: [0.0, 0.0],
+        aa_offset: [-1.0, 0.0],
+    },
+    ImageRectVertex {
+        position: [0.0, 0.0],
+        aa_offset: [1.0, 1.0],
+    },
+    ImageRectVertex {
+        position: [1.0, 0.0],
+        aa_offset: [-1.0, 1.0],
+    },
+    ImageRectVertex {
+        position: [1.0, 1.0],
+        aa_offset: [-1.0, -1.0],
+    },
+    ImageRectVertex {
+        position: [0.0, 1.0],
+        aa_offset: [1.0, -1.0],
+    },
+];
+
+pub(crate) const IMAGE_RECT_INDICES: [u16; 42] = [
+    8, 0, 9, 9, 0, 1, 1, 2, 9, 9, 2, 10, 10, 2, 3, 3, 4, 10, 10, 4, 11, 11, 4, 5, 5, 6, 11, 11, 6,
+    8, 8, 6, 7, 7, 0, 8, 9, 10, 8, 10, 8, 11,
+];
+
 pub(crate) const fn swizzle_rive_color_to_rgba(color: ColorInt) -> u32 {
     (color & 0xff00_ff00) | (color.rotate_left(16) & 0x00ff_00ff)
 }
@@ -765,6 +864,27 @@ mod tests {
         );
         let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
         assert_eq!(stroke.params, 1 | 11 << 4);
+
+        let image = ImageDrawUniforms::new(
+            Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+            0.5,
+            [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+            13,
+            BlendMode::Multiply,
+            14,
+        );
+        assert_eq!(image.matrix, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(image.opacity, 0.5);
+        assert_eq!(
+            image.clip_rect_inverse_matrix,
+            [7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+        );
+        assert_eq!(image.clip_id, 13);
+        assert_eq!(image.blend_mode, 11);
+        assert_eq!(image.z_index, 14);
+        assert_eq!(IMAGE_RECT_VERTICES.len(), 12);
+        assert_eq!(IMAGE_RECT_INDICES.len(), 42);
+        assert_eq!(&IMAGE_RECT_INDICES[..6], &[8, 0, 9, 9, 0, 1]);
     }
 
     #[test]

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=74, diverges=0, gated=1,393, total=1,467.
+- Rust wgpu: exact=76, diverges=0, gated=1,391, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -62,7 +62,9 @@ Run `make renderer-golden`.
   `gm-bug339297-clockwise-atomic` and
   `gm-bug339297_as_clip-clockwise-atomic`, plus
   `gm-hittest_evenOdd-clockwise-atomic` and
-  `gm-hittest_nonZero-clockwise-atomic`.
+  `gm-hittest_nonZero-clockwise-atomic`, plus
+  `gm-image_filter_options-clockwise-atomic` and
+  `gm-image_lod-clockwise-atomic`.
 
 ## Milestones
 
@@ -160,6 +162,17 @@ Run `make renderer-golden`.
    and are promoted at 382 pixels beyond delta 2/max delta 7 under a 512-pixel
    backend allowance. The per-group wait is a correctness-first R2 choice and
    remains an explicit R4 performance measurement target.
+   The first image vertical slice now ports PNG decode to premultiplied RGBA,
+   C++'s `ImageRectDraw` vertices/uniforms, the generated fixed-color atomic
+   image shaders, authored sampler modes, and C++ WebGPU's generated-shader
+   mipmap pass. `image_filter_options` is exact at the standard threshold;
+   `image_lod` falls from 60,631 divergent pixels without mips to 276 sparse
+   backend-filter pixels and is promoted under a 512-pixel allowance. The
+   remaining image queue is explicit: `image` and `image_aa_border` require
+   embedded PNG profile/color-management parity with Metal's platform decoder;
+   `clipping_and_draw_order` reaches pixels but clipped images are absent from
+   the legacy atomic clip buffer; image meshes remain unported. Continue R2
+   with image clip-buffer integration, then `ImageMeshDraw`.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -178,6 +191,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: ImageRect uses the upstream generated fixed-color atomic shader,
+  not the separate atomic color-buffer variant. PNGs upload as premultiplied
+  RGBA with the full C++ mip count, and each remaining mip is generated through
+  the upstream WebGPU filtered-blit shaders. `image_lod` retains delta 2 with a
+  bounded 512-pixel allowance: 276 pixels differ after mip generation, max 43,
+  with all authored images and transforms present. Metal platform decode color
+  management and clipped-image atomics remain named gates, not tolerances. Sol
+  review also made MSAA/fallback images explicitly unsupported until their
+  pipelines exist, and hoisted ImageRect geometry, dummy bindings, and all 18
+  sampler permutations so non-image draws do not inherit image resource churn.
 - 2026-07-12: Legacy homogeneous midpoint-fill batches may share shelf-packed
   tessellation storage and a render pass. Clockwise and clip-update batches
   preserve the established per-draw resource/pass topology. Intersection-board

@@ -8,6 +8,7 @@ license = "MIT"
 bytemuck = { version = "1.24", features = ["derive"] }
 nuxie-render-api = { path = "../nuxie-render-api" }
 pollster = "0.4"
+png = "0.18"
 wgpu = "30.0.0"
 
 [dev-dependencies]

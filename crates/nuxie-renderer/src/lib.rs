@@ -19,6 +19,7 @@ mod gr_triangulator;
 // Kept standalone until a renderer path has a proven grouping integration.
 #[allow(dead_code)]
 mod intersection_board;
+mod mipmap_pipeline;
 mod path_pipeline;
 mod skyline;
 mod tessellator;
@@ -32,6 +33,7 @@ use nuxie_render_api::{
 use std::any::Any;
 use std::error::Error;
 use std::fmt;
+use std::io::Cursor;
 use std::sync::{mpsc, Arc};
 use wgpu::util::DeviceExt;
 
@@ -72,6 +74,7 @@ struct Context {
     clockwise_atomic_pipeline: clockwise_atomic_pipeline::ClockwiseAtomicPipeline,
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
     composite_pipeline: composite_pipeline::CompositePipeline,
+    mipmap_pipeline: mipmap_pipeline::MipmapPipeline,
     feather_lut: feather_lut::FeatherLut,
 }
 
@@ -240,6 +243,7 @@ impl WgpuFactory {
             clockwise_atomic_pipeline::ClockwiseAtomicPipeline::new(&device);
         let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device);
         let composite_pipeline = composite_pipeline::CompositePipeline::new(&device);
+        let mipmap_pipeline = mipmap_pipeline::MipmapPipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
         Ok(Self {
             context: Arc::new(Context {
@@ -256,6 +260,7 @@ impl WgpuFactory {
                 clockwise_atomic_pipeline,
                 atlas_pipeline,
                 composite_pipeline,
+                mipmap_pipeline,
                 feather_lut,
             }),
             width,
@@ -345,10 +350,55 @@ impl Factory for WgpuFactory {
         Box::new(WgpuPaint::default())
     }
 
-    fn decode_image(&mut self, _data: &[u8]) -> Box<dyn RenderImage> {
+    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+        let Some((width, height, pixels)) = decode_png_rgba(data) else {
+            return Box::new(WgpuImage {
+                width: 0,
+                height: 0,
+                texture: None,
+            });
+        };
+        let mip_level_count = u32::BITS - (width | height).leading_zeros();
+        let texture = self
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-image"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+        self.context.queue.write_texture(
+            texture.as_image_copy(),
+            &pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            texture.size(),
+        );
+        self.context.mipmap_pipeline.generate(
+            &self.context.device,
+            &self.context.queue,
+            &texture,
+            mip_level_count,
+        );
+        let view = texture.create_view(&Default::default());
         Box::new(WgpuImage {
-            width: 0,
-            height: 0,
+            width,
+            height,
+            texture: Some(Arc::new(WgpuImageTexture { texture, view })),
         })
     }
 }
@@ -558,6 +608,13 @@ impl RenderBuffer for WgpuBuffer {
 struct WgpuImage {
     width: u32,
     height: u32,
+    texture: Option<Arc<WgpuImageTexture>>,
+}
+
+struct WgpuImageTexture {
+    #[allow(dead_code)]
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
 }
 
 impl RenderImage for WgpuImage {
@@ -611,6 +668,15 @@ struct SolidDraw {
     paint: WgpuPaint,
     state: DrawState,
     role: DrawRole,
+    image: Option<ImageRectDraw>,
+}
+
+#[derive(Clone)]
+struct ImageRectDraw {
+    texture: Arc<WgpuImageTexture>,
+    sampler: ImageSampler,
+    opacity: f32,
+    blend_mode: BlendMode,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -676,6 +742,7 @@ impl Renderer for WgpuFrame {
             paint: paint.clone(),
             state: self.state,
             role: DrawRole::Content { clip_id },
+            image: None,
         };
         if self.state.clip_stack_height != 0 {
             if !atomic_draw_is_eligible(&content) {
@@ -703,6 +770,7 @@ impl Renderer for WgpuFrame {
                         replacement_id,
                         parent_id,
                     },
+                    image: None,
                 });
             }
             self.draws.extend(updates);
@@ -743,12 +811,90 @@ impl Renderer for WgpuFrame {
 
     fn draw_image(
         &mut self,
-        _image: Option<&dyn RenderImage>,
-        _sampler: ImageSampler,
-        _blend_mode: BlendMode,
-        _opacity: f32,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
     ) {
-        self.unsupported.get_or_insert("images");
+        if self.mode != RenderMode::ClockwiseAtomic {
+            self.unsupported.get_or_insert("images in msaa mode");
+            return;
+        }
+        if self.state.clip_is_empty {
+            return;
+        }
+        let Some(image) = image.and_then(|image| image.as_any().downcast_ref::<WgpuImage>()) else {
+            return;
+        };
+        let Some(texture) = &image.texture else {
+            return;
+        };
+        let Ok(clip_id) = u16::try_from(self.state.clip_stack_height) else {
+            self.unsupported
+                .get_or_insert("more than 65535 nested clips");
+            return;
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 0.0);
+        raw_path.line_to(1.0, 0.0);
+        raw_path.line_to(1.0, 1.0);
+        raw_path.line_to(0.0, 1.0);
+        raw_path.close();
+        let image_matrix = multiply(
+            self.state.transform,
+            Mat2D([image.width as f32, 0.0, 0.0, image.height as f32, 0.0, 0.0]),
+        );
+        let mut paint = WgpuPaint::default();
+        paint.blend_mode = blend_mode;
+        let content = SolidDraw {
+            path: WgpuPath {
+                raw_path,
+                fill_rule: FillRule::NonZero,
+            },
+            paint,
+            state: DrawState {
+                transform: image_matrix,
+                ..self.state
+            },
+            role: DrawRole::Content { clip_id },
+            image: Some(ImageRectDraw {
+                texture: Arc::clone(texture),
+                sampler,
+                opacity: (opacity * self.state.opacity).max(0.0),
+                blend_mode,
+            }),
+        };
+        if !atomic_draw_is_eligible(&content) {
+            self.unsupported
+                .get_or_insert("images on fallback draw path");
+            return;
+        }
+        if self.state.clip_stack_height != 0 {
+            let mut updates = Vec::with_capacity(self.state.clip_stack_height);
+            for (index, clip) in self.clips[..self.state.clip_stack_height]
+                .iter()
+                .enumerate()
+            {
+                let parent_id = index as u16;
+                updates.push(SolidDraw {
+                    path: clip.path.clone(),
+                    paint: WgpuPaint::default(),
+                    state: DrawState {
+                        transform: clip.matrix,
+                        clip_rect: None,
+                        clip_stack_height: 0,
+                        ..self.state
+                    },
+                    role: DrawRole::ClipUpdate {
+                        replacement_id: parent_id + 1,
+                        parent_id,
+                    },
+                    image: None,
+                });
+            }
+            self.draws.extend(updates);
+        }
+        self.draws.push(content);
     }
 
     fn draw_image_mesh(
@@ -861,6 +1007,9 @@ impl WgpuFrame {
                     atlas_blit_vertices: Vec<gpu::TriangleVertex>,
                     is_stroke: bool,
                     is_feather: bool,
+                    image: Option<Arc<WgpuImageTexture>>,
+                    image_sampler: ImageSampler,
+                    image_uniforms: Option<gpu::ImageDrawUniforms>,
                 }
 
                 if clear_target {
@@ -913,7 +1062,8 @@ impl WgpuFrame {
                 });
                 let clockwise_atomic_clip_run = has_global_clip
                     && draws.iter().all(|draw| {
-                        draw.paint.style == RenderPaintStyle::Fill
+                        draw.image.is_none()
+                            && draw.paint.style == RenderPaintStyle::Fill
                             && draw.paint.feather == 0.0
                             && draw.state.clip_rect.is_none()
                     });
@@ -1194,6 +1344,25 @@ impl WgpuFrame {
                         atlas_blit_vertices,
                         is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
                         is_feather: draw.paint.feather != 0.0,
+                        image: draw.image.as_ref().map(|image| Arc::clone(&image.texture)),
+                        image_sampler: draw
+                            .image
+                            .as_ref()
+                            .map(|image| image.sampler)
+                            .unwrap_or_default(),
+                        image_uniforms: draw.image.as_ref().map(|image| {
+                            gpu::ImageDrawUniforms::new(
+                                draw.state.transform,
+                                image.opacity,
+                                image_clip_rect_inverse_matrix(draw.state.clip_rect),
+                                match draw.role {
+                                    DrawRole::Content { clip_id } => clip_id,
+                                    DrawRole::ClipUpdate { .. } => 0,
+                                },
+                                image.blend_mode,
+                                1,
+                            )
+                        }),
                     });
                 }
                 let atlas_regions = prepared
@@ -1233,7 +1402,8 @@ impl WgpuFrame {
                         .iter()
                         .all(|draw| !matches!(draw.role, DrawRole::ClipUpdate { .. }))
                     && prepared.iter().all(|draw| {
-                        draw.triangles.is_empty()
+                        draw.image.is_none()
+                            && draw.triangles.is_empty()
                             && draw.atlas.is_none()
                             && !draw.is_stroke
                             && !draw.is_feather
@@ -1400,6 +1570,9 @@ impl WgpuFrame {
                         atlas_blit_vertices: &draw.atlas_blit_vertices,
                         is_stroke: draw.is_stroke,
                         is_feather: draw.is_feather,
+                        image: draw.image.as_ref().map(|image| &image.view),
+                        image_sampler: draw.image_sampler,
+                        image_uniforms: draw.image_uniforms,
                     })
                     .collect::<Vec<_>>();
                 if use_clockwise_atomic_batch {
@@ -2176,6 +2349,43 @@ fn multiply(left: Mat2D, right: Mat2D) -> Mat2D {
     ])
 }
 
+fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let mut decoder = png::Decoder::new(Cursor::new(data));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let mut decoded = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut decoded).ok()?;
+    decoded.truncate(info.buffer_size());
+    let mut pixels = match (info.color_type, info.bit_depth) {
+        (png::ColorType::Rgba, png::BitDepth::Eight) => decoded,
+        (png::ColorType::Rgb, png::BitDepth::Eight) => decoded
+            .chunks_exact(3)
+            .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
+            .collect(),
+        (png::ColorType::Grayscale, png::BitDepth::Eight) => decoded
+            .into_iter()
+            .flat_map(|value| [value, value, value, 255])
+            .collect(),
+        (png::ColorType::GrayscaleAlpha, png::BitDepth::Eight) => decoded
+            .chunks_exact(2)
+            .flat_map(|pixel| [pixel[0], pixel[0], pixel[0], pixel[1]])
+            .collect(),
+        _ => return None,
+    };
+    for pixel in pixels.chunks_exact_mut(4) {
+        let alpha = u16::from(pixel[3]);
+        for channel in &mut pixel[..3] {
+            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+        }
+    }
+    Some((info.width, info.height, pixels))
+}
+
+fn image_clip_rect_inverse_matrix(clip: Option<ClipRectState>) -> [f32; 6] {
+    clip.map(|clip| clip_rect_paint_aux(Some(clip)).clip_rect_inverse_matrix)
+        .unwrap_or([0.0, 0.0, 0.0, 0.0, 1.0, 1.0])
+}
+
 fn invert(matrix: Mat2D) -> Option<Mat2D> {
     let [xx, yx, xy, yy, tx, ty] = matrix.0;
     let determinant = xx * yy - xy * yx;
@@ -2684,6 +2894,7 @@ mod tests {
             paint: WgpuPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
+            image: None,
         };
         let draws = [
             make_draw([10.0, 10.0, 11.0, 11.0]),
@@ -2705,6 +2916,7 @@ mod tests {
             paint: WgpuPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
+            image: None,
         };
         let draws = vec![draw; 3];
 
@@ -3100,6 +3312,7 @@ mod tests {
             paint: WgpuPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
+            image: None,
         };
         assert_eq!(tessellate_solid(&draw, 10, 10).unwrap().len(), 3);
     }

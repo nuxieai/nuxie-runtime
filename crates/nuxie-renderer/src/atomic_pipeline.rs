@@ -1,8 +1,11 @@
 //! Clockwise-atomic draw and resolve translated from Rive's WebGPU shaders.
 
 use crate::gpu::{
-    ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData, TriangleVertex,
+    ContourData, FlushUniforms, ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData,
+    PatchVertex, PathData, TriangleVertex,
 };
+use bytemuck::Zeroable;
+use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 use wgpu::util::DeviceExt;
 
 pub(crate) struct AtomicPipeline {
@@ -13,12 +16,20 @@ pub(crate) struct AtomicPipeline {
     stroke_path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
     atlas_blit: wgpu::RenderPipeline,
+    image_rect: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     feather_resolve: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     atomic_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
+    _dummy_image_texture: wgpu::Texture,
+    _dummy_image_view: wgpu::TextureView,
+    dummy_image_uniforms: wgpu::Buffer,
+    dummy_image_group: wgpu::BindGroup,
+    image_samplers: Vec<wgpu::Sampler>,
+    image_rect_vertices: wgpu::Buffer,
+    image_rect_indices: wgpu::Buffer,
 }
 
 pub(crate) struct AtomicDraw<'a> {
@@ -31,6 +42,9 @@ pub(crate) struct AtomicDraw<'a> {
     pub atlas_blit_vertices: &'a [TriangleVertex],
     pub is_stroke: bool,
     pub is_feather: bool,
+    pub image: Option<&'a wgpu::TextureView>,
+    pub image_sampler: ImageSampler,
+    pub image_uniforms: Option<ImageDrawUniforms>,
 }
 
 impl AtomicPipeline {
@@ -75,10 +89,21 @@ impl AtomicPipeline {
             "nuxie-atomic-atlas-blit-fragment",
             include_str!("generated/atomic_draw_atlas_blit.webgpu_fixedcolor_frag.wgsl"),
         );
+        let image_rect_vertex = shader(
+            device,
+            "nuxie-atomic-image-rect-vertex",
+            include_str!("generated/atomic_draw_image_rect.webgpu_vert.wgsl"),
+        );
+        let image_rect_fragment = shader(
+            device,
+            "nuxie-atomic-image-rect-fragment",
+            include_str!("generated/atomic_draw_image_rect.webgpu_fixedcolor_frag.wgsl"),
+        );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-flush-layout"),
             entries: &[
                 uniform_entry(0),
+                uniform_entry(2),
                 storage_entry(3, true),
                 storage_entry(4, true),
                 storage_entry(5, true),
@@ -114,6 +139,90 @@ impl AtomicPipeline {
             ],
             immediate_size: 0,
         });
+        let image_rect = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-image-rect-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &image_rect_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(ImageRectVertex::layout())],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &image_rect_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let dummy_image_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-atomic-dummy-image"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let dummy_image_view = dummy_image_texture.create_view(&Default::default());
+        let dummy_image_uniforms = upload(
+            device,
+            "nuxie-atomic-dummy-image-uniforms",
+            &[ImageDrawUniforms::zeroed()],
+            wgpu::BufferUsages::UNIFORM,
+        );
+        let image_samplers = [ImageFilter::Bilinear, ImageFilter::Nearest]
+            .into_iter()
+            .flat_map(|filter| {
+                [ImageWrap::Clamp, ImageWrap::Repeat, ImageWrap::Mirror]
+                    .into_iter()
+                    .flat_map(move |wrap_y| {
+                        [ImageWrap::Clamp, ImageWrap::Repeat, ImageWrap::Mirror]
+                            .into_iter()
+                            .map(move |wrap_x| ImageSampler {
+                                wrap_x,
+                                wrap_y,
+                                filter,
+                            })
+                    })
+            })
+            .map(|sampler| device.create_sampler(&image_sampler(sampler)))
+            .collect::<Vec<_>>();
+        debug_assert_eq!(image_samplers.len(), 18);
+        let dummy_image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-atomic-dummy-image-group"),
+            layout: &image_layout,
+            entries: &[
+                binding(12, wgpu::BindingResource::TextureView(&dummy_image_view)),
+                binding(14, wgpu::BindingResource::Sampler(&image_samplers[0])),
+            ],
+        });
+        let image_rect_vertices = upload(
+            device,
+            "nuxie-atomic-image-rect-vertices",
+            &crate::gpu::IMAGE_RECT_VERTICES,
+            wgpu::BufferUsages::VERTEX,
+        );
+        let image_rect_indices = upload(
+            device,
+            "nuxie-atomic-image-rect-indices",
+            &crate::gpu::IMAGE_RECT_INDICES,
+            wgpu::BufferUsages::INDEX,
+        );
         let path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-path-pipeline"),
             layout: Some(&layout),
@@ -382,12 +491,20 @@ impl AtomicPipeline {
             stroke_path,
             interior,
             atlas_blit,
+            image_rect,
             resolve,
             feather_resolve,
             flush_layout,
             image_layout,
             atomic_layout,
             sampler_layout,
+            _dummy_image_texture: dummy_image_texture,
+            _dummy_image_view: dummy_image_view,
+            dummy_image_uniforms,
+            dummy_image_group,
+            image_samplers,
+            image_rect_vertices,
+            image_rect_indices,
         }
     }
 
@@ -485,17 +602,38 @@ impl AtomicPipeline {
         });
         let dummy_view = dummy.create_view(&Default::default());
         let sampler = device.create_sampler(&linear_sampler());
+        let image_uniform_buffers = draws
+            .iter()
+            .map(|draw| {
+                draw.image_uniforms.map(|uniforms| {
+                    upload(
+                        device,
+                        "nuxie-atomic-image-uniforms",
+                        std::slice::from_ref(&uniforms),
+                        wgpu::BufferUsages::UNIFORM,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
         let shared_flush_group = draws.iter().all(|draw| {
             std::ptr::eq(draw.tessellation, draws[0].tessellation)
                 && draw.atlas.is_none()
                 && draws[0].atlas.is_none()
+                && draw.image.is_none()
         });
-        let make_flush_group = |draw: &AtomicDraw<'_>| {
+        let make_flush_group = |draw_index: usize, draw: &AtomicDraw<'_>| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-atomic-flush-group"),
                 layout: &self.flush_layout,
                 entries: &[
                     binding(0, uniform.as_entire_binding()),
+                    binding(
+                        2,
+                        image_uniform_buffers[draw_index]
+                            .as_ref()
+                            .unwrap_or(&self.dummy_image_uniforms)
+                            .as_entire_binding(),
+                    ),
                     binding(3, paths.as_entire_binding()),
                     binding(4, paints.as_entire_binding()),
                     binding(5, paint_aux.as_entire_binding()),
@@ -511,19 +649,40 @@ impl AtomicPipeline {
             })
         };
         let flush_groups = if shared_flush_group {
-            vec![make_flush_group(&draws[0])]
+            vec![make_flush_group(0, &draws[0])]
         } else {
-            draws.iter().map(make_flush_group).collect::<Vec<_>>()
+            draws
+                .iter()
+                .enumerate()
+                .map(|(index, draw)| make_flush_group(index, draw))
+                .collect::<Vec<_>>()
         };
         let flush_group_index = |draw_index: usize| if shared_flush_group { 0 } else { draw_index };
-        let image = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-atomic-image-group"),
-            layout: &self.image_layout,
-            entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
-            ],
-        });
+        let image_groups = draws
+            .iter()
+            .map(|draw| {
+                draw.image.map(|image| {
+                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("nuxie-atomic-image-group"),
+                        layout: &self.image_layout,
+                        entries: &[
+                            binding(12, wgpu::BindingResource::TextureView(image)),
+                            binding(
+                                14,
+                                wgpu::BindingResource::Sampler(
+                                    &self.image_samplers[draw.image_sampler.as_key() as usize],
+                                ),
+                            ),
+                        ],
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        let image_group = |draw_index: usize| {
+            image_groups[draw_index]
+                .as_ref()
+                .unwrap_or(&self.dummy_image_group)
+        };
         let atomics = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-buffer-group"),
             layout: &self.atomic_layout,
@@ -552,7 +711,7 @@ impl AtomicPipeline {
             ));
             pass.set_pipeline(&self.atlas_blit);
             pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
-            pass.set_bind_group(1, &image, &[]);
+            pass.set_bind_group(1, image_group(draw_index), &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);
             pass.set_vertex_buffer(0, triangle_buffers[draw_index].as_ref().unwrap().slice(..));
@@ -564,7 +723,7 @@ impl AtomicPipeline {
                 "nuxie-atomic-path-pass",
                 &attachments,
             ));
-            pass.set_bind_group(1, &image, &[]);
+            pass.set_bind_group(1, image_group(0), &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);
             pass.set_vertex_buffer(0, patch_vertices.slice(..));
@@ -603,6 +762,25 @@ impl AtomicPipeline {
                 if draw.atlas.is_some() {
                     continue;
                 }
+                if draw.image.is_some() {
+                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        "nuxie-atomic-image-rect-pass",
+                        &attachments,
+                    ));
+                    pass.set_pipeline(&self.image_rect);
+                    pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                    pass.set_bind_group(1, image_group(draw_index), &[]);
+                    pass.set_bind_group(2, &atomics, &[]);
+                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_vertex_buffer(0, self.image_rect_vertices.slice(..));
+                    pass.set_index_buffer(
+                        self.image_rect_indices.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+                    pass.draw_indexed(0..crate::gpu::IMAGE_RECT_INDICES.len() as u32, 0, 0..1);
+                    continue;
+                }
                 let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
                 let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                     "nuxie-atomic-path-pass",
@@ -620,7 +798,7 @@ impl AtomicPipeline {
                     &self.path
                 });
                 pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
-                pass.set_bind_group(1, &image, &[]);
+                pass.set_bind_group(1, image_group(draw_index), &[]);
                 pass.set_bind_group(2, &atomics, &[]);
                 pass.set_bind_group(3, &samplers, &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
@@ -639,7 +817,7 @@ impl AtomicPipeline {
                     ));
                     pass.set_pipeline(&self.interior);
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
-                    pass.set_bind_group(1, &image, &[]);
+                    pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
                     pass.set_bind_group(3, &samplers, &[]);
                     pass.set_vertex_buffer(0, triangle_buffer.slice(..));
@@ -659,7 +837,7 @@ impl AtomicPipeline {
                 &self.resolve
             });
             pass.set_bind_group(0, &flush_groups[flush_group_index(draws.len() - 1)], &[]);
-            pass.set_bind_group(1, &image, &[]);
+            pass.set_bind_group(1, image_group(draws.len() - 1), &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
@@ -747,6 +925,31 @@ fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
         label: Some("nuxie-atomic-linear-sampler"),
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    }
+}
+
+fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'static> {
+    let address_mode = |wrap| match wrap {
+        ImageWrap::Clamp => wgpu::AddressMode::ClampToEdge,
+        ImageWrap::Repeat => wgpu::AddressMode::Repeat,
+        ImageWrap::Mirror => wgpu::AddressMode::MirrorRepeat,
+    };
+    let filter = match sampler.filter {
+        ImageFilter::Bilinear => wgpu::FilterMode::Linear,
+        ImageFilter::Nearest => wgpu::FilterMode::Nearest,
+    };
+    let mipmap_filter = match sampler.filter {
+        ImageFilter::Bilinear => wgpu::MipmapFilterMode::Linear,
+        ImageFilter::Nearest => wgpu::MipmapFilterMode::Nearest,
+    };
+    wgpu::SamplerDescriptor {
+        label: Some("nuxie-image-sampler"),
+        address_mode_u: address_mode(sampler.wrap_x),
+        address_mode_v: address_mode(sampler.wrap_y),
+        mag_filter: filter,
+        min_filter: filter,
+        mipmap_filter,
         ..Default::default()
     }
 }

@@ -104,6 +104,23 @@ must have a nonzero, non-overflowing `baseElement + elementCount` range whose
 interior record's `elementCount` must equal `triangleVertexCount`. `build.sh`
 parses the generated artifact with these rules before reporting success.
 
+`direct-flower-inputs.bin` is the bounded `direct-flower` preparation oracle
+for line 7 of
+`fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-stream`.
+It reproduces the exact first clip path: one 9-cubic flower contour followed by
+its inner 4-cubic oval contour. Like `direct-grid`, it uses a `1000 x 1000`
+frame, zero feathering, `clockwiseFillOverride=true`, production atomic
+interlock, and the same pre-backend contour and `TriangleVertex` capture hooks.
+It isolates the global-triangulation inputs around the remaining oval-boundary
+pixel delta without replaying the second 100-contour grid clip.
+
+The flower artifact uses the separate `RIVEDFI` version 1 little-endian magic
+and otherwise has the same 64-byte header, record strides, payload order, and
+canonical four-draw schedule as `RIVEDGI`. Its parser requires exactly 2
+contours, a nonempty triangle count divisible by 3, a coherent outer-cubic
+range, and an interior draw `elementCount` equal to `triangleVertexCount`.
+`build.sh` emits and validates both direct artifacts independently.
+
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the

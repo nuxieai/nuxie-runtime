@@ -2223,6 +2223,124 @@ mod tests {
         fixed_feather_atlas_oracle_for(raw_path, paint)
     }
 
+    fn fixed_feather_atlas_cusp_oracle() -> FixedFeatherAtlasOracle {
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(16.0, 48.0);
+        raw_path.cubic_to(51.2, 16.0, 12.8, 16.0, 48.0, 48.0);
+        raw_path.close();
+        fixed_feather_atlas_oracle_for(raw_path, paint)
+    }
+
+    fn fixed_feather_direct_cusp_inputs() -> atlas_input_oracle::AtlasInputs {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 100.0);
+        raw_path.move_to(0.0, 100.0);
+        raw_path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
+        let transform = Mat2D([1.46300006, 0.0, 0.0, 1.46300006, -40.0, -20.0]);
+        let mut tessellation =
+            draw::build_feather_tessellation(&raw_path, transform, 1.0, None).unwrap();
+        for contour in &mut tessellation.contours {
+            contour.path_id = 1;
+        }
+        let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
+        let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
+        let uniforms = analytic_uniforms(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            tessellation_height,
+        );
+        let paths = [gpu::PathData::zeroed(), tessellation.path];
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-direct-cusp-input-encoder"),
+                });
+        let texture = factory.context.tessellator.encode(
+            &factory.context.device,
+            &mut encoder,
+            &factory.context.feather_lut.view,
+            &tessellation.spans,
+            &uniforms,
+            &paths,
+            &tessellation.contours,
+            tessellation_height,
+        );
+        let size = texture.size();
+        let bytes_per_row = size.width.checked_mul(16).unwrap();
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-direct-cusp-input-readback"),
+                size: u64::from(bytes_per_row) * u64::from(size.height),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(size.height),
+                },
+            },
+            size,
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+        let slice = readback.slice(..);
+        let (sender, receiver) = mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let texels = mapped
+            .chunks_exact(16)
+            .map(|texel| {
+                [
+                    u32::from_le_bytes(texel[0..4].try_into().unwrap()),
+                    u32::from_le_bytes(texel[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(texel[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(texel[12..16].try_into().unwrap()),
+                ]
+            })
+            .collect();
+        drop(mapped);
+        readback.unmap();
+        atlas_input_oracle::AtlasInputs::new(
+            tessellation.base_instance,
+            tessellation.instance_count,
+            tessellation
+                .contours
+                .iter()
+                .map(|contour| atlas_input_oracle::ContourRecord {
+                    midpoint_x_bits: contour.midpoint[0].to_bits(),
+                    midpoint_y_bits: contour.midpoint[1].to_bits(),
+                    path_id: contour.path_id,
+                    vertex_index0: contour.vertex_index0,
+                })
+                .collect(),
+            size.width,
+            size.height,
+            texels,
+        )
+        .unwrap()
+    }
+
     fn fixed_feather_atlas_oracle_for(
         raw_path: RawPath,
         paint: WgpuPaint,
@@ -2746,6 +2864,192 @@ mod tests {
                     path.display()
                 )
             });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_CUSP_MASK from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_cusp_mask_oracle_matches_fixed_rust_mask_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_CUSP_MASK").expect(
+            "RIVE_CPP_ATLAS_CUSP_MASK is required for the ignored C++ atlas-cusp mask test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_ATLAS_CUSP_MASK is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_CUSP_MASK must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-cusp mask at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_mask = atlas_mask_oracle::AtlasMask::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-cusp mask at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_mask = fixed_feather_atlas_cusp_oracle().mask;
+        atlas_mask_oracle::compare_cpp_to_rust(&cpp_mask, &rust_mask, ATLAS_ORACLE_TOLERANCES)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ atlas-cusp mask mismatch at {}: {error}",
+                    path.display()
+                )
+            });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_CUSP_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_cusp_input_oracle_matches_fixed_rust_inputs_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_CUSP_INPUTS").expect(
+            "RIVE_CPP_ATLAS_CUSP_INPUTS is required for the ignored C++ atlas-cusp input test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_ATLAS_CUSP_INPUTS is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_CUSP_INPUTS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-cusp inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-cusp inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_inputs = fixed_feather_atlas_cusp_oracle().inputs;
+        atlas_input_oracle::compare_cpp_to_rust_with_float_tolerances(
+            &cpp_inputs,
+            &rust_inputs,
+            4,
+            0.0001,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ atlas-cusp input mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_SOFTENED_CUSP from the C++ oracle"]
+    fn cpp_softened_cusp_path_oracle_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_SOFTENED_CUSP")
+            .expect("RIVE_CPP_SOFTENED_CUSP is required for the ignored softened-cusp path test");
+        assert!(!path.is_empty(), "RIVE_CPP_SOFTENED_CUSP is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_SOFTENED_CUSP must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ softened-cusp path at {}: {error}",
+                path.display()
+            )
+        });
+        assert!(bytes.len() >= 20, "softened-cusp header is truncated");
+        assert_eq!(&bytes[..8], b"RIVESFT\0");
+        let read_u32 = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+        assert_eq!(read_u32(8), 1, "unsupported softened-cusp version");
+        let verb_count = read_u32(12) as usize;
+        let point_count = read_u32(16) as usize;
+        assert_eq!(bytes.len(), 20 + verb_count * 4 + point_count * 8);
+        let cpp_verbs = (0..verb_count)
+            .map(|index| read_u32(20 + index * 4))
+            .collect::<Vec<_>>();
+        let points_offset = 20 + verb_count * 4;
+        let cpp_points = (0..point_count)
+            .map(|index| {
+                let offset = points_offset + index * 8;
+                [read_u32(offset), read_u32(offset + 4)]
+            })
+            .collect::<Vec<_>>();
+
+        let mut source = RawPath::new();
+        source.move_to(0.0, 100.0);
+        source.move_to(0.0, 100.0);
+        source.cubic_to(110.0, 0.0, -10.0, 0.0, 100.0, 100.0);
+        let softened = draw::softened_path_for_feathering(&source, 1.5, 1.46300006);
+        let rust_verbs = softened
+            .verbs()
+            .iter()
+            .map(|verb| match verb {
+                nuxie_render_api::PathVerb::Move => 0,
+                nuxie_render_api::PathVerb::Line => 1,
+                nuxie_render_api::PathVerb::Quad => 2,
+                nuxie_render_api::PathVerb::Cubic => 4,
+                nuxie_render_api::PathVerb::Close => 5,
+            })
+            .collect::<Vec<_>>();
+        let rust_points = softened
+            .points()
+            .iter()
+            .map(|point| [point.x.to_bits(), point.y.to_bits()])
+            .collect::<Vec<_>>();
+        assert_eq!(cpp_verbs, rust_verbs, "softened-cusp verbs differ");
+        assert_eq!(cpp_points.len(), rust_points.len());
+        for (index, (cpp_point, rust_point)) in cpp_points.iter().zip(&rust_points).enumerate() {
+            for channel in 0..2 {
+                assert!(
+                    atlas_input_oracle::float_bits_within_ulps(
+                        cpp_point[channel],
+                        rust_point[channel],
+                        2,
+                    ),
+                    "softened-cusp point {index} channel {channel} differs by more than 2 ULP: C++={:#010x}, Rust={:#010x}",
+                    cpp_point[channel],
+                    rust_point[channel],
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_CUSP_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_direct_cusp_input_oracle_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_CUSP_INPUTS").expect(
+            "RIVE_CPP_DIRECT_CUSP_INPUTS is required for the ignored direct-cusp input test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_DIRECT_CUSP_INPUTS is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_CUSP_INPUTS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-cusp inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-cusp inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_inputs = fixed_feather_direct_cusp_inputs();
+        atlas_input_oracle::compare_cpp_to_rust_with_float_tolerances(
+            &cpp_inputs,
+            &rust_inputs,
+            4,
+            0.0001,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ direct-cusp input mismatch at {}: {error}",
+                path.display()
+            )
+        });
     }
 
     #[test]

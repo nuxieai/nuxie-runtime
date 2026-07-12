@@ -8,6 +8,8 @@ pub(crate) const VERSION: u32 = 1;
 const HEADER_SIZE: usize = 40;
 const CONTOUR_STRIDE: u32 = 16;
 const TEXEL_STRIDE: u32 = 16;
+const JOIN_TYPE_MASK: u32 = 7 << 26;
+const FEATHER_JOIN_CONTOUR_FLAG: u32 = 1 << 26;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ContourRecord {
@@ -176,6 +178,15 @@ pub(crate) fn compare_cpp_to_rust_with_position_ulps(
     rust: &AtlasInputs,
     max_ulps: u32,
 ) -> Result<(), AtlasInputComparisonError> {
+    compare_cpp_to_rust_with_float_tolerances(cpp, rust, max_ulps, 0.0)
+}
+
+pub(crate) fn compare_cpp_to_rust_with_float_tolerances(
+    cpp: &AtlasInputs,
+    rust: &AtlasInputs,
+    max_position_ulps: u32,
+    max_tangent_angle_delta: f32,
+) -> Result<(), AtlasInputComparisonError> {
     compare_field("base_patch", cpp.base_patch, rust.base_patch)?;
     compare_field("patch_count", cpp.patch_count, rust.patch_count)?;
     if cpp.contours.len() != rust.contours.len() {
@@ -193,14 +204,14 @@ pub(crate) fn compare_cpp_to_rust_with_position_ulps(
             "midpoint_x_bits",
             cpp_contour.midpoint_x_bits,
             rust_contour.midpoint_x_bits,
-            max_ulps,
+            max_position_ulps,
         )?;
         compare_contour_float_field(
             index,
             "midpoint_y_bits",
             cpp_contour.midpoint_y_bits,
             rust_contour.midpoint_y_bits,
-            max_ulps,
+            max_position_ulps,
         )?;
         compare_contour_field(index, "path_id", cpp_contour.path_id, rust_contour.path_id)?;
         compare_contour_field(
@@ -214,8 +225,17 @@ pub(crate) fn compare_cpp_to_rust_with_position_ulps(
         let x = (index % cpp.tess_width as usize) as u32;
         let y = (index / cpp.tess_width as usize) as u32;
         for channel in 0..4 {
+            let z_is_tangent_angle = channel == 2
+                && cpp_texel[3] & JOIN_TYPE_MASK != FEATHER_JOIN_CONTOUR_FLAG
+                && rust_texel[3] & JOIN_TYPE_MASK != FEATHER_JOIN_CONTOUR_FLAG;
             let matches = if channel < 2 {
-                float_bits_within_ulps(cpp_texel[channel], rust_texel[channel], max_ulps)
+                float_bits_within_ulps(cpp_texel[channel], rust_texel[channel], max_position_ulps)
+            } else if z_is_tangent_angle {
+                tangent_angles_within(
+                    cpp_texel[channel],
+                    rust_texel[channel],
+                    max_tangent_angle_delta,
+                )
             } else {
                 cpp_texel[channel] == rust_texel[channel]
             };
@@ -251,7 +271,7 @@ fn compare_contour_float_field(
     Ok(())
 }
 
-fn float_bits_within_ulps(a: u32, b: u32, max_ulps: u32) -> bool {
+pub(crate) fn float_bits_within_ulps(a: u32, b: u32, max_ulps: u32) -> bool {
     if a == b {
         return true;
     }
@@ -266,6 +286,18 @@ fn float_bits_within_ulps(a: u32, b: u32, max_ulps: u32) -> bool {
         }
     };
     ordered(a).abs_diff(ordered(b)) <= max_ulps
+}
+
+fn tangent_angles_within(a: u32, b: u32, max_delta: f32) -> bool {
+    if a == b {
+        return true;
+    }
+    let (a, b) = (f32::from_bits(a), f32::from_bits(b));
+    if !a.is_finite() || !b.is_finite() {
+        return false;
+    }
+    let delta = (a - b).abs();
+    delta.min(std::f32::consts::TAU - delta) <= max_delta
 }
 
 fn compare_field(
@@ -640,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn position_ulp_comparator_keeps_topology_and_packed_channels_exact() {
+    fn position_ulp_comparator_keeps_angles_and_packed_data_exact() {
         let original = inputs();
         let mut one_ulp = original.clone();
         one_ulp.contours[0].midpoint_x_bits += 1;
@@ -649,18 +681,30 @@ mod tests {
         let mut reference = original.clone();
         reference.texels[0][0] = 32.0f32.to_bits();
         reference.texels[0][1] = (-8.0f32).to_bits();
+        reference.texels[0][2] = 0.75f32.to_bits();
+        one_ulp.texels[0][2] = reference.texels[0][2];
         assert_eq!(
             compare_cpp_to_rust_with_position_ulps(&reference, &one_ulp, 1),
             Ok(())
         );
         assert!(compare_cpp_to_rust(&reference, &one_ulp).is_err());
 
+        let mut angle = reference.clone();
+        angle.texels[0][2] = (0.75f32 + 0.00005).to_bits();
+        assert!(compare_cpp_to_rust_with_position_ulps(&reference, &angle, 1).is_err());
+        assert_eq!(
+            compare_cpp_to_rust_with_float_tolerances(&reference, &angle, 1, 0.0001),
+            Ok(())
+        );
+
         let mut two_ulps = one_ulp.clone();
         two_ulps.texels[0][0] += 1;
         assert!(compare_cpp_to_rust_with_position_ulps(&reference, &two_ulps, 1).is_err());
 
-        let mut packed = reference.clone();
+        let mut feather_join = reference.clone();
+        feather_join.texels[0][3] = FEATHER_JOIN_CONTOUR_FLAG | 1;
+        let mut packed = feather_join.clone();
         packed.texels[0][2] ^= 1;
-        assert!(compare_cpp_to_rust_with_position_ulps(&reference, &packed, 1).is_err());
+        assert!(compare_cpp_to_rust_with_position_ulps(&feather_join, &packed, 1).is_err());
     }
 }

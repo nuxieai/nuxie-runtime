@@ -168,16 +168,20 @@ class FormatTests(unittest.TestCase):
             "path->lineTo(kSquareMax, kSquareMax);",
             "path->lineTo(kSquareMin, kSquareMax);",
             "path->close();",
-            'const bool fillCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;',
+            'const bool circleCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;',
+            'const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;',
+            "const bool fillCase = circleCase || cuspCase || directCuspCase;",
             "path->fillRule(rive::FillRule::clockwise);",
+            "path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);",
+            "path->cubicTo(133.635864f, 0, -33.6358566f, 0, 100, 100);",
             "paint->style(fillCase ? rive::RenderPaintStyle::fill",
             ": rive::RenderPaintStyle::stroke);",
             "path->cubicTo(kSquareMax,",
             "paint->thickness(kStrokeThickness);",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
-            "paint->feather(kFeather);",
-            ".msaaSampleCount = 4",
+            "paint->feather(directCuspCase ? 1.f : kFeather);",
+            ".msaaSampleCount = directCuspCase ? 0u : 4u",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
             "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
@@ -187,8 +191,8 @@ class FormatTests(unittest.TestCase):
             "writeInputs(inputsOutput,",
             "writeBlit(blitOutput,",
             "readTexture(instance, device, queue, targetTexture, 4);",
-            "const uint32_t atlasWidth = atlas.GetWidth();",
-            "const uint32_t atlasHeight = atlas.GetHeight();",
+            "atlasWidth = atlas.GetWidth();",
+            "atlasHeight = atlas.GetHeight();",
             "if (atlasWidth != kExpectedPhysicalAtlasSize ||",
             "readTexture(instance, device, queue, atlas, kBytesPerTexel);",
             "readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);",
@@ -220,10 +224,16 @@ class FormatTests(unittest.TestCase):
             'rm -f "$output" "$inputs_output"',
             '"$output" "$inputs_output"',
             '"$fill_output" "$fill_inputs_output" "$fill_blit_output" fill',
+            '"$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"',
+            '"$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
             'if [[ "$fill_blit_bytes" != "16404" ]]',
+            'if [[ "$cusp_output_bytes" != "4628" ]]',
+            'if [[ "$cusp_blit_bytes" != "16404" ]]',
+            'if (( softened_cusp_bytes <= 20 ))',
+            'if (( direct_cusp_inputs_bytes <= 56 ))',
         ):
             self.assertIn(fragment, source)
 
@@ -242,6 +252,10 @@ class FormatTests(unittest.TestCase):
             '#[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_FILL_MASK from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_FILL_INPUTS from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_CUSP_MASK from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_CUSP_INPUTS from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_SOFTENED_CUSP from the C++ oracle"]',
+            '#[ignore = "requires RIVE_CPP_DIRECT_CUSP_INPUTS from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU MSAA oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
@@ -256,6 +270,14 @@ class FormatTests(unittest.TestCase):
         self.assertIn('RIVE_CPP_ATLAS_FILL_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-mask.r16f"',
                       readme)
         self.assertIn('RIVE_CPP_ATLAS_FILL_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-inputs.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_CUSP_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-cusp-mask.r16f"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-cusp-inputs.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_SOFTENED_CUSP="$PWD/tools/cpp-atlas-mask-oracle/out/softened-cusp.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_DIRECT_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-inputs.bin"',
                       readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 

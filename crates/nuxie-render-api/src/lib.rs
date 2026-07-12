@@ -1586,7 +1586,7 @@ mod tests {
             "makeLinearGradient id=1 start=(0,0.5) end=(10,20) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]\n"
         ));
         assert!(stream.contains("makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}\n"));
-        assert!(stream.contains("decodeImage id=1 width=0 height=0\n"));
+        assert!(stream.contains("decodeImage id=1 width=0 height=0 data=010203\n"));
         assert!(stream.contains("makeRenderBuffer id=1 type=1 flags=1 size=4\n"));
         assert!(stream.contains("bufferData id=1 type=1 size=4 data=01020304\n"));
         assert!(stream.contains(

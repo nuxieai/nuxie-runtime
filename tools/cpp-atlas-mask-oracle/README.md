@@ -6,19 +6,23 @@ This harness produces a deterministic readback of the C++ renderer's WebGPU
 renderer configuration, then reverses the patch and removes only the injected
 source directory.
 
-The exporter draws two coordinated fixtures:
+The exporter draws four coordinated fixtures:
 
 * render target: `64 x 64`
 * stroke fixture: closed square `(16,16) -> (48,16) -> (48,48) -> (16,48)`,
   thickness `8`, miter join, butt cap, feather `20`
-* fill fixture: clockwise four-cubic circle bounded by `(16,16)..(48,48)`,
+* circle-fill fixture: clockwise four-cubic circle bounded by `(16,16)..(48,48)`,
   feather `20`; this exercises C++'s uniform-tangent-rotation softening pass
+* cusp-fill fixture: clockwise cubic from `(16,48)` to `(48,48)` with controls
+  `(51.2,16)` and `(12.8,16)`, feather `20`; this exercises convex/cusp
+  preparation and the short-line cusp crossing
 * frame: 4x MSAA, which selects atlas feather rendering
 * atlas contract: `39 x 39` logical content at `(2,2)`, in the complete
   `48 x 48` physical allocation produced by C++'s 125% resource growth
 
 The harness emits a mask, tessellation input, and final blit for each fixture.
-The masks (`atlas-mask.r16f` and `atlas-fill-mask.r16f`) use the exact `RIVEMSK` version 1
+The masks (`atlas-mask.r16f`, `atlas-fill-mask.r16f`, and
+`atlas-cusp-mask.r16f`) use the exact `RIVEMSK` version 1
 Rust interchange format: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by a
 canonical, tightly row-packed `R16Float` payload. WebGPU's 256-byte copy rows
@@ -28,11 +32,28 @@ exactly `4628` bytes. The exporter validates the frame, logical allocation,
 placement, and physical allocation, then fails on drift without cropping,
 padding, or normalization.
 
-`atlas-inputs.bin` and `atlas-fill-inputs.bin` use the `RIVEATI` version 1 contract. Their 40-byte
+`atlas-inputs.bin`, `atlas-fill-inputs.bin`, and `atlas-cusp-inputs.bin` use
+the `RIVEATI` version 1 contract. Their 40-byte
 little-endian header records the atlas batch range, contour count, and
 tessellation dimensions, followed by canonical 16-byte contour records and
-the complete tightly packed `RGBA32Uint` tessellation texture. Both artifacts
+the complete tightly packed `RGBA32Uint` tessellation texture. All artifacts
 come from the same submitted C++ frame.
+
+`softened-cusp.bin` uses the `RIVESFT` version 1 contract: verb and point
+counts followed by canonical C++ `PathVerb` values and raw XY float bits. It
+captures the dedicated cusp source after C++ fill softening at feather `1` and
+matrix scale `1.46300006`, before direct tessellation.
+
+`direct-cusp-inputs.bin` uses the same `RIVEATI` contract for the severe
+`feather_cusp` cell: duplicate moves, controls `(133.635864,0)` and
+`(-33.6358566,0)`, paint feather `1`, and matrix scale `1.46300006`. It
+captures both contour records and the complete double-sided tessellation
+texture after path softening and before coverage. Dawn WebGPU advertises
+general atomics but not `clockwiseAtomic`, so this artifact is an
+intermediate-geometry oracle only. `direct-cusp-blit.rgba` retains the general
+atomic final target for diagnosis; it is not compared to Rust's
+clockwise-atomic output. Native Metal stream replay remains the final-pixel
+oracle for that mode.
 
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
@@ -58,6 +79,18 @@ RIVE_CPP_ATLAS_FILL_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-mask.r
 RIVE_CPP_ATLAS_FILL_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-inputs.bin" \
   cargo test -p nuxie-renderer cpp_webgpu_atlas_fill_ \
   -- --ignored --nocapture
+RIVE_CPP_ATLAS_CUSP_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-cusp-mask.r16f" \
+RIVE_CPP_ATLAS_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-cusp-inputs.bin" \
+  cargo test -p nuxie-renderer cpp_webgpu_atlas_cusp_ \
+  -- --ignored --nocapture
+RIVE_CPP_SOFTENED_CUSP="$PWD/tools/cpp-atlas-mask-oracle/out/softened-cusp.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_softened_cusp_path_oracle_matches_rust_when_configured \
+  -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-inputs.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_direct_cusp_input_oracle_matches_rust_when_configured \
+  -- --exact --ignored --nocapture
 RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
@@ -67,6 +100,9 @@ RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
 The configured comparator is ignored by ordinary test suites and requires a
 nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_FILL_MASK`, `RIVE_CPP_ATLAS_FILL_INPUTS`, or
+`RIVE_CPP_ATLAS_CUSP_MASK`, `RIVE_CPP_ATLAS_CUSP_INPUTS`, or
+`RIVE_CPP_SOFTENED_CUSP`, or
+`RIVE_CPP_DIRECT_CUSP_INPUTS`, or
 `RIVE_CPP_ATLAS_BLIT` path;
 invoking either test without its variable is an error.
 

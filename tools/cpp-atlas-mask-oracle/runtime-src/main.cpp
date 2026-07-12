@@ -3,6 +3,7 @@
 
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/webgpu/render_context_webgpu_impl.hpp"
+#include "rive_render_path.hpp"
 
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
@@ -173,6 +174,41 @@ void writeBlit(const char* output,
     }
 }
 
+uint32_t floatBits(float value);
+
+void writeSoftenedPath(const char* output, const rive::RawPath& path)
+{
+    std::array<uint8_t, 20> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'S', 'F', 'T', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, static_cast<uint32_t>(path.verbs().size()));
+    writeU32(header, 16, static_cast<uint32_t>(path.points().size()));
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open softened-path output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    for (rive::PathVerb verb : path.verbs())
+    {
+        std::array<uint8_t, 4> value{};
+        writeU32(value, 0, static_cast<uint32_t>(verb));
+        file.write(reinterpret_cast<const char*>(value.data()), value.size());
+    }
+    for (const rive::Vec2D& point : path.points())
+    {
+        std::array<uint8_t, 8> value{};
+        writeU32(value, 0, floatBits(point.x));
+        writeU32(value, 4, floatBits(point.y));
+        file.write(reinterpret_cast<const char*>(value.data()), value.size());
+    }
+    if (!file)
+    {
+        fail("could not write softened-path output file");
+    }
+}
+
 uint32_t floatBits(float value)
 {
     uint32_t bits;
@@ -188,9 +224,9 @@ void writeInputs(
     const uint8_t* paddedRows,
     uint32_t paddedRowBytes)
 {
-    if (facts.contours.size() != 1)
+    if (facts.contours.empty())
     {
-        fail("expected exactly one production contour record");
+        fail("expected at least one production contour record");
     }
     const uint64_t packedRowBytes64 =
         static_cast<uint64_t>(tessWidth) * kTessBytesPerTexel;
@@ -296,10 +332,16 @@ int main(int argc, char** argv)
     const char* output = argc > 1 ? argv[1] : "atlas-mask.r16f";
     const char* inputsOutput = argc > 2 ? argv[2] : "atlas-inputs.bin";
     const char* blitOutput = argc > 3 ? argv[3] : "atlas-blit.rgba";
-    const bool fillCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;
-    if (argc > 5 || (argc > 4 && !fillCase))
+    const bool circleCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;
+    const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;
+    const bool directCuspCase =
+        argc > 4 && std::strcmp(argv[4], "direct-cusp") == 0;
+    const bool fillCase = circleCase || cuspCase || directCuspCase;
+    const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
+    if (argc > 6 || (argc > 4 && !fillCase) ||
+        (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -365,12 +407,40 @@ int main(int argc, char** argv)
                          .renderTargetHeight = kFrameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
                          .clearColor = 0,
-                         .msaaSampleCount = 4});
+                         .msaaSampleCount = directCuspCase ? 0u : 4u,
+                         .disableRasterOrdering = directCuspCase,
+                         .clockwiseFillOverride = directCuspCase});
     rive::RiveRenderer renderer(context.get());
     auto path = context->makeEmptyRenderPath();
     if (fillCase)
     {
         path->fillRule(rive::FillRule::clockwise);
+    }
+    if (directCuspCase)
+    {
+        renderer.transform(
+            rive::Mat2D(1.46300006f, 0, 0, 1.46300006f, -40, -20));
+        path->moveTo(0, 100);
+        path->moveTo(0, 100);
+        path->cubicTo(133.635864f, 0, -33.6358566f, 0, 100, 100);
+    }
+    else if (cuspCase)
+    {
+        path->moveTo(16, 48);
+        path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);
+        if (softenedOutput != nullptr)
+        {
+            rive::RiveRenderPath source;
+            source.fillRule(rive::FillRule::clockwise);
+            source.moveTo(0, 100);
+            source.moveTo(0, 100);
+            source.cubicTo(110, 0, -10, 0, 100, 100);
+            auto softened = source.makeSoftenedCopyForFeathering(1, 1.46300006f);
+            writeSoftenedPath(softenedOutput, softened->getRawPath());
+        }
+    }
+    else if (circleCase)
+    {
         constexpr float kControlOffset = 8.83064f;
         constexpr float kCenter = (kSquareMin + kSquareMax) * .5f;
         path->moveTo(kSquareMax, kCenter);
@@ -407,7 +477,10 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    path->close();
+    if (!directCuspCase)
+    {
+        path->close();
+    }
     auto paint = context->makeRenderPaint();
     paint->style(fillCase ? rive::RenderPaintStyle::fill
                           : rive::RenderPaintStyle::stroke);
@@ -417,7 +490,7 @@ int main(int argc, char** argv)
         paint->join(rive::StrokeJoin::miter);
         paint->cap(rive::StrokeCap::butt);
     }
-    paint->feather(kFeather);
+    paint->feather(directCuspCase ? 1.f : kFeather);
     paint->color(0xffffffff);
     renderer.drawPath(path.get(), paint.get());
 
@@ -434,12 +507,31 @@ int main(int argc, char** argv)
                 facts.drawBatches.size());
     for (const auto& batch : facts.drawBatches)
     {
-        std::printf("  drawType=%u shaderFeatures=0x%x shaderMiscFlags=0x%x\n",
+        std::printf("  drawType=%u shaderFeatures=0x%x shaderMiscFlags=0x%x range=%u+%u\n",
                     batch.drawType,
                     batch.shaderFeatures,
-                    batch.shaderMiscFlags);
+                    batch.shaderMiscFlags,
+                    batch.baseElement,
+                    batch.elementCount);
     }
-    if (facts.interlockMode !=
+    if (directCuspCase)
+    {
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
+            facts.drawBatches.size() != 3 ||
+            facts.drawBatches[0].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::renderPassInitialize) ||
+            facts.drawBatches[1].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::midpointFanCenterAAPatches) ||
+            facts.drawBatches[2].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::renderPassResolve) ||
+            facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
+            facts.strokePatchCount == 0 || facts.contours.size() != 2)
+        {
+            fail("direct cusp oracle must execute one atomic feather-fill patch batch between initialize and resolve");
+        }
+    }
+    else if (facts.interlockMode !=
             static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
         !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 1 ||
         facts.drawBatches.front().drawType !=
@@ -451,14 +543,15 @@ int main(int argc, char** argv)
     {
         fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");
     }
-    if (facts.contentWidth != kExpectedLogicalAtlasSize ||
+    if (!directCuspCase &&
+        (facts.contentWidth != kExpectedLogicalAtlasSize ||
         facts.contentHeight != kExpectedLogicalAtlasSize ||
         !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
         facts.pathTranslateY != kAtlasPadding || facts.strokeBatchCount != 1 ||
         facts.atlasBatchIsStroke == fillCase ||
         facts.strokeScissor.left != 0 || facts.strokeScissor.top != 0 ||
         facts.strokeScissor.right != kExpectedLogicalAtlasSize ||
-        facts.strokeScissor.bottom != kExpectedLogicalAtlasSize)
+        facts.strokeScissor.bottom != kExpectedLogicalAtlasSize))
     {
         std::fprintf(
             stderr,
@@ -475,25 +568,30 @@ int main(int argc, char** argv)
             facts.strokeScissor.bottom);
         return 1;
     }
-    const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
-    const uint32_t atlasWidth = atlas.GetWidth();
-    const uint32_t atlasHeight = atlas.GetHeight();
-    if (atlasWidth != kExpectedPhysicalAtlasSize ||
-        atlasHeight != kExpectedPhysicalAtlasSize)
+    uint32_t atlasWidth = 0;
+    uint32_t atlasHeight = 0;
+    if (!directCuspCase)
     {
-        std::fprintf(stderr,
-                     "cpp-atlas-mask-oracle: expected physical=48x48 logical=39x39 placement=(2,2) frame=64x64, got physical=%ux%u\n",
-                     atlasWidth,
-                     atlasHeight);
-        return 1;
+        const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
+        atlasWidth = atlas.GetWidth();
+        atlasHeight = atlas.GetHeight();
+        if (atlasWidth != kExpectedPhysicalAtlasSize ||
+            atlasHeight != kExpectedPhysicalAtlasSize)
+        {
+            std::fprintf(stderr,
+                         "cpp-atlas-mask-oracle: expected physical=48x48 logical=39x39 placement=(2,2) frame=64x64, got physical=%ux%u\n",
+                         atlasWidth,
+                         atlasHeight);
+            return 1;
+        }
+        const std::vector<uint8_t> atlasBytes =
+            readTexture(instance, device, queue, atlas, kBytesPerTexel);
+        writeMask(output,
+                  atlasWidth,
+                  atlasHeight,
+                  atlasBytes.data(),
+                  atlasWidth * kBytesPerTexel);
     }
-    const std::vector<uint8_t> atlasBytes =
-        readTexture(instance, device, queue, atlas, kBytesPerTexel);
-    writeMask(output,
-              atlasWidth,
-              atlasHeight,
-              atlasBytes.data(),
-              atlasWidth * kBytesPerTexel);
 
     const wgpu::Texture tessellation =
         webgpuContext->tessellationTextureForOracle();
@@ -521,10 +619,13 @@ int main(int argc, char** argv)
               kFrameWidth,
               kFrameHeight,
               targetBytes.data());
-    std::printf("wrote %s: %ux%u R16Float row-packed atlas mask\\n",
-                output,
-                atlasWidth,
-                atlasHeight);
+    if (!directCuspCase)
+    {
+        std::printf("wrote %s: %ux%u R16Float row-packed atlas mask\\n",
+                    output,
+                    atlasWidth,
+                    atlasHeight);
+    }
     std::printf("wrote %s: batch=%u+%u contours=%zu tessellation=%ux%u RGBA32Uint\\n",
                 inputsOutput,
                 facts.strokeBasePatch,

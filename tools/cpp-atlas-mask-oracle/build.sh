@@ -15,6 +15,12 @@ blit_output="${RIVE_ATLAS_BLIT_OUTPUT:-$script_dir/out/atlas-blit.rgba}"
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
+cusp_output="${RIVE_ATLAS_CUSP_MASK_OUTPUT:-$script_dir/out/atlas-cusp-mask.r16f}"
+cusp_inputs_output="${RIVE_ATLAS_CUSP_INPUT_OUTPUT:-$script_dir/out/atlas-cusp-inputs.bin}"
+cusp_blit_output="${RIVE_ATLAS_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-cusp-blit.rgba}"
+softened_cusp_output="${RIVE_SOFTENED_CUSP_OUTPUT:-$script_dir/out/softened-cusp.bin}"
+direct_cusp_inputs_output="${RIVE_DIRECT_CUSP_INPUT_OUTPUT:-$script_dir/out/direct-cusp-inputs.bin}"
+direct_cusp_blit_output="${RIVE_DIRECT_CUSP_BLIT_OUTPUT:-$script_dir/out/direct-cusp-blit.rgba}"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -249,7 +255,13 @@ mkdir -p "$injected_dir" \
     "$(dirname "$blit_output")" \
     "$(dirname "$fill_output")" \
     "$(dirname "$fill_inputs_output")" \
-    "$(dirname "$fill_blit_output")"
+    "$(dirname "$fill_blit_output")" \
+    "$(dirname "$cusp_output")" \
+    "$(dirname "$cusp_inputs_output")" \
+    "$(dirname "$cusp_blit_output")" \
+    "$(dirname "$softened_cusp_output")" \
+    "$(dirname "$direct_cusp_inputs_output")" \
+    "$(dirname "$direct_cusp_blit_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 git -C "$runtime" apply "$patch"
 applied=1
@@ -275,9 +287,11 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -308,9 +322,45 @@ if [[ "$fill_blit_bytes" != "16404" ]]; then
     echo "atlas fill blit must be exactly 16404 bytes, got $fill_blit_bytes: $fill_blit_output" >&2
     exit 1
 fi
+cusp_output_bytes="$(wc -c < "$cusp_output" | tr -d ' ')"
+if [[ "$cusp_output_bytes" != "4628" ]]; then
+    echo "atlas cusp mask must be exactly 4628 bytes, got $cusp_output_bytes: $cusp_output" >&2
+    exit 1
+fi
+cusp_inputs_bytes="$(wc -c < "$cusp_inputs_output" | tr -d ' ')"
+if (( cusp_inputs_bytes <= 56 )); then
+    echo "atlas cusp inputs must contain a header, contour, and tessellation payload: $cusp_inputs_output" >&2
+    exit 1
+fi
+cusp_blit_bytes="$(wc -c < "$cusp_blit_output" | tr -d ' ')"
+if [[ "$cusp_blit_bytes" != "16404" ]]; then
+    echo "atlas cusp blit must be exactly 16404 bytes, got $cusp_blit_bytes: $cusp_blit_output" >&2
+    exit 1
+fi
+softened_cusp_bytes="$(wc -c < "$softened_cusp_output" | tr -d ' ')"
+if (( softened_cusp_bytes <= 20 )); then
+    echo "softened cusp must contain a header and path payload: $softened_cusp_output" >&2
+    exit 1
+fi
+direct_cusp_inputs_bytes="$(wc -c < "$direct_cusp_inputs_output" | tr -d ' ')"
+if (( direct_cusp_inputs_bytes <= 56 )); then
+    echo "direct cusp inputs must contain a header, contour, and tessellation payload: $direct_cusp_inputs_output" >&2
+    exit 1
+fi
+direct_cusp_blit_bytes="$(wc -c < "$direct_cusp_blit_output" | tr -d ' ')"
+if [[ "$direct_cusp_blit_bytes" != "16404" ]]; then
+    echo "direct cusp blit must be exactly 16404 bytes, got $direct_cusp_blit_bytes: $direct_cusp_blit_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
 echo "atlas inputs: $inputs_output"
 echo "atlas blit: $blit_output"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"
+echo "atlas cusp mask: $cusp_output"
+echo "atlas cusp inputs: $cusp_inputs_output"
+echo "atlas cusp blit: $cusp_blit_output"
+echo "softened cusp: $softened_cusp_output"
+echo "direct cusp inputs: $direct_cusp_inputs_output"
+echo "direct cusp blit: $direct_cusp_blit_output"

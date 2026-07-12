@@ -222,6 +222,7 @@ fn build_stroke_or_feather_tessellation(
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
         let mut pending = Vec::new();
         if curves.is_empty() && !is_stroke {
+            contour_data.push(ContourData::new([f32::NAN, f32::NAN], 0, contour_start));
             continue;
         }
         if curves.is_empty() {
@@ -404,7 +405,11 @@ fn build_stroke_or_feather_tessellation(
     })
 }
 
-fn softened_path_for_feathering(path: &RawPath, feather_radius: f32, matrix_scale: f32) -> RawPath {
+pub(crate) fn softened_path_for_feathering(
+    path: &RawPath,
+    feather_radius: f32,
+    matrix_scale: f32,
+) -> RawPath {
     const POLAR_JOIN_PRECISION: f32 = 2.0;
     const MIN_POLAR_ANGLE: f32 = std::f32::consts::PI / 16.0;
     let radius = feather_radius * matrix_scale * 0.25;
@@ -1769,6 +1774,31 @@ mod tests {
         assert!(tessellation.spans[1..tessellation.spans.len() - 2]
             .iter()
             .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
+    }
+
+    #[test]
+    fn feather_fill_preserves_empty_move_contours_for_gpu_ids() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 100.0);
+        path.move_to(0.0, 100.0);
+        path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
+
+        let tessellation = build_feather_tessellation(
+            &path,
+            Mat2D([1.46300006, 0.0, 0.0, 1.46300006, 0.0, 0.0]),
+            1.0,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(tessellation.contours.len(), 2);
+        assert!(tessellation.contours[0].midpoint[0].is_nan());
+        assert!(tessellation.contours[0].midpoint[1].is_nan());
+        assert_eq!(tessellation.contours[0].vertex_index0, 88);
+        assert!(tessellation
+            .spans
+            .iter()
+            .any(|span| { span.contour_id_with_flags & CONTOUR_ID_MASK == 2 }));
     }
 
     #[test]

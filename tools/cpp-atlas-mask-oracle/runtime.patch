@@ -48,7 +48,7 @@ index 4fcf8c0..52e7406 100644
  #include <webgpu/webgpu_cpp.h>
  
  #ifdef RIVE_WAGYU
-@@ -105,6 +106,41 @@ public:
+@@ -105,6 +106,43 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
@@ -70,6 +70,8 @@ index 4fcf8c0..52e7406 100644
 +            uint32_t drawType = 0;
 +            uint32_t shaderFeatures = 0;
 +            uint32_t shaderMiscFlags = 0;
++            uint32_t baseElement = 0;
++            uint32_t elementCount = 0;
 +        };
 +        uint32_t interlockMode = 0;
 +        bool fixedFunctionColorOutput = false;
@@ -237,7 +239,7 @@ index ff41da4..7baa8b3 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
-@@ -3846,6 +3848,54 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
+@@ -3846,6 +3848,69 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
  
  void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
  {
@@ -255,7 +257,9 @@ index ff41da4..7baa8b3 100644
 +                 .shaderFeatures =
 +                     static_cast<uint32_t>(batch.shaderFeatures),
 +                 .shaderMiscFlags =
-+                     static_cast<uint32_t>(batch.shaderMiscFlags)});
++                     static_cast<uint32_t>(batch.shaderMiscFlags),
++                 .baseElement = batch.baseElement,
++                 .elementCount = batch.elementCount});
 +        }
 +    }
 +    m_atlasMaskOracleFacts.contentWidth = desc.atlasContentWidth;
@@ -278,6 +282,19 @@ index ff41da4..7baa8b3 100644
 +        oracleBatch != nullptr ? oracleBatch->basePatch : 0;
 +    m_atlasMaskOracleFacts.strokePatchCount =
 +        oracleBatch != nullptr ? oracleBatch->patchCount : 0;
++    if (oracleBatch == nullptr && desc.drawList != nullptr)
++    {
++        for (const auto& batch : *desc.drawList)
++        {
++            if (batch.drawType == DrawType::midpointFanCenterAAPatches)
++            {
++                ++m_atlasMaskOracleFacts.strokeBatchCount;
++                m_atlasMaskOracleFacts.atlasBatchIsStroke = false;
++                m_atlasMaskOracleFacts.strokeBasePatch = batch.baseElement;
++                m_atlasMaskOracleFacts.strokePatchCount = batch.elementCount;
++            }
++        }
++    }
 +    if (desc.atlasInputContourCount == 0)
 +    {
 +        m_atlasMaskOracleFacts.contours.clear();

@@ -53,8 +53,11 @@ Run `make renderer-golden`.
 
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
    partitioning, direct/atlas threshold routing, atlas-stroke tessellation
-   inputs, and the R16 mask are exact against C++ WebGPU. The active boundary
-   next corpus targets are the remaining feather corner/fill GMs. The separate
+   inputs, and the R16 mask are exact against C++ WebGPU. Direct severe-cusp
+   topology and tessellation inputs are also exact; its remaining isolated
+   558-pixel/max-255 cusp-tip lobe is downstream of tessellation and stays
+   named rather than tolerated. The active corpus target is now
+   `feather_polyshapes`, followed by the clip-gated corner GMs. The separate
    matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
    pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
    behavior, robust triangulation, and integration of the translated
@@ -509,3 +512,20 @@ Run `make renderer-golden`.
   max-delta-255 geometry failures and remain the next implementation boundary;
   `feather_roundcorner` remains clip-gated. The ratchet advances to
   exact=24/diverges=0.
+- 2026-07-11: Preserved C++'s GPU contour records for empty fill contours.
+  `feather_cusp` begins with duplicate moves; Rust previously skipped the empty
+  contour but left the drawable contour tagged as ID 2, making the shader read
+  beyond its one-record contour buffer and collapsing the severe cusp. A paired
+  C++ WebGPU oracle now covers the exact severe cell (duplicate moves,
+  `133.635864/-33.6358566` controls, feather 1, scale 1.46300006): both contour
+  records, the 20-patch range, packed topology, and complete tessellation
+  texture match, with only bounded scalar/GPU float differences. The full GM
+  falls from roughly 1.7M raw mismatches to 13,239 pixels beyond delta 2; the
+  severe isolated cell falls 656 -> 558 and restores its body, but retains a
+  small max-255 cusp-tip lobe downstream of tessellation. C++ Dawn cannot run
+  the specialized clockwise-atomic mode (forcing it crashes), so native Metal
+  remains the final-pixel oracle and the lobe stays gated. Exact remains 24;
+  continue with `feather_polyshapes` per the divergence budget. The required
+  workspace floor also exposed a pre-existing stale render-stream assertion;
+  updating its expected `decodeImage` payload to include `data=010203` restores
+  the full V2 gate without changing runtime behavior.

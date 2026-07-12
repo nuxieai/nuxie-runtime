@@ -81,7 +81,8 @@ records.
 
 `direct-grid-inputs.bin` uses the `RIVEDGI` version 1 little-endian format.
 Its 64-byte header is `magic[8]`, then fourteen `u32` values: `version=1`,
-`headerBytes=64`, `flags=1` (`clockwiseFillOverride`), `interlockMode`,
+`headerBytes=64`, `flags=1` (`clockwiseFillOverride`), `interlockMode=1`
+(production `InterlockMode::atomics`),
 `drawBatchCount`, `tessWidth`, `tessHeight`, `contourCount=100`,
 `triangleVertexCount`, `drawBatchStride=20`, `contourStride=16`,
 `triangleVertexStride=12`, `tessTexelStride=16`, and `reserved=0`. The payload
@@ -94,6 +95,14 @@ tessellation texture. The temporary runtime patch snapshots each interior
 `TriangleVertex` from its still-mapped CPU production buffer after
 triangulation and before `unmapResourceBuffers()` transfers it to the backend.
 No WebGPU row padding, normalization, or omitted records are permitted.
+
+The schedule is exactly four records in production `DrawType` order:
+`renderPassInitialize=15`, `outerCurvePatches=2`,
+`interiorTriangulation=3`, and `renderPassResolve=16`. The outer-cubic record
+must have a nonzero, non-overflowing `baseElement + elementCount` range whose
+17-vertex production patch spans fit in the tessellation texture, and the
+interior record's `elementCount` must equal `triangleVertexCount`. `build.sh`
+parses the generated artifact with these rules before reporting success.
 
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte

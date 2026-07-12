@@ -6,6 +6,7 @@ import pathlib
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -17,6 +18,21 @@ INPUT_MAGIC = b"RIVEATI\0"
 BLIT_MAGIC = b"RIVEABL\0"
 DIRECT_GRID_HEADER_BYTES = 64
 DIRECT_GRID_MAGIC = b"RIVEDGI\0"
+# Production enum and patch-layout values from
+# renderer/include/rive/renderer/gpu.hpp. The generated direct-grid artifact
+# records this same four-draw schedule.
+DIRECT_GRID_INTERLOCK_ATOMICS = 1
+DRAW_TYPE_OUTER_CURVE_PATCHES = 2
+DRAW_TYPE_INTERIOR_TRIANGULATION = 3
+DRAW_TYPE_RENDER_PASS_INITIALIZE = 15
+DRAW_TYPE_RENDER_PASS_RESOLVE = 16
+OUTER_CURVE_PATCH_SEGMENT_SPAN = 17
+DIRECT_GRID_DRAW_TYPES = (
+    DRAW_TYPE_RENDER_PASS_INITIALIZE,
+    DRAW_TYPE_OUTER_CURVE_PATCHES,
+    DRAW_TYPE_INTERIOR_TRIANGULATION,
+    DRAW_TYPE_RENDER_PASS_RESOLVE,
+)
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXPORTER = pathlib.Path(__file__).with_name("runtime-src") / "main.cpp"
 BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
@@ -99,7 +115,7 @@ def parse_direct_grid_inputs(data: bytes) -> dict:
      tess_texel_stride, reserved) = fields
     if version != 1 or header_bytes != DIRECT_GRID_HEADER_BYTES:
         raise ValueError("unsupported RIVEDGI header")
-    if flags != 1 or interlock_mode == 0:
+    if flags != 1 or interlock_mode != DIRECT_GRID_INTERLOCK_ATOMICS:
         raise ValueError("RIVEDGI requires clockwise-fill atomic facts")
     if reserved != 0:
         raise ValueError("RIVEDGI reserved header bytes must be zero")
@@ -107,7 +123,9 @@ def parse_direct_grid_inputs(data: bytes) -> dict:
         raise ValueError("RIVEDGI tessellation dimensions must be nonzero")
     if contour_count != 100:
         raise ValueError("RIVEDGI must contain exactly 100 contours")
-    if draw_batch_count < 3 or not triangle_vertex_count or triangle_vertex_count % 3:
+    if draw_batch_count != len(DIRECT_GRID_DRAW_TYPES):
+        raise ValueError("RIVEDGI must contain exactly four draw batches")
+    if not triangle_vertex_count or triangle_vertex_count % 3:
         raise ValueError("RIVEDGI draw or triangle record count is invalid")
     if (draw_batch_stride, contour_stride, triangle_vertex_stride, tess_texel_stride) != (20, 16, 12, 16):
         raise ValueError("RIVEDGI stride mismatch")
@@ -120,6 +138,18 @@ def parse_direct_grid_inputs(data: bytes) -> dict:
     offset = DIRECT_GRID_HEADER_BYTES
     batches = [struct.unpack_from("<5I", data, offset + i * draw_batch_stride)
                for i in range(draw_batch_count)]
+    if tuple(batch[0] for batch in batches) != DIRECT_GRID_DRAW_TYPES:
+        raise ValueError("RIVEDGI draw schedule shape mismatch")
+    _, _, _, outer_base_element, outer_element_count = batches[1]
+    outer_end_element = outer_base_element + outer_element_count
+    if (outer_base_element == 0 or outer_element_count == 0 or
+            outer_end_element > 0xFFFFFFFF or
+            outer_end_element * OUTER_CURVE_PATCH_SEGMENT_SPAN >
+            tess_width * tess_height):
+        raise ValueError("RIVEDGI outer-cubic draw range is invalid")
+    _, _, _, _, interior_element_count = batches[2]
+    if interior_element_count != triangle_vertex_count:
+        raise ValueError("RIVEDGI interior draw count must equal triangle vertex count")
     offset += draw_batch_count * draw_batch_stride
     contours = [struct.unpack_from("<4I", data, offset + i * contour_stride)
                 for i in range(contour_count)]
@@ -155,13 +185,18 @@ def encode_direct_grid_inputs(parsed: dict) -> bytes:
 
 def make_direct_grid_inputs() -> bytes:
     parsed = {
-        "interlock_mode": 3,
-        "batches": [(1, 0, 0, 0, 1)] * 4,
+        "interlock_mode": DIRECT_GRID_INTERLOCK_ATOMICS,
+        "batches": [
+            (DRAW_TYPE_RENDER_PASS_INITIALIZE, 0, 1, 0, 1),
+            (DRAW_TYPE_OUTER_CURVE_PATCHES, 0x80, 1, 1, 20),
+            (DRAW_TYPE_INTERIOR_TRIANGULATION, 0x80, 1, 0, 6),
+            (DRAW_TYPE_RENDER_PASS_RESOLVE, 0, 1, 0, 1),
+        ],
         "contours": [(0, 0, 1, index) for index in range(100)],
         "triangles": [(0, 0, 0x00010001)] * 6,
-        "tess_width": 2,
-        "tess_height": 1,
-        "tessellation": bytes(range(32)),
+        "tess_width": 32,
+        "tess_height": 16,
+        "tessellation": bytes(32 * 16 * 16),
     }
     return encode_direct_grid_inputs(parsed)
 
@@ -224,16 +259,25 @@ class FormatTests(unittest.TestCase):
     def test_direct_grid_format_round_trips_and_rejects_malformed_counts(self):
         data = make_direct_grid_inputs()
         parsed = parse_direct_grid_inputs(data)
+        self.assertEqual(parsed["interlock_mode"], DIRECT_GRID_INTERLOCK_ATOMICS)
         self.assertEqual(len(parsed["batches"]), 4)
         self.assertEqual(len(parsed["contours"]), 100)
         self.assertEqual(len(parsed["triangles"]), 6)
-        self.assertEqual(parsed["tessellation"], bytes(range(32)))
+        self.assertEqual(parsed["tessellation"], bytes(32 * 16 * 16))
         self.assertEqual(encode_direct_grid_inputs(parsed), data)
 
         bad_header = bytearray(data)
         struct.pack_into("<I", bad_header, 12, 60)
         with self.assertRaisesRegex(ValueError, "header"):
             parse_direct_grid_inputs(bad_header)
+        bad_interlock = bytearray(data)
+        struct.pack_into("<I", bad_interlock, 20, 3)
+        with self.assertRaisesRegex(ValueError, "atomic"):
+            parse_direct_grid_inputs(bad_interlock)
+        bad_batch_count = bytearray(data)
+        struct.pack_into("<I", bad_batch_count, 24, 3)
+        with self.assertRaisesRegex(ValueError, "four draw batches"):
+            parse_direct_grid_inputs(bad_batch_count)
         bad_contours = bytearray(data)
         struct.pack_into("<I", bad_contours, 36, 99)
         with self.assertRaisesRegex(ValueError, "100 contours"):
@@ -244,6 +288,39 @@ class FormatTests(unittest.TestCase):
             parse_direct_grid_inputs(bad_triangles)
         with self.assertRaisesRegex(ValueError, "length"):
             parse_direct_grid_inputs(data[:-1])
+
+        for batch_index, draw_type in (
+            (0, DRAW_TYPE_OUTER_CURVE_PATCHES),
+            (1, DRAW_TYPE_INTERIOR_TRIANGULATION),
+            (3, DRAW_TYPE_RENDER_PASS_INITIALIZE),
+        ):
+            with self.subTest(batch_index=batch_index, draw_type=draw_type):
+                bad_schedule = bytearray(data)
+                struct.pack_into("<I", bad_schedule,
+                                 DIRECT_GRID_HEADER_BYTES + batch_index * 20,
+                                 draw_type)
+                with self.assertRaisesRegex(ValueError, "schedule shape"):
+                    parse_direct_grid_inputs(bad_schedule)
+
+        for outer_base, outer_count in (
+            (0, 20),
+            (1, 0),
+            (31, 1),
+            (0xFFFFFFFF, 20),
+        ):
+            with self.subTest(outer_base=outer_base, outer_count=outer_count):
+                bad_outer_range = bytearray(data)
+                outer_offset = DIRECT_GRID_HEADER_BYTES + 20
+                struct.pack_into("<2I", bad_outer_range, outer_offset + 12,
+                                 outer_base, outer_count)
+                with self.assertRaisesRegex(ValueError, "outer-cubic.*range"):
+                    parse_direct_grid_inputs(bad_outer_range)
+
+        bad_interior_count = bytearray(data)
+        interior_offset = DIRECT_GRID_HEADER_BYTES + 2 * 20
+        struct.pack_into("<I", bad_interior_count, interior_offset + 16, 3)
+        with self.assertRaisesRegex(ValueError, "interior draw count"):
+            parse_direct_grid_inputs(bad_interior_count)
 
     def test_accepts_and_rejects_canonical_atlas_blit(self):
         data = BLIT_MAGIC + struct.pack("<3I", 1, 2, 1) + bytes(8)
@@ -417,6 +494,7 @@ class FormatTests(unittest.TestCase):
             '--output "$injected_dir/generated_polyshark_path.inc"',
             '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
             '"$direct_grid_inputs_output" /dev/null direct-grid',
+            'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
@@ -426,7 +504,6 @@ class FormatTests(unittest.TestCase):
             'if (( softened_cusp_bytes <= 20 ))',
             'if (( direct_cusp_inputs_bytes <= 56 ))',
             'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
-            'if (( direct_grid_inputs_bytes <= 64 + 20 * 3 + 16 * 100 + 12 ))',
         ):
             self.assertIn(fragment, source)
 
@@ -556,4 +633,20 @@ class FormatTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if sys.argv[1:2] == ["--validate-direct-grid"]:
+        if len(sys.argv) != 3:
+            raise SystemExit("usage: format_test.py --validate-direct-grid PATH")
+        try:
+            artifact = pathlib.Path(sys.argv[2]).read_bytes()
+            validated = parse_direct_grid_inputs(artifact)
+        except (OSError, ValueError) as error:
+            raise SystemExit(f"direct-grid artifact validation failed: {error}")
+        print(
+            "RIVEDGI valid: "
+            f"batches={len(validated['batches'])} "
+            f"contours={len(validated['contours'])} "
+            f"triangleVertices={len(validated['triangles'])} "
+            f"tessellation={validated['tess_width']}x{validated['tess_height']}"
+        )
+    else:
+        unittest.main()

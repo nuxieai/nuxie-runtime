@@ -303,6 +303,7 @@ rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_out
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_polyshark_inputs_output" /dev/null direct-polyshark
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_grid_inputs_output" /dev/null direct-grid
+python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -366,11 +367,6 @@ fi
 direct_polyshark_inputs_bytes="$(wc -c < "$direct_polyshark_inputs_output" | tr -d ' ')"
 if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]; then
     echo "direct polyshark inputs must be exactly 163896 bytes: $direct_polyshark_inputs_output" >&2
-    exit 1
-fi
-direct_grid_inputs_bytes="$(wc -c < "$direct_grid_inputs_output" | tr -d ' ')"
-if (( direct_grid_inputs_bytes <= 64 + 20 * 3 + 16 * 100 + 12 )); then
-    echo "direct grid inputs must contain the RIVEDGI header, schedule, 100 contours, interior triangles, and tessellation payload: $direct_grid_inputs_output" >&2
     exit 1
 fi
 echo "atlas mask: $output"

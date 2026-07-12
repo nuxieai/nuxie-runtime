@@ -11,8 +11,14 @@ build_out="${RIVE_ATLAS_MASK_BUILD_OUT:-out/cpp-atlas-mask-oracle}"
 jobs="${RIVE_ATLAS_MASK_JOBS:-2}"
 output="${RIVE_ATLAS_MASK_OUTPUT:-$script_dir/out/atlas-mask.r16f}"
 inputs_output="${RIVE_ATLAS_INPUT_OUTPUT:-$script_dir/out/atlas-inputs.bin}"
-ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$script_dir/../../target/depot_tools/ninja}"
-gn_bin="${RIVE_ATLAS_MASK_GN:-$script_dir/../../target/depot_tools/gn}"
+blit_output="${RIVE_ATLAS_BLIT_OUTPUT:-$script_dir/out/atlas-blit.rgba}"
+ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
+case "$(uname -s)" in
+    Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
+    Linux) default_gn="$dawn_dir/buildtools/linux64/gn" ;;
+    *) default_gn="$script_dir/../../target/depot_tools/gn" ;;
+esac
+gn_bin="${RIVE_ATLAS_MASK_GN:-$default_gn}"
 naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"
 expected_naga_version="30.0.0"
 
@@ -122,11 +128,11 @@ preflight() {
         missing=1
     fi
     if [[ ! -x "$ninja_bin" ]]; then
-        echo "missing required tool: depot_tools ninja ($ninja_bin)" >&2
+        echo "missing required tool: pinned Dawn ninja ($ninja_bin)" >&2
         missing=1
     fi
     if [[ ! -x "$gn_bin" ]]; then
-        echo "missing required tool: depot_tools gn ($gn_bin)" >&2
+        echo "missing required tool: pinned Dawn gn ($gn_bin)" >&2
         missing=1
     fi
     for target in webgpu_dawn_static cpp proc_static; do
@@ -234,7 +240,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$injected_dir" "$(dirname "$output")" "$(dirname "$inputs_output")"
+mkdir -p "$injected_dir" "$(dirname "$output")" "$(dirname "$inputs_output")" "$(dirname "$blit_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 git -C "$runtime" apply "$patch"
 applied=1
@@ -260,8 +266,8 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output"
-"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output"
+rm -f "$output" "$inputs_output" "$blit_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -272,5 +278,11 @@ if (( inputs_bytes <= 56 )); then
     echo "atlas inputs must contain a 40-byte header, contour, and tessellation payload: $inputs_output" >&2
     exit 1
 fi
+blit_bytes="$(wc -c < "$blit_output" | tr -d ' ')"
+if [[ "$blit_bytes" != "16404" ]]; then
+    echo "atlas blit must be exactly 16404 bytes, got $blit_bytes: $blit_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
 echo "atlas inputs: $inputs_output"
+echo "atlas blit: $blit_output"

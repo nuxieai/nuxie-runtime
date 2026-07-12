@@ -15,7 +15,7 @@ The exporter draws one fixed closed square stroke:
 * atlas contract: `39 x 39` logical content at `(2,2)`, in the complete
   `48 x 48` physical allocation produced by C++'s 125% resource growth
 
-The harness emits two artifacts. The mask uses the exact `RIVEMSK` version 1
+The harness emits three artifacts. The mask uses the exact `RIVEMSK` version 1
 Rust interchange format: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by a
 canonical, tightly row-packed `R16Float` payload. WebGPU's 256-byte copy rows
@@ -31,6 +31,12 @@ tessellation dimensions, followed by canonical 16-byte contour records and
 the complete tightly packed `RGBA32Uint` tessellation texture. Both artifacts
 come from the same submitted C++ frame.
 
+`atlas-blit.rgba` uses the `RIVEABL` version 1 contract: a 20-byte
+little-endian header (`magic`, `version`, `width`, `height`) followed by the
+complete tightly packed `64 x 64` RGBA8 render target. Since the paired input
+and mask oracles already prove the atlas contents, this artifact isolates the
+final atlas sampling, paint application, atomic coverage, and resolve path.
+
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh
@@ -43,10 +49,15 @@ RIVE_CPP_ATLAS_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-inputs.bin" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_atlas_input_oracle_matches_fixed_rust_inputs_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
+  -- --exact --ignored --nocapture
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
-nonempty absolute `RIVE_CPP_ATLAS_MASK` or `RIVE_CPP_ATLAS_INPUTS` path;
+nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`, or
+`RIVE_CPP_ATLAS_BLIT` path;
 invoking either test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing

@@ -13,6 +13,7 @@ pub(crate) struct AtomicPipeline {
     interior: wgpu::RenderPipeline,
     atlas_blit: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
+    feather_resolve: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     atomic_layout: wgpu::BindGroupLayout,
@@ -169,7 +170,7 @@ impl AtomicPipeline {
                     ("1", 1.0),
                     ("3", 1.0),
                     ("4", 0.0),
-                    ("7", 0.0),
+                    ("7", 1.0),
                 ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
@@ -203,7 +204,7 @@ impl AtomicPipeline {
                     ("1", 1.0),
                     ("3", 1.0),
                     ("4", 0.0),
-                    ("7", 0.0),
+                    ("7", 1.0),
                 ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
@@ -248,34 +249,43 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
-        let resolve = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nuxie-atomic-resolve-pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &resolve_vertex,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &resolve_fragment,
-                entry_point: Some("main"),
-                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let make_resolve = |label, dither| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &resolve_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &resolve_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[
+                        ("0", 0.0),
+                        ("1", 1.0),
+                        ("4", 0.0),
+                        ("7", dither),
+                    ]),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let resolve = make_resolve("nuxie-atomic-resolve-pipeline", 0.0);
+        let feather_resolve = make_resolve("nuxie-atomic-feather-resolve-pipeline", 1.0);
         let interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-interior-pipeline"),
             layout: Some(&layout),
@@ -319,7 +329,7 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &atlas_blit_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 1.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -337,6 +347,7 @@ impl AtomicPipeline {
             interior,
             atlas_blit,
             resolve,
+            feather_resolve,
             flush_layout,
             image_layout,
             atomic_layout,
@@ -549,7 +560,11 @@ impl AtomicPipeline {
                 "nuxie-atomic-resolve-pass",
                 &attachments,
             ));
-            pass.set_pipeline(&self.resolve);
+            pass.set_pipeline(if draws.iter().any(|draw| draw.is_feather) {
+                &self.feather_resolve
+            } else {
+                &self.resolve
+            });
             pass.set_bind_group(0, flush_groups.last().unwrap(), &[]);
             pass.set_bind_group(1, &image, &[]);
             pass.set_bind_group(2, &atomics, &[]);
@@ -565,7 +580,7 @@ fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> w
         source: wgpu::ShaderSource::Wgsl(source.into()),
     })
 }
-fn options(constants: &'static [(&'static str, f64)]) -> wgpu::PipelineCompilationOptions<'static> {
+fn options<'a>(constants: &'a [(&'a str, f64)]) -> wgpu::PipelineCompilationOptions<'a> {
     wgpu::PipelineCompilationOptions {
         constants,
         ..Default::default()

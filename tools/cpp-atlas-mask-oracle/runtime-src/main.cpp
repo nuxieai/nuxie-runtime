@@ -28,6 +28,7 @@ constexpr uint32_t kAtlasPadding = 2;
 constexpr uint32_t kExpectedLogicalAtlasSize = 39;
 constexpr uint32_t kExpectedPhysicalAtlasSize = 48;
 constexpr uint32_t kMaskHeaderBytes = 20;
+constexpr uint32_t kBlitHeaderBytes = 20;
 constexpr uint32_t kInputsHeaderBytes = 40;
 constexpr uint32_t kBytesPerTexel = 2;
 constexpr uint32_t kTessBytesPerTexel = 16;
@@ -143,6 +144,32 @@ void writeMask(const char* output,
     if (!file)
     {
         fail("could not write output file");
+    }
+}
+
+void writeBlit(const char* output,
+               uint32_t width,
+               uint32_t height,
+               const uint8_t* packedRows)
+{
+    std::array<uint8_t, kBlitHeaderBytes> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'B', 'L', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, width);
+    writeU32(header, 16, height);
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open atlas-blit output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    file.write(reinterpret_cast<const char*>(packedRows),
+               static_cast<std::streamsize>(width) * height * 4);
+    if (!file)
+    {
+        fail("could not write atlas-blit output file");
     }
 }
 
@@ -268,9 +295,10 @@ int main(int argc, char** argv)
 {
     const char* output = argc > 1 ? argv[1] : "atlas-mask.r16f";
     const char* inputsOutput = argc > 2 ? argv[2] : "atlas-inputs.bin";
-    if (argc > 3)
+    const char* blitOutput = argc > 3 ? argv[3] : "atlas-blit.rgba";
+    if (argc > 4)
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -320,7 +348,8 @@ int main(int argc, char** argv)
         context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();
 
     wgpu::TextureDescriptor targetDesc = {};
-    targetDesc.usage = wgpu::TextureUsage::RenderAttachment;
+    targetDesc.usage =
+        wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     targetDesc.dimension = wgpu::TextureDimension::e2D;
     targetDesc.size = {kFrameWidth, kFrameHeight, 1};
     targetDesc.format = wgpu::TextureFormat::RGBA8Unorm;
@@ -423,6 +452,12 @@ int main(int argc, char** argv)
                 tessHeight,
                 tessellationBytes.data(),
                 tessWidth * kTessBytesPerTexel);
+    const std::vector<uint8_t> targetBytes =
+        readTexture(instance, device, queue, targetTexture, 4);
+    writeBlit(blitOutput,
+              kFrameWidth,
+              kFrameHeight,
+              targetBytes.data());
     std::printf("wrote %s: %ux%u R16Float row-packed atlas mask\\n",
                 output,
                 atlasWidth,
@@ -434,5 +469,9 @@ int main(int argc, char** argv)
                 facts.contours.size(),
                 tessWidth,
                 tessHeight);
+    std::printf("wrote %s: %ux%u tightly packed RGBA8 atlas blit\n",
+                blitOutput,
+                kFrameWidth,
+                kFrameHeight);
     return 0;
 }

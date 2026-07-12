@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-language contract tests for the RIVEMSK and RIVEATI formats."""
+"""Cross-language contract tests for the atlas oracle formats."""
 
 import os
 import pathlib
@@ -14,6 +14,7 @@ HEADER_BYTES = 20
 MAGIC = b"RIVEMSK\0"
 INPUT_HEADER_BYTES = 40
 INPUT_MAGIC = b"RIVEATI\0"
+BLIT_MAGIC = b"RIVEABL\0"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXPORTER = pathlib.Path(__file__).with_name("runtime-src") / "main.cpp"
 BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
@@ -82,6 +83,21 @@ def make_inputs() -> bytes:
     return header + bytes(16) + bytes(2 * 16)
 
 
+def parse_blit(data: bytes) -> dict:
+    if len(data) < HEADER_BYTES:
+        raise ValueError("file is shorter than the 20-byte RIVEABL header")
+    if data[:8] != BLIT_MAGIC:
+        raise ValueError("bad RIVEABL magic")
+    version, width, height = struct.unpack_from("<3I", data, 8)
+    if version != 1:
+        raise ValueError("unsupported RIVEABL version")
+    if not width or not height:
+        raise ValueError("RIVEABL dimensions must be nonzero")
+    if len(data) != HEADER_BYTES + width * height * 4:
+        raise ValueError("RIVEABL length mismatch")
+    return {"width": width, "height": height}
+
+
 class FormatTests(unittest.TestCase):
     def test_accepts_rust_serializer_fixture_byte_for_byte(self):
         self.assertEqual(parse_mask(RUST_SERIALIZER_FIXTURE), {
@@ -122,6 +138,12 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stride"):
             parse_inputs(bad_stride)
 
+    def test_accepts_and_rejects_canonical_atlas_blit(self):
+        data = BLIT_MAGIC + struct.pack("<3I", 1, 2, 1) + bytes(8)
+        self.assertEqual(parse_blit(data), {"width": 2, "height": 1})
+        with self.assertRaisesRegex(ValueError, "length"):
+            parse_blit(data + b"\0")
+
     def test_exporter_configuration_matches_coordinated_stroke_fixture(self):
         source = EXPORTER.read_text()
         for fragment in (
@@ -131,6 +153,7 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kExpectedPhysicalAtlasSize = 48;",
             "constexpr uint32_t kMaskHeaderBytes = 20;",
             "constexpr uint32_t kInputsHeaderBytes = 40;",
+            "constexpr uint32_t kBlitHeaderBytes = 20;",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             "facts.contentWidth != kExpectedLogicalAtlasSize",
             "facts.contentHeight != kExpectedLogicalAtlasSize",
@@ -156,6 +179,8 @@ class FormatTests(unittest.TestCase):
             "webgpuContext->atlasMaskTextureForOracle();",
             "webgpuContext->tessellationTextureForOracle();",
             "writeInputs(inputsOutput,",
+            "writeBlit(blitOutput,",
+            "readTexture(instance, device, queue, targetTexture, 4);",
             "const uint32_t atlasWidth = atlas.GetWidth();",
             "const uint32_t atlasHeight = atlas.GetHeight();",
             "if (atlasWidth != kExpectedPhysicalAtlasSize ||",
@@ -178,6 +203,8 @@ class FormatTests(unittest.TestCase):
         source = BUILD_SCRIPT.read_text()
         for fragment in (
             'naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"',
+            'ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"',
+            'Darwin) default_gn="$dawn_dir/buildtools/mac/gn"',
             'expected_naga_version="30.0.0"',
             '"$naga_bin" --version',
             'export PATH="$(dirname "$naga_bin"):$PATH"',
@@ -189,6 +216,7 @@ class FormatTests(unittest.TestCase):
             'rm -f "$output" "$inputs_output"',
             '"$output" "$inputs_output"',
             'if [[ "$output_bytes" != "4628" ]]',
+            'if [[ "$blit_bytes" != "16404" ]]',
         ):
             self.assertIn(fragment, source)
 
@@ -205,6 +233,7 @@ class FormatTests(unittest.TestCase):
             "2.0 / placement.width as f32",
             "placement.width,",
             '#[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
             "fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root()",
@@ -212,6 +241,8 @@ class FormatTests(unittest.TestCase):
             self.assertIn(fragment, source)
         readme = README.read_text()
         self.assertIn('RIVE_CPP_ATLAS_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba"',
                       readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 

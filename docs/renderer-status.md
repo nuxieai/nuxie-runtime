@@ -47,11 +47,12 @@ Run `make renderer-golden`.
 ## Next
 
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
-   partitioning and C++ direct/atlas threshold routing are complete. Fix the
-   isolated atlas-stroke join cutouts using a C++ WebGPU intermediate-mask
-   oracle, then converge the remaining atlas filtering/corner cases. Continue
-   R2 with the remaining `render_context.cpp` behavior, robust triangulation,
-   and integration of the translated intersection board.
+   partitioning, direct/atlas threshold routing, atlas-stroke tessellation
+   inputs, and the R16 mask are exact against C++ WebGPU. The active boundary
+   is the final atlas-blit oracle: diagnose its remaining 940-pixel/max-delta-3
+   output difference, then converge the remaining atlas filtering/corner
+   cases. Continue R2 with the remaining `render_context.cpp` behavior, robust
+   triangulation, and integration of the translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -456,3 +457,14 @@ Run `make renderer-golden`.
   and final R16 atlas mask all compare exactly. Closed/open, double-sided,
   interior, and row-wrap tests preserve logical patch counts while covering
   the physical padding layout; no tolerance changed.
+- 2026-07-11: Extended the paired C++ WebGPU oracle through final RGBA8 atlas
+  blitting. The same submitted frame now exports versioned input, physical R16
+  mask, and 64x64 final-target artifacts; inputs and mask remain exact. Ported
+  C++'s 125% physical atlas growth and default interleaved-gradient-noise
+  dither state, selecting the dithered resolve permutation only for feather
+  runs so established non-feather output remains ratcheted. The focused native
+  Metal `feather_strokes` difference drops 1,411,260 -> 229,617 pixels (84%),
+  while `make renderer-golden` remains exact=19/diverges=0. The matching C++
+  WebGPU final oracle now fails after the exact mask at 940/4,096 pixels with
+  max channel delta 3; this is the next diagnostic boundary, not a tolerance
+  adjustment.

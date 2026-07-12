@@ -1,6 +1,8 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
 #[cfg(test)]
+mod atlas_blit_oracle;
+#[cfg(test)]
 mod atlas_input_oracle;
 #[cfg(test)]
 mod atlas_mask_oracle;
@@ -984,6 +986,8 @@ impl WgpuFrame {
                 }
                 debug_assert!(atlas_origins.next().is_none());
                 let atlas_content_size = atlas_layout.extent();
+                let atlas_physical_size =
+                    atlas_physical_size(atlas_content_size, max_atlas_dimension);
                 let [atlas_width, atlas_height] = atlas_content_size;
                 let tessellation_height = prepared
                     .iter()
@@ -993,8 +997,10 @@ impl WgpuFrame {
                 let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
                 uniforms.render_target_update_bounds =
                     [0, 0, self.width as i32, self.height as i32];
-                uniforms.atlas_texture_inverse_size =
-                    [1.0 / atlas_width as f32, 1.0 / atlas_height as f32];
+                uniforms.atlas_texture_inverse_size = [
+                    1.0 / atlas_physical_size[0] as f32,
+                    1.0 / atlas_physical_size[1] as f32,
+                ];
                 uniforms.atlas_content_inverse_viewport =
                     [2.0 / atlas_width as f32, -2.0 / atlas_height as f32];
                 let mut tessellation_textures = Vec::with_capacity(prepared.len());
@@ -1023,8 +1029,8 @@ impl WgpuFrame {
                         .create_texture(&wgpu::TextureDescriptor {
                             label: Some("nuxie-feather-atlas"),
                             size: wgpu::Extent3d {
-                                width: atlas_width,
-                                height: atlas_height,
+                                width: atlas_physical_size[0],
+                                height: atlas_physical_size[1],
                                 depth_or_array_layers: 1,
                             },
                             mip_level_count: 1,
@@ -1382,6 +1388,10 @@ fn pack_atlas_for_device(
         .map_err(|error| RendererError::AtlasPacking(error.message()))
 }
 
+fn atlas_physical_size(content: [u32; 2], max_dimension: u32) -> [u32; 2] {
+    content.map(|dimension| (dimension.saturating_mul(5) / 4).max(1).min(max_dimension))
+}
+
 fn feather_atlas_placement(
     path: &RawPath,
     transform: Mat2D,
@@ -1421,6 +1431,9 @@ fn analytic_uniforms(width: u32, height: u32, tessellation_height: u32) -> gpu::
     uniforms.vertex_discard_value = f32::NAN;
     uniforms.mip_map_lod_bias = gpu::MIP_MAP_LOD_BIAS;
     uniforms.max_path_id = 1;
+    uniforms.dither_scale = 1.0 / 256.0;
+    uniforms.dither_bias = -0.5 / 256.0;
+    uniforms.dither_conversion_to_rgb10 = -0.25;
     uniforms
 }
 
@@ -1664,6 +1677,13 @@ mod tests {
         let result = pack_atlas_for_device(1920, 2048, &[(1920, 100); 21]);
 
         assert!(matches!(result, Err(RendererError::AtlasPacking(_))));
+    }
+
+    #[test]
+    fn atlas_allocation_overallocates_like_cpp_resource_growth() {
+        assert_eq!(atlas_physical_size([39, 39], 2048), [48, 48]);
+        assert_eq!(atlas_physical_size([1, 2], 2048), [1, 2]);
+        assert_eq!(atlas_physical_size([2048, 2048], 2048), [2048, 2048]);
     }
 
     #[test]
@@ -2391,6 +2411,39 @@ mod tests {
         fixed_feather_atlas_oracle(join).mask
     }
 
+    fn fixed_feather_atlas_blit() -> atlas_blit_oracle::AtlasBlit {
+        let factory = WgpuFactory::new_with_mode(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            RenderMode::ClockwiseAtomic,
+        )
+        .unwrap();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MIN);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
+        raw_path.close();
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            style: RenderPaintStyle::Stroke,
+            thickness: ATLAS_ORACLE_STROKE_THICKNESS,
+            join: ATLAS_ORACLE_STROKE_JOIN,
+            cap: ATLAS_ORACLE_STROKE_CAP,
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(&path, &paint);
+        let pixels = frame.finish().unwrap();
+        atlas_blit_oracle::AtlasBlit::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE, pixels)
+            .unwrap()
+    }
+
     #[test]
     fn feather_atlas_stroke_pass_writes_r16_coverage() {
         let mask = fixed_feather_atlas_mask(ATLAS_ORACLE_STROKE_JOIN);
@@ -2558,6 +2611,41 @@ mod tests {
                 )
             },
         );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_blit_oracle_matches_fixed_rust_output_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_BLIT")
+            .expect("RIVE_CPP_ATLAS_BLIT is required for the ignored C++ atlas-blit oracle test");
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_BLIT is set but empty; set it to a C++ atlas-blit oracle file"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_BLIT must be absolute because Cargo runs unit tests from the package directory"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = fixed_feather_atlas_blit();
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
     }
 
     #[test]

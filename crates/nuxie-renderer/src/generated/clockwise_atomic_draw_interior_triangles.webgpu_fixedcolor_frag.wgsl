@@ -38,17 +38,17 @@ struct Yd_1 {
 @id(1) override Ng: bool = true;
 @id(0) override Mg: bool = true;
 
-@group(0) @binding(9) 
+@group(0) @binding(9)
 var DD: texture_2d<f32>;
-@group(3) @binding(9) 
+@group(3) @binding(9)
 var Bb: sampler;
-@group(1) @binding(12) 
+@group(1) @binding(12)
 var AC: texture_2d<f32>;
-@group(1) @binding(14) 
+@group(1) @binding(14)
 var R5_: sampler;
-@group(0) @binding(7) 
+@group(0) @binding(7)
 var<storage, read_write> S0_: Yd_1;
-@group(0) @binding(0) 
+@group(0) @binding(0)
 var<uniform> k: NB;
 var<private> gl_FragCoord_1: vec4<f32>;
 var<private> i1_1: vec4<f32>;
@@ -57,12 +57,12 @@ var<private> j4_1: vec2<f32>;
 var<private> e3_1: vec2<u32>;
 var<private> N0_1: vec4<f32>;
 var<private> S1_1: vec2<f32>;
-@group(2) @binding(1) 
+@group(2) @binding(1)
 var<storage, read_write> d0_: d0qd;
 var<private> l1_: vec4<f32>;
-@group(3) @binding(10) 
+@group(3) @binding(10)
 var T9_: sampler;
-@group(0) @binding(10) 
+@group(0) @binding(10)
 var QC: texture_2d<f32>;
 var<private> z0_1: f32;
 var<private> Z1_1: f32;
@@ -259,7 +259,7 @@ fn main_1() {
     return;
 }
 
-@fragment 
+@fragment
 fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(0) i1_: vec4<f32>, @location(1) @interpolate(flat) j1_: f32, @location(8) j4_: vec2<f32>, @location(7) @interpolate(flat) e3_: vec2<u32>, @location(5) N0_: vec4<f32>, @location(4) @interpolate(flat) S1_: vec2<f32>, @location(3) @interpolate(flat) z0_: f32, @location(6) @interpolate(flat) Z1_: f32) -> @location(0) vec4<f32> {
     gl_FragCoord_1 = gl_FragCoord;
     i1_1 = i1_;

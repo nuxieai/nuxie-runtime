@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=46, diverges=0, gated=1,421, total=1,467.
+- Rust wgpu: exact=48, diverges=0, gated=1,419, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -45,7 +45,9 @@ Run `make renderer-golden`.
   `riv-artboardclipping-frame-0-clockwise-atomic`,
   `riv-circle_clips-frame-{0..4}-clockwise-atomic`,
   `riv-clip_tests-frame-{0..4}-clockwise-atomic`, and
-  `gm-emptystrokefeather-clockwise-atomic`.
+  `gm-emptystrokefeather-clockwise-atomic`, plus
+  `gm-largeclippedpath_clockwise-clockwise-atomic` and
+  `gm-largeclippedpath_clockwise_nested-clockwise-atomic`.
 
 ## Milestones
 
@@ -83,17 +85,17 @@ Run `make renderer-golden`.
    match the 100-contour grid (7,500 triangle vertices) and the exact
    flower+oval clip (2 contours, 108 triangle vertices) record-for-record,
    including every tessellation texel. The dedicated clockwise-atomic
-   path/interior main and borrowed shaders are now generated from upstream,
-   with the global borrowed-to-main barrier schedule and tiled visible-bounds
-   coverage allocations proven on a large compound fill. The remaining
-   large/negative gap is the WebGPU clip plane: generate the dedicated outer
-   and nested clip shaders, translate clip reads to sampled input, and use
-   fixed-function `plus`/`min` clip attachments. Keep this family isolated;
-   its coverage encoding cannot mix with the current atomics shaders. The separate
-   matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
-   pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
-   behavior, robust triangulation, and integration of the translated
-   intersection board.
+   path/interior main, borrowed, outer-clip, and nested-clip shaders are now
+   generated from upstream. The isolated family implements the global
+   borrowed-to-main barrier, tiled visible-bounds allocations, a sampled
+   WebGPU clip plane, and fixed-function `plus`/`min` clip attachments. The
+   large clockwise and nested-clockwise clip GMs are promoted. The next
+   large/negative gaps are winding/even-odd fill semantics and negative
+   interior-triangle clips; parent-tight clip bounds are a later performance
+   refinement, not a correctness gate. The separate matching WebGPU MSAA
+   final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
+   Continue R2 with those fill/clip semantics, remaining `render_context.cpp`
+   behavior, and integration of the translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -120,6 +122,10 @@ Run `make renderer-golden`.
 - 2026-07-11: C++ Metal and C++ WebGPU intentionally use different atlas
   stroke cull states. Final Metal pixels remain a corpus signal, but atlas-mask
   diagnosis compares Rust wgpu against C++ WebGPU at the intermediate R16 mask.
+- 2026-07-12: The two large clockwise clip entries retain max channel delta 2
+  with a bounded 640-pixel Metal-vs-wgpu allowance. Their 50%-coverage masks
+  are pixel-identical; the 592-593 residual pixels are confined to clip
+  boundaries, with no missing or extra binary coverage.
 
 ## Log
 
@@ -647,3 +653,14 @@ Run `make renderer-golden`.
   exact=46/diverges=0/gated=1,421. True clip rendering still requires a
   sampled-input plus fixed-function `plus`/`min` attachment translation;
   storage-buffer PLS writes are not a semantic substitute.
+- 2026-07-12: Completed the clockwise-atomic clip plane. Dedicated upstream
+  outer/nested clip fragments render to an RGBA8 attachment with `plus`/`min`
+  blending, while a checked-in upstream wrapper samples that attachment for
+  clipped path and interior draws. Corrected WebGPU borrowed-face culling,
+  threaded the real maximum path ID, and ported nested inverse-path creation.
+  `largeclippedpath_clockwise_nested` improved from 145,064 differing pixels
+  to 593, and both promoted large-clockwise entries have pixel-identical 50%
+  coverage masks versus native Metal. The renderer ratchet advances to
+  exact=48/diverges=0/gated=1,419; direct C++ preparation oracles, all 122
+  active renderer unit tests, both V2 floors (584 and 35 exact segments), and
+  the full workspace pass.

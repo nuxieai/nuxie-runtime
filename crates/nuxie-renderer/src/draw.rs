@@ -943,6 +943,13 @@ pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D)
     transformed_area > 512.0 * 512.0
 }
 
+pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
+    cubic_contours(path)
+        .iter()
+        .map(|curves| signed_area(&curves.iter().map(|curve| curve[0]).collect::<Vec<_>>()))
+        .sum()
+}
+
 pub(crate) fn build_interior_tessellation(
     path: &RawPath,
     transform: Mat2D,

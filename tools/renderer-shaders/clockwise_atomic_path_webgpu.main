@@ -1,0 +1,41 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_samplerless_texture_functions : require
+
+// WebGPU translation of renderer/src/shaders/spirv/draw_clockwise_atomic_path.main.
+// The upstream shader treats clip PLS as a read-only input plus a blended zero
+// output. wgpu has no input attachments, so bind the stored clip attachment as
+// a sampled texture and omit that no-op store.
+#define OPTIONALLY_FLAT flat
+#ifdef CWA_INTERIOR_TRIANGLES
+#define DRAW_INTERIOR_TRIANGLES
+#else
+#define ENABLE_INSTANCE_INDEX
+#define DRAW_PATH
+#endif
+#define RENDER_MODE_CLOCKWISE_ATOMIC
+#define NEVER_GENERATE_PREMULTIPLIED_PAINT_COLORS
+#include "glsl.minified.glsl"
+
+#undef PLS_DECL4F
+#undef PLS_LOAD4F
+#undef PLS_STORE4F
+#undef r0
+#undef H0
+#undef v0
+#define PLS_DECL4F(IDX, NAME)                                                  \
+    layout(set = PLS_TEXTURE_BINDINGS_SET, binding = IDX) uniform texture2D NAME
+#define PLS_LOAD4F(PLANE) texelFetch(PLANE, ivec2(floor(_fragCoord.xy)), 0)
+#define PLS_STORE4F(PLANE, VALUE)
+#define r0(IDX, NAME) layout(set = E3, binding = IDX) uniform texture2D NAME
+#define H0(PLANE) texelFetch(PLANE, ivec2(floor(S.xy)), 0)
+#define v0(PLANE, VALUE)
+
+#include "constants.minified.glsl"
+#include "specialization.minified.glsl"
+#include "flush_uniforms.minified.glsl"
+#include "common.minified.glsl"
+#include "draw_path_common.minified.glsl"
+#include "advanced_blend.minified.glsl"
+#include "draw_path.minified.vert"
+#include "draw_clockwise_atomic_path.minified.frag"

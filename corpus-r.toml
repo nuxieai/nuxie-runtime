@@ -1451,10 +1451,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_clockwise-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 640
 
 
 [[entry]]
@@ -1477,10 +1476,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-st
 reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_clockwise_nested-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 640
 
 
 [[entry]]

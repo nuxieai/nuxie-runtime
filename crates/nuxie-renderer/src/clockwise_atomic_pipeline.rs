@@ -13,9 +13,16 @@ pub(crate) struct ClockwiseAtomicPipeline {
     borrowed_interior: wgpu::RenderPipeline,
     path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
+    clipped_path: wgpu::RenderPipeline,
+    clipped_interior: wgpu::RenderPipeline,
+    outer_clip_path: wgpu::RenderPipeline,
+    outer_clip_interior: wgpu::RenderPipeline,
+    nested_clip_path: wgpu::RenderPipeline,
+    nested_clip_interior: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     clip_layout: wgpu::BindGroupLayout,
+    sampled_clip_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
 }
 
@@ -27,6 +34,15 @@ pub(crate) struct ClockwiseAtomicDraw<'a> {
     pub patch_index_range: std::ops::Range<u32>,
     pub borrowed_triangles: &'a [TriangleVertex],
     pub main_triangles: &'a [TriangleVertex],
+    pub kind: ClockwiseAtomicDrawKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ClockwiseAtomicDrawKind {
+    Content,
+    ClippedContent,
+    OutermostClip,
+    NestedClip,
 }
 
 impl ClockwiseAtomicPipeline {
@@ -65,6 +81,32 @@ impl ClockwiseAtomicPipeline {
                 "generated/clockwise_atomic_draw_interior_triangles_borrowed.webgpu_frag.wgsl"
             ),
         );
+        let sampled_clip_path_fragment = shader(
+            device,
+            "nuxie-cwa-sampled-clip-path-fragment",
+            include_str!(
+                "generated/clockwise_atomic_draw_path_sampled_clip.webgpu_fixedcolor_frag.wgsl"
+            ),
+        );
+        let sampled_clip_interior_fragment = shader(
+            device,
+            "nuxie-cwa-sampled-clip-interior-fragment",
+            include_str!(
+                "generated/clockwise_atomic_draw_interior_triangles_sampled_clip.webgpu_fixedcolor_frag.wgsl"
+            ),
+        );
+        let clip_path_fragment = shader(
+            device,
+            "nuxie-cwa-clip-path-fragment",
+            include_str!("generated/clockwise_atomic_draw_clip.webgpu_fixedcolor_frag.wgsl"),
+        );
+        let clip_interior_fragment = shader(
+            device,
+            "nuxie-cwa-clip-interior-fragment",
+            include_str!(
+                "generated/clockwise_atomic_draw_clip_interior_triangles.webgpu_fixedcolor_frag.wgsl"
+            ),
+        );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-cwa-flush-layout"),
             entries: &[
@@ -91,6 +133,14 @@ impl ClockwiseAtomicPipeline {
             label: Some("nuxie-cwa-clip-layout"),
             entries: &[storage_entry(1, false)],
         });
+        let sampled_clip_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("nuxie-cwa-sampled-clip-layout"),
+                entries: &[texture_entry(
+                    1,
+                    wgpu::TextureSampleType::Float { filterable: false },
+                )],
+            });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-cwa-sampler-layout"),
             entries: &[sampler_entry(9), sampler_entry(10), sampler_entry(11)],
@@ -105,6 +155,17 @@ impl ClockwiseAtomicPipeline {
             ],
             immediate_size: 0,
         });
+        let sampled_clip_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("nuxie-cwa-sampled-clip-pipeline-layout"),
+                bind_group_layouts: &[
+                    Some(&flush_layout),
+                    Some(&image_layout),
+                    Some(&sampled_clip_layout),
+                    Some(&sampler_layout),
+                ],
+                immediate_size: 0,
+            });
         let path_options = options(&[("0", 0.0), ("1", 0.0), ("3", 0.0), ("7", 0.0)]);
         let interior_options = options(&[("0", 0.0), ("1", 0.0), ("7", 0.0)]);
         let path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -138,7 +199,7 @@ impl ClockwiseAtomicPipeline {
                 buffers: &[Some(PatchVertex::layout())],
             },
             primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: Some(wgpu::Face::Front),
                 ..Default::default()
             },
             depth_stencil: None,
@@ -194,14 +255,129 @@ impl ClockwiseAtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let clipped_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-cwa-clipped-path-pipeline"),
+            layout: Some(&sampled_clip_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &path_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(PatchVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &sampled_clip_path_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 1.0), ("1", 0.0), ("3", 0.0), ("7", 0.0)]),
+                targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let clipped_interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-cwa-clipped-interior-pipeline"),
+            layout: Some(&sampled_clip_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &interior_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(TriangleVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &sampled_clip_interior_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 1.0), ("1", 0.0), ("7", 0.0)]),
+                targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let make_clip_path = |label, nested| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &path_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(PatchVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &clip_path_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[("9", if nested { 1.0 } else { 0.0 })]),
+                    targets: &[
+                        Some(color_target(wgpu::ColorWrites::empty())),
+                        Some(if nested {
+                            clip_min_target()
+                        } else {
+                            clip_plus_target()
+                        }),
+                    ],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let make_clip_interior = |label, nested| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &interior_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(TriangleVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &clip_interior_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[("9", if nested { 1.0 } else { 0.0 })]),
+                    targets: &[
+                        Some(color_target(wgpu::ColorWrites::empty())),
+                        Some(if nested {
+                            clip_min_target()
+                        } else {
+                            clip_plus_target()
+                        }),
+                    ],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let outer_clip_path = make_clip_path("nuxie-cwa-outer-clip-path-pipeline", false);
+        let nested_clip_path = make_clip_path("nuxie-cwa-nested-clip-path-pipeline", true);
+        let outer_clip_interior =
+            make_clip_interior("nuxie-cwa-outer-clip-interior-pipeline", false);
+        let nested_clip_interior =
+            make_clip_interior("nuxie-cwa-nested-clip-interior-pipeline", true);
         Self {
             borrowed_path,
             borrowed_interior,
             path,
             interior,
+            clipped_path,
+            clipped_interior,
+            outer_clip_path,
+            outer_clip_interior,
+            nested_clip_path,
+            nested_clip_interior,
             flush_layout,
             image_layout,
             clip_layout,
+            sampled_clip_layout,
             sampler_layout,
         }
     }
@@ -261,15 +437,30 @@ impl ClockwiseAtomicPipeline {
             &vec![0u32; coverage_word_count.max(1)],
             wgpu::BufferUsages::STORAGE,
         );
-        // The fill-only proof does not read clips. The generated fixed-color
-        // shader still preserves the upstream clip-plane store, so bind a
-        // scratch plane until the render-attachment clip translation lands.
+        // Unclipped fixed-color shaders retain the upstream no-op clip-plane
+        // store. Keep that family on a scratch plane; clipped shaders bind the
+        // render-attachment texture below through a separate layout.
         let scratch_clip = upload(
             device,
             "nuxie-cwa-scratch-clip",
             &vec![0u32; (uniforms.render_target_width * uniforms.render_target_height) as usize],
             wgpu::BufferUsages::STORAGE,
         );
+        let clip_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-cwa-clip-texture"),
+            size: wgpu::Extent3d {
+                width: uniforms.render_target_width,
+                height: uniforms.render_target_height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let clip_view = clip_texture.create_view(&Default::default());
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-cwa-dummy-texture"),
             size: wgpu::Extent3d {
@@ -320,6 +511,11 @@ impl ClockwiseAtomicPipeline {
             layout: &self.clip_layout,
             entries: &[binding(1, scratch_clip.as_entire_binding())],
         });
+        let sampled_clip = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-cwa-sampled-clip-group"),
+            layout: &self.sampled_clip_layout,
+            entries: &[binding(1, wgpu::BindingResource::TextureView(&clip_view))],
+        });
         let samplers = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-cwa-sampler-group"),
             layout: &self.sampler_layout,
@@ -339,6 +535,9 @@ impl ClockwiseAtomicPipeline {
             .collect::<Vec<_>>();
 
         for (index, draw) in draws.iter().enumerate() {
+            if draw.kind == ClockwiseAtomicDrawKind::OutermostClip {
+                continue;
+            }
             let attachments = [color_attachment(target)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-cwa-borrowed-path-pass",
@@ -368,31 +567,113 @@ impl ClockwiseAtomicPipeline {
         }
 
         for (index, draw) in draws.iter().enumerate() {
-            let attachments = [color_attachment(target)];
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                "nuxie-cwa-main-path-pass",
-                &attachments,
-            ));
-            pass.set_pipeline(&self.path);
-            set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
-            pass.set_vertex_buffer(0, patch_vertices.slice(..));
-            pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-            pass.draw_indexed(
-                draw.patch_index_range.clone(),
-                0,
-                draw.main_base_instance..draw.main_base_instance + draw.instance_count,
-            );
-            drop(pass);
-            if let Some(buffer) = &main_triangle_buffers[index] {
-                let attachments = [color_attachment(target)];
-                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                    "nuxie-cwa-main-interior-pass",
-                    &attachments,
-                ));
-                pass.set_pipeline(&self.interior);
-                set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..draw.main_triangles.len() as u32, 0..1);
+            match draw.kind {
+                ClockwiseAtomicDrawKind::Content | ClockwiseAtomicDrawKind::ClippedContent => {
+                    let attachments = [color_attachment(target)];
+                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        "nuxie-cwa-main-path-pass",
+                        &attachments,
+                    ));
+                    pass.set_pipeline(if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
+                        &self.clipped_path
+                    } else {
+                        &self.path
+                    });
+                    if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
+                        set_groups(
+                            &mut pass,
+                            &flush_groups[index],
+                            &image,
+                            &sampled_clip,
+                            &samplers,
+                        );
+                    } else {
+                        set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
+                    }
+                    pass.set_vertex_buffer(0, patch_vertices.slice(..));
+                    pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
+                    pass.draw_indexed(
+                        draw.patch_index_range.clone(),
+                        0,
+                        draw.main_base_instance..draw.main_base_instance + draw.instance_count,
+                    );
+                    drop(pass);
+                    if let Some(buffer) = &main_triangle_buffers[index] {
+                        let attachments = [color_attachment(target)];
+                        let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                            "nuxie-cwa-main-interior-pass",
+                            &attachments,
+                        ));
+                        pass.set_pipeline(
+                            if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
+                                &self.clipped_interior
+                            } else {
+                                &self.interior
+                            },
+                        );
+                        if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
+                            set_groups(
+                                &mut pass,
+                                &flush_groups[index],
+                                &image,
+                                &sampled_clip,
+                                &samplers,
+                            );
+                        } else {
+                            set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
+                        }
+                        pass.set_vertex_buffer(0, buffer.slice(..));
+                        pass.draw(0..draw.main_triangles.len() as u32, 0..1);
+                    }
+                }
+                ClockwiseAtomicDrawKind::OutermostClip | ClockwiseAtomicDrawKind::NestedClip => {
+                    let nested = draw.kind == ClockwiseAtomicDrawKind::NestedClip;
+                    let clip_load = if nested {
+                        wgpu::LoadOp::Load
+                    } else {
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                    };
+                    let attachments = [
+                        color_attachment(target),
+                        color_attachment_with_load(&clip_view, clip_load),
+                    ];
+                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        "nuxie-cwa-clip-path-pass",
+                        &attachments,
+                    ));
+                    pass.set_pipeline(if nested {
+                        &self.nested_clip_path
+                    } else {
+                        &self.outer_clip_path
+                    });
+                    set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
+                    pass.set_vertex_buffer(0, patch_vertices.slice(..));
+                    pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
+                    pass.draw_indexed(
+                        draw.patch_index_range.clone(),
+                        0,
+                        draw.main_base_instance..draw.main_base_instance + draw.instance_count,
+                    );
+                    drop(pass);
+                    if let Some(buffer) = &main_triangle_buffers[index] {
+                        let attachments = [
+                            color_attachment(target),
+                            color_attachment_with_load(&clip_view, wgpu::LoadOp::Load),
+                        ];
+                        let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                            "nuxie-cwa-clip-interior-pass",
+                            &attachments,
+                        ));
+                        pass.set_pipeline(if nested {
+                            &self.nested_clip_interior
+                        } else {
+                            &self.outer_clip_interior
+                        });
+                        set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
+                        pass.set_vertex_buffer(0, buffer.slice(..));
+                        pass.draw(0..draw.main_triangles.len() as u32, 0..1);
+                    }
+                }
             }
         }
     }
@@ -516,6 +797,38 @@ fn color_target(write_mask: wgpu::ColorWrites) -> wgpu::ColorTargetState {
     }
 }
 
+fn clip_plus_target() -> wgpu::ColorTargetState {
+    let add = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Add,
+    };
+    wgpu::ColorTargetState {
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        blend: Some(wgpu::BlendState {
+            color: add,
+            alpha: add,
+        }),
+        write_mask: wgpu::ColorWrites::ALL,
+    }
+}
+
+fn clip_min_target() -> wgpu::ColorTargetState {
+    let min = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Min,
+    };
+    wgpu::ColorTargetState {
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        blend: Some(wgpu::BlendState {
+            color: min,
+            alpha: min,
+        }),
+        write_mask: wgpu::ColorWrites::ALL,
+    }
+}
+
 fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
     wgpu::SamplerDescriptor {
         label: Some("nuxie-cwa-linear-sampler"),
@@ -526,12 +839,19 @@ fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
 }
 
 fn color_attachment(view: &wgpu::TextureView) -> Option<wgpu::RenderPassColorAttachment<'_>> {
+    color_attachment_with_load(view, wgpu::LoadOp::Load)
+}
+
+fn color_attachment_with_load(
+    view: &wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
+) -> Option<wgpu::RenderPassColorAttachment<'_>> {
     Some(wgpu::RenderPassColorAttachment {
         view,
         depth_slice: None,
         resolve_target: None,
         ops: wgpu::Operations {
-            load: wgpu::LoadOp::Load,
+            load,
             store: wgpu::StoreOp::Store,
         },
     })

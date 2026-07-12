@@ -853,24 +853,41 @@ impl WgpuFrame {
                 }
                 let padded_width = align_to(self.width, 32);
                 let padded_height = align_to(self.height, 32);
-                let use_clockwise_atomic_batch = draws.iter().all(|draw| {
-                    matches!(draw.role, DrawRole::Content { clip_id: 0 })
-                        && draw.paint.style == RenderPaintStyle::Fill
-                        && draw.paint.feather == 0.0
-                        && draw.state.clip_rect.is_none()
-                        && draw
-                            .path
-                            .raw_path
-                            .verbs()
-                            .iter()
-                            .filter(|verb| **verb == PathVerb::Move)
-                            .count()
-                            > 1
+                let contour_count = |draw: &SolidDraw| {
+                    draw.path
+                        .raw_path
+                        .verbs()
+                        .iter()
+                        .filter(|verb| **verb == PathVerb::Move)
+                        .count()
+                };
+                let has_global_clip = draws.iter().any(|draw| {
+                    matches!(draw.role, DrawRole::ClipUpdate { .. })
+                        && contour_count(draw) > 1
                         && draw::should_use_interior_tessellation(
                             &draw.path.raw_path,
                             draw.state.transform,
                         )
                 });
+                let homogeneous_global_fill = draws.iter().all(|draw| {
+                    matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                        && draw.paint.style == RenderPaintStyle::Fill
+                        && draw.paint.feather == 0.0
+                        && draw.state.clip_rect.is_none()
+                        && contour_count(draw) > 1
+                        && draw::should_use_interior_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                        )
+                });
+                let clockwise_atomic_clip_run = has_global_clip
+                    && draws.iter().all(|draw| {
+                        draw.paint.style == RenderPaintStyle::Fill
+                            && draw.paint.feather == 0.0
+                            && draw.state.clip_rect.is_none()
+                    });
+                let use_clockwise_atomic_batch =
+                    homogeneous_global_fill || clockwise_atomic_clip_run;
                 let mut clockwise_atomic_coverage_words = 0usize;
                 let mut prepared = Vec::with_capacity(draws.len());
                 let mut paths = vec![gpu::PathData::zeroed()];
@@ -883,9 +900,33 @@ impl WgpuFrame {
                 let mut contours = Vec::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
-                    let clockwise_override = match draw.role {
-                        DrawRole::Content { clip_id } => clip_id != 0,
-                        DrawRole::ClipUpdate { parent_id, .. } => parent_id != 0,
+                    let clockwise_override = use_clockwise_atomic_batch
+                        || match draw.role {
+                            DrawRole::Content { clip_id } => clip_id != 0,
+                            DrawRole::ClipUpdate { parent_id, .. } => parent_id != 0,
+                        };
+                    let inverse_clip_path = match draw.role {
+                        DrawRole::ClipUpdate { parent_id, .. }
+                            if use_clockwise_atomic_batch && parent_id != 0 =>
+                        {
+                            Some(
+                                invert_clockwise_path(
+                                    &draw.path.raw_path,
+                                    draw.path.fill_rule,
+                                    draw.state.transform,
+                                    self.width,
+                                    self.height,
+                                )
+                                .expect("atomic eligibility already validated clip transform"),
+                            )
+                        }
+                        _ => None,
+                    };
+                    let raw_path = inverse_clip_path.as_ref().unwrap_or(&draw.path.raw_path);
+                    let fill_rule = if inverse_clip_path.is_some() {
+                        FillRule::Clockwise
+                    } else {
+                        draw.path.fill_rule
                     };
                     let (
                         mut spans,
@@ -905,14 +946,14 @@ impl WgpuFrame {
                         );
                         let tessellation = if requires_atlas {
                             draw::build_feather_atlas_tessellation(
-                                &draw.path.raw_path,
+                                raw_path,
                                 draw.state.transform,
                                 draw.paint.feather,
                                 stroke,
                             )
                         } else {
                             draw::build_feather_tessellation(
-                                &draw.path.raw_path,
+                                raw_path,
                                 draw.state.transform,
                                 draw.paint.feather,
                                 stroke,
@@ -938,7 +979,7 @@ impl WgpuFrame {
                         )
                     } else if draw.paint.style == RenderPaintStyle::Stroke {
                         let tessellation = draw::build_stroke_tessellation(
-                            &draw.path.raw_path,
+                            raw_path,
                             draw.state.transform,
                             draw.paint.thickness,
                             draw.paint.join,
@@ -954,19 +995,18 @@ impl WgpuFrame {
                             0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
                             Vec::new(),
                         )
-                    } else if let Some(tessellation) = draw::should_use_interior_tessellation(
-                        &draw.path.raw_path,
-                        draw.state.transform,
-                    )
-                    .then(|| {
-                        draw::build_interior_tessellation(
-                            &draw.path.raw_path,
-                            draw.state.transform,
-                            draw.path.fill_rule,
-                            clockwise_override,
-                        )
-                    })
-                    .flatten()
+                    } else if let Some(tessellation) =
+                        (draw::should_use_interior_tessellation(raw_path, draw.state.transform)
+                            && (!use_clockwise_atomic_batch || contour_count(draw) > 1))
+                            .then(|| {
+                                draw::build_interior_tessellation(
+                                    raw_path,
+                                    draw.state.transform,
+                                    fill_rule,
+                                    clockwise_override,
+                                )
+                            })
+                            .flatten()
                     {
                         (
                             tessellation.spans,
@@ -984,11 +1024,9 @@ impl WgpuFrame {
                             tessellation.triangles,
                         )
                     } else {
-                        let mut tessellation = draw::build_fill_tessellation(
-                            &draw.path.raw_path,
-                            draw.state.transform,
-                        )
-                        .expect("atomic eligibility already validated tessellation");
+                        let mut tessellation =
+                            draw::build_fill_tessellation(raw_path, draw.state.transform)
+                                .expect("atomic eligibility already validated tessellation");
                         tessellation.make_double_sided();
                         (
                             tessellation.spans,
@@ -1041,9 +1079,11 @@ impl WgpuFrame {
                             translate_y: placement.translate[1],
                         };
                     }
-                    if use_clockwise_atomic_batch {
+                    let is_outermost_clip =
+                        matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. });
+                    if use_clockwise_atomic_batch && !is_outermost_clip {
                         let (range, word_count) = draw::clockwise_atomic_coverage_range(
-                            &draw.path.raw_path,
+                            raw_path,
                             draw.state.transform,
                             self.width,
                             self.height,
@@ -1060,11 +1100,7 @@ impl WgpuFrame {
                         DrawRole::ClipUpdate {
                             replacement_id,
                             parent_id,
-                        } => gpu::PaintData::clip_update(
-                            replacement_id,
-                            parent_id,
-                            draw.path.fill_rule,
-                        ),
+                        } => gpu::PaintData::clip_update(replacement_id, parent_id, fill_rule),
                         DrawRole::Content { clip_id } => {
                             let paint = if draw.paint.style == RenderPaintStyle::Stroke {
                                 gpu::PaintData::solid_stroke(
@@ -1150,6 +1186,7 @@ impl WgpuFrame {
                     .max()
                     .unwrap_or(1);
                 let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
+                uniforms.max_path_id = u32::try_from(paths.len() - 1).expect("path ID overflow");
                 uniforms.render_target_update_bounds =
                     [0, 0, self.width as i32, self.height as i32];
                 uniforms.atlas_texture_inverse_size = [
@@ -1266,21 +1303,38 @@ impl WgpuFrame {
                         .collect::<Vec<_>>();
                     let clockwise_atomic_draws = prepared
                         .iter()
+                        .zip(draws)
                         .zip(&tessellation_views)
                         .zip(&borrowed_triangles)
                         .zip(&main_triangles)
                         .map(
-                            |(((draw, tessellation), borrowed_triangles), main_triangles)| {
-                                assert_eq!(draw.instance_count % 2, 0);
-                                let instance_count = draw.instance_count / 2;
+                            |((((prepared, source), tessellation), borrowed_triangles), main_triangles)| {
+                                let kind = match source.role {
+                                    DrawRole::Content { clip_id: 0 } => {
+                                        clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::Content
+                                    }
+                                    DrawRole::Content { .. } => clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::ClippedContent,
+                                    DrawRole::ClipUpdate { parent_id: 0, .. } => clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::OutermostClip,
+                                    DrawRole::ClipUpdate { .. } => clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::NestedClip,
+                                };
+                                let (main_base_instance, instance_count) = if kind
+                                    == clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::OutermostClip
+                                {
+                                    (prepared.base_instance, prepared.instance_count)
+                                } else {
+                                    assert_eq!(prepared.instance_count % 2, 0);
+                                    let instance_count = prepared.instance_count / 2;
+                                    (prepared.base_instance + instance_count, instance_count)
+                                };
                                 clockwise_atomic_pipeline::ClockwiseAtomicDraw {
                                     tessellation,
-                                    borrowed_base_instance: draw.base_instance,
-                                    main_base_instance: draw.base_instance + instance_count,
+                                    borrowed_base_instance: prepared.base_instance,
+                                    main_base_instance,
                                     instance_count,
-                                    patch_index_range: draw.patch_index_range.clone(),
+                                    patch_index_range: prepared.patch_index_range.clone(),
                                     borrowed_triangles,
                                     main_triangles,
+                                    kind,
                                 }
                             },
                         )
@@ -1920,6 +1974,38 @@ fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint, transform: Mat2D) -> bo
                 || fill_path_is_collinear(&path.raw_path)))
 }
 
+fn invert_clockwise_path(
+    path: &RawPath,
+    fill_rule: FillRule,
+    transform: Mat2D,
+    width: u32,
+    height: u32,
+) -> Option<RawPath> {
+    let inverse = invert(transform)?;
+    let mut bounds = [
+        inverse.transform_point(nuxie_render_api::Vec2D::new(0.0, 0.0)),
+        inverse.transform_point(nuxie_render_api::Vec2D::new(width as f32, 0.0)),
+        inverse.transform_point(nuxie_render_api::Vec2D::new(width as f32, height as f32)),
+        inverse.transform_point(nuxie_render_api::Vec2D::new(0.0, height as f32)),
+    ];
+    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    if determinant < 0.0 {
+        bounds.swap(1, 3);
+    }
+    let mut inverse_path = RawPath::new();
+    inverse_path.move_to(bounds[0].x, bounds[0].y);
+    inverse_path.line_to(bounds[1].x, bounds[1].y);
+    inverse_path.line_to(bounds[2].x, bounds[2].y);
+    inverse_path.line_to(bounds[3].x, bounds[3].y);
+    inverse_path.close();
+    if fill_rule == FillRule::Clockwise || draw::path_coarse_area(path) >= 0.0 {
+        inverse_path.add_path_backwards(path, Mat2D::IDENTITY);
+    } else {
+        inverse_path.add_path(path, Mat2D::IDENTITY);
+    }
+    Some(inverse_path)
+}
+
 fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     if matches!(draw.role, DrawRole::ClipUpdate { .. }) {
         return draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform).is_some();
@@ -2276,6 +2362,67 @@ mod tests {
 
         assert_eq!(pixel(10, 10), [0, 0, 0, 255]);
         assert_eq!(pixel(100, 100), [255, 0, 0, 255]);
+        assert_eq!(pixel(320, 320), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn clockwise_atomic_outer_clip_writes_attachment_coverage() {
+        let factory = WgpuFactory::new_with_mode(640, 640, RenderMode::ClockwiseAtomic).unwrap();
+        let mut clip = rect_path([40.0, 40.0, 600.0, 600.0], FillRule::NonZero);
+        clip.raw_path.add_path(
+            &rect_path([200.0, 200.0, 440.0, 440.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let prepared_clip = draw::build_interior_tessellation(
+            &clip.raw_path,
+            Mat2D::IDENTITY,
+            clip.fill_rule,
+            true,
+        )
+        .unwrap();
+        assert!(prepared_clip
+            .triangles
+            .iter()
+            .any(|vertex| vertex.weight_path_id >> 16 > 0));
+        let fill = rect_path([0.0, 0.0, 640.0, 640.0], FillRule::Clockwise);
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &red);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 640 + x) * 4..][..4];
+
+        assert_eq!(pixel(20, 20), [0, 0, 0, 255]);
+        assert_eq!(pixel(100, 100), [255, 0, 0, 255]);
+        assert_eq!(pixel(320, 320), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn clockwise_atomic_nested_clip_erases_the_inverse_path() {
+        let factory = WgpuFactory::new_with_mode(640, 640, RenderMode::ClockwiseAtomic).unwrap();
+        let mut outer = rect_path([40.0, 40.0, 600.0, 600.0], FillRule::NonZero);
+        outer.raw_path.add_path(
+            &rect_path([80.0, 80.0, 560.0, 560.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let inner = rect_path([200.0, 200.0, 440.0, 440.0], FillRule::NonZero);
+        let fill = rect_path([0.0, 0.0, 640.0, 640.0], FillRule::Clockwise);
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&outer);
+        frame.clip_path(&inner);
+        frame.draw_path(&fill, &red);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 640 + x) * 4..][..4];
+
+        assert_eq!(pixel(20, 20), [0, 0, 0, 255]);
+        assert_eq!(pixel(100, 100), [0, 0, 0, 255]);
         assert_eq!(pixel(320, 320), [255, 0, 0, 255]);
     }
 

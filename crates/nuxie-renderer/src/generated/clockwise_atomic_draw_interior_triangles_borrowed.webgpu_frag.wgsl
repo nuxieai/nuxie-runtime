@@ -33,21 +33,21 @@ struct Yd_1 {
 var<private> j1_1: f32;
 var<private> j4_1: vec2<f32>;
 var<private> e3_1: vec2<u32>;
-@group(0) @binding(0) 
+@group(0) @binding(0)
 var<uniform> k: NB;
-@group(0) @binding(7) 
+@group(0) @binding(7)
 var<storage, read_write> S0_: Yd_1;
-@group(3) @binding(10) 
+@group(3) @binding(10)
 var T9_: sampler;
-@group(0) @binding(9) 
+@group(0) @binding(9)
 var DD: texture_2d<f32>;
-@group(0) @binding(10) 
+@group(0) @binding(10)
 var QC: texture_2d<f32>;
-@group(1) @binding(12) 
+@group(1) @binding(12)
 var AC: texture_2d<f32>;
-@group(3) @binding(9) 
+@group(3) @binding(9)
 var Bb: sampler;
-@group(1) @binding(14) 
+@group(1) @binding(14)
 var R5_: sampler;
 var<private> i1_1: vec4<f32>;
 var<private> z0_1: f32;
@@ -71,7 +71,7 @@ fn main_1() {
     return;
 }
 
-@fragment 
+@fragment
 fn main(@location(1) @interpolate(flat) j1_: f32, @location(8) j4_: vec2<f32>, @location(7) @interpolate(flat) e3_: vec2<u32>, @location(0) i1_: vec4<f32>, @location(3) @interpolate(flat) z0_: f32, @location(4) @interpolate(flat) S1_: vec2<f32>, @location(5) N0_: vec4<f32>, @location(6) @interpolate(flat) Z1_: f32) {
     j1_1 = j1_;
     j4_1 = j4_;

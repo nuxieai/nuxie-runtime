@@ -61,34 +61,34 @@ struct VertexOutput {
 @id(2) override Og: bool = true;
 @id(1) override Ng: bool = true;
 
-@group(0) @binding(8) 
+@group(0) @binding(8)
 var DC: texture_2d<u32>;
-@group(0) @binding(6) 
+@group(0) @binding(6)
 var<storage> XC: Sf;
-@group(0) @binding(3) 
+@group(0) @binding(3)
 var<storage> MB: Rf;
-@group(0) @binding(0) 
+@group(0) @binding(0)
 var<uniform> k: NB;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> SB_1: vec4<f32>;
 var<private> TB_1: vec4<f32>;
 var<private> I: vec4<f32>;
-@group(0) @binding(4) 
+@group(0) @binding(4)
 var<storage> TC: Be;
 var<private> z0_: f32;
 var<private> S1_: vec2<f32>;
 var<private> Z1_: f32;
-@group(0) @binding(5) 
+@group(0) @binding(5)
 var<storage> PB: Ce;
 var<private> N0_: vec4<f32>;
 var<private> i1_: vec4<f32>;
 var<private> e3_: vec2<u32>;
 var<private> j4_: vec2<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
-@group(0) @binding(10) 
+@group(0) @binding(10)
 var QC: texture_2d<f32>;
-@group(3) @binding(10) 
+@group(3) @binding(10)
 var T9_: sampler;
 
 fn main_1() {
@@ -655,7 +655,7 @@ fn main_1() {
     return;
 }
 
-@vertex 
+@vertex
 fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_InstanceIndex: u32, @location(0) SB: vec4<f32>, @location(1) TB: vec4<f32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     gl_InstanceIndex_1 = i32(gl_InstanceIndex);

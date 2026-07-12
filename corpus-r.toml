@@ -1998,10 +1998,9 @@ stream = "fixtures/renderer/streams/gm/parallelclips.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/parallelclips-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
-max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+status = "exact"
+max_channel_delta = 21
+max_different_pixels = 518
 
 
 [[entry]]

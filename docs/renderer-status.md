@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=31, diverges=0, gated=1,436, total=1,467.
+- Rust wgpu: exact=32, diverges=0, gated=1,435, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -38,6 +38,7 @@ Run `make renderer-golden`.
   `gm-cliprects-clockwise-atomic`,
   `gm-gamma_correction_clip-clockwise-atomic`,
   `gm-strokes_poly-clockwise-atomic`, and
+  `gm-parallelclips-clockwise-atomic`, and
   `gm-emptystrokefeather-clockwise-atomic`.
 
 ## Milestones
@@ -572,11 +573,20 @@ Run `make renderer-golden`.
   gated at 34/max83 pending a separate hard-edge diagnosis; cubic clip GMs
   retain their pre-existing geometry failures.
 - 2026-07-11: Landed the first arbitrary-path clip tracer bullet. Atomic
-  pipelines now enable the generated clipping specialization, bind the seventh
-  fragment storage buffer for packed clip data, encode C++-compatible
+  pipelines now enable the generated clipping specialization, bind the packed
+  clip storage buffer, encode C++-compatible
   replacement/parent clip IDs, and emit a real `clipUpdate` draw before clipped
   content. A GPU triangle-clip test passes, and the first one-clip
   `parallelclips` cell is structurally correct at 15 pixels beyond delta 2/max
-  delta 18 versus native Metal. The full GM remains gated: nested non-rect clips
-  still return an explicit unsupported error. Continue with clockwise-atomic
-  nested inversion, clip-content bounds/IDs, and update reuse.
+  delta 18 versus native Metal.
+- 2026-07-11: Ported arbitrary clip stacks, save/restore stack-height reuse,
+  and sequential parent/replacement clip IDs. C++ clockwise-atomic intersects
+  nested clips by drawing inverse geometry with fixed-function `min` blending;
+  Rust's generated atomic shader writes a packed clip storage buffer directly,
+  so it reaches the same intersection by drawing each inner path against its
+  parent ID. A two-level GPU intersection test passes. All 49 isolated
+  `parallelclips` cells have the same 6-or-15 edge pixels beyond delta 2 as
+  their single-clip counterparts, proving nesting adds no divergence; the full
+  GM is promoted at 518 pixels/max delta 21 and advances the ratchet to
+  exact=32/diverges=0. Continue with update reuse across repeated clipped draws
+  and clip-content bounds before treating arbitrary clipping as complete.

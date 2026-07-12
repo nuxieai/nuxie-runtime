@@ -97,11 +97,7 @@ impl AtomicPipeline {
         });
         let atomic_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-buffer-layout"),
-            entries: &[
-                storage_entry(1, false),
-                storage_entry(2, false),
-                storage_entry(3, false),
-            ],
+            entries: &[storage_entry(1, false), storage_entry(3, false)],
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-sampler-layout"),
@@ -407,12 +403,6 @@ impl AtomicPipeline {
             contours,
             wgpu::BufferUsages::STORAGE,
         );
-        let colors = upload(
-            device,
-            "nuxie-atomic-colors",
-            &vec![0u32; pixel_count],
-            wgpu::BufferUsages::STORAGE,
-        );
         let clips = upload(
             device,
             "nuxie-atomic-clips",
@@ -494,8 +484,7 @@ impl AtomicPipeline {
             label: Some("nuxie-atomic-buffer-group"),
             layout: &self.atomic_layout,
             entries: &[
-                binding(1, colors.as_entire_binding()),
-                binding(2, clips.as_entire_binding()),
+                binding(1, clips.as_entire_binding()),
                 binding(3, coverage.as_entire_binding()),
             ],
         });

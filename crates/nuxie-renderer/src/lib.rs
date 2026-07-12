@@ -108,7 +108,7 @@ impl WgpuFactory {
                 label: Some("nuxie-renderer-device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits {
-                    max_storage_buffers_per_shader_stage: 7,
+                    max_storage_buffers_per_shader_stage: 6,
                     ..wgpu::Limits::downlevel_defaults()
                 },
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -345,7 +345,7 @@ impl Factory for WgpuFactory {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct WgpuPath {
     raw_path: RawPath,
     fill_rule: FillRule,
@@ -582,7 +582,7 @@ struct DrawState {
     opacity: f32,
     clip_rect: Option<ClipRectState>,
     clip_is_empty: bool,
-    clip_index: Option<usize>,
+    clip_stack_height: usize,
 }
 
 impl Default for DrawState {
@@ -592,7 +592,7 @@ impl Default for DrawState {
             opacity: 1.0,
             clip_rect: None,
             clip_is_empty: false,
-            clip_index: None,
+            clip_stack_height: 0,
         }
     }
 }
@@ -647,34 +647,46 @@ impl Renderer for WgpuFrame {
         if path_draw_is_noop(path, paint, self.state.transform) {
             return;
         }
-        let clip_id = u16::from(self.state.clip_index.is_some());
+        let Ok(clip_id) = u16::try_from(self.state.clip_stack_height) else {
+            self.unsupported
+                .get_or_insert("more than 65535 nested clips");
+            return;
+        };
         let content = SolidDraw {
             path: path.clone(),
             paint: paint.clone(),
             state: self.state,
             role: DrawRole::Content { clip_id },
         };
-        if let Some(index) = self.state.clip_index {
+        if self.state.clip_stack_height != 0 {
             if !atomic_draw_is_eligible(&content) {
                 self.unsupported
                     .get_or_insert("non-rectangular clips on fallback draws");
                 return;
             }
-            let clip = &self.clips[index];
-            self.draws.push(SolidDraw {
-                path: clip.path.clone(),
-                paint: WgpuPaint::default(),
-                state: DrawState {
-                    transform: clip.matrix,
-                    clip_rect: None,
-                    clip_index: None,
-                    ..self.state
-                },
-                role: DrawRole::ClipUpdate {
-                    replacement_id: 1,
-                    parent_id: 0,
-                },
-            });
+            let mut updates = Vec::with_capacity(self.state.clip_stack_height);
+            for (index, clip) in self.clips[..self.state.clip_stack_height]
+                .iter()
+                .enumerate()
+            {
+                let parent_id = index as u16;
+                let replacement_id = parent_id + 1;
+                updates.push(SolidDraw {
+                    path: clip.path.clone(),
+                    paint: WgpuPaint::default(),
+                    state: DrawState {
+                        transform: clip.matrix,
+                        clip_rect: None,
+                        clip_stack_height: 0,
+                        ..self.state
+                    },
+                    role: DrawRole::ClipUpdate {
+                        replacement_id,
+                        parent_id,
+                    },
+                });
+            }
+            self.draws.extend(updates);
         }
         self.draws.push(content);
     }
@@ -689,16 +701,19 @@ impl Renderer for WgpuFrame {
             return;
         }
         let Some(rect) = path_aabb(&path.raw_path) else {
-            if self.state.clip_index.is_some() {
-                self.unsupported
-                    .get_or_insert("nested non-rectangular clip paths");
-                return;
+            let height = self.state.clip_stack_height;
+            if self
+                .clips
+                .get(height)
+                .is_none_or(|clip| clip.matrix != self.state.transform || clip.path != *path)
+            {
+                self.clips.truncate(height);
+                self.clips.push(ClipElement {
+                    path: path.clone(),
+                    matrix: self.state.transform,
+                });
             }
-            self.clips.push(ClipElement {
-                path: path.clone(),
-                matrix: self.state.transform,
-            });
-            self.state.clip_index = Some(self.clips.len() - 1);
+            self.state.clip_stack_height = height + 1;
             return;
         };
         if !apply_clip_rect(&mut self.state, rect) {
@@ -2183,6 +2198,104 @@ mod tests {
                 "non-rectangular clips on fallback draws"
             ))
         ));
+    }
+
+    #[test]
+    fn nested_arbitrary_clips_intersect_in_atomic_clip_buffer() {
+        fn diamond(radius: f32) -> WgpuPath {
+            let mut path = RawPath::new();
+            path.move_to(32.0, 32.0 - radius);
+            path.line_to(32.0 + radius, 32.0);
+            path.line_to(32.0, 32.0 + radius);
+            path.line_to(32.0 - radius, 32.0);
+            path.close();
+            WgpuPath {
+                raw_path: path,
+                fill_rule: FillRule::NonZero,
+            }
+        }
+
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&diamond(28.0));
+        frame.clip_path(&diamond(12.0));
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
+        assert_eq!(pixel(12, 32), [0, 0, 0, 255]);
+        assert_eq!(pixel(2, 32), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn arbitrary_clip_stack_reuses_restored_elements() {
+        fn triangle(offset: f32) -> WgpuPath {
+            let mut path = RawPath::new();
+            path.move_to(offset, offset);
+            path.line_to(60.0 - offset, offset);
+            path.line_to(32.0, 60.0 - offset);
+            path.close();
+            WgpuPath {
+                raw_path: path,
+                fill_rule: FillRule::NonZero,
+            }
+        }
+
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let outer = triangle(4.0);
+        let inner = triangle(16.0);
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&outer);
+        frame.save();
+        frame.clip_path(&inner);
+        assert_eq!(frame.state.clip_stack_height, 2);
+        assert_eq!(frame.clips.len(), 2);
+
+        frame.restore();
+        frame.save();
+        frame.clip_path(&inner);
+        assert_eq!(frame.state.clip_stack_height, 2);
+        assert_eq!(frame.clips.len(), 2);
+    }
+
+    #[test]
+    fn repeated_draws_reapply_the_same_arbitrary_clip_stack() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let mut clip_path = RawPath::new();
+        clip_path.move_to(4.0, 4.0);
+        clip_path.line_to(60.0, 4.0);
+        clip_path.line_to(32.0, 60.0);
+        clip_path.close();
+        let clip = WgpuPath {
+            raw_path: clip_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let full = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let inset = rect_path([24.0, 20.0, 40.0, 44.0], FillRule::Clockwise);
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let green = WgpuPaint {
+            color: 0xff00_ff00,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&full, &red);
+        frame.draw_path(&inset, &green);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(32, 12), [255, 0, 0, 255]);
+        assert_eq!(pixel(32, 32), [0, 255, 0, 255]);
+        assert_eq!(pixel(2, 2), [0, 0, 0, 255]);
     }
 
     #[test]

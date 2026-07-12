@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=99, diverges=0, gated=1,368, total=1,467.
+- Rust wgpu: exact=100, diverges=0, gated=1,367, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -83,7 +83,8 @@ Run `make renderer-golden`.
   `riv-rocket-frame-{0..4}-clockwise-atomic`,
   `riv-scroll_test-frame-0-clockwise-atomic`,
   `riv-scroll_threshold-frame-0-clockwise-atomic`, and
-  `riv-zombie_skins-frame-0-clockwise-atomic`.
+  `riv-zombie_skins-frame-0-clockwise-atomic`, plus
+  `riv-new_text-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -212,10 +213,10 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `new_text` (44 pixels),
-   `ai_assitant` (341), `db_health_tracker` (1,071), `off_road_car` frames
+   diagnostics. The runnable residual queue is finite: `ai_assitant` (341
+   pixels), `db_health_tracker` (1,071), `off_road_car` frames
    (3,904 each), `joel_signed` frames (6,557-6,559), `juice` frames (12,837),
-   and `bad_skin` (22,932). Attribute `new_text` first.
+   and `bad_skin` (22,932). Attribute `ai_assitant` first.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -234,6 +235,13 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: `new_text` keeps max channel delta 2 with a bounded 48-pixel
+  allowance. Draw-prefix replay attributes the first divergence to its compound
+  text path: 44 residual pixels split into 22 components, none larger than four
+  pixels, with foreground-support IoU near 99.5%. Replacing the path's gradient
+  with solid white preserves the same residual class (40 pixels, max delta 47),
+  disproving gradient math and isolating native Metal/wgpu path-edge placement.
+  The ratchet advances to exact=100/diverges=0/gated=1,367.
 - 2026-07-12: Completed the post-gradient `.riv` sweep. The host port now uses
   C++'s exact `math::EPSILON` (`1/4096`) and forward/backward monotonic stop
   clamps; all five gradient GM oracles remain unchanged. Of 38 gated
@@ -1057,3 +1065,7 @@ Run `make renderer-golden`.
   30 runnable C++ references, and promoted 11 under unchanged tolerances. The
   precise gradient epsilon/clamp semantics are pinned; the ratchet advances to
   exact=99/diverges=0/gated=1,368 and `new_text` is the next residual.
+- 2026-07-12: Classified `new_text` through draw-prefix, connected-component,
+  support-mask, and solid-paint controls. Its 44 sparse compound-text edge
+  pixels fit a bounded 48-pixel backend allowance; the ratchet advances to
+  exact=100/diverges=0/gated=1,367 and `ai_assitant` is next.

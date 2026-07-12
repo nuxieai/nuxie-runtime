@@ -400,10 +400,9 @@ stream = "fixtures/renderer/streams/gm/clippedcubic.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/clippedcubic-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -426,10 +425,9 @@ stream = "fixtures/renderer/streams/gm/clippedcubic2.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/clippedcubic2-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
-max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+status = "exact"
+max_channel_delta = 1
+max_different_pixels = 0
 
 
 [[entry]]
@@ -2074,10 +2072,9 @@ stream = "fixtures/renderer/streams/gm/path_stroke_clip_crbug1070835.rive-stream
 reference = "fixtures/renderer/reference/metal/gm/path_stroke_clip_crbug1070835-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -3185,10 +3182,9 @@ reference = "fixtures/renderer/reference/metal/riv/artboardclipping-frame-0-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-artboardclipping-frame-0-msaa"
@@ -3783,10 +3779,9 @@ reference = "fixtures/renderer/reference/metal/riv/circle_clips-frame-0-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-circle_clips-frame-0-msaa"
@@ -3809,10 +3804,9 @@ reference = "fixtures/renderer/reference/metal/riv/circle_clips-frame-1-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-circle_clips-frame-1-msaa"
@@ -3835,10 +3829,9 @@ reference = "fixtures/renderer/reference/metal/riv/circle_clips-frame-2-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-circle_clips-frame-2-msaa"
@@ -3861,10 +3854,9 @@ reference = "fixtures/renderer/reference/metal/riv/circle_clips-frame-3-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-circle_clips-frame-3-msaa"
@@ -3887,10 +3879,9 @@ reference = "fixtures/renderer/reference/metal/riv/circle_clips-frame-4-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-circle_clips-frame-4-msaa"
@@ -4251,10 +4242,9 @@ reference = "fixtures/renderer/reference/metal/riv/clip_tests-frame-0-clockwise-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-clip_tests-frame-0-msaa"
@@ -4277,10 +4267,9 @@ reference = "fixtures/renderer/reference/metal/riv/clip_tests-frame-1-clockwise-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-clip_tests-frame-1-msaa"
@@ -4303,10 +4292,9 @@ reference = "fixtures/renderer/reference/metal/riv/clip_tests-frame-2-clockwise-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-clip_tests-frame-2-msaa"
@@ -4329,10 +4317,9 @@ reference = "fixtures/renderer/reference/metal/riv/clip_tests-frame-3-clockwise-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-clip_tests-frame-3-msaa"
@@ -4355,10 +4342,9 @@ reference = "fixtures/renderer/reference/metal/riv/clip_tests-frame-4-clockwise-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-clip_tests-frame-4-msaa"

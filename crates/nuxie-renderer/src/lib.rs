@@ -923,15 +923,15 @@ impl WgpuFrame {
                             0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
                             Vec::new(),
                         )
-                    } else if draw::should_use_interior_tessellation(
+                    } else if let Some(tessellation) = draw::should_use_interior_tessellation(
                         &draw.path.raw_path,
                         draw.state.transform,
-                    ) {
-                        let tessellation = draw::build_interior_tessellation(
-                            &draw.path.raw_path,
-                            draw.state.transform,
-                        )
-                        .expect("atomic eligibility already validated tessellation");
+                    )
+                    .then(|| {
+                        draw::build_interior_tessellation(&draw.path.raw_path, draw.state.transform)
+                    })
+                    .flatten()
+                    {
                         (
                             tessellation.spans,
                             tessellation.path,
@@ -2296,6 +2296,56 @@ mod tests {
         assert_eq!(pixel(32, 12), [255, 0, 0, 255]);
         assert_eq!(pixel(32, 32), [0, 255, 0, 255]);
         assert_eq!(pixel(2, 2), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn large_clip_falls_back_when_interior_triangulation_fails() {
+        let factory = WgpuFactory::new_with_mode(640, 480, RenderMode::ClockwiseAtomic).unwrap();
+        let mut clip_path = RawPath::new();
+        clip_path.move_to(-469_515.0, -10_354_890.0);
+        clip_path.cubic_to(
+            771_919.625,
+            -10_411_179.0,
+            2_013_360.125,
+            -10_243_774.0,
+            3_195_542.75,
+            -9_860_664.0,
+        );
+        clip_path.line_to(3_195_550.0, -9_860_655.0);
+        clip_path.line_to(3_195_539.0, -9_860_652.0);
+        clip_path.line_to(3_195_539.0, -9_860_652.0);
+        clip_path.line_to(3_195_539.0, -9_860_652.0);
+        clip_path.cubic_to(
+            2_013_358.125,
+            -10_243_761.0,
+            771_919.25,
+            -10_411_166.0,
+            -469_513.844,
+            -10_354_877.0,
+        );
+        clip_path.line_to(-469_515.0, -10_354_890.0);
+        clip_path.close();
+        let clip = WgpuPath {
+            raw_path: clip_path,
+            fill_rule: FillRule::NonZero,
+        };
+        assert!(draw::should_use_interior_tessellation(
+            &clip.raw_path,
+            Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0])
+        ));
+        assert!(draw::build_interior_tessellation(
+            &clip.raw_path,
+            Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0])
+        )
+        .is_none());
+
+        let fill = rect_path([-1.0e9, -1.0e9, 1.0e9, 1.0e9], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xffff_ffff);
+        frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0]));
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &WgpuPaint::default());
+
+        assert!(frame.finish().is_ok());
     }
 
     #[test]

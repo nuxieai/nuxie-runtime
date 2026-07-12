@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=32, diverges=0, gated=1,435, total=1,467.
+- Rust wgpu: exact=46, diverges=0, gated=1,421, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -39,6 +39,12 @@ Run `make renderer-golden`.
   `gm-gamma_correction_clip-clockwise-atomic`,
   `gm-strokes_poly-clockwise-atomic`, and
   `gm-parallelclips-clockwise-atomic`, and
+  `gm-clippedcubic-clockwise-atomic`,
+  `gm-clippedcubic2-clockwise-atomic`,
+  `gm-path_stroke_clip_crbug1070835-clockwise-atomic`,
+  `riv-artboardclipping-frame-0-clockwise-atomic`,
+  `riv-circle_clips-frame-{0..4}-clockwise-atomic`,
+  `riv-clip_tests-frame-{0..4}-clockwise-atomic`, and
   `gm-emptystrokefeather-clockwise-atomic`.
 
 ## Milestones
@@ -66,9 +72,13 @@ Run `make renderer-golden`.
    558-pixel/max-255 cusp-tip lobe is downstream of tessellation and stays
    named rather than tolerated. Double-sided tessellation now wraps paired
    forward/mirrored spans across texture rows, making all 42 isolated
-   `feather_polyshapes` cells exact. C++'s axis-aligned clip-rect fast path is
-   also ported and closes both clipped corner GMs. The active clipping target
-   is now arbitrary path clip stacks and clip IDs. The separate
+   `feather_polyshapes` cells exact. C++'s axis-aligned clip-rect fast path and
+   arbitrary clip stacks/IDs are ported. The clipping sweep now leaves three
+   explicit buckets: large/negative interior triangulation and clip-content
+   bounds (`largeclippedpath_*`, `negative_interior_triangles_as_clip`),
+   clipped fallback draws (`animated_clipping` and gradient large paths), and
+   image support (`clipping_and_draw_order`). Take the pure-path interior
+   triangulation/bounds bucket next. The separate
    matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
    pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
    behavior, robust triangulation, and integration of the translated
@@ -590,3 +600,16 @@ Run `make renderer-golden`.
   GM is promoted at 518 pixels/max delta 21 and advances the ratchet to
   exact=32/diverges=0. Continue with update reuse across repeated clipped draws
   and clip-content bounds before treating arbitrary clipping as complete.
+- 2026-07-11: Swept every gated clockwise-atomic clipping entry after the
+  nested-stack port. Fixed an eligibility/preparation mismatch where a large
+  clip passed midpoint-fan validation but panicked when optional interior
+  triangulation failed; it now falls back to the validated tessellation and
+  has a direct regression test. Promoted 14 entries: `clippedcubic`,
+  `clippedcubic2`, `path_stroke_clip_crbug1070835`, `artboardclipping`, all
+  five `circle_clips` frames, and all five `clip_tests` frames. The
+  `clippedcubic2` reference is structurally identical: 144 pixels differ over
+  235,625 pixels, every difference is at most one channel level, and the
+  manifest allows zero pixels above that delta. The
+  ratchet advances to exact=46/diverges=0/gated=1,421. Large clipped paths,
+  negative interior triangles, clipped gradient fallback, and images remain
+  named algorithm gates rather than tolerance promotions.

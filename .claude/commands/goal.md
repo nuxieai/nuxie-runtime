@@ -1,234 +1,207 @@
 ---
-description: Drive the V2 porting map (docs/porting-map-v2.md) to full completion, one high-leverage session at a time, without regressing into V1-style exhaustive pinning.
+description: Drive Phase R (the renderer port, docs/renderer-port-map.md) to full completion, one high-leverage session at a time, with pixel goldens as the oracle and V2's runtime ratchets as the regression floor.
 ---
 
-# Goal: Complete the Rive Rust Port (V2)
+# Goal: Complete the Nuxie Renderer Port (Phase R)
 
-You are the continuing engineer on this project. Your mission is defined by
-`docs/porting-map-v2.md` and your working state by `docs/v2-status.md`. Read
-both before doing anything else. This command may be invoked hundreds of
-times across sessions; each invocation should move the project measurably
-toward completion and leave a clean handoff.
+You are the continuing engineer on this project. V2 (the runtime port,
+M0–M8) is COMPLETE and is now the regression floor — its history and method
+live in `docs/porting-map-v2.md` / `docs/v2-status.md` / archives, and its
+idiom codex is `docs/PORTING.md`. Your active mission is defined by
+`docs/renderer-port-map.md` and your working state by
+`docs/renderer-status.md`. Read both before doing anything else. This
+command may be invoked hundreds of times across sessions; each invocation
+should move the project measurably toward completion and leave a clean
+handoff.
 
-**Complete means:** every exit criterion of milestones M0–M8 in
-`docs/porting-map-v2.md` is checked off in `docs/v2-status.md`, and
-`make golden-compare` plus `cargo test --workspace` pass. (M8 — closeout
-hardening: scripting integration, C-ABI completion, audits/fuzzing,
-PORTING.md — was added 2026-07-09 by user decision; see #V2-9.) When that is
-true, say so and stop — do not invent new scope. A follow-on renderer port is
-planned in `docs/renderer-port-map.md` (Phase R, tickets #R-0–#R-5), but it
-requires explicit user activation: when the user says to begin Phase R, adopt
-that map's tickets and verification model under these same ground rules,
-tracking R milestones in `docs/v2-status.md` alongside a `corpus-r.toml`
-pixel metric. Never start Phase R on your own initiative.
+**Complete means:** every exit criterion of tickets #R-0 through #R-5 in
+`docs/renderer-port-map.md` (including the 2026-07-11 additions: the mid-R2
+adversarial review of the wgpu plumbing, and the R3 entry criteria — GPU
+semantic-trap audit and renderer fuzz-replay harness) is checked off in
+`docs/renderer-status.md`, with `make renderer-golden` at its target and the
+full V2 floor green. When that is true, say so and stop — do not invent new
+scope. Phase S (upstream sync, `docs/upstream-sync-map.md`) requires
+explicit user activation; never start it on your own initiative.
 
 ## The one metric
 
-The project health number is `exact-segments` from `make golden-compare`: the
-sum of verified (file × sample) segments across `exact` corpus entries. Both
-promoting a file to exact and widening an exact file's sample list move it;
-neither alone is privileged. Every session must either raise this number,
-unblock the current milestone's exit criteria, or fix a regression. There is
-no fourth category of valid work.
+The project health number is the **pixel-exact entry count** from
+`make renderer-golden` over `corpus-r.toml` (currently 1,467 entries:
+GM streams + `.riv` streams × modes). Every session must either raise this
+number, unblock the current R-ticket's exit criteria, or fix a regression.
+There is no fourth category of valid work.
 
-Gated entries carry `milestone = "M3|M4|M5|M6|gated|harness"` in
-`corpus.toml` (preserved by `generate-corpus`; the summary prints a
-parked-by-milestone breakdown). When you gate a file, set its milestone tag;
-when a milestone opens, its work-list is `grep -B6 'milestone = "MN"'
-corpus.toml`, not backlog prose.
+Two honesty invariants protect the metric: the **stub baseline** (a
+do-nothing renderer must fail every active entry — re-verify it whenever the
+comparator changes) and the tolerance rule (per-mode tolerances are declared
+in the manifest and never widened to paper over missing algorithm work —
+"do not tune broad tolerances around missing algorithm work" is a standing
+decision).
+
+**The V2 regression floor:** `make golden-compare`,
+`make scripted-golden-compare`, and `cargo test --workspace` must stay green
+at their completed values. Renderer work that regresses the runtime floor is
+reverted or fixed before anything else.
 
 ## Session loop
 
-1. **Orient.** Read `docs/v2-status.md`. Run `make golden-compare` (if it
-   exists) and note the current `exact-segments` value. Restate in one
-   sentence: current milestone, metric value, and the task you are picking up.
-2. **Pick work.** Take the top item from the "Next" queue in the status file.
-   If the queue is empty, derive the next task from the current milestone's
-   exit criteria in the porting map. Before starting, write down which corpus
-   files or which exit criterion this task advances. **If you cannot name
+1. **Orient.** Read `docs/renderer-status.md`. Run `make renderer-golden`
+   and note the exact count. Restate in one sentence: current R ticket,
+   metric value, and the task you are picking up.
+2. **Pick work.** Take the top item from the "Next" queue in the renderer
+   status file. If the queue is empty, derive the next task from the current
+   ticket's exit criteria in the map. Before starting, name which corpus-r
+   entries or which exit criterion this task advances. **If you cannot name
    one, the task is out of scope — pick different work.**
 3. **Execute** under the porting method rules below.
-4. **Verify.** Run `make golden-compare` and the frozen test suite
-   (`cargo test --workspace`). `exact-segments` is a ratchet: if your change
-   regressed any `exact` file or sample segment, fix or revert before anything
-   else.
-5. **Record.** Update `corpus.toml` statuses (and `milestone` tags for gated
-   entries), update `docs/v2-status.md` (metric, milestone checkboxes, Next
-   queue, one-line log entry), and commit with the milestone tag in the
-   message, e.g. `[M2] Port joystick apply`. When a milestone completes, move
-   its log entries to `docs/v2-log-archive.md` — the status file stays small
-   because every session pays to read it. After committing, `git push` (the
-   branch tracks `origin` at github.com/nuxieai/nuxie-runtime) and also
-   `git push origin <branch>:main` — main mirrors this branch by standing
-   user decision (2026-07-09). If a push fails on network/auth, note it in
-   the log and continue; never let push failures block slices.
+4. **Verify.** Run `make renderer-golden` plus the V2 floor. The exact count
+   is a ratchet: if your change regressed any exact entry, fix or revert
+   before anything else.
+5. **Record.** Update `corpus-r.toml` statuses, update
+   `docs/renderer-status.md` (metric, ticket checkboxes, Next queue,
+   one-line log entry; archive completed-ticket logs to keep the file
+   small), and commit with the ticket tag, e.g. `[R2] Port intersection
+   board`. After committing, `git push` (origin is
+   github.com/nuxieai/nuxie-runtime) and `git push origin <branch>:main` —
+   main mirrors this branch by standing user decision. Push failures get a
+   log note, never block slices.
 6. **Continue or hand off.** If context budget allows, loop to step 2.
-   Otherwise end with the status file current — the next session must be able
-   to resume from it alone.
+   Otherwise end with the status file current — the next session must be
+   able to resume from it alone.
 
-## Porting method (how to execute)
+## Porting method (renderer edition)
 
-- **Port code, not behaviors.** The unit of work is one C++ class/file from
-  `/Users/levi/dev/oss/rive-runtime`, translated coarsely in one sitting, with
-  a comment naming the source file. Translate the whole thing; mark uncertain
-  lines with `// TODO(golden):` rather than researching each one. Goldens
-  judge correctness, not you.
-- **Do not write** contract docs, audit docs, probe-first tests, or synthetic
-  fixtures for behavior no corpus file exercises. The V1 contract suite is
-  frozen: it runs in CI, it never grows.
-- **Unsupported is a diagnostic, not a task.** If a corpus file needs a
-  feature outside the current milestone, emit/verify the
-  `unsupported: <feature>` import diagnostic, set the file's status, add a
-  backlog line to the status file, and move on.
-- Match the existing code style; keep `rive-schema` and `rive-binary`
-  stable — they are done.
+- **Port code, not behaviors.** The unit of work is one C++ file/class from
+  `/Users/levi/dev/oss/rive-runtime/renderer/src`, translated coarsely with
+  a comment naming the source, judged by pixel goldens. `docs/PORTING.md`
+  is the idiom brief. Shaders come from the upstream-generated WGSL
+  (naga-validated), never hand-rewritten.
+- **wgpu replaces ORE.** When algorithm code touches GPU resources,
+  translate ORE/impl concepts directly to wgpu types — never recreate an
+  abstraction layer between them. The wgpu resource/binding plumbing is the
+  project's one INVENTED seam: it gets the adversarial review (mid-R2, per
+  the map) and extra skepticism, because V2 proved bugs live in invented
+  seams, not translated code.
+- **Sub-oracles are the escalation for internal state.** When final pixels
+  can't localize a divergence, build ground truth for the intermediate GPU
+  artifact itself (the atlas-mask oracle is the template): capture the
+  C++ buffer, capture the Rust buffer, compare directly. Prefer one
+  sub-oracle over guessing from downstream pixels.
+- **Unsupported is a named gate, not a task.** Entries needing unported
+  features stay gated with a named diagnostic in `corpus-r.toml`.
+- The runtime crates are DONE — do not modify them for renderer
+  convenience; `nuxie-render-stream` is the frozen isolation boundary.
 
-## Performance work (M7+)
+## Divergence protocol (pixel edition)
 
-Perf claims require release-vs-release builds with serializer/harness cost
-excluded (null-renderer benchmark mode) and >=10 iterations reporting median
-and spread — debug-build or n=2 numbers are not decision-grade and must not
-set priorities. Each optimization slice: flamegraph attribution first, then
-read the C++ source at the same hot site and PORT the original authors'
-optimization when one exists (keyframe cursors, dirt gating, buffer reuse,
-retained caching); invent novel optimizations only where C++ has none.
-Fidelity while optimizing: never widen a verification tolerance for perf,
-never restructure geometry float math (no reassociation/fast-math), and never
-add skip/cache logic that does not mirror an audited C++ dirt gate — the
-ratchet only samples corpus timelines, so invented invalidation can break
-original-author semantics on the timelines it does not sample.
+Heatmap → identify the draw batch → replay a truncated stream up to that
+batch → single-patch/single-entry reproduction → read the two
+implementations side by side → sub-oracle for the intermediate buffer if
+still ambiguous. GPU captures (Metal frame capture / wgpu trace) are the
+stream-bisection equivalent. **Budget: half a day per divergence**, then
+record findings in the status file and take the next entry. Never chase
+bit-exactness across GPUs/backends/modes — per-mode tolerance plus a
+Decision entry is the correct fix for a genuine vendor difference; a
+per-entry hack is not.
 
-## Divergence protocol
+## Performance work (R4)
 
-When a golden diff fails: first divergent render call → binary-search the
-timeline → disable subtrees/objects to isolate the component → read the two
-implementations side by side. **Budget: half a day per divergence.** If
-exceeded, you may write ONE targeted cpp-probe pin for that behavior — then
-either fix it or file it in the backlog with your findings and take the next
-task. Never let one divergence consume a session.
+All V2 perf-fence rules apply unchanged to renderer benchmarks:
+release-vs-release, ≥10 iterations with median+spread, min-based
+aggregation where contention is one-sided, pinned repeat counts,
+flamegraph/GPU-capture attribution before optimization, port C++'s own
+optimization at the same site before inventing one, and never widen a
+tolerance or restructure float math for speed. The M7 runtime perf gate
+remains part of the regression floor. SDK binary size (`make size-report`)
+is a tracked release criterion — the renderer's size impact is measured,
+not guessed.
 
 ## Weeds tripwires — check at every commit
 
-You are the failure mode. V1 spent 94% of its map and hundreds of commits
-pinning data-binding edge cases while nothing rendered. If ANY of these fire,
-stop, write a one-line confession in the status-file log, and return to the
-milestone queue:
+If ANY of these fire, stop, write a one-line confession in the status-file
+log, and return to the ticket queue:
 
-1. **Three commits in a row** on the same C++ behavior family with no corpus
-   file changing status.
-2. You are writing a **document that enumerates C++ cases** or a test for
-   behavior **no corpus file exercises**.
-3. Your planned commit message **cannot name a milestone tag** honestly.
-4. You are **extending the contract suite** or adding a cpp-probe comparison
-   outside the divergence protocol.
-5. `exact-segments` **has not moved in your last ~10 commits** and you are not
-   building #V2-1/#V2-8 infrastructure — the approach is wrong; re-read the
-   current milestone and change tactics, or record a blocker for the user.
-
-Perfectionism about an individual behavior is not rigor here; it is scope
-failure. Shipped-and-diffed beats proven-in-isolation.
+1. **Three commits in a row** on the same divergence with no corpus-r entry
+   changing status — sub-oracle it or record it and move on.
+2. You are **widening a tolerance** or hand-tuning an entry to pass — that
+   is a Sol-level Decision with rationale, never a slice detail.
+3. Your planned commit message **cannot name an R-ticket tag** honestly.
+4. The exact count **has not moved in your last ~10 commits** and you are
+   not building ticket infrastructure (oracles, harnesses, audits) — the
+   approach is wrong; re-read the ticket and change tactics, or record a
+   blocker for the user.
+5. You are porting renderer code **the corpus cannot yet exercise** —
+   land the replayable surface first; speculative breadth is the V1
+   pattern.
 
 ## Threads (parallel work)
 
 The main loop stays a single writer in this worktree — never spawn a second
-thread that edits the same modules, `corpus.toml`, or this status file in
+thread that edits the same modules, `corpus-r.toml`, or the status file in
 place. Parallelism comes in exactly three shapes:
 
-1. **Scout threads (read-only fan-out).** Triage is parallel: spawn threads
-   to probe parked/queued corpus files for their first blocker and report
-   back, so queue ordering is data instead of guesswork. Scouts never write.
-2. **Lane threads (orthogonal work, own worktree).** Work that touches
-   nothing the main loop edits runs as a thread started in a new worktree,
-   merged back into this branch when done. A lane merge must pass the full
-   ratchet (`make golden-compare` + `cargo test --workspace`) before it
-   lands, and must not carry unrelated file changes. Current eligible lanes:
-   the C++ golden-runner crash repair (`milestone = "harness"`, 36 files —
-   touches only `tools/golden-runner`), M7 scaffolding (benchmark harness,
-   importer fuzz target, public API/C ABI drafts), and the feature-gated
-   scripting spike (mlua+Luau).
-3. **Never**: two threads porting adjacent runtime slices on the critical
-   path. The ratchet serializes verification anyway; parallel writers there
-   buy merge conflicts, not wall-clock.
-
-When you start a lane thread, record it in the status file (who owns what,
-which worktree); when it merges, log the merge like any other slice.
+1. **Scout threads (read-only fan-out).** Attribution is parallel: probe
+   gated entries for their first divergence class, classify heatmaps,
+   inventory upstream code — report back; scouts never write.
+2. **Lane threads (orthogonal work, own worktree).** Work touching nothing
+   the main loop edits: oracle/harness tooling, the R3 entry-criteria
+   builds (trap audit, fuzz-replay harness), reference regeneration,
+   CI/size tooling. Lane merges must pass `make renderer-golden` plus the
+   V2 floor, verified by YOU, and carry no out-of-scope changes.
+3. **Never**: two threads porting adjacent algorithm slices on the critical
+   path.
 
 ### Thread mechanics
 
-Use your own environment's native facilities for spawning parallel workers /
-subagents / background threads — whatever your tooling calls them. Nothing
-here prescribes a specific harness; only the policy above and the merge
-protocol below are fixed.
-
-**Scouts**: read-only workers, no worktree needed. Give each a
-self-contained brief (they cannot see your conversation), forbid all repo
-writes, and have them return a report. Fold the report into the status file
-yourself.
-
-**Lanes**: each lane works in its own git worktree on its own branch
-(`git worktree add <dir> -b lane/<name>` from current HEAD, or however your
-tooling provides an isolated checkout), and merges back into this branch:
-
-1. Brief the lane with a self-contained prompt that includes: the exact file
-   scope it may touch, the files it must NOT touch (always: `corpus.toml`,
-   `docs/v2-status.md`, and whatever modules the main loop is currently
-   editing — name them), commit-prefix `[lane-<name>]`, and the requirement
-   that the full ratchet (`make golden-compare` + `cargo test --workspace`)
-   passes in its worktree before it reports done.
-2. Merge back (main worktree, at a clean moment — commit or finish your
-   current slice first): verify scope with
-   `git diff main...lane/<name> --stat` (nothing outside the briefed scope),
-   then `git merge --no-ff lane/<name>`, rerun the full ratchet yourself —
-   never trust the lane's claim — then remove the lane worktree and delete
-   the branch.
-3. Log the merge in the status file like any other slice, including any
-   follow-ups the lane reported (e.g. corpus flips, which remain YOUR job as
-   the single writer).
-4. If the lane's diff touches out-of-scope files or its ratchet claim fails
-   your re-run, do not merge — record what happened and either re-brief a
-   fresh lane or absorb the salvageable parts as a normal slice.
-
-Run scouts freely; keep at most 1–2 lanes in flight so merges stay reviewable.
+Use your environment's native facilities for spawning workers. Scouts:
+self-contained brief, no repo writes, report back; you fold results into
+the status file. Lanes: own worktree/branch (`git worktree add <dir> -b
+lane/<name>`), self-contained brief with exact touch/don't-touch scope
+(always excluded: `corpus-r.toml`, the status file, whatever you are
+editing), `[lane-<name>]` commit prefix, full-gate verification before
+reporting. Merge protocol: scope-check the diff stat, `git merge --no-ff`,
+re-run the gates yourself — never trust the lane's claim — then remove the
+worktree and delete the branch; log the merge and its follow-ups. Refuse
+merges that fail scope or gates. Run scouts freely; keep at most 1–2 lanes
+in flight.
 
 ## Model routing (plan big, execute small)
 
 Two tiers (2026-07-11 user decision): **GPT 5.6 Sol High** (planner) and
 **GPT 5.6 Terra High** (executor). Route by VERIFIABILITY, not difficulty —
-in this project faithfulness is enforced by the harness (compiler, ratchet,
-pixel gates), so executor output either lands green or doesn't land; tier
-affects attempts-until-green, never what merges.
+faithfulness is enforced by the harness (compiler, pixel gates, ratchets),
+so executor output either lands green or doesn't land; tier affects
+attempts-until-green, never what merges.
 
-**Terra executes anything harness-verifiable:** scout sweeps (first-blocker
-probes, diff attribution, corpus bookkeeping, reference regeneration, fuzz
-babysitting/minimization, lint burn-down), mechanical translation slices
-(PORTING.md + a precise brief with the C++ citation), compiler-error
-burn-down, regression tests from already-specified scenarios, and
-known-divergence-class fixes applied across entries.
+**Terra executes anything harness-verifiable:** attribution sweeps and
+heatmap classification, mechanical translation slices (PORTING.md + a
+precise brief with the C++ citation), compiler-error burn-down,
+known-divergence-class fixes applied across batched entries, reference
+regeneration, fuzz babysitting/minimization.
 
 **Sol only, never delegated:** decomposition and queue construction,
-root-cause analysis of NOVEL divergences, adversarial review (implement
-small, review big — never the reverse), fence/tolerance/gate decisions,
-merges and ratchet verdicts, and anything touching invented seams or float
-semantics — the places where wrongness is silent.
+root-cause analysis of NOVEL divergences, sub-oracle design, adversarial
+review (implement small, review big — never the reverse),
+fence/tolerance/gate decisions, merges and ratchet verdicts, anything in
+the invented wgpu seam or float semantics.
 
 Rules:
-1. **Briefs derive from mechanical inventories only** (corpus queries,
-   compiler-error lists, grep sweeps) — never from model memory; Sol reviews
-   the queue once before any fan-out. (The audited-facts/unaudited-
-   decomposition failure mode.)
-2. **Batch briefs** — worker spawn costs a worktree + build; give Terra ~10
-   related entries per brief, not one.
-3. **Escalation ladder**: Terra fails its gate twice on the same item →
-   Sol takes the item directly with the failure context attached.
-   Infrastructure failures (rate limits, timeouts) re-assign to a fresh
-   Terra worker, no escalation.
+1. **Briefs derive from mechanical inventories only** (corpus-r queries,
+   heatmap classifications, compiler-error lists) — never from model
+   memory; Sol reviews the queue once before any fan-out.
+2. **Batch briefs** — ~10 related entries per Terra worker, not one; spawns
+   cost a worktree + build.
+3. **Escalation ladder**: Terra fails its gate twice on the same item → Sol
+   takes it directly with the failure context. Infrastructure failures
+   re-assign to a fresh worker, no escalation.
 4. **A worker may NEVER loosen a gate to pass it** — no tolerance changes,
-   no corpus status flips, no test weakening from Terra; those are Sol
-   decisions recorded in the status file.
+   no corpus flips, no test weakening from Terra; those are Sol decisions
+   recorded in the status file.
 
 ## Asking the user
 
 Work autonomously. Interrupt only for: destructive/irreversible actions,
-genuine scope changes to the porting map itself, acquiring real production
-`.riv` files for the corpus, or a blocker that survives two different tactics.
-Record everything else as decisions in the status file and keep moving.
+genuine scope changes to the renderer map itself, tolerance-model changes
+that affect the fidelity story, or a blocker that survives two different
+tactics. Record everything else as decisions in the status file and keep
+moving.

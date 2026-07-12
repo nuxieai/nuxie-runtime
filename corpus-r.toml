@@ -452,10 +452,9 @@ stream = "fixtures/renderer/streams/gm/cliprectintersections.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/cliprectintersections-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 1024
 
 
 [[entry]]
@@ -478,10 +477,9 @@ stream = "fixtures/renderer/streams/gm/cliprects.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/cliprects-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 2048
 
 
 [[entry]]
@@ -1118,10 +1116,9 @@ stream = "fixtures/renderer/streams/gm/gamma_correction_clip.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/gamma_correction_clip-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 8
 
 
 [[entry]]
@@ -2464,10 +2461,9 @@ stream = "fixtures/renderer/streams/gm/strokes_poly.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/strokes_poly-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 128
 
 
 [[entry]]

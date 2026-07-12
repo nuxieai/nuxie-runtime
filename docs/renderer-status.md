@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=27, diverges=0, gated=1,440, total=1,467.
+- Rust wgpu: exact=31, diverges=0, gated=1,436, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -34,6 +34,10 @@ Run `make renderer-golden`.
   `gm-feather_polyshapes-clockwise-atomic`, and
   `gm-feather_corner-clockwise-atomic`,
   `gm-feather_roundcorner-clockwise-atomic`, and
+  `gm-cliprectintersections-clockwise-atomic`,
+  `gm-cliprects-clockwise-atomic`,
+  `gm-gamma_correction_clip-clockwise-atomic`,
+  `gm-strokes_poly-clockwise-atomic`, and
   `gm-emptystrokefeather-clockwise-atomic`.
 
 ## Milestones
@@ -559,3 +563,11 @@ Run `make renderer-golden`.
   have 3,367/max12 and 4,495/max11 differences and pass bounded 8,192-pixel
   backend budgets. The ratchet advances to exact=27/diverges=0; non-rectangular
   clip stacks remain explicitly unsupported.
+- 2026-07-11: Swept the remaining axis-aligned clip GMs after the clip-rect
+  port. `cliprectintersections` (45 draws), `gamma_correction_clip` (2), and
+  `strokes_poly` (25) are exact when isolated; `cliprects` has 15/18 exact
+  draws and three bounded AA-only cells. Their composites pass focused budgets
+  of 1,024, 8, 128, and 2,048 pixels respectively without changing max channel
+  delta 2. The ratchet advances to exact=31/diverges=0. `strokes_round` remains
+  gated at 34/max83 pending a separate hard-edge diagnosis; cubic clip GMs
+  retain their pre-existing geometry failures.

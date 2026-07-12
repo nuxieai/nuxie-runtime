@@ -485,29 +485,37 @@ impl AtomicPipeline {
         });
         let dummy_view = dummy.create_view(&Default::default());
         let sampler = device.create_sampler(&linear_sampler());
-        let flush_groups = draws
-            .iter()
-            .map(|draw| {
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("nuxie-atomic-flush-group"),
-                    layout: &self.flush_layout,
-                    entries: &[
-                        binding(0, uniform.as_entire_binding()),
-                        binding(3, paths.as_entire_binding()),
-                        binding(4, paints.as_entire_binding()),
-                        binding(5, paint_aux.as_entire_binding()),
-                        binding(6, contours.as_entire_binding()),
-                        binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
-                        binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
-                        binding(10, wgpu::BindingResource::TextureView(feather_lut)),
-                        binding(
-                            11,
-                            wgpu::BindingResource::TextureView(draw.atlas.unwrap_or(&dummy_view)),
-                        ),
-                    ],
-                })
+        let shared_flush_group = draws.iter().all(|draw| {
+            std::ptr::eq(draw.tessellation, draws[0].tessellation)
+                && draw.atlas.is_none()
+                && draws[0].atlas.is_none()
+        });
+        let make_flush_group = |draw: &AtomicDraw<'_>| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("nuxie-atomic-flush-group"),
+                layout: &self.flush_layout,
+                entries: &[
+                    binding(0, uniform.as_entire_binding()),
+                    binding(3, paths.as_entire_binding()),
+                    binding(4, paints.as_entire_binding()),
+                    binding(5, paint_aux.as_entire_binding()),
+                    binding(6, contours.as_entire_binding()),
+                    binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
+                    binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
+                    binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                    binding(
+                        11,
+                        wgpu::BindingResource::TextureView(draw.atlas.unwrap_or(&dummy_view)),
+                    ),
+                ],
             })
-            .collect::<Vec<_>>();
+        };
+        let flush_groups = if shared_flush_group {
+            vec![make_flush_group(&draws[0])]
+        } else {
+            draws.iter().map(make_flush_group).collect::<Vec<_>>()
+        };
+        let flush_group_index = |draw_index: usize| if shared_flush_group { 0 } else { draw_index };
         let image = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-image-group"),
             layout: &self.image_layout,
@@ -534,62 +542,109 @@ impl AtomicPipeline {
             ],
         });
         for (draw_index, draw) in draws.iter().enumerate() {
-            if draw.atlas.is_some() {
-                let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
-                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                    "nuxie-atomic-atlas-blit-pass",
-                    &attachments,
-                ));
-                pass.set_pipeline(&self.atlas_blit);
-                pass.set_bind_group(0, &flush_groups[draw_index], &[]);
-                pass.set_bind_group(1, &image, &[]);
-                pass.set_bind_group(2, &atomics, &[]);
-                pass.set_bind_group(3, &samplers, &[]);
-                pass.set_vertex_buffer(0, triangle_buffers[draw_index].as_ref().unwrap().slice(..));
-                pass.draw(0..draw.atlas_blit_vertices.len() as u32, 0..1);
+            if draw.atlas.is_none() {
                 continue;
             }
+            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                "nuxie-atomic-atlas-blit-pass",
+                &attachments,
+            ));
+            pass.set_pipeline(&self.atlas_blit);
+            pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+            pass.set_bind_group(1, &image, &[]);
+            pass.set_bind_group(2, &atomics, &[]);
+            pass.set_bind_group(3, &samplers, &[]);
+            pass.set_vertex_buffer(0, triangle_buffers[draw_index].as_ref().unwrap().slice(..));
+            pass.draw(0..draw.atlas_blit_vertices.len() as u32, 0..1);
+        }
+        if shared_flush_group && draws.iter().any(|draw| draw.atlas.is_none()) {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-path-pass",
                 &attachments,
             ));
-            pass.set_pipeline(if draw.is_feather && draw.is_stroke {
-                &self.feather_stroke_path
-            } else if draw.is_feather {
-                &self.feather_path
-            } else if draw.is_stroke {
-                &self.stroke_path
-            } else if !draw.triangle_vertices.is_empty() {
-                &self.outer_path
-            } else {
-                &self.path
-            });
-            pass.set_bind_group(0, &flush_groups[draw_index], &[]);
             pass.set_bind_group(1, &image, &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);
             pass.set_vertex_buffer(0, patch_vertices.slice(..));
             pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-            pass.draw_indexed(
-                draw.patch_index_range.clone(),
-                0,
-                draw.base_instance..draw.base_instance + draw.instance_count,
-            );
-            drop(pass);
-            if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
+            for (draw_index, draw) in draws.iter().enumerate() {
+                if draw.atlas.is_some() {
+                    continue;
+                }
+                pass.set_pipeline(if draw.is_feather && draw.is_stroke {
+                    &self.feather_stroke_path
+                } else if draw.is_feather {
+                    &self.feather_path
+                } else if draw.is_stroke {
+                    &self.stroke_path
+                } else if !draw.triangle_vertices.is_empty() {
+                    &self.outer_path
+                } else {
+                    &self.path
+                });
+                pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                pass.set_vertex_buffer(0, patch_vertices.slice(..));
+                pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
+                pass.draw_indexed(
+                    draw.patch_index_range.clone(),
+                    0,
+                    draw.base_instance..draw.base_instance + draw.instance_count,
+                );
+                if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
+                    pass.set_pipeline(&self.interior);
+                    pass.set_vertex_buffer(0, triangle_buffer.slice(..));
+                    pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                }
+            }
+        } else {
+            for (draw_index, draw) in draws.iter().enumerate() {
+                if draw.atlas.is_some() {
+                    continue;
+                }
                 let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
                 let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                    "nuxie-atomic-interior-pass",
+                    "nuxie-atomic-path-pass",
                     &attachments,
                 ));
-                pass.set_pipeline(&self.interior);
-                pass.set_bind_group(0, &flush_groups[draw_index], &[]);
+                pass.set_pipeline(if draw.is_feather && draw.is_stroke {
+                    &self.feather_stroke_path
+                } else if draw.is_feather {
+                    &self.feather_path
+                } else if draw.is_stroke {
+                    &self.stroke_path
+                } else if !draw.triangle_vertices.is_empty() {
+                    &self.outer_path
+                } else {
+                    &self.path
+                });
+                pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                 pass.set_bind_group(1, &image, &[]);
                 pass.set_bind_group(2, &atomics, &[]);
                 pass.set_bind_group(3, &samplers, &[]);
-                pass.set_vertex_buffer(0, triangle_buffer.slice(..));
-                pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                pass.set_vertex_buffer(0, patch_vertices.slice(..));
+                pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
+                pass.draw_indexed(
+                    draw.patch_index_range.clone(),
+                    0,
+                    draw.base_instance..draw.base_instance + draw.instance_count,
+                );
+                drop(pass);
+                if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
+                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        "nuxie-atomic-interior-pass",
+                        &attachments,
+                    ));
+                    pass.set_pipeline(&self.interior);
+                    pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                    pass.set_bind_group(1, &image, &[]);
+                    pass.set_bind_group(2, &atomics, &[]);
+                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_vertex_buffer(0, triangle_buffer.slice(..));
+                    pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                }
             }
         }
         {
@@ -603,7 +658,7 @@ impl AtomicPipeline {
             } else {
                 &self.resolve
             });
-            pass.set_bind_group(0, flush_groups.last().unwrap(), &[]);
+            pass.set_bind_group(0, &flush_groups[flush_group_index(draws.len() - 1)], &[]);
             pass.set_bind_group(1, &image, &[]);
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);

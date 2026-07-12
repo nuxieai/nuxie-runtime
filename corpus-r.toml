@@ -1127,10 +1127,9 @@ stream = "fixtures/renderer/streams/gm/hittest_evenOdd.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/hittest_evenOdd-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 512
 
 
 [[entry]]
@@ -1153,10 +1152,9 @@ stream = "fixtures/renderer/streams/gm/hittest_nonZero.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/hittest_nonZero-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 512
 
 
 [[entry]]

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=72, diverges=0, gated=1,395, total=1,467.
+- Rust wgpu: exact=74, diverges=0, gated=1,393, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -60,7 +60,9 @@ Run `make renderer-golden`.
   `gm-cubicclosepath-clockwise-atomic`, plus `gm-beziers-clockwise-atomic`
   and the `gm-bug{5099,6083,615686,6987,7792}-clockwise-atomic` set, plus
   `gm-bug339297-clockwise-atomic` and
-  `gm-bug339297_as_clip-clockwise-atomic`.
+  `gm-bug339297_as_clip-clockwise-atomic`, plus
+  `gm-hittest_evenOdd-clockwise-atomic` and
+  `gm-hittest_nonZero-clockwise-atomic`.
 
 ## Milestones
 
@@ -145,10 +147,19 @@ Run `make renderer-golden`.
    `bug339297`/`bug339297_as_clip` pair has identical binary support and
    identical black/white counts across Metal and wgpu; only two full-width AA
    scanlines differ under million-scale coordinate cancellation. Both are
-   promoted with a documented 1,280-pixel backend allowance. Continue with
-   the `hittest_evenOdd`/`hittest_nonZero` pair, whose Rust replay reaches a
-   wgpu async-map failure before producing pixels; this is the nearest finding
-   in the invented resource/readback seam and must be diagnosed locally.
+   promoted with a documented 1,280-pixel backend allowance. The
+   `hittest_evenOdd`/`hittest_nonZero` pair exposed unbounded invented-wgpu
+   resource use: 32,580 tiny draws each allocated a 2,048-wide tessellation
+   texture, bind group, and render pass in one command buffer, ending in an
+   async-map failure. Homogeneous midpoint fills now shelf-pack into one
+   tessellation texture, share one flush bind group and render pass, and use
+   the translated intersection board to separate AA-overlapping draws into
+   ordered atomic groups. Submitting and polling after each group bounds the
+   command-buffer lifetime. Clockwise and clip-update batches retain their
+   prior texture dimensions and pass topology. Both hit-test GMs now complete
+   and are promoted at 382 pixels beyond delta 2/max delta 7 under a 512-pixel
+   backend allowance. The per-group wait is a correctness-first R2 choice and
+   remains an explicit R4 performance measurement target.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -167,6 +178,11 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Legacy homogeneous midpoint-fill batches may share shelf-packed
+  tessellation storage and a render pass. Clockwise and clip-update batches
+  preserve the established per-draw resource/pass topology. Intersection-board
+  groups are submitted independently to bound backend resource lifetime; R4
+  must measure and optimize the wait policy without weakening corpus parity.
 - 2026-07-10: Phase R activated by the user; incremental R0-R5 strategy chosen.
 - 2026-07-10: Pixel space is canonical top-left RGBA8. The C++ Metal bridge
   readback is vertically flipped during replay; the Rust renderer is not

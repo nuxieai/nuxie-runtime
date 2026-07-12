@@ -605,6 +605,7 @@ impl Default for DrawState {
     }
 }
 
+#[derive(Clone)]
 struct SolidDraw {
     path: WgpuPath,
     paint: WgpuPaint,
@@ -853,6 +854,8 @@ impl WgpuFrame {
                     base_instance: u32,
                     instance_count: u32,
                     patch_index_range: std::ops::Range<u32>,
+                    contour_range: std::ops::Range<usize>,
+                    tessellation_index: usize,
                     triangles: Vec<gpu::TriangleVertex>,
                     atlas: Option<AtlasPlacement>,
                     atlas_blit_vertices: Vec<gpu::TriangleVertex>,
@@ -1163,7 +1166,9 @@ impl WgpuFrame {
                     }
                     paints.push(paint);
                     paint_aux.push(clip_rect_paint_aux(draw.state.clip_rect));
+                    let contour_start = contours.len();
                     contours.extend(draw_contours);
+                    let contour_range = contour_start..contours.len();
                     let atlas_blit_vertices = atlas
                         .map(|placement| {
                             let [left, top, right, bottom] = placement.bounds;
@@ -1182,6 +1187,8 @@ impl WgpuFrame {
                         base_instance,
                         instance_count,
                         patch_index_range,
+                        contour_range,
+                        tessellation_index: 0,
                         triangles,
                         atlas,
                         atlas_blit_vertices,
@@ -1221,11 +1228,84 @@ impl WgpuFrame {
                 let atlas_physical_size =
                     atlas_physical_size(atlas_content_size, max_atlas_dimension);
                 let [atlas_width, atlas_height] = atlas_content_size;
-                let tessellation_height = prepared
-                    .iter()
-                    .map(|draw| draw::tessellation_texture_height(&draw.spans))
-                    .max()
-                    .unwrap_or(1);
+                let share_midpoint_tessellation = !force_clockwise_atomic_batch
+                    && draws
+                        .iter()
+                        .all(|draw| !matches!(draw.role, DrawRole::ClipUpdate { .. }))
+                    && prepared.iter().all(|draw| {
+                        draw.triangles.is_empty()
+                            && draw.atlas.is_none()
+                            && !draw.is_stroke
+                            && !draw.is_feather
+                            && draw.patch_index_range.end
+                                <= (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                    + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                    as u32
+                    });
+                let mut tessellation_span_batches = Vec::new();
+                let mut tessellation_heights = Vec::new();
+                if share_midpoint_tessellation {
+                    let mut packed = Vec::new();
+                    let mut cursor_x = 0u32;
+                    let mut cursor_y = 0u32;
+                    let mut packed_height = 1u32;
+                    for draw in &mut prepared {
+                        let local_height = draw::tessellation_texture_height(&draw.spans);
+                        let single_row_width = (local_height == 1)
+                            .then(|| midpoint_tessellation_single_row_width(&draw.spans))
+                            .flatten();
+                        let mut placement = midpoint_shelf_placement(
+                            cursor_x,
+                            cursor_y,
+                            local_height,
+                            single_row_width,
+                        );
+                        if placement.height > max_atlas_dimension && !packed.is_empty() {
+                            tessellation_span_batches.push(std::mem::take(&mut packed));
+                            tessellation_heights.push(packed_height);
+                            cursor_x = 0;
+                            cursor_y = 0;
+                            packed_height = 1;
+                            placement = midpoint_shelf_placement(
+                                cursor_x,
+                                cursor_y,
+                                local_height,
+                                single_row_width,
+                            );
+                        }
+                        if placement.height > max_atlas_dimension {
+                            return Err(RendererError::Device(
+                                "tessellation texture exceeds device dimension limit".into(),
+                            ));
+                        }
+                        let (x, y) = (placement.x, placement.y);
+                        cursor_x = placement.next_x;
+                        cursor_y = placement.next_y;
+                        packed_height = packed_height.max(placement.height);
+                        relocate_midpoint_tessellation(
+                            &mut draw.spans,
+                            &mut draw.base_instance,
+                            &mut contours[draw.contour_range.clone()],
+                            x,
+                            y,
+                        );
+                        packed.append(&mut draw.spans);
+                        draw.tessellation_index = tessellation_span_batches.len();
+                    }
+                    if !packed.is_empty() {
+                        tessellation_span_batches.push(packed);
+                        tessellation_heights.push(packed_height);
+                    }
+                } else {
+                    for (index, draw) in prepared.iter_mut().enumerate() {
+                        tessellation_heights.push(draw::tessellation_texture_height(&draw.spans));
+                        tessellation_span_batches.push(std::mem::take(&mut draw.spans));
+                        draw.tessellation_index = index;
+                    }
+                    let common_height = tessellation_heights.iter().copied().max().unwrap_or(1);
+                    tessellation_heights.fill(common_height);
+                }
+                let tessellation_height = tessellation_heights.iter().copied().max().unwrap_or(1);
                 let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
                 uniforms.max_path_id = u32::try_from(paths.len() - 1).expect("path ID overflow");
                 uniforms.render_target_update_bounds =
@@ -1236,17 +1316,20 @@ impl WgpuFrame {
                 ];
                 uniforms.atlas_content_inverse_viewport =
                     [2.0 / atlas_width as f32, -2.0 / atlas_height as f32];
-                let mut tessellation_textures = Vec::with_capacity(prepared.len());
-                for draw in &prepared {
+                let mut tessellation_textures = Vec::with_capacity(tessellation_span_batches.len());
+                for (spans, height) in tessellation_span_batches
+                    .iter()
+                    .zip(tessellation_heights.iter().copied())
+                {
                     let tessellation_texture = self.context.tessellator.encode(
                         &self.context.device,
                         encoder,
                         &self.context.feather_lut.view,
-                        &draw.spans,
+                        spans,
                         &uniforms,
                         &paths,
                         &contours,
-                        tessellation_height,
+                        height,
                     );
                     tessellation_textures.push(tessellation_texture);
                 }
@@ -1275,7 +1358,7 @@ impl WgpuFrame {
                         });
                     let view = texture.create_view(&Default::default());
                     let mut clear = true;
-                    for (index, draw) in prepared.iter().enumerate() {
+                    for draw in &prepared {
                         if let Some(atlas) = draw.atlas {
                             self.context.atlas_pipeline.encode_mask(
                                 &self.context.device,
@@ -1283,7 +1366,7 @@ impl WgpuFrame {
                                 &view,
                                 &self.context.patch_vertex_buffer,
                                 &self.context.patch_index_buffer,
-                                &tessellation_views[index],
+                                &tessellation_views[draw.tessellation_index],
                                 &self.context.feather_lut.view,
                                 &uniforms,
                                 &paths,
@@ -1307,9 +1390,8 @@ impl WgpuFrame {
                     .map(|texture| texture.create_view(&Default::default()));
                 let atomic_draws = prepared
                     .iter()
-                    .zip(&tessellation_views)
-                    .map(|(draw, tessellation)| atomic_pipeline::AtomicDraw {
-                        tessellation,
+                    .map(|draw| atomic_pipeline::AtomicDraw {
+                        tessellation: &tessellation_views[draw.tessellation_index],
                         base_instance: draw.base_instance,
                         instance_count: draw.instance_count,
                         patch_index_range: draw.patch_index_range.clone(),
@@ -1345,11 +1427,12 @@ impl WgpuFrame {
                     let clockwise_atomic_draws = prepared
                         .iter()
                         .zip(draws)
-                        .zip(&tessellation_views)
                         .zip(&borrowed_triangles)
                         .zip(&main_triangles)
                         .map(
-                            |((((prepared, source), tessellation), borrowed_triangles), main_triangles)| {
+                            |(((prepared, source), borrowed_triangles), main_triangles)| {
+                                let tessellation =
+                                    &tessellation_views[prepared.tessellation_index];
                                 let kind = match source.role {
                                     DrawRole::Content { clip_id: 0 } => {
                                         clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::Content
@@ -1654,12 +1737,37 @@ impl WgpuFrame {
                     end += 1;
                 }
                 if atomic {
-                    encode_atomic_run(
-                        &self.draws[start..end],
-                        clear_target,
-                        clockwise_atomic,
-                        &mut encoder,
-                    )?;
+                    let has_clip_updates = self.draws[start..end]
+                        .iter()
+                        .any(|draw| matches!(draw.role, DrawRole::ClipUpdate { .. }));
+                    if clockwise_atomic || has_clip_updates {
+                        encode_atomic_run(
+                            &self.draws[start..end],
+                            clear_target,
+                            clockwise_atomic,
+                            &mut encoder,
+                        )?;
+                    } else {
+                        for group in disjoint_atomic_draw_groups(
+                            &self.draws[start..end],
+                            self.width,
+                            self.height,
+                        ) {
+                            encode_atomic_run(&group, clear_target, false, &mut encoder)?;
+                            let next_encoder = self.context.device.create_command_encoder(
+                                &wgpu::CommandEncoderDescriptor {
+                                    label: Some("nuxie-frame-encoder"),
+                                },
+                            );
+                            let submitted_encoder = std::mem::replace(&mut encoder, next_encoder);
+                            self.context.queue.submit(Some(submitted_encoder.finish()));
+                            self.context
+                                .device
+                                .poll(wgpu::PollType::wait_indefinitely())
+                                .map_err(|error| RendererError::Map(error.to_string()))?;
+                            clear_target = false;
+                        }
+                    }
                 } else {
                     encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder);
                 }
@@ -2190,6 +2298,176 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     }
 }
 
+fn disjoint_atomic_draw_groups(
+    draws: &[SolidDraw],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> Vec<Vec<SolidDraw>> {
+    disjoint_atomic_draw_groups_with_limit(
+        draws,
+        viewport_width,
+        viewport_height,
+        i16::MAX as usize - 1,
+    )
+}
+
+fn disjoint_atomic_draw_groups_with_limit(
+    draws: &[SolidDraw],
+    viewport_width: u32,
+    viewport_height: u32,
+    group_limit: usize,
+) -> Vec<Vec<SolidDraw>> {
+    assert!((1..i16::MAX as usize).contains(&group_limit));
+    let mut board =
+        intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+    board.resize_and_reset(viewport_width, viewport_height);
+    let mut groups = Vec::<Vec<SolidDraw>>::new();
+    let mut group_base = 0usize;
+    let mut board_group_count = 0usize;
+    for draw in draws {
+        // IntersectionBoard computes `bottom + layer_count - 1` in i16, so
+        // i16::MAX itself is not a safe returned group for a one-layer draw.
+        if board_group_count == group_limit {
+            board.resize_and_reset(viewport_width, viewport_height);
+            group_base = groups.len();
+            board_group_count = 0;
+        }
+        let bounds = if matches!(draw.role, DrawRole::ClipUpdate { .. }) {
+            [0, 0, viewport_width as i32, viewport_height as i32]
+        } else {
+            draw::feather_pixel_bounds(
+                &draw.path.raw_path,
+                draw.state.transform,
+                draw.paint.feather,
+                draw.paint.effective_stroke(),
+            )
+            .unwrap_or([0, 0, viewport_width as i32, viewport_height as i32])
+        };
+        let rect = intersection_board::Rect::new(
+            bounds[0].saturating_sub(1),
+            bounds[1].saturating_sub(1),
+            bounds[2].saturating_add(1),
+            bounds[3].saturating_add(1),
+        );
+        let local_group = board.add_rectangle(rect, 1).max(1) as usize;
+        board_group_count = board_group_count.max(local_group);
+        let group_index = group_base + local_group - 1;
+        if groups.len() <= group_index {
+            groups.resize_with(group_index + 1, Vec::new);
+        }
+        groups[group_index].push(draw.clone());
+    }
+    groups
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MidpointShelfPlacement {
+    x: u32,
+    y: u32,
+    next_x: u32,
+    next_y: u32,
+    height: u32,
+}
+
+fn midpoint_shelf_placement(
+    mut cursor_x: u32,
+    mut cursor_y: u32,
+    local_height: u32,
+    single_row_width: Option<u32>,
+) -> MidpointShelfPlacement {
+    if let Some(width) = single_row_width {
+        if cursor_x + width > gpu::TESS_TEXTURE_WIDTH as u32 {
+            cursor_x = 0;
+            cursor_y += 1;
+        }
+        MidpointShelfPlacement {
+            x: cursor_x,
+            y: cursor_y,
+            next_x: cursor_x + width,
+            next_y: cursor_y,
+            height: cursor_y + 1,
+        }
+    } else {
+        if cursor_x != 0 {
+            cursor_y += 1;
+        }
+        MidpointShelfPlacement {
+            x: 0,
+            y: cursor_y,
+            next_x: 0,
+            next_y: cursor_y + local_height,
+            height: cursor_y + local_height,
+        }
+    }
+}
+
+fn midpoint_tessellation_single_row_width(spans: &[gpu::TessVertexSpan]) -> Option<u32> {
+    let mut right = 0i32;
+    for span in spans {
+        if span.y != 0.0 {
+            return None;
+        }
+        let (x0, x1) = span.x_range();
+        if x0 < 0 || x1 < x0 {
+            return None;
+        }
+        right = right.max(x1);
+        if span.reflection_y.is_finite() {
+            if span.reflection_y != 0.0 {
+                return None;
+            }
+            let reflection_x0 = span.reflection_x0_x1 as i16 as i32;
+            let reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
+            if reflection_x0 < 0 || reflection_x1 < 0 {
+                return None;
+            }
+            right = right.max(reflection_x0.max(reflection_x1));
+        }
+    }
+    let right = u32::try_from(right).ok()?.checked_add(1)?;
+    Some(align_to(
+        right.max(gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32),
+        gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+    ))
+}
+
+fn relocate_midpoint_tessellation(
+    spans: &mut [gpu::TessVertexSpan],
+    base_instance: &mut u32,
+    contours: &mut [gpu::ContourData],
+    x: u32,
+    y: u32,
+) {
+    let logical_offset = y * gpu::TESS_TEXTURE_WIDTH as u32 + x;
+    assert_eq!(
+        logical_offset % gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+        0
+    );
+    *base_instance += logical_offset / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+    for contour in contours {
+        contour.vertex_index0 += logical_offset;
+    }
+    for span in spans {
+        span.y += y as f32;
+        let (x0, x1) = span.x_range();
+        let mut reflection_y = span.reflection_y;
+        let mut reflection_x0 = span.reflection_x0_x1 as i16 as i32;
+        let mut reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
+        if reflection_y.is_finite() {
+            reflection_y += y as f32;
+            reflection_x0 += x as i32;
+            reflection_x1 += x as i32;
+        }
+        span.set_ranges(
+            x0 + x as i32,
+            x1 + x as i32,
+            reflection_x0,
+            reflection_x1,
+            reflection_y,
+        );
+    }
+}
+
 fn draw_requires_clockwise_atomic(draw: &SolidDraw) -> bool {
     matches!(draw.role, DrawRole::Content { clip_id: 0 })
         && draw.paint.style == RenderPaintStyle::Fill
@@ -2366,6 +2644,99 @@ mod tests {
         compound.line_to(30.0, 20.0);
         compound.line_to(20.0, 30.0);
         assert!(path_has_complex_fill_topology(&compound));
+    }
+
+    #[test]
+    fn midpoint_tessellation_relocates_into_shared_texture_shelves() {
+        let path = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let mut tessellation =
+            draw::build_fill_tessellation(&path.raw_path, Mat2D::IDENTITY).unwrap();
+        tessellation.make_double_sided();
+        let width = midpoint_tessellation_single_row_width(&tessellation.spans).unwrap();
+        let base_instance = tessellation.base_instance;
+        let vertex_index0 = tessellation.contours[0].vertex_index0;
+
+        relocate_midpoint_tessellation(
+            &mut tessellation.spans,
+            &mut tessellation.base_instance,
+            &mut tessellation.contours,
+            width,
+            2,
+        );
+
+        let logical_offset = 2 * gpu::TESS_TEXTURE_WIDTH as u32 + width;
+        assert_eq!(width % gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32, 0);
+        assert_eq!(
+            tessellation.base_instance,
+            base_instance + logical_offset / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
+        );
+        assert_eq!(
+            tessellation.contours[0].vertex_index0,
+            vertex_index0 + logical_offset
+        );
+        assert!(tessellation.spans.iter().all(|span| span.y == 2.0));
+    }
+
+    #[test]
+    fn intersection_board_separates_overlapping_atomic_aa_bounds() {
+        let make_draw = |bounds| SolidDraw {
+            path: rect_path(bounds, FillRule::NonZero),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+        };
+        let draws = [
+            make_draw([10.0, 10.0, 11.0, 11.0]),
+            make_draw([11.0, 10.0, 12.0, 11.0]),
+            make_draw([30.0, 30.0, 31.0, 31.0]),
+        ];
+
+        let groups = disjoint_atomic_draw_groups(&draws, 64, 64);
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].len(), 2);
+        assert_eq!(groups[1].len(), 1);
+    }
+
+    #[test]
+    fn intersection_board_rolls_over_before_group_index_overflow() {
+        let draw = SolidDraw {
+            path: rect_path([10.0, 10.0, 11.0, 11.0], FillRule::NonZero),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+        };
+        let draws = vec![draw; 3];
+
+        let groups = disjoint_atomic_draw_groups_with_limit(&draws, 64, 64, 2);
+
+        assert_eq!(groups.len(), draws.len());
+        assert!(groups.iter().all(|group| group.len() == 1));
+    }
+
+    #[test]
+    fn midpoint_shelf_placement_reports_texture_height_rollover() {
+        let width = gpu::TESS_TEXTURE_WIDTH as u32;
+        assert_eq!(
+            midpoint_shelf_placement(width - 8, 3, 1, Some(16)),
+            MidpointShelfPlacement {
+                x: 0,
+                y: 4,
+                next_x: 16,
+                next_y: 4,
+                height: 5,
+            }
+        );
+        assert_eq!(
+            midpoint_shelf_placement(8, 3, 2, None),
+            MidpointShelfPlacement {
+                x: 0,
+                y: 4,
+                next_x: 0,
+                next_y: 6,
+                height: 6,
+            }
+        );
     }
 
     fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> WgpuPath {

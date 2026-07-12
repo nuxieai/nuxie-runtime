@@ -1177,10 +1177,9 @@ stream = "fixtures/renderer/streams/gm/image.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/image-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "platform-image-decode-color-profile"
+max_different_pixels = 9000
 
 
 [[entry]]
@@ -1203,10 +1202,9 @@ stream = "fixtures/renderer/streams/gm/image_aa_border.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/image_aa_border-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "platform-image-decode-color-profile"
+max_different_pixels = 6000
 
 
 [[entry]]
@@ -1636,10 +1634,9 @@ stream = "fixtures/renderer/streams/gm/mesh.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/mesh-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "platform-image-decode-color-profile"
+max_different_pixels = 18000
 
 
 [[entry]]

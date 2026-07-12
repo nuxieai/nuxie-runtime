@@ -2661,6 +2661,11 @@ fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = png::Decoder::new(Cursor::new(data));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
+    let icc_profile = reader
+        .info()
+        .icc_profile
+        .as_ref()
+        .map(|profile| profile.as_ref().to_vec());
     let mut decoded = vec![0; reader.output_buffer_size()?];
     let info = reader.next_frame(&mut decoded).ok()?;
     decoded.truncate(info.buffer_size());
@@ -2680,8 +2685,47 @@ fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
             .collect(),
         _ => return None,
     };
+    if let Some(profile) = icc_profile {
+        convert_icc_rgba_to_srgb(&mut pixels, info.width, &profile);
+    }
     premultiply_rgba(&mut pixels);
     Some((info.width, info.height, pixels))
+}
+
+fn convert_icc_rgba_to_srgb(pixels: &mut [u8], width: u32, icc_profile: &[u8]) {
+    // C++ decoders/src/bitmap_decoder_thirdparty.cpp draws the profiled image
+    // into a DeviceRGB RGBA bitmap before premultiplying its alpha.
+    let Ok(source) = moxcms::ColorProfile::new_from_slice(icc_profile) else {
+        return;
+    };
+    let destination = moxcms::ColorProfile::new_srgb();
+    let Ok(transform) = source.create_transform_8bit(
+        moxcms::Layout::Rgba,
+        &destination,
+        moxcms::Layout::Rgba,
+        moxcms::TransformOptions::default(),
+    ) else {
+        return;
+    };
+    let Some(row_bytes) = usize::try_from(width)
+        .ok()
+        .and_then(|width| width.checked_mul(4))
+    else {
+        return;
+    };
+    if row_bytes == 0 || !pixels.len().is_multiple_of(row_bytes) {
+        return;
+    }
+    let mut converted = vec![0; pixels.len()];
+    for (source, destination) in pixels
+        .chunks_exact(row_bytes)
+        .zip(converted.chunks_exact_mut(row_bytes))
+    {
+        if transform.transform(source, destination).is_err() {
+            return;
+        }
+    }
+    pixels.copy_from_slice(&converted);
 }
 
 fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
@@ -3217,6 +3261,31 @@ mod tests {
     #[test]
     fn rejects_unknown_encoded_image_format() {
         assert!(decode_image_rgba(b"not an image").is_none());
+    }
+
+    #[test]
+    fn embedded_png_profile_transforms_rgb_and_preserves_alpha() {
+        let stream = nuxie_render_stream::RenderStream::parse(include_str!(
+            "../../../fixtures/renderer/streams/gm/image_aa_border.rive-stream"
+        ))
+        .unwrap();
+        let encoded = stream
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                nuxie_render_stream::Resource::Image { data, .. } => Some(data.as_slice()),
+                _ => None,
+            })
+            .unwrap();
+        let reader = png::Decoder::new(Cursor::new(encoded)).read_info().unwrap();
+        let profile = reader.info().icc_profile.as_ref().unwrap();
+        let mut pixel = [64, 128, 192, 77];
+        let original = pixel;
+
+        convert_icc_rgba_to_srgb(&mut pixel, 1, profile);
+
+        assert_ne!(pixel[..3], original[..3]);
+        assert_eq!(pixel[3], original[3]);
     }
 
     #[test]

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=78, diverges=0, gated=1,389, total=1,467.
+- Rust wgpu: exact=81, diverges=0, gated=1,386, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -65,6 +65,9 @@ Run `make renderer-golden`.
   `gm-hittest_nonZero-clockwise-atomic`, plus
   `gm-image_filter_options-clockwise-atomic`,
   `gm-image_lod-clockwise-atomic`, and
+  `gm-image-clockwise-atomic`,
+  `gm-image_aa_border-clockwise-atomic`, and
+  `gm-mesh-clockwise-atomic`, and
   `riv-clipping_and_draw_order-frame-0-clockwise-atomic`, plus
   `riv-tape-frame-0-clockwise-atomic`.
 
@@ -172,19 +175,19 @@ Run `make renderer-golden`.
    backend-filter pixels and is promoted under a 512-pixel allowance. The
    encoded-image dispatch now also decodes JPEG, restoring both the circularly
    clipped and later unclipped image in `clipping_and_draw_order`; the clip
-   boundary and authored draw order match C++ Metal. The remaining image queue
-   is explicit: `image` and `image_aa_border` require embedded PNG
-   profile/color-management parity with Metal's platform decoder. C++'s
+   boundary and authored draw order match C++ Metal. Embedded PNG ICC profiles
+   are now transformed to sRGB before premultiplication, matching ImageIO's
+   decode order and sharply reducing the shared LG UltraFine-profile delta.
+   `image`, `image_aa_border`, and `mesh` are promoted under measured
+   Metal-vs-wgpu decoder/filter allowances. C++'s
    `ImageMeshDraw` is now ported with retained position/UV/index buffers,
    immutable unmap snapshots, generated atomic mesh shaders, clip IDs, and
    authored opacity/samplers. The non-fixed atomic color path now adds C++'s
    tiled color storage plane, destination-copy initialization, monotonic image
    z indices, generated advanced-blend shaders, and coalesced resolve. GPU
-   regressions pin screen, darken, exclusion, and luminosity. `tape` is
-   promoted; `mesh` renders all twelve meshes but remains gated by its embedded
-   ICC profile, and the larger `jellyfish_test` mesh surface remains to be
-   measured. Continue R2 with color-managed PNG decode, then rescout the
-   remaining image corpus.
+   regressions pin screen, darken, exclusion, and luminosity. `tape` and all
+   three focused image GMs are promoted. Rescout the larger `jellyfish_test`
+   mesh surface and remaining image corpus next.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -203,6 +206,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: PNG decode now honors `iCCP` metadata with a pure-Rust moxcms
+  transform from the embedded profile to sRGB before alpha premultiplication,
+  matching C++ ImageIO's color-convert-then-premultiply order. On `gm-mesh`
+  this reduces the fresh C++ delta from 140,327/max 56 to 17,450/max 34 while
+  preserving all twelve transforms, clips, and blend modes. The remaining
+  Metal-vs-wgpu decoder/filter samples are bounded at strict delta 2:
+  `image` 8,814/max 39 under 9,000, `image_aa_border` 5,745/max 71 under 6,000,
+  and `mesh` 17,450/max 34 under 18,000. These are whole-entry backend
+  allowances over visually coincident output, not missing-algorithm
+  tolerances; the ratchet advances to exact=81/diverges=0/gated=1,386.
 - 2026-07-12: Advanced atomic image blending follows C++ WebGPU's non-fixed
   color-output lifecycle rather than per-draw framebuffer copies: request the
   seventh fragment storage binding, copy the current target before each
@@ -962,3 +975,8 @@ Run `make renderer-golden`.
   and is reclassified from algorithm work to its measured ICC decoder gate;
   the ratchet remains exact=78/diverges=0/gated=1,389 without widening a
   tolerance. Color-managed PNG decode is next.
+- 2026-07-12: Added embedded ICC-to-sRGB conversion before PNG
+  premultiplication and promoted `image`, `image_aa_border`, and `mesh` under
+  their measured decoder/filter allowances. The ratchet advances to
+  exact=81/diverges=0/gated=1,386; rescouting the larger image/mesh corpus is
+  next.

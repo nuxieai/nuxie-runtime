@@ -351,7 +351,7 @@ impl Factory for WgpuFactory {
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
-        let Some((width, height, pixels)) = decode_png_rgba(data) else {
+        let Some((width, height, pixels)) = decode_image_rgba(data) else {
             return Box::new(WgpuImage {
                 width: 0,
                 height: 0,
@@ -2349,6 +2349,16 @@ fn multiply(left: Mat2D, right: Mat2D) -> Mat2D {
     ])
 }
 
+fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        decode_png_rgba(data)
+    } else if data.starts_with(&[0xff, 0xd8]) {
+        decode_jpeg_rgba(data)
+    } else {
+        None
+    }
+}
+
 fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = png::Decoder::new(Cursor::new(data));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -2372,13 +2382,50 @@ fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
             .collect(),
         _ => return None,
     };
+    premultiply_rgba(&mut pixels);
+    Some((info.width, info.height, pixels))
+}
+
+fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
+    let decoded = decoder.decode().ok()?;
+    let info = decoder.info()?;
+    let pixels = match info.pixel_format {
+        jpeg_decoder::PixelFormat::L8 => decoded
+            .into_iter()
+            .flat_map(|value| [value, value, value, 255])
+            .collect(),
+        jpeg_decoder::PixelFormat::L16 => decoded
+            .chunks_exact(2)
+            .flat_map(|value| [value[0], value[0], value[0], 255])
+            .collect(),
+        jpeg_decoder::PixelFormat::RGB24 => decoded
+            .chunks_exact(3)
+            .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
+            .collect(),
+        jpeg_decoder::PixelFormat::CMYK32 => decoded
+            .chunks_exact(4)
+            .flat_map(|cmyk| {
+                let key = u16::from(cmyk[3]);
+                [
+                    ((u16::from(cmyk[0]) * key + 127) / 255) as u8,
+                    ((u16::from(cmyk[1]) * key + 127) / 255) as u8,
+                    ((u16::from(cmyk[2]) * key + 127) / 255) as u8,
+                    255,
+                ]
+            })
+            .collect(),
+    };
+    Some((u32::from(info.width), u32::from(info.height), pixels))
+}
+
+fn premultiply_rgba(pixels: &mut [u8]) {
     for pixel in pixels.chunks_exact_mut(4) {
         let alpha = u16::from(pixel[3]);
         for channel in &mut pixel[..3] {
             *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
         }
     }
-    Some((info.width, info.height, pixels))
 }
 
 fn image_clip_rect_inverse_matrix(clip: Option<ClipRectState>) -> [f32; 6] {
@@ -2824,6 +2871,37 @@ mod tests {
         let scaled = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
         let result = multiply(translated, scaled);
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+    }
+
+    #[test]
+    fn decodes_corpus_jpeg_to_opaque_rgba() {
+        let stream = include_str!(
+            "../../../fixtures/renderer/streams/riv/clipping_and_draw_order.rive-stream"
+        );
+        let encoded = stream
+            .lines()
+            .find_map(|line| line.strip_prefix("decodeImage "))
+            .and_then(|line| line.split_once("data="))
+            .map(|(_, hex)| {
+                hex.as_bytes()
+                    .chunks_exact(2)
+                    .map(|pair| {
+                        let pair = std::str::from_utf8(pair).unwrap();
+                        u8::from_str_radix(pair, 16).unwrap()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .expect("fixture must contain an encoded image");
+
+        let (width, height, rgba) = decode_image_rgba(&encoded).expect("JPEG must decode");
+        assert_eq!((width, height), (278, 278));
+        assert_eq!(rgba.len(), 278 * 278 * 4);
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+    }
+
+    #[test]
+    fn rejects_unknown_encoded_image_format() {
+        assert!(decode_image_rgba(b"not an image").is_none());
     }
 
     #[test]

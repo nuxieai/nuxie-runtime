@@ -6,6 +6,7 @@ license = "MIT"
 
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
+jpeg-decoder = { version = "0.3", default-features = false }
 nuxie-render-api = { path = "../nuxie-render-api" }
 pollster = "0.4"
 png = "0.18"

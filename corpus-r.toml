@@ -4337,10 +4337,9 @@ reference = "fixtures/renderer/reference/metal/riv/clipping_and_draw_order-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "image-clip-buffer"
+max_different_pixels = 10000
 
 [[entry]]
 id = "riv-clipping_and_draw_order-frame-0-msaa"

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=76, diverges=0, gated=1,391, total=1,467.
+- Rust wgpu: exact=77, diverges=0, gated=1,390, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -63,8 +63,9 @@ Run `make renderer-golden`.
   `gm-bug339297_as_clip-clockwise-atomic`, plus
   `gm-hittest_evenOdd-clockwise-atomic` and
   `gm-hittest_nonZero-clockwise-atomic`, plus
-  `gm-image_filter_options-clockwise-atomic` and
-  `gm-image_lod-clockwise-atomic`.
+  `gm-image_filter_options-clockwise-atomic`,
+  `gm-image_lod-clockwise-atomic`, and
+  `riv-clipping_and_draw_order-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -168,11 +169,12 @@ Run `make renderer-golden`.
    mipmap pass. `image_filter_options` is exact at the standard threshold;
    `image_lod` falls from 60,631 divergent pixels without mips to 276 sparse
    backend-filter pixels and is promoted under a 512-pixel allowance. The
-   remaining image queue is explicit: `image` and `image_aa_border` require
-   embedded PNG profile/color-management parity with Metal's platform decoder;
-   `clipping_and_draw_order` reaches pixels but clipped images are absent from
-   the legacy atomic clip buffer; image meshes remain unported. Continue R2
-   with image clip-buffer integration, then `ImageMeshDraw`.
+   encoded-image dispatch now also decodes JPEG, restoring both the circularly
+   clipped and later unclipped image in `clipping_and_draw_order`; the clip
+   boundary and authored draw order match C++ Metal. The remaining image queue
+   is explicit: `image` and `image_aa_border` require embedded PNG
+   profile/color-management parity with Metal's platform decoder, while image
+   meshes remain unported. Continue R2 with `ImageMeshDraw`.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -191,6 +193,15 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Encoded-image dispatch supports both corpus formats: PNG and
+  JPEG. `clipping_and_draw_order` was a decode gate, not a clip-buffer failure:
+  its embedded bytes begin with JPEG SOI, and the PNG-only decoder returned an
+  empty image before either draw reached the renderer. With pure-Rust JPEG
+  decode, both 278x278 images, the circular clip boundary, and all authored
+  ordering are present. Its bounded 10,000-pixel allowance at delta 2 covers
+  the measured 9,494 ImageIO-versus-`jpeg-decoder` color samples (max delta 18),
+  all confined to the two image interiors; the pre-fix missing-image result was
+  104,981 pixels, over ten times the allowance.
 - 2026-07-12: ImageRect uses the upstream generated fixed-color atomic shader,
   not the separate atomic color-buffer variant. PNGs upload as premultiplied
   RGBA with the full C++ mip count, and each remaining mip is generated through
@@ -905,3 +916,7 @@ Run `make renderer-golden`.
   forms, while 1,280 AA samples differ across two scanlines. The documented
   backend allowance promotes both entries and advances the ratchet to
   exact=72/diverges=0/gated=1,395; the hit-test readback failure is next.
+- 2026-07-12: Added JPEG decode alongside PNG and captured a dedicated C++
+  clockwise-atomic reference for `clipping_and_draw_order`. Both image draws,
+  including the circular clip, are restored; the renderer ratchet advances to
+  exact=77/diverges=0/gated=1,390. `ImageMeshDraw` is the next R2 image slice.

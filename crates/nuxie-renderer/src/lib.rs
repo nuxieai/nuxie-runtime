@@ -27,7 +27,7 @@ use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer,
     RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap, StrokeJoin,
+    RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 use std::error::Error;
@@ -844,7 +844,10 @@ impl WgpuFrame {
                 });
         let mut pending_coverage_readbacks = Vec::new();
         let mut encode_atomic_run =
-            |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
+            |draws: &[SolidDraw],
+             clear_target: bool,
+             force_clockwise_atomic_batch: bool,
+             encoder: &mut wgpu::CommandEncoder| {
                 struct PreparedAtomicDraw {
                     spans: Vec<gpu::TessVertexSpan>,
                     base_instance: u32,
@@ -911,8 +914,9 @@ impl WgpuFrame {
                             && draw.paint.feather == 0.0
                             && draw.state.clip_rect.is_none()
                     });
-                let use_clockwise_atomic_batch =
-                    homogeneous_global_fill || clockwise_atomic_clip_run;
+                let use_clockwise_atomic_batch = force_clockwise_atomic_batch
+                    || homogeneous_global_fill
+                    || clockwise_atomic_clip_run;
                 let mut clockwise_atomic_coverage_words = 0usize;
                 let mut prepared = Vec::with_capacity(draws.len());
                 let mut paths = vec![gpu::PathData::zeroed()];
@@ -1640,13 +1644,22 @@ impl WgpuFrame {
             let mut clear_target = true;
             while start < self.draws.len() {
                 let atomic = atomic_draw_is_eligible(&self.draws[start]);
+                let clockwise_atomic = atomic && draw_requires_clockwise_atomic(&self.draws[start]);
                 let mut end = start + 1;
-                while end < self.draws.len() && atomic_draw_is_eligible(&self.draws[end]) == atomic
+                while end < self.draws.len()
+                    && atomic_draw_is_eligible(&self.draws[end]) == atomic
+                    && (!atomic
+                        || draw_requires_clockwise_atomic(&self.draws[end]) == clockwise_atomic)
                 {
                     end += 1;
                 }
                 if atomic {
-                    encode_atomic_run(&self.draws[start..end], clear_target, &mut encoder)?;
+                    encode_atomic_run(
+                        &self.draws[start..end],
+                        clear_target,
+                        clockwise_atomic,
+                        &mut encoder,
+                    )?;
                 } else {
                     encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder);
                 }
@@ -2177,6 +2190,94 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     }
 }
 
+fn draw_requires_clockwise_atomic(draw: &SolidDraw) -> bool {
+    matches!(draw.role, DrawRole::Content { clip_id: 0 })
+        && draw.paint.style == RenderPaintStyle::Fill
+        && draw.paint.feather == 0.0
+        && draw.state.clip_rect.is_none()
+        && path_has_complex_fill_topology(&draw.path.raw_path)
+}
+
+fn path_has_complex_fill_topology(path: &RawPath) -> bool {
+    let mut contours = Vec::<Vec<Vec2D>>::new();
+    let mut contour = Vec::new();
+    let mut point_index = 0;
+    for verb in path.verbs() {
+        let point_count = match verb {
+            PathVerb::Move | PathVerb::Line => 1,
+            PathVerb::Quad => 2,
+            PathVerb::Cubic => 3,
+            PathVerb::Close => 0,
+        };
+        if *verb == PathVerb::Move && !contour.is_empty() {
+            contours.push(std::mem::take(&mut contour));
+        }
+        if point_count != 0 {
+            contour.push(path.points()[point_index + point_count - 1]);
+            point_index += point_count;
+        }
+    }
+    if !contour.is_empty() {
+        contours.push(contour);
+    }
+    for contour in &mut contours {
+        contour.dedup();
+        if contour.len() > 1 && contour.first() == contour.last() {
+            contour.pop();
+        }
+    }
+    contours.retain(|contour| !contour.is_empty());
+    if contours.len() > 1 {
+        return true;
+    }
+    let Some(points) = contours.first() else {
+        return false;
+    };
+    if points.len() < 4 {
+        return false;
+    }
+    for first in 0..points.len() {
+        let first_end = (first + 1) % points.len();
+        for second in first + 1..points.len() {
+            let second_end = (second + 1) % points.len();
+            if first_end == second || second_end == first {
+                continue;
+            }
+            if line_segments_intersect(
+                points[first],
+                points[first_end],
+                points[second],
+                points[second_end],
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn line_segments_intersect(a: Vec2D, b: Vec2D, c: Vec2D, d: Vec2D) -> bool {
+    fn cross(a: Vec2D, b: Vec2D, c: Vec2D) -> f32 {
+        (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+    }
+    fn contains(a: Vec2D, b: Vec2D, point: Vec2D) -> bool {
+        point.x >= a.x.min(b.x)
+            && point.x <= a.x.max(b.x)
+            && point.y >= a.y.min(b.y)
+            && point.y <= a.y.max(b.y)
+    }
+
+    let ac = cross(a, b, c);
+    let ad = cross(a, b, d);
+    let ca = cross(c, d, a);
+    let cb = cross(c, d, b);
+    (ac.signum() != ad.signum() && ca.signum() != cb.signum())
+        || (ac == 0.0 && contains(a, b, c))
+        || (ad == 0.0 && contains(a, b, d))
+        || (ca == 0.0 && contains(c, d, a))
+        || (cb == 0.0 && contains(c, d, b))
+}
+
 fn fill_path_is_collinear(path: &RawPath) -> bool {
     let mut points = path.points().iter().copied();
     let Some(origin) = points.next() else {
@@ -2235,6 +2336,36 @@ mod tests {
         let scaled = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
         let result = multiply(translated, scaled);
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+    }
+
+    #[test]
+    fn complex_fill_topology_detects_crossings_and_compound_contours() {
+        let mut concave = RawPath::new();
+        concave.move_to(20.0, 20.0);
+        concave.line_to(80.0, 20.0);
+        concave.line_to(30.0, 30.0);
+        concave.line_to(20.0, 80.0);
+        assert!(!path_has_complex_fill_topology(&concave));
+
+        let mut bowtie = RawPath::new();
+        bowtie.move_to(20.0, 20.0);
+        bowtie.line_to(80.0, 80.0);
+        bowtie.line_to(80.0, 20.0);
+        bowtie.line_to(20.0, 80.0);
+        assert!(path_has_complex_fill_topology(&bowtie));
+
+        let mut closed_cubic = RawPath::new();
+        append_oval(&mut closed_cubic, [0.0, 0.0, 100.0, 100.0]);
+        assert!(!path_has_complex_fill_topology(&closed_cubic));
+
+        let mut compound = RawPath::new();
+        compound.move_to(0.0, 0.0);
+        compound.line_to(10.0, 0.0);
+        compound.line_to(0.0, 10.0);
+        compound.move_to(20.0, 20.0);
+        compound.line_to(30.0, 20.0);
+        compound.line_to(20.0, 30.0);
+        assert!(path_has_complex_fill_topology(&compound));
     }
 
     fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> WgpuPath {

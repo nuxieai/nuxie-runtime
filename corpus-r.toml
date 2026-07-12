@@ -500,10 +500,9 @@ stream = "fixtures/renderer/streams/gm/concavepaths.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/concavepaths-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2111,10 +2110,9 @@ stream = "fixtures/renderer/streams/gm/poly_clockwise.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/poly_clockwise-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=58, diverges=0, gated=1,409, total=1,467.
+- Rust wgpu: exact=60, diverges=0, gated=1,407, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -53,7 +53,9 @@ Run `make renderer-golden`.
   `gm-negative_interior_triangles_as_clip-clockwise-atomic`, and
   `gm-convexpaths-clockwise-atomic`, `gm-pathfill-clockwise-atomic`,
   `gm-oval-clockwise-atomic`, and
-  `gm-mutating_fill_rule-clockwise-atomic`.
+  `gm-mutating_fill_rule-clockwise-atomic`, plus
+  `gm-concavepaths-clockwise-atomic` and
+  `gm-poly_clockwise-clockwise-atomic`.
 
 ## Milestones
 
@@ -119,8 +121,13 @@ Run `make renderer-golden`.
    counterclockwise-face cull to the CWA main path restores every oval, hole,
    and overlap. `mutating_fill_rule` is promoted after its remaining 45 pixels
    prove to be four one-pixel edge components with identical foreground
-   support. Continue with `concavepaths`, the smallest structural fill gap at
-   4,052 pixels beyond delta 2/max 255.
+   support. Topologically complex fills are now isolated into the true
+   clockwise-atomic pipeline, restoring self-intersections, repeated vertices,
+   and compound clockwise contours without regressing large interior
+   triangulation. `concavepaths` falls from 4,052 structural pixels to 9 edge
+   pixels and `poly_clockwise` becomes pixel-exact. Continue with the authored
+   `poly_evenOdd`/`poly_nonZero` pair, which now share a 9,121-pixel semantic
+   gap under the topology route.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -187,6 +194,10 @@ Run `make renderer-golden`.
   64-pixel allowance. All 45 residuals form four one-pixel vertical edge
   components, max delta is 11, and expected/actual foreground support is
   identical (IoU 1.0).
+- 2026-07-12: Self-intersecting and compound fills form their own
+  clockwise-atomic runs. Endpoint normalization keeps ordinary closed cubics
+  on the legacy analytic path; this preserves the promoted large-path corpus
+  while matching C++ atomic accumulation for complex topology.
 
 ## Log
 
@@ -791,3 +802,10 @@ Run `make renderer-golden`.
   support audit localized all 45 residuals to four one-pixel circle edges.
   The ratchet advances to exact=58/diverges=0/gated=1,409; `concavepaths` is
   the next measured structural fill target at 4,052 pixels beyond delta 2.
+- 2026-07-12: Routed only topologically complex fills through the true
+  clockwise-atomic coverage pipeline. Prefix replay localized the first
+  `concavepaths` failure to the self-intersecting bowtie; full CWA replay proved
+  the upstream behavior, and run splitting retained the established ordinary
+  fill path. `concavepaths` now has 9 pixels beyond delta 2/max 13 and
+  `poly_clockwise` is pixel-exact, advancing the ratchet to
+  exact=60/diverges=0/gated=1,407.

@@ -30,7 +30,7 @@ diff --git a/renderer/premake5.lua b/renderer/premake5.lua
 index 308f1f45..842750f2 100644
 --- a/renderer/premake5.lua
 +++ b/renderer/premake5.lua
-@@ -325,10 +325,61 @@ if _OPTIONS['with-webgpu'] or _OPTIONS['with-dawn'] then
+@@ -325,10 +325,62 @@ if _OPTIONS['with-webgpu'] or _OPTIONS['with-dawn'] then
          end
  
          filter({})
@@ -83,6 +83,7 @@ index 308f1f45..842750f2 100644
 +                'QuartzCore.framework',
 +                'IOKit.framework',
 +                'IOSurface.framework',
++                'Security.framework',
 +            })
 +        end
 +        filter('system:windows')

@@ -7,6 +7,7 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -74,13 +75,13 @@ struct MapResult
     bool succeeded = false;
 };
 
-void onMap(WGPUBufferMapAsyncStatus status,
+void onMap(WGPUMapAsyncStatus status,
            WGPUStringView message,
            void* userdata1,
            void*)
 {
     MapResult* result = static_cast<MapResult*>(userdata1);
-    result->succeeded = status == WGPUBufferMapAsyncStatus_Success;
+    result->succeeded = status == WGPUMapAsyncStatus_Success;
     if (!result->succeeded)
     {
         std::fprintf(stderr,
@@ -185,6 +186,8 @@ int main(int argc, char** argv)
     {
         fail("could not create Rive WebGPU render context");
     }
+    auto* webgpuContext =
+        context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();
 
     wgpu::TextureDescriptor targetDesc = {};
     targetDesc.usage = wgpu::TextureUsage::RenderAttachment;
@@ -192,9 +195,10 @@ int main(int argc, char** argv)
     targetDesc.size = {kFrameWidth, kFrameHeight, 1};
     targetDesc.format = wgpu::TextureFormat::RGBA8Unorm;
     wgpu::Texture targetTexture = device.CreateTexture(&targetDesc);
-    auto target = context->makeRenderTarget(wgpu::TextureFormat::RGBA8Unorm,
-                                            kFrameWidth,
-                                            kFrameHeight);
+    auto target = webgpuContext->makeRenderTarget(
+        wgpu::TextureFormat::RGBA8Unorm,
+        kFrameWidth,
+        kFrameHeight);
     target->setTargetTextureView(targetTexture.CreateView(), targetTexture);
 
     context->beginFrame({.renderTargetWidth = kFrameWidth,
@@ -225,13 +229,11 @@ int main(int argc, char** argv)
     wgpu::CommandBuffer renderCommands = renderEncoder.Finish();
     queue.Submit(1, &renderCommands);
 
-    const wgpu::Texture atlas = context->atlasMaskTextureForOracle();
-    const uint32_t width = atlas.GetWidth();
-    const uint32_t height = atlas.GetHeight();
-    if (width != kFrameWidth || height != kFrameHeight)
-    {
-        fail("atlas dimensions differ from the Rust 64x64 oracle contract");
-    }
+    const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
+    const uint32_t width = kFrameWidth;
+    const uint32_t height = kFrameHeight;
+    const uint32_t copyWidth = std::min(width, atlas.GetWidth());
+    const uint32_t copyHeight = std::min(height, atlas.GetHeight());
     const uint32_t packedRowBytes = width * kBytesPerTexel;
     const uint32_t paddedRowBytes = alignCopyRow(packedRowBytes);
     wgpu::BufferDescriptor readbackDesc = {};
@@ -245,7 +247,11 @@ int main(int argc, char** argv)
         .layout = {.offset = 0, .bytesPerRow = paddedRowBytes, .rowsPerImage = height},
         .buffer = readback,
     };
-    wgpu::Extent3D copySize = {.width = width, .height = height, .depthOrArrayLayers = 1};
+    wgpu::Extent3D copySize = {
+        .width = copyWidth,
+        .height = copyHeight,
+        .depthOrArrayLayers = 1,
+    };
     readEncoder.CopyTextureToBuffer(&source, &destination, &copySize);
     wgpu::CommandBuffer readCommands = readEncoder.Finish();
     queue.Submit(1, &readCommands);

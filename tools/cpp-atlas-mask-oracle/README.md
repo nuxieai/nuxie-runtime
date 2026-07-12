@@ -42,3 +42,5 @@ The same Xcode-26 branch temporarily appends
 This keeps legacy unsafe-buffer diagnostics visible but prevents the new clang
 default from promoting them to build-stopping errors. An explicit user value is
 never overwritten, and the harness removes only the line it added on exit.
+It also sets `use_lld=false`, making Dawn emit regular archives that the
+Premake executable's Apple `ld` link step can consume.

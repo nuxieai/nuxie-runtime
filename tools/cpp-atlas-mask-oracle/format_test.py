@@ -88,6 +88,15 @@ class FormatTests(unittest.TestCase):
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
             "paint->feather(20);",
+            "void onMap(WGPUMapAsyncStatus status,",
+            "status == WGPUMapAsyncStatus_Success",
+            "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
+            "webgpuContext->makeRenderTarget(",
+            "webgpuContext->atlasMaskTextureForOracle();",
+            "const uint32_t width = kFrameWidth;",
+            "const uint32_t height = kFrameHeight;",
+            "const uint32_t copyWidth = std::min(width, atlas.GetWidth());",
+            "const uint32_t copyHeight = std::min(height, atlas.GetHeight());",
             "writeU32(header, 8, 1);",
             "writeU32(header, 12, width);",
             "writeU32(header, 16, height);",
@@ -95,6 +104,9 @@ class FormatTests(unittest.TestCase):
             self.assertIn(fragment, source)
         self.assertNotIn("RenderPaintStyle::fill", source)
         self.assertNotIn("path->cubicTo(", source)
+        self.assertNotIn("WGPUBufferMapAsyncStatus", source)
+        self.assertNotIn("context->makeRenderTarget(", source)
+        self.assertNotIn("context->atlasMaskTextureForOracle()", source)
 
     def test_runtime_patch_applies_and_only_makes_atlas_copyable(self):
         files = (

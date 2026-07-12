@@ -47,6 +47,7 @@ dawn_archive_is_declared() {
 
 dawn_args="$dawn_dir/out/release/args.gn"
 dawn_warning_arg_added=0
+dawn_lld_arg_added=0
 
 configure_xcode26_dawn_args() {
     if ! needs_xcode26_patch; then
@@ -57,11 +58,21 @@ configure_xcode26_dawn_args() {
             echo "Dawn args explicitly set treat_warnings_as_errors; refusing to override it" >&2
             return 2
         fi
-        return
+    else
+        printf '\n# cpp-atlas-mask-oracle: Xcode 26 promotes legacy unsafe-buffer warnings.\ntreat_warnings_as_errors=false\n' >> "$dawn_args"
+        dawn_warning_arg_added=1
     fi
-    printf '\n# cpp-atlas-mask-oracle: Xcode 26 promotes legacy unsafe-buffer warnings.\ntreat_warnings_as_errors=false\n' >> "$dawn_args"
-    dawn_warning_arg_added=1
     grep -Eq '^treat_warnings_as_errors[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"
+
+    if grep -Eq '^use_lld[[:space:]]*=' "$dawn_args"; then
+        if ! grep -Eq '^use_lld[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"; then
+            echo "Dawn args explicitly set use_lld; refusing to override it" >&2
+            return 2
+        fi
+    else
+        printf '# cpp-atlas-mask-oracle: Apple ld cannot consume Dawn thin archives.\nuse_lld=false\n' >> "$dawn_args"
+        dawn_lld_arg_added=1
+    fi
 }
 
 usage() {
@@ -134,7 +145,12 @@ preflight() {
             echo "Dawn args explicitly enable warnings-as-errors; refusing to override them" >&2
             return 2
         fi
-        echo "Dawn Xcode-26 compatibility: treat_warnings_as_errors=false will be verified before GN generation"
+        if grep -Eq '^use_lld[[:space:]]*=' "$dawn_args" &&
+            ! grep -Eq '^use_lld[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"; then
+            echo "Dawn args explicitly enable lld; refusing to produce Apple-ld-incompatible thin archives" >&2
+            return 2
+        fi
+        echo "Dawn Xcode-26 compatibility: treat_warnings_as_errors=false and use_lld=false will be verified before GN generation"
     fi
     if (( missing )); then
         echo "preflight: BLOCKED (patch applies; Dawn build/runtime execution was not attempted)" >&2
@@ -162,6 +178,10 @@ cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 applied=0
 dawn_patch_applied=0
 cleanup() {
+    if (( dawn_lld_arg_added )); then
+        sed -i.bak '/^# cpp-atlas-mask-oracle: Apple ld cannot consume Dawn thin archives\.$/d; /^use_lld=false$/d' "$dawn_args"
+        rm -f "$dawn_args.bak"
+    fi
     if (( dawn_warning_arg_added )); then
         sed -i.bak '/^# cpp-atlas-mask-oracle: Xcode 26 promotes legacy unsafe-buffer warnings\.$/d; /^treat_warnings_as_errors=false$/d' "$dawn_args"
         rm -f "$dawn_args.bak"

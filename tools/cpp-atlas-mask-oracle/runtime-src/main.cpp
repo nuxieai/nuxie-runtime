@@ -7,7 +7,9 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -20,6 +22,13 @@ namespace
 {
 constexpr uint32_t kFrameWidth = 64;
 constexpr uint32_t kFrameHeight = 64;
+constexpr float kSquareMin = 16;
+constexpr float kSquareMax = 48;
+constexpr float kStrokeThickness = 8;
+constexpr float kFeather = 20;
+constexpr uint32_t kAtlasPadding = 2;
+constexpr uint32_t kExpectedLogicalAtlasSize = 39;
+constexpr uint32_t kExpectedPhysicalAtlasSize = 48;
 constexpr uint32_t kHeaderBytes = 20;
 constexpr uint32_t kBytesPerTexel = 2;
 constexpr uint32_t kCopyRowAlignment = 256;
@@ -28,6 +37,36 @@ void fail(const char* message)
 {
     std::fprintf(stderr, "cpp-atlas-mask-oracle: %s\\n", message);
     std::exit(1);
+}
+
+void validateFixtureContract()
+{
+    const float outset = kStrokeThickness * .5f * 4 + kFeather * 1.5f + 1;
+    const int32_t left = std::max(0, static_cast<int32_t>(std::floor(kSquareMin - outset)));
+    const int32_t top = left;
+    const int32_t right = std::min(static_cast<int32_t>(kFrameWidth),
+                                   static_cast<int32_t>(std::ceil(kSquareMax + outset)));
+    const int32_t bottom = right;
+    const float scale = 16 / std::max(kFeather * 1.5f, 16.0f);
+    const uint32_t contentWidth =
+        static_cast<uint32_t>(std::ceil((right - left) * scale));
+    const uint32_t contentHeight =
+        static_cast<uint32_t>(std::ceil((bottom - top) * scale));
+    const uint32_t logicalWidth = contentWidth + kAtlasPadding * 2;
+    const uint32_t logicalHeight = contentHeight + kAtlasPadding * 2;
+    const float placementX = kAtlasPadding - left * scale;
+    const float placementY = kAtlasPadding - top * scale;
+    const uint32_t physicalWidth = logicalWidth * 5 / 4;
+    const uint32_t physicalHeight = logicalHeight * 5 / 4;
+    if (left != 0 || top != 0 || right != static_cast<int32_t>(kFrameWidth) ||
+        bottom != static_cast<int32_t>(kFrameHeight) ||
+        logicalWidth != kExpectedLogicalAtlasSize ||
+        logicalHeight != kExpectedLogicalAtlasSize || placementX != 2 || placementY != 2 ||
+        physicalWidth != kExpectedPhysicalAtlasSize ||
+        physicalHeight != kExpectedPhysicalAtlasSize)
+    {
+        fail("fixed fixture no longer derives the 64-frame/39-logical/(2,2)-placement/48-physical atlas contract");
+    }
 }
 
 void await(WGPUInstance instance, WGPUFuture future)
@@ -140,6 +179,7 @@ void writeMask(const char* output,
 
 int main(int argc, char** argv)
 {
+    validateFixtureContract();
     const char* output = argc == 2 ? argv[1] : "atlas-mask.r16f";
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -208,17 +248,17 @@ int main(int argc, char** argv)
     rive::RiveRenderer renderer(context.get());
     auto path = context->makeEmptyRenderPath();
     // Exact fixed_feather_atlas_mask() geometry from Rust's env test.
-    path->moveTo(16, 16);
-    path->lineTo(48, 16);
-    path->lineTo(48, 48);
-    path->lineTo(16, 48);
+    path->moveTo(kSquareMin, kSquareMin);
+    path->lineTo(kSquareMax, kSquareMin);
+    path->lineTo(kSquareMax, kSquareMax);
+    path->lineTo(kSquareMin, kSquareMax);
     path->close();
     auto paint = context->makeRenderPaint();
     paint->style(rive::RenderPaintStyle::stroke);
-    paint->thickness(8);
+    paint->thickness(kStrokeThickness);
     paint->join(rive::StrokeJoin::miter);
     paint->cap(rive::StrokeCap::butt);
-    paint->feather(20);
+    paint->feather(kFeather);
     paint->color(0xffffffff);
     renderer.drawPath(path.get(), paint.get());
 
@@ -231,16 +271,17 @@ int main(int argc, char** argv)
     const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
     const uint32_t atlasWidth = atlas.GetWidth();
     const uint32_t atlasHeight = atlas.GetHeight();
-    if (atlasWidth != kFrameWidth || atlasHeight != kFrameHeight)
+    if (atlasWidth != kExpectedPhysicalAtlasSize ||
+        atlasHeight != kExpectedPhysicalAtlasSize)
     {
         std::fprintf(stderr,
-                     "cpp-atlas-mask-oracle: expected a 64x64 physical atlas, got %ux%u\n",
+                     "cpp-atlas-mask-oracle: expected physical=48x48 logical=39x39 placement=(2,2) frame=64x64, got physical=%ux%u\n",
                      atlasWidth,
                      atlasHeight);
         return 1;
     }
-    const uint32_t width = kFrameWidth;
-    const uint32_t height = kFrameHeight;
+    const uint32_t width = atlasWidth;
+    const uint32_t height = atlasHeight;
     const uint32_t packedRowBytes = width * kBytesPerTexel;
     const uint32_t paddedRowBytes = alignCopyRow(packedRowBytes);
     wgpu::BufferDescriptor readbackDesc = {};

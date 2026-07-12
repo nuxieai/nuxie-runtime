@@ -8,17 +8,21 @@ source directory.
 
 The exporter draws one fixed closed square stroke:
 
-* render target and atlas: `64 x 64`
+* render target: `64 x 64`
 * closed square: `(16,16) -> (48,16) -> (48,48) -> (16,48)`
 * stroke: thickness `8`, miter join, butt cap, feather `20`
 * frame: 4x MSAA, which selects atlas feather rendering
+* atlas contract: `39 x 39` logical content at `(2,2)`, in the complete
+  `48 x 48` physical allocation produced by C++'s 125% resource growth
 
 Output is the exact `RIVEMSK` version 1 Rust interchange format: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by a
 canonical, tightly row-packed `R16Float` payload. WebGPU's 256-byte copy rows
-are stripped during export. The physical C++ atlas must itself be exactly
-`64 x 64`; the exporter reports its actual dimensions and fails instead of
-cropping, padding, or otherwise normalizing a different allocation.
+are stripped during export. The complete physical C++ atlas, including its
+cleared unused tail, must be exactly `48 x 48`, making the canonical file
+exactly `4628` bytes. The exporter validates the frame, logical allocation,
+placement, and physical allocation, then fails on drift without cropping,
+padding, or normalization.
 
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
@@ -27,8 +31,11 @@ python3 tools/cpp-atlas-mask-oracle/format_test.py
 RIVE_CPP_ATLAS_MASK=tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_atlas_mask_oracle_matches_fixed_rust_mask_when_configured \
-  -- --exact --nocapture
+  -- --exact --ignored --nocapture
 ```
+
+The configured comparator is ignored by ordinary test suites and requires a
+nonempty `RIVE_CPP_ATLAS_MASK`; invoking it without the variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing
 Dawn prerequisite without building or changing the runtime checkout.

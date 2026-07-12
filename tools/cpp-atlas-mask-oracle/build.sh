@@ -261,4 +261,9 @@ configure_xcode26_dawn_args
 
 rm -f "$output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output"
+output_bytes="$(wc -c < "$output" | tr -d ' ')"
+if [[ "$output_bytes" != "4628" ]]; then
+    echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"

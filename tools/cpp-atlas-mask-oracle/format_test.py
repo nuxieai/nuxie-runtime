@@ -15,7 +15,9 @@ MAGIC = b"RIVEMSK\0"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXPORTER = pathlib.Path(__file__).with_name("runtime-src") / "main.cpp"
 BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
+README = pathlib.Path(__file__).with_name("README.md")
 RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
+RUST_RENDERER = ROOT / "crates" / "nuxie-renderer" / "src" / "lib.rs"
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
 # Exact bytes asserted by AtlasMask::serialize() in commit 10a64ec.
@@ -78,17 +80,20 @@ class FormatTests(unittest.TestCase):
         for fragment in (
             "constexpr uint32_t kFrameWidth = 64;",
             "constexpr uint32_t kFrameHeight = 64;",
+            "constexpr uint32_t kExpectedLogicalAtlasSize = 39;",
+            "constexpr uint32_t kExpectedPhysicalAtlasSize = 48;",
             "constexpr uint32_t kHeaderBytes = 20;",
-            "path->moveTo(16, 16);",
-            "path->lineTo(48, 16);",
-            "path->lineTo(48, 48);",
-            "path->lineTo(16, 48);",
+            "validateFixtureContract();",
+            "path->moveTo(kSquareMin, kSquareMin);",
+            "path->lineTo(kSquareMax, kSquareMin);",
+            "path->lineTo(kSquareMax, kSquareMax);",
+            "path->lineTo(kSquareMin, kSquareMax);",
             "path->close();",
             "paint->style(rive::RenderPaintStyle::stroke);",
-            "paint->thickness(8);",
+            "paint->thickness(kStrokeThickness);",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
-            "paint->feather(20);",
+            "paint->feather(kFeather);",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
             "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
@@ -96,10 +101,9 @@ class FormatTests(unittest.TestCase):
             "webgpuContext->atlasMaskTextureForOracle();",
             "const uint32_t atlasWidth = atlas.GetWidth();",
             "const uint32_t atlasHeight = atlas.GetHeight();",
-            "if (atlasWidth != kFrameWidth || atlasHeight != kFrameHeight)",
-            '"cpp-atlas-mask-oracle: expected a 64x64 physical atlas, got %ux%u\\n"',
-            "const uint32_t width = kFrameWidth;",
-            "const uint32_t height = kFrameHeight;",
+            "if (atlasWidth != kExpectedPhysicalAtlasSize ||",
+            "const uint32_t width = atlasWidth;",
+            "const uint32_t height = atlasHeight;",
             ".width = width,",
             ".height = height,",
             "writeU32(header, 8, 1);",
@@ -112,7 +116,6 @@ class FormatTests(unittest.TestCase):
         self.assertNotIn("WGPUBufferMapAsyncStatus", source)
         self.assertNotIn("context->makeRenderTarget(", source)
         self.assertNotIn("context->atlasMaskTextureForOracle()", source)
-        self.assertNotIn("std::min", source)
         self.assertNotIn("copyWidth", source)
         self.assertNotIn("copyHeight", source)
 
@@ -128,8 +131,28 @@ class FormatTests(unittest.TestCase):
             'cp "$dawn_args_snapshot" "$dawn_args"',
             'cmp -s "$dawn_args_snapshot" "$dawn_args"',
             'rm -f "$output"',
+            'if [[ "$output_bytes" != "4628" ]]',
         ):
             self.assertIn(fragment, source)
+
+    def test_rust_fixture_uses_physical_placement_contract_and_required_env(self):
+        source = RUST_RENDERER.read_text()
+        for fragment in (
+            "const ATLAS_ORACLE_FRAME_SIZE: u32 = 64;",
+            "const ATLAS_ORACLE_PHYSICAL_SIZE: u32 = 48;",
+            "const ATLAS_ORACLE_LOGICAL_SIZE: u32 = 39;",
+            "const ATLAS_ORACLE_PLACEMENT: [f32; 2] = [2.0, 2.0];",
+            "let mut placement = feather_atlas_placement(",
+            "assert_eq!([placement.width, placement.height], [39, 39]);",
+            "uniforms.atlas_texture_inverse_size =",
+            "2.0 / placement.width as f32",
+            "placement.width,",
+            '#[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]',
+            '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
+        ):
+            self.assertIn(fragment, source)
+        readme = README.read_text()
+        self.assertIn("-- --exact --ignored --nocapture", readme)
 
     def test_runtime_patch_applies_and_only_makes_atlas_copyable(self):
         files = (

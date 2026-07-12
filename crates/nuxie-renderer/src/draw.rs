@@ -944,10 +944,78 @@ pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D)
 }
 
 pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
-    cubic_contours(path)
-        .iter()
-        .map(|curves| signed_area(&curves.iter().map(|curve| curve[0]).collect::<Vec<_>>()))
-        .sum()
+    let mut area = 0.0;
+    let mut contour_start = Vec2D::new(0.0, 0.0);
+    let mut last = Vec2D::new(0.0, 0.0);
+    let mut point_index = 0;
+    for verb in path.verbs() {
+        match verb {
+            PathVerb::Move => {
+                area += vector_cross(last, contour_start);
+                contour_start = path.points()[point_index];
+                last = contour_start;
+                point_index += 1;
+            }
+            PathVerb::Line => {
+                let end = path.points()[point_index];
+                area += vector_cross(last, end);
+                last = end;
+                point_index += 1;
+            }
+            PathVerb::Quad => {
+                let control = path.points()[point_index];
+                let end = path.points()[point_index + 1];
+                let cubic = [
+                    last,
+                    lerp(last, control, 2.0 / 3.0),
+                    lerp(end, control, 2.0 / 3.0),
+                    end,
+                ];
+                accumulate_coarse_cubic_area(&mut area, &mut last, cubic);
+                point_index += 2;
+            }
+            PathVerb::Cubic => {
+                let cubic = [
+                    last,
+                    path.points()[point_index],
+                    path.points()[point_index + 1],
+                    path.points()[point_index + 2],
+                ];
+                accumulate_coarse_cubic_area(&mut area, &mut last, cubic);
+                point_index += 3;
+            }
+            PathVerb::Close => {}
+        }
+    }
+    area += vector_cross(last, contour_start);
+    area * 0.5
+}
+
+fn accumulate_coarse_cubic_area(area: &mut f32, last: &mut Vec2D, cubic: [Vec2D; 4]) {
+    let segment_count = coarse_cubic_segment_count(cubic);
+    for segment in 1..segment_count {
+        let point = eval_cubic(cubic, segment as f32 / segment_count as f32);
+        *area += vector_cross(*last, point);
+        *last = point;
+    }
+    *area += vector_cross(*last, cubic[3]);
+    *last = cubic[3];
+}
+
+fn coarse_cubic_segment_count(points: [Vec2D; 4]) -> u32 {
+    let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
+        let x = a.x - 2.0 * b.x + c.x;
+        let y = a.y - 2.0 * b.y + c.y;
+        x * x + y * y
+    };
+    let max_length_squared = second_difference(points[0], points[1], points[2])
+        .max(second_difference(points[1], points[2], points[3]));
+    let length_term_squared = (9.0 / 16.0) * (1.0 / 8.0f32).powi(2);
+    (max_length_squared * length_term_squared)
+        .sqrt()
+        .sqrt()
+        .ceil()
+        .clamp(1.0, 64.0) as u32
 }
 
 pub(crate) fn build_interior_tessellation(
@@ -993,10 +1061,7 @@ pub(crate) fn build_interior_tessellation(
         SweepDirection::Vertical
     };
     let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
-    let coarse_area = cubic_contours
-        .iter()
-        .map(|curves| signed_area(&curves.iter().map(|curve| curve[0]).collect::<Vec<_>>()))
-        .sum::<f32>();
+    let coarse_area = path_coarse_area(path);
     let negate_coverage = clockwise_atomic_negate_coverage_from_area(
         coarse_area,
         determinant,
@@ -1250,10 +1315,7 @@ pub(crate) fn clockwise_atomic_negate_coverage(
     clockwise_override: bool,
 ) -> bool {
     let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
-    let coarse_area = cubic_contours(path)
-        .iter()
-        .map(|curves| signed_area(&curves.iter().map(|curve| curve[0]).collect::<Vec<_>>()))
-        .sum::<f32>();
+    let coarse_area = path_coarse_area(path);
     clockwise_atomic_negate_coverage_from_area(
         coarse_area,
         determinant,
@@ -1791,6 +1853,26 @@ mod tests {
             Vec2D::new(100.0, 0.0),
         ];
         assert_eq!(cubic_segment_count(curve), 21);
+        assert_eq!(coarse_cubic_segment_count(curve), 4);
+    }
+
+    #[test]
+    fn coarse_area_preserves_cpp_stream_order_for_cancelling_contours() {
+        let mut path = RawPath::new();
+        path.move_to(1.0, 0.0);
+        path.line_to(-0.500_000_06, -0.866_025_4);
+        path.line_to(-0.499_999_9, 0.866_025_45);
+        path.move_to(-1.0, -8.742_278e-8);
+        path.line_to(0.499_999_9, -0.866_025_45);
+        path.line_to(0.500_000_06, 0.866_025_4);
+
+        assert!(path_coarse_area(&path) < 0.0);
+        assert!(clockwise_atomic_negate_coverage(
+            &path,
+            Mat2D::IDENTITY,
+            FillRule::EvenOdd,
+            true,
+        ));
     }
 
     #[test]

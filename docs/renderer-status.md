@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=60, diverges=0, gated=1,407, total=1,467.
+- Rust wgpu: exact=62, diverges=0, gated=1,405, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -55,7 +55,7 @@ Run `make renderer-golden`.
   `gm-oval-clockwise-atomic`, and
   `gm-mutating_fill_rule-clockwise-atomic`, plus
   `gm-concavepaths-clockwise-atomic` and
-  `gm-poly_clockwise-clockwise-atomic`.
+  the `gm-poly_{clockwise,evenOdd,nonZero}-clockwise-atomic` family.
 
 ## Milestones
 
@@ -125,9 +125,12 @@ Run `make renderer-golden`.
    clockwise-atomic pipeline, restoring self-intersections, repeated vertices,
    and compound clockwise contours without regressing large interior
    triangulation. `concavepaths` falls from 4,052 structural pixels to 9 edge
-   pixels and `poly_clockwise` becomes pixel-exact. Continue with the authored
-   `poly_evenOdd`/`poly_nonZero` pair, which now share a 9,121-pixel semantic
-   gap under the topology route.
+   pixels and `poly_clockwise` becomes pixel-exact. The remaining
+   `poly_evenOdd`/`poly_nonZero` pair exposed a floating-point parity bug in
+   dominant-winding selection: Rust summed per-contour areas, while C++
+   accumulates the raw path in stream order before halving. Porting that exact
+   accumulator restores both files to 2 edge pixels. Continue with the tied
+   `cubicpath`/`cubicclosepath` primitive gap at 6,240 pixels/max 127.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -198,6 +201,10 @@ Run `make renderer-golden`.
   clockwise-atomic runs. Endpoint normalization keeps ordinary closed cubics
   on the legacy analytic path; this preserves the promoted large-path corpus
   while matching C++ atomic accumulation for complex topology.
+- 2026-07-12: Dominant winding uses C++ `RawPath::computeCoarseArea` stream
+  order, including coarse cubic subdivision. This order is observable when
+  opposite contours nearly cancel and must not be replaced by independently
+  rounded per-contour areas.
 
 ## Log
 
@@ -809,3 +816,8 @@ Run `make renderer-golden`.
   fill path. `concavepaths` now has 9 pixels beyond delta 2/max 13 and
   `poly_clockwise` is pixel-exact, advancing the ratchet to
   exact=60/diverges=0/gated=1,407.
+- 2026-07-12: Ported C++ coarse-area accumulation order after the isolated
+  counterclockwise six-point polygon proved that equal opposite contours used
+  the wrong floating-point tie-break in Rust. `poly_evenOdd` and `poly_nonZero`
+  each fall from 9,121 structural pixels to 2 edge pixels/max 17, advancing
+  the ratchet to exact=62/diverges=0/gated=1,405.

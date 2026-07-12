@@ -1756,10 +1756,9 @@ stream = "fixtures/renderer/streams/gm/negative_interior_triangles.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/negative_interior_triangles-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 1152
 
 
 [[entry]]

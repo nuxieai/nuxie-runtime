@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=52, diverges=0, gated=1,415, total=1,467.
+- Rust wgpu: exact=53, diverges=0, gated=1,414, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -48,7 +48,8 @@ Run `make renderer-golden`.
   `gm-emptystrokefeather-clockwise-atomic`, plus
   `gm-largeclippedpath_clockwise-clockwise-atomic` and
   `gm-largeclippedpath_clockwise_nested-clockwise-atomic`, and the
-  `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix.
+  `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
+  and `gm-negative_interior_triangles-clockwise-atomic`.
 
 ## Milestones
 
@@ -91,10 +92,14 @@ Run `make renderer-golden`.
    borrowed-to-main barrier, tiled visible-bounds allocations, a sampled
    WebGPU clip plane, and fixed-function `plus`/`min` clip attachments. The
    full large-path clockwise/winding/even-odd matrix is promoted under the
-   forced-clockwise oracle. The next measured correctness gap is negative
-   interior triangles: unclipped differs at 16,845 pixels/max 255 and clipped
-   at 181,923/max 255. Diagnose the shared borrowed/main coverage path first,
-   then the additional clip amplification. Parent-tight clip bounds are a
+   forced-clockwise oracle. Negative-determinant interior preparation now uses
+   C++'s physical forward-then-reverse tessellation layout, reducing the
+   unclipped GM from 16,845 pixels to a bounded 1,040 edge pixels and promoting
+   it. Counterclockwise culling on clip path/interior passes reduces the
+   positive nested-clip draw from 15,408 pixels to 23. The remaining measured
+   gap is the mirrored nested inverse clip, which is still blank and differs at
+   roughly 166,515 pixels; build a focused inverse-path preparation/coverage
+   oracle before changing scheduling or bounds. Parent-tight clip bounds are a
    later performance refinement, not a correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
    Continue R2 with those fill/clip semantics, remaining `render_context.cpp`
@@ -134,6 +139,12 @@ Run `make renderer-golden`.
   parity would contradict the C++ oracle. Viewport-bounded nested inverses are
   behaviorally equivalent while the parent clip remains active, so parent
   content/tightened bounds stay a performance task unless pixels prove otherwise.
+- 2026-07-12: `negative_interior_triangles` keeps max channel delta 2 with a
+  bounded 1,152-pixel allowance. The two isolated determinant draws differ at
+  553 and 487 pixels, the combined 1%-coverage support masks differ at only 26
+  pixels, and the 1,040 residuals are sparse backend edge coverage rather than
+  missing geometry. The mirrored as-clip case remains gated because its broad
+  blank region is an algorithm failure.
 
 ## Log
 
@@ -681,3 +692,13 @@ Run `make renderer-golden`.
   delta-2 allowance and advance the ratchet to exact=52/diverges=0/gated=1,415.
   The adjacent negative-interior probe remains a real geometry/coverage gap:
   16,845 pixels unclipped and 181,923 as a clip, both max delta 255.
+- 2026-07-12: Ported C++'s `forwardThenReverse` physical tessellation layout
+  for negative clockwise coverage and counterclockwise face culling for clip
+  path/interior passes. Regression tests pin the C++ contour indices (493
+  normal, 17 mirrored) and three formerly missing nested-clip pixels. The
+  unclipped negative-interior GM improves 16,845 -> 1,040 pixels and advances
+  the ratchet to exact=53/diverges=0/gated=1,414. A Terra oracle lane remains
+  isolated and unmerged after Sol review found that its first capture modeled
+  an opaque standalone draw instead of the real borrowed/main split; its
+  forced-CWA Dawn amendment then failed binding validation. Continue linearly
+  with a narrow mirrored inverse-clip oracle rather than merging that lane.

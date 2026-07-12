@@ -1054,10 +1054,15 @@ pub(crate) fn build_interior_tessellation(
     let mut contours = Vec::with_capacity(cubic_contours.len());
     let mut curve_offset = 0i32;
     for (contour_index, curves) in cubic_contours.iter().enumerate() {
+        let forward_base = if negate_coverage {
+            base
+        } else {
+            base + half_vertex_count
+        };
         contours.push(ContourData::new(
             [0.0, 0.0],
             1,
-            (base + half_vertex_count + curve_offset) as u32,
+            (forward_base + curve_offset) as u32,
         ));
         for curve in curves {
             let span = TessVertexSpan::without_reflection(
@@ -1080,6 +1085,7 @@ pub(crate) fn build_interior_tessellation(
                 base + curve_offset + OUTER_CURVE_PATCH_SEGMENT_SPAN as i32,
                 base,
                 half_vertex_count,
+                negate_coverage,
             );
             curve_offset += OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
         }
@@ -1107,6 +1113,7 @@ pub(crate) fn build_interior_tessellation(
             base + curve_offset + OUTER_CURVE_PATCH_SEGMENT_SPAN as i32,
             base,
             half_vertex_count,
+            negate_coverage,
         );
         curve_offset += OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
     }
@@ -1213,6 +1220,7 @@ impl FillTessellation {
                 logical_x0 + x1 - x0,
                 base as i32,
                 half_vertex_count as i32,
+                false,
             );
         }
         self.spans = double_sided_spans;
@@ -1233,11 +1241,18 @@ fn push_double_sided_tessellation_spans(
     logical_x1: i32,
     base: i32,
     half_vertex_count: i32,
+    forward_then_reverse: bool,
 ) {
     let offset = logical_x0 - base;
     let vertex_count = logical_x1 - logical_x0;
-    let forward_location = base + half_vertex_count + offset;
-    let reflection_location = base + half_vertex_count - offset;
+    let (forward_location, reflection_location) = if forward_then_reverse {
+        (base + offset, base + half_vertex_count * 2 - offset)
+    } else {
+        (
+            base + half_vertex_count + offset,
+            base + half_vertex_count - offset,
+        )
+    };
     let mut y = forward_location / TESS_TEXTURE_WIDTH;
     let mut x0 = forward_location % TESS_TEXTURE_WIDTH;
     let mut x1 = x0 + vertex_count;
@@ -1893,6 +1908,43 @@ mod tests {
         assert_eq!(
             tessellation.spans[1].contour_id_with_flags,
             CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG | 1
+        );
+    }
+
+    #[test]
+    fn mirrored_clockwise_interior_uses_forward_then_reverse_layout() {
+        let mut path = RawPath::new();
+        path.move_to(1600.0, 0.0);
+        path.line_to(0.0, 0.0);
+        path.line_to(0.0, 1600.0);
+        path.line_to(1600.0, 1600.0);
+        path.close();
+        for x in [800.0, 0.0, 800.0] {
+            path.move_to(x + 50.0, 640.0);
+            path.cubic_to(x + 50.0, 0.0, x + 750.0, 0.0, x + 750.0, 640.0);
+            path.cubic_to(x + 750.0, 1600.0, x + 50.0, 1600.0, x + 50.0, 640.0);
+        }
+
+        let positive = build_interior_tessellation(
+            &path,
+            Mat2D([1.0, 0.0, 0.0, 1.0, 29.0, -100.0]),
+            FillRule::Clockwise,
+            false,
+        )
+        .unwrap();
+        let mirrored = build_interior_tessellation(
+            &path,
+            Mat2D([-1.0, 0.0, 0.0, 1.0, 1593.0, 207.0]),
+            FillRule::Clockwise,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(positive.contours[0].vertex_index0, 493);
+        assert_eq!(mirrored.contours[0].vertex_index0, 17);
+        assert_ne!(
+            positive.spans[1].reflection_x0_x1,
+            mirrored.spans[1].reflection_x0_x1
         );
     }
 

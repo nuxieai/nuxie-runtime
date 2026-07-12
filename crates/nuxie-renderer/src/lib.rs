@@ -1997,7 +1997,6 @@ fn invert_clockwise_path(
     inverse_path.line_to(bounds[1].x, bounds[1].y);
     inverse_path.line_to(bounds[2].x, bounds[2].y);
     inverse_path.line_to(bounds[3].x, bounds[3].y);
-    inverse_path.close();
     if fill_rule == FillRule::Clockwise || draw::path_coarse_area(path) >= 0.0 {
         inverse_path.add_path_backwards(path, Mat2D::IDENTITY);
     } else {
@@ -2119,6 +2118,73 @@ mod tests {
         WgpuPath {
             raw_path,
             fill_rule,
+        }
+    }
+
+    fn negative_interior_path() -> WgpuPath {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(1600.0, 0.0);
+        raw_path.line_to(0.0, 0.0);
+        raw_path.line_to(0.0, 1600.0);
+        raw_path.line_to(1600.0, 1600.0);
+        raw_path.close();
+        for x in [800.0, 0.0, 800.0] {
+            raw_path.move_to(x + 50.0, 640.0);
+            raw_path.cubic_to(x + 50.0, 0.0, x + 750.0, 0.0, x + 750.0, 640.0);
+            raw_path.cubic_to(x + 750.0, 1600.0, x + 50.0, 1600.0, x + 50.0, 640.0);
+        }
+        WgpuPath {
+            raw_path,
+            fill_rule: FillRule::Clockwise,
+        }
+    }
+
+    fn negative_interior_checkerboard() -> WgpuPath {
+        let mut raw_path = RawPath::new();
+        for index in 0..50 {
+            let offset = index as f32 * 32.0;
+            let (horizontal, vertical) = if index & 1 == 0 {
+                (
+                    [
+                        [0.0, offset],
+                        [0.0, offset + 32.0],
+                        [1600.0, offset + 32.0],
+                        [1600.0, offset],
+                    ],
+                    [
+                        [offset, 0.0],
+                        [offset, 1600.0],
+                        [offset + 32.0, 1600.0],
+                        [offset + 32.0, 0.0],
+                    ],
+                )
+            } else {
+                (
+                    [
+                        [0.0, offset],
+                        [1600.0, offset],
+                        [1600.0, offset + 32.0],
+                        [0.0, offset + 32.0],
+                    ],
+                    [
+                        [offset, 0.0],
+                        [offset + 32.0, 0.0],
+                        [offset + 32.0, 1600.0],
+                        [offset, 1600.0],
+                    ],
+                )
+            };
+            for points in [horizontal, vertical] {
+                raw_path.move_to(points[0][0], points[0][1]);
+                for point in &points[1..] {
+                    raw_path.line_to(point[0], point[1]);
+                }
+                raw_path.close();
+            }
+        }
+        WgpuPath {
+            raw_path,
+            fill_rule: FillRule::Clockwise,
         }
     }
 
@@ -2424,6 +2490,29 @@ mod tests {
         assert_eq!(pixel(20, 20), [0, 0, 0, 255]);
         assert_eq!(pixel(100, 100), [0, 0, 0, 255]);
         assert_eq!(pixel(320, 320), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn clockwise_atomic_nested_interior_clip_culls_counterclockwise_faces() {
+        let factory = WgpuFactory::new_with_mode(1600, 1600, RenderMode::ClockwiseAtomic).unwrap();
+        let checkerboard = negative_interior_checkerboard();
+        let clip = negative_interior_path();
+        let fill = rect_path([0.0, 0.0, 1600.0, 1600.0], FillRule::Clockwise);
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_ffff);
+        frame.clip_path(&checkerboard);
+        frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 29.0, -100.0]));
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &red);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 1600 + x) * 4..][..4];
+
+        assert_eq!(pixel(1074, 116), [255, 0, 0, 255]);
+        assert_eq!(pixel(1331, 103), [255, 0, 0, 255]);
+        assert_eq!(pixel(939, 302), [255, 0, 0, 255]);
     }
 
     #[test]

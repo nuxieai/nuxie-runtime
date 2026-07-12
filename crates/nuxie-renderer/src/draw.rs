@@ -384,6 +384,7 @@ fn build_stroke_or_feather_tessellation(
     if contour_data.is_empty() {
         return None;
     }
+    push_midpoint_tail_padding(&mut spans, location);
     Some(FillTessellation {
         spans,
         path: PathData::new(
@@ -793,6 +794,7 @@ pub(crate) fn build_interior_tessellation(
             curve_offset += OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
         }
     }
+    push_final_padding(&mut spans, base + half_vertex_count * 2);
     Some(InteriorTessellation {
         spans,
         path: PathData::new(
@@ -868,6 +870,11 @@ fn subdivide_cubic(mut curve: [Vec2D; 4], subdivision_count: u32) -> Vec<[Vec2D;
 
 impl FillTessellation {
     pub(crate) fn make_double_sided(&mut self) {
+        while self.spans.len() > 1
+            && self.spans.last().unwrap().contour_id_with_flags & CONTOUR_ID_MASK == 0
+        {
+            self.spans.pop();
+        }
         let base = self.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let half_vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         for span in &mut self.spans {
@@ -890,6 +897,9 @@ impl FillTessellation {
             contour.vertex_index0 += half_vertex_count;
         }
         self.instance_count *= 2;
+        let location =
+            (self.base_instance + self.instance_count) * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        push_midpoint_tail_padding(&mut self.spans, location as i32);
     }
 }
 
@@ -938,6 +948,7 @@ pub(crate) fn build_fill_tessellation(
             ));
         }
     }
+    push_midpoint_tail_padding(&mut spans, location);
     Some(FillTessellation {
         spans,
         path: PathData::new(
@@ -1061,6 +1072,38 @@ fn push_padding_span(spans: &mut Vec<TessVertexSpan>, x0: i32, x1: i32) {
         1,
         0,
     ));
+}
+
+fn push_final_padding(spans: &mut Vec<TessVertexSpan>, location: i32) {
+    push_forward_tessellation_spans(
+        spans,
+        [[0.0; 2]; 4],
+        [0.0; 2],
+        location,
+        location + 1,
+        0,
+        0,
+        1,
+        0,
+    );
+}
+
+fn push_midpoint_tail_padding(spans: &mut Vec<TessVertexSpan>, location: i32) {
+    let outer_curve_start = align_up(location, OUTER_CURVE_PATCH_SEGMENT_SPAN as i32);
+    if outer_curve_start != location {
+        push_forward_tessellation_spans(
+            spans,
+            [[0.0; 2]; 4],
+            [0.0; 2],
+            location,
+            outer_curve_start,
+            0,
+            0,
+            1,
+            0,
+        );
+    }
+    push_final_padding(spans, outer_curve_start);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1382,6 +1425,35 @@ mod tests {
         assert!(triangulate_contour(&contour.points).is_some());
     }
 
+    fn assert_post_contour_padding(tessellation: &FillTessellation) {
+        let logical_end = (tessellation.base_instance + tessellation.instance_count)
+            * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let location = align_up(logical_end as i32, OUTER_CURVE_PATCH_SEGMENT_SPAN as i32) as u32;
+        let padding = tessellation.spans.last().unwrap();
+        assert_eq!(padding.points, [[0.0; 2]; 4]);
+        assert_eq!(padding.join_tangent, [0.0; 2]);
+        assert_eq!(padding.y, (location as i32 / TESS_TEXTURE_WIDTH) as f32);
+        assert_eq!(
+            padding.x_range(),
+            (
+                location as i32 % TESS_TEXTURE_WIDTH,
+                location as i32 % TESS_TEXTURE_WIDTH + 1,
+            )
+        );
+        assert_eq!(padding.segment_counts, 0x0010_0000);
+        assert_eq!(padding.contour_id_with_flags, 0);
+        assert!(
+            tessellation
+                .spans
+                .iter()
+                .filter(|span| {
+                    span.segment_counts == 0x0010_0000 && span.contour_id_with_flags == 0
+                })
+                .count()
+                >= 1
+        );
+    }
+
     #[test]
     fn fill_tessellation_obeys_eight_vertex_patch_layout() {
         let mut path = RawPath::new();
@@ -1394,10 +1466,11 @@ mod tests {
         assert_eq!(tessellation.instance_count, 1);
         assert_eq!(tessellation.contours.len(), 1);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert_eq!(tessellation.spans.len(), 4);
+        assert_eq!(tessellation.spans.len(), 6);
         assert_eq!(tessellation.spans[0].x0_x1 as u32, 0x0008_0000);
         assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x000c_0008);
         assert_eq!(tessellation.spans[3].x0_x1 as u32, 0x0010_000e);
+        assert_post_contour_padding(&tessellation);
     }
 
     #[test]
@@ -1414,6 +1487,7 @@ mod tests {
         assert_eq!(tessellation.contours[0].vertex_index0, 16);
         assert_eq!(tessellation.spans[1].x_range(), (16, 20));
         assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x000c_0010);
+        assert_post_contour_padding(&tessellation);
     }
 
     #[test]
@@ -1425,7 +1499,7 @@ mod tests {
         path.line_to(0.0, 100.0);
         path.close();
         let tessellation = build_interior_tessellation(&path, Mat2D::IDENTITY).unwrap();
-        assert_eq!(tessellation.spans.len(), 5);
+        assert_eq!(tessellation.spans.len(), 6);
         assert_eq!(tessellation.base_instance, 1);
         assert_eq!(tessellation.instance_count, 8);
         assert_eq!(tessellation.triangles.len(), 6);
@@ -1463,7 +1537,7 @@ mod tests {
         assert!(tessellation.spans.len() > 3);
         assert_eq!(
             tessellation.instance_count as usize,
-            (tessellation.spans.len() - 1) * 2
+            (tessellation.spans.len() - 2) * 2
         );
     }
 
@@ -1484,13 +1558,14 @@ mod tests {
         assert_eq!(tessellation.instance_count, 2);
         assert_eq!(tessellation.contours[0].midpoint, [0.0, 0.0]);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert_eq!(tessellation.spans.len(), 3);
+        assert_eq!(tessellation.spans.len(), 5);
         assert_eq!(tessellation.spans[1].x_range(), (8, 18));
         assert_eq!(tessellation.spans[2].x_range(), (18, 24));
         assert_eq!(
             tessellation.spans[1].contour_id_with_flags,
             1 | BEVEL_JOIN_CONTOUR_FLAG | EMULATED_STROKE_CAP_CONTOUR_FLAG
         );
+        assert_post_contour_padding(&tessellation);
     }
 
     #[test]
@@ -1523,7 +1598,7 @@ mod tests {
         assert_eq!(tessellation.contours[0].midpoint, [8.0, 2.0]);
         assert_eq!(tessellation.contours[0].vertex_index0, 64);
         assert_eq!(tessellation.instance_count % 2, 0);
-        assert!(tessellation.spans[1..]
+        assert!(tessellation.spans[1..tessellation.spans.len() - 2]
             .iter()
             .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
     }
@@ -1622,7 +1697,7 @@ mod tests {
         assert_eq!(tessellation.path.stroke_radius, 5.0);
         assert_eq!(tessellation.path.feather_radius, 6.0);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert!(tessellation.spans[1..]
+        assert!(tessellation.spans[1..tessellation.spans.len() - 1]
             .iter()
             .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 }));
     }
@@ -1644,7 +1719,7 @@ mod tests {
             Some((10.0, StrokeJoin::Miter, StrokeCap::Butt)),
         )
         .unwrap();
-        assert!(tessellation.spans[1..]
+        assert!(tessellation.spans[1..tessellation.spans.len() - 1]
             .iter()
             .all(|span| span.segment_counts >> 20 == 1));
     }
@@ -1662,7 +1737,7 @@ mod tests {
             StrokeCap::Round,
         )
         .unwrap();
-        assert_eq!(tessellation.spans.len(), 7);
+        assert_eq!(tessellation.spans.len(), 9);
         for index in [3, 5] {
             let pivot = &tessellation.spans[index].points;
             assert_eq!(pivot[0], pivot[3]);
@@ -1682,7 +1757,7 @@ mod tests {
             StrokeCap::Round,
         )
         .unwrap();
-        assert_eq!(tessellation.spans.len(), 3);
+        assert_eq!(tessellation.spans.len(), 5);
         assert_eq!(tessellation.spans[1].points[3], [20.0, 30.0]);
         assert_eq!(tessellation.spans[2].points[3], [20.0, 30.0]);
         assert_eq!(
@@ -1717,5 +1792,6 @@ mod tests {
             .spans
             .iter()
             .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0));
+        assert_post_contour_padding(&tessellation);
     }
 }

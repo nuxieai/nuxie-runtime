@@ -448,3 +448,11 @@ Run `make renderer-golden`.
   next failure is tessellation texel (10,0) channel 2. This moves the remaining
   mask defect upstream of atlas rasterization into stroke tessellation; fix the
   patch-count/data generation rather than adjusting mask tolerances.
+- 2026-07-11: Closed the fixed atlas-stroke parity chain. Rust now applies
+  C++'s effective round join/cap style to every feathered stroke, uses the
+  upstream fast-acos round budget, and emits both midpoint-to-outer alignment
+  padding and the final shader sentinel in the tessellation texture. The
+  C++/Rust batch range, contour record, full RGBA32Uint tessellation texture,
+  and final R16 atlas mask all compare exactly. Closed/open, double-sided,
+  interior, and row-wrap tests preserve logical patch counts while covering
+  the physical padding layout; no tolerance changed.

@@ -1674,6 +1674,17 @@ mod tests {
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
     }
 
+    fn assert_post_contour_padding(tessellation: &draw::FillTessellation) {
+        let logical_end = (tessellation.base_instance + tessellation.instance_count)
+            * gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let alignment = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
+        let index = logical_end.div_ceil(alignment) * alignment;
+        let padding = tessellation.spans.last().unwrap();
+        assert_eq!(padding.x_range(), (index as i32, index as i32 + 1));
+        assert_eq!(padding.segment_counts, 0x0010_0000);
+        assert_eq!(padding.contour_id_with_flags, 0);
+    }
+
     #[test]
     fn feathered_stroke_uses_effective_round_style_for_direct_and_atlas_tessellation() {
         let paint = WgpuPaint {
@@ -1716,20 +1727,21 @@ mod tests {
         ] {
             assert_eq!(tessellation.base_instance, 1);
             assert_eq!(tessellation.instance_count, 5);
-            assert_eq!(tessellation.spans.len(), 5);
+            assert_eq!(tessellation.spans.len(), 7);
             assert_eq!(
-                tessellation.spans[1..]
+                tessellation.spans[1..5]
                     .iter()
                     .map(|span| span.x_range())
                     .collect::<Vec<_>>(),
                 vec![(8, 18), (18, 28), (28, 38), (38, 48)]
             );
-            assert!(tessellation.spans[1..]
+            assert!(tessellation.spans[1..5]
                 .iter()
                 .all(|span| span.segment_counts == 0x0090_0401));
-            assert!(tessellation.spans[1..]
+            assert!(tessellation.spans[1..5]
                 .iter()
                 .all(|span| span.contour_id_with_flags == 0x0800_0001));
+            assert_post_contour_padding(&tessellation);
         }
     }
 
@@ -1765,13 +1777,14 @@ mod tests {
         ] {
             assert_eq!(tessellation.base_instance, 1);
             assert_eq!(tessellation.instance_count, 5);
-            assert_eq!(tessellation.spans.len(), 3);
+            assert_eq!(tessellation.spans.len(), 5);
             assert_eq!(tessellation.spans[1].x_range(), (8, 27));
             assert_eq!(tessellation.spans[2].x_range(), (27, 48));
             assert_eq!(tessellation.spans[1].segment_counts, 0x0140_0000);
             assert_eq!(tessellation.spans[2].segment_counts, 0x0140_0401);
             assert_eq!(tessellation.spans[1].contour_id_with_flags, 0x0a00_0001);
             assert_eq!(tessellation.spans[2].contour_id_with_flags, 0x0a00_0001);
+            assert_post_contour_padding(&tessellation);
         }
     }
 
@@ -2456,6 +2469,21 @@ mod tests {
                 rust: tessellation.texels[used_texel][0],
             })
         );
+    }
+
+    #[test]
+    fn atlas_tessellation_writes_the_final_post_contour_padding_sentinel() {
+        let inputs = fixed_feather_atlas_oracle(ATLAS_ORACLE_STROKE_JOIN).inputs;
+        let logical_end =
+            (inputs.base_patch + inputs.patch_count) * gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let alignment = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
+        let final_index = (logical_end.div_ceil(alignment) * alignment) as usize;
+        assert!(inputs.texels[logical_end as usize..=final_index]
+            .iter()
+            .all(|texel| *texel == [0, 0, 0x4049_0fdb, 0x0008_0000]));
+        assert!(inputs.texels[final_index + 1..]
+            .iter()
+            .all(|texel| *texel == [0; 4]));
     }
 
     #[test]

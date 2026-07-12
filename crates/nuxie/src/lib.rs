@@ -3,6 +3,8 @@
 //! This crate keeps the user-facing surface narrow while the lower-level
 //! crates continue to carry the import, graph, runtime, and renderer details.
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::{ArtboardGraph, GraphFile};
@@ -340,6 +342,210 @@ impl<'a> ArtboardInstance<'a> {
     }
 }
 
+/// Owning variant of [`ArtboardInstance`] for hosts that cannot hold a
+/// borrow of the [`File`] — editors, long-lived embeddings, FFI surfaces.
+/// Shares the file via [`Arc`] and owns the runtime instance; a
+/// method-for-method mirror of [`ArtboardInstance`] (which stays the
+/// zero-overhead choice when a borrow works).
+pub struct OwnedArtboardInstance {
+    file: Arc<File>,
+    artboard_index: usize,
+    raw: RuntimeArtboardInstance,
+}
+
+impl OwnedArtboardInstance {
+    /// Instantiate `artboard_index` of `file` as an owning instance.
+    pub fn instantiate(file: Arc<File>, artboard_index: usize) -> Result<Self> {
+        let raw = {
+            let artboard = file
+                .artboard(artboard_index)
+                .with_context(|| format!("artboard index {artboard_index} out of range"))?;
+            RuntimeArtboardInstance::from_graph_with_artboards(
+                &file.runtime,
+                artboard.graph(),
+                &file.graph.artboards,
+            )
+            .with_context(|| {
+                format!(
+                    "failed to instantiate artboard {}",
+                    artboard.name().unwrap_or("<unnamed>")
+                )
+            })?
+        };
+        Ok(Self {
+            file,
+            artboard_index,
+            raw,
+        })
+    }
+
+    /// Instantiate the file's default artboard as an owning instance.
+    pub fn instantiate_default(file: Arc<File>) -> Result<Self> {
+        let artboard_index = file
+            .default_artboard()
+            .context("file has no artboards")?
+            .index();
+        Self::instantiate(file, artboard_index)
+    }
+
+    pub fn file(&self) -> &Arc<File> {
+        &self.file
+    }
+
+    pub fn artboard(&self) -> Artboard<'_> {
+        Artboard {
+            file: &self.file,
+            index: self.artboard_index,
+        }
+    }
+
+    pub fn raw(&self) -> &RuntimeArtboardInstance {
+        &self.raw
+    }
+
+    pub fn raw_mut(&mut self) -> &mut RuntimeArtboardInstance {
+        &mut self.raw
+    }
+
+    pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
+        self.raw.advance_nested_artboards(elapsed_seconds)
+    }
+
+    pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
+        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
+        changed
+    }
+
+    pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
+        self.raw.state_machine_instance(index)
+    }
+
+    /// See [`ArtboardInstance::default_state_machine_instance`].
+    pub fn default_state_machine_instance(&self) -> Option<StateMachineInstance> {
+        let index = self.artboard().default_state_machine_index().unwrap_or(0);
+        self.state_machine_instance(index)
+    }
+
+    /// See [`ArtboardInstance::view_model_index`].
+    pub fn view_model_index(&self) -> Option<usize> {
+        let artboard = self.file.runtime.artboard(self.artboard_index)?;
+        let view_model_id = artboard.uint_property("viewModelId")?;
+        if view_model_id == u32::MAX as u64 {
+            return None;
+        }
+        usize::try_from(view_model_id).ok()
+    }
+
+    /// See [`ArtboardInstance::instantiate_view_model`].
+    pub fn instantiate_view_model(&self) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::new(&self.file.runtime, view_model_index)?;
+        Some(ViewModelInstance { raw })
+    }
+
+    /// See [`ArtboardInstance::instantiate_view_model_instance`].
+    pub fn instantiate_view_model_instance(
+        &self,
+        instance_index: usize,
+    ) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::from_instance(
+            &self.file.runtime,
+            view_model_index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance { raw })
+    }
+
+    /// See [`ArtboardInstance::bind_view_model`].
+    pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
+        let mut changed = self
+            .raw
+            .bind_default_view_model_artboard_list_context(&self.file.runtime);
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
+        changed
+    }
+
+    /// See [`ArtboardInstance::advance_with_state_machine`].
+    pub fn advance_with_state_machine(
+        &mut self,
+        state_machine: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let mut changed = self
+            .raw
+            .advance_state_machine_instance(state_machine, elapsed_seconds);
+        if self
+            .raw
+            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
+        {
+            self.raw.advance_state_machine_instance(state_machine, 0.0);
+            changed = true;
+        }
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
+        changed
+    }
+
+    pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
+        let mut cache = self.new_render_cache(factory);
+        self.draw_with_render_cache(factory, renderer, &mut cache)
+    }
+
+    /// See [`ArtboardInstance::new_render_cache`].
+    pub fn new_render_cache(&self, factory: &mut dyn Factory) -> ArtboardRenderCache {
+        ArtboardRenderCache {
+            paint: preallocate_render_paint_cache_for_artboard_tree(
+                &self.file.runtime,
+                self.artboard().graph(),
+                &self.file.graph.artboards,
+                factory,
+            ),
+            path: RuntimeRenderPathCache::default(),
+        }
+    }
+
+    /// See [`ArtboardInstance::draw_with_render_cache`].
+    pub fn draw_with_render_cache(
+        &mut self,
+        factory: &mut dyn Factory,
+        renderer: &mut dyn Renderer,
+        cache: &mut ArtboardRenderCache,
+    ) -> Result<()> {
+        self.raw.update_pass();
+        let artboard = self.artboard().graph();
+        self.raw
+            .prepare_static_artboard_tree_paints(
+                &self.file.runtime,
+                artboard,
+                &self.file.graph.artboards,
+                factory,
+                &mut cache.paint,
+                &mut cache.path,
+            )
+            .context("failed to prepare Rive paints")?;
+        self.raw
+            .draw_prepared_static_artboard_with_render_cache(
+                &self.file.runtime,
+                artboard,
+                &self.file.graph.artboards,
+                factory,
+                renderer,
+                &mut cache.paint,
+                &mut cache.path,
+            )
+            .context("failed to draw Rive artboard")
+    }
+}
+
 /// Owned view-model context for driving an artboard's data binds.
 ///
 /// Instantiate one from an [`ArtboardInstance`], set properties by name path,
@@ -393,5 +599,62 @@ impl ViewModelInstance {
     /// exposed here because the owned context resolves enums by index.)
     pub fn set_enum(&mut self, name_path: &str, value: u64) -> bool {
         self.raw.set_enum_by_property_name_path(name_path, value)
+    }
+}
+
+#[cfg(test)]
+mod owned_instance_tests {
+    use super::*;
+    use nuxie_render_api::RecordingFactory;
+
+    const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+
+    fn stream_of(draw: impl FnOnce(&mut RecordingFactory) -> Result<()>) -> String {
+        let mut factory = RecordingFactory::new();
+        draw(&mut factory).expect("draw succeeds");
+        factory.stream()
+    }
+
+    #[test]
+    fn owned_instance_draws_identically_to_borrowed() {
+        let borrowed_stream = stream_of(|factory| {
+            let file = File::import(FIXTURE)?;
+            let artboard = file.default_artboard().context("default artboard")?;
+            let mut instance = artboard.instantiate()?;
+            instance.advance(0.0);
+            let mut renderer = factory.make_renderer();
+            instance.draw(factory, &mut renderer)
+        });
+
+        let owned_stream = stream_of(|factory| {
+            let file = Arc::new(File::import(FIXTURE)?);
+            let mut instance = OwnedArtboardInstance::instantiate_default(file)?;
+            instance.advance(0.0);
+            let mut renderer = factory.make_renderer();
+            instance.draw(factory, &mut renderer)
+        });
+
+        assert_eq!(
+            owned_stream, borrowed_stream,
+            "owned and borrowed instances must draw the identical stream"
+        );
+    }
+
+    #[test]
+    fn owned_instance_outlives_the_importing_scope() {
+        let mut instance = {
+            let file = Arc::new(File::import(FIXTURE).expect("import"));
+            OwnedArtboardInstance::instantiate_default(file).expect("instantiate")
+        };
+        assert!(!instance.advance(0.016) || instance.raw().components().len() > 0);
+    }
+
+    #[test]
+    fn promoted_property_writes_report_missing_targets() {
+        let file = Arc::new(File::import(FIXTURE).expect("import"));
+        let mut instance = OwnedArtboardInstance::instantiate_default(file).expect("instantiate");
+        // Nonexistent property key: the typed write path must report false
+        // (no match), never panic.
+        assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
     }
 }

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=20, diverges=0, gated=1,447, total=1,467.
+- Rust wgpu: exact=21, diverges=0, gated=1,446, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -27,7 +27,8 @@ Run `make renderer-golden`.
   `gm-lots_of_tess_spans_stroke-clockwise-atomic`, and
   `gm-emptyfeather-clockwise-atomic`, plus
   `first-light-direct-feather-stroke-clockwise-atomic` and
-  `first-light-atlas-feather-stroke-clockwise-atomic`.
+  `first-light-atlas-feather-stroke-clockwise-atomic`, and
+  `gm-feather_strokes-clockwise-atomic`.
 
 ## Milestones
 
@@ -50,12 +51,11 @@ Run `make renderer-golden`.
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
    partitioning, direct/atlas threshold routing, atlas-stroke tessellation
    inputs, and the R16 mask are exact against C++ WebGPU. The active boundary
-   is the remaining multi-radius/corner stress output in `feather_strokes`;
-   bisect it with mode-correct native Metal clockwise-atomic replays. The
-   separate matching WebGPU MSAA final-blit oracle remains a named R2 failure
-   at 4,096 pixels/max delta 80. Continue R2 with the remaining
-   `render_context.cpp` behavior, robust triangulation, and integration of the
-   translated intersection board.
+   next corpus targets are the remaining feather corner/fill GMs. The separate
+   matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
+   pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
+   behavior, robust triangulation, and integration of the translated
+   intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -476,3 +476,11 @@ Run `make renderer-golden`.
 - 2026-07-11: Made `generate-corpus-r` preserve existing generated entry blocks
   by identity. Status, tolerances, references, and gate diagnostics now survive
   regeneration byte-for-byte; a regression test covers an exact promoted row.
+- 2026-07-11: Promoted the full clockwise-atomic `feather_strokes` stress GM
+  after a draw/radius bisection proved backend variance rather than missing
+  geometry. The seven radius rows increase monotonically from 745/delta-1 to
+  126,772/delta-7 as huge feather fields overlap; every isolated largest-radius
+  shape stays at max delta 2. Across the full 3.6M-pixel frame, normalized RMSE
+  is 0.001408 and 9,577 pixels exceed channel delta 2. The entry therefore keeps
+  delta 2 with a bounded 16,384-pixel overlap budget. The ratchet advances to
+  exact=21/diverges=0 without changing any renderer behavior.

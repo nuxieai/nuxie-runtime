@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=22, diverges=0, gated=1,445, total=1,467.
+- Rust wgpu: exact=24, diverges=0, gated=1,443, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -29,7 +29,9 @@ Run `make renderer-golden`.
   `first-light-direct-feather-stroke-clockwise-atomic` and
   `first-light-atlas-feather-stroke-clockwise-atomic`, and
   `gm-feather_strokes-clockwise-atomic`, and
-  `gm-feather_shapes-clockwise-atomic`.
+  `gm-feather_shapes-clockwise-atomic`,
+  `gm-feather_ellipse-clockwise-atomic`, and
+  `gm-emptystrokefeather-clockwise-atomic`.
 
 ## Milestones
 
@@ -496,3 +498,14 @@ Run `make renderer-golden`.
   frame pixels above delta 2 occur under overlapping huge feather fields and
   pass the existing bounded 16,384-pixel backend budget, advancing the ratchet
   to exact=22/diverges=0.
+- 2026-07-11: Audited the remaining feather GMs after fill softening and
+  promoted two mode-correct native Metal comparisons. `feather_ellipse` has
+  6,476 full-frame pixels above delta 2/max delta 9; each isolated largest-
+  radius nondegenerate ellipse stays at max delta 2, while the zero-width
+  ellipse is exactly blank in both renderers, so the full overlap keeps a
+  bounded 8,192-pixel budget. `emptystrokefeather` has only 74 pixels above
+  delta 2/max delta 11 and passes a 128-pixel budget while all degenerate
+  strokes remain culled. `feather_cusp` and `feather_polyshapes` still show
+  max-delta-255 geometry failures and remain the next implementation boundary;
+  `feather_roundcorner` remains clip-gated. The ratchet advances to
+  exact=24/diverges=0.

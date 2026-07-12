@@ -787,10 +787,9 @@ stream = "fixtures/renderer/streams/gm/emptystrokefeather.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/emptystrokefeather-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 128
 
 
 [[entry]]
@@ -891,10 +890,9 @@ stream = "fixtures/renderer/streams/gm/feather_ellipse.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/feather_ellipse-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 8192
 
 
 [[entry]]

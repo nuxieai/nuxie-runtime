@@ -810,6 +810,7 @@ impl AtomicPipeline {
         target: &wgpu::TextureView,
         load_color: Option<&wgpu::TextureView>,
         feather_lut: &wgpu::TextureView,
+        gradient: Option<&wgpu::TextureView>,
         patch_vertices: &wgpu::Buffer,
         patch_indices: &wgpu::Buffer,
         draws: &[AtomicDraw<'_>],
@@ -957,7 +958,10 @@ impl AtomicPipeline {
                     binding(5, paint_aux.as_entire_binding()),
                     binding(6, contours.as_entire_binding()),
                     binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
-                    binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
+                    binding(
+                        9,
+                        wgpu::BindingResource::TextureView(gradient.unwrap_or(&dummy_view)),
+                    ),
                     binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                     binding(
                         11,
@@ -1342,18 +1346,34 @@ fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'static> {
         ImageFilter::Bilinear => wgpu::FilterMode::Linear,
         ImageFilter::Nearest => wgpu::FilterMode::Nearest,
     };
-    let mipmap_filter = match sampler.filter {
-        ImageFilter::Bilinear => wgpu::MipmapFilterMode::Linear,
-        ImageFilter::Nearest => wgpu::MipmapFilterMode::Nearest,
-    };
     wgpu::SamplerDescriptor {
         label: Some("nuxie-image-sampler"),
         address_mode_u: address_mode(sampler.wrap_x),
         address_mode_v: address_mode(sampler.wrap_y),
         mag_filter: filter,
         min_filter: filter,
-        mipmap_filter,
+        // Rive's Metal and WebGPU backends both use nearest mip selection;
+        // ImageFilter only controls filtering within the selected level.
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bilinear_image_filter_keeps_nearest_mip_selection() {
+        let descriptor = image_sampler(ImageSampler {
+            filter: ImageFilter::Bilinear,
+            wrap_x: ImageWrap::Clamp,
+            wrap_y: ImageWrap::Clamp,
+        });
+
+        assert_eq!(descriptor.min_filter, wgpu::FilterMode::Linear);
+        assert_eq!(descriptor.mag_filter, wgpu::FilterMode::Linear);
+        assert_eq!(descriptor.mipmap_filter, wgpu::MipmapFilterMode::Nearest);
     }
 }
 fn color_attachment(

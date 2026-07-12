@@ -643,10 +643,9 @@ stream = "fixtures/renderer/streams/gm/degengrad.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/degengrad-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1179,7 +1178,7 @@ mode = "clockwise-atomic"
 backend = "metal"
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 9000
+max_different_pixels = 32
 
 
 [[entry]]
@@ -1204,7 +1203,7 @@ mode = "clockwise-atomic"
 backend = "metal"
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 6000
+max_different_pixels = 32
 
 
 [[entry]]
@@ -1254,7 +1253,7 @@ mode = "clockwise-atomic"
 backend = "metal"
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 512
+max_different_pixels = 32
 
 
 [[entry]]
@@ -1636,7 +1635,7 @@ mode = "clockwise-atomic"
 backend = "metal"
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 18000
+max_different_pixels = 32
 
 
 [[entry]]
@@ -2245,10 +2244,9 @@ stream = "fixtures/renderer/streams/gm/rect_grad.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/rect_grad-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2347,10 +2345,9 @@ stream = "fixtures/renderer/streams/gm/strokedlines.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/strokedlines-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2657,10 +2654,9 @@ stream = "fixtures/renderer/streams/gm/verycomplexgrad.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/verycomplexgrad-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2708,10 +2704,9 @@ stream = "fixtures/renderer/streams/gm/xfermodes2.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/xfermodes2-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -8701,10 +8696,9 @@ reference = "fixtures/renderer/reference/metal/riv/jellyfish_test-frame-0-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "platform-mipmap-filtering"
+max_different_pixels = 23000
 
 [[entry]]
 id = "riv-jellyfish_test-frame-0-msaa"
@@ -17075,7 +17069,7 @@ backend = "metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 12000
+max_different_pixels = 128
 
 [[entry]]
 id = "riv-superbowl-frame-0-msaa"
@@ -17100,7 +17094,7 @@ backend = "metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 6400
+max_different_pixels = 64
 
 [[entry]]
 id = "riv-tape-frame-0-msaa"

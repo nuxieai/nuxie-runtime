@@ -22,6 +22,18 @@ pub(crate) struct GradientSpan {
 }
 
 impl GradientSpan {
+    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Uint32x4,
+                offset: 0,
+                shader_location: 0,
+            }],
+        }
+    }
+
     pub(crate) fn new(
         x0_fixed: u32,
         x1_fixed: u32,
@@ -552,6 +564,37 @@ impl PaintData {
         Self {
             params: PaintType::SolidColor as u32 | blend_mode_id(blend_mode) << 4,
             value: swizzle_rive_color_to_rgba(color),
+        }
+    }
+
+    pub(crate) fn gradient(
+        paint_type: PaintType,
+        texture_y: f32,
+        fill_rule: FillRule,
+        blend_mode: BlendMode,
+    ) -> Self {
+        debug_assert!(matches!(
+            paint_type,
+            PaintType::LinearGradient | PaintType::RadialGradient
+        ));
+        Self {
+            params: paint_type as u32 | Self::fill_flag(fill_rule) | blend_mode_id(blend_mode) << 4,
+            value: texture_y.to_bits(),
+        }
+    }
+
+    pub(crate) fn gradient_stroke(
+        paint_type: PaintType,
+        texture_y: f32,
+        blend_mode: BlendMode,
+    ) -> Self {
+        debug_assert!(matches!(
+            paint_type,
+            PaintType::LinearGradient | PaintType::RadialGradient
+        ));
+        Self {
+            params: paint_type as u32 | blend_mode_id(blend_mode) << 4,
+            value: texture_y.to_bits(),
         }
     }
 

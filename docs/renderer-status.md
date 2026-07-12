@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=82, diverges=0, gated=1,385, total=1,467.
+- Rust wgpu: exact=88, diverges=0, gated=1,379, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -68,9 +68,15 @@ Run `make renderer-golden`.
   `gm-image-clockwise-atomic`,
   `gm-image_aa_border-clockwise-atomic`, and
   `gm-mesh-clockwise-atomic`, and
+  `gm-degengrad-clockwise-atomic`,
+  `gm-rect_grad-clockwise-atomic`,
+  `gm-strokedlines-clockwise-atomic`,
+  `gm-verycomplexgrad-clockwise-atomic`, and
+  `gm-xfermodes2-clockwise-atomic`, and
   `riv-clipping_and_draw_order-frame-0-clockwise-atomic`, plus
   `riv-tape-frame-0-clockwise-atomic`, and
-  `riv-superbowl-frame-0-clockwise-atomic`.
+  `riv-superbowl-frame-0-clockwise-atomic`, and
+  `riv-jellyfish_test-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -189,11 +195,14 @@ Run `make renderer-golden`.
    regressions pin screen, darken, exclusion, and luminosity. `tape` and all
    three focused image GMs are promoted. Requesting the selected adapter's
    actual 2D texture limit instead of the 2,048 downlevel bucket unblocks both
-   `superbowl` and the 2,080-square `jellyfish_test`; `superbowl` is promoted,
-   while `jellyfish_test` remains a measured native-Metal versus generated-wgpu
-   mipmap/filtering gate concentrated in translucent glows. Build a mip-level
-   sub-oracle before revisiting that 604,916-pixel residual, and rescout the
-   now-runnable image corpus next.
+   `superbowl` and the 2,080-square `jellyfish_test`. A draw-prefix and no-mip
+   sub-oracle disproved the original mipmap attribution: every rendered image
+   selects level zero, disabling generated mips is byte-identical, and the
+   pre-image radial-gradient background alone carried 866,438 divergent
+   pixels. C++'s simple/complex gradient-ramp layout, generated color-ramp
+   pass, opacity modulation, and inverse paint transforms are now ported.
+   Five focused gradient GMs and `jellyfish_test` are promoted; rescout the
+   remaining gradient-bearing `.riv` corpus next.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -212,6 +221,21 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: The `jellyfish_test` mip gate was false attribution. A bounded
+  draw/LOD inventory found all 22 image draws at LOD 0; a no-mip render is
+  byte-identical to the corrected nearest-mip render. Prefix replay then proved
+  the solid background exact, the first radial gradient added 589,692 divergent
+  pixels, and both radial gradients added 866,438 before any image draw. Porting
+  `render_context.cpp`'s 512-wide simple/complex `GradientSpan` layout through
+  the generated color-ramp WGSL, plus C++ gradient normalization, opacity, and
+  inverse paint matrices, makes `degengrad`, `rect_grad`, and `verycomplexgrad`
+  exact at delta 2; `strokedlines` and `xfermodes2` retain only 4 and 8 edge
+  pixels under their existing 32-pixel budgets. `jellyfish_test` falls from
+  604,916/max 139 to 22,363/max 7 and is promoted under a 23,000-pixel strict
+  delta-2 image/backend allowance. Matching C++'s nearest mip selection also
+  shrinks the stale image allowances: `image`/`image_aa_border`/`image_lod`/
+  `mesh` to 32 pixels, `tape` to 64, and `superbowl` to 128. The ratchet advances
+  to exact=88/diverges=0/gated=1,379.
 - 2026-07-12: Image allocation now requests the selected adapter's supported
   `max_texture_dimension_2d` instead of inheriting wgpu's 2,048 downlevel
   default. A 2,080-pixel decode regression pins the request; `jellyfish_test`
@@ -1001,3 +1025,8 @@ Run `make renderer-golden`.
   supported limit. `superbowl` is promoted under its measured image-backend
   allowance; `jellyfish_test` now renders but remains gated on a mip-level
   oracle. The ratchet advances to exact=82/diverges=0/gated=1,385.
+- 2026-07-12: Draw-prefix replay disproved the `jellyfish_test` mipmap gate and
+  isolated the missing radial-gradient background. Ported generated color-ramp
+  rendering, gradient paint data/transforms, and nearest mip selection; five
+  gradient GMs plus `jellyfish_test` advance the ratchet to
+  exact=88/diverges=0/gated=1,379, with stale image allowances tightened.

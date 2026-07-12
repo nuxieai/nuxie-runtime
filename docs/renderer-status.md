@@ -424,3 +424,13 @@ Run `make renderer-golden`.
   confirmed that Metal final pixels cannot isolate WebGPU atlas behavior.
   The next atlas step is a C++ WebGPU R16 mask exporter and Rust mask comparator;
   no atlas coverage code changes until that fail-before oracle exists.
+- 2026-07-11: Established and independently accepted the matching-backend
+  C++ WebGPU R16 atlas-mask oracle. The fixed stroke produces a complete 48x48
+  physical atlas with a production-observed 39x39 content region at (2,2), one
+  stroke batch scissored to [0,0,39,39], and a canonical 4,628-byte artifact.
+  Rust renders the same production placement and compares the full physical
+  payload. The configured comparison now gives a trustworthy fail-before at
+  (0,0): C++=0.01171875, Rust=0, support threshold=1/1024. Naga is pinned,
+  malformed/tolerance/join sensitivity tests pass, and temporary C++/Dawn
+  changes restore byte-for-byte. Diagnose this mask discrepancy next; do not
+  change atlas coverage without making the configured oracle pass.

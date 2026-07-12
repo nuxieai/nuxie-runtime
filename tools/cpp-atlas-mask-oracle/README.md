@@ -28,7 +28,7 @@ padding, or normalization.
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh
 python3 tools/cpp-atlas-mask-oracle/format_test.py
-RIVE_CPP_ATLAS_MASK=tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f \
+RIVE_CPP_ATLAS_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_atlas_mask_oracle_matches_fixed_rust_mask_when_configured \
   -- --exact --ignored --nocapture

@@ -1,43 +1,62 @@
+diff --git a/renderer/include/rive/renderer/gpu.hpp b/renderer/include/rive/renderer/gpu.hpp
+index f831f3c6..98726c04 100644
+--- a/renderer/include/rive/renderer/gpu.hpp
++++ b/renderer/include/rive/renderer/gpu.hpp
+@@ -1383,6 +1383,12 @@ struct FlushDescriptor
+     const AtlasDrawBatch* atlasStrokeBatches = nullptr;
+     size_t atlasStrokeBatchCount = 0;
+ 
++    // Temporary atlas-mask oracle observation, populated from the selected
++    // production PathDraw before the backend consumes this descriptor.
++    float atlasPathTranslateXForOracle = 0;
++    float atlasPathTranslateYForOracle = 0;
++    bool atlasPathTransformForOracleValid = false;
++
+     // List of draws in the main render pass. These are rendered directly to the
+     // renderTarget.
+     const BlockAllocatedLinkedList<DrawBatch>* drawList = nullptr;
 diff --git a/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp b/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
-index 4fcf8c0e..4d745852 100644
+index 4fcf8c0e..ba51dbef 100644
 --- a/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
 +++ b/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
-@@ -98,20 +98,23 @@ public:
-                                   bool srgb = false,
-                                   bool generateRemainingMips = false) override;
- 
- #ifdef RIVE_CANVAS
-     rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
-                                        uint32_t height) override;
- 
+@@ -105,6 +105,24 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
-+    // Temporary oracle hook. build.sh reverses this patch after readback.
++    struct AtlasMaskOracleFacts
++    {
++        uint16_t contentWidth = 0;
++        uint16_t contentHeight = 0;
++        float pathTranslateX = 0;
++        float pathTranslateY = 0;
++        bool pathTransformValid = false;
++        size_t strokeBatchCount = 0;
++        AABBu16 strokeScissor = {};
++    };
++
++    // Temporary oracle hooks. build.sh reverses this patch after readback.
 +    wgpu::Texture atlasMaskTextureForOracle() const { return m_atlasTexture; }
++    const AtlasMaskOracleFacts& atlasMaskFactsForOracle() const
++    {
++        return m_atlasMaskOracleFacts;
++    }
 +
  private:
      RenderContextWebGPUImpl(wgpu::Adapter,
                              wgpu::Device,
-                             wgpu::Queue,
-                             const ContextOptions&);
+@@ -227,6 +245,7 @@ private:
+     std::unique_ptr<AtlasPipeline> m_atlasPipeline;
+     wgpu::Texture m_atlasTexture;
+     wgpu::TextureView m_atlasTextureView;
++    AtlasMaskOracleFacts m_atlasMaskOracleFacts;
  
-     // Create a standard PLS "draw" pipeline for the current implementation.
-     // vertexShader / fragmentShader carry information about which override
-     // constants are actually used by the shader (WebGPU doesn't allow
-     // overriding a constant that is declared but not used via the main
+     // Draw paths and image meshes using the gradient and tessellation textures.
+     class DrawPipeline;
 diff --git a/renderer/premake5.lua b/renderer/premake5.lua
-index 308f1f45..842750f2 100644
+index 308f1f45..6c60a2f0 100644
 --- a/renderer/premake5.lua
 +++ b/renderer/premake5.lua
-@@ -325,10 +325,62 @@ if _OPTIONS['with-webgpu'] or _OPTIONS['with-dawn'] then
-         end
- 
-         filter({})
- 
-         if RIVE_WAGYU_PORT then
-             buildoptions({ RIVE_WAGYU_PORT })
-             linkoptions({ RIVE_WAGYU_PORT })
+@@ -332,3 +332,55 @@ if _OPTIONS['with-webgpu'] or _OPTIONS['with-dawn'] then
          end
      end
  end
@@ -93,18 +112,30 @@ index 308f1f45..842750f2 100644
 +        filter({})
 +    end
 +end
+diff --git a/renderer/src/render_context.cpp b/renderer/src/render_context.cpp
+index 5fdeb585..27bb01ef 100644
+--- a/renderer/src/render_context.cpp
++++ b/renderer/src/render_context.cpp
+@@ -2289,6 +2289,14 @@ void RenderContext::LogicalFlush::writeResources()
+         assert(m_flushDesc.atlasFillBatchCount +
+                    m_flushDesc.atlasStrokeBatchCount <=
+                m_pendingAtlasDraws.size());
++        if (m_pendingAtlasDraws.size() == 1)
++        {
++            m_flushDesc.atlasPathTranslateXForOracle =
++                m_pendingAtlasDraws.front()->atlasTransform().translateX;
++            m_flushDesc.atlasPathTranslateYForOracle =
++                m_pendingAtlasDraws.front()->atlasTransform().translateY;
++            m_flushDesc.atlasPathTransformForOracleValid = true;
++        }
+     }
+ 
+     // Pad our buffers to 256-byte alignment.
 diff --git a/renderer/src/webgpu/render_context_webgpu_impl.cpp b/renderer/src/webgpu/render_context_webgpu_impl.cpp
-index ff41da4c..4d28916e 100644
+index ff41da4c..3666c4c2 100644
 --- a/renderer/src/webgpu/render_context_webgpu_impl.cpp
 +++ b/renderer/src/webgpu/render_context_webgpu_impl.cpp
-@@ -2845,21 +2845,22 @@ void RenderContextWebGPUImpl::resizeTessellationTexture(uint32_t width,
- }
- 
- void RenderContextWebGPUImpl::resizeAtlasTexture(uint32_t width,
-                                                  uint32_t height)
- {
-     width = std::max(width, 1u);
-     height = std::max(height, 1u);
+@@ -2852,7 +2852,8 @@ void RenderContextWebGPUImpl::resizeAtlasTexture(uint32_t width,
  
      wgpu::TextureDescriptor desc{
          .usage = wgpu::TextureUsage::RenderAttachment |
@@ -114,10 +145,23 @@ index ff41da4c..4d28916e 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
+@@ -3846,6 +3847,19 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
  
-     m_atlasTexture = m_device.CreateTexture(&desc);
-     m_atlasTextureView = m_atlasTexture.CreateView();
- }
- 
- void RenderContextWebGPUImpl::resizeAtomicCoverageBacking(uint32_t width,
-                                                           uint32_t height)
+ void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
+ {
++    m_atlasMaskOracleFacts.contentWidth = desc.atlasContentWidth;
++    m_atlasMaskOracleFacts.contentHeight = desc.atlasContentHeight;
++    m_atlasMaskOracleFacts.pathTransformValid =
++        desc.atlasPathTransformForOracleValid;
++    m_atlasMaskOracleFacts.pathTranslateX =
++        desc.atlasPathTranslateXForOracle;
++    m_atlasMaskOracleFacts.pathTranslateY =
++        desc.atlasPathTranslateYForOracle;
++    m_atlasMaskOracleFacts.strokeBatchCount = desc.atlasStrokeBatchCount;
++    m_atlasMaskOracleFacts.strokeScissor =
++        desc.atlasStrokeBatchCount == 1 ? desc.atlasStrokeBatches[0].scissor
++                                        : AABBu16{};
++
+     auto* const renderTarget =
+         static_cast<RenderTargetWebGPU*>(desc.renderTarget);
+     const auto& drawPipelineLayout =

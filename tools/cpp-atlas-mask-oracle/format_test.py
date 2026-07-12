@@ -83,7 +83,14 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kExpectedLogicalAtlasSize = 39;",
             "constexpr uint32_t kExpectedPhysicalAtlasSize = 48;",
             "constexpr uint32_t kHeaderBytes = 20;",
-            "validateFixtureContract();",
+            "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
+            "facts.contentWidth != kExpectedLogicalAtlasSize",
+            "facts.contentHeight != kExpectedLogicalAtlasSize",
+            "facts.pathTranslateX != kAtlasPadding",
+            "facts.pathTranslateY != kAtlasPadding",
+            "facts.strokeBatchCount != 1",
+            "facts.strokeScissor.right != kExpectedLogicalAtlasSize",
+            "facts.strokeScissor.bottom != kExpectedLogicalAtlasSize",
             "path->moveTo(kSquareMin, kSquareMin);",
             "path->lineTo(kSquareMax, kSquareMin);",
             "path->lineTo(kSquareMax, kSquareMax);",
@@ -149,15 +156,21 @@ class FormatTests(unittest.TestCase):
             "placement.width,",
             '#[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
+            'path.is_absolute()',
+            "fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root()",
         ):
             self.assertIn(fragment, source)
         readme = README.read_text()
+        self.assertIn('RIVE_CPP_ATLAS_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f"',
+                      readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 
-    def test_runtime_patch_applies_and_only_makes_atlas_copyable(self):
+    def test_runtime_patch_applies_and_observes_production_atlas_state(self):
         files = (
+            "renderer/include/rive/renderer/gpu.hpp",
             "renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp",
             "renderer/premake5.lua",
+            "renderer/src/render_context.cpp",
             "renderer/src/webgpu/render_context_webgpu_impl.cpp",
         )
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -171,7 +184,7 @@ class FormatTests(unittest.TestCase):
                            cwd=temp, check=True)
             subprocess.run(["git", "apply", str(RUNTIME_PATCH)], cwd=temp, check=True)
 
-            cpp = (temp / files[2]).read_text()
+            cpp = (temp / "renderer/src/webgpu/render_context_webgpu_impl.cpp").read_text()
             atlas = cpp[cpp.index("void RenderContextWebGPUImpl::resizeAtlasTexture"):
                         cpp.index("void RenderContextWebGPUImpl::resizeAtomicCoverageBacking")]
             gradient = cpp[cpp.index("void RenderContextWebGPUImpl::resizeGradientTexture"):
@@ -180,7 +193,33 @@ class FormatTests(unittest.TestCase):
             self.assertIn("wgpu::TextureFormat::R16Float", atlas)
             self.assertNotIn("wgpu::TextureUsage::CopySrc", gradient)
 
-            premake = (temp / files[1]).read_text()
+            gpu = (temp / "renderer/include/rive/renderer/gpu.hpp").read_text()
+            logical_flush = (temp / "renderer/src/render_context.cpp").read_text()
+            webgpu_header = (
+                temp / "renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp"
+            ).read_text()
+            for fragment in (
+                "float atlasPathTranslateXForOracle = 0;",
+                "float atlasPathTranslateYForOracle = 0;",
+                "bool atlasPathTransformForOracleValid = false;",
+            ):
+                self.assertIn(fragment, gpu)
+            self.assertIn(
+                "m_pendingAtlasDraws.front()->atlasTransform().translateX;", logical_flush
+            )
+            self.assertIn(
+                "m_pendingAtlasDraws.front()->atlasTransform().translateY;", logical_flush
+            )
+            for fragment in (
+                "const AtlasMaskOracleFacts& atlasMaskFactsForOracle() const",
+                "m_atlasMaskOracleFacts.contentWidth = desc.atlasContentWidth;",
+                "desc.atlasPathTranslateXForOracle;",
+                "desc.atlasPathTranslateYForOracle;",
+                "desc.atlasStrokeBatches[0].scissor",
+            ):
+                self.assertIn(fragment, webgpu_header + cpp)
+
+            premake = (temp / "renderer/premake5.lua").read_text()
             self.assertGreater(premake.index("project('rive_atlas_mask_oracle')"),
                                premake.index("if RIVE_WAGYU_PORT then"))
             self.assertTrue(premake.rstrip().endswith("end"))

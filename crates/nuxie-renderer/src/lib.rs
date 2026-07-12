@@ -2228,6 +2228,10 @@ mod tests {
             "RIVE_CPP_ATLAS_MASK is set but empty; set it to a C++ atlas-mask oracle file"
         );
         let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_MASK must be absolute because Cargo runs unit tests from the package directory"
+        );
         let bytes = fs::read(&path).unwrap_or_else(|error| {
             panic!(
                 "failed to read C++ atlas-mask oracle at {}: {error}",
@@ -2248,5 +2252,29 @@ mod tests {
                     path.display()
                 )
             });
+    }
+
+    #[test]
+    fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root() {
+        let package_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = package_dir.join("../..").canonicalize().unwrap();
+        let cargo_test_cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
+        assert_eq!(cargo_test_cwd, package_dir.canonicalize().unwrap());
+
+        let documented_path = repo_root.join("tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f");
+        assert!(documented_path.is_absolute());
+        assert_eq!(
+            documented_path
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .canonicalize()
+                .unwrap(),
+            repo_root
+                .join("tools/cpp-atlas-mask-oracle")
+                .canonicalize()
+                .unwrap()
+        );
     }
 }

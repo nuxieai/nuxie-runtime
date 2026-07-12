@@ -7,9 +7,7 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
-#include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -37,36 +35,6 @@ void fail(const char* message)
 {
     std::fprintf(stderr, "cpp-atlas-mask-oracle: %s\\n", message);
     std::exit(1);
-}
-
-void validateFixtureContract()
-{
-    const float outset = kStrokeThickness * .5f * 4 + kFeather * 1.5f + 1;
-    const int32_t left = std::max(0, static_cast<int32_t>(std::floor(kSquareMin - outset)));
-    const int32_t top = left;
-    const int32_t right = std::min(static_cast<int32_t>(kFrameWidth),
-                                   static_cast<int32_t>(std::ceil(kSquareMax + outset)));
-    const int32_t bottom = right;
-    const float scale = 16 / std::max(kFeather * 1.5f, 16.0f);
-    const uint32_t contentWidth =
-        static_cast<uint32_t>(std::ceil((right - left) * scale));
-    const uint32_t contentHeight =
-        static_cast<uint32_t>(std::ceil((bottom - top) * scale));
-    const uint32_t logicalWidth = contentWidth + kAtlasPadding * 2;
-    const uint32_t logicalHeight = contentHeight + kAtlasPadding * 2;
-    const float placementX = kAtlasPadding - left * scale;
-    const float placementY = kAtlasPadding - top * scale;
-    const uint32_t physicalWidth = logicalWidth * 5 / 4;
-    const uint32_t physicalHeight = logicalHeight * 5 / 4;
-    if (left != 0 || top != 0 || right != static_cast<int32_t>(kFrameWidth) ||
-        bottom != static_cast<int32_t>(kFrameHeight) ||
-        logicalWidth != kExpectedLogicalAtlasSize ||
-        logicalHeight != kExpectedLogicalAtlasSize || placementX != 2 || placementY != 2 ||
-        physicalWidth != kExpectedPhysicalAtlasSize ||
-        physicalHeight != kExpectedPhysicalAtlasSize)
-    {
-        fail("fixed fixture no longer derives the 64-frame/39-logical/(2,2)-placement/48-physical atlas contract");
-    }
 }
 
 void await(WGPUInstance instance, WGPUFuture future)
@@ -179,7 +147,6 @@ void writeMask(const char* output,
 
 int main(int argc, char** argv)
 {
-    validateFixtureContract();
     const char* output = argc == 2 ? argv[1] : "atlas-mask.r16f";
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -268,6 +235,30 @@ int main(int argc, char** argv)
     wgpu::CommandBuffer renderCommands = renderEncoder.Finish();
     queue.Submit(1, &renderCommands);
 
+    const auto& facts = webgpuContext->atlasMaskFactsForOracle();
+    if (facts.contentWidth != kExpectedLogicalAtlasSize ||
+        facts.contentHeight != kExpectedLogicalAtlasSize ||
+        !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
+        facts.pathTranslateY != kAtlasPadding || facts.strokeBatchCount != 1 ||
+        facts.strokeScissor.left != 0 || facts.strokeScissor.top != 0 ||
+        facts.strokeScissor.right != kExpectedLogicalAtlasSize ||
+        facts.strokeScissor.bottom != kExpectedLogicalAtlasSize)
+    {
+        std::fprintf(
+            stderr,
+            "cpp-atlas-mask-oracle: production flush contract drift: content=%ux%u transformValid=%d translation=(%g,%g) strokeBatches=%zu scissor=[%u,%u,%u,%u]\n",
+            facts.contentWidth,
+            facts.contentHeight,
+            facts.pathTransformValid,
+            facts.pathTranslateX,
+            facts.pathTranslateY,
+            facts.strokeBatchCount,
+            facts.strokeScissor.left,
+            facts.strokeScissor.top,
+            facts.strokeScissor.right,
+            facts.strokeScissor.bottom);
+        return 1;
+    }
     const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
     const uint32_t atlasWidth = atlas.GetWidth();
     const uint32_t atlasHeight = atlas.GetHeight();

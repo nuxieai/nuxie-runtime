@@ -389,6 +389,29 @@ int main(int argc, char** argv)
     queue.Submit(1, &renderCommands);
 
     const auto& facts = webgpuContext->atlasMaskFactsForOracle();
+    std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu\n",
+                facts.interlockMode,
+                facts.fixedFunctionColorOutput,
+                facts.drawBatches.size());
+    for (const auto& batch : facts.drawBatches)
+    {
+        std::printf("  drawType=%u shaderFeatures=0x%x shaderMiscFlags=0x%x\n",
+                    batch.drawType,
+                    batch.shaderFeatures,
+                    batch.shaderMiscFlags);
+    }
+    if (facts.interlockMode !=
+            static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+        !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 1 ||
+        facts.drawBatches.front().drawType !=
+            static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
+        facts.drawBatches.front().shaderFeatures != static_cast<uint32_t>(
+            rive::gpu::ShaderFeatures::ENABLE_DITHER) ||
+        facts.drawBatches.front().shaderMiscFlags != static_cast<uint32_t>(
+            rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+    {
+        fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");
+    }
     if (facts.contentWidth != kExpectedLogicalAtlasSize ||
         facts.contentHeight != kExpectedLogicalAtlasSize ||
         !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||

@@ -2415,7 +2415,7 @@ mod tests {
         let factory = WgpuFactory::new_with_mode(
             ATLAS_ORACLE_FRAME_SIZE,
             ATLAS_ORACLE_FRAME_SIZE,
-            RenderMode::ClockwiseAtomic,
+            RenderMode::Msaa,
         )
         .unwrap();
         let mut raw_path = RawPath::new();
@@ -2614,8 +2614,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU oracle"]
-    fn cpp_webgpu_atlas_blit_oracle_matches_fixed_rust_output_when_configured() {
+    #[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured() {
         let path = std::env::var_os("RIVE_CPP_ATLAS_BLIT")
             .expect("RIVE_CPP_ATLAS_BLIT is required for the ignored C++ atlas-blit oracle test");
         assert!(

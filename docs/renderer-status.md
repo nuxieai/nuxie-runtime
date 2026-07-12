@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=19, diverges=0, gated=1,447, total=1,466.
+- Rust wgpu: exact=20, diverges=0, gated=1,447, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -26,7 +26,8 @@ Run `make renderer-golden`.
   `gm-strokes3-clockwise-atomic`, and
   `gm-lots_of_tess_spans_stroke-clockwise-atomic`, and
   `gm-emptyfeather-clockwise-atomic`, plus
-  `first-light-direct-feather-stroke-clockwise-atomic`.
+  `first-light-direct-feather-stroke-clockwise-atomic` and
+  `first-light-atlas-feather-stroke-clockwise-atomic`.
 
 ## Milestones
 
@@ -49,10 +50,12 @@ Run `make renderer-golden`.
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
    partitioning, direct/atlas threshold routing, atlas-stroke tessellation
    inputs, and the R16 mask are exact against C++ WebGPU. The active boundary
-   is the final atlas-blit oracle: diagnose its remaining 940-pixel/max-delta-3
-   output difference, then converge the remaining atlas filtering/corner
-   cases. Continue R2 with the remaining `render_context.cpp` behavior, robust
-   triangulation, and integration of the translated intersection board.
+   is the remaining multi-radius/corner stress output in `feather_strokes`;
+   bisect it with mode-correct native Metal clockwise-atomic replays. The
+   separate matching WebGPU MSAA final-blit oracle remains a named R2 failure
+   at 4,096 pixels/max delta 80. Continue R2 with the remaining
+   `render_context.cpp` behavior, robust triangulation, and integration of the
+   translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -457,14 +460,19 @@ Run `make renderer-golden`.
   and final R16 atlas mask all compare exactly. Closed/open, double-sided,
   interior, and row-wrap tests preserve logical patch counts while covering
   the physical padding layout; no tolerance changed.
-- 2026-07-11: Extended the paired C++ WebGPU oracle through final RGBA8 atlas
-  blitting. The same submitted frame now exports versioned input, physical R16
-  mask, and 64x64 final-target artifacts; inputs and mask remain exact. Ported
-  C++'s 125% physical atlas growth and default interleaved-gradient-noise
-  dither state, selecting the dithered resolve permutation only for feather
-  runs so established non-feather output remains ratcheted. The focused native
-  Metal `feather_strokes` difference drops 1,411,260 -> 229,617 pixels (84%),
-  while `make renderer-golden` remains exact=19/diverges=0. The matching C++
-  WebGPU final oracle now fails after the exact mask at 940/4,096 pixels with
-  max channel delta 3; this is the next diagnostic boundary, not a tolerance
-  adjustment.
+- 2026-07-11: Extended the paired C++ WebGPU oracle through final RGBA8 MSAA
+  atlas blitting. The same submitted frame now exports versioned input,
+  physical R16 mask, and 64x64 final-target artifacts; inputs and mask remain
+  exact. A draw-schedule assertion prevents comparing this MSAA output to an
+  atomic Rust path again. Matching Rust MSAA currently differs across all
+  4,096 pixels with max delta 80, a named R2 failure. For the primary path, a
+  new mode-correct native Metal clockwise-atomic atlas-feather stream differs
+  at only 106 pixels/max delta 1, passes the existing 2/128 backend budget, and
+  is promoted. Porting C++'s 125% physical atlas growth and feature-scoped
+  default dither drops native `feather_strokes` from 1,411,260 to 229,617
+  differing pixels (84%) while moving the ratchet to exact=20/diverges=0. The
+  earlier 940/max-delta-3 number mixed C++ MSAA with Rust atomic output and is
+  explicitly invalidated.
+- 2026-07-11: Made `generate-corpus-r` preserve existing generated entry blocks
+  by identity. Status, tolerances, references, and gate diagnostics now survive
+  regeneration byte-for-byte; a regression test covers an exact promoted row.

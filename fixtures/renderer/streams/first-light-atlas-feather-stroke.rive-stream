@@ -1,0 +1,10 @@
+rive-golden-stream-v1
+source file="first-light:atlas-feather-stroke" artboard="" scene="atlas-feather-stroke"
+frameSize width=64 height=64
+clearColor value=0xff000000
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+save
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(16,16),(48,16),(48,48),(16,48)]}} paint={id=1,style=stroke,color=0xffffffff,thickness=8,join=0,cap=0,feather=20,blendMode=3,shader=0}
+restore
+frame

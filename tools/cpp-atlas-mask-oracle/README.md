@@ -31,11 +31,13 @@ tessellation dimensions, followed by canonical 16-byte contour records and
 the complete tightly packed `RGBA32Uint` tessellation texture. Both artifacts
 come from the same submitted C++ frame.
 
-`atlas-blit.rgba` uses the `RIVEABL` version 1 contract: a 20-byte
+`atlas-blit.rgba` uses the `RIVEABL` version 1 contract for the matching MSAA
+mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
 complete tightly packed `64 x 64` RGBA8 render target. Since the paired input
 and mask oracles already prove the atlas contents, this artifact isolates the
-final atlas sampling, paint application, atomic coverage, and resolve path.
+final atlas sampling, paint application, and MSAA output path. Clockwise-atomic
+final output is verified separately through the native Metal stream replay.
 
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
@@ -51,7 +53,7 @@ RIVE_CPP_ATLAS_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-inputs.bin" \
   -- --exact --ignored --nocapture
 RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
   cargo test -p nuxie-renderer \
-  tests::cpp_webgpu_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
+  tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
   -- --exact --ignored --nocapture
 ```
 

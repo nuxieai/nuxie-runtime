@@ -3,6 +3,7 @@
 
 import os
 import pathlib
+import re
 import shutil
 import struct
 import subprocess
@@ -556,20 +557,61 @@ class FormatTests(unittest.TestCase):
     def test_direct_flower_provenance_matches_stream_line_7(self):
         stream_line = FLOWER_STREAM.read_text().splitlines()[6]
         self.assertIn("clipPath path={id=1,fillRule=2", stream_line)
-        self.assertIn("verbs=[move,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,cubic,close,move,cubic,cubic,cubic,cubic,close]", stream_line)
-        self.assertIn("(833.333374,500)", stream_line)
-        self.assertIn("(833.333374,500.000061),(750,500)", stream_line)
-        self.assertIn("(750,362.02124),(750,500)", stream_line)
+        fixture_path = re.search(
+            r"verbs=\[([^]]+)\],points=\[(.*)\]\}\}$", stream_line
+        )
+        self.assertIsNotNone(fixture_path)
+        expected_verbs = fixture_path.group(1).split(",")
+        expected_points = re.findall(
+            r"\(([^,]+),([^)]+)\)", fixture_path.group(2)
+        )
 
+        def f32_bits(literal: str) -> int:
+            if literal.endswith("f"):
+                literal = literal[:-1]
+            return struct.unpack("<I", struct.pack("<f", float(literal)))[0]
+
+        expected_point_bits = [
+            (f32_bits(x), f32_bits(y)) for x, y in expected_points
+        ]
         source = EXPORTER.read_text()
-        for fragment in (
-            "path->moveTo(833.333374f, 500.f);",
-            "1035.17468f,",
-            "500.000061f);",
-            "path->moveTo(750.f, 500.f);",
-            "path->cubicTo(637.97876f, 250.f, 750.f, 362.02124f, 750.f, 500.f);",
-        ):
-            self.assertIn(fragment, source)
+        function_start = source.index(
+            "void addClockwiseNestedFlower(rive::RenderPath* path)"
+        )
+        function_end = source.index(
+            "\nstd::vector<uint8_t> readTexture", function_start
+        )
+        function_source = source[function_start:function_end]
+        commands = re.findall(
+            r"path->(moveTo|cubicTo|close)\((.*?)\);",
+            function_source,
+            re.DOTALL,
+        )
+        actual_verbs = {
+            "moveTo": "move",
+            "cubicTo": "cubic",
+            "close": "close",
+        }
+        self.assertEqual(
+            [actual_verbs[command] for command, _ in commands], expected_verbs
+        )
+
+        actual_point_bits = []
+        for command, argument_list in commands:
+            if command == "close":
+                self.assertEqual(argument_list.strip(), "")
+                continue
+            arguments = [part.strip() for part in argument_list.split(",")]
+            expected_argument_count = 2 if command == "moveTo" else 6
+            self.assertEqual(len(arguments), expected_argument_count)
+            actual_point_bits.extend(
+                (f32_bits(arguments[index]), f32_bits(arguments[index + 1]))
+                for index in range(0, len(arguments), 2)
+            )
+
+        self.assertEqual(len(expected_verbs), 17)
+        self.assertEqual(len(expected_point_bits), 41)
+        self.assertEqual(actual_point_bits, expected_point_bits)
 
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()

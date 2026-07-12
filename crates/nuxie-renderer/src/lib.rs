@@ -108,7 +108,7 @@ impl WgpuFactory {
                 label: Some("nuxie-renderer-device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits {
-                    max_storage_buffers_per_shader_stage: 6,
+                    max_storage_buffers_per_shader_stage: 7,
                     ..wgpu::Limits::downlevel_defaults()
                 },
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -265,6 +265,7 @@ impl WgpuFactory {
             state: DrawState::default(),
             stack: Vec::new(),
             draws: Vec::new(),
+            clips: Vec::new(),
             unsupported: None,
             mode: self.mode,
         }
@@ -569,12 +570,19 @@ struct ClipRectState {
     matrix: Mat2D,
 }
 
+#[derive(Debug, Clone)]
+struct ClipElement {
+    path: WgpuPath,
+    matrix: Mat2D,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct DrawState {
     transform: Mat2D,
     opacity: f32,
     clip_rect: Option<ClipRectState>,
     clip_is_empty: bool,
+    clip_index: Option<usize>,
 }
 
 impl Default for DrawState {
@@ -584,6 +592,7 @@ impl Default for DrawState {
             opacity: 1.0,
             clip_rect: None,
             clip_is_empty: false,
+            clip_index: None,
         }
     }
 }
@@ -592,6 +601,13 @@ struct SolidDraw {
     path: WgpuPath,
     paint: WgpuPaint,
     state: DrawState,
+    role: DrawRole,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DrawRole {
+    Content { clip_id: u16 },
+    ClipUpdate { replacement_id: u16, parent_id: u16 },
 }
 
 pub struct WgpuFrame {
@@ -602,6 +618,7 @@ pub struct WgpuFrame {
     state: DrawState,
     stack: Vec<DrawState>,
     draws: Vec<SolidDraw>,
+    clips: Vec<ClipElement>,
     unsupported: Option<&'static str>,
     mode: RenderMode,
 }
@@ -630,11 +647,36 @@ impl Renderer for WgpuFrame {
         if path_draw_is_noop(path, paint, self.state.transform) {
             return;
         }
-        self.draws.push(SolidDraw {
+        let clip_id = u16::from(self.state.clip_index.is_some());
+        let content = SolidDraw {
             path: path.clone(),
             paint: paint.clone(),
             state: self.state,
-        });
+            role: DrawRole::Content { clip_id },
+        };
+        if let Some(index) = self.state.clip_index {
+            if !atomic_draw_is_eligible(&content) {
+                self.unsupported
+                    .get_or_insert("non-rectangular clips on fallback draws");
+                return;
+            }
+            let clip = &self.clips[index];
+            self.draws.push(SolidDraw {
+                path: clip.path.clone(),
+                paint: WgpuPaint::default(),
+                state: DrawState {
+                    transform: clip.matrix,
+                    clip_rect: None,
+                    clip_index: None,
+                    ..self.state
+                },
+                role: DrawRole::ClipUpdate {
+                    replacement_id: 1,
+                    parent_id: 0,
+                },
+            });
+        }
+        self.draws.push(content);
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
@@ -647,7 +689,16 @@ impl Renderer for WgpuFrame {
             return;
         }
         let Some(rect) = path_aabb(&path.raw_path) else {
-            self.unsupported.get_or_insert("non-rectangular clip paths");
+            if self.state.clip_index.is_some() {
+                self.unsupported
+                    .get_or_insert("nested non-rectangular clip paths");
+                return;
+            }
+            self.clips.push(ClipElement {
+                path: path.clone(),
+                matrix: self.state.transform,
+            });
+            self.state.clip_index = Some(self.clips.len() - 1);
             return;
         };
         if !apply_clip_rect(&mut self.state, rect) {
@@ -941,17 +992,30 @@ impl WgpuFrame {
                     }
                     path.coverage_buffer_range.pitch = padded_width;
                     paths.push(path);
-                    let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
-                        gpu::PaintData::solid_stroke(
-                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                            draw.paint.blend_mode,
-                        )
-                    } else {
-                        gpu::PaintData::solid(
-                            modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                    let mut paint = match draw.role {
+                        DrawRole::ClipUpdate {
+                            replacement_id,
+                            parent_id,
+                        } => gpu::PaintData::clip_update(
+                            replacement_id,
+                            parent_id,
                             draw.path.fill_rule,
-                            draw.paint.blend_mode,
-                        )
+                        ),
+                        DrawRole::Content { clip_id } => {
+                            let paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                                gpu::PaintData::solid_stroke(
+                                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                    draw.paint.blend_mode,
+                                )
+                            } else {
+                                gpu::PaintData::solid(
+                                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                    draw.path.fill_rule,
+                                    draw.paint.blend_mode,
+                                )
+                            };
+                            paint.with_clip_id(clip_id)
+                        }
                     };
                     if draw.state.clip_rect.is_some() {
                         paint = paint.with_clip_rect();
@@ -1733,6 +1797,9 @@ fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint, transform: Mat2D) -> bo
 }
 
 fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
+    if matches!(draw.role, DrawRole::ClipUpdate { .. }) {
+        return draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform).is_some();
+    }
     if draw.paint.shader.is_some() {
         return false;
     }
@@ -1994,6 +2061,7 @@ mod tests {
             },
             paint: WgpuPaint::default(),
             state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
         };
         assert_eq!(tessellate_solid(&draw, 10, 10).unwrap().len(), 3);
     }
@@ -2053,6 +2121,68 @@ mod tests {
         assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
         assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
         assert_eq!(pixel(56, 56), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn arbitrary_clip_path_updates_atomic_clip_buffer() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let mut clip_path = RawPath::new();
+        clip_path.move_to(8.0, 8.0);
+        clip_path.line_to(56.0, 8.0);
+        clip_path.line_to(32.0, 56.0);
+        clip_path.close();
+        let clip = WgpuPath {
+            raw_path: clip_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(4, 4), [0, 0, 0, 255]);
+        assert_eq!(pixel(32, 24), [255, 255, 255, 255]);
+        assert_eq!(pixel(60, 60), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn arbitrary_clip_rejects_fallback_content_explicitly() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let mut clip_path = RawPath::new();
+        clip_path.move_to(8.0, 8.0);
+        clip_path.line_to(56.0, 8.0);
+        clip_path.line_to(32.0, 56.0);
+        clip_path.close();
+        let clip = WgpuPath {
+            raw_path: clip_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            shader: Some(WgpuShader::Linear {
+                start: (0.0, 0.0),
+                end: (64.0, 64.0),
+                colors: vec![0xffff_ffff, 0xff00_0000],
+                stops: vec![0.0, 1.0],
+            }),
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &paint);
+
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "non-rectangular clips on fallback draws"
+            ))
+        ));
     }
 
     #[test]

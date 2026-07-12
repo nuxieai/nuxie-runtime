@@ -97,7 +97,11 @@ impl AtomicPipeline {
         });
         let atomic_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-buffer-layout"),
-            entries: &[storage_entry(1, false), storage_entry(3, false)],
+            entries: &[
+                storage_entry(1, false),
+                storage_entry(2, false),
+                storage_entry(3, false),
+            ],
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-sampler-layout"),
@@ -132,7 +136,7 @@ impl AtomicPipeline {
                 module: &path_fragment,
                 entry_point: Some("main"),
                 compilation_options: options(&[
-                    ("0", 0.0),
+                    ("0", 1.0),
                     ("1", 1.0),
                     ("3", 0.0),
                     ("4", 0.0),
@@ -166,7 +170,7 @@ impl AtomicPipeline {
                 module: &path_fragment,
                 entry_point: Some("main"),
                 compilation_options: options(&[
-                    ("0", 0.0),
+                    ("0", 1.0),
                     ("1", 1.0),
                     ("3", 1.0),
                     ("4", 0.0),
@@ -200,7 +204,7 @@ impl AtomicPipeline {
                 module: &path_fragment,
                 entry_point: Some("main"),
                 compilation_options: options(&[
-                    ("0", 0.0),
+                    ("0", 1.0),
                     ("1", 1.0),
                     ("3", 1.0),
                     ("4", 0.0),
@@ -234,7 +238,7 @@ impl AtomicPipeline {
                 module: &path_fragment,
                 entry_point: Some("main"),
                 compilation_options: options(&[
-                    ("0", 0.0),
+                    ("0", 1.0),
                     ("1", 1.0),
                     ("3", 0.0),
                     ("4", 0.0),
@@ -269,7 +273,7 @@ impl AtomicPipeline {
                     module: &resolve_fragment,
                     entry_point: Some("main"),
                     compilation_options: options(&[
-                        ("0", 0.0),
+                        ("0", 1.0),
                         ("1", 1.0),
                         ("4", 0.0),
                         ("7", dither),
@@ -301,7 +305,7 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &interior_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -329,7 +333,7 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &atlas_blit_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("4", 0.0), ("7", 1.0)]),
+                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 1.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -409,6 +413,12 @@ impl AtomicPipeline {
             &vec![0u32; pixel_count],
             wgpu::BufferUsages::STORAGE,
         );
+        let clips = upload(
+            device,
+            "nuxie-atomic-clips",
+            &vec![0u32; pixel_count],
+            wgpu::BufferUsages::STORAGE,
+        );
         let coverage = upload(
             device,
             "nuxie-atomic-coverage",
@@ -485,6 +495,7 @@ impl AtomicPipeline {
             layout: &self.atomic_layout,
             entries: &[
                 binding(1, colors.as_entire_binding()),
+                binding(2, clips.as_entire_binding()),
                 binding(3, coverage.as_entire_binding()),
             ],
         });

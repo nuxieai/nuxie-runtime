@@ -571,3 +571,12 @@ Run `make renderer-golden`.
   delta 2. The ratchet advances to exact=31/diverges=0. `strokes_round` remains
   gated at 34/max83 pending a separate hard-edge diagnosis; cubic clip GMs
   retain their pre-existing geometry failures.
+- 2026-07-11: Landed the first arbitrary-path clip tracer bullet. Atomic
+  pipelines now enable the generated clipping specialization, bind the seventh
+  fragment storage buffer for packed clip data, encode C++-compatible
+  replacement/parent clip IDs, and emit a real `clipUpdate` draw before clipped
+  content. A GPU triangle-clip test passes, and the first one-clip
+  `parallelclips` cell is structurally correct at 15 pixels beyond delta 2/max
+  delta 18 versus native Metal. The full GM remains gated: nested non-rect clips
+  still return an explicit unsupported error. Continue with clockwise-atomic
+  nested inversion, clip-content bounds/IDs, and update reuse.

@@ -530,13 +530,18 @@ pub(crate) struct PaintData {
 }
 
 impl PaintData {
-    pub(crate) fn solid(color: ColorInt, fill_rule: FillRule, blend_mode: BlendMode) -> Self {
-        let fill_flag = match fill_rule {
+    fn fill_flag(fill_rule: FillRule) -> u32 {
+        match fill_rule {
             FillRule::NonZero | FillRule::Clockwise => 0x100,
             FillRule::EvenOdd => 0x200,
-        };
+        }
+    }
+
+    pub(crate) fn solid(color: ColorInt, fill_rule: FillRule, blend_mode: BlendMode) -> Self {
         Self {
-            params: PaintType::SolidColor as u32 | fill_flag | blend_mode_id(blend_mode) << 4,
+            params: PaintType::SolidColor as u32
+                | Self::fill_flag(fill_rule)
+                | blend_mode_id(blend_mode) << 4,
             value: swizzle_rive_color_to_rgba(color),
         }
     }
@@ -551,6 +556,18 @@ impl PaintData {
     pub(crate) fn with_clip_rect(mut self) -> Self {
         self.params |= PAINT_FLAG_HAS_CLIP_RECT;
         self
+    }
+
+    pub(crate) fn with_clip_id(mut self, clip_id: u16) -> Self {
+        self.params |= u32::from(clip_id) << 16;
+        self
+    }
+
+    pub(crate) fn clip_update(replacement_id: u16, parent_id: u16, fill_rule: FillRule) -> Self {
+        Self {
+            params: Self::fill_flag(fill_rule) | u32::from(parent_id) << 16,
+            value: u32::from(replacement_id) << 16,
+        }
     }
 }
 
@@ -735,6 +752,15 @@ mod tests {
         assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
         assert_eq!(paint.value, 0x8010_2040);
         assert_eq!(paint.with_clip_rect().params, 1 | 0x200 | 0x400 | 11 << 4);
+        assert_eq!(paint.with_clip_id(7).params, 7 << 16 | 1 | 0x200 | 11 << 4);
+        assert_eq!(
+            PaintData::clip_update(7, 3, FillRule::EvenOdd).params,
+            3 << 16 | 0x200
+        );
+        assert_eq!(
+            PaintData::clip_update(7, 3, FillRule::EvenOdd).value,
+            7 << 16
+        );
         let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
         assert_eq!(stroke.params, 1 | 11 << 4);
     }

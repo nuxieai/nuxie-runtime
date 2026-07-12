@@ -3276,7 +3276,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-bankcard-frame-0-msaa"
@@ -3692,7 +3692,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "incompatible-clip-rectangles"
 
 [[entry]]
 id = "riv-bullet_man-frame-0-msaa"
@@ -3718,7 +3718,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-msaa"
@@ -4357,7 +4357,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-coin-frame-0-msaa"
@@ -5995,7 +5995,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-data_viz_demo-frame-0-msaa"
@@ -6200,10 +6200,9 @@ reference = "fixtures/renderer/reference/metal/riv/death_knight-frame-0-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-death_knight-frame-0-msaa"
@@ -6356,10 +6355,9 @@ reference = "fixtures/renderer/reference/metal/riv/deterministic_mode-frame-0-cl
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-deterministic_mode-frame-0-msaa"
@@ -6645,7 +6643,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-echo_show_demo-frame-0-msaa"
@@ -8439,7 +8437,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-hunter_x_demo-frame-0-msaa"
@@ -8618,10 +8616,9 @@ reference = "fixtures/renderer/reference/metal/riv/interactive_scrolling-frame-0
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-interactive_scrolling-frame-0-msaa"
@@ -13092,7 +13089,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "advanced-blend-feather"
 
 [[entry]]
 id = "riv-rewards_demo-frame-0-msaa"
@@ -13115,10 +13112,9 @@ reference = "fixtures/renderer/reference/metal/riv/rocket-frame-0-clockwise-atom
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-rocket-frame-0-msaa"
@@ -13141,10 +13137,9 @@ reference = "fixtures/renderer/reference/metal/riv/rocket-frame-1-clockwise-atom
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-rocket-frame-1-msaa"
@@ -13167,10 +13162,9 @@ reference = "fixtures/renderer/reference/metal/riv/rocket-frame-2-clockwise-atom
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-rocket-frame-2-msaa"
@@ -13193,10 +13187,9 @@ reference = "fixtures/renderer/reference/metal/riv/rocket-frame-3-clockwise-atom
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-rocket-frame-3-msaa"
@@ -13219,10 +13212,9 @@ reference = "fixtures/renderer/reference/metal/riv/rocket-frame-4-clockwise-atom
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-rocket-frame-4-msaa"
@@ -14987,10 +14979,9 @@ reference = "fixtures/renderer/reference/metal/riv/scroll_test-frame-0-clockwise
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-scroll_test-frame-0-msaa"
@@ -15013,10 +15004,9 @@ reference = "fixtures/renderer/reference/metal/riv/scroll_threshold-frame-0-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-scroll_threshold-frame-0-msaa"
@@ -18963,10 +18953,9 @@ reference = "fixtures/renderer/reference/metal/riv/zombie_skins-frame-0-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-zombie_skins-frame-0-msaa"

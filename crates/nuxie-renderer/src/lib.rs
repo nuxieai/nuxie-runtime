@@ -2813,7 +2813,7 @@ fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
 }
 
 fn normalize_gradient(shader: &WgpuShader, opacity: f32) -> Option<GradientDefinition> {
-    const EPSILON: f32 = 1e-5;
+    const EPSILON: f32 = 1.0 / 4096.0;
     let (paint_type, mut colors, stops, coeffs) = match shader {
         WgpuShader::Linear {
             start,
@@ -2844,6 +2844,13 @@ fn normalize_gradient(shader: &WgpuShader, opacity: f32) -> Option<GradientDefin
                 }
                 stops[0] = 0.0;
                 *stops.last_mut().unwrap() = 1.0;
+                let final_index = stops.len() - 1;
+                for index in 1..final_index {
+                    stops[index] = stops[index].max(stops[index - 1]);
+                }
+                for index in (1..final_index).rev() {
+                    stops[index] = stops[index].min(stops[index + 1]);
+                }
             }
             let dx = end.0 - start.0;
             let dy = end.1 - start.1;
@@ -2875,6 +2882,13 @@ fn normalize_gradient(shader: &WgpuShader, opacity: f32) -> Option<GradientDefin
                     *stop *= inverse_last;
                 }
                 *stops.last_mut().unwrap() = 1.0;
+                stops[0] = stops[0].max(0.0);
+                for index in 1..final_index {
+                    stops[index] = stops[index].max(stops[index - 1]);
+                }
+                for index in (0..final_index).rev() {
+                    stops[index] = stops[index].min(stops[index + 1]);
+                }
             }
             (
                 gpu::PaintType::RadialGradient,

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=88, diverges=0, gated=1,379, total=1,467.
+- Rust wgpu: exact=99, diverges=0, gated=1,368, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -76,7 +76,14 @@ Run `make renderer-golden`.
   `riv-clipping_and_draw_order-frame-0-clockwise-atomic`, plus
   `riv-tape-frame-0-clockwise-atomic`, and
   `riv-superbowl-frame-0-clockwise-atomic`, and
-  `riv-jellyfish_test-frame-0-clockwise-atomic`.
+  `riv-jellyfish_test-frame-0-clockwise-atomic`, plus
+  `riv-death_knight-frame-0-clockwise-atomic`,
+  `riv-deterministic_mode-frame-0-clockwise-atomic`,
+  `riv-interactive_scrolling-frame-0-clockwise-atomic`,
+  `riv-rocket-frame-{0..4}-clockwise-atomic`,
+  `riv-scroll_test-frame-0-clockwise-atomic`,
+  `riv-scroll_threshold-frame-0-clockwise-atomic`, and
+  `riv-zombie_skins-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -201,8 +208,14 @@ Run `make renderer-golden`.
    pre-image radial-gradient background alone carried 866,438 divergent
    pixels. C++'s simple/complex gradient-ramp layout, generated color-ramp
    pass, opacity modulation, and inverse paint transforms are now ported.
-   Five focused gradient GMs and `jellyfish_test` are promoted; rescout the
-   remaining gradient-bearing `.riv` corpus next.
+   Five focused gradient GMs and `jellyfish_test` are promoted. A mechanical
+   sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
+   C++ references and promoted 11 entries without changing their 32-pixel
+   budgets. Eight entries stop on advanced-blend feather or incompatible clip
+   diagnostics. The runnable residual queue is finite: `new_text` (44 pixels),
+   `ai_assitant` (341), `db_health_tracker` (1,071), `off_road_car` frames
+   (3,904 each), `joel_signed` frames (6,557-6,559), `juice` frames (12,837),
+   and `bad_skin` (22,932). Attribute `new_text` first.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -221,6 +234,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Completed the post-gradient `.riv` sweep. The host port now uses
+  C++'s exact `math::EPSILON` (`1/4096`) and forward/backward monotonic stop
+  clamps; all five gradient GM oracles remain unchanged. Of 38 gated
+  gradient-bearing clockwise entries, 30 render and now have fresh C++ Metal
+  references, while eight retain explicit advanced-blend-feather or clip-rect
+  diagnostics. Eleven pass under the existing strict delta-2/32-pixel budget:
+  `death_knight`, `deterministic_mode`, `interactive_scrolling`, all five
+  `rocket` samples, `scroll_test`, `scroll_threshold`, and `zombie_skins`.
+  Larger measured residuals remain gated rather than tolerated. The ratchet
+  advances to exact=99/diverges=0/gated=1,368.
 - 2026-07-12: The `jellyfish_test` mip gate was false attribution. A bounded
   draw/LOD inventory found all 22 image draws at LOD 0; a no-mip render is
   byte-identical to the corrected nearest-mip render. Prefix replay then proved
@@ -1030,3 +1053,7 @@ Run `make renderer-golden`.
   rendering, gradient paint data/transforms, and nearest mip selection; five
   gradient GMs plus `jellyfish_test` advance the ratchet to
   exact=88/diverges=0/gated=1,379, with stale image allowances tightened.
+- 2026-07-12: Swept all 38 remaining gradient-bearing `.riv` entries, captured
+  30 runnable C++ references, and promoted 11 under unchanged tolerances. The
+  precise gradient epsilon/clamp semantics are pinned; the ratchet advances to
+  exact=99/diverges=0/gated=1,368 and `new_text` is the next residual.

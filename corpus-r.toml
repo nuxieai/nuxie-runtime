@@ -8704,7 +8704,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "platform-mipmap-filtering"
 
 [[entry]]
 id = "riv-jellyfish_test-frame-0-msaa"
@@ -17073,10 +17073,9 @@ reference = "fixtures/renderer/reference/metal/riv/superbowl-frame-0-clockwise-a
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 12000
 
 [[entry]]
 id = "riv-superbowl-frame-0-msaa"

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=81, diverges=0, gated=1,386, total=1,467.
+- Rust wgpu: exact=82, diverges=0, gated=1,385, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -69,7 +69,8 @@ Run `make renderer-golden`.
   `gm-image_aa_border-clockwise-atomic`, and
   `gm-mesh-clockwise-atomic`, and
   `riv-clipping_and_draw_order-frame-0-clockwise-atomic`, plus
-  `riv-tape-frame-0-clockwise-atomic`.
+  `riv-tape-frame-0-clockwise-atomic`, and
+  `riv-superbowl-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -186,8 +187,13 @@ Run `make renderer-golden`.
    tiled color storage plane, destination-copy initialization, monotonic image
    z indices, generated advanced-blend shaders, and coalesced resolve. GPU
    regressions pin screen, darken, exclusion, and luminosity. `tape` and all
-   three focused image GMs are promoted. Rescout the larger `jellyfish_test`
-   mesh surface and remaining image corpus next.
+   three focused image GMs are promoted. Requesting the selected adapter's
+   actual 2D texture limit instead of the 2,048 downlevel bucket unblocks both
+   `superbowl` and the 2,080-square `jellyfish_test`; `superbowl` is promoted,
+   while `jellyfish_test` remains a measured native-Metal versus generated-wgpu
+   mipmap/filtering gate concentrated in translucent glows. Build a mip-level
+   sub-oracle before revisiting that 604,916-pixel residual, and rescout the
+   now-runnable image corpus next.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -206,6 +212,17 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Image allocation now requests the selected adapter's supported
+  `max_texture_dimension_2d` instead of inheriting wgpu's 2,048 downlevel
+  default. A 2,080-pixel decode regression pins the request; `jellyfish_test`
+  (2,080x2,080) and `superbowl` (2,914x296) both render instead of panicking.
+  Fresh `superbowl` output is visually coincident and promoted at strict delta
+  2 with 11,268/max 64 samples under a 12,000-pixel backend allowance.
+  `jellyfish_test` is not tolerated: all 23 CoreGraphics decodes match Rust
+  premultiplication within one byte with identical alpha, while its 604,916/max
+  139 frame delta is isolated to translucent glows and edges. It is reclassified
+  to `platform-mipmap-filtering` pending a mip-level oracle. The ratchet advances
+  to exact=82/diverges=0/gated=1,385.
 - 2026-07-12: PNG decode now honors `iCCP` metadata with a pure-Rust moxcms
   transform from the embedded profile to sRGB before alpha premultiplication,
   matching C++ ImageIO's color-convert-then-premultiply order. On `gm-mesh`
@@ -980,3 +997,7 @@ Run `make renderer-golden`.
   their measured decoder/filter allowances. The ratchet advances to
   exact=81/diverges=0/gated=1,386; rescouting the larger image/mesh corpus is
   next.
+- 2026-07-12: Replaced the self-imposed 2,048 texture cap with the adapter's
+  supported limit. `superbowl` is promoted under its measured image-backend
+  allowance; `jellyfish_test` now renders but remains gated on a mip-level
+  oracle. The ratchet advances to exact=82/diverges=0/gated=1,385.

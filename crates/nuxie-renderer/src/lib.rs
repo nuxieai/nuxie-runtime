@@ -111,12 +111,14 @@ impl WgpuFactory {
             })
             .await
             .map_err(|error| RendererError::Adapter(error.to_string()))?;
+        let adapter_limits = adapter.limits();
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("nuxie-renderer-device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits {
                     max_storage_buffers_per_shader_stage: 7,
+                    max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
                     ..wgpu::Limits::downlevel_defaults()
                 },
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -3286,6 +3288,33 @@ mod tests {
 
         assert_ne!(pixel[..3], original[..3]);
         assert_eq!(pixel[3], original[3]);
+    }
+
+    #[test]
+    fn image_decode_uses_the_adapter_texture_dimension_limit() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 2080, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&vec![255; 2080 * 4])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+
+        let image = factory.decode_image(&encoded);
+
+        assert_eq!(image.width(), 2080);
+        assert_eq!(image.height(), 1);
+        assert!(image
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .unwrap()
+            .texture
+            .is_some());
     }
 
     #[test]

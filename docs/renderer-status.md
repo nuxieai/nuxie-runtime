@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=100, diverges=0, gated=1,367, total=1,467.
+- Rust wgpu: exact=101, diverges=0, gated=1,366, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -84,7 +84,8 @@ Run `make renderer-golden`.
   `riv-scroll_test-frame-0-clockwise-atomic`,
   `riv-scroll_threshold-frame-0-clockwise-atomic`, and
   `riv-zombie_skins-frame-0-clockwise-atomic`, plus
-  `riv-new_text-frame-0-clockwise-atomic`.
+  `riv-new_text-frame-0-clockwise-atomic` and
+  `riv-ai_assitant-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -213,10 +214,10 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `ai_assitant` (341
-   pixels), `db_health_tracker` (1,071), `off_road_car` frames
+   diagnostics. The runnable residual queue is finite: `db_health_tracker`
+   (1,071 pixels), `off_road_car` frames
    (3,904 each), `joel_signed` frames (6,557-6,559), `juice` frames (12,837),
-   and `bad_skin` (22,932). Attribute `ai_assitant` first.
+   and `bad_skin` (22,932). Attribute `db_health_tracker` first.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -235,6 +236,15 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: `ai_assitant` keeps max channel delta 2 with a bounded 384-pixel
+  allowance. Its exact background and 16 repeated rotated stroke pairs rise
+  smoothly from 1 to 341 residual pixels with no structural jump; 340 of 341
+  connected components are single pixels and foreground-support IoU remains
+  99.3-99.8%. Replacing every gradient shader with solid cyan preserves the
+  residual class (350 pixels, max delta 15), disproving gradient math. Per-draw
+  cutoffs concentrate the accumulation in each intact `feather=12` companion,
+  isolating native Metal/wgpu feather-edge placement rather than missing feather
+  geometry. The ratchet advances to exact=101/diverges=0/gated=1,366.
 - 2026-07-12: `new_text` keeps max channel delta 2 with a bounded 48-pixel
   allowance. Draw-prefix replay attributes the first divergence to its compound
   text path: 44 residual pixels split into 22 components, none larger than four
@@ -1069,3 +1079,8 @@ Run `make renderer-golden`.
   support-mask, and solid-paint controls. Its 44 sparse compound-text edge
   pixels fit a bounded 48-pixel backend allowance; the ratchet advances to
   exact=100/diverges=0/gated=1,367 and `ai_assitant` is next.
+- 2026-07-12: Classified `ai_assitant` through paired-draw prefixes,
+  connected-component/support masks, and a full solid-paint control. Its 341
+  almost entirely singleton stroke-edge pixels fit a bounded 384-pixel backend
+  allowance; the ratchet advances to exact=101/diverges=0/gated=1,366 and
+  `db_health_tracker` is next.

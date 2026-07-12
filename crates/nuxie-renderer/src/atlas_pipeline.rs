@@ -144,6 +144,7 @@ impl AtlasPipeline {
         instance_count: u32,
         is_stroke: bool,
         clear: bool,
+        atlas_content_size: [u32; 2],
         scissor: [u32; 4],
     ) {
         let uniform = upload(
@@ -227,6 +228,14 @@ impl AtlasPipeline {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        pass.set_viewport(
+            0.0,
+            0.0,
+            atlas_content_size[0] as f32,
+            atlas_content_size[1] as f32,
+            0.0,
+            1.0,
+        );
         pass.set_pipeline(if is_stroke { &self.stroke } else { &self.fill });
         pass.set_scissor_rect(scissor[0], scissor[1], scissor[2], scissor[3]);
         pass.set_bind_group(0, &flush, &[]);

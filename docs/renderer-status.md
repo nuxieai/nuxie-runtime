@@ -434,3 +434,9 @@ Run `make renderer-golden`.
   malformed/tolerance/join sensitivity tests pass, and temporary C++/Dawn
   changes restore byte-for-byte. Diagnose this mask discrepancy next; do not
   change atlas coverage without making the configured oracle pass.
+- 2026-07-11: Set each atlas mask pass viewport from the complete packed logical
+  extent while retaining the physical texture size and per-batch scissor. The
+  fixed oracle improves comparator mismatches 1,448 -> 640, exact differing
+  pixels 1,521 -> 643, and mean absolute error 0.05800 -> 0.02841. The first
+  mismatch remains (0,0), so patch/contour/tessellation inputs are the next
+  boundary; tolerances remain unchanged.

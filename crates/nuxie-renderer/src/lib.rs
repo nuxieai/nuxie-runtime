@@ -971,7 +971,8 @@ impl WgpuFrame {
                     paths[index + 1].atlas_transform.translate_y = atlas.translate[1];
                 }
                 debug_assert!(atlas_origins.next().is_none());
-                let [atlas_width, atlas_height] = atlas_layout.extent();
+                let atlas_content_size = atlas_layout.extent();
+                let [atlas_width, atlas_height] = atlas_content_size;
                 let tessellation_height = prepared
                     .iter()
                     .map(|draw| draw::tessellation_texture_height(&draw.spans))
@@ -1043,6 +1044,7 @@ impl WgpuFrame {
                                 draw.instance_count,
                                 draw.is_stroke,
                                 clear,
+                                atlas_content_size,
                                 [atlas.origin[0], atlas.origin[1], atlas.width, atlas.height],
                             );
                             clear = false;
@@ -2124,6 +2126,7 @@ mod tests {
             tessellation.instance_count,
             true,
             true,
+            [ATLAS_ORACLE_LOGICAL_SIZE; 2],
             [
                 placement.origin[0],
                 placement.origin[1],

@@ -158,6 +158,51 @@ pub(crate) fn feather_pixel_bounds(
     ])
 }
 
+pub(crate) fn clockwise_atomic_coverage_range(
+    path: &RawPath,
+    transform: Mat2D,
+    viewport_width: u32,
+    viewport_height: u32,
+    offset: usize,
+) -> Option<(CoverageBufferRange, usize)> {
+    const PADDING: i32 = 2;
+    const TILE_SIZE: u32 = 32;
+
+    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for point in path.points() {
+        let point = transform.transform_point(*point);
+        min.x = min.x.min(point.x);
+        min.y = min.y.min(point.y);
+        max.x = max.x.max(point.x);
+        max.y = max.y.max(point.y);
+    }
+    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
+        return None;
+    }
+    let left = (min.x.floor() as i32).clamp(0, viewport_width as i32);
+    let top = (min.y.floor() as i32).clamp(0, viewport_height as i32);
+    let right = (max.x.ceil() as i32).clamp(0, viewport_width as i32);
+    let bottom = (max.y.ceil() as i32).clamp(0, viewport_height as i32);
+    if right <= left || bottom <= top {
+        return None;
+    }
+    let padded_width = u32::try_from(right - left + PADDING * 2).ok()?;
+    let padded_height = u32::try_from(bottom - top + PADDING * 2).ok()?;
+    let coverage_width = padded_width.checked_next_multiple_of(TILE_SIZE)?;
+    let coverage_height = padded_height.checked_next_multiple_of(TILE_SIZE)?;
+    let word_count = (coverage_width as usize).checked_mul(coverage_height as usize)?;
+    Some((
+        CoverageBufferRange {
+            offset: u32::try_from(offset).ok()?,
+            pitch: coverage_width,
+            offset_x: (-left + PADDING) as f32,
+            offset_y: (-top + PADDING) as f32,
+        },
+        word_count,
+    ))
+}
+
 fn build_stroke_or_feather_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -1794,6 +1839,31 @@ mod tests {
         assert_eq!(tessellation.spans[1].x_range(), (16, 20));
         assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x000c_0010);
         assert_post_contour_padding(&tessellation);
+    }
+
+    #[test]
+    fn clockwise_atomic_coverage_range_matches_cpp_visible_bounds_tiling() {
+        let mut path = RawPath::new();
+        path.move_to(10.25, 20.75);
+        path.cubic_to(12.0, -8.5, 80.25, 75.5, 50.1, 70.2);
+        path.close();
+        let (range, word_count) =
+            clockwise_atomic_coverage_range(&path, Mat2D::IDENTITY, 64, 64, 1024).unwrap();
+        assert_eq!(range.offset, 1024);
+        assert_eq!(range.pitch, 64);
+        assert_eq!(range.offset_x, -8.0);
+        assert_eq!(range.offset_y, 2.0);
+        assert_eq!(word_count, 64 * 96);
+    }
+
+    #[test]
+    fn clockwise_atomic_coverage_range_rejects_offscreen_paths() {
+        let mut path = RawPath::new();
+        path.move_to(-20.0, -20.0);
+        path.line_to(-10.0, -20.0);
+        path.line_to(-10.0, -10.0);
+        path.close();
+        assert!(clockwise_atomic_coverage_range(&path, Mat2D::IDENTITY, 64, 64, 0).is_none());
     }
 
     #[test]

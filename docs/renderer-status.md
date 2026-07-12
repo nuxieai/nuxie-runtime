@@ -82,11 +82,14 @@ Run `make renderer-golden`.
    decomposition, weighted faces, and grout. Direct WebGPU preparation oracles
    match the 100-contour grid (7,500 triangle vertices) and the exact
    flower+oval clip (2 contours, 108 triangle vertices) record-for-record,
-   including every tessellation texel. The remaining large/negative gap is the
-   coherent clockwise-atomic family: dedicated main/borrowed/clip shaders,
-   their barrier schedule, and tiled visible-bounds coverage allocations.
-   Port that family next; do not mix its coverage encoding with the current
-   atomics shaders. The separate
+   including every tessellation texel. The dedicated clockwise-atomic
+   path/interior main and borrowed shaders are now generated from upstream,
+   with the global borrowed-to-main barrier schedule and tiled visible-bounds
+   coverage allocations proven on a large compound fill. The remaining
+   large/negative gap is the WebGPU clip plane: generate the dedicated outer
+   and nested clip shaders, translate clip reads to sampled input, and use
+   fixed-function `plus`/`min` clip attachments. Keep this family isolated;
+   its coverage encoding cannot mix with the current atomics shaders. The separate
    matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
    pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
    behavior, robust triangulation, and integration of the translated
@@ -634,3 +637,13 @@ Run `make renderer-golden`.
   mixed. `make renderer-golden` remains exact=46/diverges=0/gated=1,421; the
   next R2 slice is the dedicated clockwise-atomic shader/scheduling/allocation
   family, not further geometry work on these cases.
+- 2026-07-12: Generated the upstream clockwise-atomic path/interior main and
+  borrowed-coverage WGSL modules through GLSL -> SPIR-V -> naga and wired them
+  as an isolated wgpu pipeline family. Ported C++'s per-path visible-bounds
+  allocator (2px padding, 32x32 tiling, monotonic offsets) and global
+  borrowed-before-main pass schedule. A 640x640 multi-contour GPU proof renders
+  interior and nested-winding pixels correctly; `batchedtriangulations` stays
+  within tolerance at 18 pixels, and the renderer ratchet remains
+  exact=46/diverges=0/gated=1,421. True clip rendering still requires a
+  sampled-input plus fixed-function `plus`/`min` attachment translation;
+  storage-buffer PLS writes are not a semantic substitute.

@@ -8,6 +8,7 @@ mod atlas_input_oracle;
 mod atlas_mask_oracle;
 mod atlas_pipeline;
 mod atomic_pipeline;
+mod clockwise_atomic_pipeline;
 mod composite_pipeline;
 #[cfg(test)]
 mod direct_grid_oracle;
@@ -68,6 +69,7 @@ struct Context {
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
     atomic_pipeline: atomic_pipeline::AtomicPipeline,
+    clockwise_atomic_pipeline: clockwise_atomic_pipeline::ClockwiseAtomicPipeline,
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
     composite_pipeline: composite_pipeline::CompositePipeline,
     feather_lut: feather_lut::FeatherLut,
@@ -234,6 +236,8 @@ impl WgpuFactory {
         let tessellator = tessellator::Tessellator::new(&device);
         let path_pipeline = path_pipeline::PathPipeline::new(&device);
         let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
+        let clockwise_atomic_pipeline =
+            clockwise_atomic_pipeline::ClockwiseAtomicPipeline::new(&device);
         let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device);
         let composite_pipeline = composite_pipeline::CompositePipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
@@ -249,6 +253,7 @@ impl WgpuFactory {
                 tessellator,
                 path_pipeline,
                 atomic_pipeline,
+                clockwise_atomic_pipeline,
                 atlas_pipeline,
                 composite_pipeline,
                 feather_lut,
@@ -848,6 +853,25 @@ impl WgpuFrame {
                 }
                 let padded_width = align_to(self.width, 32);
                 let padded_height = align_to(self.height, 32);
+                let use_clockwise_atomic_batch = draws.iter().all(|draw| {
+                    matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                        && draw.paint.style == RenderPaintStyle::Fill
+                        && draw.paint.feather == 0.0
+                        && draw.state.clip_rect.is_none()
+                        && draw
+                            .path
+                            .raw_path
+                            .verbs()
+                            .iter()
+                            .filter(|verb| **verb == PathVerb::Move)
+                            .count()
+                            > 1
+                        && draw::should_use_interior_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                        )
+                });
+                let mut clockwise_atomic_coverage_words = 0usize;
                 let mut prepared = Vec::with_capacity(draws.len());
                 let mut paths = vec![gpu::PathData::zeroed()];
                 let mut paints = vec![gpu::PaintData::solid(
@@ -1017,7 +1041,20 @@ impl WgpuFrame {
                             translate_y: placement.translate[1],
                         };
                     }
-                    path.coverage_buffer_range.pitch = padded_width;
+                    if use_clockwise_atomic_batch {
+                        let (range, word_count) = draw::clockwise_atomic_coverage_range(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            self.width,
+                            self.height,
+                            clockwise_atomic_coverage_words,
+                        )
+                        .expect("atomic eligibility already validated visible path bounds");
+                        path.coverage_buffer_range = range;
+                        clockwise_atomic_coverage_words += word_count;
+                    } else {
+                        path.coverage_buffer_range.pitch = padded_width;
+                    }
                     paths.push(path);
                     let mut paint = match draw.role {
                         DrawRole::ClipUpdate {
@@ -1205,21 +1242,81 @@ impl WgpuFrame {
                         is_feather: draw.is_feather,
                     })
                     .collect::<Vec<_>>();
-                self.context.atomic_pipeline.encode_batch(
-                    &self.context.device,
-                    encoder,
-                    &view,
-                    &self.context.feather_lut.view,
-                    &self.context.patch_vertex_buffer,
-                    &self.context.patch_index_buffer,
-                    &atomic_draws,
-                    &uniforms,
-                    &paths,
-                    &paints,
-                    &paint_aux,
-                    &contours,
-                    padded_width as usize * padded_height as usize,
-                );
+                if use_clockwise_atomic_batch {
+                    uniforms.coverage_buffer_prefix = 1 << 20;
+                    let borrowed_triangles = prepared
+                        .iter()
+                        .map(|draw| {
+                            draw.triangles
+                                .iter()
+                                .copied()
+                                .filter(|vertex| vertex.weight_path_id >> 16 < 0)
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>();
+                    let main_triangles = prepared
+                        .iter()
+                        .map(|draw| {
+                            draw.triangles
+                                .iter()
+                                .copied()
+                                .filter(|vertex| vertex.weight_path_id >> 16 > 0)
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>();
+                    let clockwise_atomic_draws = prepared
+                        .iter()
+                        .zip(&tessellation_views)
+                        .zip(&borrowed_triangles)
+                        .zip(&main_triangles)
+                        .map(
+                            |(((draw, tessellation), borrowed_triangles), main_triangles)| {
+                                assert_eq!(draw.instance_count % 2, 0);
+                                let instance_count = draw.instance_count / 2;
+                                clockwise_atomic_pipeline::ClockwiseAtomicDraw {
+                                    tessellation,
+                                    borrowed_base_instance: draw.base_instance,
+                                    main_base_instance: draw.base_instance + instance_count,
+                                    instance_count,
+                                    patch_index_range: draw.patch_index_range.clone(),
+                                    borrowed_triangles,
+                                    main_triangles,
+                                }
+                            },
+                        )
+                        .collect::<Vec<_>>();
+                    self.context.clockwise_atomic_pipeline.encode_fills(
+                        &self.context.device,
+                        encoder,
+                        &view,
+                        &self.context.feather_lut.view,
+                        &self.context.patch_vertex_buffer,
+                        &self.context.patch_index_buffer,
+                        &clockwise_atomic_draws,
+                        &uniforms,
+                        &paths,
+                        &paints,
+                        &paint_aux,
+                        &contours,
+                        clockwise_atomic_coverage_words,
+                    );
+                } else {
+                    self.context.atomic_pipeline.encode_batch(
+                        &self.context.device,
+                        encoder,
+                        &view,
+                        &self.context.feather_lut.view,
+                        &self.context.patch_vertex_buffer,
+                        &self.context.patch_index_buffer,
+                        &atomic_draws,
+                        &uniforms,
+                        &paths,
+                        &paints,
+                        &paint_aux,
+                        &contours,
+                        padded_width as usize * padded_height as usize,
+                    );
+                }
                 Ok::<(), RendererError>(())
             };
         let encode_fallback_run =
@@ -1843,6 +1940,16 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
         RenderPaintStyle::Fill => {
             draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
                 .is_some_and(|tessellation| tessellation.contours.len() == 1)
+                || (draw::should_use_interior_tessellation(
+                    &draw.path.raw_path,
+                    draw.state.transform,
+                ) && draw::build_interior_tessellation(
+                    &draw.path.raw_path,
+                    draw.state.transform,
+                    draw.path.fill_rule,
+                    false,
+                )
+                .is_some())
         }
         RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
             &draw.path.raw_path,
@@ -2148,6 +2255,28 @@ mod tests {
         assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
         assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
         assert_eq!(pixel(56, 56), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn clockwise_atomic_global_fill_runs_borrowed_then_main_passes() {
+        let factory = WgpuFactory::new_with_mode(640, 640, RenderMode::ClockwiseAtomic).unwrap();
+        let mut compound = rect_path([20.0, 20.0, 620.0, 620.0], FillRule::NonZero);
+        compound.raw_path.add_path(
+            &rect_path([200.0, 200.0, 440.0, 440.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(&compound, &red);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 640 + x) * 4..][..4];
+
+        assert_eq!(pixel(10, 10), [0, 0, 0, 255]);
+        assert_eq!(pixel(100, 100), [255, 0, 0, 255]);
+        assert_eq!(pixel(320, 320), [255, 0, 0, 255]);
     }
 
     #[test]

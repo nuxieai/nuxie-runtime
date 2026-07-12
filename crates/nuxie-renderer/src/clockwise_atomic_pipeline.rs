@@ -37,6 +37,15 @@ pub(crate) struct ClockwiseAtomicDraw<'a> {
     pub kind: ClockwiseAtomicDrawKind,
 }
 
+pub(crate) struct ClockwiseAtomicCoverageReadback {
+    pub borrowed: wgpu::Buffer,
+    pub main: wgpu::Buffer,
+    pub word_count: usize,
+    pub clip_updates: Vec<wgpu::Buffer>,
+    pub clip_bytes_per_row: u32,
+    pub clip_height: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ClockwiseAtomicDrawKind {
     Content,
@@ -404,7 +413,8 @@ impl ClockwiseAtomicPipeline {
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         coverage_word_count: usize,
-    ) {
+        capture_coverage: bool,
+    ) -> Option<ClockwiseAtomicCoverageReadback> {
         assert!(!draws.is_empty());
         assert_ne!(uniforms.coverage_buffer_prefix, 0);
         let uniform = upload(
@@ -441,8 +451,32 @@ impl ClockwiseAtomicPipeline {
             device,
             "nuxie-cwa-coverage",
             &vec![0u32; coverage_word_count.max(1)],
-            wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::STORAGE
+                | if capture_coverage {
+                    wgpu::BufferUsages::COPY_SRC
+                } else {
+                    wgpu::BufferUsages::empty()
+                },
         );
+        let coverage_readback = capture_coverage.then(|| {
+            let size = (coverage_word_count.max(1) * std::mem::size_of::<u32>()) as u64;
+            let make_buffer = |label| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(label),
+                    size,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                })
+            };
+            ClockwiseAtomicCoverageReadback {
+                borrowed: make_buffer("nuxie-cwa-borrowed-coverage-readback"),
+                main: make_buffer("nuxie-cwa-main-coverage-readback"),
+                word_count: coverage_word_count.max(1),
+                clip_updates: Vec::new(),
+                clip_bytes_per_row: 0,
+                clip_height: 0,
+            }
+        });
         // Unclipped fixed-color shaders retain the upstream no-op clip-plane
         // store. Keep that family on a scratch plane; clipped shaders bind the
         // render-attachment texture below through a separate layout.
@@ -463,7 +497,13 @@ impl ClockwiseAtomicPipeline {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | if capture_coverage {
+                    wgpu::TextureUsages::COPY_SRC
+                } else {
+                    wgpu::TextureUsages::empty()
+                },
             view_formats: &[],
         });
         let clip_view = clip_texture.create_view(&Default::default());
@@ -539,6 +579,10 @@ impl ClockwiseAtomicPipeline {
             .iter()
             .map(|draw| upload_optional_triangles(device, draw.main_triangles))
             .collect::<Vec<_>>();
+        let clip_bytes_per_row = (uniforms.render_target_width * 4)
+            .div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let mut clip_update_readbacks = Vec::new();
 
         for (index, draw) in draws.iter().enumerate() {
             if draw.kind == ClockwiseAtomicDrawKind::OutermostClip {
@@ -570,6 +614,10 @@ impl ClockwiseAtomicPipeline {
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..draw.borrowed_triangles.len() as u32, 0..1);
             }
+        }
+
+        if let Some(readback) = &coverage_readback {
+            encoder.copy_buffer_to_buffer(&coverage, 0, &readback.borrowed, 0, coverage.size());
         }
 
         for (index, draw) in draws.iter().enumerate() {
@@ -679,9 +727,40 @@ impl ClockwiseAtomicPipeline {
                         pass.set_vertex_buffer(0, buffer.slice(..));
                         pass.draw(0..draw.main_triangles.len() as u32, 0..1);
                     }
+                    if capture_coverage && nested {
+                        let readback = device.create_buffer(&wgpu::BufferDescriptor {
+                            label: Some("nuxie-cwa-nested-clip-readback"),
+                            size: u64::from(clip_bytes_per_row)
+                                * u64::from(uniforms.render_target_height),
+                            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                            mapped_at_creation: false,
+                        });
+                        encoder.copy_texture_to_buffer(
+                            clip_texture.as_image_copy(),
+                            wgpu::TexelCopyBufferInfo {
+                                buffer: &readback,
+                                layout: wgpu::TexelCopyBufferLayout {
+                                    offset: 0,
+                                    bytes_per_row: Some(clip_bytes_per_row),
+                                    rows_per_image: Some(uniforms.render_target_height),
+                                },
+                            },
+                            clip_texture.size(),
+                        );
+                        clip_update_readbacks.push(readback);
+                    }
                 }
             }
         }
+        if let Some(readback) = &coverage_readback {
+            encoder.copy_buffer_to_buffer(&coverage, 0, &readback.main, 0, coverage.size());
+        }
+        coverage_readback.map(|mut readback| {
+            readback.clip_updates = clip_update_readbacks;
+            readback.clip_bytes_per_row = clip_bytes_per_row;
+            readback.clip_height = uniforms.render_target_height;
+            readback
+        })
     }
 }
 

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=53, diverges=0, gated=1,414, total=1,467.
+- Rust wgpu: exact=54, diverges=0, gated=1,413, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -49,7 +49,8 @@ Run `make renderer-golden`.
   `gm-largeclippedpath_clockwise-clockwise-atomic` and
   `gm-largeclippedpath_clockwise_nested-clockwise-atomic`, and the
   `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
-  and `gm-negative_interior_triangles-clockwise-atomic`.
+  `gm-negative_interior_triangles-clockwise-atomic`, and
+  `gm-negative_interior_triangles_as_clip-clockwise-atomic`.
 
 ## Milestones
 
@@ -96,15 +97,17 @@ Run `make renderer-golden`.
    C++'s physical forward-then-reverse tessellation layout, reducing the
    unclipped GM from 16,845 pixels to a bounded 1,040 edge pixels and promoting
    it. Counterclockwise culling on clip path/interior passes reduces the
-   positive nested-clip draw from 15,408 pixels to 23. The remaining measured
-   gap is the mirrored nested inverse clip, which is still blank and differs at
-   166,809 pixels/max 208. Rust preparation is determinant-invariant where it
-   should be: both inverse paths have 5 contours, 108 triangle vertices, 36
-   positive main faces, identical transformed face orientation and 1,632-square
-   coverage allocations; only the expected negate flag differs. Front/no/back
-   cull combinations, parent-tight inverse bounds, midpoint-fan routing, and a
-   signed-fragment diagnostic did not recover it. Capture the coverage buffer
-   after borrowed and main passes before changing more renderer code.
+   positive nested-clip draw from 15,408 pixels to 23. The mirrored nested
+   inverse clip is now closed. Test-only snapshots prove both
+   determinants produce the same borrowed word (`0x13f800`), main word
+   (`0x140000`), and white clip-attachment pixel at corresponding interior
+   points. The missing output was the clipped full-rectangle content:
+   midpoint-fan double-sided preparation always used reverse-then-forward and
+   omitted C++'s negative-determinant coverage flag. Porting determinant-aware
+   forward-then-reverse layout reduces the GM from 166,809 pixels/max 208 to 46
+   pixels beyond delta 2/max 7 and promotes it. Sweep the remaining gated CWA
+   fill/clip entries for the same now-supported fallback before starting a new
+   algorithm family.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -149,8 +152,12 @@ Run `make renderer-golden`.
   bounded 1,152-pixel allowance. The two isolated determinant draws differ at
   553 and 487 pixels, the combined 1%-coverage support masks differ at only 26
   pixels, and the 1,040 residuals are sparse backend edge coverage rather than
-  missing geometry. The mirrored as-clip case remains gated because its broad
-  blank region is an algorithm failure.
+  missing geometry. At this point the mirrored as-clip case remained gated
+  because its broad blank region was still an algorithm failure.
+- 2026-07-12: `negative_interior_triangles_as_clip` keeps max channel delta 2
+  with a bounded 64-pixel allowance. After the mirrored fallback fix, only 46
+  pixels exceed delta 2 across 2.56M pixels and max delta is 7; both shapes,
+  checkerboard clipping, and corresponding interior support are restored.
 
 ## Log
 
@@ -717,3 +724,13 @@ Run `make renderer-golden`.
   rejected. A determinant-paired preparation probe then matched contour/face
   counts, face orientation, and coverage ranges. The next useful evidence is a
   borrowed/main coverage-buffer capture; all diagnostic code was reverted.
+- 2026-07-12: Added opt-in CWA storage-buffer and clip-attachment snapshots at
+  the borrowed/main boundary. Positive and mirrored nested clips are identical
+  at all captured stages, proving the clip was correct; the following clipped
+  rectangle was blank because midpoint-fan double-sided preparation ignored
+  C++ `forwardThenReverse` plus `NEGATE_PATH_FILL_COVERAGE_FLAG` semantics.
+  Porting that shared direction rule restores the mirrored draw and advances
+  the ratchet to exact=54/diverges=0/gated=1,413. A Terra scout confirmed native
+  Metal has no executable CWA storage-buffer mode, so implementing an entire
+  backend solely for a redundant C++ buffer capture was rejected; native final
+  pixels remain the cross-implementation oracle.

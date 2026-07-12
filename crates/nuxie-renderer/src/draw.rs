@@ -997,12 +997,12 @@ pub(crate) fn build_interior_tessellation(
         .iter()
         .map(|curves| signed_area(&curves.iter().map(|curve| curve[0]).collect::<Vec<_>>()))
         .sum::<f32>();
-    let clockwise_dominant = coarse_area * determinant >= 0.0;
-    let negate_coverage = if fill_rule == FillRule::Clockwise {
-        determinant < 0.0
-    } else {
-        clockwise_override && !clockwise_dominant
-    };
+    let negate_coverage = clockwise_atomic_negate_coverage_from_area(
+        coarse_area,
+        determinant,
+        fill_rule,
+        clockwise_override,
+    );
     let effective_fill_rule = if clockwise_override {
         FillRule::Clockwise
     } else {
@@ -1193,6 +1193,10 @@ fn subdivide_cubic(mut curve: [Vec2D; 4], subdivision_count: u32) -> Vec<[Vec2D;
 
 impl FillTessellation {
     pub(crate) fn make_double_sided(&mut self) {
+        self.make_double_sided_with_direction(false);
+    }
+
+    pub(crate) fn make_double_sided_with_direction(&mut self, forward_then_reverse: bool) {
         while self.spans.len() > 1
             && self.spans.last().unwrap().contour_id_with_flags & CONTOUR_ID_MASK == 0
         {
@@ -1202,7 +1206,7 @@ impl FillTessellation {
         let half_vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let mut double_sided_spans = Vec::with_capacity(self.spans.len());
         let mut previous_logical_x0 = None;
-        for span in self.spans.iter().copied() {
+        for mut span in self.spans.iter().copied() {
             if span.contour_id_with_flags & CONTOUR_ID_MASK == 0 {
                 double_sided_spans.push(span);
                 continue;
@@ -1213,6 +1217,9 @@ impl FillTessellation {
                 continue;
             }
             previous_logical_x0 = Some(logical_x0);
+            if forward_then_reverse {
+                span.contour_id_with_flags |= NEGATE_PATH_FILL_COVERAGE_FLAG;
+            }
             push_double_sided_tessellation_spans(
                 &mut double_sided_spans,
                 span,
@@ -1220,17 +1227,51 @@ impl FillTessellation {
                 logical_x0 + x1 - x0,
                 base as i32,
                 half_vertex_count as i32,
-                false,
+                forward_then_reverse,
             );
         }
         self.spans = double_sided_spans;
-        for contour in &mut self.contours {
-            contour.vertex_index0 += half_vertex_count;
+        if !forward_then_reverse {
+            for contour in &mut self.contours {
+                contour.vertex_index0 += half_vertex_count;
+            }
         }
         self.instance_count *= 2;
         let location =
             (self.base_instance + self.instance_count) * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         push_midpoint_tail_padding(&mut self.spans, location as i32);
+    }
+}
+
+pub(crate) fn clockwise_atomic_negate_coverage(
+    path: &RawPath,
+    transform: Mat2D,
+    fill_rule: FillRule,
+    clockwise_override: bool,
+) -> bool {
+    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let coarse_area = cubic_contours(path)
+        .iter()
+        .map(|curves| signed_area(&curves.iter().map(|curve| curve[0]).collect::<Vec<_>>()))
+        .sum::<f32>();
+    clockwise_atomic_negate_coverage_from_area(
+        coarse_area,
+        determinant,
+        fill_rule,
+        clockwise_override,
+    )
+}
+
+fn clockwise_atomic_negate_coverage_from_area(
+    coarse_area: f32,
+    determinant: f32,
+    fill_rule: FillRule,
+    clockwise_override: bool,
+) -> bool {
+    if fill_rule == FillRule::Clockwise {
+        determinant < 0.0
+    } else {
+        clockwise_override && coarse_area * determinant < 0.0
     }
 }
 
@@ -1860,6 +1901,28 @@ mod tests {
         assert_eq!(tessellation.contours[0].vertex_index0, 16);
         assert_eq!(tessellation.spans[1].x_range(), (16, 20));
         assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x000c_0010);
+        assert_post_contour_padding(&tessellation);
+    }
+
+    #[test]
+    fn mirrored_clockwise_fill_packs_forward_then_reverse_halves() {
+        let mut path = RawPath::new();
+        path.move_to(4.0, 4.0);
+        path.line_to(60.0, 4.0);
+        path.line_to(32.0, 60.0);
+        path.close();
+        let mut tessellation =
+            build_fill_tessellation(&path, Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0])).unwrap();
+        tessellation.make_double_sided_with_direction(true);
+
+        assert_eq!(tessellation.instance_count, 2);
+        assert_eq!(tessellation.contours[0].vertex_index0, 8);
+        assert_eq!(tessellation.spans[1].x_range(), (8, 12));
+        assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x0014_0018);
+        assert_ne!(
+            tessellation.spans[1].contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG,
+            0
+        );
         assert_post_contour_padding(&tessellation);
     }
 

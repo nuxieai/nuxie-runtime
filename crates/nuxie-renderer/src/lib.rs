@@ -631,6 +631,16 @@ pub struct WgpuFrame {
     mode: RenderMode,
 }
 
+#[allow(dead_code)]
+struct ClockwiseAtomicCoverageSnapshot {
+    borrowed: Vec<u32>,
+    main: Vec<u32>,
+    ranges: Vec<gpu::CoverageBufferRange>,
+    kinds: Vec<clockwise_atomic_pipeline::ClockwiseAtomicDrawKind>,
+    clip_updates: Vec<Vec<u8>>,
+    clip_bytes_per_row: u32,
+}
+
 impl Renderer for WgpuFrame {
     fn save(&mut self) {
         self.stack.push(self.state);
@@ -762,6 +772,20 @@ impl Renderer for WgpuFrame {
 
 impl WgpuFrame {
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
+        self.finish_internal(false).map(|(pixels, _)| pixels)
+    }
+
+    #[cfg(test)]
+    fn finish_with_clockwise_atomic_coverage(
+        self,
+    ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
+        self.finish_internal(true)
+    }
+
+    fn finish_internal(
+        self,
+        capture_clockwise_atomic_coverage: bool,
+    ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
@@ -818,7 +842,8 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
-        let encode_atomic_run =
+        let mut pending_coverage_readbacks = Vec::new();
+        let mut encode_atomic_run =
             |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
                 struct PreparedAtomicDraw {
                     spans: Vec<gpu::TessVertexSpan>,
@@ -1027,7 +1052,14 @@ impl WgpuFrame {
                         let mut tessellation =
                             draw::build_fill_tessellation(raw_path, draw.state.transform)
                                 .expect("atomic eligibility already validated tessellation");
-                        tessellation.make_double_sided();
+                        tessellation.make_double_sided_with_direction(
+                            draw::clockwise_atomic_negate_coverage(
+                                raw_path,
+                                draw.state.transform,
+                                fill_rule,
+                                clockwise_override,
+                            ),
+                        );
                         (
                             tessellation.spans,
                             tessellation.path,
@@ -1339,7 +1371,7 @@ impl WgpuFrame {
                             },
                         )
                         .collect::<Vec<_>>();
-                    self.context.clockwise_atomic_pipeline.encode_fills(
+                    let coverage_readback = self.context.clockwise_atomic_pipeline.encode_fills(
                         &self.context.device,
                         encoder,
                         &view,
@@ -1353,7 +1385,22 @@ impl WgpuFrame {
                         &paint_aux,
                         &contours,
                         clockwise_atomic_coverage_words,
+                        capture_clockwise_atomic_coverage,
                     );
+                    if let Some(readback) = coverage_readback {
+                        pending_coverage_readbacks.push((
+                            readback,
+                            paths
+                                .iter()
+                                .skip(1)
+                                .map(|path| path.coverage_buffer_range)
+                                .collect::<Vec<_>>(),
+                            clockwise_atomic_draws
+                                .iter()
+                                .map(|draw| draw.kind)
+                                .collect::<Vec<_>>(),
+                        ));
+                    }
                 } else {
                     self.context.atomic_pipeline.encode_batch(
                         &self.context.device,
@@ -1647,8 +1694,87 @@ impl WgpuFrame {
         }
         drop(mapped);
         readback.unmap();
-        Ok(pixels)
+        let mut coverage_snapshots = Vec::with_capacity(pending_coverage_readbacks.len());
+        for (readback, ranges, kinds) in pending_coverage_readbacks {
+            coverage_snapshots.push(ClockwiseAtomicCoverageSnapshot {
+                borrowed: read_u32_buffer(&self.context, &readback.borrowed, readback.word_count)?,
+                main: read_u32_buffer(&self.context, &readback.main, readback.word_count)?,
+                ranges,
+                kinds,
+                clip_updates: readback
+                    .clip_updates
+                    .iter()
+                    .map(|buffer| {
+                        read_u8_buffer(
+                            &self.context,
+                            buffer,
+                            readback.clip_bytes_per_row as usize * readback.clip_height as usize,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                clip_bytes_per_row: readback.clip_bytes_per_row,
+            });
+        }
+        Ok((pixels, coverage_snapshots))
     }
+}
+
+fn read_u32_buffer(
+    context: &Context,
+    buffer: &wgpu::Buffer,
+    word_count: usize,
+) -> Result<Vec<u32>, RendererError> {
+    let slice = buffer.slice(..);
+    let (sender, receiver) = mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    context
+        .device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    receiver
+        .recv()
+        .map_err(|error| RendererError::Map(error.to_string()))?
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    let mapped = slice
+        .get_mapped_range()
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    let words = mapped
+        .chunks_exact(std::mem::size_of::<u32>())
+        .take(word_count)
+        .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+        .collect();
+    drop(mapped);
+    buffer.unmap();
+    Ok(words)
+}
+
+fn read_u8_buffer(
+    context: &Context,
+    buffer: &wgpu::Buffer,
+    byte_count: usize,
+) -> Result<Vec<u8>, RendererError> {
+    let slice = buffer.slice(..);
+    let (sender, receiver) = mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    context
+        .device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    receiver
+        .recv()
+        .map_err(|error| RendererError::Map(error.to_string()))?
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    let mapped = slice
+        .get_mapped_range()
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    let bytes = mapped[..byte_count].to_vec();
+    drop(mapped);
+    buffer.unmap();
+    Ok(bytes)
 }
 
 fn pack_atlas_for_device(
@@ -2513,6 +2639,80 @@ mod tests {
         assert_eq!(pixel(1074, 116), [255, 0, 0, 255]);
         assert_eq!(pixel(1331, 103), [255, 0, 0, 255]);
         assert_eq!(pixel(939, 302), [255, 0, 0, 255]);
+    }
+
+    fn coverage_word_at(words: &[u32], range: gpu::CoverageBufferRange, x: u32, y: u32) -> u32 {
+        let x = (x as f32 + range.offset_x).floor() as u32;
+        let y = (y as f32 + range.offset_y).floor() as u32;
+        let index = range.offset
+            + (y >> 5) * (range.pitch << 5)
+            + (x >> 5) * 1024
+            + ((x & 28) << 5)
+            + ((y & 28) << 2)
+            + ((y & 3) << 2)
+            + (x & 3);
+        words[index as usize]
+    }
+
+    #[test]
+    fn captures_clockwise_atomic_coverage_between_borrowed_and_main_passes() {
+        let factory = WgpuFactory::new_with_mode(1600, 1600, RenderMode::ClockwiseAtomic).unwrap();
+        let checkerboard = negative_interior_checkerboard();
+        let clip = negative_interior_path();
+        let fill = rect_path([0.0, 0.0, 1600.0, 1600.0], FillRule::Clockwise);
+        let mut frame = factory.begin_frame(0xff00_ffff);
+        frame.clip_path(&checkerboard);
+        for (transform, color) in [
+            (Mat2D([1.0, 0.0, 0.0, 1.0, 29.0, -100.0]), 0xffff_0000),
+            (Mat2D([-1.0, 0.0, 0.0, 1.0, 1593.0, 207.0]), 0xd090_0000),
+        ] {
+            frame.save();
+            frame.transform(transform);
+            frame.clip_path(&clip);
+            frame.draw_path(
+                &fill,
+                &WgpuPaint {
+                    color,
+                    ..WgpuPaint::default()
+                },
+            );
+            frame.restore();
+        }
+        let (pixels, captures) = frame.finish_with_clockwise_atomic_coverage().unwrap();
+        assert_eq!(captures.len(), 1);
+        let capture = &captures[0];
+        let nested = capture
+            .kinds
+            .iter()
+            .enumerate()
+            .filter_map(|(index, kind)| {
+                (*kind == clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::NestedClip)
+                    .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(nested.len(), 2);
+        assert_eq!(capture.clip_updates.len(), 2);
+        for ((index, point), clip_update) in nested
+            .into_iter()
+            .zip([(1074, 116), (238, 430)])
+            .zip(&capture.clip_updates)
+        {
+            let range = capture.ranges[index];
+            let clip_index =
+                point.1 as usize * capture.clip_bytes_per_row as usize + point.0 as usize * 4;
+            assert_eq!(
+                coverage_word_at(&capture.borrowed, range, point.0, point.1),
+                0x13f800
+            );
+            assert_eq!(
+                coverage_word_at(&capture.main, range, point.0, point.1),
+                0x140000
+            );
+            assert_eq!(&clip_update[clip_index..clip_index + 4], [255; 4]);
+        }
+        let pixel = |x: usize, y: usize| &pixels[(y * 1600 + x) * 4..][..4];
+        assert_eq!(pixel(1074, 116), [255, 0, 0, 255]);
+        assert_eq!(pixel(238, 430), [117, 47, 47, 255]);
     }
 
     #[test]

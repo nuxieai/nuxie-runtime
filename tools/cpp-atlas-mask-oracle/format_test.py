@@ -94,10 +94,14 @@ class FormatTests(unittest.TestCase):
             "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
             "webgpuContext->makeRenderTarget(",
             "webgpuContext->atlasMaskTextureForOracle();",
+            "const uint32_t atlasWidth = atlas.GetWidth();",
+            "const uint32_t atlasHeight = atlas.GetHeight();",
+            "if (atlasWidth != kFrameWidth || atlasHeight != kFrameHeight)",
+            '"cpp-atlas-mask-oracle: expected a 64x64 physical atlas, got %ux%u\\n"',
             "const uint32_t width = kFrameWidth;",
             "const uint32_t height = kFrameHeight;",
-            "const uint32_t copyWidth = std::min(width, atlas.GetWidth());",
-            "const uint32_t copyHeight = std::min(height, atlas.GetHeight());",
+            ".width = width,",
+            ".height = height,",
             "writeU32(header, 8, 1);",
             "writeU32(header, 12, width);",
             "writeU32(header, 16, height);",
@@ -108,6 +112,9 @@ class FormatTests(unittest.TestCase):
         self.assertNotIn("WGPUBufferMapAsyncStatus", source)
         self.assertNotIn("context->makeRenderTarget(", source)
         self.assertNotIn("context->atlasMaskTextureForOracle()", source)
+        self.assertNotIn("std::min", source)
+        self.assertNotIn("copyWidth", source)
+        self.assertNotIn("copyHeight", source)
 
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
@@ -116,6 +123,11 @@ class FormatTests(unittest.TestCase):
             'expected_naga_version="30.0.0"',
             '"$naga_bin" --version',
             'export PATH="$(dirname "$naga_bin"):$PATH"',
+            'dawn_args_snapshot_candidate="$(mktemp ',
+            'dawn_args_snapshot="$dawn_args_snapshot_candidate"',
+            'cp "$dawn_args_snapshot" "$dawn_args"',
+            'cmp -s "$dawn_args_snapshot" "$dawn_args"',
+            'rm -f "$output"',
         ):
             self.assertIn(fragment, source)
 

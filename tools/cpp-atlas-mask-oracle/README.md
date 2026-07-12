@@ -16,12 +16,18 @@ The exporter draws one fixed closed square stroke:
 Output is the exact `RIVEMSK` version 1 Rust interchange format: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by a
 canonical, tightly row-packed `R16Float` payload. WebGPU's 256-byte copy rows
-are stripped during export.
+are stripped during export. The physical C++ atlas must itself be exactly
+`64 x 64`; the exporter reports its actual dimensions and fails instead of
+cropping, padding, or otherwise normalizing a different allocation.
 
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh
 python3 tools/cpp-atlas-mask-oracle/format_test.py
+RIVE_CPP_ATLAS_MASK=tools/cpp-atlas-mask-oracle/out/atlas-mask.r16f \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_atlas_mask_oracle_matches_fixed_rust_mask_when_configured \
+  -- --exact --nocapture
 ```
 
 `--preflight` proves that the temporary patch applies and reports each missing
@@ -46,6 +52,7 @@ The same Xcode-26 branch temporarily appends
 `treat_warnings_as_errors=false` to Dawn's generated `out/release/args.gn`.
 This keeps legacy unsafe-buffer diagnostics visible but prevents the new clang
 default from promoting them to build-stopping errors. An explicit user value is
-never overwritten, and the harness removes only the line it added on exit.
-It also sets `use_lld=false`, making Dawn emit regular archives that the
-Premake executable's Apple `ld` link step can consume.
+never overwritten. It also sets `use_lld=false`, making Dawn emit regular
+archives that the Premake executable's Apple `ld` link step can consume. Before
+either temporary edit, the harness snapshots `args.gn`; its exit trap restores
+that snapshot and verifies byte equality with `cmp`, including blank lines.

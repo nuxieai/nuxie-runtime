@@ -103,13 +103,17 @@ impl AtlasMask {
 pub(crate) struct MaskComparisonTolerances {
     /// Samples at or below this coverage are treated as outside the mask.
     ///
-    /// The oracle uses 2^-10: one binary16 unit-scale ULP, which suppresses a
-    /// single quantization step at the zero-support boundary.
+    /// The oracle uses the absolute threshold 2^-10, equal to one binary16 ULP
+    /// at unity. This ignores only very low coverage when deciding whether a
+    /// pixel belongs to the mask; it is not a claim about f16 spacing near zero,
+    /// where adjacent values are 2^-24 apart.
     pub(crate) support: f32,
     /// Absolute coverage difference allowed once both samples have support.
     ///
-    /// The oracle uses 2^-9: two binary16 unit-scale ULPs, allowing the two
-    /// implementations to differ by at most two quantization steps.
+    /// The oracle uses the absolute threshold 2^-9, equal to two binary16 ULPs
+    /// at unity. Coverage spans [0, 1], so this gives one fixed comparison
+    /// budget across the mask even though f16 spacing varies with magnitude
+    /// (including smaller local steps around 0.5).
     pub(crate) value: f32,
 }
 

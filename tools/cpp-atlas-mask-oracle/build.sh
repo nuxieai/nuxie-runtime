@@ -48,8 +48,8 @@ dawn_archive_is_declared() {
 }
 
 dawn_args="$dawn_dir/out/release/args.gn"
-dawn_warning_arg_added=0
-dawn_lld_arg_added=0
+dawn_args_snapshot=""
+dawn_args_snapshot_candidate=""
 
 configure_xcode26_dawn_args() {
     if ! needs_xcode26_patch; then
@@ -62,7 +62,6 @@ configure_xcode26_dawn_args() {
         fi
     else
         printf '\n# cpp-atlas-mask-oracle: Xcode 26 promotes legacy unsafe-buffer warnings.\ntreat_warnings_as_errors=false\n' >> "$dawn_args"
-        dawn_warning_arg_added=1
     fi
     grep -Eq '^treat_warnings_as_errors[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"
 
@@ -73,7 +72,6 @@ configure_xcode26_dawn_args() {
         fi
     else
         printf '# cpp-atlas-mask-oracle: Apple ld cannot consume Dawn thin archives.\nuse_lld=false\n' >> "$dawn_args"
-        dawn_lld_arg_added=1
     fi
 }
 
@@ -86,7 +84,7 @@ preflight() {
     local naga_output
     local naga_version
     python3 "$script_dir/format_test.py"
-    for command in git premake5 make python3; do
+    for command in cmp git make mktemp premake5 python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
             missing=1
@@ -196,34 +194,56 @@ esac
 
 preflight
 export PATH="$(dirname "$naga_bin"):$PATH"
-mkdir -p "$injected_dir" "$(dirname "$output")"
-cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 applied=0
 dawn_patch_applied=0
 cleanup() {
-    if (( dawn_lld_arg_added )); then
-        sed -i.bak '/^# cpp-atlas-mask-oracle: Apple ld cannot consume Dawn thin archives\.$/d; /^use_lld=false$/d' "$dawn_args"
-        rm -f "$dawn_args.bak"
-    fi
-    if (( dawn_warning_arg_added )); then
-        sed -i.bak '/^# cpp-atlas-mask-oracle: Xcode 26 promotes legacy unsafe-buffer warnings\.$/d; /^treat_warnings_as_errors=false$/d' "$dawn_args"
-        rm -f "$dawn_args.bak"
+    local status=$?
+    trap - EXIT INT TERM
+    set +e
+    if [[ -n "$dawn_args_snapshot" ]]; then
+        if [[ ! -f "$dawn_args_snapshot" ]]; then
+            echo "Dawn args snapshot disappeared before cleanup: $dawn_args_snapshot" >&2
+            status=1
+        elif ! cp "$dawn_args_snapshot" "$dawn_args" ||
+            ! cmp -s "$dawn_args_snapshot" "$dawn_args"; then
+            echo "failed to restore Dawn args byte-for-byte; snapshot retained at $dawn_args_snapshot" >&2
+            status=1
+        else
+            echo "Dawn args restored byte-for-byte: $dawn_args"
+            rm -f "$dawn_args_snapshot"
+        fi
+    elif [[ -n "$dawn_args_snapshot_candidate" ]]; then
+        rm -f "$dawn_args_snapshot_candidate"
     fi
     if (( dawn_patch_applied )); then
-        git -C "$dawn_dir" apply --reverse "$dawn_patch"
+        if ! git -C "$dawn_dir" apply --reverse "$dawn_patch"; then
+            echo "failed to reverse Dawn compatibility patch" >&2
+            status=1
+        fi
     fi
     if (( applied )); then
-        git -C "$runtime" apply --reverse "$patch"
+        if ! git -C "$runtime" apply --reverse "$patch"; then
+            echo "failed to reverse runtime oracle patch" >&2
+            status=1
+        fi
     fi
     rm -rf "$injected_dir"
+    exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+mkdir -p "$injected_dir" "$(dirname "$output")"
+cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
     git -C "$dawn_dir" apply "$dawn_patch"
     dawn_patch_applied=1
 fi
+dawn_args_snapshot_candidate="$(mktemp "${TMPDIR:-/tmp}/cpp-atlas-mask-dawn-args.XXXXXX")"
+cp "$dawn_args" "$dawn_args_snapshot_candidate"
+dawn_args_snapshot="$dawn_args_snapshot_candidate"
 configure_xcode26_dawn_args
 
 (
@@ -239,5 +259,6 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
+rm -f "$output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output"
 echo "atlas mask: $output"

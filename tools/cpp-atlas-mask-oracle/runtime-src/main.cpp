@@ -7,7 +7,6 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
-#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -230,10 +229,18 @@ int main(int argc, char** argv)
     queue.Submit(1, &renderCommands);
 
     const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
+    const uint32_t atlasWidth = atlas.GetWidth();
+    const uint32_t atlasHeight = atlas.GetHeight();
+    if (atlasWidth != kFrameWidth || atlasHeight != kFrameHeight)
+    {
+        std::fprintf(stderr,
+                     "cpp-atlas-mask-oracle: expected a 64x64 physical atlas, got %ux%u\n",
+                     atlasWidth,
+                     atlasHeight);
+        return 1;
+    }
     const uint32_t width = kFrameWidth;
     const uint32_t height = kFrameHeight;
-    const uint32_t copyWidth = std::min(width, atlas.GetWidth());
-    const uint32_t copyHeight = std::min(height, atlas.GetHeight());
     const uint32_t packedRowBytes = width * kBytesPerTexel;
     const uint32_t paddedRowBytes = alignCopyRow(packedRowBytes);
     wgpu::BufferDescriptor readbackDesc = {};
@@ -248,8 +255,8 @@ int main(int argc, char** argv)
         .buffer = readback,
     };
     wgpu::Extent3D copySize = {
-        .width = copyWidth,
-        .height = copyHeight,
+        .width = width,
+        .height = height,
         .depthOrArrayLayers = 1,
     };
     readEncoder.CopyTextureToBuffer(&source, &destination, &copySize);

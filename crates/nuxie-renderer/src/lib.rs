@@ -498,7 +498,7 @@ impl RenderPaint for WgpuPaint {
     }
 
     fn thickness(&mut self, value: f32) {
-        self.thickness = value;
+        self.thickness = value.abs();
     }
 
     fn join(&mut self, value: StrokeJoin) {
@@ -2702,6 +2702,16 @@ mod tests {
         move_only.raw_path.move_to(4.0, 4.0);
         paint = WgpuPaint::default();
         assert!(path_draw_is_noop(&move_only, &paint, Mat2D::IDENTITY));
+    }
+
+    #[test]
+    fn paint_thickness_matches_cpp_absolute_value_setter() {
+        let mut paint = WgpuPaint::default();
+        RenderPaint::thickness(&mut paint, -3.5);
+        assert_eq!(paint.thickness, 3.5);
+
+        RenderPaint::thickness(&mut paint, f32::NAN);
+        assert!(paint.thickness.is_nan());
     }
 
     #[test]

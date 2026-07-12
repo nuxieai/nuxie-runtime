@@ -601,10 +601,9 @@ stream = "fixtures/renderer/streams/gm/cubicclosepath.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/cubicclosepath-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -627,10 +626,9 @@ stream = "fixtures/renderer/streams/gm/cubicpath.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/cubicpath-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

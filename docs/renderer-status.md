@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=62, diverges=0, gated=1,405, total=1,467.
+- Rust wgpu: exact=64, diverges=0, gated=1,403, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -55,7 +55,9 @@ Run `make renderer-golden`.
   `gm-oval-clockwise-atomic`, and
   `gm-mutating_fill_rule-clockwise-atomic`, plus
   `gm-concavepaths-clockwise-atomic` and
-  the `gm-poly_{clockwise,evenOdd,nonZero}-clockwise-atomic` family.
+  the `gm-poly_{clockwise,evenOdd,nonZero}-clockwise-atomic` family, plus
+  `gm-cubicpath-clockwise-atomic` and
+  `gm-cubicclosepath-clockwise-atomic`.
 
 ## Milestones
 
@@ -129,8 +131,12 @@ Run `make renderer-golden`.
    `poly_evenOdd`/`poly_nonZero` pair exposed a floating-point parity bug in
    dominant-winding selection: Rust summed per-contour areas, while C++
    accumulates the raw path in stream order before halving. Porting that exact
-   accumulator restores both files to 2 edge pixels. Continue with the tied
-   `cubicpath`/`cubicclosepath` primitive gap at 6,240 pixels/max 127.
+   accumulator restores both files to 2 edge pixels. The tied
+   `cubicpath`/`cubicclosepath` gap was paint API parity: C++ stores the
+   absolute value of stroke thickness, while Rust retained the GM's `-1` and
+   rejected all twelve frame strokes. Porting the setter makes both files
+   pixel-exact and closes the ten-entry basic-fill sweep. Remeasure the gated
+   R2 fill/clip corpus before selecting the next implementation target.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -205,6 +211,9 @@ Run `make renderer-golden`.
   order, including coarse cubic subdivision. This order is observable when
   opposite contours nearly cancel and must not be replaced by independently
   rounded per-contour areas.
+- 2026-07-12: Render-paint stroke thickness follows C++ and stores `abs(value)`;
+  invalid `NaN` remains invalid. Negative GM inputs therefore become positive
+  strokes before draw-time culling.
 
 ## Log
 
@@ -821,3 +830,7 @@ Run `make renderer-golden`.
   the wrong floating-point tie-break in Rust. `poly_evenOdd` and `poly_nonZero`
   each fall from 9,121 structural pixels to 2 edge pixels/max 17, advancing
   the ratchet to exact=62/diverges=0/gated=1,405.
+- 2026-07-12: Ported `RiveRenderPaint::thickness` absolute-value semantics.
+  This restores the twelve one-pixel rectangle frames shared by `cubicpath`
+  and `cubicclosepath`; both become pixel-exact, the basic-fill sweep closes,
+  and the ratchet advances to exact=64/diverges=0/gated=1,403.

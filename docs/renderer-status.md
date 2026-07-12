@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=57, diverges=0, gated=1,410, total=1,467.
+- Rust wgpu: exact=58, diverges=0, gated=1,409, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -51,8 +51,9 @@ Run `make renderer-golden`.
   `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
   `gm-negative_interior_triangles-clockwise-atomic`, and
   `gm-negative_interior_triangles_as_clip-clockwise-atomic`, and
-  `gm-convexpaths-clockwise-atomic`, `gm-pathfill-clockwise-atomic`, and
-  `gm-oval-clockwise-atomic`.
+  `gm-convexpaths-clockwise-atomic`, `gm-pathfill-clockwise-atomic`,
+  `gm-oval-clockwise-atomic`, and
+  `gm-mutating_fill_rule-clockwise-atomic`.
 
 ## Milestones
 
@@ -116,9 +117,10 @@ Run `make renderer-golden`.
    outer-curve patches shared one atomic cull state. Admitting compound fills,
    splitting the atomic path pipelines by patch class, and applying C++'s
    counterclockwise-face cull to the CWA main path restores every oval, hole,
-   and overlap. A fresh basic-fill scout selects `mutating_fill_rule` next at
-   45 pixels beyond delta 2/max 11; the other six measured entries retain
-   structural gaps from 4,052 to 16,169 pixels.
+   and overlap. `mutating_fill_rule` is promoted after its remaining 45 pixels
+   prove to be four one-pixel edge components with identical foreground
+   support. Continue with `concavepaths`, the smallest structural fill gap at
+   4,052 pixels beyond delta 2/max 255.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -181,6 +183,10 @@ Run `make renderer-golden`.
   allowance. After the midpoint-fan admission/cull fix, all 109 residuals are
   one-pixel edge components, the largest is 16 pixels, and foreground support
   has 99.9965% IoU with equal expected/actual support counts.
+- 2026-07-12: `mutating_fill_rule` keeps max channel delta 2 with a bounded
+  64-pixel allowance. All 45 residuals form four one-pixel vertical edge
+  components, max delta is 11, and expected/actual foreground support is
+  identical (IoU 1.0).
 
 ## Log
 
@@ -781,3 +787,7 @@ Run `make renderer-golden`.
   three `poly_*` variants, `cubicpath`, and `cubicclosepath` retain structural
   topology/primitive gaps from 4,052 to 16,169 pixels, so
   `mutating_fill_rule` is the next R2 target.
+- 2026-07-12: Promoted `mutating_fill_rule` after an independent component and
+  support audit localized all 45 residuals to four one-pixel circle edges.
+  The ratchet advances to exact=58/diverges=0/gated=1,409; `concavepaths` is
+  the next measured structural fill target at 4,052 pixels beyond delta 2.

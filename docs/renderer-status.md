@@ -77,8 +77,16 @@ Run `make renderer-golden`.
    explicit buckets: large/negative interior triangulation and clip-content
    bounds (`largeclippedpath_*`, `negative_interior_triangles_as_clip`),
    clipped fallback draws (`animated_clipping` and gradient large paths), and
-   image support (`clipping_and_draw_order`). Take the pure-path interior
-   triangulation/bounds bucket next. The separate
+   image support (`clipping_and_draw_order`). C++'s global inner-fan
+   triangulator is now ported with intersection simplification, monotone
+   decomposition, weighted faces, and grout. Direct WebGPU preparation oracles
+   match the 100-contour grid (7,500 triangle vertices) and the exact
+   flower+oval clip (2 contours, 108 triangle vertices) record-for-record,
+   including every tessellation texel. The remaining large/negative gap is the
+   coherent clockwise-atomic family: dedicated main/borrowed/clip shaders,
+   their barrier schedule, and tiled visible-bounds coverage allocations.
+   Port that family next; do not mix its coverage encoding with the current
+   atomics shaders. The separate
    matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
    pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
    behavior, robust triangulation, and integration of the translated
@@ -613,3 +621,16 @@ Run `make renderer-golden`.
   ratchet advances to exact=46/diverges=0/gated=1,421. Large clipped paths,
   negative interior triangles, clipped gradient fallback, and images remain
   named algorithm gates rather than tolerance promotions.
+- 2026-07-12: Ported C++ `gr_triangulator.cpp` and
+  `GrInnerFanTriangulator` as a stable-index mesh: coincident/intersection
+  simplification, winding-preserving edge splits, monotone decomposition,
+  weighted face emission, and grout are integrated into multi-contour interior
+  tessellation. Two direct C++ WebGPU sub-oracles prove preparation parity:
+  the 100-contour grid matches all 7,500 TriangleVertex records, while the exact
+  9-cubic flower plus 4-cubic oval matches both contour records, all 108
+  TriangleVertex records, and every texel of its 2048x1 RGBA32Uint tessellation
+  texture bit-for-bit. A provisional borrowed-coverage hybrid was rejected
+  after proving atomics and clockwise-atomic coverage encodings cannot be
+  mixed. `make renderer-golden` remains exact=46/diverges=0/gated=1,421; the
+  next R2 slice is the dedicated clockwise-atomic shader/scheduling/allocation
+  family, not further geometry work on these cases.

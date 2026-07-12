@@ -9,9 +9,12 @@ mod atlas_mask_oracle;
 mod atlas_pipeline;
 mod atomic_pipeline;
 mod composite_pipeline;
+#[cfg(test)]
+mod direct_grid_oracle;
 mod draw;
 mod feather_lut;
 mod gpu;
+mod gr_triangulator;
 // Kept standalone until a renderer path has a proven grouping integration.
 #[allow(dead_code)]
 mod intersection_board;
@@ -856,6 +859,10 @@ impl WgpuFrame {
                 let mut contours = Vec::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
+                    let clockwise_override = match draw.role {
+                        DrawRole::Content { clip_id } => clip_id != 0,
+                        DrawRole::ClipUpdate { parent_id, .. } => parent_id != 0,
+                    };
                     let (
                         mut spans,
                         mut path,
@@ -928,7 +935,12 @@ impl WgpuFrame {
                         draw.state.transform,
                     )
                     .then(|| {
-                        draw::build_interior_tessellation(&draw.path.raw_path, draw.state.transform)
+                        draw::build_interior_tessellation(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.path.fill_rule,
+                            clockwise_override,
+                        )
                     })
                     .flatten()
                     {
@@ -2335,7 +2347,9 @@ mod tests {
         ));
         assert!(draw::build_interior_tessellation(
             &clip.raw_path,
-            Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0])
+            Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0]),
+            FillRule::NonZero,
+            true,
         )
         .is_none());
 

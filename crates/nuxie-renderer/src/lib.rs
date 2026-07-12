@@ -2236,19 +2236,19 @@ mod tests {
         fixed_feather_atlas_oracle_for(raw_path, paint)
     }
 
-    fn fixed_feather_direct_cusp_inputs() -> atlas_input_oracle::AtlasInputs {
-        let mut raw_path = RawPath::new();
-        raw_path.move_to(0.0, 100.0);
-        raw_path.move_to(0.0, 100.0);
-        raw_path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
-        let transform = Mat2D([1.46300006, 0.0, 0.0, 1.46300006, -40.0, -20.0]);
+    fn fixed_feather_direct_inputs(
+        raw_path: RawPath,
+        transform: Mat2D,
+    ) -> atlas_input_oracle::AtlasInputs {
         let mut tessellation =
             draw::build_feather_tessellation(&raw_path, transform, 1.0, None).unwrap();
         for contour in &mut tessellation.contours {
             contour.path_id = 1;
         }
         let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
-        let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
+        let logical_tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
+        // The C++ oracle exports the complete allocation, including its 125% growth tail.
+        let tessellation_height = logical_tessellation_height * 5 / 4;
         let uniforms = analytic_uniforms(
             ATLAS_ORACLE_FRAME_SIZE,
             ATLAS_ORACLE_FRAME_SIZE,
@@ -2260,7 +2260,7 @@ mod tests {
                 .context
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-direct-cusp-input-encoder"),
+                    label: Some("nuxie-direct-input-encoder"),
                 });
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
@@ -2278,7 +2278,7 @@ mod tests {
             .context
             .device
             .create_buffer(&wgpu::BufferDescriptor {
-                label: Some("nuxie-direct-cusp-input-readback"),
+                label: Some("nuxie-direct-input-readback"),
                 size: u64::from(bytes_per_row) * u64::from(size.height),
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
@@ -2339,6 +2339,46 @@ mod tests {
             texels,
         )
         .unwrap()
+    }
+
+    fn fixed_feather_direct_cusp_inputs() -> atlas_input_oracle::AtlasInputs {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 100.0);
+        raw_path.move_to(0.0, 100.0);
+        raw_path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
+        fixed_feather_direct_inputs(
+            raw_path,
+            Mat2D([1.46300006, 0.0, 0.0, 1.46300006, -40.0, -20.0]),
+        )
+    }
+
+    fn fixed_feather_direct_polyshark_inputs() -> atlas_input_oracle::AtlasInputs {
+        use nuxie_render_stream::{Command, RenderStream};
+
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
+        )))
+        .unwrap();
+        let transform = stream.frames[0]
+            .commands
+            .iter()
+            .find_map(|command| match command {
+                Command::Transform(transform) => Some(*transform),
+                _ => None,
+            })
+            .expect("feather_polyshapes top-level transform");
+        let (path, paint) = stream.frames[0]
+            .commands
+            .iter()
+            .filter_map(|command| match command {
+                Command::DrawPath { path, paint } => Some((path, paint)),
+                _ => None,
+            })
+            .nth(2)
+            .expect("feather_polyshapes row 0 shark draw");
+        assert_eq!(paint.feather, 1.0);
+        fixed_feather_direct_inputs(path.raw_path.clone(), transform)
     }
 
     fn fixed_feather_atlas_oracle_for(
@@ -3047,6 +3087,62 @@ mod tests {
         .unwrap_or_else(|error| {
             panic!(
                 "C++ direct-cusp input mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_POLYSHARK_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_direct_polyshark_input_oracle_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_POLYSHARK_INPUTS").expect(
+            "RIVE_CPP_DIRECT_POLYSHARK_INPUTS is required for the ignored direct-polyshark input test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_DIRECT_POLYSHARK_INPUTS is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_POLYSHARK_INPUTS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-polyshark inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let mut cpp_inputs =
+            atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+                panic!(
+                    "malformed C++ direct-polyshark inputs at {}: {error}",
+                    path.display()
+                )
+            });
+        let rust_inputs = fixed_feather_direct_polyshark_inputs();
+        const JOIN_SIDE_MASK: u32 = 1 << 20 | 1 << 19;
+        const JOIN_TYPE_MASK: u32 = 7 << 26;
+        const FEATHER_JOIN: u32 = 1 << 26;
+        for (cpp, rust) in cpp_inputs.texels.iter_mut().zip(&rust_inputs.texels) {
+            if cpp[3] ^ rust[3] == JOIN_SIDE_MASK
+                && (cpp[3] & JOIN_SIDE_MASK).count_ones() == 1
+                && (rust[3] & JOIN_SIDE_MASK).count_ones() == 1
+                && cpp[3] & JOIN_TYPE_MASK == FEATHER_JOIN
+                && rust[3] & JOIN_TYPE_MASK == FEATHER_JOIN
+            {
+                cpp[3] = rust[3];
+            }
+        }
+        atlas_input_oracle::compare_cpp_to_rust_with_float_tolerances(
+            &cpp_inputs,
+            &rust_inputs,
+            4,
+            0.0001,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ direct-polyshark input mismatch at {}: {error}",
                 path.display()
             )
         });

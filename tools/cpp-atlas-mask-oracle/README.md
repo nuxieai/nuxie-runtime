@@ -55,6 +55,21 @@ atomic final target for diagnosis; it is not compared to Rust's
 clockwise-atomic output. Native Metal stream replay remains the final-pixel
 oracle for that mode.
 
+`direct-polyshark-inputs.bin` uses the same contract for row 0, shark cell
+(stream lines 14 and 28) of `feather_polyshapes`. During each build,
+`generate_polyshark_stream_path.py` validates that canonical stream record and
+emits its exact 315 f32 point literals into the temporary C++ source tree.
+The harness therefore uses the serialized `RawPath` sequence, including its
+sign-sensitive feather joins, rather than independently reproducing
+`FeatherPolyShapesGM` polygonization. The stream's `1.46300006` top-level
+scale remains the direct-render transform. It captures every emitted contour
+record and the complete `RGBA32Uint` tessellation texture before coverage.
+The configured Rust comparator treats LEFT/RIGHT as equivalent only when both
+records are otherwise-identical feather joins. Dawn WebGPU and wgpu classify
+that side oppositely for this polygon, while native Metal and wgpu produce
+isolated final pixels with no channel delta beyond 2; all other packed flags
+remain strict.
+
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
@@ -91,6 +106,10 @@ RIVE_CPP_DIRECT_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-in
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_direct_cusp_input_oracle_matches_rust_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_POLYSHARK_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-polyshark-inputs.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_direct_polyshark_input_oracle_matches_rust_when_configured \
+  -- --exact --ignored --nocapture
 RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
@@ -102,7 +121,7 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_FILL_MASK`, `RIVE_CPP_ATLAS_FILL_INPUTS`, or
 `RIVE_CPP_ATLAS_CUSP_MASK`, `RIVE_CPP_ATLAS_CUSP_INPUTS`, or
 `RIVE_CPP_SOFTENED_CUSP`, or
-`RIVE_CPP_DIRECT_CUSP_INPUTS`, or
+`RIVE_CPP_DIRECT_CUSP_INPUTS`, `RIVE_CPP_DIRECT_POLYSHARK_INPUTS`, or
 `RIVE_CPP_ATLAS_BLIT` path;
 invoking either test without its variable is an error.
 

@@ -672,6 +672,7 @@ dependencies = [
  "bytemuck",
  "naga",
  "nuxie-render-api",
+ "nuxie-render-stream",
  "pollster",
  "wgpu",
 ]

@@ -21,6 +21,9 @@ cusp_blit_output="${RIVE_ATLAS_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-cusp-blit
 softened_cusp_output="${RIVE_SOFTENED_CUSP_OUTPUT:-$script_dir/out/softened-cusp.bin}"
 direct_cusp_inputs_output="${RIVE_DIRECT_CUSP_INPUT_OUTPUT:-$script_dir/out/direct-cusp-inputs.bin}"
 direct_cusp_blit_output="${RIVE_DIRECT_CUSP_BLIT_OUTPUT:-$script_dir/out/direct-cusp-blit.rgba}"
+direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"
+polyshark_generator="$script_dir/generate_polyshark_stream_path.py"
+polyshark_stream="$script_dir/../../fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -100,6 +103,7 @@ preflight() {
     local naga_output
     local naga_version
     python3 "$script_dir/format_test.py"
+    python3 "$polyshark_generator" --stream "$polyshark_stream" --check
     for command in cmp git make mktemp premake5 python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
@@ -261,8 +265,11 @@ mkdir -p "$injected_dir" \
     "$(dirname "$cusp_blit_output")" \
     "$(dirname "$softened_cusp_output")" \
     "$(dirname "$direct_cusp_inputs_output")" \
-    "$(dirname "$direct_cusp_blit_output")"
+    "$(dirname "$direct_cusp_blit_output")" \
+    "$(dirname "$direct_polyshark_inputs_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
+python3 "$polyshark_generator" --stream "$polyshark_stream" \
+    --output "$injected_dir/generated_polyshark_path.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -287,11 +294,12 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_polyshark_inputs_output" /dev/null direct-polyshark
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -352,6 +360,11 @@ if [[ "$direct_cusp_blit_bytes" != "16404" ]]; then
     echo "direct cusp blit must be exactly 16404 bytes, got $direct_cusp_blit_bytes: $direct_cusp_blit_output" >&2
     exit 1
 fi
+direct_polyshark_inputs_bytes="$(wc -c < "$direct_polyshark_inputs_output" | tr -d ' ')"
+if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]; then
+    echo "direct polyshark inputs must be exactly 163896 bytes: $direct_polyshark_inputs_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
 echo "atlas inputs: $inputs_output"
 echo "atlas blit: $blit_output"
@@ -364,3 +377,4 @@ echo "atlas cusp blit: $cusp_blit_output"
 echo "softened cusp: $softened_cusp_output"
 echo "direct cusp inputs: $direct_cusp_inputs_output"
 echo "direct cusp blit: $direct_cusp_blit_output"
+echo "direct polyshark inputs: $direct_polyshark_inputs_output"

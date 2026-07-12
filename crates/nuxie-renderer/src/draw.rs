@@ -1050,22 +1050,29 @@ impl FillTessellation {
         }
         let base = self.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let half_vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
-        for span in &mut self.spans {
+        let mut double_sided_spans = Vec::with_capacity(self.spans.len());
+        let mut previous_logical_x0 = None;
+        for span in self.spans.iter().copied() {
             if span.contour_id_with_flags & CONTOUR_ID_MASK == 0 {
+                double_sided_spans.push(span);
                 continue;
             }
             let (x0, x1) = span.x_range();
-            let offset = x0 - base as i32;
-            let reflection_x0 = (base + half_vertex_count) as i32 - offset;
-            let reflection_x1 = reflection_x0 - (x1 - x0);
-            span.set_ranges(
-                x0 + half_vertex_count as i32,
-                x1 + half_vertex_count as i32,
-                reflection_x0,
-                reflection_x1,
-                0.0,
+            let logical_x0 = span.y as i32 * TESS_TEXTURE_WIDTH + x0;
+            if previous_logical_x0 == Some(logical_x0) {
+                continue;
+            }
+            previous_logical_x0 = Some(logical_x0);
+            push_double_sided_tessellation_spans(
+                &mut double_sided_spans,
+                span,
+                logical_x0,
+                logical_x0 + x1 - x0,
+                base as i32,
+                half_vertex_count as i32,
             );
         }
+        self.spans = double_sided_spans;
         for contour in &mut self.contours {
             contour.vertex_index0 += half_vertex_count;
         }
@@ -1073,6 +1080,41 @@ impl FillTessellation {
         let location =
             (self.base_instance + self.instance_count) * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         push_midpoint_tail_padding(&mut self.spans, location as i32);
+    }
+}
+
+fn push_double_sided_tessellation_spans(
+    spans: &mut Vec<TessVertexSpan>,
+    mut span: TessVertexSpan,
+    logical_x0: i32,
+    logical_x1: i32,
+    base: i32,
+    half_vertex_count: i32,
+) {
+    let offset = logical_x0 - base;
+    let vertex_count = logical_x1 - logical_x0;
+    let forward_location = base + half_vertex_count + offset;
+    let reflection_location = base + half_vertex_count - offset;
+    let mut y = forward_location / TESS_TEXTURE_WIDTH;
+    let mut x0 = forward_location % TESS_TEXTURE_WIDTH;
+    let mut x1 = x0 + vertex_count;
+    let mut reflection_y = (reflection_location - 1) / TESS_TEXTURE_WIDTH;
+    let mut reflection_x0 = (reflection_location - 1) % TESS_TEXTURE_WIDTH + 1;
+    let mut reflection_x1 = reflection_x0 - vertex_count;
+
+    loop {
+        span.y = y as f32;
+        span.set_ranges(x0, x1, reflection_x0, reflection_x1, reflection_y as f32);
+        spans.push(span);
+        if x1 <= TESS_TEXTURE_WIDTH && reflection_x1 >= 0 {
+            break;
+        }
+        y += 1;
+        x0 -= TESS_TEXTURE_WIDTH;
+        x1 -= TESS_TEXTURE_WIDTH;
+        reflection_y -= 1;
+        reflection_x0 += TESS_TEXTURE_WIDTH;
+        reflection_x1 += TESS_TEXTURE_WIDTH;
     }
 }
 
@@ -1799,6 +1841,43 @@ mod tests {
             .spans
             .iter()
             .any(|span| { span.contour_id_with_flags & CONTOUR_ID_MASK == 2 }));
+    }
+
+    #[test]
+    fn double_sided_feather_wraps_forward_and_mirrored_rows_together() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        for index in 1..=320 {
+            path.line_to(index as f32, (index & 1) as f32);
+        }
+        path.close();
+
+        let tessellation = build_feather_tessellation(&path, Mat2D::IDENTITY, 1.0, None).unwrap();
+        let base = tessellation.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let half_vertex_count =
+            tessellation.instance_count / 2 * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        assert!(half_vertex_count > TESS_TEXTURE_WIDTH as u32);
+
+        let center = (base + half_vertex_count) as i32;
+        let mut saw_wrapped_record = false;
+        for span in tessellation
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+        {
+            let (x0, x1) = span.x_range();
+            let reflection_x0 = span.reflection_x0_x1 as i16 as i32;
+            let reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
+            let forward_location = span.y as i32 * TESS_TEXTURE_WIDTH + x0;
+            let reflection_location = span.reflection_y as i32 * TESS_TEXTURE_WIDTH + reflection_x0;
+            assert_eq!(forward_location + reflection_location, center * 2);
+            assert_eq!(x1 - x0, reflection_x0 - reflection_x1);
+            saw_wrapped_record |= x0 < 0
+                || x1 > TESS_TEXTURE_WIDTH
+                || reflection_x0 > TESS_TEXTURE_WIDTH
+                || reflection_x1 < 0;
+        }
+        assert!(saw_wrapped_record);
     }
 
     #[test]

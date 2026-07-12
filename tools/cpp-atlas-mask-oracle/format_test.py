@@ -21,6 +21,8 @@ BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
 README = pathlib.Path(__file__).with_name("README.md")
 RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
 RUST_RENDERER = ROOT / "crates" / "nuxie-renderer" / "src" / "lib.rs"
+POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
+POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
 # Exact bytes asserted by AtlasMask::serialize() in commit 10a64ec.
@@ -154,6 +156,9 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kMaskHeaderBytes = 20;",
             "constexpr uint32_t kInputsHeaderBytes = 40;",
             "constexpr uint32_t kBlitHeaderBytes = 20;",
+            "constexpr uint32_t kExpectedPolySharkPatchCount = 786;",
+            "constexpr uint32_t kExpectedPolySharkContourCount = 1;",
+            "constexpr uint32_t kExpectedPolySharkTessHeight = 5;",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
             "facts.contentWidth != kExpectedLogicalAtlasSize",
@@ -170,18 +175,23 @@ class FormatTests(unittest.TestCase):
             "path->close();",
             'const bool circleCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;',
             'const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;',
-            "const bool fillCase = circleCase || cuspCase || directCuspCase;",
+            'argc > 4 && std::strcmp(argv[4], "direct-polyshark") == 0;',
+            "const bool directCase = directCuspCase || directPolySharkCase;",
+            "const bool fillCase = circleCase || cuspCase || directCase;",
             "path->fillRule(rive::FillRule::clockwise);",
             "path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);",
             "path->cubicTo(133.635864f, 0, -33.6358566f, 0, 100, 100);",
+            '#include "generated_polyshark_path.inc"',
+            "rive::Mat2D(kPolySharkStreamScale,",
+            "addFeatherPolyShapesShark(path.get());",
             "paint->style(fillCase ? rive::RenderPaintStyle::fill",
             ": rive::RenderPaintStyle::stroke);",
             "path->cubicTo(kSquareMax,",
             "paint->thickness(kStrokeThickness);",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
-            "paint->feather(directCuspCase ? 1.f : kFeather);",
-            ".msaaSampleCount = directCuspCase ? 0u : 4u",
+            "paint->feather(directCase ? 1.f : kFeather);",
+            ".msaaSampleCount = directCase ? 0u : 4u",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
             "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
@@ -207,6 +217,66 @@ class FormatTests(unittest.TestCase):
         self.assertNotIn("copyWidth", source)
         self.assertNotIn("copyHeight", source)
 
+    def test_direct_polyshark_provenance_matches_stream_line_28(self):
+        stream_lines = POLYSHARK_STREAM.read_text().splitlines()
+        self.assertEqual(
+            stream_lines[13],
+            "transform matrix=[1.46300006,0,0,1.46300006,0,0]",
+        )
+        stream_line = stream_lines[27]
+        self.assertIn("drawPath path={id=4,fillRule=2", stream_line)
+        self.assertIn("points=[(1.35999978,118.419998)", stream_line)
+        self.assertIn("feather=1", stream_line)
+
+        source = EXPORTER.read_text()
+        for fragment in (
+            "rive::Mat2D(kPolySharkStreamScale,",
+            '#include "generated_polyshark_path.inc"',
+        ):
+            self.assertIn(fragment, source)
+        self.assertNotIn("wangs_formula", source)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first = pathlib.Path(temp_dir) / "first.inc"
+            second = pathlib.Path(temp_dir) / "second.inc"
+            command = ["python3", str(POLYSHARK_GENERATOR), "--stream",
+                       str(POLYSHARK_STREAM), "--output"]
+            subprocess.run(command + [str(first)], check=True)
+            subprocess.run(command + [str(second)], check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            generated = first.read_text().splitlines()
+            self.assertEqual(len(generated), 321)
+            self.assertEqual(
+                generated[2], "constexpr float kPolySharkStreamScale = 1.46300006f;"
+            )
+            self.assertEqual(
+                generated[5], "    path->moveTo(1.35999978f, 118.419998f);"
+            )
+            self.assertEqual(
+                generated[-2], "    path->lineTo(1.35999978f, 118.419998f);"
+            )
+
+            changed_stream = pathlib.Path(temp_dir) / "changed.rive-stream"
+            changed_output = pathlib.Path(temp_dir) / "changed.inc"
+            changed_lines = stream_lines.copy()
+            changed_lines[13] = "transform matrix=[2,0,0,2,0,0]"
+            changed_stream.write_text("\n".join(changed_lines) + "\n")
+            subprocess.run(
+                [
+                    "python3",
+                    str(POLYSHARK_GENERATOR),
+                    "--stream",
+                    str(changed_stream),
+                    "--output",
+                    str(changed_output),
+                ],
+                check=True,
+            )
+            self.assertIn(
+                "constexpr float kPolySharkStreamScale = 2.f;",
+                changed_output.read_text(),
+            )
+
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
         for fragment in (
@@ -226,6 +296,11 @@ class FormatTests(unittest.TestCase):
             '"$fill_output" "$fill_inputs_output" "$fill_blit_output" fill',
             '"$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"',
             '"$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp',
+            'direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"',
+            'polyshark_generator="$script_dir/generate_polyshark_stream_path.py"',
+            'python3 "$polyshark_generator" --stream "$polyshark_stream" --check',
+            '--output "$injected_dir/generated_polyshark_path.inc"',
+            '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
@@ -234,6 +309,7 @@ class FormatTests(unittest.TestCase):
             'if [[ "$cusp_blit_bytes" != "16404" ]]',
             'if (( softened_cusp_bytes <= 20 ))',
             'if (( direct_cusp_inputs_bytes <= 56 ))',
+            'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
         ):
             self.assertIn(fragment, source)
 
@@ -278,6 +354,8 @@ class FormatTests(unittest.TestCase):
         self.assertIn('RIVE_CPP_SOFTENED_CUSP="$PWD/tools/cpp-atlas-mask-oracle/out/softened-cusp.bin"',
                       readme)
         self.assertIn('RIVE_CPP_DIRECT_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-inputs.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_DIRECT_POLYSHARK_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-polyshark-inputs.bin"',
                       readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 

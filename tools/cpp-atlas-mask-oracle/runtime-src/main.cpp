@@ -35,6 +35,10 @@ constexpr uint32_t kBytesPerTexel = 2;
 constexpr uint32_t kTessBytesPerTexel = 16;
 constexpr uint32_t kCopyRowAlignment = 256;
 constexpr uint32_t kExpectedTessWidth = 2048;
+constexpr uint32_t kExpectedPolySharkPatchCount = 786;
+constexpr uint32_t kExpectedPolySharkContourCount = 1;
+constexpr uint32_t kExpectedPolySharkTessHeight = 5;
+#include "generated_polyshark_path.inc"
 
 void fail(const char* message)
 {
@@ -336,12 +340,15 @@ int main(int argc, char** argv)
     const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;
     const bool directCuspCase =
         argc > 4 && std::strcmp(argv[4], "direct-cusp") == 0;
-    const bool fillCase = circleCase || cuspCase || directCuspCase;
+    const bool directPolySharkCase =
+        argc > 4 && std::strcmp(argv[4], "direct-polyshark") == 0;
+    const bool directCase = directCuspCase || directPolySharkCase;
+    const bool fillCase = circleCase || cuspCase || directCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 || (argc > 4 && !fillCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp|direct-polyshark] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -407,9 +414,9 @@ int main(int argc, char** argv)
                          .renderTargetHeight = kFrameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
                          .clearColor = 0,
-                         .msaaSampleCount = directCuspCase ? 0u : 4u,
-                         .disableRasterOrdering = directCuspCase,
-                         .clockwiseFillOverride = directCuspCase});
+                         .msaaSampleCount = directCase ? 0u : 4u,
+                         .disableRasterOrdering = directCase,
+                         .clockwiseFillOverride = directCase});
     rive::RiveRenderer renderer(context.get());
     auto path = context->makeEmptyRenderPath();
     if (fillCase)
@@ -423,6 +430,16 @@ int main(int argc, char** argv)
         path->moveTo(0, 100);
         path->moveTo(0, 100);
         path->cubicTo(133.635864f, 0, -33.6358566f, 0, 100, 100);
+    }
+    else if (directPolySharkCase)
+    {
+        renderer.transform(rive::Mat2D(kPolySharkStreamScale,
+                                       0,
+                                       0,
+                                       kPolySharkStreamScale,
+                                       0,
+                                       0));
+        addFeatherPolyShapesShark(path.get());
     }
     else if (cuspCase)
     {
@@ -477,7 +494,7 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCuspCase)
+    if (!directCase)
     {
         path->close();
     }
@@ -490,7 +507,7 @@ int main(int argc, char** argv)
         paint->join(rive::StrokeJoin::miter);
         paint->cap(rive::StrokeCap::butt);
     }
-    paint->feather(directCuspCase ? 1.f : kFeather);
+    paint->feather(directCase ? 1.f : kFeather);
     paint->color(0xffffffff);
     renderer.drawPath(path.get(), paint.get());
 
@@ -514,7 +531,7 @@ int main(int argc, char** argv)
                     batch.baseElement,
                     batch.elementCount);
     }
-    if (directCuspCase)
+    if (directCase)
     {
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
@@ -526,9 +543,13 @@ int main(int argc, char** argv)
             facts.drawBatches[2].drawType != static_cast<uint32_t>(
                                                    rive::gpu::DrawType::renderPassResolve) ||
             facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
-            facts.strokePatchCount == 0 || facts.contours.size() != 2)
+            facts.strokePatchCount == 0 ||
+            (directCuspCase && facts.contours.size() != 2) ||
+            (directPolySharkCase &&
+             (facts.strokePatchCount != kExpectedPolySharkPatchCount ||
+              facts.contours.size() != kExpectedPolySharkContourCount)))
         {
-            fail("direct cusp oracle must execute one atomic feather-fill patch batch between initialize and resolve");
+            fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
         }
     }
     else if (facts.interlockMode !=
@@ -543,7 +564,7 @@ int main(int argc, char** argv)
     {
         fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");
     }
-    if (!directCuspCase &&
+    if (!directCase &&
         (facts.contentWidth != kExpectedLogicalAtlasSize ||
         facts.contentHeight != kExpectedLogicalAtlasSize ||
         !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
@@ -570,7 +591,7 @@ int main(int argc, char** argv)
     }
     uint32_t atlasWidth = 0;
     uint32_t atlasHeight = 0;
-    if (!directCuspCase)
+    if (!directCase)
     {
         const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
         atlasWidth = atlas.GetWidth();
@@ -597,7 +618,8 @@ int main(int argc, char** argv)
         webgpuContext->tessellationTextureForOracle();
     const uint32_t tessWidth = tessellation.GetWidth();
     const uint32_t tessHeight = tessellation.GetHeight();
-    if (tessWidth != kExpectedTessWidth || tessHeight == 0)
+    if (tessWidth != kExpectedTessWidth || tessHeight == 0 ||
+        (directPolySharkCase && tessHeight != kExpectedPolySharkTessHeight))
     {
         std::fprintf(stderr,
                      "cpp-atlas-mask-oracle: unexpected tessellation texture dimensions %ux%u\n",
@@ -619,7 +641,7 @@ int main(int argc, char** argv)
               kFrameWidth,
               kFrameHeight,
               targetBytes.data());
-    if (!directCuspCase)
+    if (!directCase)
     {
         std::printf("wrote %s: %ux%u R16Float row-packed atlas mask\\n",
                     output,

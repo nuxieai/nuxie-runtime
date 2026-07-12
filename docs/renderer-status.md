@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=24, diverges=0, gated=1,443, total=1,467.
+- Rust wgpu: exact=25, diverges=0, gated=1,442, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -31,6 +31,7 @@ Run `make renderer-golden`.
   `gm-feather_strokes-clockwise-atomic`, and
   `gm-feather_shapes-clockwise-atomic`,
   `gm-feather_ellipse-clockwise-atomic`, and
+  `gm-feather_polyshapes-clockwise-atomic`, and
   `gm-emptystrokefeather-clockwise-atomic`.
 
 ## Milestones
@@ -56,8 +57,10 @@ Run `make renderer-golden`.
    inputs, and the R16 mask are exact against C++ WebGPU. Direct severe-cusp
    topology and tessellation inputs are also exact; its remaining isolated
    558-pixel/max-255 cusp-tip lobe is downstream of tessellation and stays
-   named rather than tolerated. The active corpus target is now
-   `feather_polyshapes`, followed by the clip-gated corner GMs. The separate
+   named rather than tolerated. Double-sided tessellation now wraps paired
+   forward/mirrored spans across texture rows, making all 42 isolated
+   `feather_polyshapes` cells exact. The active targets are now the clip-gated
+   corner GMs. The separate
    matching WebGPU MSAA final-blit oracle remains a named R2 failure at 4,096
    pixels/max delta 80. Continue R2 with the remaining `render_context.cpp`
    behavior, robust triangulation, and integration of the translated
@@ -529,3 +532,17 @@ Run `make renderer-golden`.
   workspace floor also exposed a pre-existing stale render-stream assertion;
   updating its expected `decodeImage` payload to include `data=010203` restores
   the full V2 gate without changing runtime behavior.
+- 2026-07-11: Ported C++ `pushDoubleSidedTessellationSpans` row wrapping.
+  Rust previously relocated already row-local forward spans and assigned every
+  mirrored span to row zero, corrupting direct feather fills once one contour's
+  half-tessellation crossed the 2,048-texel boundary. The polygonal shark in
+  `feather_polyshapes` exposed the defect while atlas rendering remained exact.
+  All 42 cells are now individually exact at max channel delta 2; the composite
+  has 11,677 pixels beyond delta 2/max delta 11 only where individually exact
+  translucent feathers overlap, and passes the existing bounded 16,384-pixel
+  overlap budget. A direct WebGPU input oracle also matches the 786-patch,
+  one-contour, four-live-row topology and payload; its 125%-growth fifth row is
+  zero. Dawn and wgpu classify 320 otherwise-identical feather-join texels with
+  opposite LEFT/RIGHT bits, a backend equivalence guarded narrowly by the
+  comparator and superseded by exact isolated native-Metal pixels. The ratchet
+  advances to exact=25/diverges=0.

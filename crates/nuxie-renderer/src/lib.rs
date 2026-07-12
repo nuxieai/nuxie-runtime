@@ -1,6 +1,8 @@
 //! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
 
 #[cfg(test)]
+mod atlas_input_oracle;
+#[cfg(test)]
 mod atlas_mask_oracle;
 mod atlas_pipeline;
 mod atomic_pipeline;
@@ -2011,7 +2013,12 @@ mod tests {
         );
     }
 
-    fn fixed_feather_atlas_mask(join: StrokeJoin) -> atlas_mask_oracle::AtlasMask {
+    struct FixedFeatherAtlasOracle {
+        mask: atlas_mask_oracle::AtlasMask,
+        inputs: atlas_input_oracle::AtlasInputs,
+    }
+
+    fn fixed_feather_atlas_oracle(join: StrokeJoin) -> FixedFeatherAtlasOracle {
         let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
         let mut raw_path = RawPath::new();
         raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
@@ -2091,6 +2098,7 @@ mod tests {
         );
         let tessellation_view =
             tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let tessellation_size = tessellation_texture.size();
         let atlas = factory
             .context
             .device
@@ -2135,7 +2143,7 @@ mod tests {
             ],
         );
         let bytes_per_row = 256;
-        let readback = factory
+        let atlas_readback = factory
             .context
             .device
             .create_buffer(&wgpu::BufferDescriptor {
@@ -2147,7 +2155,7 @@ mod tests {
         encoder.copy_texture_to_buffer(
             atlas.as_image_copy(),
             wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
+                buffer: &atlas_readback,
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(bytes_per_row),
@@ -2156,19 +2164,47 @@ mod tests {
             },
             atlas.size(),
         );
+        let tessellation_bytes_per_row = tessellation_size.width.checked_mul(16).unwrap();
+        let tessellation_readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-atlas-input-tessellation-readback"),
+                size: u64::from(tessellation_bytes_per_row) * u64::from(tessellation_size.height),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            tessellation_texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &tessellation_readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(tessellation_bytes_per_row),
+                    rows_per_image: Some(tessellation_size.height),
+                },
+            },
+            tessellation_size,
+        );
         factory.context.queue.submit(Some(encoder.finish()));
-        let slice = readback.slice(..);
-        let (sender, receiver) = mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
+        let atlas_slice = atlas_readback.slice(..);
+        let tessellation_slice = tessellation_readback.slice(..);
+        let (atlas_sender, atlas_receiver) = mpsc::channel();
+        atlas_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = atlas_sender.send(result);
+        });
+        let (tessellation_sender, tessellation_receiver) = mpsc::channel();
+        tessellation_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tessellation_sender.send(result);
         });
         factory
             .context
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .unwrap();
-        receiver.recv().unwrap().unwrap();
-        let mapped = slice.get_mapped_range().unwrap();
+        atlas_receiver.recv().unwrap().unwrap();
+        tessellation_receiver.recv().unwrap().unwrap();
+        let mapped = atlas_slice.get_mapped_range().unwrap();
         let size = ATLAS_ORACLE_PHYSICAL_SIZE as usize;
         let mut pixels = Vec::with_capacity(size * size);
         for y in 0..size {
@@ -2179,13 +2215,52 @@ mod tests {
             );
         }
         drop(mapped);
-        readback.unmap();
-        atlas_mask_oracle::AtlasMask::new(
+        atlas_readback.unmap();
+        let mask = atlas_mask_oracle::AtlasMask::new(
             ATLAS_ORACLE_PHYSICAL_SIZE,
             ATLAS_ORACLE_PHYSICAL_SIZE,
             pixels,
         )
-        .unwrap()
+        .unwrap();
+        let mapped = tessellation_slice.get_mapped_range().unwrap();
+        let mut texels = Vec::with_capacity(
+            tessellation_size.width as usize * tessellation_size.height as usize,
+        );
+        for row in mapped.chunks_exact(tessellation_bytes_per_row as usize) {
+            texels.extend(row.chunks_exact(16).map(|texel| {
+                [
+                    u32::from_le_bytes(texel[0..4].try_into().unwrap()),
+                    u32::from_le_bytes(texel[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(texel[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(texel[12..16].try_into().unwrap()),
+                ]
+            }));
+        }
+        drop(mapped);
+        tessellation_readback.unmap();
+        let inputs = atlas_input_oracle::AtlasInputs::new(
+            tessellation.base_instance,
+            tessellation.instance_count,
+            tessellation
+                .contours
+                .iter()
+                .map(|contour| atlas_input_oracle::ContourRecord {
+                    midpoint_x_bits: contour.midpoint[0].to_bits(),
+                    midpoint_y_bits: contour.midpoint[1].to_bits(),
+                    path_id: contour.path_id,
+                    vertex_index0: contour.vertex_index0,
+                })
+                .collect(),
+            tessellation_size.width,
+            tessellation_size.height,
+            texels,
+        )
+        .unwrap();
+        FixedFeatherAtlasOracle { mask, inputs }
+    }
+
+    fn fixed_feather_atlas_mask(join: StrokeJoin) -> atlas_mask_oracle::AtlasMask {
+        fixed_feather_atlas_oracle(join).mask
     }
 
     #[test]
@@ -2222,6 +2297,57 @@ mod tests {
     }
 
     #[test]
+    fn atlas_input_oracle_detects_fixed_stroke_sensitivity() {
+        let oracle = fixed_feather_atlas_oracle(ATLAS_ORACLE_STROKE_JOIN);
+        let inputs = oracle.inputs;
+
+        let mut batch = inputs.clone();
+        batch.patch_count ^= 1;
+        assert_eq!(
+            atlas_input_oracle::compare_cpp_to_rust(&inputs, &batch),
+            Err(
+                atlas_input_oracle::AtlasInputComparisonError::BatchOrDimensionField {
+                    field: "patch_count",
+                    cpp: inputs.patch_count,
+                    rust: batch.patch_count,
+                }
+            )
+        );
+
+        let mut contour = inputs.clone();
+        contour.contours[0].vertex_index0 ^= 1;
+        assert_eq!(
+            atlas_input_oracle::compare_cpp_to_rust(&inputs, &contour),
+            Err(
+                atlas_input_oracle::AtlasInputComparisonError::ContourField {
+                    index: 0,
+                    field: "vertex_index0",
+                    cpp: inputs.contours[0].vertex_index0,
+                    rust: contour.contours[0].vertex_index0,
+                }
+            )
+        );
+
+        let used_texel = inputs
+            .texels
+            .iter()
+            .position(|texel| *texel != [0; 4])
+            .expect("fixed stroke tessellation must write a texel");
+        let mut tessellation = inputs.clone();
+        tessellation.texels[used_texel][0] ^= 1;
+        assert_eq!(
+            atlas_input_oracle::compare_cpp_to_rust(&inputs, &tessellation),
+            Err(atlas_input_oracle::AtlasInputComparisonError::Texel {
+                x: (used_texel % inputs.tess_width as usize) as u32,
+                y: (used_texel / inputs.tess_width as usize) as u32,
+                channel: 0,
+                cpp: inputs.texels[used_texel][0],
+                rust: tessellation.texels[used_texel][0],
+            })
+        );
+    }
+
+    #[test]
     #[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]
     fn cpp_webgpu_atlas_mask_oracle_matches_fixed_rust_mask_when_configured() {
         let path = std::env::var_os("RIVE_CPP_ATLAS_MASK")
@@ -2255,6 +2381,44 @@ mod tests {
                     path.display()
                 )
             });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_input_oracle_matches_fixed_rust_inputs_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_INPUTS").expect(
+            "RIVE_CPP_ATLAS_INPUTS is required for the ignored C++ atlas-input oracle test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_INPUTS is set but empty; set it to a C++ atlas-input oracle file"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_INPUTS must be absolute because Cargo runs unit tests from the package directory"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atlas-input oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atlas-input oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_inputs = fixed_feather_atlas_oracle(ATLAS_ORACLE_STROKE_JOIN).inputs;
+        atlas_input_oracle::compare_cpp_to_rust(&cpp_inputs, &rust_inputs).unwrap_or_else(
+            |error| {
+                panic!(
+                    "C++ atlas-input oracle mismatch at {}: {error}",
+                    path.display()
+                )
+            },
+        );
     }
 
     #[test]

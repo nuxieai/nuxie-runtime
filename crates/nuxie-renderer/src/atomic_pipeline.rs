@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 
 pub(crate) struct AtomicPipeline {
     path: wgpu::RenderPipeline,
+    outer_path: wgpu::RenderPipeline,
     feather_path: wgpu::RenderPipeline,
     feather_stroke_path: wgpu::RenderPipeline,
     stroke_path: wgpu::RenderPipeline,
@@ -115,6 +116,40 @@ impl AtomicPipeline {
         });
         let path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-path-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &path_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(PatchVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &path_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("3", 0.0),
+                    ("4", 0.0),
+                    ("7", 0.0),
+                ]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let outer_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-outer-path-pipeline"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &path_vertex,
@@ -341,6 +376,7 @@ impl AtomicPipeline {
         });
         Self {
             path,
+            outer_path,
             feather_path,
             feather_stroke_path,
             stroke_path,
@@ -524,6 +560,8 @@ impl AtomicPipeline {
                 &self.feather_path
             } else if draw.is_stroke {
                 &self.stroke_path
+            } else if !draw.triangle_vertices.is_empty() {
+                &self.outer_path
             } else {
                 &self.path
             });

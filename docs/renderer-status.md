@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=56, diverges=0, gated=1,411, total=1,467.
+- Rust wgpu: exact=57, diverges=0, gated=1,410, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -51,7 +51,8 @@ Run `make renderer-golden`.
   `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
   `gm-negative_interior_triangles-clockwise-atomic`, and
   `gm-negative_interior_triangles_as_clip-clockwise-atomic`, and
-  `gm-convexpaths-clockwise-atomic`, and `gm-pathfill-clockwise-atomic`.
+  `gm-convexpaths-clockwise-atomic`, `gm-pathfill-clockwise-atomic`, and
+  `gm-oval-clockwise-atomic`.
 
 ## Milestones
 
@@ -110,8 +111,14 @@ Run `make renderer-golden`.
    then promoted `convexpaths` after porting missing forward-span row wrapping.
    `pathfill` is also promoted after connected-component analysis proved its
    253 hard-edge pixels are sparse one-pixel placement differences with 99.5%
-   support overlap. Continue the basic-fill family with `oval`, the smallest
-   remaining measured gap at 4,578 pixels beyond delta 2.
+   support overlap. `oval` then exposed two stale midpoint-fan boundaries:
+   small compound fills were rejected into fallback, and midpoint-fan and
+   outer-curve patches shared one atomic cull state. Admitting compound fills,
+   splitting the atomic path pipelines by patch class, and applying C++'s
+   counterclockwise-face cull to the CWA main path restores every oval, hole,
+   and overlap. A fresh basic-fill scout selects `mutating_fill_rule` next at
+   45 pixels beyond delta 2/max 11; the other six measured entries retain
+   structural gaps from 4,052 to 16,169 pixels.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -170,6 +177,10 @@ Run `make renderer-golden`.
   allowance. Its 253 residuals have 99.5% support overlap and split into tiny
   hard-edge components; the largest is 56 pixels inside a 19x13 box. Max-255
   samples are one-pixel binary edge placement, not missing shapes.
+- 2026-07-12: `oval` keeps max channel delta 2 with a bounded 128-pixel
+  allowance. After the midpoint-fan admission/cull fix, all 109 residuals are
+  one-pixel edge components, the largest is 16 pixels, and foreground support
+  has 99.9965% IoU with equal expected/actual support counts.
 
 ## Log
 
@@ -759,3 +770,14 @@ Run `make renderer-golden`.
   localized all 253 pixels beyond delta 2 to sparse hard edges across its
   compound icon stress set. The ratchet advances to
   exact=56/diverges=0/gated=1,411 without renderer changes.
+- 2026-07-12: Promoted `oval` by admitting small compound midpoint fans to the
+  atomic path, separating midpoint-fan and outer-curve cull state, and porting
+  C++'s counterclockwise-face cull to the clockwise-atomic main path. Two GPU
+  regressions cover same-direction cubic union and opposite-direction holes;
+  the residual is 109 sparse edge pixels and the ratchet advances to
+  exact=57/diverges=0/gated=1,410.
+- 2026-07-12: A fresh post-`oval` basic-fill scout measured
+  `mutating_fill_rule` at 45 pixels beyond delta 2/max 11. `concavepaths`, the
+  three `poly_*` variants, `cubicpath`, and `cubicclosepath` retain structural
+  topology/primitive gaps from 4,052 to 16,169 pixels, so
+  `mutating_fill_rule` is the next R2 target.

@@ -948,10 +948,15 @@ impl WgpuFrame {
                         _ => None,
                     };
                     let raw_path = inverse_clip_path.as_ref().unwrap_or(&draw.path.raw_path);
-                    let fill_rule = if inverse_clip_path.is_some() {
+                    let source_fill_rule = if inverse_clip_path.is_some() {
                         FillRule::Clockwise
                     } else {
                         draw.path.fill_rule
+                    };
+                    let fill_rule = if clockwise_override {
+                        FillRule::Clockwise
+                    } else {
+                        source_fill_rule
                     };
                     let (
                         mut spans,
@@ -1027,7 +1032,7 @@ impl WgpuFrame {
                                 draw::build_interior_tessellation(
                                     raw_path,
                                     draw.state.transform,
-                                    fill_rule,
+                                    source_fill_rule,
                                     clockwise_override,
                                 )
                             })
@@ -1056,7 +1061,7 @@ impl WgpuFrame {
                             draw::clockwise_atomic_negate_coverage(
                                 raw_path,
                                 draw.state.transform,
-                                fill_rule,
+                                source_fill_rule,
                                 clockwise_override,
                             ),
                         );
@@ -1142,7 +1147,7 @@ impl WgpuFrame {
                             } else {
                                 gpu::PaintData::solid(
                                     modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                    draw.path.fill_rule,
+                                    fill_rule,
                                     draw.paint.blend_mode,
                                 )
                             };
@@ -2149,8 +2154,7 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     }
     match draw.paint.style {
         RenderPaintStyle::Fill => {
-            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
-                .is_some_and(|tessellation| tessellation.contours.len() == 1)
+            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform).is_some()
                 || (draw::should_use_interior_tessellation(
                     &draw.path.raw_path,
                     draw.state.transform,
@@ -2245,6 +2249,116 @@ mod tests {
             raw_path,
             fill_rule,
         }
+    }
+
+    fn append_oval(path: &mut RawPath, bounds: [f32; 4]) {
+        const KAPPA: f32 = 0.552_284_8;
+        let [left, top, right, bottom] = bounds;
+        let center_x = (left + right) * 0.5;
+        let center_y = (top + bottom) * 0.5;
+        let radius_x = (right - left) * 0.5;
+        let radius_y = (bottom - top) * 0.5;
+        path.move_to(right, center_y);
+        path.cubic_to(
+            right,
+            center_y + radius_y * KAPPA,
+            center_x + radius_x * KAPPA,
+            bottom,
+            center_x,
+            bottom,
+        );
+        path.cubic_to(
+            center_x - radius_x * KAPPA,
+            bottom,
+            left,
+            center_y + radius_y * KAPPA,
+            left,
+            center_y,
+        );
+        path.cubic_to(
+            left,
+            center_y - radius_y * KAPPA,
+            center_x - radius_x * KAPPA,
+            top,
+            center_x,
+            top,
+        );
+        path.cubic_to(
+            center_x + radius_x * KAPPA,
+            top,
+            right,
+            center_y - radius_y * KAPPA,
+            right,
+            center_y,
+        );
+        path.close();
+    }
+
+    #[test]
+    fn clockwise_atomic_override_unions_overlapping_cubic_contours() {
+        let factory = WgpuFactory::new_with_mode(256, 160, RenderMode::ClockwiseAtomic).unwrap();
+        let mut raw_path = RawPath::new();
+        append_oval(&mut raw_path, [20.0, 20.0, 140.0, 140.0]);
+        append_oval(&mut raw_path, [100.0, 20.0, 220.0, 140.0]);
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::EvenOdd,
+        };
+        let mut frame = factory.begin_frame(0xffff_ffff);
+        frame.draw_path(
+            &path,
+            &WgpuPaint {
+                color: 0xff44_88cc,
+                ..WgpuPaint::default()
+            },
+        );
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 256 + x) * 4..][..4];
+
+        assert_eq!(pixel(0, 0), [0xff; 4]);
+        assert_eq!(pixel(80, 80), [0x44, 0x88, 0xcc, 0xff]);
+        assert_eq!(pixel(120, 80), [0x44, 0x88, 0xcc, 0xff]);
+    }
+
+    #[test]
+    fn clockwise_atomic_compound_draw_preserves_prior_draw_and_hole() {
+        let factory = WgpuFactory::new_with_mode(256, 256, RenderMode::ClockwiseAtomic).unwrap();
+        let mut red_raw_path = RawPath::new();
+        append_oval(&mut red_raw_path, [10.0, 10.0, 100.0, 50.0]);
+        let red_path = WgpuPath {
+            raw_path: red_raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let mut ring_raw_path = RawPath::new();
+        append_oval(&mut ring_raw_path, [70.0, 70.0, 200.0, 200.0]);
+        let mut inner = RawPath::new();
+        append_oval(&mut inner, [90.0, 90.0, 180.0, 180.0]);
+        ring_raw_path.add_path_backwards(&inner, Mat2D::IDENTITY);
+        let ring_path = WgpuPath {
+            raw_path: ring_raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let mut frame = factory.begin_frame(0xffff_ffff);
+        frame.draw_path(
+            &red_path,
+            &WgpuPaint {
+                color: 0xffff_0000,
+                ..WgpuPaint::default()
+            },
+        );
+        frame.draw_path(
+            &ring_path,
+            &WgpuPaint {
+                color: 0xff00_00ff,
+                ..WgpuPaint::default()
+            },
+        );
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 256 + x) * 4..][..4];
+
+        assert_eq!(pixel(55, 30), [0xff, 0, 0, 0xff]);
+        assert_eq!(pixel(135, 80), [0, 0, 0xff, 0xff]);
+        assert_eq!(pixel(135, 135), [0xff; 4]);
     }
 
     fn negative_interior_path() -> WgpuPath {
@@ -3071,7 +3185,7 @@ mod tests {
 
         assert_eq!(pixel(2, 2), [255, 0, 0, 255]);
         assert_eq!(pixel(6, 6), [0, 255, 0, 255]);
-        assert_eq!(pixel(12, 12), [255, 0, 0, 255]);
+        assert_eq!(pixel(12, 12), [0, 255, 0, 255]);
         assert_eq!(pixel(18, 18), [0, 0, 255, 255]);
     }
 

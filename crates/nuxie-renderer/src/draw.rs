@@ -635,15 +635,50 @@ fn polar_segments_per_radian(radius: f32) -> f32 {
     0.5 / cos_theta.max(-1.0).acos()
 }
 
+fn fast_acos(x: f32) -> f32 {
+    const A: f32 = -0.939115566365855;
+    const B: f32 = 0.9217841528914573;
+    const C: f32 = -1.2845906244690837;
+    const D: f32 = 0.295624144969963174;
+    const PI_OVER_2: f32 = 1.5707963267948966;
+
+    let xx = x * x;
+    let numer = B * xx + A;
+    let denom = xx * (D * xx + C) + 1.0;
+    x * (numer / denom) + PI_OVER_2
+}
+
 fn round_join_segment_count(incoming: Vec2D, outgoing: Vec2D, per_radian: f32) -> u32 {
     let denominator = ((incoming.x * incoming.x + incoming.y * incoming.y)
         * (outgoing.x * outgoing.x + outgoing.y * outgoing.y))
         .sqrt();
     let cosine =
         ((incoming.x * outgoing.x + incoming.y * outgoing.y) / denominator).clamp(-1.0, 1.0);
-    (cosine.acos() * per_radian)
+    (fast_acos(cosine) * per_radian)
         .ceil()
         .clamp(1.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32
+}
+
+#[cfg(test)]
+mod fast_acos_tests {
+    use super::*;
+
+    #[test]
+    fn round_join_segments_follow_cpp_fast_acos_at_threshold_edges() {
+        let per_radian = 5.5;
+        let cases = [
+            (Vec2D::new(0.934_609_65, 0.355_672_72), 2),
+            (Vec2D::new(0.614_463_2, 0.788_945_5), 6),
+            (Vec2D::new(-0.827_510_06, 0.561_448_9), 15),
+        ];
+
+        for (outgoing, expected) in cases {
+            assert_eq!(
+                round_join_segment_count(Vec2D::new(1.0, 0.0), outgoing, per_radian),
+                expected
+            );
+        }
+    }
 }
 
 fn subtract(a: Vec2D, b: Vec2D) -> Vec2D {

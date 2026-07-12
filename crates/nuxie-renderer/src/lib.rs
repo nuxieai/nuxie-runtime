@@ -455,6 +455,24 @@ impl Default for WgpuPaint {
     }
 }
 
+impl WgpuPaint {
+    fn effective_stroke(&self) -> Option<(f32, StrokeJoin, StrokeCap)> {
+        (self.style == RenderPaintStyle::Stroke).then_some((
+            self.thickness,
+            if self.feather != 0.0 {
+                StrokeJoin::Round
+            } else {
+                self.join
+            },
+            if self.feather != 0.0 {
+                StrokeCap::Round
+            } else {
+                self.cap
+            },
+        ))
+    }
+}
+
 impl RenderPaint for WgpuPaint {
     fn as_any(&self) -> &dyn Any {
         self
@@ -757,17 +775,13 @@ impl WgpuFrame {
                         patch_index_range,
                         mut triangles,
                     ) = if draw.paint.feather != 0.0 {
-                        let is_stroke = draw.paint.style == RenderPaintStyle::Stroke;
+                        let stroke = draw.paint.effective_stroke();
+                        let is_stroke = stroke.is_some();
                         let requires_atlas = draw::feather_requires_atlas(
                             draw.paint.feather,
                             draw.state.transform,
                             false,
                         );
-                        let stroke = is_stroke.then_some((
-                            draw.paint.thickness,
-                            draw.paint.join,
-                            draw.paint.cap,
-                        ));
                         let tessellation = if requires_atlas {
                             draw::build_feather_atlas_tessellation(
                                 &draw.path.raw_path,
@@ -888,11 +902,7 @@ impl WgpuFrame {
                             &draw.path.raw_path,
                             draw.state.transform,
                             draw.paint.feather,
-                            (draw.paint.style == RenderPaintStyle::Stroke).then_some((
-                                draw.paint.thickness,
-                                draw.paint.join,
-                                draw.paint.cap,
-                            )),
+                            draw.paint.effective_stroke(),
                             self.width,
                             self.height,
                         )
@@ -1587,16 +1597,11 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
         return false;
     }
     if draw.paint.feather != 0.0 {
-        let stroke = (draw.paint.style == RenderPaintStyle::Stroke).then_some((
-            draw.paint.thickness,
-            draw.paint.join,
-            draw.paint.cap,
-        ));
         return draw::build_feather_tessellation(
             &draw.path.raw_path,
             draw.state.transform,
             draw.paint.feather,
-            stroke,
+            draw.paint.effective_stroke(),
         )
         .is_some();
     }
@@ -1667,6 +1672,107 @@ mod tests {
         let scaled = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
         let result = multiply(translated, scaled);
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+    }
+
+    #[test]
+    fn feathered_stroke_uses_effective_round_style_for_direct_and_atlas_tessellation() {
+        let paint = WgpuPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: 8.0,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Butt,
+            feather: 18.0,
+            ..WgpuPaint::default()
+        };
+        assert_eq!(
+            paint.effective_stroke(),
+            Some((8.0, StrokeJoin::Round, StrokeCap::Round))
+        );
+        assert_eq!(paint.join, StrokeJoin::Miter);
+        assert_eq!(paint.cap, StrokeCap::Butt);
+
+        let mut path = RawPath::new();
+        path.move_to(16.0, 16.0);
+        path.line_to(48.0, 16.0);
+        path.line_to(48.0, 48.0);
+        path.line_to(16.0, 48.0);
+        path.close();
+
+        for tessellation in [
+            draw::build_feather_tessellation(
+                &path,
+                Mat2D::IDENTITY,
+                paint.feather,
+                paint.effective_stroke(),
+            )
+            .unwrap(),
+            draw::build_feather_atlas_tessellation(
+                &path,
+                Mat2D::IDENTITY,
+                paint.feather,
+                paint.effective_stroke(),
+            )
+            .unwrap(),
+        ] {
+            assert_eq!(tessellation.base_instance, 1);
+            assert_eq!(tessellation.instance_count, 5);
+            assert_eq!(tessellation.spans.len(), 5);
+            assert_eq!(
+                tessellation.spans[1..]
+                    .iter()
+                    .map(|span| span.x_range())
+                    .collect::<Vec<_>>(),
+                vec![(8, 18), (18, 28), (28, 38), (38, 48)]
+            );
+            assert!(tessellation.spans[1..]
+                .iter()
+                .all(|span| span.segment_counts == 0x0090_0401));
+            assert!(tessellation.spans[1..]
+                .iter()
+                .all(|span| span.contour_id_with_flags == 0x0800_0001));
+        }
+    }
+
+    #[test]
+    fn feathered_open_stroke_uses_effective_round_caps_for_direct_and_atlas_tessellation() {
+        let paint = WgpuPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: 8.0,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Butt,
+            feather: 18.0,
+            ..WgpuPaint::default()
+        };
+        let mut path = RawPath::new();
+        path.move_to(16.0, 32.0);
+        path.line_to(48.0, 32.0);
+
+        for tessellation in [
+            draw::build_feather_tessellation(
+                &path,
+                Mat2D::IDENTITY,
+                paint.feather,
+                paint.effective_stroke(),
+            )
+            .unwrap(),
+            draw::build_feather_atlas_tessellation(
+                &path,
+                Mat2D::IDENTITY,
+                paint.feather,
+                paint.effective_stroke(),
+            )
+            .unwrap(),
+        ] {
+            assert_eq!(tessellation.base_instance, 1);
+            assert_eq!(tessellation.instance_count, 5);
+            assert_eq!(tessellation.spans.len(), 3);
+            assert_eq!(tessellation.spans[1].x_range(), (8, 27));
+            assert_eq!(tessellation.spans[2].x_range(), (27, 48));
+            assert_eq!(tessellation.spans[1].segment_counts, 0x0140_0000);
+            assert_eq!(tessellation.spans[2].segment_counts, 0x0140_0401);
+            assert_eq!(tessellation.spans[1].contour_id_with_flags, 0x0a00_0001);
+            assert_eq!(tessellation.spans[2].contour_id_with_flags, 0x0a00_0001);
+        }
     }
 
     #[test]
@@ -2020,6 +2126,15 @@ mod tests {
 
     fn fixed_feather_atlas_oracle(join: StrokeJoin) -> FixedFeatherAtlasOracle {
         let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
+        let paint = WgpuPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: ATLAS_ORACLE_STROKE_THICKNESS,
+            join,
+            cap: ATLAS_ORACLE_STROKE_CAP,
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let stroke = paint.effective_stroke();
         let mut raw_path = RawPath::new();
         raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MIN);
@@ -2030,7 +2145,7 @@ mod tests {
             &raw_path,
             Mat2D::IDENTITY,
             ATLAS_ORACLE_FEATHER,
-            Some((ATLAS_ORACLE_STROKE_THICKNESS, join, ATLAS_ORACLE_STROKE_CAP)),
+            stroke,
             ATLAS_ORACLE_FRAME_SIZE,
             ATLAS_ORACLE_FRAME_SIZE,
         )
@@ -2053,7 +2168,7 @@ mod tests {
             &raw_path,
             Mat2D::IDENTITY,
             ATLAS_ORACLE_FEATHER,
-            Some((ATLAS_ORACLE_STROKE_THICKNESS, join, ATLAS_ORACLE_STROKE_CAP)),
+            stroke,
         )
         .unwrap();
         tessellation.path.atlas_transform = gpu::AtlasTransform {
@@ -2285,15 +2400,11 @@ mod tests {
     }
 
     #[test]
-    fn feather_atlas_stroke_join_changes_mask_geometry() {
+    fn feather_atlas_stroke_uses_the_same_mask_for_all_requested_joins() {
         let miter = fixed_feather_atlas_mask(StrokeJoin::Miter);
         let bevel = fixed_feather_atlas_mask(StrokeJoin::Bevel);
 
-        assert!(matches!(
-            atlas_mask_oracle::compare_cpp_to_rust(&miter, &bevel, ATLAS_ORACLE_TOLERANCES),
-            Err(atlas_mask_oracle::AtlasMaskComparisonError::Support { .. })
-                | Err(atlas_mask_oracle::AtlasMaskComparisonError::Value { .. })
-        ));
+        assert_eq!(miter, bevel);
     }
 
     #[test]

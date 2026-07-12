@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-language contract tests for the RIVEMSK v1 interchange format."""
+"""Cross-language contract tests for the RIVEMSK and RIVEATI formats."""
 
 import os
 import pathlib
@@ -12,6 +12,8 @@ import unittest
 
 HEADER_BYTES = 20
 MAGIC = b"RIVEMSK\0"
+INPUT_HEADER_BYTES = 40
+INPUT_MAGIC = b"RIVEATI\0"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXPORTER = pathlib.Path(__file__).with_name("runtime-src") / "main.cpp"
 BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
@@ -50,6 +52,36 @@ def make_mask(width=3, height=2) -> bytes:
     return MAGIC + struct.pack("<3I", 1, width, height) + bytes(range(width * height * 2))
 
 
+def parse_inputs(data: bytes) -> dict:
+    if len(data) < INPUT_HEADER_BYTES:
+        raise ValueError("file is shorter than the 40-byte RIVEATI header")
+    if data[:8] != INPUT_MAGIC:
+        raise ValueError("bad RIVEATI magic")
+    fields = struct.unpack_from("<8I", data, 8)
+    version, base_patch, patch_count, contour_count, width, height, contour_stride, texel_stride = fields
+    if version != 1:
+        raise ValueError("unsupported RIVEATI version")
+    if not width or not height:
+        raise ValueError("RIVEATI dimensions must be nonzero")
+    if contour_stride != 16 or texel_stride != 16:
+        raise ValueError("RIVEATI stride mismatch")
+    expected = INPUT_HEADER_BYTES + contour_count * contour_stride + width * height * texel_stride
+    if len(data) != expected:
+        raise ValueError("RIVEATI length mismatch")
+    return {
+        "base_patch": base_patch,
+        "patch_count": patch_count,
+        "contour_count": contour_count,
+        "width": width,
+        "height": height,
+    }
+
+
+def make_inputs() -> bytes:
+    header = INPUT_MAGIC + struct.pack("<8I", 1, 1, 2, 1, 2, 1, 16, 16)
+    return header + bytes(16) + bytes(2 * 16)
+
+
 class FormatTests(unittest.TestCase):
     def test_accepts_rust_serializer_fixture_byte_for_byte(self):
         self.assertEqual(parse_mask(RUST_SERIALIZER_FIXTURE), {
@@ -75,6 +107,21 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "nonzero"):
             parse_mask(MAGIC + struct.pack("<3I", 1, 0, 2))
 
+    def test_accepts_and_rejects_canonical_atlas_inputs(self):
+        self.assertEqual(parse_inputs(make_inputs()), {
+            "base_patch": 1,
+            "patch_count": 2,
+            "contour_count": 1,
+            "width": 2,
+            "height": 1,
+        })
+        with self.assertRaisesRegex(ValueError, "length"):
+            parse_inputs(make_inputs() + b"\0")
+        bad_stride = bytearray(make_inputs())
+        struct.pack_into("<I", bad_stride, 32, 12)
+        with self.assertRaisesRegex(ValueError, "stride"):
+            parse_inputs(bad_stride)
+
     def test_exporter_configuration_matches_coordinated_stroke_fixture(self):
         source = EXPORTER.read_text()
         for fragment in (
@@ -82,7 +129,8 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kFrameHeight = 64;",
             "constexpr uint32_t kExpectedLogicalAtlasSize = 39;",
             "constexpr uint32_t kExpectedPhysicalAtlasSize = 48;",
-            "constexpr uint32_t kHeaderBytes = 20;",
+            "constexpr uint32_t kMaskHeaderBytes = 20;",
+            "constexpr uint32_t kInputsHeaderBytes = 40;",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             "facts.contentWidth != kExpectedLogicalAtlasSize",
             "facts.contentHeight != kExpectedLogicalAtlasSize",
@@ -106,13 +154,13 @@ class FormatTests(unittest.TestCase):
             "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
             "webgpuContext->makeRenderTarget(",
             "webgpuContext->atlasMaskTextureForOracle();",
+            "webgpuContext->tessellationTextureForOracle();",
+            "writeInputs(inputsOutput,",
             "const uint32_t atlasWidth = atlas.GetWidth();",
             "const uint32_t atlasHeight = atlas.GetHeight();",
             "if (atlasWidth != kExpectedPhysicalAtlasSize ||",
-            "const uint32_t width = atlasWidth;",
-            "const uint32_t height = atlasHeight;",
-            ".width = width,",
-            ".height = height,",
+            "readTexture(instance, device, queue, atlas, kBytesPerTexel);",
+            "readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);",
             "writeU32(header, 8, 1);",
             "writeU32(header, 12, width);",
             "writeU32(header, 16, height);",
@@ -138,6 +186,8 @@ class FormatTests(unittest.TestCase):
             'cp "$dawn_args_snapshot" "$dawn_args"',
             'cmp -s "$dawn_args_snapshot" "$dawn_args"',
             'rm -f "$output"',
+            'rm -f "$output" "$inputs_output"',
+            '"$output" "$inputs_output"',
             'if [[ "$output_bytes" != "4628" ]]',
         ):
             self.assertIn(fragment, source)
@@ -168,6 +218,7 @@ class FormatTests(unittest.TestCase):
     def test_runtime_patch_applies_and_observes_production_atlas_state(self):
         files = (
             "renderer/include/rive/renderer/gpu.hpp",
+            "renderer/include/rive/renderer/render_context.hpp",
             "renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp",
             "renderer/premake5.lua",
             "renderer/src/render_context.cpp",
@@ -189,8 +240,12 @@ class FormatTests(unittest.TestCase):
                         cpp.index("void RenderContextWebGPUImpl::resizeAtomicCoverageBacking")]
             gradient = cpp[cpp.index("void RenderContextWebGPUImpl::resizeGradientTexture"):
                            cpp.index("void RenderContextWebGPUImpl::resizeTessellationTexture")]
+            tessellation = cpp[cpp.index("void RenderContextWebGPUImpl::resizeTessellationTexture"):
+                               cpp.index("void RenderContextWebGPUImpl::resizeAtlasTexture")]
             self.assertIn("wgpu::TextureUsage::CopySrc", atlas)
+            self.assertIn("wgpu::TextureUsage::CopySrc", tessellation)
             self.assertIn("wgpu::TextureFormat::R16Float", atlas)
+            self.assertIn("wgpu::TextureFormat::RGBA32Uint", tessellation)
             self.assertNotIn("wgpu::TextureUsage::CopySrc", gradient)
 
             gpu = (temp / "renderer/include/rive/renderer/gpu.hpp").read_text()
@@ -202,6 +257,7 @@ class FormatTests(unittest.TestCase):
                 "float atlasPathTranslateXForOracle = 0;",
                 "float atlasPathTranslateYForOracle = 0;",
                 "bool atlasPathTransformForOracleValid = false;",
+                "AtlasInputContourForOracle",
             ):
                 self.assertIn(fragment, gpu)
             self.assertIn(
@@ -216,8 +272,13 @@ class FormatTests(unittest.TestCase):
                 "desc.atlasPathTranslateXForOracle;",
                 "desc.atlasPathTranslateYForOracle;",
                 "desc.atlasStrokeBatches[0].scissor",
+                "desc.atlasStrokeBatches[0].basePatch",
+                "desc.atlasStrokeBatches[0].patchCount",
+                "tessellationTextureForOracle() const",
+                "m_atlasMaskOracleFacts.contours.assign(",
             ):
                 self.assertIn(fragment, webgpu_header + cpp)
+            self.assertIn("m_atlasInputContoursForOracle.push_back(", logical_flush)
 
             premake = (temp / "renderer/premake5.lua").read_text()
             self.assertGreater(premake.index("project('rive_atlas_mask_oracle')"),

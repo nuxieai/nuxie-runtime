@@ -10,6 +10,7 @@ injected_dir="$runtime/renderer/atlas_mask_oracle"
 build_out="${RIVE_ATLAS_MASK_BUILD_OUT:-out/cpp-atlas-mask-oracle}"
 jobs="${RIVE_ATLAS_MASK_JOBS:-2}"
 output="${RIVE_ATLAS_MASK_OUTPUT:-$script_dir/out/atlas-mask.r16f}"
+inputs_output="${RIVE_ATLAS_INPUT_OUTPUT:-$script_dir/out/atlas-inputs.bin}"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$script_dir/../../target/depot_tools/ninja}"
 gn_bin="${RIVE_ATLAS_MASK_GN:-$script_dir/../../target/depot_tools/gn}"
 naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"
@@ -233,7 +234,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$injected_dir" "$(dirname "$output")"
+mkdir -p "$injected_dir" "$(dirname "$output")" "$(dirname "$inputs_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 git -C "$runtime" apply "$patch"
 applied=1
@@ -259,11 +260,17 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output"
-"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output"
+rm -f "$output" "$inputs_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output"
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
     exit 1
 fi
+inputs_bytes="$(wc -c < "$inputs_output" | tr -d ' ')"
+if (( inputs_bytes <= 56 )); then
+    echo "atlas inputs must contain a 40-byte header, contour, and tessellation payload: $inputs_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
+echo "atlas inputs: $inputs_output"

@@ -440,3 +440,11 @@ Run `make renderer-golden`.
   pixels 1,521 -> 643, and mean absolute error 0.05800 -> 0.02841. The first
   mismatch remains (0,0), so patch/contour/tessellation inputs are the next
   boundary; tolerances remain unchanged.
+- 2026-07-11: Added an independently accepted C++/Rust atlas-input oracle for
+  the production stroke batch range, contour records, and complete live
+  RGBA32Uint tessellation texture. The fixed fixture first diverges at the
+  batch range: C++ submits basePatch=1/patchCount=5 while Rust submits 1/3.
+  With only that field normalized for diagnosis, the contour matches and the
+  next failure is tessellation texel (10,0) channel 2. This moves the remaining
+  mask defect upstream of atlas rasterization into stroke tessellation; fix the
+  patch-count/data generation rather than adjusting mask tolerances.

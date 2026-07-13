@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=268, diverges=0, gated=1,200, total=1,468.
+- Rust wgpu: exact=278, diverges=0, gated=1,190, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -153,7 +153,8 @@ Run `make renderer-golden`.
   `riv-draw_index_list-frame-0-clockwise-atomic`,
   `riv-draw_rule_cycle-frame-{0..4}-clockwise-atomic`,
   `riv-entry-frame-0-clockwise-atomic`, and
-  `riv-event_on_listener-frame-{0,1}-clockwise-atomic`.
+  `riv-event_on_listener-frame-{0..7}-clockwise-atomic`, plus
+  `riv-event_trigger_event-frame-{0..3}-clockwise-atomic`.
 
 ## Milestones
 
@@ -247,9 +248,13 @@ Run `make renderer-golden`.
     entries: `draw_index_list`, `draw_rule_cycle` frames 0-4, `ellipsis`,
     `entry`, and `event_on_listener` frames 0-1. Capture missing pinned Metal
     references and apply the unchanged contract and diagnostic rules.
-15. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+15. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `event_on_listener` frames 2-7 and `event_trigger_event` frames
     0-3. Capture missing pinned Metal references and apply the unchanged
+    contract and diagnostic rules.
+16. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `event_trigger_event` frames 4-7 and `events_on_states` frames
+    0-5. Capture missing pinned Metal references and apply the unchanged
     contract and diagnostic rules.
 
 ## R2 Completion Record
@@ -1993,3 +1998,9 @@ Run `make renderer-golden`.
   independently checked the draw count and alpha plane, and Sol approved the
   existing `metal-webgpu-subpixel-edge-coverage` diagnostic without changing
   the reference or tolerance.
+- 2026-07-13: Probed the fourteenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. All six remaining
+  `event_on_listener` frames repeat the family's one-pixel/max-17 result and
+  all four `event_trigger_event` frames have zero over-threshold pixels. The
+  unchanged `2/32` contract promotes all ten and advances the renderer ratchet
+  to exact=278/diverges=0/gated=1,190.

@@ -6629,10 +6629,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_on_listener-frame-2-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_on_listener-frame-2-msaa"
@@ -6655,10 +6654,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_on_listener-frame-3-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_on_listener-frame-3-msaa"
@@ -6681,10 +6679,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_on_listener-frame-4-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_on_listener-frame-4-msaa"
@@ -6707,10 +6704,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_on_listener-frame-5-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 5
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_on_listener-frame-5-msaa"
@@ -6733,10 +6729,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_on_listener-frame-6-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 6
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_on_listener-frame-6-msaa"
@@ -6759,10 +6754,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_on_listener-frame-7-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 7
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_on_listener-frame-7-msaa"
@@ -6785,10 +6779,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_trigger_event-frame-0-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_trigger_event-frame-0-msaa"
@@ -6811,10 +6804,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_trigger_event-frame-1-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_trigger_event-frame-1-msaa"
@@ -6837,10 +6829,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_trigger_event-frame-2-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_trigger_event-frame-2-msaa"
@@ -6863,10 +6854,9 @@ reference = "fixtures/renderer/reference/metal/riv/event_trigger_event-frame-3-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-event_trigger_event-frame-3-msaa"

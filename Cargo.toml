@@ -14,6 +14,7 @@ members = [
     "tools/golden-compare",
     "tools/perf-compare",
     "tools/pixel-compare",
+    "tools/renderer-fuzz-replay",
     "tools/renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",

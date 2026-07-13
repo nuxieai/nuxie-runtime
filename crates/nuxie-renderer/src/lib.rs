@@ -5590,6 +5590,21 @@ mod tests {
     }
 
     #[test]
+    fn absurd_stroke_width_does_not_overflow_tessellation() {
+        let mut path = RawPath::new();
+        path.move_to(4.0, 4.0);
+        path.line_to(28.0, 28.0);
+        assert!(draw::build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            f32::MAX,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .is_some());
+    }
+
+    #[test]
     fn solid_triangle_tessellates_to_one_gpu_triangle() {
         let mut raw_path = RawPath::new();
         raw_path.move_to(0.0, 0.0);

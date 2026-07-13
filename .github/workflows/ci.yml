@@ -120,8 +120,16 @@ jobs:
       - name: Verify renderer shader provenance
         run: make renderer-shaders-check
 
-      - name: Verify stub baseline and Rust renderer pixels
+      - name: Build reference runtime and renderer for dual fuzz replay
+        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
         run: |
+          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
+          cd renderer
+          PATH="${RIVE_RUNTIME_DIR}/build:${PATH}" build_rive.sh debug -- rive_pls_renderer rive_decoders libpng zlib libjpeg libwebp rive_harfbuzz rive_sheenbidi rive_yoga
+
+      - name: Verify dual fuzz replay, stub baseline, and Rust renderer pixels
+        run: |
+          make renderer-fuzz-replay
           make renderer-stub-baseline
           make renderer-golden
 

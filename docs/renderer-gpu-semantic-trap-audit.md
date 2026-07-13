@@ -134,15 +134,18 @@ PNG max delta at most 2.
 
 ### R3-ST-05: Non-finite replay input
 
-**Reachable hypothesis, assigned to the next R3 gate.** Render-stream `f32`
-parsing can admit `NaN` and infinity into transform state. No active corpus
-stream contains those values, and path-level finite guards do not establish a
-renderer-wide contract.
+**Verified by the dual-renderer fuzz-replay gate.** Render-stream `f32` parsing
+admits `NaN` and infinity into transform state. R3-FZ-01 replays NaN,
+positive/negative infinity, and `f32::MAX` transforms under save/restore, then
+draws an opaque finite control region. Rust/wgpu and pinned C++/Metal complete
+under the process deadline, preserve the control region, and are exact outside
+its footprint.
 
-Disposition: test this in the required dual-renderer fuzz-replay harness with a
-finite control draw after non-finite transforms. Rust must not panic, hang,
-lose the device, or submit an invalid atomic batch. This is an input-contract
-finding, not evidence of a shader mismatch.
+The broader gate also found and fixed a Rust debug-overflow panic for an absurd
+but finite stroke width. The complete matrix, pass contract, and remaining
+named hostile-input deltas are recorded in
+[`renderer-fuzz-replay.md`](renderer-fuzz-replay.md). This remains an input-
+contract result, not evidence of a shader mismatch.
 
 ### R3-ST-06: Signed C++ packing
 

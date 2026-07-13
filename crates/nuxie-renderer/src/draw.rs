@@ -289,10 +289,8 @@ fn build_stroke_or_feather_tessellation(
     } else {
         FEATHER_JOIN_CONTOUR_FLAG
     };
-    let feather_join_segments = ((polar_segments_per_radian * std::f32::consts::PI).ceil() as u32
-        + 4)
-    .max(6)
-    .min(crate::gpu::MAX_POLAR_SEGMENTS);
+    let feather_join_segments = ((polar_segments_per_radian * std::f32::consts::PI).ceil() + 4.0)
+        .clamp(6.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32;
     let mut spans = Vec::new();
     let mut contour_data = Vec::with_capacity(contours.len());
     let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;

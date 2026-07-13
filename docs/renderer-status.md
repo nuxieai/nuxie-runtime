@@ -126,10 +126,16 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. [ ] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
+1. [x] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
    NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
    stacks, and hostile gradient stops. Rust must not panic, hang, or lose the
    device; behavioral deltas become named findings and a smoke gate enters CI.
+2. [ ] Probe the first ten gated clockwise-atomic `.riv` entries against their
+   pinned Metal references: `advance_blend_mode` frames 0-1, `align_target`,
+   `animated_clipping`, `animation_reset_cases` frames 0-4, and
+   `artboard_list_map_rules`. Promote unchanged-contract passes and replace
+   the first failing `algorithm-core` placeholder with an evidence-backed
+   diagnostic.
 
 ## R2 Completion Record
 
@@ -1752,3 +1758,12 @@ Run `make renderer-golden`.
   `make renderer-decoder-oracle` pins fixture and runtime provenance plus the
   bounded contracts; no corpus tolerance or reference changed. Dual-renderer
   fuzz replay is now the only remaining R3 entry gate.
+- 2026-07-13: Closed the R3 dual-renderer fuzz-replay entry gate with five
+  deterministic hostile-stream families, per-child wall deadlines, PNG and
+  finite-control-region oracles, named C++/Rust pixel findings, and a macOS CI
+  smoke target. The first absurd-stroke replay exposed a Rust debug-overflow
+  panic; clamping segment arithmetic before integer conversion fixes it and a
+  focused unit test pins the regression. Non-finite transforms and degenerate
+  geometry are exact, deep clips stay within 21 pixels/max delta 1, and the
+  absurd-stroke and invalid-gradient raster differences remain named
+  out-of-contract findings. See `docs/renderer-fuzz-replay.md`.

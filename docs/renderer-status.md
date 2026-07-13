@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=173, diverges=0, gated=1,295, total=1,468.
+- Rust wgpu: exact=182, diverges=0, gated=1,286, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -116,7 +116,8 @@ Run `make renderer-golden`.
   `riv-background_measure-frame-0-clockwise-atomic`,
   `riv-ball_test-frame-0-clockwise-atomic`,
   `riv-bidirectional_precedence-frame-0-clockwise-atomic`, and
-  `riv-bindable_artboard_child-frame-{0..3}-clockwise-atomic`.
+  `riv-bindable_artboard_child-frame-{0..7}-clockwise-atomic`, plus
+  `riv-blend_test-frame-{0..4}-clockwise-atomic`.
 
 ## Milestones
 
@@ -152,11 +153,15 @@ Run `make renderer-golden`.
    `bindable_artboard_child` frames 0-3. Capture their missing pinned Metal
    references first, then promote unchanged-contract passes and diagnose the
    first failure without widening tolerance.
-4. [ ] Probe the next ten gated clockwise-atomic `.riv` entries:
+4. [x] Probe the next ten gated clockwise-atomic `.riv` entries:
    `bindable_artboard_child` frames 4-7,
    `bindable_artboard_nesty` frame 0, and `blend_test` frames 0-4. Capture
    their missing pinned Metal references first, then apply the same unchanged
    contract and diagnostic rules.
+5. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+   entries: `clear_viewmodel_list` frames 0-4 and `click_event` frames 0-4.
+   Capture missing pinned Metal references, preserve the unchanged `2/32`
+   contract, and classify any first failure before promotion.
 
 ## R2 Completion Record
 
@@ -1804,3 +1809,10 @@ Run `make renderer-golden`.
   outline draws, while the eight axis-aligned background/rectangle draws are
   clean, so the existing reviewed `metal-webgpu-subpixel-edge-coverage`
   diagnostic applies without a tolerance change.
+- 2026-07-13: Probed the third ten-entry clockwise-atomic `.riv` batch against
+  freshly pinned native Metal references. Nine pass the unchanged `2/32`
+  contract and advance the renderer ratchet to
+  exact=182/diverges=0/gated=1,286. `bindable_artboard_nesty` remains gated at
+  79 pixels/max delta 60; every outlier lies on its single transformed white
+  glyph-outline draw while the full-canvas background is clean, so the
+  existing reviewed `metal-webgpu-subpixel-edge-coverage` diagnostic applies.

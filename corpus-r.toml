@@ -4490,10 +4490,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_based_conditions-fr
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_based_conditions-frame-3-msaa"
@@ -4516,10 +4515,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_based_conditions-fr
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_based_conditions-frame-4-msaa"
@@ -4542,10 +4540,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_1-frame-0-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_1-frame-0-msaa"
@@ -4568,10 +4565,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_2-frame-0-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_2-frame-0-msaa"
@@ -4594,10 +4590,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_2-frame-1-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_2-frame-1-msaa"
@@ -4620,10 +4615,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_2-frame-2-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_2-frame-2-msaa"
@@ -4646,10 +4640,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_2-frame-3-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_2-frame-3-msaa"
@@ -4672,10 +4665,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_2-frame-4-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_2-frame-4-msaa"
@@ -4698,10 +4690,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_child_origin-f
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_child_origin-frame-0-msaa"
@@ -4724,10 +4715,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_follow_path-fr
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_follow_path-frame-0-msaa"

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=200, diverges=0, gated=1,268, total=1,468.
+- Rust wgpu: exact=210, diverges=0, gated=1,258, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -122,7 +122,11 @@ Run `make renderer-golden`.
   `riv-click_event-frame-{0..7}-clockwise-atomic`, plus
   `riv-collapsable_data_binding-frame-0-clockwise-atomic`,
   `riv-complex_ik_dependency-frame-0-clockwise-atomic`, and
-  `riv-component_based_conditions-frame-{0..2}-clockwise-atomic`.
+  `riv-component_based_conditions-frame-{0..4}-clockwise-atomic`, plus
+  `riv-component_list_1-frame-0-clockwise-atomic`,
+  `riv-component_list_2-frame-{0..4}-clockwise-atomic`,
+  `riv-component_list_child_origin-frame-0-clockwise-atomic`, and
+  `riv-component_list_follow_path-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -172,11 +176,16 @@ Run `make renderer-golden`.
    `collapse_data_binds`, `collapsing_elements`, `complex_ik_dependency`, and
    `component_based_conditions` frames 0-2. Capture missing pinned Metal
    references and apply the unchanged contract and diagnostic rules.
-7. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+7. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
    entries: `component_based_conditions` frames 3-4, `component_list_1`,
    `component_list_2` frames 0-4, `component_list_child_origin`, and
    `component_list_follow_path`. Capture missing pinned Metal references and
    apply the unchanged contract and diagnostic rules.
+8. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+   entries: `component_list_follow_path_distance`, `component_list_grouped`
+   frames 0-4, and `component_list_hit_order` frames 0-3. Capture missing
+   pinned Metal references and apply the unchanged contract and diagnostic
+   rules.
 
 ## R2 Completion Record
 
@@ -1846,3 +1855,9 @@ Run `make renderer-golden`.
   edge of five stripe rectangles and its other 43 draws are clean. Sol
   approved applying the existing `metal-webgpu-subpixel-edge-coverage` gate
   to both without tolerance changes.
+- 2026-07-13: Probed the sixth ten-entry clockwise-atomic `.riv` batch against
+  freshly pinned native Metal references. All ten pass the unchanged `2/32`
+  contract; eight have zero over-threshold pixels and the two remaining
+  `component_based_conditions` frames repeat the family's one-pixel/max-19
+  result. The renderer ratchet advances to
+  exact=210/diverges=0/gated=1,258.

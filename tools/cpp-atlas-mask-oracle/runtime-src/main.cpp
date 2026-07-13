@@ -42,6 +42,9 @@ constexpr uint32_t kExpectedPolySharkTessHeight = 5;
 constexpr uint32_t kDirectGridFrameSize = 1000;
 constexpr uint32_t kDirectGridContourCount = 100;
 constexpr uint32_t kDirectFlowerContourCount = 2;
+constexpr uint32_t kDirectBadSkinFrameWidth = 999;
+constexpr uint32_t kDirectBadSkinFrameHeight = 720;
+constexpr uint32_t kDirectBadSkinContourCount = 1;
 #include "generated_polyshark_path.inc"
 
 void fail(const char* message)
@@ -412,6 +415,25 @@ void writeDirectFlowerInputs(
                       kDirectFlowerContourCount);
 }
 
+void writeDirectBadSkinInputs(
+    const char* output,
+    const rive::gpu::RenderContextWebGPUImpl::AtlasMaskOracleFacts& facts,
+    uint32_t tessWidth,
+    uint32_t tessHeight,
+    const uint8_t* paddedRows,
+    uint32_t paddedRowBytes)
+{
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'B', 'I', '\0'};
+    writeDirectInputs(output,
+                      facts,
+                      tessWidth,
+                      tessHeight,
+                      paddedRows,
+                      paddedRowBytes,
+                      kMagic,
+                      kDirectBadSkinContourCount);
+}
+
 void addClockwiseNestedGrid(rive::RenderPath* path)
 {
     // Source citation: fixtures/renderer/streams/gm/
@@ -525,6 +547,39 @@ void addClockwiseNestedFlower(rive::RenderPath* path)
     path->close();
 }
 
+void addBadSkinHair(rive::RenderPath* path)
+{
+    // Exact fixture path: fixtures/renderer/streams/riv/bad_skin.rive-stream:330.
+    path->moveTo(-81.5608521f, -65.8947601f);
+    path->cubicTo(-81.5608521f, -65.8947601f, -105.346954f, -143.298767f,
+                  -31.1603794f, -150.845825f);
+    path->cubicTo(-10.2647314f, -146.784561f, -5.52482748f, -138.151382f,
+                  3.95540905f, -135.285233f);
+    path->cubicTo(13.435585f, -132.419128f, 45.7343864f, -139.608963f,
+                  67.0147171f, -116.697594f);
+    path->cubicTo(88.295105f, -93.7862701f, 101.926819f, -73.546402f,
+                  114.122017f, -9.98956394f);
+    path->cubicTo(127.370155f, 43.0014648f, 179.42717f, 98.3242035f,
+                  219.327179f, 105.924187f);
+    path->cubicTo(259.227203f, 113.524231f, 219.327179f, 296.024231f,
+                  219.327179f, 296.024231f);
+    path->cubicTo(219.327179f, 296.024231f, 14.4906435f, 346.763397f,
+                  -28.0207996f, 347.893097f);
+    path->cubicTo(-70.5313416f, 348.922821f, -254.072845f, 382.324249f,
+                  -283.272827f, 345.224243f);
+    path->cubicTo(-312.472809f, 308.024261f, -167.772812f, 149.824234f,
+                  -167.772812f, 149.824234f);
+    path->cubicTo(-167.772812f, 149.824234f, -173.372818f, 117.124199f,
+                  -171.672791f, 98.2241821f);
+    path->cubicTo(-169.270737f, 76.4746246f, -171.432159f, 54.370945f,
+                  -137.79129f, 30.8296814f);
+    path->cubicTo(-104.150368f, 7.28838682f, -136.469254f, -24.0374756f,
+                  -120.125793f, -40.795002f);
+    path->cubicTo(-98.6691818f, -62.6391525f, -81.5608521f, -65.8947601f,
+                  -81.5608521f, -65.8947601f);
+    path->close();
+}
+
 std::vector<uint8_t> readTexture(wgpu::Instance instance,
                                  wgpu::Device device,
                                  wgpu::Queue queue,
@@ -593,7 +648,10 @@ int main(int argc, char** argv)
     const bool directGridCase = argc > 4 && std::strcmp(argv[4], "direct-grid") == 0;
     const bool directFlowerCase =
         argc > 4 && std::strcmp(argv[4], "direct-flower") == 0;
-    const bool directTriangulatedCase = directGridCase || directFlowerCase;
+    const bool directBadSkinCase =
+        argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;
+    const bool directTriangulatedCase =
+        directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase;
     const bool fillCase = circleCase || cuspCase || directCase;
@@ -601,7 +659,7 @@ int main(int argc, char** argv)
     if (argc > 6 || (argc > 4 && !fillCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp|direct-polyshark|direct-grid|direct-flower] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -654,10 +712,14 @@ int main(int argc, char** argv)
     targetDesc.usage =
         wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     targetDesc.dimension = wgpu::TextureDimension::e2D;
-    const uint32_t frameWidth =
-        directTriangulatedCase ? kDirectGridFrameSize : kFrameWidth;
-    const uint32_t frameHeight =
-        directTriangulatedCase ? kDirectGridFrameSize : kFrameHeight;
+    const uint32_t frameWidth = directBadSkinCase
+                                    ? kDirectBadSkinFrameWidth
+                                    : (directTriangulatedCase ? kDirectGridFrameSize
+                                                               : kFrameWidth);
+    const uint32_t frameHeight = directBadSkinCase
+                                     ? kDirectBadSkinFrameHeight
+                                     : (directTriangulatedCase ? kDirectGridFrameSize
+                                                                : kFrameHeight);
     targetDesc.size = {frameWidth, frameHeight, 1};
     targetDesc.format = wgpu::TextureFormat::RGBA8Unorm;
     wgpu::Texture targetTexture = device.CreateTexture(&targetDesc);
@@ -676,7 +738,9 @@ int main(int argc, char** argv)
                          .clockwiseFillOverride = directCase});
     rive::RiveRenderer renderer(context.get());
     auto path = context->makeEmptyRenderPath();
-    if (fillCase)
+    // bad_skin preserves its stream-authored nonzero fill rule while the frame
+    // still enables clockwiseFillOverride for atomic preparation.
+    if (fillCase && !directBadSkinCase)
     {
         path->fillRule(rive::FillRule::clockwise);
     }
@@ -705,6 +769,16 @@ int main(int argc, char** argv)
     else if (directFlowerCase)
     {
         addClockwiseNestedFlower(path.get());
+    }
+    else if (directBadSkinCase)
+    {
+        renderer.transform(rive::Mat2D(1.00501573f,
+                                       0.116219193f,
+                                       -0.11621917f,
+                                       1.00501561f,
+                                       550.433167f,
+                                       361.510925f));
+        addBadSkinHair(path.get());
     }
     else if (cuspCase)
     {
@@ -809,21 +883,15 @@ int main(int argc, char** argv)
                                                    rive::gpu::DrawType::renderPassResolve);
         if (directTriangulatedCase)
         {
-            directScheduleValid = facts.drawBatches.size() >= 4 &&
+            directScheduleValid = facts.drawBatches.size() == 4 &&
                                   facts.drawBatches.front().drawType == static_cast<uint32_t>(
                                       rive::gpu::DrawType::renderPassInitialize) &&
+                                  facts.drawBatches[1].drawType == static_cast<uint32_t>(
+                                      rive::gpu::DrawType::outerCurvePatches) &&
+                                  facts.drawBatches[2].drawType == static_cast<uint32_t>(
+                                      rive::gpu::DrawType::interiorTriangulation) &&
                                   facts.drawBatches.back().drawType == static_cast<uint32_t>(
                                       rive::gpu::DrawType::renderPassResolve);
-            bool hasInterior = false;
-            bool hasOuterCubics = false;
-            for (const auto& batch : facts.drawBatches)
-            {
-                hasInterior |= batch.drawType == static_cast<uint32_t>(
-                    rive::gpu::DrawType::interiorTriangulation);
-                hasOuterCubics |= batch.drawType == static_cast<uint32_t>(
-                    rive::gpu::DrawType::outerCurvePatches);
-            }
-            directScheduleValid &= hasInterior && hasOuterCubics;
         }
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
@@ -840,6 +908,9 @@ int main(int argc, char** argv)
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)) ||
             (directFlowerCase &&
              (facts.contours.size() != kDirectFlowerContourCount ||
+              facts.triangles.empty() || facts.triangles.size() % 3 != 0)) ||
+            (directBadSkinCase &&
+             (facts.contours.size() != kDirectBadSkinContourCount ||
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
             fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
@@ -939,6 +1010,15 @@ int main(int argc, char** argv)
                                 tessHeight,
                                 tessellationBytes.data(),
                                 tessWidth * kTessBytesPerTexel);
+    }
+    else if (directBadSkinCase)
+    {
+        writeDirectBadSkinInputs(inputsOutput,
+                                 facts,
+                                 tessWidth,
+                                 tessHeight,
+                                 tessellationBytes.data(),
+                                 tessWidth * kTessBytesPerTexel);
     }
     else
     {

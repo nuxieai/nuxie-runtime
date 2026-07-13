@@ -232,14 +232,14 @@ Run `make renderer-golden`.
    update, while unchanged clips reuse their stencil state and unclipped draws
    ignore retained stencil. Nested non-zero atlas clips are now exact too:
    `msaaMidpointFanPathsStencil` accumulates the inner winding and an
-   intersecting `clipReset` rewrites the parent clip bit. Continue R2 with the
-   even-odd and clockwise clip transitions, then destination-copy shader
-   blending. The current GM candidates are negative boundary probes rather
-   than positive alternate-fill coverage: `parallelclips` has no feather and
-   takes the unsupported non-atlas path, while `largeclippedpath_*_nested` and
-   `mutating_fill_rule` stop at the non-atlas and alternate-fill gates.
-   Continue afterward with remaining `render_context.cpp` behavior and
-   integration of the translated intersection board.
+   intersecting `clipReset` rewrites the parent clip bit. Even-odd and
+   clockwise transitions are exact too: outer even-odd uses stencil/cover,
+   outer clockwise preserves the clip bit during cleanup, nested even-odd
+   writes parity, and nested clockwise selects the `0xc0` reset mask. Filled
+   C++ Dawn fixtures behaviorally distinguish every special mode with holes
+   and opposite-winding contours. Continue R2 with destination-copy shader
+   blending, then remaining `render_context.cpp` behavior and integration of
+   the translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -253,6 +253,23 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Closed even-odd and clockwise MSAA path clips for feather-atlas
+  draws. Rust now selects C++'s exact outer schedules: non-zero and clockwise
+  run borrowed/update/cleanup with clockwise cleanup limited to write mask
+  `0x7f`, while even-odd runs parity stencil then cover/reset. Nested clips use
+  write mask `0x01` for even-odd or `0x7f` otherwise; the parent intersection
+  reset reads `0xc0` for clockwise and `0xff` for non-zero/even-odd. Clip
+  tessellation now mirrors C++ contour orientation under negative transforms.
+  Two C++ Dawn fixtures pin the exact five/six-batch schedules and all 4,096
+  RGBA pixels. Sol found that the first stroked fixtures did not behaviorally
+  distinguish the special pipelines; the accepted filled fixtures now expose
+  nested even-odd and outer even-odd holes plus outer/nested opposite-winding
+  rejection. Sol's closure review reports no remaining findings. Terra's
+  bounded README/harness update passed all 16 format tests and was accepted
+  after local diff review. The renderer ratchet remains
+  exact=118/diverges=0/gated=1,349; normal V2 remains 263 files/584 segments,
+  scripted V2 is 27 files/35 segments, and `cargo test --workspace` passes.
+  Destination-copy shader blending is next.
 - 2026-07-12: Closed nested non-zero MSAA path clips for feather-atlas draws.
   The C++ Dawn oracle pins the exact `8,9,10,11,14,4` schedule: outer
   borrowed/update/cleanup, double-sided nested winding stencil, parent-bounds

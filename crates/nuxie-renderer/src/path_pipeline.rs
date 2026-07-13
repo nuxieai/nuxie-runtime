@@ -8,7 +8,11 @@ pub(crate) struct PathPipeline {
     pub clip_borrowed_pipeline: wgpu::RenderPipeline,
     pub clip_update_pipeline: wgpu::RenderPipeline,
     pub clip_cleanup_pipeline: wgpu::RenderPipeline,
+    pub clockwise_clip_cleanup_pipeline: wgpu::RenderPipeline,
+    pub even_odd_clip_stencil_pipeline: wgpu::RenderPipeline,
+    pub even_odd_clip_cover_pipeline: wgpu::RenderPipeline,
     pub nested_clip_pipeline: wgpu::RenderPipeline,
+    pub nested_even_odd_clip_pipeline: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
@@ -182,6 +186,42 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             wgpu::ColorWrites::empty(),
         );
+        let clockwise_clip_cleanup_pipeline = create_pipeline(
+            "nuxie-msaa-path-clockwise-clip-cleanup-pipeline",
+            Some(wgpu::Face::Front),
+            stencil_state(clip_front, clip_back, 0x7f, 0x7f),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
+        let even_odd_front = stencil_face(
+            wgpu::CompareFunction::Always,
+            keep,
+            wgpu::StencilOperation::DecrementWrap,
+        );
+        let even_odd_back = stencil_face(
+            wgpu::CompareFunction::Always,
+            keep,
+            wgpu::StencilOperation::IncrementWrap,
+        );
+        let even_odd_clip_stencil_pipeline = create_pipeline(
+            "nuxie-msaa-path-even-odd-clip-stencil-pipeline",
+            None,
+            stencil_state(even_odd_front, even_odd_back, 0xff, 0x01),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
+        let even_odd_cover_face = stencil_face(
+            wgpu::CompareFunction::NotEqual,
+            keep,
+            wgpu::StencilOperation::Replace,
+        );
+        let even_odd_clip_cover_pipeline = create_pipeline(
+            "nuxie-msaa-path-even-odd-clip-cover-pipeline",
+            None,
+            stencil_state(even_odd_cover_face, even_odd_cover_face, 0x7f, 0xff),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
         let nested_front = stencil_face(
             wgpu::CompareFunction::LessEqual,
             keep,
@@ -199,12 +239,23 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             wgpu::ColorWrites::empty(),
         );
+        let nested_even_odd_clip_pipeline = create_pipeline(
+            "nuxie-msaa-path-nested-even-odd-clip-pipeline",
+            None,
+            stencil_state(nested_front, nested_back, 0xff, 0x01),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
         Self {
             pipeline,
             clip_borrowed_pipeline,
             clip_update_pipeline,
             clip_cleanup_pipeline,
+            clockwise_clip_cleanup_pipeline,
+            even_odd_clip_stencil_pipeline,
+            even_odd_clip_cover_pipeline,
             nested_clip_pipeline,
+            nested_even_odd_clip_pipeline,
             flush_layout,
             image_layout,
             sampler_layout,

@@ -8,11 +8,11 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=26, unsupported-feature=6, not-yet=0
+  exact-segments=584, diverges=27, unsupported-feature=5, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=26 / exact-segments=34 / diverges=0 /
-  unsupported-feature=1 across the 27 M8 scripting entries
+- Scripted compare: exact=27 / exact-segments=35 / diverges=0 /
+  unsupported-feature=0 across the 27 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence

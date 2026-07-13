@@ -810,6 +810,8 @@ enum DrawRole {
 enum MsaaClipResetAction {
     ClearPrevious,
     IntersectPreviousNonZero,
+    IntersectPreviousEvenOdd,
+    IntersectPreviousClockwise,
 }
 
 pub struct WgpuFrame {
@@ -903,14 +905,6 @@ impl Renderer for WgpuFrame {
         let mut current_msaa_path_clips = Vec::new();
         if self.mode == RenderMode::Msaa && clip_id != 0 {
             let clips = self.clips[..self.state.clip_stack_height].to_vec();
-            if clips
-                .iter()
-                .any(|clip| clip.path.fill_rule != FillRule::NonZero)
-            {
-                self.unsupported
-                    .get_or_insert("even-odd or clockwise path clips on msaa feather atlas draws");
-                return;
-            }
             if !msaa_feather_atlas {
                 self.unsupported
                     .get_or_insert("path clips on non-atlas msaa draws");
@@ -923,10 +917,13 @@ impl Renderer for WgpuFrame {
                     scheduled_updates.push(update);
                     let clip_index = msaa_clip_update_start + offset;
                     if clip_index != 0 {
-                        scheduled_updates.push(self.msaa_clip_reset_draw(
-                            &clips[clip_index - 1],
-                            MsaaClipResetAction::IntersectPreviousNonZero,
-                        ));
+                        let action = match clips[clip_index].path.fill_rule {
+                            FillRule::NonZero => MsaaClipResetAction::IntersectPreviousNonZero,
+                            FillRule::EvenOdd => MsaaClipResetAction::IntersectPreviousEvenOdd,
+                            FillRule::Clockwise => MsaaClipResetAction::IntersectPreviousClockwise,
+                        };
+                        scheduled_updates
+                            .push(self.msaa_clip_reset_draw(&clips[clip_index - 1], action));
                     }
                 }
                 clip_updates = scheduled_updates;
@@ -2186,8 +2183,8 @@ impl WgpuFrame {
             |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
                 enum PreparedDraw {
                     Analytic(path_pipeline::PreparedPathDraw),
-                    OutermostClipUpdate(path_pipeline::PreparedPathDraw),
-                    NestedClipUpdate(path_pipeline::PreparedPathDraw),
+                    OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
+                    NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     ClipReset(
                         msaa_stencil_pipeline::PreparedStencilDraw,
                         MsaaClipResetAction,
@@ -2210,8 +2207,19 @@ impl WgpuFrame {
                         continue;
                     }
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
+                        let oriented_path = draw::msaa_fill_requires_reverse(
+                            &draw.path.raw_path,
+                            draw.state.transform,
+                            draw.path.fill_rule,
+                        )
+                        .then(|| {
+                            let mut path = RawPath::new();
+                            path.add_path_backwards(&draw.path.raw_path, Mat2D::IDENTITY);
+                            path
+                        });
+                        let raw_path = oriented_path.as_ref().unwrap_or(&draw.path.raw_path);
                         if let Some(mut tessellation) =
-                            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                            draw::build_fill_tessellation(raw_path, draw.state.transform)
                         {
                             tessellation.path.z_index = 1;
                             let tessellation_height =
@@ -2245,9 +2253,9 @@ impl WgpuFrame {
                                 tessellation.instance_count,
                             );
                             prepared_draws.push(if parent_id == 0 {
-                                PreparedDraw::OutermostClipUpdate(prepared)
+                                PreparedDraw::OutermostClipUpdate(prepared, draw.path.fill_rule)
                             } else {
-                                PreparedDraw::NestedClipUpdate(prepared)
+                                PreparedDraw::NestedClipUpdate(prepared, draw.path.fill_rule)
                             });
                         }
                         continue;
@@ -2583,7 +2591,7 @@ impl WgpuFrame {
                                     draw.base_instance..draw.base_instance + draw.instance_count,
                                 );
                             }
-                            PreparedDraw::OutermostClipUpdate(draw) => {
+                            PreparedDraw::OutermostClipUpdate(draw, fill_rule) => {
                                 pass.set_stencil_reference(0x80);
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
@@ -2598,23 +2606,59 @@ impl WgpuFrame {
                                 );
                                 let indices = gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT as u32
                                     ..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32;
-                                for pipeline in [
-                                    &self.context.path_pipeline.clip_borrowed_pipeline,
-                                    &self.context.path_pipeline.clip_update_pipeline,
-                                    &self.context.path_pipeline.clip_cleanup_pipeline,
-                                ] {
-                                    pass.set_pipeline(pipeline);
-                                    pass.draw_indexed(
-                                        indices.clone(),
-                                        0,
-                                        draw.base_instance
-                                            ..draw.base_instance + draw.instance_count,
-                                    );
+                                match fill_rule {
+                                    FillRule::EvenOdd => {
+                                        for pipeline in [
+                                            &self
+                                                .context
+                                                .path_pipeline
+                                                .even_odd_clip_stencil_pipeline,
+                                            &self
+                                                .context
+                                                .path_pipeline
+                                                .even_odd_clip_cover_pipeline,
+                                        ] {
+                                            pass.set_pipeline(pipeline);
+                                            pass.draw_indexed(
+                                                indices.clone(),
+                                                0,
+                                                draw.base_instance
+                                                    ..draw.base_instance + draw.instance_count,
+                                            );
+                                        }
+                                    }
+                                    FillRule::NonZero | FillRule::Clockwise => {
+                                        let cleanup = if *fill_rule == FillRule::Clockwise {
+                                            &self
+                                                .context
+                                                .path_pipeline
+                                                .clockwise_clip_cleanup_pipeline
+                                        } else {
+                                            &self.context.path_pipeline.clip_cleanup_pipeline
+                                        };
+                                        for pipeline in [
+                                            &self.context.path_pipeline.clip_borrowed_pipeline,
+                                            &self.context.path_pipeline.clip_update_pipeline,
+                                            cleanup,
+                                        ] {
+                                            pass.set_pipeline(pipeline);
+                                            pass.draw_indexed(
+                                                indices.clone(),
+                                                0,
+                                                draw.base_instance
+                                                    ..draw.base_instance + draw.instance_count,
+                                            );
+                                        }
+                                    }
                                 }
                             }
-                            PreparedDraw::NestedClipUpdate(draw) => {
+                            PreparedDraw::NestedClipUpdate(draw, fill_rule) => {
                                 pass.set_stencil_reference(0x80);
-                                pass.set_pipeline(&self.context.path_pipeline.nested_clip_pipeline);
+                                pass.set_pipeline(if *fill_rule == FillRule::EvenOdd {
+                                    &self.context.path_pipeline.nested_even_odd_clip_pipeline
+                                } else {
+                                    &self.context.path_pipeline.nested_clip_pipeline
+                                });
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
                                 pass.set_bind_group(3, &draw.sampler_group, &[]);
@@ -2644,6 +2688,20 @@ impl WgpuFrame {
                                             .context
                                             .msaa_stencil_pipeline
                                             .nested_clip_reset_pipeline,
+                                    ),
+                                    MsaaClipResetAction::IntersectPreviousEvenOdd => (
+                                        0x80,
+                                        &self
+                                            .context
+                                            .msaa_stencil_pipeline
+                                            .nested_clip_reset_pipeline,
+                                    ),
+                                    MsaaClipResetAction::IntersectPreviousClockwise => (
+                                        0x80,
+                                        &self
+                                            .context
+                                            .msaa_stencil_pipeline
+                                            .nested_clockwise_clip_reset_pipeline,
                                     ),
                                 };
                                 pass.set_stencil_reference(reference);
@@ -6344,7 +6402,9 @@ mod tests {
         fixed_feather_atlas_blit_with_clips(None, true).unwrap()
     }
 
-    fn fixed_feather_atlas_nested_path_clipped_blit(
+    fn fixed_feather_atlas_blit_with_path_clips(
+        clips: &[WgpuPath],
+        fill_content: bool,
     ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         let factory = WgpuFactory::new_with_mode(
             ATLAS_ORACLE_FRAME_SIZE,
@@ -6360,31 +6420,29 @@ mod tests {
         raw_path.close();
         let path = WgpuPath {
             raw_path,
-            fill_rule: FillRule::NonZero,
+            fill_rule: if fill_content {
+                FillRule::Clockwise
+            } else {
+                FillRule::NonZero
+            },
         };
         let paint = WgpuPaint {
             color: 0xffff_ffff,
-            style: RenderPaintStyle::Stroke,
+            style: if fill_content {
+                RenderPaintStyle::Fill
+            } else {
+                RenderPaintStyle::Stroke
+            },
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
             join: ATLAS_ORACLE_STROKE_JOIN,
             cap: ATLAS_ORACLE_STROKE_CAP,
             feather: ATLAS_ORACLE_FEATHER,
             ..WgpuPaint::default()
         };
-        let triangle = |points: [[f32; 2]; 3]| {
-            let mut raw_path = RawPath::new();
-            raw_path.move_to(points[0][0], points[0][1]);
-            raw_path.line_to(points[1][0], points[1][1]);
-            raw_path.line_to(points[2][0], points[2][1]);
-            raw_path.close();
-            WgpuPath {
-                raw_path,
-                fill_rule: FillRule::NonZero,
-            }
-        };
         let mut frame = factory.begin_frame(0);
-        frame.clip_path(&triangle([[32.0, 8.0], [56.0, 56.0], [8.0, 56.0]]));
-        frame.clip_path(&triangle([[32.0, 20.0], [44.0, 48.0], [20.0, 48.0]]));
+        for clip in clips {
+            frame.clip_path(clip);
+        }
         frame.draw_path(&path, &paint);
         let pixels = frame.finish()?;
         Ok(atlas_blit_oracle::AtlasBlit::new(
@@ -6393,6 +6451,62 @@ mod tests {
             pixels,
         )
         .unwrap())
+    }
+
+    fn triangle_path(points: [[f32; 2]; 3], fill_rule: FillRule) -> WgpuPath {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(points[0][0], points[0][1]);
+        raw_path.line_to(points[1][0], points[1][1]);
+        raw_path.line_to(points[2][0], points[2][1]);
+        raw_path.close();
+        WgpuPath {
+            raw_path,
+            fill_rule,
+        }
+    }
+
+    fn fixed_feather_atlas_nested_path_clipped_blit(
+    ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        fixed_feather_atlas_blit_with_path_clips(
+            &[
+                triangle_path([[32.0, 8.0], [56.0, 56.0], [8.0, 56.0]], FillRule::NonZero),
+                triangle_path(
+                    [[32.0, 20.0], [44.0, 48.0], [20.0, 48.0]],
+                    FillRule::NonZero,
+                ),
+            ],
+            false,
+        )
+    }
+
+    fn fixed_feather_atlas_nested_even_odd_path_clipped_blit(
+    ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        let mut outer = rect_path([8.0, 8.0, 32.0, 56.0], FillRule::Clockwise);
+        outer.raw_path.add_path_backwards(
+            &rect_path([32.0, 8.0, 56.0, 56.0], FillRule::Clockwise).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let mut inner = rect_path([12.0, 12.0, 52.0, 52.0], FillRule::EvenOdd);
+        inner.raw_path.add_path(
+            &rect_path([20.0, 20.0, 44.0, 44.0], FillRule::EvenOdd).raw_path,
+            Mat2D::IDENTITY,
+        );
+        fixed_feather_atlas_blit_with_path_clips(&[outer, inner], true)
+    }
+
+    fn fixed_feather_atlas_nested_clockwise_path_clipped_blit(
+    ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        let mut outer = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::EvenOdd);
+        outer.raw_path.add_path(
+            &rect_path([24.0, 24.0, 40.0, 40.0], FillRule::EvenOdd).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let mut inner = rect_path([8.0, 8.0, 32.0, 56.0], FillRule::Clockwise);
+        inner.raw_path.add_path_backwards(
+            &rect_path([32.0, 8.0, 56.0, 56.0], FillRule::Clockwise).raw_path,
+            Mat2D::IDENTITY,
+        );
+        fixed_feather_atlas_blit_with_path_clips(&[outer, inner], true)
     }
 
     fn fixed_feather_atlas_changing_path_clipped_blit_with_unclipped_middle(
@@ -6685,35 +6799,25 @@ mod tests {
     }
 
     #[test]
-    fn msaa_path_clip_fill_rules_remain_an_explicit_boundary() {
-        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let mut raw_path = RawPath::new();
-        raw_path.move_to(32.0, 16.0);
-        raw_path.line_to(48.0, 48.0);
-        raw_path.line_to(16.0, 48.0);
-        raw_path.close();
-        let clip = WgpuPath {
-            raw_path: raw_path.clone(),
-            fill_rule: FillRule::EvenOdd,
-        };
-        let content = WgpuPath {
-            raw_path,
-            fill_rule: FillRule::NonZero,
-        };
-        let paint = WgpuPaint {
-            feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
-        };
-        let mut frame = factory.begin_frame(0);
-        frame.clip_path(&clip);
-        frame.draw_path(&content, &paint);
+    fn msaa_feather_atlas_blit_intersects_clockwise_and_nested_even_odd_path_clips() {
+        let blit = fixed_feather_atlas_nested_even_odd_path_clipped_blit().unwrap();
+        let pixels = blit.pixels();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
-        assert!(matches!(
-            frame.finish(),
-            Err(RendererError::Unsupported(
-                "even-odd or clockwise path clips on msaa feather atlas draws"
-            ))
-        ));
+        assert_ne!(pixel(18, 18), [0; 4]);
+        assert_eq!(pixel(24, 32), [0; 4]);
+        assert_eq!(pixel(46, 18), [0; 4]);
+    }
+
+    #[test]
+    fn msaa_feather_atlas_blit_intersects_even_odd_and_nested_clockwise_path_clips() {
+        let blit = fixed_feather_atlas_nested_clockwise_path_clipped_blit().unwrap();
+        let pixels = blit.pixels();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_ne!(pixel(20, 32), [0; 4]);
+        assert_eq!(pixel(28, 32), [0; 4]);
+        assert_eq!(pixel(44, 32), [0; 4]);
     }
 
     #[test]
@@ -7450,6 +7554,80 @@ mod tests {
         atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
             panic!(
                 "C++ nested-path-clipped atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_nested_even_odd_path_clipped_blit_matches_fixed_rust_output_when_configured(
+    ) {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT").expect(
+            "RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT is required for the ignored C++ nested even-odd path-clipped atlas-blit test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ nested even-odd path-clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ nested even-odd path-clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = fixed_feather_atlas_nested_even_odd_path_clipped_blit().unwrap();
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ nested even-odd path-clipped atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_nested_clockwise_path_clipped_blit_matches_fixed_rust_output_when_configured(
+    ) {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT").expect(
+            "RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT is required for the ignored C++ nested clockwise path-clipped atlas-blit test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ nested clockwise path-clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ nested clockwise path-clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = fixed_feather_atlas_nested_clockwise_path_clipped_blit().unwrap();
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ nested clockwise path-clipped atlas-blit oracle mismatch at {}: {error}",
                 path.display()
             )
         });

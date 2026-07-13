@@ -6,6 +6,7 @@ use wgpu::util::DeviceExt;
 pub(crate) struct MsaaStencilPipeline {
     pub clip_reset_pipeline: wgpu::RenderPipeline,
     pub nested_clip_reset_pipeline: wgpu::RenderPipeline,
+    pub nested_clockwise_clip_reset_pipeline: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
 }
 
@@ -102,9 +103,9 @@ impl MsaaStencilPipeline {
             depth_fail_op: wgpu::StencilOperation::Keep,
             pass_op: wgpu::StencilOperation::Replace,
         };
-        let nested_clip_reset_pipeline =
+        let create_nested_clip_reset_pipeline = |label, read_mask| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("nuxie-msaa-nested-clip-reset-pipeline"),
+                label: Some(label),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
                     module: &vertex,
@@ -125,7 +126,7 @@ impl MsaaStencilPipeline {
                     stencil: wgpu::StencilState {
                         front: nested_face,
                         back: nested_face,
-                        read_mask: 0xff,
+                        read_mask,
                         write_mask: 0xff,
                     },
                     bias: wgpu::DepthBiasState::default(),
@@ -147,10 +148,18 @@ impl MsaaStencilPipeline {
                 }),
                 multiview_mask: None,
                 cache: None,
-            });
+            })
+        };
+        let nested_clip_reset_pipeline =
+            create_nested_clip_reset_pipeline("nuxie-msaa-nested-clip-reset-pipeline", 0xff);
+        let nested_clockwise_clip_reset_pipeline = create_nested_clip_reset_pipeline(
+            "nuxie-msaa-nested-clockwise-clip-reset-pipeline",
+            0xc0,
+        );
         Self {
             clip_reset_pipeline,
             nested_clip_reset_pipeline,
+            nested_clockwise_clip_reset_pipeline,
             flush_layout,
         }
     }

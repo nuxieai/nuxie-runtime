@@ -1339,6 +1339,19 @@ pub(crate) fn clockwise_atomic_negate_coverage(
     )
 }
 
+pub(crate) fn msaa_fill_requires_reverse(
+    path: &RawPath,
+    transform: Mat2D,
+    fill_rule: FillRule,
+) -> bool {
+    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    match fill_rule {
+        FillRule::EvenOdd => false,
+        FillRule::Clockwise => determinant < 0.0,
+        FillRule::NonZero => path_coarse_area(path) * determinant < 0.0,
+    }
+}
+
 fn clockwise_atomic_negate_coverage_from_area(
     coarse_area: f32,
     determinant: f32,
@@ -1887,6 +1900,50 @@ mod tests {
             Mat2D::IDENTITY,
             FillRule::EvenOdd,
             true,
+        ));
+    }
+
+    #[test]
+    fn msaa_fill_orientation_matches_cpp_fill_rule_contract() {
+        let mut clockwise = RawPath::new();
+        clockwise.move_to(0.0, 0.0);
+        clockwise.line_to(10.0, 0.0);
+        clockwise.line_to(10.0, 10.0);
+        clockwise.line_to(0.0, 10.0);
+        clockwise.close();
+        let mirrored = Mat2D([-1.0, 0.0, 0.0, 1.0, 10.0, 0.0]);
+        let mut counterclockwise = RawPath::new();
+        counterclockwise.add_path_backwards(&clockwise, Mat2D::IDENTITY);
+
+        assert!(!msaa_fill_requires_reverse(
+            &clockwise,
+            Mat2D::IDENTITY,
+            FillRule::NonZero,
+        ));
+        assert!(msaa_fill_requires_reverse(
+            &counterclockwise,
+            Mat2D::IDENTITY,
+            FillRule::NonZero,
+        ));
+        assert!(msaa_fill_requires_reverse(
+            &clockwise,
+            mirrored,
+            FillRule::NonZero,
+        ));
+        assert!(!msaa_fill_requires_reverse(
+            &clockwise,
+            Mat2D::IDENTITY,
+            FillRule::Clockwise,
+        ));
+        assert!(msaa_fill_requires_reverse(
+            &clockwise,
+            mirrored,
+            FillRule::Clockwise,
+        ));
+        assert!(!msaa_fill_requires_reverse(
+            &counterclockwise,
+            mirrored,
+            FillRule::EvenOdd,
         ));
     }
 

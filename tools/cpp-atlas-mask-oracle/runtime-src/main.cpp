@@ -657,18 +657,25 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "changing-path-clipped") == 0;
     const bool nestedPathClippedCase =
         argc > 4 && std::strcmp(argv[4], "nested-path-clipped") == 0;
+    const bool nestedEvenOddPathClippedCase =
+        argc > 4 && std::strcmp(argv[4], "nested-evenodd-path-clipped") == 0;
+    const bool nestedClockwisePathClippedCase =
+        argc > 4 && std::strcmp(argv[4], "nested-clockwise-path-clipped") == 0;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase;
-    const bool fillCase = circleCase || cuspCase || directCase;
+    const bool fillCase = circleCase || cuspCase || directCase ||
+                          nestedEvenOddPathClippedCase ||
+                          nestedClockwisePathClippedCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 ||
         (argc > 4 && !fillCase && !clippedCase && !pathClippedCase &&
-         !changingPathClippedCase && !nestedPathClippedCase) ||
+         !changingPathClippedCase && !nestedPathClippedCase &&
+         !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -919,6 +926,66 @@ int main(int argc, char** argv)
         innerClip->close();
         renderer.clipPath(innerClip.get());
     }
+    else if (nestedEvenOddPathClippedCase)
+    {
+        auto outerClip = context->makeEmptyRenderPath();
+        outerClip->fillRule(rive::FillRule::clockwise);
+        outerClip->moveTo(8, 8);
+        outerClip->lineTo(32, 8);
+        outerClip->lineTo(32, 56);
+        outerClip->lineTo(8, 56);
+        outerClip->close();
+        outerClip->moveTo(32, 8);
+        outerClip->lineTo(32, 56);
+        outerClip->lineTo(56, 56);
+        outerClip->lineTo(56, 8);
+        outerClip->close();
+        renderer.clipPath(outerClip.get());
+
+        auto innerClip = context->makeEmptyRenderPath();
+        innerClip->fillRule(rive::FillRule::evenOdd);
+        innerClip->moveTo(12, 12);
+        innerClip->lineTo(52, 12);
+        innerClip->lineTo(52, 52);
+        innerClip->lineTo(12, 52);
+        innerClip->close();
+        innerClip->moveTo(20, 20);
+        innerClip->lineTo(44, 20);
+        innerClip->lineTo(44, 44);
+        innerClip->lineTo(20, 44);
+        innerClip->close();
+        renderer.clipPath(innerClip.get());
+    }
+    else if (nestedClockwisePathClippedCase)
+    {
+        auto outerClip = context->makeEmptyRenderPath();
+        outerClip->fillRule(rive::FillRule::evenOdd);
+        outerClip->moveTo(8, 8);
+        outerClip->lineTo(56, 8);
+        outerClip->lineTo(56, 56);
+        outerClip->lineTo(8, 56);
+        outerClip->close();
+        outerClip->moveTo(24, 24);
+        outerClip->lineTo(40, 24);
+        outerClip->lineTo(40, 40);
+        outerClip->lineTo(24, 40);
+        outerClip->close();
+        renderer.clipPath(outerClip.get());
+
+        auto innerClip = context->makeEmptyRenderPath();
+        innerClip->fillRule(rive::FillRule::clockwise);
+        innerClip->moveTo(8, 8);
+        innerClip->lineTo(32, 8);
+        innerClip->lineTo(32, 56);
+        innerClip->lineTo(8, 56);
+        innerClip->close();
+        innerClip->moveTo(32, 8);
+        innerClip->lineTo(32, 56);
+        innerClip->lineTo(56, 56);
+        innerClip->lineTo(56, 8);
+        innerClip->close();
+        renderer.clipPath(innerClip.get());
+    }
     renderer.drawPath(path.get(), paint.get());
 
     wgpu::CommandEncoder renderEncoder = device.CreateCommandEncoder();
@@ -985,6 +1052,84 @@ int main(int argc, char** argv)
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
             fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
+        }
+    }
+    else if (nestedEvenOddPathClippedCase || nestedClockwisePathClippedCase)
+    {
+        const uint32_t clipUpdate =
+            static_cast<uint32_t>(rive::gpu::DrawContents::clipUpdate);
+        const uint32_t activeClip =
+            static_cast<uint32_t>(rive::gpu::DrawContents::activeClip);
+        const uint32_t evenOddFill =
+            static_cast<uint32_t>(rive::gpu::DrawContents::evenOddFill);
+        const uint32_t clockwiseFill =
+            static_cast<uint32_t>(rive::gpu::DrawContents::clockwiseFill);
+        const uint32_t dither =
+            static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_DITHER);
+        const uint32_t fixedColor = static_cast<uint32_t>(
+            rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput);
+        const std::vector<uint32_t> expectedTypes =
+            nestedEvenOddPathClippedCase
+                ? std::vector<uint32_t>{
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanStencilReset),
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                      static_cast<uint32_t>(rive::gpu::DrawType::clipReset),
+                      static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit),
+                  }
+                : std::vector<uint32_t>{
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsCover),
+                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                      static_cast<uint32_t>(rive::gpu::DrawType::clipReset),
+                      static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit),
+                  };
+        const std::vector<uint32_t> expectedContents =
+            nestedEvenOddPathClippedCase
+                ? std::vector<uint32_t>{
+                      clipUpdate | clockwiseFill,
+                      clipUpdate | clockwiseFill,
+                      clipUpdate | clockwiseFill,
+                      clipUpdate | activeClip | evenOddFill,
+                      clipUpdate | activeClip | evenOddFill,
+                      activeClip,
+                  }
+                : std::vector<uint32_t>{
+                      clipUpdate | evenOddFill,
+                      clipUpdate | evenOddFill,
+                      clipUpdate | activeClip | clockwiseFill,
+                      clipUpdate | activeClip | clockwiseFill,
+                      activeClip,
+                  };
+        const std::vector<uint32_t> expectedBases =
+            nestedEvenOddPathClippedCase
+                ? std::vector<uint32_t>{1, 1, 1, 3, 0, 6}
+                : std::vector<uint32_t>{1, 1, 3, 0, 6};
+        const std::vector<uint32_t> expectedCounts =
+            nestedEvenOddPathClippedCase
+                ? std::vector<uint32_t>{2, 2, 2, 2, 6, 6}
+                : std::vector<uint32_t>{2, 2, 2, 6, 6};
+        bool scheduleMatches =
+            facts.interlockMode ==
+                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) &&
+            facts.fixedFunctionColorOutput &&
+            facts.drawBatches.size() == expectedTypes.size();
+        for (size_t i = 0; scheduleMatches && i != expectedTypes.size(); ++i)
+        {
+            const auto& batch = facts.drawBatches[i];
+            scheduleMatches = batch.drawType == expectedTypes[i] &&
+                              batch.drawContents == expectedContents[i] &&
+                              batch.baseElement == expectedBases[i] &&
+                              batch.elementCount == expectedCounts[i] &&
+                              batch.shaderFeatures == dither &&
+                              batch.shaderMiscFlags == fixedColor;
+        }
+        if (!scheduleMatches)
+        {
+            fail(nestedEvenOddPathClippedCase
+                     ? "alternate clip oracle must execute clockwise outer and nested even-odd MSAA stencil transitions"
+                     : "alternate clip oracle must execute even-odd outer and nested clockwise MSAA stencil transitions");
         }
     }
     else if (nestedPathClippedCase)
@@ -1278,6 +1423,42 @@ int main(int argc, char** argv)
                 insideInnerClip[channel] != 61)
             {
                 fail("nested path-clipped oracle pixels must prove intersection with the inner non-zero clip");
+            }
+        }
+    }
+    else if (nestedEvenOddPathClippedCase)
+    {
+        const auto pixel = [&targetBytes](uint32_t x, uint32_t y) {
+            return targetBytes.data() + (y * kFrameWidth + x) * 4;
+        };
+        const uint8_t* insideBothClips = pixel(18, 18);
+        const uint8_t* insideEvenOddHole = pixel(24, 32);
+        const uint8_t* counterclockwiseParentContour = pixel(46, 18);
+        for (uint32_t channel = 0; channel != 4; ++channel)
+        {
+            if (insideBothClips[channel] == 0 ||
+                insideEvenOddHole[channel] != 0 ||
+                counterclockwiseParentContour[channel] != 0)
+            {
+                fail("nested even-odd path-clipped oracle pixels must prove the even-odd hole and clockwise parent winding");
+            }
+        }
+    }
+    else if (nestedClockwisePathClippedCase)
+    {
+        const auto pixel = [&targetBytes](uint32_t x, uint32_t y) {
+            return targetBytes.data() + (y * kFrameWidth + x) * 4;
+        };
+        const uint8_t* clockwiseContour = pixel(20, 32);
+        const uint8_t* insideEvenOddHole = pixel(28, 32);
+        const uint8_t* counterclockwiseContour = pixel(44, 32);
+        for (uint32_t channel = 0; channel != 4; ++channel)
+        {
+            if (clockwiseContour[channel] == 0 ||
+                insideEvenOddHole[channel] != 0 ||
+                counterclockwiseContour[channel] != 0)
+            {
+                fail("nested clockwise path-clipped oracle pixels must prove the even-odd parent hole and reject the oppositely wound contour");
             }
         }
     }

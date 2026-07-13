@@ -25,6 +25,10 @@ atomic_colorburn_pair_color_output="${RIVE_ATOMIC_COLORBURN_PAIR_COLOR_OUTPUT:-$
 atomic_colorburn_pair_coverage_output="${RIVE_ATOMIC_COLORBURN_PAIR_COVERAGE_OUTPUT:-$script_dir/out/atomic-colorburn-pair.coverage}"
 atomic_interleavedfeather_full_output="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_OUTPUT:-$script_dir/out/atomic-interleavedfeather-full.rgba}"
 atomic_interleavedfeather_full_provenance="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE:-$script_dir/out/atomic-interleavedfeather-full.provenance}"
+atomic_dstreadshuffle_full_output="${RIVE_ATOMIC_DSTREADSHUFFLE_FULL_OUTPUT:-$script_dir/out/atomic-dstreadshuffle-full.rgba}"
+atomic_dstreadshuffle_full_provenance="${RIVE_ATOMIC_DSTREADSHUFFLE_FULL_PROVENANCE:-$script_dir/out/atomic-dstreadshuffle-full.provenance}"
+atomic_dstreadshuffle_srcover_output="${RIVE_ATOMIC_DSTREADSHUFFLE_SRCOVER_OUTPUT:-$script_dir/out/atomic-dstreadshuffle-srcover.rgba}"
+atomic_dstreadshuffle_srcover_provenance="${RIVE_ATOMIC_DSTREADSHUFFLE_SRCOVER_PROVENANCE:-$script_dir/out/atomic-dstreadshuffle-srcover.provenance}"
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
@@ -53,6 +57,7 @@ colorburn_pair_generator="$script_dir/generate_interleaved_colorburn_pair_path.p
 colorburn_pair_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 path_stream_generator="$script_dir/generate_path_stream_replay.py"
 interleavedfeather_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
+dstreadshuffle_stream="$script_dir/../../fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -63,6 +68,7 @@ gn_bin="${RIVE_ATLAS_MASK_GN:-$default_gn}"
 naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"
 expected_naga_version="30.0.0"
 expected_interleavedfeather_sha256="8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
+expected_dstreadshuffle_sha256="0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"
 expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 
@@ -346,7 +352,11 @@ mkdir -p "$injected_dir" \
     "$(dirname "$atomic_colorburn_pair_color_output")" \
     "$(dirname "$atomic_colorburn_pair_coverage_output")" \
     "$(dirname "$atomic_interleavedfeather_full_output")" \
-    "$(dirname "$atomic_interleavedfeather_full_provenance")"
+    "$(dirname "$atomic_interleavedfeather_full_provenance")" \
+    "$(dirname "$atomic_dstreadshuffle_full_output")" \
+    "$(dirname "$atomic_dstreadshuffle_full_provenance")" \
+    "$(dirname "$atomic_dstreadshuffle_srcover_output")" \
+    "$(dirname "$atomic_dstreadshuffle_srcover_provenance")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
@@ -359,11 +369,35 @@ python3 "$path_stream_generator" \
     --expected-sha256 "$expected_interleavedfeather_sha256" \
     --expected-source gm:interleavedfeather \
     --expected-width 1000 --expected-height 1000 \
+    --expected-clear-color 0x00000000 \
     --expected-count save=301 --expected-count restore=301 \
     --expected-count transform=900 --expected-count makeEmptyRenderPath=1 \
     --expected-count makeRenderPaint=1 --expected-count drawPath=451 \
     --function replayInterleavedFeatherFull \
     --output "$injected_dir/generated_interleavedfeather_full.inc"
+python3 "$path_stream_generator" \
+    --stream "$dstreadshuffle_stream" \
+    --expected-sha256 "$expected_dstreadshuffle_sha256" \
+    --expected-source gm:dstreadshuffle \
+    --expected-width 530 --expected-height 690 \
+    --expected-clear-color 0xffffffff \
+    --expected-count save=97 --expected-count restore=97 \
+    --expected-count transform=96 --expected-count makeEmptyRenderPath=193 \
+    --expected-count makeRenderPaint=97 --expected-count drawPath=97 \
+    --function replayDstReadShuffleFull \
+    --output "$injected_dir/generated_dstreadshuffle_full.inc"
+python3 "$path_stream_generator" \
+    --stream "$dstreadshuffle_stream" \
+    --expected-sha256 "$expected_dstreadshuffle_sha256" \
+    --expected-source gm:dstreadshuffle \
+    --expected-width 530 --expected-height 690 \
+    --expected-clear-color 0xffffffff \
+    --expected-count save=97 --expected-count restore=97 \
+    --expected-count transform=96 --expected-count makeEmptyRenderPath=193 \
+    --expected-count makeRenderPaint=97 --expected-count drawPath=97 \
+    --override-blend-mode 3 \
+    --function replayDstReadShuffleSrcOverControl \
+    --output "$injected_dir/generated_dstreadshuffle_srcover_control.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -388,7 +422,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -406,6 +440,20 @@ printf 'artifact_sha256=%s\nstream_sha256=%s\nruntime_revision=%s\ndawn_revision
     "$expected_interleavedfeather_sha256" \
     "$expected_runtime_revision" \
     "$expected_dawn_revision" >> "$atomic_interleavedfeather_full_provenance"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_dstreadshuffle_full_output" atomic-dstreadshuffle-full "$atomic_dstreadshuffle_full_provenance"
+atomic_dstreadshuffle_full_sha256="$(sha256_file "$atomic_dstreadshuffle_full_output")"
+printf 'artifact_sha256=%s\nstream_sha256=%s\nruntime_revision=%s\ndawn_revision=%s\n' \
+    "$atomic_dstreadshuffle_full_sha256" \
+    "$expected_dstreadshuffle_sha256" \
+    "$expected_runtime_revision" \
+    "$expected_dawn_revision" >> "$atomic_dstreadshuffle_full_provenance"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_dstreadshuffle_srcover_output" atomic-dstreadshuffle-srcover-full "$atomic_dstreadshuffle_srcover_provenance"
+atomic_dstreadshuffle_srcover_sha256="$(sha256_file "$atomic_dstreadshuffle_srcover_output")"
+printf 'artifact_sha256=%s\nstream_sha256=%s\nruntime_revision=%s\ndawn_revision=%s\nblend_mode_override=srcOver\n' \
+    "$atomic_dstreadshuffle_srcover_sha256" \
+    "$expected_dstreadshuffle_sha256" \
+    "$expected_runtime_revision" \
+    "$expected_dawn_revision" >> "$atomic_dstreadshuffle_srcover_provenance"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
@@ -512,6 +560,39 @@ for provenance in \
         exit 1
     fi
 done
+atomic_dstreadshuffle_srcover_bytes="$(wc -c < "$atomic_dstreadshuffle_srcover_output" | tr -d ' ')"
+if [[ "$atomic_dstreadshuffle_srcover_bytes" != "1462820" ]]; then
+    echo "atomic dstreadshuffle SrcOver output must be exactly 1462820 bytes, got $atomic_dstreadshuffle_srcover_bytes: $atomic_dstreadshuffle_srcover_output" >&2
+    exit 1
+fi
+for provenance in \
+    "backend=metal" \
+    "artifact_sha256=$atomic_dstreadshuffle_srcover_sha256" \
+    "stream_sha256=$expected_dstreadshuffle_sha256" \
+    "runtime_revision=$expected_runtime_revision" \
+    "dawn_revision=$expected_dawn_revision" \
+    "blend_mode_override=srcOver"; do
+    if ! grep -Fqx "$provenance" "$atomic_dstreadshuffle_srcover_provenance"; then
+        echo "atomic dstreadshuffle SrcOver provenance is missing $provenance: $atomic_dstreadshuffle_srcover_provenance" >&2
+        exit 1
+    fi
+done
+atomic_dstreadshuffle_full_bytes="$(wc -c < "$atomic_dstreadshuffle_full_output" | tr -d ' ')"
+if [[ "$atomic_dstreadshuffle_full_bytes" != "1462820" ]]; then
+    echo "atomic dstreadshuffle full output must be exactly 1462820 bytes, got $atomic_dstreadshuffle_full_bytes: $atomic_dstreadshuffle_full_output" >&2
+    exit 1
+fi
+for provenance in \
+    "backend=metal" \
+    "artifact_sha256=$atomic_dstreadshuffle_full_sha256" \
+    "stream_sha256=$expected_dstreadshuffle_sha256" \
+    "runtime_revision=$expected_runtime_revision" \
+    "dawn_revision=$expected_dawn_revision"; do
+    if ! grep -Fqx "$provenance" "$atomic_dstreadshuffle_full_provenance"; then
+        echo "atomic dstreadshuffle provenance is missing $provenance: $atomic_dstreadshuffle_full_provenance" >&2
+        exit 1
+    fi
+done
 fill_output_bytes="$(wc -c < "$fill_output" | tr -d ' ')"
 if [[ "$fill_output_bytes" != "4628" ]]; then
     echo "atlas fill mask must be exactly 4628 bytes, got $fill_output_bytes: $fill_output" >&2
@@ -608,6 +689,10 @@ echo "atomic colorburn-pair color storage: $atomic_colorburn_pair_color_output"
 echo "atomic colorburn-pair coverage storage: $atomic_colorburn_pair_coverage_output"
 echo "atomic interleavedfeather full output: $atomic_interleavedfeather_full_output"
 echo "atomic interleavedfeather full provenance: $atomic_interleavedfeather_full_provenance"
+echo "atomic dstreadshuffle full output: $atomic_dstreadshuffle_full_output"
+echo "atomic dstreadshuffle full provenance: $atomic_dstreadshuffle_full_provenance"
+echo "atomic dstreadshuffle SrcOver output: $atomic_dstreadshuffle_srcover_output"
+echo "atomic dstreadshuffle SrcOver provenance: $atomic_dstreadshuffle_srcover_provenance"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"

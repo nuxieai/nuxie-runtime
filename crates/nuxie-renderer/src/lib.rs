@@ -4529,6 +4529,8 @@ mod tests {
     const RAWTEXT_ORACLE_FRAME_HEIGHT: u32 = 335;
     const ATOMIC_COLORBURN_PAIR_FRAME_SIZE: u32 = 1024;
     const ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE: u32 = 1000;
+    const ATOMIC_DSTREADSHUFFLE_FULL_FRAME_WIDTH: u32 = 530;
+    const ATOMIC_DSTREADSHUFFLE_FULL_FRAME_HEIGHT: u32 = 690;
     const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
         atlas_mask_oracle::MaskComparisonTolerances {
             support: 1.0 / 1024.0,
@@ -7322,35 +7324,68 @@ mod tests {
         frame
     }
 
-    fn interleaved_feather_full_output() -> atlas_blit_oracle::AtlasBlit {
-        let stream = nuxie_render_stream::RenderStream::parse(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
-        )))
-        .unwrap();
-        assert_eq!(
-            stream.frame_size,
-            Some((
-                ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
-                ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
-            ))
-        );
-        assert_eq!(stream.clear_color, Some(0));
+    fn path_stream_full_output(
+        source: &str,
+        width: u32,
+        height: u32,
+        clear_color: u32,
+        blend_mode_override: Option<BlendMode>,
+    ) -> atlas_blit_oracle::AtlasBlit {
+        let mut stream = nuxie_render_stream::RenderStream::parse(source).unwrap();
+        assert_eq!(stream.frame_size, Some((width, height)));
+        assert_eq!(stream.clear_color, Some(clear_color));
         assert_eq!(stream.frames.len(), 1);
-        let mut factory = WgpuFactory::new_with_mode(
-            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
-            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
-            RenderMode::ClockwiseAtomic,
-        )
-        .unwrap();
-        let mut frame = factory.begin_frame(0);
+        if let Some(blend_mode) = blend_mode_override {
+            for command in &mut stream.frames[0].commands {
+                if let nuxie_render_stream::Command::DrawPath { paint, .. } = command {
+                    paint.blend_mode = blend_mode;
+                }
+            }
+        }
+        let mut factory =
+            WgpuFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic).unwrap();
+        let mut frame = factory.begin_frame(clear_color);
         stream.replay_frame(0, &mut factory, &mut frame).unwrap();
-        atlas_blit_oracle::AtlasBlit::new(
+        atlas_blit_oracle::AtlasBlit::new(width, height, frame.finish().unwrap()).unwrap()
+    }
+
+    fn interleaved_feather_full_output() -> atlas_blit_oracle::AtlasBlit {
+        path_stream_full_output(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
+            )),
             ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
             ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
-            frame.finish().unwrap(),
+            0,
+            None,
         )
-        .unwrap()
+    }
+
+    fn dstreadshuffle_full_output() -> atlas_blit_oracle::AtlasBlit {
+        path_stream_full_output(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
+            )),
+            ATOMIC_DSTREADSHUFFLE_FULL_FRAME_WIDTH,
+            ATOMIC_DSTREADSHUFFLE_FULL_FRAME_HEIGHT,
+            0xffff_ffff,
+            None,
+        )
+    }
+
+    fn dstreadshuffle_srcover_control_output() -> atlas_blit_oracle::AtlasBlit {
+        path_stream_full_output(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
+            )),
+            ATOMIC_DSTREADSHUFFLE_FULL_FRAME_WIDTH,
+            ATOMIC_DSTREADSHUFFLE_FULL_FRAME_HEIGHT,
+            0xffff_ffff,
+            Some(BlendMode::SrcOver),
+        )
     }
 
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
@@ -9236,40 +9271,37 @@ mod tests {
         );
     }
 
-    #[test]
-    #[ignore = "requires RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL and its provenance from the C++ WebGPU-on-Metal oracle"]
-    fn cpp_webgpu_atomic_interleavedfeather_full_matches_rust_when_configured() {
-        let path = std::env::var_os("RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL").expect(
-            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL is required for the ignored full-stream test",
-        );
-        assert!(
-            !path.is_empty(),
-            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL is empty"
-        );
+    fn configured_cpp_full_stream_artifact(
+        artifact_env: &str,
+        provenance_env: &str,
+        expected_stream_sha256: &str,
+        extra_provenance: &[&str],
+    ) -> (PathBuf, atlas_blit_oracle::AtlasBlit) {
+        let path = std::env::var_os(artifact_env).unwrap_or_else(|| {
+            panic!("{artifact_env} is required for the ignored full-stream test")
+        });
+        assert!(!path.is_empty(), "{artifact_env} is empty");
         let path = PathBuf::from(path);
-        assert!(
-            path.is_absolute(),
-            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL must be absolute"
-        );
+        assert!(path.is_absolute(), "{artifact_env} must be absolute");
         let bytes = fs::read(&path)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
         use sha2::Digest as _;
         let artifact_sha256 = format!("{:x}", sha2::Sha256::digest(&bytes));
-        let provenance_path = PathBuf::from(
-            std::env::var_os("RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE").expect(
-                "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE is required for the ignored full-stream test",
-            ),
-        );
+        let provenance_path =
+            PathBuf::from(std::env::var_os(provenance_env).unwrap_or_else(|| {
+                panic!("{provenance_env} is required for the ignored full-stream test")
+            }));
         assert!(
             provenance_path.is_absolute(),
-            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE must be absolute"
+            "{provenance_env} must be absolute"
         );
         let provenance = fs::read_to_string(&provenance_path).unwrap_or_else(|error| {
             panic!("failed to read {}: {error}", provenance_path.display())
         });
+        let stream_provenance = format!("stream_sha256={expected_stream_sha256}");
         for expected in [
             "backend=metal",
-            "stream_sha256=8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a",
+            stream_provenance.as_str(),
             "runtime_revision=7c778d13c5d903b3b74eec1dd6bb68a811dea5f2",
             "dawn_revision=211333b2e3e429c3508f25c81c547f602adf448c",
         ] {
@@ -9279,10 +9311,16 @@ mod tests {
                 provenance_path.display()
             );
         }
+        for expected in extra_provenance {
+            assert!(
+                provenance.lines().any(|line| line == *expected),
+                "{} is missing {expected}",
+                provenance_path.display()
+            );
+        }
+        let artifact_provenance = format!("artifact_sha256={artifact_sha256}");
         assert!(
-            provenance
-                .lines()
-                .any(|line| line == format!("artifact_sha256={artifact_sha256}")),
+            provenance.lines().any(|line| line == artifact_provenance),
             "{} does not match the RGBA artifact SHA-256",
             provenance_path.display()
         );
@@ -9293,13 +9331,20 @@ mod tests {
             "{} does not identify the selected adapter",
             provenance_path.display()
         );
-        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes)
+        let blit = atlas_blit_oracle::AtlasBlit::parse(&bytes)
             .unwrap_or_else(|error| panic!("malformed C++ output at {}: {error}", path.display()));
-        let rust_blit = interleaved_feather_full_output();
-        let mut largest = cpp_blit
+        (path, blit)
+    }
+
+    fn largest_full_stream_mismatches(
+        cpp: &atlas_blit_oracle::AtlasBlit,
+        rust: &atlas_blit_oracle::AtlasBlit,
+        width: u32,
+    ) -> Vec<(u8, usize, usize, [u8; 4], [u8; 4])> {
+        let mut largest = cpp
             .pixels()
             .chunks_exact(4)
-            .zip(rust_blit.pixels().chunks_exact(4))
+            .zip(rust.pixels().chunks_exact(4))
             .enumerate()
             .filter_map(|(index, (cpp, rust))| {
                 let max_delta = cpp
@@ -9311,8 +9356,8 @@ mod tests {
                 (max_delta != 0).then(|| {
                     (
                         max_delta,
-                        index % ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE as usize,
-                        index / ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE as usize,
+                        index % width as usize,
+                        index / width as usize,
                         <[u8; 4]>::try_from(cpp).unwrap(),
                         <[u8; 4]>::try_from(rust).unwrap(),
                     )
@@ -9320,6 +9365,24 @@ mod tests {
             })
             .collect::<Vec<_>>();
         largest.sort_unstable_by(|left, right| right.cmp(left));
+        largest
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL and its provenance from the C++ WebGPU-on-Metal oracle"]
+    fn cpp_webgpu_atomic_interleavedfeather_full_matches_rust_when_configured() {
+        let (path, cpp_blit) = configured_cpp_full_stream_artifact(
+            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL",
+            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE",
+            "8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a",
+            &[],
+        );
+        let rust_blit = interleaved_feather_full_output();
+        let largest = largest_full_stream_mismatches(
+            &cpp_blit,
+            &rust_blit,
+            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+        );
         eprintln!(
             "largest full-stream mismatches: {:?}",
             &largest[..largest.len().min(12)]
@@ -9336,6 +9399,80 @@ mod tests {
                 path.display()
             )
         });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATOMIC_DSTREADSHUFFLE_FULL and its provenance from the C++ WebGPU-on-Metal oracle"]
+    fn cpp_webgpu_atomic_dstreadshuffle_full_matches_rust_when_configured() {
+        let (path, cpp_blit) = configured_cpp_full_stream_artifact(
+            "RIVE_CPP_ATOMIC_DSTREADSHUFFLE_FULL",
+            "RIVE_CPP_ATOMIC_DSTREADSHUFFLE_FULL_PROVENANCE",
+            "0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195",
+            &[],
+        );
+        let rust_blit = dstreadshuffle_full_output();
+        let largest = largest_full_stream_mismatches(
+            &cpp_blit,
+            &rust_blit,
+            ATOMIC_DSTREADSHUFFLE_FULL_FRAME_WIDTH,
+        );
+        eprintln!(
+            "dstreadshuffle full-stream byte-inexact={} over-delta2={} max-delta={}; largest: {:?}",
+            largest.len(),
+            largest.iter().take_while(|mismatch| mismatch.0 > 2).count(),
+            largest.first().map_or(0, |mismatch| mismatch.0),
+            &largest[..largest.len().min(12)]
+        );
+        atlas_blit_oracle::compare_cpp_to_rust_with_pixel_tolerance(
+            &cpp_blit,
+            &rust_blit,
+            2,
+            32,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ WebGPU-on-Metal dstreadshuffle exceeded the corpus delta-2/32-pixel contract at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATOMIC_DSTREADSHUFFLE_SRCOVER and its provenance from the C++ WebGPU-on-Metal oracle"]
+    fn cpp_webgpu_atomic_dstreadshuffle_srcover_control_matches_rust_when_configured() {
+        let (path, cpp_blit) = configured_cpp_full_stream_artifact(
+            "RIVE_CPP_ATOMIC_DSTREADSHUFFLE_SRCOVER",
+            "RIVE_CPP_ATOMIC_DSTREADSHUFFLE_SRCOVER_PROVENANCE",
+            "0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195",
+            &["blend_mode_override=srcOver"],
+        );
+        for sample in 0..3 {
+            let rust_blit = dstreadshuffle_srcover_control_output();
+            let largest = largest_full_stream_mismatches(
+                &cpp_blit,
+                &rust_blit,
+                ATOMIC_DSTREADSHUFFLE_FULL_FRAME_WIDTH,
+            );
+            eprintln!(
+                "dstreadshuffle SrcOver-control sample={sample} byte-inexact={} over-delta2={} max-delta={}; largest: {:?}",
+                largest.len(),
+                largest.iter().take_while(|mismatch| mismatch.0 > 2).count(),
+                largest.first().map_or(0, |mismatch| mismatch.0),
+                &largest[..largest.len().min(12)]
+            );
+            atlas_blit_oracle::compare_cpp_to_rust_with_pixel_tolerance(
+                &cpp_blit,
+                &rust_blit,
+                2,
+                32,
+            )
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ WebGPU-on-Metal dstreadshuffle SrcOver control sample {sample} exceeded the corpus delta-2/32-pixel contract at {}: {error}",
+                    path.display()
+                )
+            });
+        }
     }
 
     #[test]

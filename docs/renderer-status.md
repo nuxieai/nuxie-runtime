@@ -281,15 +281,21 @@ Run `make renderer-golden`.
    and Rust differ at 84 byte-inexact pixels/max 26, while native Metal differs
    from both WebGPU paths almost identically: 18,492 and 18,495 pixels over
    delta 2/max 78. Sol accepted algorithm parity and required the corpus gate
-   be renamed, not widened or promoted. `dstreadshuffle` is the next
-   independent full-stream reference lane.
+   be renamed, not widened or promoted.
    C++'s empty-segment outcome is now matched in
    stroke/feather preparation for coincident cubics, closing `zeroPath`.
    `dstreadshuffle` is parked under the same intermediate-color precision
-   boundary: isolated ColorDodge passes, isolated ColorBurn differs, and the
-   repeated blend board amplifies that backend delta. A fresh forced reference
-   also promotes `overfill_blendmodes` unchanged. `overfill_opaque` is now
-   promoted under a bounded 48-pixel cubic-edge allowance: its two translated
+   boundary after an independent full-stream C++ Dawn WebGPU-on-Metal lane
+   replayed all 97 draws. The untouched stream remains an intentionally failing
+   configured gate at roughly 22.84k pixels over delta 2/max 61. A separately
+   pinned control changes only the 97 paint blend-mode setters to SrcOver;
+   three Rust samples pass the unchanged `2/32` contract at 11, 13, and 13
+   pixels over delta 2/max 4. Exact generated-line comparison proves geometry,
+   transforms, colors, ordering, dimensions, and opaque clear are unchanged.
+   Sol approved removing the algorithm attribution while keeping the entry
+   gated with its native reference and tolerance unchanged. A fresh forced
+   reference also promotes `overfill_blendmodes` unchanged. `overfill_opaque`
+   is now promoted under a bounded 48-pixel cubic-edge allowance: its two translated
    colored draws each contribute the same 20-pixel residual, while binary
    foreground support is exact. The `strokes_round` draw-38 CPU
    `TessVertexSpan` range now matches C++ all 11 records/176 words exactly
@@ -328,6 +334,19 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Reclassify `dstreadshuffle` from `algorithm-core` to
+  `metal-webgpu-atomic-intermediate-precision` after pinned untouched and
+  SrcOver-control C++ Dawn WebGPU-on-Metal lanes. The strict compiler validates
+  stream SHA-256, opaque clear, 97 draws, 96 transforms, 97 saves/restores, 193
+  path declarations, 97 paints, and every path/paint snapshot independently of
+  the Rust parser. The untouched configured comparison intentionally retains
+  and fails the existing `2/32` contract at 22,841-22,851 over-threshold pixels
+  across repeated samples/max 61. The control changes exactly 97 blend setters
+  and no other generated replay line; three samples pass at 11, 13, and 13
+  pixels over delta 2/max 4. Artifact provenance pins the runtime, Dawn,
+  adapter, driver, stream, artifact digest, and control override. Sol approved
+  the narrower attribution, not promotion or a fitted tolerance. Status,
+  native reference, and `2/32` contract remain unchanged.
 - 2026-07-13: Reclassify `interleavedfeather` from `algorithm-core` to
   `metal-webgpu-atomic-intermediate-precision` after a pinned full-stream C++
   Dawn WebGPU-on-Metal oracle. A strict stream compiler validates the SHA-256,
@@ -1663,3 +1682,10 @@ Run `make renderer-golden`.
   remaining corpus gap is backend precision rather than algorithm core. The
   entry remains gated under the named backend boundary, with the renderer
   ratchet unchanged at exact=154/diverges=0/gated=1,313.
+- 2026-07-13: Added pinned full-stream untouched and SrcOver-control C++ Dawn
+  WebGPU-on-Metal oracles for all 97 `dstreadshuffle` draws. The untouched gate
+  remains open at roughly 22.84k pixels over delta 2/max 61; changing only the
+  97 paint blend modes to SrcOver passes three samples at 11-13 pixels over
+  delta 2/max 4. Sol approved reclassifying the corpus diagnostic to the named
+  shader-stack precision boundary while preserving gated status, native
+  reference, tolerance, and renderer ratchet.

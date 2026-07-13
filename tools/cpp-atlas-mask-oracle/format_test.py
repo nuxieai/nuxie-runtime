@@ -58,6 +58,8 @@ FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippe
 BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
 INTERLEAVED_FEATHER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "interleavedfeather.rive-stream"
 INTERLEAVED_FEATHER_SHA256 = "8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
+DSTREADSHUFFLE_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "dstreadshuffle.rive-stream"
+DSTREADSHUFFLE_SHA256 = "0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"
 POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
 RAWTEXT_GENERATOR = pathlib.Path(__file__).with_name("generate_rawtext_stream_path.py")
 COLORBURN_PAIR_GENERATOR = pathlib.Path(__file__).with_name(
@@ -895,15 +897,27 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kDirectBadSkinFrameHeight = 720;",
             "constexpr uint32_t kDirectBadSkinContourCount = 1;",
             "constexpr uint32_t kAtomicInterleavedFeatherFullFrameSize = 1000;",
+            "constexpr uint32_t kAtomicDstReadShuffleFullFrameWidth = 530;",
+            "constexpr uint32_t kAtomicDstReadShuffleFullFrameHeight = 690;",
             '#include "generated_interleavedfeather_full.inc"',
+            '#include "generated_dstreadshuffle_full.inc"',
+            '#include "generated_dstreadshuffle_srcover_control.inc"',
             'std::strcmp(argv[4], "atomic-interleavedfeather-full") == 0;',
+            'std::strcmp(argv[4], "atomic-dstreadshuffle-full") == 0;',
+            'std::strcmp(argv[4], "atomic-dstreadshuffle-srcover-full") == 0;',
+            "const bool fullStreamCase =",
+            "atomicDstReadShuffleSrcOverCase",
+            "atomicDstReadShuffleCase =",
             "adapterOptions.backendType = WGPUBackendType_Metal;",
+            "fullStreamCase\n                                         ? &adapterOptions",
             "writeAdapterProvenance(auxiliaryOutput, adapter.Get());",
             "info.backendType != WGPUBackendType_Metal",
             'file << "backend=metal\\n";',
             "replayInterleavedFeatherFull(&renderer, context.get());",
+            "replayDstReadShuffleFull(&renderer, context.get());",
+            "replayDstReadShuffleSrcOverControl(&renderer, context.get());",
             "facts.drawBatches.size() < 3",
-            "if (!atomicInterleavedFeatherFullCase)",
+            "if (!fullStreamCase)",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
             "facts.contentWidth != kExpectedLogicalAtlasSize",
@@ -996,6 +1010,49 @@ class FormatTests(unittest.TestCase):
         ):
             self.assertIn(fragment, source)
         self.assertNotIn("kIntersectionGroupDrawCount", source)
+
+        full_stream_case = source[
+            source.index("const bool fullStreamCase ="):
+            source.index("const bool intersectionGroupsCase =")
+        ]
+        self.assertIn("atomicDstReadShuffleCase", full_stream_case)
+
+        frame_selection = source[
+            source.index("const uint32_t frameWidth"):
+            source.index("targetDesc.size", source.index("const uint32_t frameWidth"))
+        ]
+        self.assertIn("atomicDstReadShuffleCase", frame_selection)
+        self.assertIn("kAtomicDstReadShuffleFullFrameWidth", frame_selection)
+        self.assertIn("kAtomicDstReadShuffleFullFrameHeight", frame_selection)
+
+        begin_frame = source[
+            source.index("context->beginFrame("):
+            source.index("path->moveTo", source.index("context->beginFrame("))
+        ]
+        self.assertIn("atomicDstReadShuffleCase", begin_frame)
+        self.assertIn("0xffffffff", begin_frame)
+
+        full_stream_schedule = source[
+            source.index("else if (fullStreamCase)"):
+            source.index("else if (atomicAdvancedBlendCase)")
+        ]
+        self.assertIn(
+            "const bool expectedFixedFunctionColorOutput =",
+            full_stream_schedule,
+        )
+        self.assertIn(
+            "atomicDstReadShuffleSrcOverCase;",
+            full_stream_schedule,
+        )
+        self.assertIn(
+            "facts.fixedFunctionColorOutput != expectedFixedFunctionColorOutput",
+            full_stream_schedule,
+        )
+        self.assertIn(
+            "full path-stream oracle must execute the expected atomic color-output mode, "
+            "initialize, draws, and resolve",
+            full_stream_schedule,
+        )
 
         assertion_start = source.index(
             "    if (intersectionGroupsCase)\n"
@@ -1427,8 +1484,155 @@ class FormatTests(unittest.TestCase):
             )
             self.assertNotEqual(wrong_header.returncode, 0)
             self.assertIn(
-                "header or transparent clear contract drifted", wrong_header.stderr
+                "header or clear-color contract drifted", wrong_header.stderr
             )
+
+    def test_dstreadshuffle_replay_is_deterministic_and_enforces_opaque_clear_color(self):
+        expected_counts = [
+            "save=97",
+            "restore=97",
+            "transform=96",
+            "makeEmptyRenderPath=193",
+            "makeRenderPaint=97",
+            "drawPath=97",
+        ]
+
+        def command(output=None, check=False, clear_color="0xffffffff"):
+            result = [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--stream",
+                str(DSTREADSHUFFLE_STREAM),
+                "--expected-sha256",
+                DSTREADSHUFFLE_SHA256,
+                "--expected-source",
+                "gm:dstreadshuffle",
+                "--expected-width",
+                "530",
+                "--expected-height",
+                "690",
+                "--expected-clear-color",
+                clear_color,
+            ]
+            for count in expected_counts:
+                result.extend(["--expected-count", count])
+            result.extend(["--function", "replayDstReadShuffleFull"])
+            result.extend(["--check"] if check else ["--output", str(output)])
+            return result
+
+        subprocess.run(command(check=True), check=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            first = temp_dir / "first.inc"
+            second = temp_dir / "second.inc"
+            subprocess.run(command(first), check=True)
+            subprocess.run(command(second), check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+            generated = first.read_text()
+            digest = hashlib.sha256(DSTREADSHUFFLE_STREAM.read_bytes()).hexdigest()
+            self.assertEqual(digest, DSTREADSHUFFLE_SHA256)
+            self.assertIn(f"dstreadshuffle.rive-stream sha256={digest}", generated)
+            self.assertIn(
+                "void replayDstReadShuffleFull(rive::RiveRenderer* renderer, "
+                "rive::gpu::RenderContext* context)",
+                generated,
+            )
+            self.assertEqual(generated.count("renderer->save();"), 97)
+            self.assertEqual(generated.count("renderer->restore();"), 97)
+            self.assertEqual(generated.count("renderer->transform("), 96)
+            self.assertEqual(generated.count("context->makeEmptyRenderPath()"), 193)
+            self.assertEqual(generated.count("context->makeRenderPaint()"), 97)
+            self.assertEqual(generated.count("renderer->drawPath("), 97)
+
+            wrong_clear_color = subprocess.run(
+                command(check=True, clear_color="0x00000000"),
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(wrong_clear_color.returncode, 0)
+            self.assertIn(
+                "header or clear-color contract drifted",
+                wrong_clear_color.stderr,
+            )
+
+    def test_dstreadshuffle_srcover_control_replay_is_deterministic_and_overrides_only_blend_modes(self):
+        expected_counts = [
+            "save=97",
+            "restore=97",
+            "transform=96",
+            "makeEmptyRenderPath=193",
+            "makeRenderPaint=97",
+            "drawPath=97",
+        ]
+
+        def command(output=None, check=False, override_blend_mode=None):
+            result = [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--stream",
+                str(DSTREADSHUFFLE_STREAM),
+                "--expected-sha256",
+                DSTREADSHUFFLE_SHA256,
+                "--expected-source",
+                "gm:dstreadshuffle",
+                "--expected-width",
+                "530",
+                "--expected-height",
+                "690",
+                "--expected-clear-color",
+                "0xffffffff",
+            ]
+            for count in expected_counts:
+                result.extend(["--expected-count", count])
+            if override_blend_mode is not None:
+                result.extend(["--override-blend-mode", str(override_blend_mode)])
+            result.extend(["--function", "replayDstReadShuffleSrcOverControl"])
+            result.extend(["--check"] if check else ["--output", str(output)])
+            return result
+
+        subprocess.run(command(check=True, override_blend_mode=3), check=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            baseline = temp_dir / "baseline.inc"
+            first = temp_dir / "first.inc"
+            second = temp_dir / "second.inc"
+            subprocess.run(command(baseline), check=True)
+            subprocess.run(command(first, override_blend_mode=3), check=True)
+            subprocess.run(command(second, override_blend_mode=3), check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+            baseline_generated = baseline.read_text()
+            generated = first.read_text()
+            baseline_lines = baseline_generated.splitlines()
+            control_lines = generated.splitlines()
+            override_comment = "// Diagnostic paint blend-mode override=3."
+            self.assertEqual(control_lines.count(override_comment), 1)
+            self.assertEqual(len(control_lines), len(baseline_lines) + 1)
+            control_lines.remove(override_comment)
+
+            blend_mode_pattern = re.compile(
+                r"    paint(\d+)->blendMode\(static_cast<rive::BlendMode>\((\d+)\)\);"
+            )
+            baseline_setters = [
+                blend_mode_pattern.fullmatch(line) for line in baseline_lines
+            ]
+            self.assertEqual(sum(match is not None for match in baseline_setters), 97)
+
+            control_setter_count = 0
+            for baseline_line, control_line, baseline_setter in zip(
+                baseline_lines, control_lines, baseline_setters
+            ):
+                if baseline_setter is None:
+                    self.assertEqual(control_line, baseline_line)
+                    continue
+                paint_id, _ = baseline_setter.groups()
+                self.assertEqual(
+                    control_line,
+                    f"    paint{paint_id}->blendMode(static_cast<rive::BlendMode>(3));",
+                )
+                control_setter_count += 1
+            self.assertEqual(control_setter_count, 97)
 
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
@@ -1484,7 +1688,12 @@ class FormatTests(unittest.TestCase):
             'atomic_colorburn_pair_coverage_output="${RIVE_ATOMIC_COLORBURN_PAIR_COVERAGE_OUTPUT:-$script_dir/out/atomic-colorburn-pair.coverage}"',
             'atomic_interleavedfeather_full_output="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_OUTPUT:-$script_dir/out/atomic-interleavedfeather-full.rgba}"',
             'atomic_interleavedfeather_full_provenance="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE:-$script_dir/out/atomic-interleavedfeather-full.provenance}"',
+            'atomic_dstreadshuffle_full_output="${RIVE_ATOMIC_DSTREADSHUFFLE_FULL_OUTPUT:-$script_dir/out/atomic-dstreadshuffle-full.rgba}"',
+            'atomic_dstreadshuffle_full_provenance="${RIVE_ATOMIC_DSTREADSHUFFLE_FULL_PROVENANCE:-$script_dir/out/atomic-dstreadshuffle-full.provenance}"',
+            'atomic_dstreadshuffle_srcover_output="${RIVE_ATOMIC_DSTREADSHUFFLE_SRCOVER_OUTPUT:-$script_dir/out/atomic-dstreadshuffle-srcover.rgba}"',
+            'atomic_dstreadshuffle_srcover_provenance="${RIVE_ATOMIC_DSTREADSHUFFLE_SRCOVER_PROVENANCE:-$script_dir/out/atomic-dstreadshuffle-srcover.provenance}"',
             'expected_interleavedfeather_sha256="8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"',
+            'expected_dstreadshuffle_sha256="0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"',
             'expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"',
             'expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"',
             "sha256_file()",
@@ -1497,6 +1706,19 @@ class FormatTests(unittest.TestCase):
             '--expected-sha256 "$expected_interleavedfeather_sha256"',
             '--function replayInterleavedFeatherFull --check',
             '--output "$injected_dir/generated_interleavedfeather_full.inc"',
+            '--stream "$dstreadshuffle_stream"',
+            '--expected-sha256 "$expected_dstreadshuffle_sha256"',
+            '--expected-source gm:dstreadshuffle',
+            '--expected-width 530 --expected-height 690',
+            '--expected-clear-color 0xffffffff',
+            '--expected-count save=97 --expected-count restore=97',
+            '--expected-count transform=96 --expected-count makeEmptyRenderPath=193',
+            '--expected-count makeRenderPaint=97 --expected-count drawPath=97',
+            '--function replayDstReadShuffleFull',
+            '--output "$injected_dir/generated_dstreadshuffle_full.inc"',
+            '--override-blend-mode 3',
+            '--function replayDstReadShuffleSrcOverControl',
+            '--output "$injected_dir/generated_dstreadshuffle_srcover_control.inc"',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_evenodd_path_clipped_blit_output" nested-evenodd-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend',
@@ -1504,7 +1726,15 @@ class FormatTests(unittest.TestCase):
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_colorburn_pair_output" atomic-colorburn-pair "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output"',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_interleavedfeather_full_output" atomic-interleavedfeather-full "$atomic_interleavedfeather_full_provenance"',
             'atomic_interleavedfeather_full_sha256="$(sha256_file "$atomic_interleavedfeather_full_output")"',
+            '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_dstreadshuffle_full_output" atomic-dstreadshuffle-full "$atomic_dstreadshuffle_full_provenance"',
+            'atomic_dstreadshuffle_full_sha256="$(sha256_file "$atomic_dstreadshuffle_full_output")"',
+            '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_dstreadshuffle_srcover_output" atomic-dstreadshuffle-srcover-full "$atomic_dstreadshuffle_srcover_provenance"',
+            'atomic_dstreadshuffle_srcover_sha256="$(sha256_file "$atomic_dstreadshuffle_srcover_output")"',
             "artifact_sha256=$atomic_interleavedfeather_full_sha256",
+            "artifact_sha256=$atomic_dstreadshuffle_full_sha256",
+            "stream_sha256=$expected_dstreadshuffle_sha256",
+            "artifact_sha256=$atomic_dstreadshuffle_srcover_sha256",
+            "blend_mode_override=srcOver",
             "runtime_revision=$expected_runtime_revision",
             "dawn_revision=$expected_dawn_revision",
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups',
@@ -1525,6 +1755,10 @@ class FormatTests(unittest.TestCase):
             'if [[ "$atomic_colorburn_pair_color_bytes" != "4194328" ]]',
             'if [[ "$atomic_colorburn_pair_coverage_bytes" != "4194328" ]]',
             'if [[ "$atomic_interleavedfeather_full_bytes" != "4000020" ]]',
+            'if [[ "$atomic_dstreadshuffle_full_bytes" != "1462820" ]]',
+            'atomic dstreadshuffle provenance is missing $provenance: $atomic_dstreadshuffle_full_provenance',
+            'if [[ "$atomic_dstreadshuffle_srcover_bytes" != "1462820" ]]',
+            'atomic dstreadshuffle SrcOver provenance is missing $provenance: $atomic_dstreadshuffle_srcover_provenance',
             'if [[ "$fill_output_bytes" != "4628" ]]',
             'if [[ "$fill_blit_bytes" != "16404" ]]',
             'if [[ "$cusp_output_bytes" != "4628" ]]',
@@ -1537,6 +1771,10 @@ class FormatTests(unittest.TestCase):
             'if [[ "$direct_rawtext_inputs_bytes" != "66152" ]]',
             'if [[ "$direct_rawtext_spans_bytes" != "28060" ]]',
             'if [[ "$direct_rawtext_blit_bytes" != "536020" ]]',
+            'echo "atomic dstreadshuffle full output: $atomic_dstreadshuffle_full_output"',
+            'echo "atomic dstreadshuffle full provenance: $atomic_dstreadshuffle_full_provenance"',
+            'echo "atomic dstreadshuffle SrcOver output: $atomic_dstreadshuffle_srcover_output"',
+            'echo "atomic dstreadshuffle SrcOver provenance: $atomic_dstreadshuffle_srcover_provenance"',
         ):
             self.assertIn(fragment, source)
 

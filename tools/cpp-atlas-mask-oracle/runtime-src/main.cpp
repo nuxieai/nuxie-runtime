@@ -57,10 +57,14 @@ constexpr uint32_t kDirectRawTextPatchCount = 318;
 constexpr uint32_t kIntersectionGroupBatchCount = 9;
 constexpr uint32_t kAtomicColorBurnPairFrameSize = 1024;
 constexpr uint32_t kAtomicInterleavedFeatherFullFrameSize = 1000;
+constexpr uint32_t kAtomicDstReadShuffleFullFrameWidth = 530;
+constexpr uint32_t kAtomicDstReadShuffleFullFrameHeight = 690;
 #include "generated_polyshark_path.inc"
 #include "generated_rawtext_path.inc"
 #include "generated_interleaved_colorburn_pair_path.inc"
 #include "generated_interleavedfeather_full.inc"
+#include "generated_dstreadshuffle_full.inc"
+#include "generated_dstreadshuffle_srcover_control.inc"
 
 void fail(const char* message)
 {
@@ -911,6 +915,16 @@ int main(int argc, char** argv)
     const bool atomicInterleavedFeatherFullCase =
         argc > 4 &&
         std::strcmp(argv[4], "atomic-interleavedfeather-full") == 0;
+    const bool atomicDstReadShuffleFullCase =
+        argc > 4 &&
+        std::strcmp(argv[4], "atomic-dstreadshuffle-full") == 0;
+    const bool atomicDstReadShuffleSrcOverCase =
+        argc > 4 &&
+        std::strcmp(argv[4], "atomic-dstreadshuffle-srcover-full") == 0;
+    const bool atomicDstReadShuffleCase =
+        atomicDstReadShuffleFullCase || atomicDstReadShuffleSrcOverCase;
+    const bool fullStreamCase =
+        atomicInterleavedFeatherFullCase || atomicDstReadShuffleCase;
     const bool intersectionGroupsCase =
         argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;
     const bool anyAdvancedBlendCase =
@@ -922,7 +936,7 @@ int main(int argc, char** argv)
         directStrokesRoundCase || directRawTextCase;
     const bool directOutputCase = directCase || atomicAdvancedBlendCase ||
                                   atomicColorBurnPairCase ||
-                                  atomicInterleavedFeatherFullCase;
+                                  fullStreamCase;
     const bool fillCase = circleCase || cuspCase ||
                           (directCase && !directStrokesRoundCase) ||
                           anyAdvancedBlendCase ||
@@ -937,18 +951,18 @@ int main(int argc, char** argv)
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
         !advancedBlendCase && !atomicAdvancedBlendCase && !atomicColorBurnPairCase &&
-        !atomicInterleavedFeatherFullCase &&
+        !fullStreamCase &&
         !intersectionGroupsCase) ||
         (auxiliaryOutput != nullptr && !cuspCase && !directCuspCase &&
-         !atomicColorBurnPairCase && !atomicInterleavedFeatherFullCase &&
+         !atomicColorBurnPairCase && !fullStreamCase &&
          !directStrokesRoundCase && !directRawTextCase) ||
         ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase ||
-          atomicInterleavedFeatherFullCase) &&
+          fullStreamCase) &&
          auxiliaryOutput == nullptr) ||
         (secondaryOutput != nullptr && !atomicColorBurnPairCase) ||
         (atomicColorBurnPairCase && secondaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -965,7 +979,7 @@ int main(int argc, char** argv)
 
     WGPUAdapter adapterHandle = nullptr;
     WGPURequestAdapterOptions adapterOptions = {};
-    if (atomicInterleavedFeatherFullCase)
+    if (fullStreamCase)
     {
         adapterOptions.backendType = WGPUBackendType_Metal;
     }
@@ -975,7 +989,7 @@ int main(int argc, char** argv)
     adapterCallback.userdata1 = &adapterHandle;
     await(instance.Get(),
           wgpuInstanceRequestAdapter(instance.Get(),
-                                     atomicInterleavedFeatherFullCase
+                                     fullStreamCase
                                          ? &adapterOptions
                                          : nullptr,
                                      adapterCallback));
@@ -984,7 +998,7 @@ int main(int argc, char** argv)
         fail("could not acquire Dawn WebGPU adapter");
     }
     wgpu::Adapter adapter = wgpu::Adapter::Acquire(adapterHandle);
-    if (atomicInterleavedFeatherFullCase)
+    if (fullStreamCase)
     {
         writeAdapterProvenance(auxiliaryOutput, adapter.Get());
     }
@@ -1031,6 +1045,8 @@ int main(int argc, char** argv)
                                     ? kAtomicColorBurnPairFrameSize
                                 : atomicInterleavedFeatherFullCase
                                     ? kAtomicInterleavedFeatherFullFrameSize
+                                : atomicDstReadShuffleCase
+                                    ? kAtomicDstReadShuffleFullFrameWidth
                                     : (directTriangulatedCase ? kDirectGridFrameSize
                                                                : kFrameWidth);
     const uint32_t frameHeight = directRawTextCase
@@ -1043,6 +1059,8 @@ int main(int argc, char** argv)
                                  ? kAtomicColorBurnPairFrameSize
                                  : atomicInterleavedFeatherFullCase
                                  ? kAtomicInterleavedFeatherFullFrameSize
+                                 : atomicDstReadShuffleCase
+                                 ? kAtomicDstReadShuffleFullFrameHeight
                                  : (directTriangulatedCase ? kDirectGridFrameSize
                                                                 : kFrameHeight);
     targetDesc.size = {frameWidth, frameHeight, 1};
@@ -1057,7 +1075,8 @@ int main(int argc, char** argv)
     context->beginFrame({.renderTargetWidth = frameWidth,
                          .renderTargetHeight = frameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
-                         .clearColor = directStrokesRoundCase || directRawTextCase
+                         .clearColor = directStrokesRoundCase || directRawTextCase ||
+                                               atomicDstReadShuffleCase
                                            ? 0xffffffff
                                            : ((advancedBlendCase || atomicAdvancedBlendCase)
                                                   ? 0xff204080
@@ -1209,8 +1228,8 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCase && !atomicColorBurnPairCase &&
-        !atomicInterleavedFeatherFullCase && !intersectionGroupsCase)
+    if (!directCase && !atomicColorBurnPairCase && !fullStreamCase &&
+        !intersectionGroupsCase)
     {
         path->close();
     }
@@ -1355,6 +1374,14 @@ int main(int argc, char** argv)
     if (atomicInterleavedFeatherFullCase)
     {
         replayInterleavedFeatherFull(&renderer, context.get());
+    }
+    else if (atomicDstReadShuffleFullCase)
+    {
+        replayDstReadShuffleFull(&renderer, context.get());
+    }
+    else if (atomicDstReadShuffleSrcOverCase)
+    {
+        replayDstReadShuffleSrcOverControl(&renderer, context.get());
     }
     else if (intersectionGroupsCase)
     {
@@ -1569,17 +1596,20 @@ int main(int argc, char** argv)
             fail("advanced-blend oracle must execute one destination-reading MSAA atlas batch with shader color output");
         }
     }
-    else if (atomicInterleavedFeatherFullCase)
+    else if (fullStreamCase)
     {
+        const bool expectedFixedFunctionColorOutput =
+            atomicDstReadShuffleSrcOverCase;
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
-            facts.fixedFunctionColorOutput || facts.drawBatches.size() < 3 ||
+            facts.fixedFunctionColorOutput != expectedFixedFunctionColorOutput ||
+            facts.drawBatches.size() < 3 ||
             facts.drawBatches.front().drawType != static_cast<uint32_t>(
                                                      rive::gpu::DrawType::renderPassInitialize) ||
             facts.drawBatches.back().drawType != static_cast<uint32_t>(
                                                     rive::gpu::DrawType::renderPassResolve))
         {
-            fail("full interleavedfeather oracle must execute non-fixed atomic initialize, draws, and resolve");
+            fail("full path-stream oracle must execute the expected atomic color-output mode, initialize, draws, and resolve");
         }
     }
     else if (atomicAdvancedBlendCase)
@@ -2036,7 +2066,7 @@ int main(int argc, char** argv)
 
     uint32_t tessWidth = 0;
     uint32_t tessHeight = 0;
-    if (!atomicInterleavedFeatherFullCase)
+    if (!fullStreamCase)
     {
         const wgpu::Texture tessellation =
             webgpuContext->tessellationTextureForOracle();
@@ -2197,7 +2227,7 @@ int main(int argc, char** argv)
                     atlasWidth,
                     atlasHeight);
     }
-    if (!changingPathClippedCase && !atomicInterleavedFeatherFullCase)
+    if (!changingPathClippedCase && !fullStreamCase)
     {
         std::printf("wrote %s: batch=%u+%u contours=%zu interiorTriangles=%zu tessellation=%ux%u RGBA32Uint\\n",
                     inputsOutput,

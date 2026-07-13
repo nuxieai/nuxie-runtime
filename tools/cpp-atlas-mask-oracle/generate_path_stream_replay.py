@@ -118,9 +118,15 @@ def generate_include(
     expected_source: str,
     expected_width: int,
     expected_height: int,
+    expected_clear_color: str,
     expected_counts: dict[str, int],
     function_name: str,
+    blend_mode_override: int | None,
 ) -> str:
+    if re.fullmatch(r"0x[0-9a-f]{8}", expected_clear_color) is None:
+        raise ValueError(
+            f"expected clear color must be canonical 0xRRGGBBAA: {expected_clear_color!r}"
+        )
     raw = stream.read_bytes()
     actual_sha256 = hashlib.sha256(raw).hexdigest()
     if actual_sha256 != expected_sha256:
@@ -133,10 +139,10 @@ def generate_include(
         "rive-golden-stream-v1",
         f'source file="{expected_source}" artboard="" scene="{expected_source.removeprefix("gm:")}"',
         f"frameSize width={expected_width} height={expected_height}",
-        "clearColor value=0x00000000",
+        f"clearColor value={expected_clear_color}",
     ]
     if lines[:4] != expected_header:
-        raise ValueError("path-only stream header or transparent clear contract drifted")
+        raise ValueError("path-only stream header or clear-color contract drifted")
     if not lines[4:] or lines[-1] != "frame" or "frame" in lines[4:-1]:
         raise ValueError("path-only replay requires exactly one terminal frame marker")
 
@@ -146,6 +152,10 @@ def generate_include(
         f"void {function_name}(rive::RiveRenderer* renderer, rive::gpu::RenderContext* context)",
         "{",
     ]
+    if blend_mode_override is not None:
+        output.insert(
+            2, f"// Diagnostic paint blend-mode override={blend_mode_override}."
+        )
     paths: dict[int, PathSnapshot | None] = {}
     paints: set[int] = set()
     counts: dict[str, int] = {}
@@ -232,7 +242,7 @@ def generate_include(
                     f"    paint{paint.object_id}->join(static_cast<rive::StrokeJoin>({paint.join}));",
                     f"    paint{paint.object_id}->cap(static_cast<rive::StrokeCap>({paint.cap}));",
                     f"    paint{paint.object_id}->feather({float_literal(paint.feather)});",
-                    f"    paint{paint.object_id}->blendMode(static_cast<rive::BlendMode>({paint.blend_mode}));",
+                    f"    paint{paint.object_id}->blendMode(static_cast<rive::BlendMode>({blend_mode_override if blend_mode_override is not None else paint.blend_mode}));",
                     f"    renderer->drawPath(path{path.object_id}.get(), paint{paint.object_id}.get());",
                 ]
             )
@@ -255,7 +265,9 @@ def main() -> None:
     parser.add_argument("--expected-source", required=True)
     parser.add_argument("--expected-width", type=int, required=True)
     parser.add_argument("--expected-height", type=int, required=True)
+    parser.add_argument("--expected-clear-color", default="0x00000000")
     parser.add_argument("--expected-count", action="append", default=[])
+    parser.add_argument("--override-blend-mode", type=int, choices=range(29))
     parser.add_argument("--function", required=True)
     parser.add_argument("--output", type=pathlib.Path)
     parser.add_argument("--check", action="store_true")
@@ -268,8 +280,10 @@ def main() -> None:
         args.expected_source,
         args.expected_width,
         args.expected_height,
+        args.expected_clear_color,
         parse_expected_counts(args.expected_count),
         args.function,
+        args.override_blend_mode,
     )
     if args.output:
         args.output.write_text(generated)

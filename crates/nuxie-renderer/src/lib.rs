@@ -3853,12 +3853,13 @@ fn rgba(value: ColorInt, opacity: f32) -> [f32; 4] {
 }
 
 fn color(value: ColorInt) -> wgpu::Color {
-    let rgba = rgba(value, 1.0);
+    let [alpha, red, green, blue] = value.to_be_bytes();
+    let premul = |channel: u8| f64::from(u16::from(channel) * u16::from(alpha) / 255) / 255.0;
     wgpu::Color {
-        r: rgba[0] as f64,
-        g: rgba[1] as f64,
-        b: rgba[2] as f64,
-        a: rgba[3] as f64,
+        r: premul(red),
+        g: premul(green),
+        b: premul(blue),
+        a: f64::from(alpha) / 255.0,
     }
 }
 
@@ -4377,6 +4378,19 @@ mod tests {
         let scaled = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
         let result = multiply(translated, scaled);
         assert_eq!(result.0, [2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+    }
+
+    #[test]
+    fn frame_clear_color_uses_cpp_integer_premultiplication() {
+        assert_eq!(
+            color(0x8040_2010),
+            wgpu::Color {
+                r: 32.0 / 255.0,
+                g: 16.0 / 255.0,
+                b: 8.0 / 255.0,
+                a: 128.0 / 255.0,
+            }
+        );
     }
 
     #[test]

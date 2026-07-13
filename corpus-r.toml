@@ -567,10 +567,9 @@ stream = "fixtures/renderer/streams/gm/crbug_996140.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/crbug_996140-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -694,10 +693,9 @@ stream = "fixtures/renderer/streams/gm/emptyclear.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/emptyclear-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -795,10 +793,9 @@ stream = "fixtures/renderer/streams/gm/emptytransparentclear.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/emptytransparentclear-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -997,10 +994,9 @@ stream = "fixtures/renderer/streams/gm/feathertext_montserrat.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/feathertext_montserrat-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1049,10 +1045,9 @@ stream = "fixtures/renderer/streams/gm/feathertext_roboto.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/feathertext_roboto-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1276,10 +1271,9 @@ stream = "fixtures/renderer/streams/gm/inner_join_geometry.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/inner_join_geometry-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1328,10 +1322,9 @@ stream = "fixtures/renderer/streams/gm/interleavedfillrule.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/interleavedfillrule-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1354,10 +1347,9 @@ stream = "fixtures/renderer/streams/gm/labyrinth_butt.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/labyrinth_butt-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1380,10 +1372,9 @@ stream = "fixtures/renderer/streams/gm/labyrinth_round.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/labyrinth_round-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1406,10 +1397,9 @@ stream = "fixtures/renderer/streams/gm/labyrinth_square.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/labyrinth_square-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1607,10 +1597,9 @@ stream = "fixtures/renderer/streams/gm/mandoline.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/mandoline-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1658,10 +1647,9 @@ stream = "fixtures/renderer/streams/gm/mesh_ht_1.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/mesh_ht_1-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1684,10 +1672,9 @@ stream = "fixtures/renderer/streams/gm/mesh_ht_7.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/mesh_ht_7-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1862,10 +1849,9 @@ stream = "fixtures/renderer/streams/gm/overfill_transparent.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/overfill_transparent-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1914,10 +1900,9 @@ stream = "fixtures/renderer/streams/gm/overstroke_opaque.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/overstroke_opaque-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1940,10 +1925,9 @@ stream = "fixtures/renderer/streams/gm/overstroke_transparent.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/overstroke_transparent-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1991,10 +1975,9 @@ stream = "fixtures/renderer/streams/gm/path_skbug_11859.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/path_skbug_11859-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2167,10 +2150,9 @@ stream = "fixtures/renderer/streams/gm/quadcap.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/quadcap-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2319,10 +2301,9 @@ stream = "fixtures/renderer/streams/gm/skbug12244.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/skbug12244-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2472,10 +2453,9 @@ stream = "fixtures/renderer/streams/gm/strokes_zoomed.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/strokes_zoomed-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2498,10 +2478,9 @@ stream = "fixtures/renderer/streams/gm/teenyStrokes.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/teenyStrokes-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2524,10 +2503,9 @@ stream = "fixtures/renderer/streams/gm/transparentclear.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/transparentclear-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2550,10 +2528,9 @@ stream = "fixtures/renderer/streams/gm/transparentclear_blendmode.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/transparentclear_blendmode-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2576,10 +2553,9 @@ stream = "fixtures/renderer/streams/gm/trickycubicstrokes.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/trickycubicstrokes-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2602,10 +2578,9 @@ stream = "fixtures/renderer/streams/gm/trickycubicstrokes_feather.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/trickycubicstrokes_feather-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2628,10 +2603,9 @@ stream = "fixtures/renderer/streams/gm/trickycubicstrokes_roundcaps.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/trickycubicstrokes_roundcaps-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

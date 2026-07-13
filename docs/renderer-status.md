@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=118, diverges=0, gated=1,349, total=1,467.
+- Rust wgpu: exact=144, diverges=0, gated=1,323, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -90,7 +90,13 @@ Run `make renderer-golden`.
   `riv-off_road_car-frame-{0..4}-clockwise-atomic`, plus
   `riv-joel_signed-frame-{0..4}-clockwise-atomic`, plus
   `riv-juice-frame-{0..4}-clockwise-atomic`, plus
-  `riv-bad_skin-frame-0-clockwise-atomic`.
+  `riv-bad_skin-frame-0-clockwise-atomic`, plus 26 newly promoted GM entries:
+  `crbug_996140`, both empty-clear cases, Montserrat and Roboto feather text,
+  `inner_join_geometry`, `interleavedfillrule`, all three labyrinth variants,
+  `mandoline`, both `mesh_ht` cases, transparent overfill, opaque and
+  transparent overstroke, `path_skbug_11859`, `quadcap`, `skbug12244`,
+  `strokes_zoomed`, `teenyStrokes`, all three tricky-cubic stroke variants,
+  and both transparent-clear blend cases.
 
 ## Milestones
 
@@ -240,9 +246,15 @@ Run `make renderer-golden`.
    C++ Dawn fixtures behaviorally distinguish every special mode with holes
    and opposite-winding contours. Destination-copy shader blending is now
    byte-exact for solid feather-atlas draws. The translated intersection board
-   now schedules disjoint MSAA draws with the C++ layer reservations. Continue
-   R2 with the remaining logical-flush draw-type, texture, scissor, and subpass
-   sorting from `render_context.cpp`.
+   now schedules disjoint MSAA draws with the C++ layer reservations. A forced
+   C++ clockwise-atomic sweep of the 38 remaining gated GMs promoted 24 under
+   their unchanged contracts. Two more clear-state GMs became exact after
+   frame attachments adopted C++'s integer-premultiplied clear color. Twelve
+   real GM divergences remain. Continue R2 with the mirrored Montserrat/Roboto
+   feather-text pair, whose roughly 750k-pixel failures are the largest shared
+   structural feather gap. The remaining logical-flush sort-key fields are
+   deferred until pass-level batching is an explicit R4 task: whole-draw Rust
+   execution already preserves their only current correctness dependency.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -256,6 +268,21 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Reclassified all 38 gated clockwise-atomic GMs against freshly
+  forced C++ Metal output. Twenty-four already pass their existing contracts
+  and are promoted with mode-correct references; no tolerance changed. The
+  two 64x64 transparent-clear fixtures then isolated a real all-pixel defect:
+  Rust supplied straight RGB to the frame attachment clear while C++ stores
+  integer-premultiplied RGBA. Premultiplying each channel before the wgpu clear
+  makes both outputs exact and is pinned by a scalar regression. The renderer
+  ratchet rises from 118 to 144 exact entries with zero divergence. The
+  remaining 12 GMs are now an evidence-backed queue rather than generic
+  `algorithm-core` guesses. A read-only logical-sort audit also found that
+  `drawType`, texture, scissor, and contents keys currently affect batching,
+  while whole-draw execution conservatively preserves subpass correctness;
+  full key parity is therefore R4 work unless a pixel counterexample appears.
+  V2 remains 263 files/584 segments, scripted V2 remains 27 files/35 segments,
+  and `cargo test --workspace` passes.
 - 2026-07-13: Integrated the translated intersection board into MSAA fallback
   scheduling. Rust now reserves C++'s `max(prepassCount, subpassCount)` layers:
   three for fast fills, two for even-odd fills, and one for strokes, atlas

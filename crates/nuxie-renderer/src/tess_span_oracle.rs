@@ -103,9 +103,28 @@ pub(crate) fn compare_exact(cpp: &TessSpanArtifact, rust: &TessSpanArtifact) -> 
             cpp.first_span, rust.first_span
         ));
     }
+    let common_prefix = cpp
+        .records
+        .iter()
+        .zip(&rust.records)
+        .take_while(|(cpp_record, rust_record)| cpp_record == rust_record)
+        .count();
     if cpp.records.len() != rust.records.len() {
+        let max_suffix = cpp
+            .records
+            .len()
+            .min(rust.records.len())
+            .saturating_sub(common_prefix);
+        let common_suffix = cpp
+            .records
+            .iter()
+            .rev()
+            .zip(rust.records.iter().rev())
+            .take(max_suffix)
+            .take_while(|(cpp_record, rust_record)| cpp_record == rust_record)
+            .count();
         return Err(format!(
-            "span count differs: C++={}, Rust={}",
+            "span count differs: C++={}, Rust={}; exact common prefix={common_prefix}, exact common suffix={common_suffix}",
             cpp.records.len(),
             rust.records.len()
         ));

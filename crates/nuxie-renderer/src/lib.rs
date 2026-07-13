@@ -4364,6 +4364,8 @@ mod tests {
     const ATLAS_ORACLE_FEATHER: f32 = 20.0;
     const STROKES_ROUND_ORACLE_FRAME_SIZE: u32 = 400;
     const STROKES_ROUND_ORACLE_THICKNESS: f32 = 4.5;
+    const RAWTEXT_ORACLE_FRAME_WIDTH: u32 = 400;
+    const RAWTEXT_ORACLE_FRAME_HEIGHT: u32 = 335;
     const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
         atlas_mask_oracle::MaskComparisonTolerances {
             support: 1.0 / 1024.0,
@@ -6477,6 +6479,53 @@ mod tests {
         path
     }
 
+    fn fixed_rawtext_draw_one_tessellation() -> draw::FillTessellation {
+        use nuxie_render_stream::{Command, RenderStream};
+
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/rawtext.rive-stream"
+        )))
+        .unwrap();
+        assert_eq!(
+            stream.frame_size,
+            Some((RAWTEXT_ORACLE_FRAME_WIDTH, RAWTEXT_ORACLE_FRAME_HEIGHT))
+        );
+        let (path, paint) = stream.frames[0]
+            .commands
+            .iter()
+            .find_map(|command| match command {
+                Command::DrawPath { path, paint } => Some((path, paint)),
+                _ => None,
+            })
+            .expect("rawtext draw 1");
+        assert_eq!(path.fill_rule, FillRule::Clockwise);
+        assert_eq!(paint.style, RenderPaintStyle::Fill);
+        assert_eq!(paint.feather, 0.0);
+        let mut tessellation =
+            draw::build_fill_tessellation(&path.raw_path, Mat2D::IDENTITY).unwrap();
+        tessellation.make_double_sided_with_direction(draw::clockwise_atomic_negate_coverage(
+            &path.raw_path,
+            Mat2D::IDENTITY,
+            path.fill_rule,
+            true,
+        ));
+        tessellation
+    }
+
+    fn fixed_rawtext_direct_inputs() -> atlas_input_oracle::AtlasInputs {
+        fixed_direct_inputs_from_tessellation(
+            fixed_rawtext_draw_one_tessellation(),
+            RAWTEXT_ORACLE_FRAME_WIDTH,
+            RAWTEXT_ORACLE_FRAME_HEIGHT,
+        )
+    }
+
+    fn fixed_rawtext_spans() -> tess_span_oracle::TessSpanArtifact {
+        let tessellation = fixed_rawtext_draw_one_tessellation();
+        tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
+    }
+
     fn fixed_strokes_round_tessellation() -> draw::FillTessellation {
         let path = strokes_round_draw_38_path();
         draw::build_stroke_tessellation(
@@ -8078,6 +8127,74 @@ mod tests {
         tess_span_oracle::compare_exact(&cpp_spans, &rust_spans).unwrap_or_else(|error| {
             panic!(
                 "C++ direct-strokes-round CPU span mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_direct_rawtext_tessellation_matches_rust() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_RAWTEXT_INPUTS").expect(
+            "RIVE_CPP_DIRECT_RAWTEXT_INPUTS is required for the ignored direct-rawtext input test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_DIRECT_RAWTEXT_INPUTS is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_RAWTEXT_INPUTS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-rawtext inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-rawtext inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_inputs = fixed_rawtext_direct_inputs();
+        atlas_input_oracle::compare_cpp_to_rust(&cpp_inputs, &rust_inputs).unwrap_or_else(
+            |error| {
+                panic!(
+                    "C++ direct-rawtext input mismatch at {}: {error}",
+                    path.display()
+                )
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_SPANS from the C++ WebGPU oracle"]
+    fn cpp_direct_rawtext_cpu_spans_match_rust_record_for_record() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_RAWTEXT_SPANS").expect(
+            "RIVE_CPP_DIRECT_RAWTEXT_SPANS is required for the ignored direct-rawtext span test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_DIRECT_RAWTEXT_SPANS is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_RAWTEXT_SPANS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-rawtext spans at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_spans = tess_span_oracle::TessSpanArtifact::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-rawtext spans at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_spans = fixed_rawtext_spans();
+        tess_span_oracle::compare_exact(&cpp_spans, &rust_spans).unwrap_or_else(|error| {
+            panic!(
+                "C++ direct-rawtext CPU span mismatch at {}: {error}",
                 path.display()
             )
         });

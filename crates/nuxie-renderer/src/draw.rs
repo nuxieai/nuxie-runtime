@@ -1308,20 +1308,16 @@ impl FillTessellation {
     }
 
     pub(crate) fn make_double_sided_with_direction(&mut self, forward_then_reverse: bool) {
-        while self.spans.len() > 1
-            && self.spans.last().unwrap().contour_id_with_flags & CONTOUR_ID_MASK == 0
-        {
-            self.spans.pop();
-        }
         let base = self.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let half_vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
-        let mut double_sided_spans = Vec::with_capacity(self.spans.len());
+        let mut geometry_spans = Vec::with_capacity(self.spans.len());
         let mut previous_logical_x0 = None;
-        for mut span in self.spans.iter().copied() {
-            if span.contour_id_with_flags & CONTOUR_ID_MASK == 0 {
-                double_sided_spans.push(span);
-                continue;
-            }
+        for mut span in self
+            .spans
+            .iter()
+            .copied()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+        {
             let (x0, x1) = span.x_range();
             let logical_x0 = span.y as i32 * TESS_TEXTURE_WIDTH + x0;
             if previous_logical_x0 == Some(logical_x0) {
@@ -1332,7 +1328,7 @@ impl FillTessellation {
                 span.contour_id_with_flags |= NEGATE_PATH_FILL_COVERAGE_FLAG;
             }
             push_double_sided_tessellation_spans(
-                &mut double_sided_spans,
+                &mut geometry_spans,
                 span,
                 logical_x0,
                 logical_x0 + x1 - x0,
@@ -1341,7 +1337,6 @@ impl FillTessellation {
                 forward_then_reverse,
             );
         }
-        self.spans = double_sided_spans;
         if !forward_then_reverse {
             for contour in &mut self.contours {
                 contour.vertex_index0 += half_vertex_count;
@@ -1350,25 +1345,25 @@ impl FillTessellation {
         self.instance_count *= 2;
         let location =
             (self.base_instance + self.instance_count) * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
-        push_midpoint_tail_padding(&mut self.spans, location as i32);
+        let mut ordered_spans = Vec::with_capacity(geometry_spans.len() + 3);
+        push_padding_span(&mut ordered_spans, 0, base as i32);
+        push_midpoint_tail_padding(&mut ordered_spans, location as i32);
+        ordered_spans.extend(geometry_spans);
+        self.spans = ordered_spans;
     }
 
     fn make_single_sided_reverse(&mut self, negate_coverage: bool) {
-        while self.spans.len() > 1
-            && self.spans.last().unwrap().contour_id_with_flags & CONTOUR_ID_MASK == 0
-        {
-            self.spans.pop();
-        }
         let base = self.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let end = base + vertex_count;
-        let mut reversed_spans = Vec::with_capacity(self.spans.len());
+        let mut geometry_spans = Vec::with_capacity(self.spans.len());
         let mut previous_logical_x0 = None;
-        for mut span in self.spans.iter().copied() {
-            if span.contour_id_with_flags & CONTOUR_ID_MASK == 0 {
-                reversed_spans.push(span);
-                continue;
-            }
+        for mut span in self
+            .spans
+            .iter()
+            .copied()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+        {
             let (x0, x1) = span.x_range();
             let logical_x0 = span.y as i32 * TESS_TEXTURE_WIDTH + x0;
             if previous_logical_x0 == Some(logical_x0) {
@@ -1379,7 +1374,7 @@ impl FillTessellation {
                 span.contour_id_with_flags |= NEGATE_PATH_FILL_COVERAGE_FLAG;
             }
             push_reverse_tessellation_spans(
-                &mut reversed_spans,
+                &mut geometry_spans,
                 span,
                 logical_x0,
                 logical_x0 + x1 - x0,
@@ -1387,11 +1382,14 @@ impl FillTessellation {
                 end as i32,
             );
         }
-        self.spans = reversed_spans;
         for contour in &mut self.contours {
             contour.vertex_index0 = base + end - contour.vertex_index0 - 1;
         }
-        push_midpoint_tail_padding(&mut self.spans, end as i32);
+        let mut ordered_spans = Vec::with_capacity(geometry_spans.len() + 3);
+        push_padding_span(&mut ordered_spans, 0, base as i32);
+        push_midpoint_tail_padding(&mut ordered_spans, end as i32);
+        ordered_spans.extend(geometry_spans);
+        self.spans = ordered_spans;
     }
 }
 
@@ -1459,7 +1457,7 @@ fn push_double_sided_tessellation_spans(
     let mut y = forward_location / TESS_TEXTURE_WIDTH;
     let mut x0 = forward_location % TESS_TEXTURE_WIDTH;
     let mut x1 = x0 + vertex_count;
-    let mut reflection_y = (reflection_location - 1) / TESS_TEXTURE_WIDTH;
+    let mut reflection_y = ((reflection_location - 1) / TESS_TEXTURE_WIDTH) as u32;
     let mut reflection_x0 = (reflection_location - 1) % TESS_TEXTURE_WIDTH + 1;
     let mut reflection_x1 = reflection_x0 - vertex_count;
 
@@ -1473,7 +1471,7 @@ fn push_double_sided_tessellation_spans(
         y += 1;
         x0 -= TESS_TEXTURE_WIDTH;
         x1 -= TESS_TEXTURE_WIDTH;
-        reflection_y -= 1;
+        reflection_y = reflection_y.wrapping_sub(1);
         reflection_x0 += TESS_TEXTURE_WIDTH;
         reflection_x1 += TESS_TEXTURE_WIDTH;
     }
@@ -1489,7 +1487,7 @@ fn push_reverse_tessellation_spans(
 ) {
     let vertex_count = logical_x1 - logical_x0;
     let reverse_location = end - (logical_x0 - base);
-    let mut y = (reverse_location - 1) / TESS_TEXTURE_WIDTH;
+    let mut y = ((reverse_location - 1) / TESS_TEXTURE_WIDTH) as u32;
     let mut x0 = (reverse_location - 1) % TESS_TEXTURE_WIDTH + 1;
     let mut x1 = x0 - vertex_count;
     loop {
@@ -1499,7 +1497,7 @@ fn push_reverse_tessellation_spans(
         if x1 >= 0 {
             break;
         }
-        y -= 1;
+        y = y.wrapping_sub(1);
         x0 += TESS_TEXTURE_WIDTH;
         x1 += TESS_TEXTURE_WIDTH;
     }
@@ -1509,7 +1507,7 @@ pub(crate) fn build_fill_tessellation(
     path: &RawPath,
     transform: Mat2D,
 ) -> Option<FillTessellation> {
-    let contours = cubic_contours(path);
+    let contours = fill_cubic_contours(path);
     if contours.is_empty() {
         return None;
     }
@@ -1521,11 +1519,14 @@ pub(crate) fn build_fill_tessellation(
     let path_start = location;
     for (index, curves) in contours.iter().enumerate() {
         let vertex_index0 = location as u32;
-        let midpoint = contour_midpoint(curves);
+        let midpoint =
+            contour_midpoint(&curves.iter().map(|curve| curve.cubic).collect::<Vec<_>>());
         contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, vertex_index0));
         let segment_counts = curves
             .iter()
-            .map(|curve| cubic_segment_count(curve.map(|point| transform.transform_point(point))))
+            .map(|curve| {
+                cubic_segment_count(curve.cubic.map(|point| transform.transform_point(point)))
+            })
             .collect::<Vec<_>>();
         let raw_vertex_count = segment_counts.iter().sum::<u32>() + curves.len() as u32;
         let padding = align_up(
@@ -1539,8 +1540,12 @@ pub(crate) fn build_fill_tessellation(
             location += segments as i32 + 1 + i32::from(curve_index == 0) * padding;
             push_forward_tessellation_spans(
                 &mut spans,
-                curve.map(|point| [point.x, point.y]),
-                [0.0, 0.0],
+                curve.cubic.map(|point| [point.x, point.y]),
+                if curve.is_line {
+                    [0.0, 1.0]
+                } else {
+                    [0.0, 0.0]
+                },
                 x0,
                 location,
                 segments,
@@ -1550,7 +1555,10 @@ pub(crate) fn build_fill_tessellation(
             );
         }
     }
+    // C++ LogicalFlush writes every padding span before PathDraw geometry.
+    let geometry_spans = spans.split_off(1);
     push_midpoint_tail_padding(&mut spans, location);
+    spans.extend(geometry_spans);
     Some(FillTessellation {
         spans,
         path: PathData::new(
@@ -1567,19 +1575,22 @@ pub(crate) fn build_fill_tessellation(
     })
 }
 
-fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
+fn fill_cubic_contours(path: &RawPath) -> Vec<Vec<StrokeCurve>> {
     let mut result = Vec::new();
     let mut curves = Vec::new();
     let mut first = None;
     let mut current = None;
     let mut point_index = 0;
-    let finish = |result: &mut Vec<Vec<[Vec2D; 4]>>,
-                  curves: &mut Vec<[Vec2D; 4]>,
+    let finish = |result: &mut Vec<Vec<StrokeCurve>>,
+                  curves: &mut Vec<StrokeCurve>,
                   first: &mut Option<Vec2D>,
                   current: &mut Option<Vec2D>| {
         if let (Some(start), Some(end)) = (*first, *current) {
             if !same_point(start, end) {
-                curves.push(line_cubic(end, start));
+                curves.push(StrokeCurve {
+                    cubic: line_cubic(end, start),
+                    is_line: true,
+                });
             }
         }
         if !curves.is_empty() {
@@ -1601,7 +1612,10 @@ fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
                 let end = path.points()[point_index];
                 point_index += 1;
                 if let Some(start) = current {
-                    curves.push(line_cubic(start, end));
+                    curves.push(StrokeCurve {
+                        cubic: line_cubic(start, end),
+                        is_line: true,
+                    });
                 }
                 current = Some(end);
             }
@@ -1610,12 +1624,15 @@ fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
                 let end = path.points()[point_index + 1];
                 point_index += 2;
                 if let Some(start) = current {
-                    curves.push([
-                        start,
-                        lerp(start, control, 2.0 / 3.0),
-                        lerp(end, control, 2.0 / 3.0),
-                        end,
-                    ]);
+                    curves.push(StrokeCurve {
+                        cubic: [
+                            start,
+                            lerp(start, control, 2.0 / 3.0),
+                            lerp(end, control, 2.0 / 3.0),
+                            end,
+                        ],
+                        is_line: false,
+                    });
                 }
                 current = Some(end);
             }
@@ -1625,14 +1642,20 @@ fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
                 let end = path.points()[point_index + 2];
                 point_index += 3;
                 if let Some(start) = current {
-                    curves.push([start, control0, control1, end]);
+                    curves.push(StrokeCurve {
+                        cubic: [start, control0, control1, end],
+                        is_line: false,
+                    });
                 }
                 current = Some(end);
             }
             PathVerb::Close => {
                 if let (Some(start), Some(end)) = (first, current) {
                     if !same_point(start, end) {
-                        curves.push(line_cubic(end, start));
+                        curves.push(StrokeCurve {
+                            cubic: line_cubic(end, start),
+                            is_line: true,
+                        });
                     }
                     current = Some(start);
                 }
@@ -1643,11 +1666,22 @@ fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
     result
 }
 
+fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
+    fill_cubic_contours(path)
+        .into_iter()
+        .map(|curves| curves.into_iter().map(|curve| curve.cubic).collect())
+        .collect()
+}
+
 fn line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
+    let mix_one_third = |a: Vec2D, b: Vec2D| {
+        let t = 1.0 / 3.0;
+        Vec2D::new((b.x - a.x).mul_add(t, a.x), (b.y - a.y).mul_add(t, a.y))
+    };
     [
         start,
-        lerp(start, end, 1.0 / 3.0),
-        lerp(start, end, 2.0 / 3.0),
+        mix_one_third(start, end),
+        mix_one_third(end, start),
         end,
     ]
 }
@@ -2151,8 +2185,9 @@ mod tests {
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
         assert_eq!(tessellation.spans.len(), 6);
         assert_eq!(tessellation.spans[0].x0_x1 as u32, 0x0008_0000);
-        assert_eq!(tessellation.spans[1].x0_x1 as u32, 0x000c_0008);
-        assert_eq!(tessellation.spans[3].x0_x1 as u32, 0x0010_000e);
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry[0].x0_x1 as u32, 0x000c_0008);
+        assert_eq!(geometry[2].x0_x1 as u32, 0x0010_000e);
         assert_post_contour_padding(&tessellation);
     }
 
@@ -2187,8 +2222,9 @@ mod tests {
         assert_eq!(tessellation.base_instance, 1);
         assert_eq!(tessellation.instance_count, 2);
         assert_eq!(tessellation.contours[0].vertex_index0, 16);
-        assert_eq!(tessellation.spans[1].x_range(), (16, 20));
-        assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x000c_0010);
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry[0].x_range(), (16, 20));
+        assert_eq!(geometry[0].reflection_x0_x1 as u32, 0x000c_0010);
         assert_post_contour_padding(&tessellation);
     }
 
@@ -2205,10 +2241,11 @@ mod tests {
 
         assert_eq!(tessellation.instance_count, 2);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert_eq!(tessellation.spans[1].x_range(), (8, 12));
-        assert_eq!(tessellation.spans[1].reflection_x0_x1 as u32, 0x0014_0018);
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry[0].x_range(), (8, 12));
+        assert_eq!(geometry[0].reflection_x0_x1 as u32, 0x0014_0018);
         assert_ne!(
-            tessellation.spans[1].contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG,
+            geometry[0].contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG,
             0
         );
         assert_post_contour_padding(&tessellation);
@@ -2440,6 +2477,7 @@ mod tests {
 
         let center = (base + half_vertex_count) as i32;
         let mut saw_wrapped_record = false;
+        let mut saw_wrapped_reflection_row = false;
         for span in tessellation
             .spans
             .iter()
@@ -2449,7 +2487,13 @@ mod tests {
             let reflection_x0 = span.reflection_x0_x1 as i16 as i32;
             let reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
             let forward_location = span.y as i32 * TESS_TEXTURE_WIDTH + x0;
-            let reflection_location = span.reflection_y as i32 * TESS_TEXTURE_WIDTH + reflection_x0;
+            let reflection_y = if span.reflection_y == u32::MAX as f32 {
+                saw_wrapped_reflection_row = true;
+                -1
+            } else {
+                span.reflection_y as i32
+            };
+            let reflection_location = reflection_y * TESS_TEXTURE_WIDTH + reflection_x0;
             assert_eq!(forward_location + reflection_location, center * 2);
             assert_eq!(x1 - x0, reflection_x0 - reflection_x1);
             saw_wrapped_record |= x0 < 0
@@ -2458,6 +2502,7 @@ mod tests {
                 || reflection_x1 < 0;
         }
         assert!(saw_wrapped_record);
+        assert!(saw_wrapped_reflection_row);
     }
 
     #[test]

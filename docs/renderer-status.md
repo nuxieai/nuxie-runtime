@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=152, diverges=0, gated=1,315, total=1,467.
+- Rust wgpu: exact=153, diverges=0, gated=1,314, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -103,7 +103,8 @@ Run `make renderer-golden`.
   `gm-overfill_blendmodes-clockwise-atomic` and
   `gm-overfill_opaque-clockwise-atomic`, plus
   `gm-strokes_round-clockwise-atomic` and
-  `gm-strokefill-clockwise-atomic`.
+  `gm-strokefill-clockwise-atomic`, plus
+  `gm-rawtext-clockwise-atomic`.
 
 ## Milestones
 
@@ -258,7 +259,7 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Four gated clockwise-atomic GM
+   Montserrat/Roboto feather-text pair. Three gated clockwise-atomic GM
    divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
@@ -283,9 +284,17 @@ Run `make renderer-golden`.
    30 pixels beyond delta 2, the full frame has 109 pixels/max delta 48 across
    19 components with largest area 15, and thresholded support IoU remains
    above 99.985%. It keeps channel delta 2 with a 128-pixel allowance.
-   `rawtext` is next: both isolated compound fills have sparse edge residuals,
-   but its 263-pixel/max-80 total requires a midpoint-fan preparation oracle
-   before any backend allowance is considered.
+   `rawtext` is promoted after a production-ring C++ oracle proved its first
+   compound fill exact before rasterization: all 438 CPU span records, the
+   `1+318` patch range, 36 contour records, and the complete 2,048x2
+   tessellation texture match Rust byte-for-byte. The source fixes restore
+   C++ flush-padding order, line/cubic tangent provenance, fused SIMD line
+   conversion, and unsigned reflected-row wrapping. Fresh native Metal and
+   the legacy reference agree at the standard threshold; the full Rust frame
+   has 263 pixels/max delta 80 split across 76 components with largest area
+   10, while its two isolated draws contribute 190 and 73 pixels. Foreground
+   support IoU remains above 99.822%, so the entry is promoted at unchanged
+   channel delta 2 with a bounded 288-pixel backend allowance.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -302,6 +311,20 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Promoted `rawtext` after closing its complete pre-raster path.
+  A deterministic stream-derived C++ production oracle pins provenance and
+  matches Rust across all 438 CPU tessellation-span records (7,008 words),
+  the `1+318` patch range, 36 contour records, and every texel of the 2,048x2
+  RGBA32Uint tessellation texture. It exposed four shared preparation gaps:
+  flush padding order, line-versus-cubic tangent provenance, C++'s fused SIMD
+  line conversion, and unsigned reflected-row wrapping. After porting them,
+  the final 263-pixel/max-80 residual is distributed across 76 components
+  with largest area 10; isolated draws account for 190 and 73 pixels, and
+  thresholded support IoU stays at or above 99.822%. Fresh forced-clockwise
+  Metal differs from the legacy reference by zero pixels beyond delta 2. The
+  unchanged channel delta 2 and bounded 288-pixel allowance advance the
+  ratchet to exact=153/diverges=0/gated=1,314. Renderer golden, the full
+  workspace suite, and both V2 golden floors pass.
 - 2026-07-13: Promoted `strokefill` under a bounded 128-pixel
   native-Metal-versus-wgpu allowance at unchanged channel delta 2. Prefix
   replay shows no structural jump across its 14 mixed fill/stroke draws; every
@@ -1546,3 +1569,9 @@ Run `make renderer-golden`.
   edge-only 109-pixel residual under a bounded 128-pixel allowance, advancing
   the renderer ratchet to exact=152/diverges=0/gated=1,315. Renderer golden,
   both V2 golden floors, and the workspace tests pass; `rawtext` is next.
+- 2026-07-13: Added a stream-derived C++ production oracle for `rawtext`,
+  matched all 438 CPU spans and the complete tessellation texture exactly,
+  ported four shared fill-preparation details, and promoted the sparse final
+  raster residual under a bounded 288-pixel allowance. The renderer ratchet is
+  exact=153/diverges=0/gated=1,314; renderer golden, the full workspace suite,
+  and both V2 golden floors pass.

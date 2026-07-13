@@ -88,6 +88,23 @@ corpus promotion gate. `build.sh` requires exactly one contour, patch range
 `1+10`, a nonempty canonical span artifact, and a final-frame artifact of
 exactly `640020` bytes.
 
+`direct-rawtext-spans.bin`, `direct-rawtext-inputs.bin`, and
+`direct-rawtext-blit.rgba` isolate draw 1 from
+`fixtures/renderer/streams/gm/rawtext.rive-stream`. During each build,
+`generate_rawtext_stream_path.py` validates the canonical stream record and
+emits its exact 506 verbs and 1,096 f32 point literals into the temporary C++
+source tree. The fixture preserves all 36 contours, clockwise fill, zero
+feathering, and the stream's `400 x 335` white frame. The `RIVEATS` artifact
+captures the complete `firstSpan=0`, `spanCount=438` CPU `TessVertexSpan`
+range before unmap. The `RIVEATI` artifact pins patch range `1+318`, every
+contour record, and the complete `2048 x 2` post-tessellation `RGBA32Uint`
+texture. Their canonical sizes are `28060` and `66152` bytes, respectively;
+the `400 x 335` diagnostic blit is exactly `536020` bytes. Together they
+distinguish path and midpoint-fan preparation from downstream
+native-Metal-versus-wgpu raster edges. The `RIVEABL` final frame is diagnostic
+only; native Metal replay remains the corpus pixel oracle for clockwise-atomic
+mode.
+
 `direct-polyshark-inputs.bin` uses the same contract for row 0, shark cell
 (stream lines 14 and 28) of `feather_polyshapes`. During each build,
 `generate_polyshark_stream_path.py` validates that canonical stream record and
@@ -267,6 +284,14 @@ RIVE_CPP_DIRECT_STROKES_ROUND_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct
   cargo test -p nuxie-renderer \
   tests::cpp_direct_strokes_round_cpu_spans_match_rust_record_for_record \
   -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_RAWTEXT_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-rawtext-inputs.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_direct_rawtext_tessellation_matches_rust \
+  -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_RAWTEXT_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-rawtext-spans.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_direct_rawtext_cpu_spans_match_rust_record_for_record \
+  -- --exact --ignored --nocapture
 RIVE_CPP_DIRECT_BAD_SKIN_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-bad-skin-inputs.bin" \
   cargo test -p nuxie-renderer \
   direct_grid_oracle::tests::configured_cpp_bad_skin_preparation_matches_record_for_record \
@@ -316,7 +341,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_SOFTENED_CUSP`, or
 `RIVE_CPP_DIRECT_CUSP_INPUTS`, `RIVE_CPP_DIRECT_POLYSHARK_INPUTS`, or
 `RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, `RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS`,
-`RIVE_CPP_DIRECT_STROKES_ROUND_SPANS`, `RIVE_CPP_ATLAS_BLIT`, or
+`RIVE_CPP_DIRECT_STROKES_ROUND_SPANS`, `RIVE_CPP_DIRECT_RAWTEXT_INPUTS`,
+`RIVE_CPP_DIRECT_RAWTEXT_SPANS`, `RIVE_CPP_ATLAS_BLIT`, or
 `RIVE_CPP_ATLAS_CLIPPED_BLIT`, `RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_CHANGING_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_NESTED_PATH_CLIPPED_BLIT`,

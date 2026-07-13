@@ -36,8 +36,13 @@ direct_bad_skin_inputs_output="${RIVE_DIRECT_BAD_SKIN_INPUT_OUTPUT:-$script_dir/
 direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"
 direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"
 direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"
+direct_rawtext_inputs_output="${RIVE_DIRECT_RAWTEXT_INPUT_OUTPUT:-$script_dir/out/direct-rawtext-inputs.bin}"
+direct_rawtext_blit_output="${RIVE_DIRECT_RAWTEXT_BLIT_OUTPUT:-$script_dir/out/direct-rawtext-blit.rgba}"
+direct_rawtext_spans_output="${RIVE_DIRECT_RAWTEXT_SPANS_OUTPUT:-$script_dir/out/direct-rawtext-spans.bin}"
 polyshark_generator="$script_dir/generate_polyshark_stream_path.py"
 polyshark_stream="$script_dir/../../fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
+rawtext_generator="$script_dir/generate_rawtext_stream_path.py"
+rawtext_stream="$script_dir/../../fixtures/renderer/streams/gm/rawtext.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -118,6 +123,7 @@ preflight() {
     local naga_version
     python3 "$script_dir/format_test.py"
     python3 "$polyshark_generator" --stream "$polyshark_stream" --check
+    python3 "$rawtext_generator" --stream "$rawtext_stream" --check
     for command in cmp git make mktemp premake5 python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
@@ -287,11 +293,16 @@ mkdir -p "$injected_dir" \
     "$(dirname "$direct_strokes_round_inputs_output")" \
     "$(dirname "$direct_strokes_round_blit_output")" \
     "$(dirname "$direct_strokes_round_spans_output")" \
+    "$(dirname "$direct_rawtext_inputs_output")" \
+    "$(dirname "$direct_rawtext_blit_output")" \
+    "$(dirname "$direct_rawtext_spans_output")" \
     "$(dirname "$advanced_blend_blit_output")" \
     "$(dirname "$atomic_advanced_blend_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
+python3 "$rawtext_generator" --stream "$rawtext_stream" \
+    --output "$injected_dir/generated_rawtext_path.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -316,7 +327,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -335,11 +346,14 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_flower_inputs_output" /dev/null direct-flower
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_bad_skin_inputs_output" /dev/null direct-bad-skin
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" direct-rawtext "$direct_rawtext_spans_output"
 python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"
+python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"
+python3 "$script_dir/format_test.py" --validate-direct-rawtext-spans "$direct_rawtext_spans_output"
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -455,6 +469,21 @@ if [[ "$direct_strokes_round_blit_bytes" != "640020" ]]; then
     echo "direct strokes-round blit must be exactly 640020 bytes, got $direct_strokes_round_blit_bytes: $direct_strokes_round_blit_output" >&2
     exit 1
 fi
+direct_rawtext_inputs_bytes="$(wc -c < "$direct_rawtext_inputs_output" | tr -d ' ')"
+if [[ "$direct_rawtext_inputs_bytes" != "66152" ]]; then
+    echo "direct rawtext inputs must be exactly 66152 bytes, got $direct_rawtext_inputs_bytes: $direct_rawtext_inputs_output" >&2
+    exit 1
+fi
+direct_rawtext_spans_bytes="$(wc -c < "$direct_rawtext_spans_output" | tr -d ' ')"
+if [[ "$direct_rawtext_spans_bytes" != "28060" ]]; then
+    echo "direct rawtext spans must be exactly 28060 bytes, got $direct_rawtext_spans_bytes: $direct_rawtext_spans_output" >&2
+    exit 1
+fi
+direct_rawtext_blit_bytes="$(wc -c < "$direct_rawtext_blit_output" | tr -d ' ')"
+if [[ "$direct_rawtext_blit_bytes" != "536020" ]]; then
+    echo "direct rawtext blit must be exactly 536020 bytes, got $direct_rawtext_blit_bytes: $direct_rawtext_blit_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
 echo "atlas inputs: $inputs_output"
 echo "atlas blit: $blit_output"
@@ -482,3 +511,6 @@ echo "direct bad-skin inputs: $direct_bad_skin_inputs_output"
 echo "direct strokes-round inputs: $direct_strokes_round_inputs_output"
 echo "direct strokes-round blit: $direct_strokes_round_blit_output"
 echo "direct strokes-round spans: $direct_strokes_round_spans_output"
+echo "direct rawtext inputs: $direct_rawtext_inputs_output"
+echo "direct rawtext blit: $direct_rawtext_blit_output"
+echo "direct rawtext spans: $direct_rawtext_spans_output"

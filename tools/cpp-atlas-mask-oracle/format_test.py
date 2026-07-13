@@ -46,10 +46,12 @@ README = pathlib.Path(__file__).with_name("README.md")
 RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
 RUST_RENDERER = ROOT / "crates" / "nuxie-renderer" / "src" / "lib.rs"
 STROKES_ROUND_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "strokes_round.rive-stream"
+RAWTEXT_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "rawtext.rive-stream"
 POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
 BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
 POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
+RAWTEXT_GENERATOR = pathlib.Path(__file__).with_name("generate_rawtext_stream_path.py")
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
 # Exact bytes asserted by AtlasMask::serialize() in commit 10a64ec.
@@ -107,11 +109,13 @@ def parse_inputs(data: bytes) -> dict:
     }
 
 
-def make_inputs(base_patch=1, patch_count=2, contour_count=1) -> bytes:
+def make_inputs(base_patch=1, patch_count=2, contour_count=1,
+                width=2, height=1) -> bytes:
     header = INPUT_MAGIC + struct.pack(
-        "<8I", 1, base_patch, patch_count, contour_count, 2, 1, 16, 16
+        "<8I", 1, base_patch, patch_count, contour_count,
+        width, height, 16, 16
     )
-    return header + bytes(contour_count * 16) + bytes(2 * 16)
+    return header + bytes(contour_count * 16) + bytes(width * height * 16)
 
 
 def _parse_direct_inputs(data: bytes, magic: bytes, name: str,
@@ -342,6 +346,26 @@ def validate_direct_strokes_round_spans(data: bytes) -> dict:
     return validated
 
 
+def validate_direct_rawtext_inputs(data: bytes) -> dict:
+    validated = parse_inputs(data)
+    actual = tuple(validated[field] for field in (
+        "base_patch", "patch_count", "contour_count", "width", "height"
+    ))
+    if actual != (1, 318, 36, 2048, 2):
+        raise ValueError(
+            "direct-rawtext must be exactly patches=1+318, contours=36, "
+            "tessellation=2048x2"
+        )
+    return validated
+
+
+def validate_direct_rawtext_spans(data: bytes) -> dict:
+    validated = parse_tess_spans(data)
+    if (validated["first_span"], validated["span_count"]) != (0, 438):
+        raise ValueError("direct-rawtext span range must be exactly 0+438")
+    return validated
+
+
 class FormatTests(unittest.TestCase):
     def test_accepts_rust_serializer_fixture_byte_for_byte(self):
         self.assertEqual(parse_mask(RUST_SERIALIZER_FIXTURE), {
@@ -396,6 +420,28 @@ class FormatTests(unittest.TestCase):
         two_contours = make_inputs(patch_count=10, contour_count=2)
         with self.assertRaisesRegex(ValueError, "exactly one contour"):
             validate_direct_strokes_round_inputs(two_contours)
+
+    def test_direct_rawtext_contract_pins_full_preparation_shape(self):
+        inputs = make_inputs(
+            patch_count=318, contour_count=36, width=2048, height=2
+        )
+        self.assertEqual(validate_direct_rawtext_inputs(inputs)["patch_count"], 318)
+        with self.assertRaisesRegex(ValueError, r"patches=1\+318"):
+            validate_direct_rawtext_inputs(
+                make_inputs(
+                    patch_count=317, contour_count=36, width=2048, height=2
+                )
+            )
+        self.assertEqual(
+            validate_direct_rawtext_spans(
+                make_tess_spans(first_span=0, span_count=438)
+            )["span_count"],
+            438,
+        )
+        with self.assertRaisesRegex(ValueError, r"exactly 0\+438"):
+            validate_direct_rawtext_spans(
+                make_tess_spans(first_span=0, span_count=437)
+            )
 
     def test_direct_strokes_round_cli_validates_arguments_and_contract(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -853,6 +899,38 @@ class FormatTests(unittest.TestCase):
                 changed_output.read_text(),
             )
 
+    def test_direct_rawtext_provenance_matches_stream_line_9(self):
+        stream_lines = RAWTEXT_STREAM.read_text().splitlines()
+        self.assertTrue(stream_lines[8].startswith(
+            "drawPath path={id=1,fillRule=2,path={verbs=[move,line"
+        ))
+        self.assertIn("points=[(5.9765625,66.796875)", stream_lines[8])
+        self.assertTrue(stream_lines[8].endswith(
+            "paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}"
+        ))
+
+        source = EXPORTER.read_text()
+        self.assertIn('#include "generated_rawtext_path.inc"', source)
+        self.assertIn("addRawTextDrawOne(path.get());", source)
+        self.assertIn('std::strcmp(argv[4], "direct-rawtext")', source)
+        self.assertIn("constexpr uint32_t kDirectRawTextPatchCount = 318;", source)
+        self.assertIn("facts.drawBatches[1].elementCount == kDirectRawTextPatchCount", source)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first = pathlib.Path(temp_dir) / "first.inc"
+            second = pathlib.Path(temp_dir) / "second.inc"
+            command = ["python3", str(RAWTEXT_GENERATOR), "--stream",
+                       str(RAWTEXT_STREAM), "--output"]
+            subprocess.run(command + [str(first)], check=True)
+            subprocess.run(command + [str(second)], check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            generated = first.read_text().splitlines()
+            self.assertEqual(len(generated), 511)
+            self.assertEqual(
+                generated[4], "    path->moveTo(5.9765625f, 66.796875f);"
+            )
+            self.assertEqual(generated[-2], "    path->close();")
+
     def test_direct_flower_provenance_matches_stream_line_7(self):
         stream_line = FLOWER_STREAM.read_text().splitlines()[6]
         self.assertIn("clipPath path={id=1,fillRule=2", stream_line)
@@ -1001,14 +1079,21 @@ class FormatTests(unittest.TestCase):
             'direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"',
             'direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"',
             'direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"',
+            'direct_rawtext_inputs_output="${RIVE_DIRECT_RAWTEXT_INPUT_OUTPUT:-$script_dir/out/direct-rawtext-inputs.bin}"',
+            'direct_rawtext_blit_output="${RIVE_DIRECT_RAWTEXT_BLIT_OUTPUT:-$script_dir/out/direct-rawtext-blit.rgba}"',
+            'direct_rawtext_spans_output="${RIVE_DIRECT_RAWTEXT_SPANS_OUTPUT:-$script_dir/out/direct-rawtext-spans.bin}"',
             'polyshark_generator="$script_dir/generate_polyshark_stream_path.py"',
             'python3 "$polyshark_generator" --stream "$polyshark_stream" --check',
             '--output "$injected_dir/generated_polyshark_path.inc"',
+            'rawtext_generator="$script_dir/generate_rawtext_stream_path.py"',
+            'python3 "$rawtext_generator" --stream "$rawtext_stream" --check',
+            '--output "$injected_dir/generated_rawtext_path.inc"',
             '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
             '"$direct_grid_inputs_output" /dev/null direct-grid',
             '"$direct_flower_inputs_output" /dev/null direct-flower',
             '"$direct_bad_skin_inputs_output" /dev/null direct-bad-skin',
             '"$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"',
+            '"$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" direct-rawtext "$direct_rawtext_spans_output"',
             'nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-evenodd-path-clipped-blit.rgba}"',
             'nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"',
             'advanced_blend_blit_output="${RIVE_ATLAS_ADVANCED_BLEND_BLIT_OUTPUT:-$script_dir/out/atlas-advanced-blend-blit.rgba}"',
@@ -1023,6 +1108,8 @@ class FormatTests(unittest.TestCase):
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-rawtext-spans "$direct_rawtext_spans_output"',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$atomic_advanced_blend_bytes" != "16404" ]]',
@@ -1034,6 +1121,9 @@ class FormatTests(unittest.TestCase):
             'if (( direct_cusp_inputs_bytes <= 56 ))',
             'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
             'if [[ "$direct_strokes_round_blit_bytes" != "640020" ]]',
+            'if [[ "$direct_rawtext_inputs_bytes" != "66152" ]]',
+            'if [[ "$direct_rawtext_spans_bytes" != "28060" ]]',
+            'if [[ "$direct_rawtext_blit_bytes" != "536020" ]]',
         ):
             self.assertIn(fragment, source)
 
@@ -1066,6 +1156,8 @@ class FormatTests(unittest.TestCase):
             '#[ignore = "requires RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATOMIC_ADVANCED_BLEND from the C++ WebGPU atomic oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_STROKES_ROUND_SPANS from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_INPUTS from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_SPANS from the C++ WebGPU oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
             "fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root()",
@@ -1109,6 +1201,10 @@ class FormatTests(unittest.TestCase):
         self.assertIn('RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-inputs.bin"',
                       readme)
         self.assertIn('RIVE_CPP_DIRECT_STROKES_ROUND_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-spans.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_DIRECT_RAWTEXT_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-rawtext-inputs.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_DIRECT_RAWTEXT_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-rawtext-spans.bin"',
                       readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 
@@ -1216,6 +1312,10 @@ if __name__ == "__main__":
         "--validate-direct-strokes-round-spans":
             ("direct-strokes-round-spans", "RIVEATS",
              validate_direct_strokes_round_spans),
+        "--validate-direct-rawtext":
+            ("direct-rawtext", "RIVEATI", validate_direct_rawtext_inputs),
+        "--validate-direct-rawtext-spans":
+            ("direct-rawtext-spans", "RIVEATS", validate_direct_rawtext_spans),
     }
     if sys.argv[1:2] and sys.argv[1] in validators:
         if len(sys.argv) != 3:

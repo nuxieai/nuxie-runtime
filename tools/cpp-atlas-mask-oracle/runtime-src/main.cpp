@@ -48,8 +48,13 @@ constexpr uint32_t kDirectBadSkinFrameHeight = 720;
 constexpr uint32_t kDirectBadSkinContourCount = 1;
 constexpr uint32_t kDirectStrokesRoundFrameSize = 400;
 constexpr float kDirectStrokesRoundThickness = 4.5f;
+constexpr uint32_t kDirectRawTextFrameWidth = 400;
+constexpr uint32_t kDirectRawTextFrameHeight = 335;
+constexpr uint32_t kDirectRawTextContourCount = 36;
+constexpr uint32_t kDirectRawTextPatchCount = 318;
 constexpr uint32_t kIntersectionGroupBatchCount = 9;
 #include "generated_polyshark_path.inc"
+#include "generated_rawtext_path.inc"
 
 void fail(const char* message)
 {
@@ -719,6 +724,8 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;
     const bool directStrokesRoundCase =
         argc > 4 && std::strcmp(argv[4], "direct-strokes-round") == 0;
+    const bool directRawTextCase =
+        argc > 4 && std::strcmp(argv[4], "direct-rawtext") == 0;
     const bool clippedCase = argc > 4 && std::strcmp(argv[4], "clipped") == 0;
     const bool pathClippedCase =
         argc > 4 && std::strcmp(argv[4], "path-clipped") == 0;
@@ -742,7 +749,7 @@ int main(int argc, char** argv)
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase ||
-        directStrokesRoundCase;
+        directStrokesRoundCase || directRawTextCase;
     const bool directOutputCase = directCase || atomicAdvancedBlendCase;
     const bool fillCase = circleCase || cuspCase ||
                           (directCase && !directStrokesRoundCase) ||
@@ -758,10 +765,12 @@ int main(int argc, char** argv)
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
          !advancedBlendCase && !atomicAdvancedBlendCase &&
          !intersectionGroupsCase) ||
-        (auxiliaryOutput != nullptr && !cuspCase && !directStrokesRoundCase) ||
-        (directStrokesRoundCase && auxiliaryOutput == nullptr))
+        (auxiliaryOutput != nullptr && !cuspCase && !directStrokesRoundCase &&
+         !directRawTextCase) ||
+        ((directStrokesRoundCase || directRawTextCase) &&
+         auxiliaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round] [softened-or-tess-span-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [softened-or-tess-span-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -821,13 +830,17 @@ int main(int argc, char** argv)
     targetDesc.usage =
         wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     targetDesc.dimension = wgpu::TextureDimension::e2D;
-    const uint32_t frameWidth = directStrokesRoundCase
+    const uint32_t frameWidth = directRawTextCase
+                                    ? kDirectRawTextFrameWidth
+                                : directStrokesRoundCase
                                     ? kDirectStrokesRoundFrameSize
                                 : directBadSkinCase
                                     ? kDirectBadSkinFrameWidth
                                     : (directTriangulatedCase ? kDirectGridFrameSize
                                                                : kFrameWidth);
-    const uint32_t frameHeight = directStrokesRoundCase
+    const uint32_t frameHeight = directRawTextCase
+                                     ? kDirectRawTextFrameHeight
+                                 : directStrokesRoundCase
                                      ? kDirectStrokesRoundFrameSize
                                  : directBadSkinCase
                                      ? kDirectBadSkinFrameHeight
@@ -845,7 +858,7 @@ int main(int argc, char** argv)
     context->beginFrame({.renderTargetWidth = frameWidth,
                          .renderTargetHeight = frameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
-                         .clearColor = directStrokesRoundCase
+                         .clearColor = directStrokesRoundCase || directRawTextCase
                                            ? 0xffffffff
                                            : (anyAdvancedBlendCase ? 0xff204080 : 0),
                          .msaaSampleCount = directOutputCase ? 0u : 4u,
@@ -859,7 +872,11 @@ int main(int argc, char** argv)
     {
         path->fillRule(rive::FillRule::clockwise);
     }
-    if (directStrokesRoundCase)
+    if (directRawTextCase)
+    {
+        addRawTextDrawOne(path.get());
+    }
+    else if (directStrokesRoundCase)
     {
         // Source: strokes_round.rive-stream draw 38. The clip is intentionally
         // omitted because the isolated seam residual is unchanged without it.
@@ -1002,11 +1019,13 @@ int main(int argc, char** argv)
         paint->cap(rive::StrokeCap::butt);
     }
     paint->feather(directTriangulatedCase || directStrokesRoundCase ||
+                           directRawTextCase ||
                            intersectionGroupsCase
                        ? 0.f
                        : (directCase ? 1.f : kFeather));
-    paint->color(directStrokesRoundCase
-                     ? 0x7a52bdb0
+    paint->color(directRawTextCase
+                     ? 0xff000000
+                 : directStrokesRoundCase ? 0x7a52bdb0
                      : (anyAdvancedBlendCase ? 0xc0e08040 : 0xffffffff));
     if (anyAdvancedBlendCase)
     {
@@ -1319,7 +1338,7 @@ int main(int argc, char** argv)
     else if (directCase)
     {
         const uint32_t expectedPatchDrawType = static_cast<uint32_t>(
-            directStrokesRoundCase
+            directStrokesRoundCase || directRawTextCase
                 ? rive::gpu::DrawType::midpointFanPatches
                 : rive::gpu::DrawType::midpointFanCenterAAPatches);
         bool directScheduleValid =
@@ -1353,9 +1372,23 @@ int main(int argc, char** argv)
              facts.drawBatches[1].baseElement == 1 &&
              facts.drawBatches[1].elementCount == 10 &&
              facts.strokePatchCount == 10);
+        const bool rawTextScheduleValid =
+            !directRawTextCase ||
+            (directScheduleValid && facts.fixedFunctionColorOutput &&
+             facts.drawBatches[1].shaderFeatures == static_cast<uint32_t>(
+                 rive::gpu::ShaderFeatures::ENABLE_DITHER) &&
+             facts.drawBatches[1].shaderMiscFlags == static_cast<uint32_t>(
+                 rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput) &&
+             facts.drawBatches[1].drawContents ==
+                 (static_cast<uint32_t>(rive::gpu::DrawContents::opaquePaint) |
+                  static_cast<uint32_t>(rive::gpu::DrawContents::clockwiseFill)) &&
+             facts.drawBatches[1].baseElement == 1 &&
+             facts.drawBatches[1].elementCount == kDirectRawTextPatchCount &&
+             facts.strokePatchCount == kDirectRawTextPatchCount);
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
             !directScheduleValid || !strokesRoundScheduleValid ||
+            !rawTextScheduleValid ||
             (!directTriangulatedCase &&
              (facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
               facts.strokePatchCount == 0)) ||
@@ -1364,6 +1397,8 @@ int main(int argc, char** argv)
              (facts.strokePatchCount != kExpectedPolySharkPatchCount ||
               facts.contours.size() != kExpectedPolySharkContourCount)) ||
             (directStrokesRoundCase && facts.contours.size() != 1) ||
+            (directRawTextCase &&
+             facts.contours.size() != kDirectRawTextContourCount) ||
             (directGridCase &&
              (facts.contours.size() != kDirectGridContourCount ||
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)) ||
@@ -1376,7 +1411,7 @@ int main(int argc, char** argv)
         {
             fail("direct oracle must execute one atomic path-patch batch between initialize and resolve");
         }
-        if (directStrokesRoundCase)
+        if (directStrokesRoundCase || directRawTextCase)
         {
             writeTessVertexSpans(auxiliaryOutput, facts);
         }

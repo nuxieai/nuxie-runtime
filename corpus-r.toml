@@ -1872,10 +1872,9 @@ stream = "fixtures/renderer/streams/gm/overstroke_blendmodes.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/overstroke_blendmodes-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

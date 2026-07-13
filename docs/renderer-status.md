@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=146, diverges=0, gated=1,321, total=1,467.
+- Rust wgpu: exact=147, diverges=0, gated=1,320, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -97,7 +97,7 @@ Run `make renderer-golden`.
   transparent overstroke, `path_skbug_11859`, `quadcap`, `skbug12244`,
   `strokes_zoomed`, `teenyStrokes`, all three tricky-cubic stroke variants,
   and both transparent-clear blend cases, plus the mirrored Montserrat and
-  Roboto feather-text entries.
+  Roboto feather-text entries, plus `gm-overstroke_blendmodes-clockwise-atomic`.
 
 ## Milestones
 
@@ -252,9 +252,13 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Ten real GM divergences remain.
-   Continue R2 with `interleavedfeather`, the largest remaining structural
-   feather gap not already covered by the named severe-cusp investigation.
+   Montserrat/Roboto feather-text pair. Nine real GM divergences remain.
+   `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
+   intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
+   storage erases a sub-8-bit RGB/alpha distinction that ColorBurn amplifies.
+   Do not tolerate it or add a bespoke shader fork without a dedicated C++
+   color-plane suboracle. Continue R2 with `zeroPath`, the next structural
+   target; `dstreadshuffle` follows.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -271,6 +275,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Parked `interleavedfeather` after isolating its first meaningful
+  failure to draws 13-14. Each draw alone is within one channel value of C++,
+  but their ColorBurn pair differs at 97 pixels/max-18 and the complete GM at
+  18,487 pixels/max-78; replacing ColorBurn with SrcOver makes the pair exact.
+  A generated f16 color-plane storage/arithmetic experiment worsened the pair
+  and full frame and was reverted. The remaining gap is a named native Metal
+  versus WebGPU atomic intermediate-precision discontinuity, not a tolerance
+  candidate. A fresh forced C++ reference proves
+  `overstroke_blendmodes` passes unchanged at 1 pixel/max-3, promoting it and
+  raising the ratchet to 147 exact entries. `zeroPath` is next.
 - 2026-07-13: Mirrored clockwise feather fills now use C++'s contour-direction
   contract: direct fills write forward-then-reverse tessellation and atlas
   fills write single-sided descending spans, with matching contour anchors and
@@ -1417,3 +1431,9 @@ Run `make renderer-golden`.
 - 2026-07-13: Ported determinant-aware direct and atlas feather contour
   directions, promoted both mirrored feather-text GMs, and advanced the
   renderer ratchet to exact=146/diverges=0/gated=1,321.
+- 2026-07-13: Isolated `interleavedfeather` to a ColorBurn-sensitive atomic
+  intermediate-precision discontinuity, rejected and reverted destination
+  texture and f16 color-plane experiments, and parked the case pending a C++
+  color-plane suboracle or backend-matched reference. Promoted the independently
+  verified `overstroke_blendmodes` reference under its unchanged 2/32 contract;
+  the ratchet is exact=147/diverges=0/gated=1,320 and `zeroPath` is next.

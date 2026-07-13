@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=182, diverges=0, gated=1,286, total=1,468.
+- Rust wgpu: exact=192, diverges=0, gated=1,276, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -117,7 +117,9 @@ Run `make renderer-golden`.
   `riv-ball_test-frame-0-clockwise-atomic`,
   `riv-bidirectional_precedence-frame-0-clockwise-atomic`, and
   `riv-bindable_artboard_child-frame-{0..7}-clockwise-atomic`, plus
-  `riv-blend_test-frame-{0..4}-clockwise-atomic`.
+  `riv-blend_test-frame-{0..4}-clockwise-atomic`, plus
+  `riv-clear_viewmodel_list-frame-{0..4}-clockwise-atomic` and
+  `riv-click_event-frame-{0..4}-clockwise-atomic`.
 
 ## Milestones
 
@@ -158,10 +160,15 @@ Run `make renderer-golden`.
    `bindable_artboard_nesty` frame 0, and `blend_test` frames 0-4. Capture
    their missing pinned Metal references first, then apply the same unchanged
    contract and diagnostic rules.
-5. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+5. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
    entries: `clear_viewmodel_list` frames 0-4 and `click_event` frames 0-4.
    Capture missing pinned Metal references, preserve the unchanged `2/32`
    contract, and classify any first failure before promotion.
+6. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+   entries: `click_event` frames 5-7, `collapsable_data_binding`,
+   `collapse_data_binds`, `collapsing_elements`, `complex_ik_dependency`, and
+   `component_based_conditions` frames 0-2. Capture missing pinned Metal
+   references and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1816,3 +1823,8 @@ Run `make renderer-golden`.
   79 pixels/max delta 60; every outlier lies on its single transformed white
   glyph-outline draw while the full-canvas background is clean, so the
   existing reviewed `metal-webgpu-subpixel-edge-coverage` diagnostic applies.
+- 2026-07-13: Probed the fourth ten-entry clockwise-atomic `.riv` batch against
+  freshly pinned native Metal references. All five `clear_viewmodel_list`
+  frames are pixel-identical and all five `click_event` frames stay entirely
+  within channel delta 2, so the unchanged `2/32` contract promotes all ten
+  and advances the renderer ratchet to exact=192/diverges=0/gated=1,276.

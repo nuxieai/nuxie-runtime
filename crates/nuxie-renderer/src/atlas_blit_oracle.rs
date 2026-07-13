@@ -54,6 +54,11 @@ impl AtlasBlit {
     }
 
     #[cfg(test)]
+    pub(crate) fn pixels(&self) -> &[u8] {
+        &self.pixels
+    }
+
+    #[cfg(test)]
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(HEADER_SIZE + self.pixels.len());
         bytes.extend_from_slice(&MAGIC);

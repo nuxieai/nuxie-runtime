@@ -221,12 +221,14 @@ Run `make renderer-golden`.
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
    diagnostics. `bad_skin` is now promoted after ordering generic-atomic outer
    and interior passes and proving all 69 isolated draws are bounded. The
-   matching WebGPU MSAA final-blit oracle is the next named R2 boundary.
-   Parent-tight clip bounds are a later performance refinement, not a
-   correctness gate. The separate matching WebGPU MSAA
-   final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
-   Continue R2 with those fill/clip semantics, remaining `render_context.cpp`
-   behavior, and integration of the translated intersection board.
+   matching WebGPU MSAA final blit is now byte-exact across all 4,096 oracle
+   pixels for the solid, unclipped, source-over slice. Parent-tight clip bounds
+   are a later performance refinement, not a correctness gate. Continue R2
+   with MSAA clip semantics in source order: rectangle clip-distance,
+   path-clip/stencil behavior, then destination-copy shader blending. Those
+   unsupported boundaries are explicit and tested. Continue afterward with
+   remaining `render_context.cpp` behavior and integration of the translated
+   intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -240,6 +242,22 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Closed the matching C++ WebGPU MSAA atlas final-blit oracle.
+  MSAA now forces feathered solid fills and strokes through the translated
+  atlas tessellation and R16 mask passes, then draws the upstream six-vertex
+  atlas rectangle through a dedicated 4x fixed-function pipeline. The original
+  blank Rust frame differed at all 4,096 pixels/max delta 80; the final RGBA8
+  frame is byte-exact, including upstream dither and premultiplied output.
+  Always-on GPU tests cover the canonical stroke, two ordered feathered fills,
+  and resource retention across multiple atlas draws. Sol's adversarial review
+  found that the first patch silently accepted clip rectangles, path clips,
+  and non-source-over blending without their required shader permutations.
+  Those cases now return named `Unsupported` errors with regressions instead
+  of drawing incorrect pixels; Sol's final review reports no remaining blocker
+  for the intentionally narrow slice. `make renderer-golden` remains
+  exact=118/diverges=0/gated=1,349. The next R2 boundary is MSAA rectangle
+  clip-distance support, followed by path-clip/stencil and destination-copy
+  blend variants.
 - 2026-07-12: Removed a generic-atomic interior race in the invented wgpu
   batching seam. Shared flush groups had submitted outer-curve patches and
   interior triangles in one render pass; five identical isolated `bad_skin`

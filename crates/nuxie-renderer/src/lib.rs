@@ -285,6 +285,7 @@ impl WgpuFactory {
             stack: Vec::new(),
             draws: Vec::new(),
             clips: Vec::new(),
+            next_clip_id: 1,
             unsupported: None,
             mode: self.mode,
         }
@@ -794,6 +795,7 @@ pub struct WgpuFrame {
     stack: Vec<DrawState>,
     draws: Vec<SolidDraw>,
     clips: Vec<ClipElement>,
+    next_clip_id: u32,
     unsupported: Option<&'static str>,
     mode: RenderMode,
 }
@@ -832,9 +834,7 @@ impl Renderer for WgpuFrame {
         if path_draw_is_noop(path, paint, self.state.transform) {
             return;
         }
-        let Ok(clip_id) = u16::try_from(self.state.clip_stack_height) else {
-            self.unsupported
-                .get_or_insert("more than 65535 nested clips");
+        let Some((clip_updates, clip_id)) = self.prepare_clip_updates() else {
             return;
         };
         let content = SolidDraw {
@@ -844,37 +844,14 @@ impl Renderer for WgpuFrame {
             role: DrawRole::Content { clip_id },
             image: None,
         };
-        if self.state.clip_stack_height != 0 {
+        if clip_id != 0 {
             if !atomic_draw_is_eligible(&content) {
                 self.unsupported
                     .get_or_insert("non-rectangular clips on fallback draws");
                 return;
             }
-            let mut updates = Vec::with_capacity(self.state.clip_stack_height);
-            for (index, clip) in self.clips[..self.state.clip_stack_height]
-                .iter()
-                .enumerate()
-            {
-                let parent_id = index as u16;
-                let replacement_id = parent_id + 1;
-                updates.push(SolidDraw {
-                    path: clip.path.clone(),
-                    paint: WgpuPaint::default(),
-                    state: DrawState {
-                        transform: clip.matrix,
-                        clip_rect: None,
-                        clip_stack_height: 0,
-                        ..self.state
-                    },
-                    role: DrawRole::ClipUpdate {
-                        replacement_id,
-                        parent_id,
-                    },
-                    image: None,
-                });
-            }
-            self.draws.extend(updates);
         }
+        self.draws.extend(clip_updates);
         self.draws.push(content);
     }
 
@@ -929,9 +906,7 @@ impl Renderer for WgpuFrame {
         let Some(texture) = &image.texture else {
             return;
         };
-        let Ok(clip_id) = u16::try_from(self.state.clip_stack_height) else {
-            self.unsupported
-                .get_or_insert("more than 65535 nested clips");
+        let Some((clip_updates, clip_id)) = self.prepare_clip_updates() else {
             return;
         };
         let mut raw_path = RawPath::new();
@@ -969,31 +944,7 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("images on fallback draw path");
             return;
         }
-        if self.state.clip_stack_height != 0 {
-            let mut updates = Vec::with_capacity(self.state.clip_stack_height);
-            for (index, clip) in self.clips[..self.state.clip_stack_height]
-                .iter()
-                .enumerate()
-            {
-                let parent_id = index as u16;
-                updates.push(SolidDraw {
-                    path: clip.path.clone(),
-                    paint: WgpuPaint::default(),
-                    state: DrawState {
-                        transform: clip.matrix,
-                        clip_rect: None,
-                        clip_stack_height: 0,
-                        ..self.state
-                    },
-                    role: DrawRole::ClipUpdate {
-                        replacement_id: parent_id + 1,
-                        parent_id,
-                    },
-                    image: None,
-                });
-            }
-            self.draws.extend(updates);
-        }
+        self.draws.extend(clip_updates);
         self.draws.push(content);
     }
 
@@ -1057,9 +1008,7 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("unmapped image mesh buffers");
             return;
         };
-        let Ok(clip_id) = u16::try_from(self.state.clip_stack_height) else {
-            self.unsupported
-                .get_or_insert("more than 65535 nested clips");
+        let Some((clip_updates, clip_id)) = self.prepare_clip_updates() else {
             return;
         };
         let content = SolidDraw {
@@ -1081,29 +1030,7 @@ impl Renderer for WgpuFrame {
                 index_count,
             })),
         };
-        if self.state.clip_stack_height != 0 {
-            for (index, clip) in self.clips[..self.state.clip_stack_height]
-                .iter()
-                .enumerate()
-            {
-                let parent_id = index as u16;
-                self.draws.push(SolidDraw {
-                    path: clip.path.clone(),
-                    paint: WgpuPaint::default(),
-                    state: DrawState {
-                        transform: clip.matrix,
-                        clip_rect: None,
-                        clip_stack_height: 0,
-                        ..self.state
-                    },
-                    role: DrawRole::ClipUpdate {
-                        replacement_id: parent_id + 1,
-                        parent_id,
-                    },
-                    image: None,
-                });
-            }
-        }
+        self.draws.extend(clip_updates);
         self.draws.push(content);
     }
 
@@ -1113,6 +1040,54 @@ impl Renderer for WgpuFrame {
 }
 
 impl WgpuFrame {
+    fn prepare_clip_updates(&mut self) -> Option<(Vec<SolidDraw>, u16)> {
+        let height = self.state.clip_stack_height;
+        if height == 0 {
+            return Some((Vec::new(), 0));
+        }
+        // C++ RiveRenderer::applyClip generates a new ID whenever a clip is
+        // rendered. Reusing stack depth would accept stale coverage left by an
+        // unrelated clip at the same depth in the storage-backed clip plane.
+        let Ok(update_count) = u32::try_from(height) else {
+            self.unsupported
+                .get_or_insert("more than 65535 clip updates in one frame");
+            return None;
+        };
+        let Some(end) = self.next_clip_id.checked_add(update_count) else {
+            self.unsupported
+                .get_or_insert("more than 65535 clip updates in one frame");
+            return None;
+        };
+        if end > u16::MAX as u32 + 1 {
+            self.unsupported
+                .get_or_insert("more than 65535 clip updates in one frame");
+            return None;
+        }
+        let mut updates = Vec::with_capacity(height);
+        let mut parent_id = 0;
+        for (offset, clip) in self.clips[..height].iter().enumerate() {
+            let replacement_id = (self.next_clip_id + offset as u32) as u16;
+            updates.push(SolidDraw {
+                path: clip.path.clone(),
+                paint: WgpuPaint::default(),
+                state: DrawState {
+                    transform: clip.matrix,
+                    clip_rect: None,
+                    clip_stack_height: 0,
+                    ..self.state
+                },
+                role: DrawRole::ClipUpdate {
+                    replacement_id,
+                    parent_id,
+                },
+                image: None,
+            });
+            parent_id = replacement_id;
+        }
+        self.next_clip_id = end;
+        Some((updates, parent_id))
+    }
+
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false).map(|(pixels, _)| pixels)
     }
@@ -4615,6 +4590,51 @@ mod tests {
         assert_eq!(inside[1], inside[2]);
         assert!(inside[0] > 64 && inside[0] < 224);
         assert_eq!(pixel(60, 60), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn sequential_root_clips_do_not_reuse_stale_clip_coverage() {
+        fn triangle(points: [[f32; 2]; 3]) -> WgpuPath {
+            let mut path = RawPath::new();
+            path.move_to(points[0][0], points[0][1]);
+            path.line_to(points[1][0], points[1][1]);
+            path.line_to(points[2][0], points[2][1]);
+            path.close();
+            WgpuPath {
+                raw_path: path,
+                fill_rule: FillRule::NonZero,
+            }
+        }
+
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.save();
+        frame.clip_path(&triangle([[32.0, 32.0], [60.0, 32.0], [60.0, 60.0]]));
+        frame.draw_path(
+            &fill,
+            &WgpuPaint {
+                color: 0xffff_0000,
+                ..WgpuPaint::default()
+            },
+        );
+        frame.restore();
+        frame.save();
+        frame.clip_path(&triangle([[4.0, 4.0], [28.0, 4.0], [4.0, 28.0]]));
+        frame.draw_path(
+            &fill,
+            &WgpuPaint {
+                color: 0xff00_ffff,
+                ..WgpuPaint::default()
+            },
+        );
+        frame.restore();
+
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+        assert_eq!(pixel(10, 10), [0, 255, 255, 255]);
+        assert_eq!(pixel(50, 40), [255, 0, 0, 255]);
+        assert_eq!(pixel(30, 30), [0, 0, 0, 255]);
     }
 
     #[test]

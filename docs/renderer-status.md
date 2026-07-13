@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=102, diverges=0, gated=1,365, total=1,467.
+- Rust wgpu: exact=107, diverges=0, gated=1,360, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -86,7 +86,8 @@ Run `make renderer-golden`.
   `riv-zombie_skins-frame-0-clockwise-atomic`, plus
   `riv-new_text-frame-0-clockwise-atomic` and
   `riv-ai_assitant-frame-0-clockwise-atomic`, plus
-  `riv-db_health_tracker-frame-0-clockwise-atomic`.
+  `riv-db_health_tracker-frame-0-clockwise-atomic` and
+  `riv-off_road_car-frame-{0..4}-clockwise-atomic`.
 
 ## Milestones
 
@@ -215,9 +216,9 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `off_road_car` frames
-   (3,904 pixels each), `joel_signed` frames (6,557-6,559), `juice` frames
-   (12,837), and `bad_skin` (22,932). Attribute `off_road_car` first.
+   diagnostics. The runnable residual queue is finite: `joel_signed` frames
+   (6,557-6,559 pixels), `juice` frames (12,837), and `bad_skin` (22,932).
+   Attribute `joel_signed` first.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -236,6 +237,19 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: C++ `RiveRenderer::applyClip` generates a new clip ID whenever
+  an element is rendered into the clip buffer. Rust had encoded stack depth as
+  the ID, so unrelated root clips all reused ID 1 and stale coverage from an
+  earlier clip admitted `off_road_car`'s windshield gradient around the front
+  grille. Unique per-render clip IDs across paths, images, and meshes remove
+  that coherent 2,042-pixel leak; a two-root-clip regression pins the lifecycle.
+  All five recorded samples are byte-identical on each backend and now share an
+  identical 1,862-pixel residual. Its 55 components are confined to thin ground,
+  stripe, and small car edges; the largest occupies a 243x13 strip. Replacing
+  the implicated gradient with solid cyan leaves exactly the same residual,
+  proving the structural clip error is closed. The family keeps max channel
+  delta 2 with a bounded 2,048-pixel backend allowance and advances the ratchet
+  to exact=107/diverges=0/gated=1,360.
 - 2026-07-12: `db_health_tracker` keeps max channel delta 2 with a bounded
   1,152-pixel allowance. Draw-prefix replay proves its first 430 of 473 draws
   exact, including the chart's 353-stroke batch, clips, cards, and markers.
@@ -1099,3 +1113,7 @@ Run `make renderer-golden`.
   only across late text-outline edges and fit a bounded 1,152-pixel backend
   allowance. The ratchet advances to exact=102/diverges=0/gated=1,365 and
   `off_road_car` is next.
+- 2026-07-12: Ported C++'s unique clip-generation IDs, removing stale root-clip
+  coverage from all five identical `off_road_car` samples. The post-fix 1,862
+  thin edge pixels fit a bounded 2,048-pixel backend allowance; the ratchet
+  advances to exact=107/diverges=0/gated=1,360 and `joel_signed` is next.

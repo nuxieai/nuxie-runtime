@@ -4,13 +4,19 @@ use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, 
 use wgpu::util::DeviceExt;
 
 pub(crate) struct MsaaAtlasPipeline {
+    fixed: PipelineSet,
+    advanced: PipelineSet,
+    advanced_hsl: PipelineSet,
+    flush_layout: wgpu::BindGroupLayout,
+    image_layout: wgpu::BindGroupLayout,
+    sampler_layout: wgpu::BindGroupLayout,
+}
+
+struct PipelineSet {
     no_clip_pipeline: wgpu::RenderPipeline,
     clip_rect_pipeline: Option<wgpu::RenderPipeline>,
     path_clip_pipeline: wgpu::RenderPipeline,
     path_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
-    flush_layout: wgpu::BindGroupLayout,
-    image_layout: wgpu::BindGroupLayout,
-    sampler_layout: wgpu::BindGroupLayout,
 }
 
 pub(crate) struct PreparedAtlasBlit {
@@ -21,6 +27,9 @@ pub(crate) struct PreparedAtlasBlit {
     pub vertex_count: u32,
     clip_rect: bool,
     path_clip: bool,
+    advanced_blend: bool,
+    hsl_blend: bool,
+    destination_copy_bounds: [u32; 4],
 }
 
 impl MsaaAtlasPipeline {
@@ -30,10 +39,15 @@ impl MsaaAtlasPipeline {
             "nuxie-msaa-atlas-blit-vertex",
             include_str!("generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl"),
         );
-        let fragment = shader(
+        let fixed_fragment = shader(
             device,
             "nuxie-msaa-atlas-blit-fragment",
             include_str!("generated/draw_msaa_atlas_blit.webgpu_fixedcolor_frag.wgsl"),
+        );
+        let advanced_fragment = shader(
+            device,
+            "nuxie-msaa-atlas-advanced-blit-fragment",
+            include_str!("generated/draw_msaa_atlas_blit.webgpu_frag.wgsl"),
         );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-atlas-flush-layout"),
@@ -47,6 +61,7 @@ impl MsaaAtlasPipeline {
                 texture_entry(9, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(10, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
+                texture_entry(13, wgpu::TextureSampleType::Float { filterable: false }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -74,7 +89,14 @@ impl MsaaAtlasPipeline {
             ],
             immediate_size: 0,
         });
-        let create_pipeline = |label, vertex: &wgpu::ShaderModule, clip_rect, path_clip| {
+        let create_pipeline = |label: &'static str,
+                               vertex: &wgpu::ShaderModule,
+                               fragment: &wgpu::ShaderModule,
+                               clip_rect: bool,
+                               path_clip: bool,
+                               advanced_blend: bool,
+                               hsl_blend: bool|
+         -> wgpu::RenderPipeline {
             let stencil_face = wgpu::StencilFaceState {
                 compare: if path_clip {
                     wgpu::CompareFunction::Equal
@@ -85,6 +107,17 @@ impl MsaaAtlasPipeline {
                 depth_fail_op: wgpu::StencilOperation::Keep,
                 pass_op: wgpu::StencilOperation::Keep,
             };
+            let advanced_fragment_constants = [
+                ("2", 1.0),
+                ("6", if hsl_blend { 1.0 } else { 0.0 }),
+                ("7", 1.0),
+            ];
+            let fixed_fragment_constants = [("2", 0.0), ("7", 1.0)];
+            let fragment_constants = if advanced_blend {
+                &advanced_fragment_constants[..]
+            } else {
+                &fixed_fragment_constants[..]
+            };
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -92,10 +125,11 @@ impl MsaaAtlasPipeline {
                     module: vertex,
                     entry_point: Some("main"),
                     compilation_options: wgpu::PipelineCompilationOptions {
-                        constants: if clip_rect {
-                            &[("0", 0.0), ("1", 1.0), ("2", 0.0)]
-                        } else {
-                            &[("0", 0.0), ("2", 0.0)]
+                        constants: match (clip_rect, advanced_blend) {
+                            (true, true) => &[("0", 0.0), ("1", 1.0), ("2", 1.0)],
+                            (true, false) => &[("0", 0.0), ("1", 1.0), ("2", 0.0)],
+                            (false, true) => &[("0", 0.0), ("2", 1.0)],
+                            (false, false) => &[("0", 0.0), ("2", 0.0)],
                         },
                         ..Default::default()
                     },
@@ -123,10 +157,10 @@ impl MsaaAtlasPipeline {
                     alpha_to_coverage_enabled: false,
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &fragment,
+                    module: fragment,
                     entry_point: Some("main"),
                     compilation_options: wgpu::PipelineCompilationOptions {
-                        constants: &[("2", 0.0), ("7", 1.0)],
+                        constants: fragment_constants,
                         ..Default::default()
                     },
                     targets: &[Some(wgpu::ColorTargetState {
@@ -139,18 +173,6 @@ impl MsaaAtlasPipeline {
                 cache: None,
             })
         };
-        let no_clip_pipeline = create_pipeline(
-            "nuxie-msaa-atlas-blit-pipeline",
-            &no_clip_vertex,
-            false,
-            false,
-        );
-        let path_clip_pipeline = create_pipeline(
-            "nuxie-msaa-atlas-path-clip-pipeline",
-            &no_clip_vertex,
-            false,
-            true,
-        );
         let clip_rect_vertex = device
             .features()
             .contains(wgpu::Features::CLIP_DISTANCES)
@@ -161,27 +183,70 @@ impl MsaaAtlasPipeline {
                     include_str!("generated/draw_msaa_atlas_blit.webgpu_vert.wgsl"),
                 )
             });
-        let clip_rect_pipeline = clip_rect_vertex.as_ref().map(|vertex| {
-            create_pipeline(
-                "nuxie-msaa-atlas-blit-clip-rect-pipeline",
-                vertex,
+        let create_set = |prefix: &'static str,
+                          fragment: &wgpu::ShaderModule,
+                          advanced_blend,
+                          hsl_blend| PipelineSet {
+            no_clip_pipeline: create_pipeline(
+                prefix,
+                &no_clip_vertex,
+                fragment,
+                false,
+                false,
+                advanced_blend,
+                hsl_blend,
+            ),
+            clip_rect_pipeline: clip_rect_vertex.as_ref().map(|vertex| {
+                create_pipeline(
+                    prefix,
+                    vertex,
+                    fragment,
+                    true,
+                    false,
+                    advanced_blend,
+                    hsl_blend,
+                )
+            }),
+            path_clip_pipeline: create_pipeline(
+                prefix,
+                &no_clip_vertex,
+                fragment,
+                false,
+                true,
+                advanced_blend,
+                hsl_blend,
+            ),
+            path_clip_rect_pipeline: clip_rect_vertex.as_ref().map(|vertex| {
+                create_pipeline(
+                    prefix,
+                    vertex,
+                    fragment,
+                    true,
+                    true,
+                    advanced_blend,
+                    hsl_blend,
+                )
+            }),
+        };
+        Self {
+            fixed: create_set(
+                "nuxie-msaa-atlas-blit-pipeline",
+                &fixed_fragment,
+                false,
+                false,
+            ),
+            advanced: create_set(
+                "nuxie-msaa-atlas-advanced-blit-pipeline",
+                &advanced_fragment,
                 true,
                 false,
-            )
-        });
-        let path_clip_rect_pipeline = clip_rect_vertex.as_ref().map(|vertex| {
-            create_pipeline(
-                "nuxie-msaa-atlas-path-clip-rect-pipeline",
-                vertex,
+            ),
+            advanced_hsl: create_set(
+                "nuxie-msaa-atlas-advanced-hsl-blit-pipeline",
+                &advanced_fragment,
                 true,
                 true,
-            )
-        });
-        Self {
-            no_clip_pipeline,
-            clip_rect_pipeline,
-            path_clip_pipeline,
-            path_clip_rect_pipeline,
+            ),
             flush_layout,
             image_layout,
             sampler_layout,
@@ -189,18 +254,25 @@ impl MsaaAtlasPipeline {
     }
 
     pub(crate) fn supports_clip_rect(&self) -> bool {
-        self.clip_rect_pipeline.is_some()
+        self.fixed.clip_rect_pipeline.is_some()
     }
 
     pub(crate) fn pipeline<'a>(&'a self, draw: &PreparedAtlasBlit) -> &'a wgpu::RenderPipeline {
+        let pipelines = if draw.hsl_blend {
+            &self.advanced_hsl
+        } else if draw.advanced_blend {
+            &self.advanced
+        } else {
+            &self.fixed
+        };
         match (draw.clip_rect, draw.path_clip) {
-            (false, false) => &self.no_clip_pipeline,
-            (false, true) => &self.path_clip_pipeline,
-            (true, false) => self
+            (false, false) => &pipelines.no_clip_pipeline,
+            (false, true) => &pipelines.path_clip_pipeline,
+            (true, false) => pipelines
                 .clip_rect_pipeline
                 .as_ref()
                 .expect("clip-rect atlas blit prepared without clip-distance pipeline"),
-            (true, true) => self
+            (true, true) => pipelines
                 .path_clip_rect_pipeline
                 .as_ref()
                 .expect("path-and-rect clipped atlas blit prepared without clip-distance pipeline"),
@@ -209,6 +281,14 @@ impl MsaaAtlasPipeline {
 
     pub(crate) fn uses_path_clip(draw: &PreparedAtlasBlit) -> bool {
         draw.path_clip
+    }
+
+    pub(crate) fn uses_advanced_blend(draw: &PreparedAtlasBlit) -> bool {
+        draw.advanced_blend
+    }
+
+    pub(crate) fn destination_copy_bounds(draw: &PreparedAtlasBlit) -> Option<[u32; 4]> {
+        draw.advanced_blend.then_some(draw.destination_copy_bounds)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -224,8 +304,12 @@ impl MsaaAtlasPipeline {
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         vertices: &[TriangleVertex],
+        destination: Option<&wgpu::TextureView>,
         clip_rect: bool,
         path_clip: bool,
+        advanced_blend: bool,
+        hsl_blend: bool,
+        destination_copy_bounds: [u32; 4],
     ) -> PreparedAtlasBlit {
         let uniform = upload(
             device,
@@ -297,6 +381,10 @@ impl MsaaAtlasPipeline {
                 binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                 binding(11, wgpu::BindingResource::TextureView(atlas)),
+                binding(
+                    13,
+                    wgpu::BindingResource::TextureView(destination.unwrap_or(&dummy_view)),
+                ),
             ],
         });
         let image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -324,6 +412,9 @@ impl MsaaAtlasPipeline {
             vertex_count: vertices.len() as u32,
             clip_rect,
             path_clip,
+            advanced_blend,
+            hsl_blend,
+            destination_copy_bounds,
         }
     }
 }

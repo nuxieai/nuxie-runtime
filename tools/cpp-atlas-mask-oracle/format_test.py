@@ -509,6 +509,7 @@ class FormatTests(unittest.TestCase):
             'argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;',
             'argc > 4 && std::strcmp(argv[4], "nested-evenodd-path-clipped") == 0;',
             'argc > 4 && std::strcmp(argv[4], "nested-clockwise-path-clipped") == 0;',
+            'argc > 4 && std::strcmp(argv[4], "advanced-blend") == 0;',
             "directGridCase || directFlowerCase || directBadSkinCase;",
             "nestedEvenOddPathClippedCase ||",
             "nestedClockwisePathClippedCase;",
@@ -777,8 +778,10 @@ class FormatTests(unittest.TestCase):
             '"$direct_bad_skin_inputs_output" /dev/null direct-bad-skin',
             'nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-evenodd-path-clipped-blit.rgba}"',
             'nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"',
+            'advanced_blend_blit_output="${RIVE_ATLAS_ADVANCED_BLEND_BLIT_OUTPUT:-$script_dir/out/atlas-advanced-blend-blit.rgba}"',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_evenodd_path_clipped_blit_output" nested-evenodd-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped',
+            '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend',
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
@@ -820,6 +823,7 @@ class FormatTests(unittest.TestCase):
             '#[ignore = "requires RIVE_CPP_ATLAS_NESTED_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT from the C++ WebGPU MSAA oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
             "fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root()",
@@ -841,6 +845,8 @@ class FormatTests(unittest.TestCase):
         self.assertIn('RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-nested-evenodd-path-clipped-blit.rgba"',
                       readme)
         self.assertIn('RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-nested-clockwise-path-clipped-blit.rgba"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-advanced-blend-blit.rgba"',
                       readme)
         self.assertIn('RIVE_CPP_ATLAS_FILL_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-mask.r16f"',
                       readme)

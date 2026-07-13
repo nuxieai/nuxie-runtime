@@ -661,21 +661,25 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "nested-evenodd-path-clipped") == 0;
     const bool nestedClockwisePathClippedCase =
         argc > 4 && std::strcmp(argv[4], "nested-clockwise-path-clipped") == 0;
+    const bool advancedBlendCase =
+        argc > 4 && std::strcmp(argv[4], "advanced-blend") == 0;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase;
     const bool fillCase = circleCase || cuspCase || directCase ||
+                          advancedBlendCase ||
                           nestedEvenOddPathClippedCase ||
                           nestedClockwisePathClippedCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 ||
         (argc > 4 && !fillCase && !clippedCase && !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
-         !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase) ||
+         !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
+         !advancedBlendCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -755,7 +759,7 @@ int main(int argc, char** argv)
     context->beginFrame({.renderTargetWidth = frameWidth,
                          .renderTargetHeight = frameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
-                         .clearColor = 0,
+                         .clearColor = advancedBlendCase ? 0xff204080 : 0,
                          .msaaSampleCount = directCase ? 0u : 4u,
                          .disableRasterOrdering = directCase,
                          .clockwiseFillOverride = directCase});
@@ -871,7 +875,11 @@ int main(int argc, char** argv)
     }
     paint->feather(directTriangulatedCase ? 0.f
                                          : (directCase ? 1.f : kFeather));
-    paint->color(0xffffffff);
+    paint->color(advancedBlendCase ? 0xc0e08040 : 0xffffffff);
+    if (advancedBlendCase)
+    {
+        paint->blendMode(rive::BlendMode::colorDodge);
+    }
     if (clippedCase)
     {
         auto clip = context->makeEmptyRenderPath();
@@ -1009,7 +1017,29 @@ int main(int argc, char** argv)
                     batch.baseElement,
                     batch.elementCount);
     }
-    if (directCase)
+    if (advancedBlendCase)
+    {
+        const uint32_t expectedFeatures =
+            static_cast<uint32_t>(
+                rive::gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND) |
+            static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_DITHER);
+        const uint32_t advancedBlend =
+            static_cast<uint32_t>(rive::gpu::DrawContents::advancedBlend);
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+            facts.fixedFunctionColorOutput || facts.drawBatches.size() != 1 ||
+            facts.drawBatches[0].drawType !=
+                static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
+            facts.drawBatches[0].shaderFeatures != expectedFeatures ||
+            facts.drawBatches[0].shaderMiscFlags != 0 ||
+            facts.drawBatches[0].drawContents != advancedBlend ||
+            facts.drawBatches[0].baseElement != 0 ||
+            facts.drawBatches[0].elementCount != 6)
+        {
+            fail("advanced-blend oracle must execute one destination-reading MSAA atlas batch with shader color output");
+        }
+    }
+    else if (directCase)
     {
         bool directScheduleValid =
             facts.drawBatches.size() == 3 &&

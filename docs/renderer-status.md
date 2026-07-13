@@ -237,9 +237,10 @@ Run `make renderer-golden`.
    outer clockwise preserves the clip bit during cleanup, nested even-odd
    writes parity, and nested clockwise selects the `0xc0` reset mask. Filled
    C++ Dawn fixtures behaviorally distinguish every special mode with holes
-   and opposite-winding contours. Continue R2 with destination-copy shader
-   blending, then remaining `render_context.cpp` behavior and integration of
-   the translated intersection board.
+   and opposite-winding contours. Destination-copy shader blending is now
+   byte-exact for solid feather-atlas draws. Continue R2 with the remaining
+   `render_context.cpp` behavior and integration of the translated intersection
+   board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -253,6 +254,23 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Closed MSAA destination-copy shader blending for solid
+  feather-atlas draws. A C++ Dawn fixture pins the unextended WebGPU schedule:
+  resolve at `dstBlend`, copy the intersected draw bounds into a single-sample
+  sampled texture, then restart MSAA with color/depth/stencil load operations.
+  Rust now segments the pass at each advanced atlas draw, preserves the old
+  fixed-function path, and selects generated standard or HSL atlas shaders for
+  all 15 advanced blend modes. The 64x64 ColorDodge fixture matches all 4,096
+  RGBA pixels byte-for-byte; GPU regressions compare all modes to the generated
+  atomic shader and preserve a non-rectangular path clip across two destination
+  copies. A real `bankcard` MSAA replay also completes. Sol found one silent
+  omission for gradient-backed advanced feather paints; the accepted fix
+  retains a named `Unsupported` boundary until atlas gradient resources are
+  implemented. `make renderer-golden` remains
+  exact=118/diverges=0/gated=1,349; normal V2 remains 263 files/584 segments,
+  scripted V2 is 27 files/35 segments, and `cargo test --workspace` passes.
+  Remaining `render_context.cpp` behavior and integration of the translated
+  intersection board are next.
 - 2026-07-12: Closed even-odd and clockwise MSAA path clips for feather-atlas
   draws. Rust now selects C++'s exact outer schedules: non-zero and clockwise
   run borrowed/update/cleanup with clockwise cleanup limited to write mask
@@ -1307,3 +1325,11 @@ Run `make renderer-golden`.
   intersection-reset, incremental-stack, and full-frame oracle parity; all
   gates remain green at exact=118/diverges=0/gated=1,349, and alternate clip
   fill rules are next.
+- 2026-07-12: Ported alternate even-odd and clockwise MSAA atlas clip fills.
+  Filled Dawn fixtures distinguish parity holes and opposite-winding rejection;
+  commit `44bf47ea` keeps all gates green at
+  exact=118/diverges=0/gated=1,349.
+- 2026-07-12: Ported MSAA atlas destination-copy shader blending for solid
+  feathered draws, including all 15 advanced modes, repeated bounded copies,
+  attachment preservation, path clipping, and an exact C++ Dawn frame. The
+  renderer ratchet remains exact=118/diverges=0/gated=1,349.

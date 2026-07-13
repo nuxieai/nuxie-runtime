@@ -145,13 +145,24 @@ triangle records, dimensions, and every texture texel without tolerances.
 `atlas-path-clipped-blit.rgba`, `atlas-changing-path-clipped-blit.rgba`,
 `atlas-nested-path-clipped-blit.rgba`,
 `atlas-nested-evenodd-path-clipped-blit.rgba`,
-`atlas-nested-clockwise-path-clipped-blit.rgba`, and `atlas-fill-blit.rgba`
+`atlas-nested-clockwise-path-clipped-blit.rgba`,
+`atlas-advanced-blend-blit.rgba`, and `atlas-fill-blit.rgba`
 use the `RIVEABL` version 1 contract for the matching MSAA mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
 complete tightly packed `64 x 64` RGBA8 render target. Since the paired input
 and mask oracles already prove the atlas contents, this artifact isolates the
 final atlas sampling, paint application, and MSAA output path. Clockwise-atomic
 final output is verified separately through the native Metal stream replay.
+
+`atlas-advanced-blend-blit.rgba` uses clear color `0xff204080` and a clockwise
+square fill with color `0xc0e08040`, feather `20`, and `ColorDodge`. The
+exporter requires one MSAA `atlasBlit` batch with
+`ENABLE_ADVANCED_BLEND | ENABLE_DITHER`, no fixed-function color-output flag,
+and `DrawContents::advancedBlend`. On unextended WebGPU this forces the C++
+renderer to end and resolve the MSAA pass, copy the draw's destination bounds
+to its single-sample destination texture, restart with MSAA attachments loaded,
+and finish RGB in the generated destination-reading shader while hardware
+src-over blending finishes alpha.
 
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
@@ -217,6 +228,10 @@ RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-ora
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_nested_clockwise_path_clipped_blit_matches_fixed_rust_output_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-advanced-blend-blit.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_msaa_atlas_advanced_blend_matches_rust_output_when_configured \
+  -- --exact --ignored --nocapture
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
@@ -230,7 +245,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_CHANGING_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_NESTED_PATH_CLIPPED_BLIT`,
 `RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT`, or
-`RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT` path;
+`RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT`, or
+`RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT` path;
 invoking either test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing

@@ -931,16 +931,16 @@ impl Renderer for WgpuFrame {
             current_msaa_path_clips = clips;
         }
         if self.mode == RenderMode::Msaa && paint.feather != 0.0 {
+            if paint.blend_mode != BlendMode::SrcOver && paint.shader.is_some() {
+                self.unsupported
+                    .get_or_insert("advanced blending with shaders on msaa feather atlas draws");
+                return;
+            }
             if self.state.clip_rect.is_some()
                 && !self.context.msaa_atlas_pipeline.supports_clip_rect()
             {
                 self.unsupported
                     .get_or_insert("clip rectangles on msaa feather atlas draws");
-                return;
-            }
-            if paint.blend_mode != BlendMode::SrcOver {
-                self.unsupported
-                    .get_or_insert("advanced blending on msaa feather atlas draws");
                 return;
             }
         }
@@ -2181,6 +2181,29 @@ impl WgpuFrame {
             };
         let encode_fallback_run =
             |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
+                let has_advanced_atlas = draws.iter().any(|draw| {
+                    draw.paint.shader.is_none()
+                        && draw.paint.feather != 0.0
+                        && draw.paint.blend_mode != BlendMode::SrcOver
+                });
+                let destination_texture = has_advanced_atlas.then(|| {
+                    self.context
+                        .device
+                        .create_texture(&wgpu::TextureDescriptor {
+                            label: Some("nuxie-msaa-atlas-destination-copy"),
+                            size: texture.size(),
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            usage: wgpu::TextureUsages::COPY_DST
+                                | wgpu::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        })
+                });
+                let destination_view = destination_texture
+                    .as_ref()
+                    .map(|texture| texture.create_view(&Default::default()));
                 enum PreparedDraw {
                     Analytic(path_pipeline::PreparedPathDraw),
                     OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
@@ -2262,7 +2285,6 @@ impl WgpuFrame {
                     }
                     if draw.paint.shader.is_none()
                         && draw.paint.feather != 0.0
-                        && draw.paint.blend_mode == BlendMode::SrcOver
                         && (draw.state.clip_rect.is_none()
                             || self.context.msaa_atlas_pipeline.supports_clip_rect())
                     {
@@ -2404,11 +2426,15 @@ impl WgpuFrame {
                                     &paint_aux,
                                     &tessellation.contours,
                                     &vertices,
+                                    destination_view.as_ref(),
                                     draw.state.clip_rect.is_some(),
                                     matches!(
                                         draw.role,
                                         DrawRole::Content { clip_id } if clip_id != 0
                                     ),
+                                    draw.paint.blend_mode != BlendMode::SrcOver,
+                                    gpu::blend_mode_id(draw.paint.blend_mode) >= 12,
+                                    [left as u32, top as u32, right as u32, bottom as u32],
                                 ),
                             ));
                             continue;
@@ -2507,7 +2533,30 @@ impl WgpuFrame {
                         ));
                     }
                 }
-                let fallback_texture =
+                let prepared_advanced_atlas_count = prepared_draws
+                    .iter()
+                    .filter(|draw| {
+                        matches!(
+                            draw,
+                            PreparedDraw::Atlas(draw)
+                                if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(draw)
+                        )
+                    })
+                    .count();
+                let requested_advanced_atlas_count = draws
+                    .iter()
+                    .filter(|draw| {
+                        draw.paint.shader.is_none()
+                            && draw.paint.feather != 0.0
+                            && draw.paint.blend_mode != BlendMode::SrcOver
+                    })
+                    .count();
+                if prepared_advanced_atlas_count != requested_advanced_atlas_count {
+                    return Err(RendererError::Unsupported(
+                        "advanced blending on unplaced msaa feather draws",
+                    ));
+                }
+                let fallback_texture = (!has_advanced_atlas).then(|| {
                     self.context
                         .device
                         .create_texture(&wgpu::TextureDescriptor {
@@ -2520,9 +2569,12 @@ impl WgpuFrame {
                             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                                 | wgpu::TextureUsages::TEXTURE_BINDING,
                             view_formats: &[],
-                        });
-                let fallback_view = fallback_texture.create_view(&Default::default());
-                if clear_target {
+                        })
+                });
+                let fallback_view = fallback_texture
+                    .as_ref()
+                    .map(|texture| texture.create_view(&Default::default()));
+                if clear_target && !has_advanced_atlas {
                     let attachments = [Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         depth_slice: None,
@@ -2541,27 +2593,75 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                 }
-                {
+                let mut segment_ends = prepared_draws
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, draw)| match draw {
+                        PreparedDraw::Atlas(draw)
+                            if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(
+                                draw,
+                            ) =>
+                        {
+                            Some(index)
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                segment_ends.push(prepared_draws.len());
+                let mut segment_start = 0;
+                for (segment_index, segment_end) in segment_ends.into_iter().enumerate() {
+                    let first_segment = segment_index == 0;
+                    let resolve_target = if has_advanced_atlas {
+                        &view
+                    } else {
+                        fallback_view
+                            .as_ref()
+                            .expect("fixed MSAA draw prepared without fallback target")
+                    };
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("nuxie-solid-pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                             view: &multisample_view,
                             depth_slice: None,
-                            resolve_target: Some(&fallback_view),
+                            resolve_target: Some(resolve_target),
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                load: if first_segment {
+                                    wgpu::LoadOp::Clear(if has_advanced_atlas {
+                                        color(self.clear_color)
+                                    } else {
+                                        wgpu::Color::TRANSPARENT
+                                    })
+                                } else {
+                                    wgpu::LoadOp::Load
+                                },
                                 store: wgpu::StoreOp::Store,
                             },
                         })],
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &stencil_view,
                             depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(1.0),
-                                store: wgpu::StoreOp::Discard,
+                                load: if first_segment {
+                                    wgpu::LoadOp::Clear(1.0)
+                                } else {
+                                    wgpu::LoadOp::Load
+                                },
+                                store: if has_advanced_atlas {
+                                    wgpu::StoreOp::Store
+                                } else {
+                                    wgpu::StoreOp::Discard
+                                },
                             }),
                             stencil_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(0),
-                                store: wgpu::StoreOp::Discard,
+                                load: if first_segment {
+                                    wgpu::LoadOp::Clear(0)
+                                } else {
+                                    wgpu::LoadOp::Load
+                                },
+                                store: if has_advanced_atlas {
+                                    wgpu::StoreOp::Store
+                                } else {
+                                    wgpu::StoreOp::Discard
+                                },
                             }),
                         }),
                         timestamp_writes: None,
@@ -2569,7 +2669,7 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                     pass.set_stencil_reference(0);
-                    for prepared in &prepared_draws {
+                    for prepared in &prepared_draws[segment_start..segment_end] {
                         match prepared {
                             PreparedDraw::Analytic(draw) => {
                                 pass.set_stencil_reference(0);
@@ -2746,16 +2846,64 @@ impl WgpuFrame {
                             }
                         }
                     }
+                    drop(pass);
+                    if segment_end < prepared_draws.len() {
+                        let bounds = match &prepared_draws[segment_end] {
+                            PreparedDraw::Atlas(draw) => {
+                                msaa_atlas_pipeline::MsaaAtlasPipeline::destination_copy_bounds(
+                                    draw,
+                                )
+                                .expect("MSAA barrier must precede an advanced atlas draw")
+                            }
+                            _ => {
+                                unreachable!("MSAA destination barrier must precede an atlas draw")
+                            }
+                        };
+                        let [left, top, right, bottom] = bounds;
+                        let origin = wgpu::Origin3d {
+                            x: left,
+                            y: top,
+                            z: 0,
+                        };
+                        let destination_texture = destination_texture
+                            .as_ref()
+                            .expect("advanced atlas draw prepared without destination texture");
+                        encoder.copy_texture_to_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &texture,
+                                mip_level: 0,
+                                origin,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::TexelCopyTextureInfo {
+                                texture: destination_texture,
+                                mip_level: 0,
+                                origin,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::Extent3d {
+                                width: right - left,
+                                height: bottom - top,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                    }
+                    segment_start = segment_end;
                 }
-                self.context.composite_pipeline.encode(
-                    &self.context.device,
-                    encoder,
-                    &view,
-                    &fallback_view,
-                );
+                if !has_advanced_atlas {
+                    self.context.composite_pipeline.encode(
+                        &self.context.device,
+                        encoder,
+                        &view,
+                        fallback_view
+                            .as_ref()
+                            .expect("fixed MSAA draw prepared without fallback target"),
+                    );
+                }
+                Ok(())
             };
         if self.draws.is_empty() || self.mode == RenderMode::Msaa {
-            encode_fallback_run(&self.draws, true, &mut encoder);
+            encode_fallback_run(&self.draws, true, &mut encoder)?;
         } else {
             let mut start = 0;
             let mut clear_target = true;
@@ -2872,7 +3020,7 @@ impl WgpuFrame {
                         }
                     }
                 } else {
-                    encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder);
+                    encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder)?;
                 }
                 clear_target = false;
                 start = end;
@@ -6394,6 +6542,41 @@ mod tests {
         fixed_feather_atlas_blit_with_clip(None).unwrap()
     }
 
+    fn advanced_feather_atlas_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        let factory = WgpuFactory::new_with_mode(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            RenderMode::Msaa,
+        )
+        .unwrap();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MIN);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
+        raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
+        raw_path.close();
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::Clockwise,
+        };
+        let paint = WgpuPaint {
+            color: 0xc0e0_8040,
+            style: RenderPaintStyle::Fill,
+            feather: ATLAS_ORACLE_FEATHER,
+            blend_mode: BlendMode::ColorDodge,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff20_4080);
+        frame.draw_path(&path, &paint);
+        let pixels = frame.finish()?;
+        Ok(atlas_blit_oracle::AtlasBlit::new(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            pixels,
+        )
+        .unwrap())
+    }
+
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         fixed_feather_atlas_blit_with_clip(Some([16.0, 8.0, 32.0, 56.0]))
     }
@@ -6845,6 +7028,32 @@ mod tests {
     }
 
     #[test]
+    fn msaa_feather_atlas_advanced_gradient_remains_an_explicit_boundary() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            feather: 4.0,
+            blend_mode: BlendMode::Multiply,
+            shader: Some(WgpuShader::Linear {
+                start: (8.0, 8.0),
+                end: (56.0, 56.0),
+                colors: vec![0xffff_0000, 0xff00_00ff],
+                stops: vec![0.0, 1.0],
+            }),
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff20_80c0);
+        frame.draw_path(&path, &paint);
+
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "advanced blending with shaders on msaa feather atlas draws"
+            ))
+        ));
+    }
+
+    #[test]
     fn image_mesh_rejects_msaa_before_enqueuing_clip_updates() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let mut frame = factory.begin_frame(0);
@@ -6867,32 +7076,107 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_blit_rejects_shader_blending_until_dst_copy_is_supported() {
+    fn msaa_feather_atlas_blit_uses_shader_advanced_blending() {
+        let blit = advanced_feather_atlas_blit().unwrap();
+        let pixels = blit.pixels();
+        let center = &pixels[(32 * 64 + 32) * 4..][..4];
+        let corner = &pixels[..4];
+        assert_ne!(&center[..3], &corner[..3]);
+        assert_eq!(center[3], 255);
+        assert_eq!(corner[3], 255);
+    }
+
+    #[test]
+    fn msaa_feather_atlas_advanced_blends_match_generated_atomic_shader() {
+        let msaa_factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let atomic_factory =
+            WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
+        for blend_mode in [
+            BlendMode::Screen,
+            BlendMode::Overlay,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+            BlendMode::HardLight,
+            BlendMode::SoftLight,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+            BlendMode::Multiply,
+            BlendMode::Hue,
+            BlendMode::Saturation,
+            BlendMode::Color,
+            BlendMode::Luminosity,
+        ] {
+            let render = |factory: &WgpuFactory, feather| {
+                let paint = WgpuPaint {
+                    color: 0x80c0_4020,
+                    feather,
+                    blend_mode,
+                    ..WgpuPaint::default()
+                };
+                let mut frame = factory.begin_frame(0xff20_80c0);
+                frame.draw_path(&path, &paint);
+                let pixels = frame.finish().unwrap();
+                <[u8; 4]>::try_from(&pixels[(32 * 64 + 32) * 4..][..4]).unwrap()
+            };
+
+            let atlas = render(&msaa_factory, 1.0);
+            let atomic = render(&atomic_factory, 0.0);
+            assert!(
+                atlas
+                    .iter()
+                    .zip(atomic)
+                    .all(|(left, right)| left.abs_diff(right) <= 1),
+                "{blend_mode:?}: atlas={atlas:?} atomic={atomic:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn msaa_advanced_atlas_blends_preserve_path_clip_across_destination_copies() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let mut square = RawPath::new();
-        square.move_to(16.0, 16.0);
-        square.line_to(48.0, 16.0);
-        square.line_to(48.0, 48.0);
-        square.line_to(16.0, 48.0);
-        square.close();
-        let path = WgpuPath {
-            raw_path: square,
+        let content = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 16.0);
+        raw_clip.line_to(48.0, 48.0);
+        raw_clip.line_to(16.0, 48.0);
+        raw_clip.close();
+        let clip = WgpuPath {
+            raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
-            feather: 20.0,
+        let first = WgpuPaint {
+            color: 0x80c0_4020,
+            feather: 1.0,
+            blend_mode: BlendMode::ColorDodge,
+            ..WgpuPaint::default()
+        };
+        let second = WgpuPaint {
+            color: 0xa040_c080,
+            feather: 1.0,
             blend_mode: BlendMode::Multiply,
             ..WgpuPaint::default()
         };
+        let render = |draw_second| {
+            let mut frame = factory.begin_frame(0xff20_80c0);
+            frame.clip_path(&clip);
+            frame.draw_path(&content, &first);
+            if draw_second {
+                frame.draw_path(&content, &second);
+            }
+            frame.finish().unwrap()
+        };
 
-        let mut frame = factory.begin_frame(0);
-        frame.draw_path(&path, &paint);
-        assert!(matches!(
-            frame.finish(),
-            Err(RendererError::Unsupported(
-                "advanced blending on msaa feather atlas draws"
-            ))
-        ));
+        let single = render(false);
+        let double = render(true);
+        let pixel = |pixels: &[u8], x: usize, y: usize| {
+            <[u8; 4]>::try_from(&pixels[(y * 64 + x) * 4..][..4]).unwrap()
+        };
+        assert_eq!(pixel(&single, 8, 8), [32, 128, 192, 255]);
+        assert_eq!(pixel(&double, 8, 8), [32, 128, 192, 255]);
+        assert_ne!(pixel(&single, 32, 32), pixel(&double, 32, 32));
     }
 
     #[test]
@@ -7628,6 +7912,42 @@ mod tests {
         atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
             panic!(
                 "C++ nested clockwise path-clipped atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_advanced_blend_matches_rust_output_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT").expect(
+            "RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT is required for the ignored C++ advanced-blend atlas test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ advanced-blend atlas oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ advanced-blend atlas oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = advanced_feather_atlas_blit().unwrap();
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ advanced-blend atlas oracle mismatch at {}: {error}",
                 path.display()
             )
         });

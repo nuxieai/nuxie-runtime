@@ -227,10 +227,17 @@ Run `make renderer-golden`.
    clip-distance is now byte-exact against C++ WebGPU. The unchanged outer
    non-zero path-clip slice is also exact: three stencil-update batches feed a
    fixed-function clipped atlas draw, including the combined path-plus-rect
-   state. Continue R2 with clip-reset/changing-outer behavior and the nested,
-   even-odd, and clockwise clip transitions, then destination-copy shader
-   blending. Those remaining unsupported boundaries are explicit and tested.
-   Continue afterward with remaining `render_context.cpp` behavior and
+   state. Changing unrelated outer clips is now exact as well: a generated
+   MSAA stencil reset clears the previous clip before the next three-pass
+   update, while unchanged clips reuse their stencil state and unclipped draws
+   ignore retained stencil. Continue R2 with nested non-zero atlas clips
+   (`msaaMidpointFanPathsStencil` plus intersecting `clipReset`), then the
+   even-odd and clockwise clip transitions, then destination-copy shader
+   blending. The current GM candidates are negative boundary probes rather
+   than positive reset coverage: `parallelclips` has no feather and takes the
+   unsupported non-atlas path, while the `largeclippedpath_*_nested` and
+   `mutating_fill_rule` MSAA entries stop at the nested and alternate-fill
+   gates. Continue afterward with remaining `render_context.cpp` behavior and
    integration of the translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
@@ -245,6 +252,26 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Closed changing outer non-zero MSAA path clips for atlas draws.
+  Rust now ports C++ `ClipReset::clearPreviousClip` through the generated
+  `draw_msaa_stencil` shader, exact `Depth24PlusStencil8` not-equal/zero state,
+  clockwise front face with counterclockwise culling, transformed `roundOut()`
+  reset bounds, and the six `TriangleVertex` rectangle. Unchanged clips skip
+  both ID allocation and redundant stencil updates; an unclipped draw may run
+  while the prior stencil remains retained, and the next unrelated clip still
+  resets it. The Dawn oracle asserts the exact nine-batch schedule
+  `8,9,10,4,14,8,9,10,4`, every base/count range, the 97x48 atlas, 2048x1
+  tessellation texture, and exact left/reset-gap/right pixels. Rust matches
+  all 4,096 pixels, while the previous unclipped, rectangle-clipped, and
+  single-path-clipped frames remain exact. Terra identified reset-adjacent GM
+  streams, but Sol correctly classified them as negative future boundaries,
+  not positive coverage for this feather-atlas slice. Sol's adversarial review
+  also tightened the oracle, reset-pixel test, retained-stencil transition,
+  and native bounds parity before reporting no remaining findings. The
+  renderer ratchet remains exact=118/diverges=0/gated=1,349; normal V2 is 263
+  files/584 segments, scripted V2 is 27 files/35 segments, and
+  `cargo test --workspace` passes. Nested non-zero atlas clip intersection is
+  the next source-order R2 boundary.
 - 2026-07-12: Closed the unchanged outer non-zero MSAA path-clip slice for
   atlas draws. The fallback attachment is now depth/stencil, the path pipeline
   implements C++'s borrowed/update/cleanup stencil states and exact inner-fan
@@ -1241,3 +1268,6 @@ Run `make renderer-golden`.
   `bad_skin` C++ preparation oracle, promoted its stable bounded residual, and
   advanced the renderer ratchet to exact=118/diverges=0/gated=1,349; the
   matching WebGPU MSAA final-blit oracle is next.
+- 2026-07-12: Ported top-level MSAA `clipReset` for changing outer non-zero
+  atlas clips; the nine-batch C++ frame is pixel-exact, all gates stay green at
+  exact=118/diverges=0/gated=1,349, and nested clip intersection is next.

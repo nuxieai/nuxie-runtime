@@ -124,18 +124,7 @@ pub(crate) fn feather_pixel_bounds(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<[i32; 4]> {
-    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    for point in path.points() {
-        let point = transform.transform_point(*point);
-        min.x = min.x.min(point.x);
-        min.y = min.y.min(point.y);
-        max.x = max.x.max(point.x);
-        max.y = max.y.max(point.y);
-    }
-    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
-        return None;
-    }
+    let (min, max) = transformed_control_bounds(path, transform)?;
     let mut radius = stroke.map_or(0.0, |(thickness, join, cap)| {
         let stroke_radius = thickness * 0.5;
         if join == StrokeJoin::Miter {
@@ -156,6 +145,32 @@ pub(crate) fn feather_pixel_bounds(
         (max.x + outset_x).ceil() as i32,
         (max.y + outset_y).ceil() as i32,
     ])
+}
+
+pub(crate) fn path_pixel_bounds(path: &RawPath, transform: Mat2D) -> Option<[i32; 4]> {
+    let (min, max) = transformed_control_bounds(path, transform)?;
+    Some([
+        min.x.floor() as i32,
+        min.y.floor() as i32,
+        max.x.ceil() as i32,
+        max.y.ceil() as i32,
+    ])
+}
+
+fn transformed_control_bounds(path: &RawPath, transform: Mat2D) -> Option<(Vec2D, Vec2D)> {
+    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for point in path.points() {
+        let point = transform.transform_point(*point);
+        min.x = min.x.min(point.x);
+        min.y = min.y.min(point.y);
+        max.x = max.x.max(point.x);
+        max.y = max.y.max(point.y);
+    }
+    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
+        return None;
+    }
+    Some((min, max))
 }
 
 pub(crate) fn clockwise_atomic_coverage_range(
@@ -2320,6 +2335,18 @@ mod tests {
             false
         ));
         assert!(feather_requires_atlas(0.01, Mat2D::IDENTITY, true));
+    }
+
+    #[test]
+    fn path_pixel_bounds_round_out_without_aa_outset() {
+        let mut path = RawPath::new();
+        path.move_to(1.25, 2.75);
+        path.line_to(6.5, 8.125);
+
+        assert_eq!(
+            path_pixel_bounds(&path, Mat2D::IDENTITY),
+            Some([1, 2, 7, 9])
+        );
     }
 
     #[test]

@@ -546,7 +546,7 @@ class FormatTests(unittest.TestCase):
             "readTexture(instance, device, queue, targetTexture, 4);",
             "atlasWidth = atlas.GetWidth();",
             "atlasHeight = atlas.GetHeight();",
-            "if (atlasWidth != kExpectedPhysicalAtlasSize ||",
+            "if (atlasWidth != expectedAtlasWidth ||",
             "readTexture(instance, device, queue, atlas, kBytesPerTexel);",
             "readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);",
             "writeU32(header, 8, 1);",
@@ -809,6 +809,7 @@ class FormatTests(unittest.TestCase):
             '#[ignore = "requires RIVE_CPP_ATLAS_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATLAS_CHANGING_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
             "fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root()",
@@ -822,6 +823,8 @@ class FormatTests(unittest.TestCase):
         self.assertIn('RIVE_CPP_ATLAS_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-clipped-blit.rgba"',
                       readme)
         self.assertIn('RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-path-clipped-blit.rgba"',
+                      readme)
+        self.assertIn('RIVE_CPP_ATLAS_CHANGING_PATH_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-changing-path-clipped-blit.rgba"',
                       readme)
         self.assertIn('RIVE_CPP_ATLAS_FILL_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-fill-mask.r16f"',
                       readme)

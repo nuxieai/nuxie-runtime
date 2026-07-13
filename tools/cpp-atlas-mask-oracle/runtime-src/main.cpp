@@ -653,6 +653,8 @@ int main(int argc, char** argv)
     const bool clippedCase = argc > 4 && std::strcmp(argv[4], "clipped") == 0;
     const bool pathClippedCase =
         argc > 4 && std::strcmp(argv[4], "path-clipped") == 0;
+    const bool changingPathClippedCase =
+        argc > 4 && std::strcmp(argv[4], "changing-path-clipped") == 0;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
@@ -660,10 +662,11 @@ int main(int argc, char** argv)
     const bool fillCase = circleCase || cuspCase || directCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 ||
-        (argc > 4 && !fillCase && !clippedCase && !pathClippedCase) ||
+        (argc > 4 && !fillCase && !clippedCase && !pathClippedCase &&
+         !changingPathClippedCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -879,6 +882,25 @@ int main(int argc, char** argv)
         clip->close();
         renderer.clipPath(clip.get());
     }
+    else if (changingPathClippedCase)
+    {
+        renderer.save();
+        auto firstClip = context->makeEmptyRenderPath();
+        firstClip->moveTo(16, 16);
+        firstClip->lineTo(32, 48);
+        firstClip->lineTo(8, 48);
+        firstClip->close();
+        renderer.clipPath(firstClip.get());
+        renderer.drawPath(path.get(), paint.get());
+        renderer.restore();
+
+        auto secondClip = context->makeEmptyRenderPath();
+        secondClip->moveTo(48, 16);
+        secondClip->lineTo(56, 48);
+        secondClip->lineTo(32, 48);
+        secondClip->close();
+        renderer.clipPath(secondClip.get());
+    }
     renderer.drawPath(path.get(), paint.get());
 
     wgpu::CommandEncoder renderEncoder = device.CreateCommandEncoder();
@@ -947,16 +969,20 @@ int main(int argc, char** argv)
             fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
         }
     }
-    else if (pathClippedCase)
+    else if (pathClippedCase || changingPathClippedCase)
     {
         const uint32_t clipUpdate =
             static_cast<uint32_t>(rive::gpu::DrawContents::clipUpdate) |
             static_cast<uint32_t>(rive::gpu::DrawContents::nonZeroFill);
         const uint32_t activeClip =
             static_cast<uint32_t>(rive::gpu::DrawContents::activeClip);
+        const uint32_t clipReset =
+            static_cast<uint32_t>(rive::gpu::DrawContents::clipUpdate);
+        const size_t expectedBatchCount = changingPathClippedCase ? 9 : 4;
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
-            !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 4 ||
+            !facts.fixedFunctionColorOutput ||
+            facts.drawBatches.size() != expectedBatchCount ||
             facts.drawBatches[0].drawType != static_cast<uint32_t>(
                                                    rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
             facts.drawBatches[1].drawType != static_cast<uint32_t>(
@@ -969,12 +995,52 @@ int main(int argc, char** argv)
             facts.drawBatches[1].drawContents != clipUpdate ||
             facts.drawBatches[2].drawContents != clipUpdate ||
             facts.drawBatches[3].drawContents != activeClip ||
+            facts.drawBatches[0].baseElement != 1 ||
+            facts.drawBatches[1].baseElement != 1 ||
+            facts.drawBatches[2].baseElement != 1 ||
+            facts.drawBatches[0].elementCount != 1 ||
+            facts.drawBatches[1].elementCount != 1 ||
+            facts.drawBatches[2].elementCount != 1 ||
+            facts.drawBatches[3].baseElement != 0 ||
+            facts.drawBatches[3].elementCount != 6 ||
             facts.drawBatches[3].shaderFeatures != static_cast<uint32_t>(
                 rive::gpu::ShaderFeatures::ENABLE_DITHER) ||
             facts.drawBatches[3].shaderMiscFlags != static_cast<uint32_t>(
-                rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+                rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput) ||
+            (changingPathClippedCase &&
+             (facts.drawBatches[4].drawType !=
+                  static_cast<uint32_t>(rive::gpu::DrawType::clipReset) ||
+              facts.drawBatches[4].drawContents != clipReset ||
+              facts.drawBatches[5].drawType != static_cast<uint32_t>(
+                                                     rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+              facts.drawBatches[6].drawType != static_cast<uint32_t>(
+                                                     rive::gpu::DrawType::msaaMidpointFans) ||
+              facts.drawBatches[7].drawType != static_cast<uint32_t>(
+                                                     rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+              facts.drawBatches[8].drawType !=
+                  static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
+              facts.drawBatches[5].drawContents != clipUpdate ||
+              facts.drawBatches[6].drawContents != clipUpdate ||
+              facts.drawBatches[7].drawContents != clipUpdate ||
+              facts.drawBatches[8].drawContents != activeClip ||
+              facts.drawBatches[4].baseElement != 6 ||
+              facts.drawBatches[4].elementCount != 6 ||
+              facts.drawBatches[5].baseElement != 2 ||
+              facts.drawBatches[6].baseElement != 2 ||
+              facts.drawBatches[7].baseElement != 2 ||
+              facts.drawBatches[5].elementCount != 1 ||
+              facts.drawBatches[6].elementCount != 1 ||
+              facts.drawBatches[7].elementCount != 1 ||
+              facts.drawBatches[8].baseElement != 12 ||
+              facts.drawBatches[8].elementCount != 6 ||
+              facts.drawBatches[8].shaderFeatures != static_cast<uint32_t>(
+                  rive::gpu::ShaderFeatures::ENABLE_DITHER) ||
+              facts.drawBatches[8].shaderMiscFlags != static_cast<uint32_t>(
+                  rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))))
         {
-            fail("path-clipped atlas oracle must execute the top-level MSAA clip update followed by one clipped atlas batch");
+            fail(changingPathClippedCase
+                     ? "changing path-clipped atlas oracle must clear the previous clip between two top-level MSAA clip updates"
+                     : "path-clipped atlas oracle must execute the top-level MSAA clip update followed by one clipped atlas batch");
         }
     }
     else if (facts.interlockMode !=
@@ -993,7 +1059,7 @@ int main(int argc, char** argv)
     {
         fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");
     }
-    if (!directCase &&
+    if (!directCase && !changingPathClippedCase &&
         (facts.contentWidth != kExpectedLogicalAtlasSize ||
         facts.contentHeight != kExpectedLogicalAtlasSize ||
         !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
@@ -1018,6 +1084,13 @@ int main(int argc, char** argv)
             facts.strokeScissor.bottom);
         return 1;
     }
+    if (changingPathClippedCase &&
+        (facts.contentWidth != kExpectedLogicalAtlasSize * 2 ||
+         facts.contentHeight != kExpectedLogicalAtlasSize ||
+         facts.strokeBatchCount != 2))
+    {
+        fail("changing path-clipped oracle must allocate two canonical atlas stroke regions");
+    }
     uint32_t atlasWidth = 0;
     uint32_t atlasHeight = 0;
     if (!directCase)
@@ -1025,22 +1098,28 @@ int main(int argc, char** argv)
         const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
         atlasWidth = atlas.GetWidth();
         atlasHeight = atlas.GetHeight();
-        if (atlasWidth != kExpectedPhysicalAtlasSize ||
+        const uint32_t expectedAtlasWidth =
+            changingPathClippedCase ? 97 : kExpectedPhysicalAtlasSize;
+        if (atlasWidth != expectedAtlasWidth ||
             atlasHeight != kExpectedPhysicalAtlasSize)
         {
             std::fprintf(stderr,
-                         "cpp-atlas-mask-oracle: expected physical=48x48 logical=39x39 placement=(2,2) frame=64x64, got physical=%ux%u\n",
+                         "cpp-atlas-mask-oracle: expected physical=%ux48 frame=64x64, got physical=%ux%u\n",
+                         expectedAtlasWidth,
                          atlasWidth,
                          atlasHeight);
             return 1;
         }
-        const std::vector<uint8_t> atlasBytes =
-            readTexture(instance, device, queue, atlas, kBytesPerTexel);
-        writeMask(output,
-                  atlasWidth,
-                  atlasHeight,
-                  atlasBytes.data(),
-                  atlasWidth * kBytesPerTexel);
+        if (!changingPathClippedCase)
+        {
+            const std::vector<uint8_t> atlasBytes =
+                readTexture(instance, device, queue, atlas, kBytesPerTexel);
+            writeMask(output,
+                      atlasWidth,
+                      atlasHeight,
+                      atlasBytes.data(),
+                      atlasWidth * kBytesPerTexel);
+        }
     }
 
     const wgpu::Texture tessellation =
@@ -1048,7 +1127,8 @@ int main(int argc, char** argv)
     const uint32_t tessWidth = tessellation.GetWidth();
     const uint32_t tessHeight = tessellation.GetHeight();
     if (tessWidth != kExpectedTessWidth || tessHeight == 0 ||
-        (directPolySharkCase && tessHeight != kExpectedPolySharkTessHeight))
+        (directPolySharkCase && tessHeight != kExpectedPolySharkTessHeight) ||
+        (changingPathClippedCase && tessHeight != 1))
     {
         std::fprintf(stderr,
                      "cpp-atlas-mask-oracle: unexpected tessellation texture dimensions %ux%u\n",
@@ -1056,65 +1136,88 @@ int main(int argc, char** argv)
                      tessHeight);
         return 1;
     }
-    const std::vector<uint8_t> tessellationBytes =
-        readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);
-    if (directGridCase)
+    if (!changingPathClippedCase)
     {
-        writeDirectGridInputs(inputsOutput,
-                              facts,
-                              tessWidth,
-                              tessHeight,
-                              tessellationBytes.data(),
-                              tessWidth * kTessBytesPerTexel);
-    }
-    else if (directFlowerCase)
-    {
-        writeDirectFlowerInputs(inputsOutput,
-                                facts,
-                                tessWidth,
-                                tessHeight,
-                                tessellationBytes.data(),
-                                tessWidth * kTessBytesPerTexel);
-    }
-    else if (directBadSkinCase)
-    {
-        writeDirectBadSkinInputs(inputsOutput,
-                                 facts,
-                                 tessWidth,
-                                 tessHeight,
-                                 tessellationBytes.data(),
-                                 tessWidth * kTessBytesPerTexel);
-    }
-    else
-    {
-        writeInputs(inputsOutput,
-                    facts,
-                    tessWidth,
-                    tessHeight,
-                    tessellationBytes.data(),
-                    tessWidth * kTessBytesPerTexel);
+        const std::vector<uint8_t> tessellationBytes =
+            readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);
+        if (directGridCase)
+        {
+            writeDirectGridInputs(inputsOutput,
+                                  facts,
+                                  tessWidth,
+                                  tessHeight,
+                                  tessellationBytes.data(),
+                                  tessWidth * kTessBytesPerTexel);
+        }
+        else if (directFlowerCase)
+        {
+            writeDirectFlowerInputs(inputsOutput,
+                                    facts,
+                                    tessWidth,
+                                    tessHeight,
+                                    tessellationBytes.data(),
+                                    tessWidth * kTessBytesPerTexel);
+        }
+        else if (directBadSkinCase)
+        {
+            writeDirectBadSkinInputs(inputsOutput,
+                                     facts,
+                                     tessWidth,
+                                     tessHeight,
+                                     tessellationBytes.data(),
+                                     tessWidth * kTessBytesPerTexel);
+        }
+        else
+        {
+            writeInputs(inputsOutput,
+                        facts,
+                        tessWidth,
+                        tessHeight,
+                        tessellationBytes.data(),
+                        tessWidth * kTessBytesPerTexel);
+        }
     }
     const std::vector<uint8_t> targetBytes =
         readTexture(instance, device, queue, targetTexture, 4);
+    if (changingPathClippedCase)
+    {
+        const auto pixel = [&targetBytes](uint32_t x, uint32_t y) {
+            return targetBytes.data() + (y * kFrameWidth + x) * 4;
+        };
+        const uint8_t* leftPixel = pixel(16, 32);
+        const uint8_t* gapPixel = pixel(32, 32);
+        const uint8_t* rightPixel = pixel(48, 32);
+        for (uint32_t channel = 0; channel != 4; ++channel)
+        {
+            if (leftPixel[channel] != 79 || gapPixel[channel] != 0 ||
+                rightPixel[channel] != 79)
+            {
+                fail("changing path-clipped oracle pixels must prove both clipped draws and the reset gap");
+            }
+        }
+    }
     writeBlit(blitOutput,
               frameWidth,
               frameHeight,
               targetBytes.data());
-    if (!directCase)
+    if (!directCase && !changingPathClippedCase)
     {
         std::printf("wrote %s: %ux%u R16Float row-packed atlas mask\\n",
                     output,
                     atlasWidth,
                     atlasHeight);
     }
-    std::printf("wrote %s: batch=%u+%u contours=%zu interiorTriangles=%zu tessellation=%ux%u RGBA32Uint\\n",
-                inputsOutput,
-                facts.strokeBasePatch,
-                facts.strokePatchCount,
-                facts.contours.size(),
-                facts.triangles.size(),
-                tessWidth,
-                tessHeight);
+    if (!changingPathClippedCase)
+    {
+        std::printf("wrote %s: batch=%u+%u contours=%zu interiorTriangles=%zu tessellation=%ux%u RGBA32Uint\\n",
+                    inputsOutput,
+                    facts.strokeBasePatch,
+                    facts.strokePatchCount,
+                    facts.contours.size(),
+                    facts.triangles.size(),
+                    tessWidth,
+                    tessHeight);
+    }
     std::printf("wrote %s: %ux%u tightly packed RGBA8 atlas blit\n",
                 blitOutput,
                 frameWidth,

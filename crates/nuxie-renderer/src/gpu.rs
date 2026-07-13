@@ -838,6 +838,7 @@ mod tests {
         assert_eq!(size_of::<ContourData>(), 16);
         assert_eq!(size_of::<TriangleVertex>(), 12);
         assert_eq!(size_of::<ImageDrawUniforms>(), 256);
+        assert_eq!(size_of::<ImageRectVertex>(), 16);
         assert_eq!(size_of::<PaintType>(), 4);
         assert_eq!(size_of::<DrawType>(), 1);
         assert_eq!(align_of::<FlushUniforms>(), 4);

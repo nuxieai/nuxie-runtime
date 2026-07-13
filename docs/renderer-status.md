@@ -125,13 +125,13 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. [ ] Complete R3's GPU semantic-trap audit across the GLSL/SPIR-V to
-   Dawn/Tint and WGSL/wgpu/naga paths: uniformity, texture/sampler semantics,
-   float precision and denormals, matrix packing, integer wrap, MSAA resolve,
-   and coordinate conventions. Carry `dstreadshuffle` and
-   `interleavedfeather` as named
-   `metal-webgpu-atomic-intermediate-precision` investigations without
-   promotion, reference replacement, or contract changes.
+1. [ ] Close the two remaining findings in
+   `docs/renderer-gpu-semantic-trap-audit.md`: compare the complete sampled
+   clockwise-atomic nested clip plane against C++ Metal, then compare decoded
+   premultiplied RGBA bytes for the reachable JPEG and ICC PNG fixtures.
+   Shader provenance, ABI coverage, the wider semantic-surface audit, and the
+   two named `metal-webgpu-atomic-intermediate-precision` boundaries are
+   complete. Do not promote entries, replace references, or change contracts.
 2. [ ] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
    NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
    stacks, and hostile gradient stops. Rust must not panic, hang, or lose the
@@ -348,6 +348,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Pin the complete renderer shader lineage before closing R3's
+  semantic-trap audit. Clean regeneration now requires runtime `7c778d13`,
+  Naga 30.0.0, glslang 16.2.0, SPIRV-Tools 2026.1, ply 3.11, clean tracked and
+  untracked shader inputs, and a fixed Python hash seed for upstream's
+  otherwise nondeterministic WGSL identifier minifier. CI regenerates and
+  asserts 60 raw Rust WGSL modules plus 50 canonical minified C++
+  compiler-input headers by exact digest. Sol approved the architecture,
+  source/tool fence, CI installation, and evidence wording. The remaining
+  audit work is limited to the sampled clip-plane and decoded-image byte
+  oracles documented in `docs/renderer-gpu-semantic-trap-audit.md`.
 - 2026-07-13: Complete R2 after the exit-contract audit clarified the
   algorithm milestone boundary. All 108 upstream clockwise-atomic GMs are
   accounted for: 106 pass their committed contracts and the remaining two,
@@ -1719,3 +1729,9 @@ Run `make renderer-golden`.
   `algorithm-core` gates. No corpus tolerance or native reference changed.
   R3's semantic-trap audit and dual-renderer fuzz replay are now the active
   entry work.
+- 2026-07-13: Pinned reproducible Rust and C++ shader compiler-input lineages,
+  including upstream minifier determinism, exact artifact counts/digests, and
+  a macOS CI gate. The ABI test now explicitly covers `ImageRectVertex`.
+  Renderer tests pass 193/193 active cases and the corpus ratchet remains
+  exact=154/diverges=0/gated=1,313 after Sol approval. The sampled nested clip
+  plane and decoded-image bytes are the only open semantic-trap oracles.

@@ -89,10 +89,36 @@ jobs:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
 
+      - name: Checkout reference rive-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
       - name: Install Rust stable
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
+
+      - name: Install pinned renderer shader tools
+        run: |
+          tap=openai/rive-shader-tools
+          brew tap-new --no-git "$tap"
+          tap_dir="$(brew --repository "$tap")"
+          curl -fsSL https://raw.githubusercontent.com/Homebrew/homebrew-core/aad3312cb71e895b3c62db86c8f08a897a876323/Formula/s/spirv-headers.rb -o "$tap_dir/Formula/spirv-headers.rb"
+          curl -fsSL https://raw.githubusercontent.com/Homebrew/homebrew-core/aad3312cb71e895b3c62db86c8f08a897a876323/Formula/s/spirv-tools.rb -o "$tap_dir/Formula/spirv-tools.rb"
+          curl -fsSL https://raw.githubusercontent.com/Homebrew/homebrew-core/d716f586c4f58e3cc5cfc999a4e79e9a2a234b6b/Formula/g/glslang.rb -o "$tap_dir/Formula/glslang.rb"
+          for formula in glslang spirv-tools spirv-headers; do
+            brew uninstall --ignore-dependencies "$formula" || true
+          done
+          brew install "$tap/spirv-headers"
+          brew install "$tap/spirv-tools"
+          brew install "$tap/glslang"
+          cargo install naga-cli --version 30.0.0 --locked
+
+      - name: Verify renderer shader provenance
+        run: make renderer-shaders-check
 
       - name: Verify stub baseline and Rust renderer pixels
         run: |

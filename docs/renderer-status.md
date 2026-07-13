@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=148, diverges=0, gated=1,319, total=1,467.
+- Rust wgpu: exact=149, diverges=0, gated=1,318, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -99,7 +99,8 @@ Run `make renderer-golden`.
   and both transparent-clear blend cases, plus the mirrored Montserrat and
   Roboto feather-text entries, plus
   `gm-overstroke_blendmodes-clockwise-atomic` and
-  `gm-zeroPath-clockwise-atomic`.
+  `gm-zeroPath-clockwise-atomic`, plus
+  `gm-overfill_blendmodes-clockwise-atomic`.
 
 ## Milestones
 
@@ -254,14 +255,18 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Eight real GM divergences remain.
+   Montserrat/Roboto feather-text pair. Seven real GM divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
    storage erases a sub-8-bit RGB/alpha distinction that ColorBurn amplifies.
    Do not tolerate it or add a bespoke shader fork without a dedicated C++
    color-plane suboracle. C++'s empty-segment outcome is now matched in
-   stroke/feather preparation for coincident cubics, closing `zeroPath`. Continue R2 with
-   `dstreadshuffle`, the next structural target.
+   stroke/feather preparation for coincident cubics, closing `zeroPath`.
+   `dstreadshuffle` is parked under the same intermediate-color precision
+   boundary: isolated ColorDodge passes, isolated ColorBurn differs, and the
+   repeated blend board amplifies that backend delta. A fresh forced reference
+   also promotes `overfill_blendmodes` unchanged. Continue R2 with
+   `strokes_round`, now stable at 34 pixels/max-83 against its 2/32 contract.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -278,6 +283,15 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Classified `dstreadshuffle` as the same native-Metal-versus-WebGPU
+  atomic intermediate-color precision boundary as `interleavedfeather`.
+  Prefixes through Lighten pass; ColorDodge first reaches 198 pixels/max-7,
+  ColorBurn reaches 2,042/max-11, isolated ColorDodge passes at 1/max-3, and
+  isolated ColorBurn differs at 768/max-9. A full SrcOver control reduces the
+  complete board from 23,086 pixels/max-146 to 490/max-24, leaving only sparse
+  geometry edges. No tolerance or shader fork is justified. A fresh forced
+  native reference promotes `overfill_blendmodes` unchanged at 7/max-3, raising
+  the ratchet to 149 exact entries. `strokes_round` is next at 34/max-83.
 - 2026-07-13: Matched C++ `RawPath::pruneEmptySegments` behavior in
   stroke/feather preparation for cubic strokes whose four points coincide.
   Rust had retained these curves with zero
@@ -1454,3 +1468,8 @@ Run `make renderer-golden`.
   Fresh native Metal comparison passes the unchanged 2/32 contract at
   26 pixels/max-55; the ratchet is exact=148/diverges=0/gated=1,319 and
   `dstreadshuffle` is next.
+- 2026-07-13: Isolated `dstreadshuffle` to the named intermediate-color
+  precision boundary and parked it without tolerance changes. Promoted fresh
+  `overfill_blendmodes` output at 7 pixels/max-3 under the unchanged 2/32
+  contract; the ratchet is exact=149/diverges=0/gated=1,318 and
+  `strokes_round` is next.

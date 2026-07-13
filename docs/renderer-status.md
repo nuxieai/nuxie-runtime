@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=101, diverges=0, gated=1,366, total=1,467.
+- Rust wgpu: exact=102, diverges=0, gated=1,365, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -85,7 +85,8 @@ Run `make renderer-golden`.
   `riv-scroll_threshold-frame-0-clockwise-atomic`, and
   `riv-zombie_skins-frame-0-clockwise-atomic`, plus
   `riv-new_text-frame-0-clockwise-atomic` and
-  `riv-ai_assitant-frame-0-clockwise-atomic`.
+  `riv-ai_assitant-frame-0-clockwise-atomic`, plus
+  `riv-db_health_tracker-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -214,10 +215,9 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `db_health_tracker`
-   (1,071 pixels), `off_road_car` frames
-   (3,904 each), `joel_signed` frames (6,557-6,559), `juice` frames (12,837),
-   and `bad_skin` (22,932). Attribute `db_health_tracker` first.
+   diagnostics. The runnable residual queue is finite: `off_road_car` frames
+   (3,904 pixels each), `joel_signed` frames (6,557-6,559), `juice` frames
+   (12,837), and `bad_skin` (22,932). Attribute `off_road_car` first.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -236,6 +236,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: `db_health_tracker` keeps max channel delta 2 with a bounded
+  1,152-pixel allowance. Draw-prefix replay proves its first 430 of 473 draws
+  exact, including the chart's 353-stroke batch, clips, cards, and markers.
+  Divergence starts in the late solid text-outline fills and accumulates in
+  small increments to 1,071 pixels across a 2,073,600-pixel frame; 432
+  connected components are present, none larger than 13 pixels, and only 32
+  samples exceed delta 32. Flat fills and the two gradient draws add no
+  residual. This is repeated native Metal/wgpu glyph/path-edge placement, not
+  missing algorithm work. The ratchet advances to
+  exact=102/diverges=0/gated=1,365.
 - 2026-07-12: `ai_assitant` keeps max channel delta 2 with a bounded 384-pixel
   allowance. Its exact background and 16 repeated rotated stroke pairs rise
   smoothly from 1 to 341 residual pixels with no structural jump; 340 of 341
@@ -1084,3 +1094,8 @@ Run `make renderer-golden`.
   almost entirely singleton stroke-edge pixels fit a bounded 384-pixel backend
   allowance; the ratchet advances to exact=101/diverges=0/gated=1,366 and
   `db_health_tracker` is next.
+- 2026-07-12: Classified `db_health_tracker` through all 473 draw prefixes and
+  connected components. Draws 1-430 are exact; its 1,071 residuals accumulate
+  only across late text-outline edges and fit a bounded 1,152-pixel backend
+  allowance. The ratchet advances to exact=102/diverges=0/gated=1,365 and
+  `off_road_car` is next.

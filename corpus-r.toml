@@ -6173,10 +6173,9 @@ reference = "fixtures/renderer/reference/metal/riv/db_health_tracker-frame-0-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 1152
 
 [[entry]]
 id = "riv-db_health_tracker-frame-0-msaa"

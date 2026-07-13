@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=259, diverges=0, gated=1,209, total=1,468.
+- Rust wgpu: exact=268, diverges=0, gated=1,200, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -149,7 +149,11 @@ Run `make renderer-golden`.
   `riv-dependency_test-frame-{0..4}-clockwise-atomic`,
   `riv-distance_constraint-frame-0-clockwise-atomic`,
   `riv-double_library_with_image-frame-0-clockwise-atomic`, and
-  `riv-drag_event-frame-0-clockwise-atomic`.
+  `riv-drag_event-frame-0-clockwise-atomic`, plus
+  `riv-draw_index_list-frame-0-clockwise-atomic`,
+  `riv-draw_rule_cycle-frame-{0..4}-clockwise-atomic`,
+  `riv-entry-frame-0-clockwise-atomic`, and
+  `riv-event_on_listener-frame-{0,1}-clockwise-atomic`.
 
 ## Milestones
 
@@ -239,10 +243,14 @@ Run `make renderer-golden`.
     `distance_constraint`, `double_library_with_image`, `double_line`, and
     `drag_event`. Capture missing pinned Metal references and apply the
     unchanged contract and diagnostic rules.
-14. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+14. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `draw_index_list`, `draw_rule_cycle` frames 0-4, `ellipsis`,
     `entry`, and `event_on_listener` frames 0-1. Capture missing pinned Metal
     references and apply the unchanged contract and diagnostic rules.
+15. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `event_on_listener` frames 2-7 and `event_trigger_event` frames
+    0-3. Capture missing pinned Metal references and apply the unchanged
+    contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1976,3 +1984,12 @@ Run `make renderer-golden`.
   foreground fill. A read-only Terra scout supplied the draw inventory and
   Sol approved `metal-webgpu-subpixel-edge-coverage` without a tolerance
   change.
+- 2026-07-13: Probed the thirteenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. Nine pass the unchanged
+  `2/32` contract and advance the renderer ratchet to
+  exact=268/diverges=0/gated=1,200. `ellipsis` remains gated at 35/max 33;
+  all outliers have exact alpha and lie on the sole translated white text
+  path's contour boundaries while the full-canvas background is clean. Main
+  independently checked the draw count and alpha plane, and Sol approved the
+  existing `metal-webgpu-subpixel-edge-coverage` diagnostic without changing
+  the reference or tolerance.

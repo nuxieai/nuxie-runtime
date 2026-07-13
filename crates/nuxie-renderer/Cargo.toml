@@ -16,3 +16,4 @@ wgpu = "30.0.0"
 [dev-dependencies]
 naga = { version = "30.0.0", features = ["wgsl-in"] }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
+sha2 = "0.10"

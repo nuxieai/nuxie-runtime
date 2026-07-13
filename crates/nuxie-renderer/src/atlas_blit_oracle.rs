@@ -132,6 +132,59 @@ pub(crate) fn compare_cpp_to_rust_with_tolerance(
     }
 }
 
+pub(crate) fn compare_cpp_to_rust_with_pixel_tolerance(
+    cpp: &AtlasBlit,
+    rust: &AtlasBlit,
+    max_channel_delta_allowed: u8,
+    max_pixels_over_delta_allowed: usize,
+) -> Result<(), AtlasBlitComparisonError> {
+    if (cpp.width, cpp.height) != (rust.width, rust.height) {
+        return Err(AtlasBlitComparisonError::Dimensions {
+            cpp: (cpp.width, cpp.height),
+            rust: (rust.width, rust.height),
+        });
+    }
+    let mut first = None;
+    let mut pixels_over_delta = 0usize;
+    let mut max_channel_delta = 0u8;
+    for (pixel_index, (cpp_pixel, rust_pixel)) in cpp
+        .pixels
+        .chunks_exact(4)
+        .zip(rust.pixels.chunks_exact(4))
+        .enumerate()
+    {
+        let mut pixel_delta = 0u8;
+        for channel in 0..4 {
+            let cpp_value = cpp_pixel[channel];
+            let rust_value = rust_pixel[channel];
+            let delta = cpp_value.abs_diff(rust_value);
+            pixel_delta = pixel_delta.max(delta);
+            max_channel_delta = max_channel_delta.max(delta);
+            if delta > max_channel_delta_allowed {
+                first.get_or_insert((pixel_index, channel, cpp_value, rust_value));
+            }
+        }
+        if pixel_delta > max_channel_delta_allowed {
+            pixels_over_delta += 1;
+        }
+    }
+    if pixels_over_delta <= max_pixels_over_delta_allowed {
+        return Ok(());
+    }
+    let (pixel, channel, first_cpp, first_rust) =
+        first.expect("a pixel over the threshold must have a channel over the threshold");
+    Err(AtlasBlitComparisonError::PixelsBeyondTolerance {
+        first_x: pixel % cpp.width as usize,
+        first_y: pixel / cpp.width as usize,
+        first_channel: channel,
+        first_cpp,
+        first_rust,
+        pixels_over_delta,
+        max_channel_delta,
+        max_channel_delta_allowed,
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AtlasBlitError {
     TruncatedHeader {
@@ -209,6 +262,16 @@ pub(crate) enum AtlasBlitComparisonError {
         different_pixels: usize,
         max_channel_delta: u8,
     },
+    PixelsBeyondTolerance {
+        first_x: usize,
+        first_y: usize,
+        first_channel: usize,
+        first_cpp: u8,
+        first_rust: u8,
+        pixels_over_delta: usize,
+        max_channel_delta: u8,
+        max_channel_delta_allowed: u8,
+    },
 }
 
 impl fmt::Display for AtlasBlitComparisonError {
@@ -230,6 +293,19 @@ impl fmt::Display for AtlasBlitComparisonError {
             } => write!(
                 f,
                 "{different_pixels} pixels differ (max channel delta {max_channel_delta}); first at ({first_x}, {first_y}) channel {first_channel}: C++={first_cpp}, Rust={first_rust}"
+            ),
+            Self::PixelsBeyondTolerance {
+                first_x,
+                first_y,
+                first_channel,
+                first_cpp,
+                first_rust,
+                pixels_over_delta,
+                max_channel_delta,
+                max_channel_delta_allowed,
+            } => write!(
+                f,
+                "{pixels_over_delta} pixels exceed channel delta {max_channel_delta_allowed} (max channel delta {max_channel_delta}); first at ({first_x}, {first_y}) channel {first_channel}: C++={first_cpp}, Rust={first_rust}"
             ),
         }
     }
@@ -300,5 +376,21 @@ mod tests {
         assert!(compare_cpp_to_rust_with_tolerance(&cpp, &within, 1, 2).is_ok());
         assert!(compare_cpp_to_rust_with_tolerance(&cpp, &within, 0, 2).is_err());
         assert!(compare_cpp_to_rust_with_tolerance(&cpp, &within, 1, 1).is_err());
+    }
+
+    #[test]
+    fn pixel_tolerance_counts_only_pixels_over_the_channel_threshold() {
+        let cpp = AtlasBlit::new(2, 1, vec![10, 20, 30, 40, 50, 60, 70, 80]).unwrap();
+        let rust = AtlasBlit::new(2, 1, vec![11, 20, 30, 40, 50, 67, 70, 80]).unwrap();
+        assert!(compare_cpp_to_rust_with_pixel_tolerance(&cpp, &rust, 2, 1).is_ok());
+        assert!(matches!(
+            compare_cpp_to_rust_with_pixel_tolerance(&cpp, &rust, 2, 0),
+            Err(AtlasBlitComparisonError::PixelsBeyondTolerance {
+                pixels_over_delta: 1,
+                max_channel_delta: 7,
+                max_channel_delta_allowed: 2,
+                ..
+            })
+        ));
     }
 }

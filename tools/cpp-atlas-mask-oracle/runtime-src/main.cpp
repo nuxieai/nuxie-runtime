@@ -56,9 +56,11 @@ constexpr uint32_t kDirectRawTextContourCount = 36;
 constexpr uint32_t kDirectRawTextPatchCount = 318;
 constexpr uint32_t kIntersectionGroupBatchCount = 9;
 constexpr uint32_t kAtomicColorBurnPairFrameSize = 1024;
+constexpr uint32_t kAtomicInterleavedFeatherFullFrameSize = 1000;
 #include "generated_polyshark_path.inc"
 #include "generated_rawtext_path.inc"
 #include "generated_interleaved_colorburn_pair_path.inc"
+#include "generated_interleavedfeather_full.inc"
 
 void fail(const char* message)
 {
@@ -195,6 +197,43 @@ void writeBlit(const char* output,
     if (!file)
     {
         fail("could not write atlas-blit output file");
+    }
+}
+
+void writeAdapterProvenance(const char* output, WGPUAdapter adapter)
+{
+    WGPUAdapterInfo info = {};
+    if (wgpuAdapterGetInfo(adapter, &info) != WGPUStatus_Success)
+    {
+        fail("could not query adapter provenance");
+    }
+    if (info.backendType != WGPUBackendType_Metal)
+    {
+        wgpuAdapterInfoFreeMembers(info);
+        fail("full-stream oracle did not select the Metal backend");
+    }
+    std::ofstream file(output, std::ios::trunc);
+    if (!file)
+    {
+        wgpuAdapterInfoFreeMembers(info);
+        fail("could not open adapter provenance output file");
+    }
+    const auto writeString = [&file](const char* name, WGPUStringView value) {
+        file << name << '=';
+        file.write(value.data, static_cast<std::streamsize>(value.length));
+        file << '\n';
+    };
+    file << "backend=metal\n";
+    writeString("adapter_vendor", info.vendor);
+    writeString("adapter_architecture", info.architecture);
+    writeString("adapter_device", info.device);
+    writeString("adapter_description", info.description);
+    file << "adapter_vendor_id=" << info.vendorID << '\n';
+    file << "adapter_device_id=" << info.deviceID << '\n';
+    wgpuAdapterInfoFreeMembers(info);
+    if (!file)
+    {
+        fail("could not write adapter provenance output file");
     }
 }
 
@@ -869,6 +908,9 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "atomic-advanced-blend") == 0;
     const bool atomicColorBurnPairCase =
         argc > 4 && std::strcmp(argv[4], "atomic-colorburn-pair") == 0;
+    const bool atomicInterleavedFeatherFullCase =
+        argc > 4 &&
+        std::strcmp(argv[4], "atomic-interleavedfeather-full") == 0;
     const bool intersectionGroupsCase =
         argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;
     const bool anyAdvancedBlendCase =
@@ -879,7 +921,8 @@ int main(int argc, char** argv)
         directCuspCase || directPolySharkCase || directTriangulatedCase ||
         directStrokesRoundCase || directRawTextCase;
     const bool directOutputCase = directCase || atomicAdvancedBlendCase ||
-                                  atomicColorBurnPairCase;
+                                  atomicColorBurnPairCase ||
+                                  atomicInterleavedFeatherFullCase;
     const bool fillCase = circleCase || cuspCase ||
                           (directCase && !directStrokesRoundCase) ||
                           anyAdvancedBlendCase ||
@@ -894,16 +937,18 @@ int main(int argc, char** argv)
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
         !advancedBlendCase && !atomicAdvancedBlendCase && !atomicColorBurnPairCase &&
+        !atomicInterleavedFeatherFullCase &&
         !intersectionGroupsCase) ||
         (auxiliaryOutput != nullptr && !cuspCase && !directCuspCase &&
-         !atomicColorBurnPairCase &&
+         !atomicColorBurnPairCase && !atomicInterleavedFeatherFullCase &&
          !directStrokesRoundCase && !directRawTextCase) ||
-        ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase) &&
+        ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase ||
+          atomicInterleavedFeatherFullCase) &&
          auxiliaryOutput == nullptr) ||
         (secondaryOutput != nullptr && !atomicColorBurnPairCase) ||
         (atomicColorBurnPairCase && secondaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -919,17 +964,30 @@ int main(int argc, char** argv)
     }
 
     WGPUAdapter adapterHandle = nullptr;
+    WGPURequestAdapterOptions adapterOptions = {};
+    if (atomicInterleavedFeatherFullCase)
+    {
+        adapterOptions.backendType = WGPUBackendType_Metal;
+    }
     WGPURequestAdapterCallbackInfo adapterCallback = {};
     adapterCallback.mode = WGPUCallbackMode_WaitAnyOnly;
     adapterCallback.callback = onAdapterRequest;
     adapterCallback.userdata1 = &adapterHandle;
     await(instance.Get(),
-          wgpuInstanceRequestAdapter(instance.Get(), nullptr, adapterCallback));
+          wgpuInstanceRequestAdapter(instance.Get(),
+                                     atomicInterleavedFeatherFullCase
+                                         ? &adapterOptions
+                                         : nullptr,
+                                     adapterCallback));
     if (adapterHandle == nullptr)
     {
         fail("could not acquire Dawn WebGPU adapter");
     }
     wgpu::Adapter adapter = wgpu::Adapter::Acquire(adapterHandle);
+    if (atomicInterleavedFeatherFullCase)
+    {
+        writeAdapterProvenance(auxiliaryOutput, adapter.Get());
+    }
 
     WGPUDeviceDescriptor deviceDesc = {};
     deviceDesc.uncapturedErrorCallbackInfo.callback = onDeviceError;
@@ -969,8 +1027,10 @@ int main(int argc, char** argv)
                                     ? kDirectStrokesRoundFrameSize
                                 : directBadSkinCase
                                     ? kDirectBadSkinFrameWidth
-                                    : atomicColorBurnPairCase
+                                : atomicColorBurnPairCase
                                     ? kAtomicColorBurnPairFrameSize
+                                : atomicInterleavedFeatherFullCase
+                                    ? kAtomicInterleavedFeatherFullFrameSize
                                     : (directTriangulatedCase ? kDirectGridFrameSize
                                                                : kFrameWidth);
     const uint32_t frameHeight = directRawTextCase
@@ -981,6 +1041,8 @@ int main(int argc, char** argv)
                                      ? kDirectBadSkinFrameHeight
                                  : atomicColorBurnPairCase
                                  ? kAtomicColorBurnPairFrameSize
+                                 : atomicInterleavedFeatherFullCase
+                                 ? kAtomicInterleavedFeatherFullFrameSize
                                  : (directTriangulatedCase ? kDirectGridFrameSize
                                                                 : kFrameHeight);
     targetDesc.size = {frameWidth, frameHeight, 1};
@@ -1147,7 +1209,8 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCase && !atomicColorBurnPairCase && !intersectionGroupsCase)
+    if (!directCase && !atomicColorBurnPairCase &&
+        !atomicInterleavedFeatherFullCase && !intersectionGroupsCase)
     {
         path->close();
     }
@@ -1289,7 +1352,11 @@ int main(int argc, char** argv)
         innerClip->close();
         renderer.clipPath(innerClip.get());
     }
-    if (intersectionGroupsCase)
+    if (atomicInterleavedFeatherFullCase)
+    {
+        replayInterleavedFeatherFull(&renderer, context.get());
+    }
+    else if (intersectionGroupsCase)
     {
         // Draw 0 is opaque MSAA fast-path coverage: prepassCount=3,
         // subpassCount=0. Draw 1 is its overlapping translucent counterpart.
@@ -1500,6 +1567,19 @@ int main(int argc, char** argv)
             facts.drawBatches[0].elementCount != 6)
         {
             fail("advanced-blend oracle must execute one destination-reading MSAA atlas batch with shader color output");
+        }
+    }
+    else if (atomicInterleavedFeatherFullCase)
+    {
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
+            facts.fixedFunctionColorOutput || facts.drawBatches.size() < 3 ||
+            facts.drawBatches.front().drawType != static_cast<uint32_t>(
+                                                     rive::gpu::DrawType::renderPassInitialize) ||
+            facts.drawBatches.back().drawType != static_cast<uint32_t>(
+                                                    rive::gpu::DrawType::renderPassResolve))
+        {
+            fail("full interleavedfeather oracle must execute non-fixed atomic initialize, draws, and resolve");
         }
     }
     else if (atomicAdvancedBlendCase)
@@ -1954,59 +2034,64 @@ int main(int argc, char** argv)
         }
     }
 
-    const wgpu::Texture tessellation =
-        webgpuContext->tessellationTextureForOracle();
-    const uint32_t tessWidth = tessellation.GetWidth();
-    const uint32_t tessHeight = tessellation.GetHeight();
-    if (tessWidth != kExpectedTessWidth || tessHeight == 0 ||
-        (directPolySharkCase && tessHeight != kExpectedPolySharkTessHeight) ||
-        (changingPathClippedCase && tessHeight != 1))
+    uint32_t tessWidth = 0;
+    uint32_t tessHeight = 0;
+    if (!atomicInterleavedFeatherFullCase)
     {
-        std::fprintf(stderr,
-                     "cpp-atlas-mask-oracle: unexpected tessellation texture dimensions %ux%u\n",
-                     tessWidth,
-                     tessHeight);
-        return 1;
-    }
-    if (!changingPathClippedCase)
-    {
-        const std::vector<uint8_t> tessellationBytes =
-            readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);
-        if (directGridCase)
+        const wgpu::Texture tessellation =
+            webgpuContext->tessellationTextureForOracle();
+        tessWidth = tessellation.GetWidth();
+        tessHeight = tessellation.GetHeight();
+        if (tessWidth != kExpectedTessWidth || tessHeight == 0 ||
+            (directPolySharkCase && tessHeight != kExpectedPolySharkTessHeight) ||
+            (changingPathClippedCase && tessHeight != 1))
         {
-            writeDirectGridInputs(inputsOutput,
-                                  facts,
-                                  tessWidth,
-                                  tessHeight,
-                                  tessellationBytes.data(),
-                                  tessWidth * kTessBytesPerTexel);
+            std::fprintf(stderr,
+                         "cpp-atlas-mask-oracle: unexpected tessellation texture dimensions %ux%u\n",
+                         tessWidth,
+                         tessHeight);
+            return 1;
         }
-        else if (directFlowerCase)
+        if (!changingPathClippedCase)
         {
-            writeDirectFlowerInputs(inputsOutput,
-                                    facts,
-                                    tessWidth,
-                                    tessHeight,
-                                    tessellationBytes.data(),
-                                    tessWidth * kTessBytesPerTexel);
-        }
-        else if (directBadSkinCase)
-        {
-            writeDirectBadSkinInputs(inputsOutput,
-                                     facts,
-                                     tessWidth,
-                                     tessHeight,
-                                     tessellationBytes.data(),
-                                     tessWidth * kTessBytesPerTexel);
-        }
-        else
-        {
-            writeInputs(inputsOutput,
-                        facts,
-                        tessWidth,
-                        tessHeight,
-                        tessellationBytes.data(),
-                        tessWidth * kTessBytesPerTexel);
+            const std::vector<uint8_t> tessellationBytes =
+                readTexture(instance, device, queue, tessellation, kTessBytesPerTexel);
+            if (directGridCase)
+            {
+                writeDirectGridInputs(inputsOutput,
+                                      facts,
+                                      tessWidth,
+                                      tessHeight,
+                                      tessellationBytes.data(),
+                                      tessWidth * kTessBytesPerTexel);
+            }
+            else if (directFlowerCase)
+            {
+                writeDirectFlowerInputs(inputsOutput,
+                                        facts,
+                                        tessWidth,
+                                        tessHeight,
+                                        tessellationBytes.data(),
+                                        tessWidth * kTessBytesPerTexel);
+            }
+            else if (directBadSkinCase)
+            {
+                writeDirectBadSkinInputs(inputsOutput,
+                                         facts,
+                                         tessWidth,
+                                         tessHeight,
+                                         tessellationBytes.data(),
+                                         tessWidth * kTessBytesPerTexel);
+            }
+            else
+            {
+                writeInputs(inputsOutput,
+                            facts,
+                            tessWidth,
+                            tessHeight,
+                            tessellationBytes.data(),
+                            tessWidth * kTessBytesPerTexel);
+            }
         }
     }
     const std::vector<uint8_t> targetBytes =
@@ -2112,7 +2197,7 @@ int main(int argc, char** argv)
                     atlasWidth,
                     atlasHeight);
     }
-    if (!changingPathClippedCase)
+    if (!changingPathClippedCase && !atomicInterleavedFeatherFullCase)
     {
         std::printf("wrote %s: batch=%u+%u contours=%zu interiorTriangles=%zu tessellation=%ux%u RGBA32Uint\\n",
                     inputsOutput,

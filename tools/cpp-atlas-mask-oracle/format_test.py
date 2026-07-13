@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Cross-language contract tests for the atlas oracle formats."""
 
+import hashlib
 import os
 import pathlib
 import re
@@ -56,10 +57,14 @@ POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
 BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
 INTERLEAVED_FEATHER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "interleavedfeather.rive-stream"
+INTERLEAVED_FEATHER_SHA256 = "8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
 POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
 RAWTEXT_GENERATOR = pathlib.Path(__file__).with_name("generate_rawtext_stream_path.py")
 COLORBURN_PAIR_GENERATOR = pathlib.Path(__file__).with_name(
     "generate_interleaved_colorburn_pair_path.py"
+)
+PATH_STREAM_GENERATOR = pathlib.Path(__file__).with_name(
+    "generate_path_stream_replay.py"
 )
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
@@ -889,6 +894,16 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kDirectBadSkinFrameWidth = 999;",
             "constexpr uint32_t kDirectBadSkinFrameHeight = 720;",
             "constexpr uint32_t kDirectBadSkinContourCount = 1;",
+            "constexpr uint32_t kAtomicInterleavedFeatherFullFrameSize = 1000;",
+            '#include "generated_interleavedfeather_full.inc"',
+            'std::strcmp(argv[4], "atomic-interleavedfeather-full") == 0;',
+            "adapterOptions.backendType = WGPUBackendType_Metal;",
+            "writeAdapterProvenance(auxiliaryOutput, adapter.Get());",
+            "info.backendType != WGPUBackendType_Metal",
+            'file << "backend=metal\\n";',
+            "replayInterleavedFeatherFull(&renderer, context.get());",
+            "facts.drawBatches.size() < 3",
+            "if (!atomicInterleavedFeatherFullCase)",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
             "facts.contentWidth != kExpectedLogicalAtlasSize",
@@ -1331,6 +1346,90 @@ class FormatTests(unittest.TestCase):
             ]
             self.assertEqual(generated_bits, source_bits)
 
+    def test_interleavedfeather_full_replay_is_deterministic_and_strict(self):
+        expected_counts = [
+            "save=301",
+            "restore=301",
+            "transform=900",
+            "makeEmptyRenderPath=1",
+            "makeRenderPaint=1",
+            "drawPath=451",
+        ]
+
+        def command(stream, output=None, check=False):
+            result = [
+                "python3",
+                str(PATH_STREAM_GENERATOR),
+                "--stream",
+                str(stream),
+                "--expected-sha256",
+                INTERLEAVED_FEATHER_SHA256,
+                "--expected-source",
+                "gm:interleavedfeather",
+                "--expected-width",
+                "1000",
+                "--expected-height",
+                "1000",
+            ]
+            for count in expected_counts:
+                result.extend(["--expected-count", count])
+            result.extend(["--function", "replayInterleavedFeatherFull"])
+            result.extend(["--check"] if check else ["--output", str(output)])
+            return result
+
+        subprocess.run(command(INTERLEAVED_FEATHER_STREAM, check=True), check=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            first = temp_dir / "first.inc"
+            second = temp_dir / "second.inc"
+            subprocess.run(command(INTERLEAVED_FEATHER_STREAM, first), check=True)
+            subprocess.run(command(INTERLEAVED_FEATHER_STREAM, second), check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+            generated = first.read_text()
+            digest = hashlib.sha256(INTERLEAVED_FEATHER_STREAM.read_bytes()).hexdigest()
+            self.assertEqual(digest, INTERLEAVED_FEATHER_SHA256)
+            self.assertIn(f"interleavedfeather.rive-stream sha256={digest}", generated)
+            self.assertIn(
+                "void replayInterleavedFeatherFull(rive::RiveRenderer* renderer, "
+                "rive::gpu::RenderContext* context)",
+                generated,
+            )
+            self.assertEqual(generated.count("renderer->save();"), 301)
+            self.assertEqual(generated.count("renderer->restore();"), 301)
+            self.assertEqual(generated.count("renderer->transform("), 900)
+            self.assertEqual(generated.count("renderer->drawPath("), 451)
+
+            drifted = temp_dir / "drifted.rive-stream"
+            drifted.write_text(
+                INTERLEAVED_FEATHER_STREAM.read_text().replace(
+                    "clearColor value=0x00000000",
+                    "clearColor value=0xffffffff",
+                    1,
+                )
+            )
+            wrong_digest = subprocess.run(
+                command(drifted, check=True),
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(wrong_digest.returncode, 0)
+            self.assertIn("path-only stream sha256 drifted", wrong_digest.stderr)
+
+            drifted_digest = hashlib.sha256(drifted.read_bytes()).hexdigest()
+            drifted_command = command(drifted, check=True)
+            digest_index = drifted_command.index("--expected-sha256") + 1
+            drifted_command[digest_index] = drifted_digest
+            wrong_header = subprocess.run(
+                drifted_command,
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(wrong_header.returncode, 0)
+            self.assertIn(
+                "header or transparent clear contract drifted", wrong_header.stderr
+            )
+
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
         for fragment in (
@@ -1383,11 +1482,31 @@ class FormatTests(unittest.TestCase):
             'atomic_colorburn_pair_output="${RIVE_ATOMIC_COLORBURN_PAIR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.rgba}"',
             'atomic_colorburn_pair_color_output="${RIVE_ATOMIC_COLORBURN_PAIR_COLOR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.color}"',
             'atomic_colorburn_pair_coverage_output="${RIVE_ATOMIC_COLORBURN_PAIR_COVERAGE_OUTPUT:-$script_dir/out/atomic-colorburn-pair.coverage}"',
+            'atomic_interleavedfeather_full_output="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_OUTPUT:-$script_dir/out/atomic-interleavedfeather-full.rgba}"',
+            'atomic_interleavedfeather_full_provenance="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE:-$script_dir/out/atomic-interleavedfeather-full.provenance}"',
+            'expected_interleavedfeather_sha256="8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"',
+            'expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"',
+            'expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"',
+            "sha256_file()",
+            'git -C "$runtime" diff --quiet',
+            'git -C "$runtime" diff --cached --quiet',
+            'git -C "$dawn_dir" diff --quiet',
+            'git -C "$dawn_dir" diff --cached --quiet',
+            'path_stream_generator="$script_dir/generate_path_stream_replay.py"',
+            'python3 "$path_stream_generator"',
+            '--expected-sha256 "$expected_interleavedfeather_sha256"',
+            '--function replayInterleavedFeatherFull --check',
+            '--output "$injected_dir/generated_interleavedfeather_full.inc"',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_evenodd_path_clipped_blit_output" nested-evenodd-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_colorburn_pair_output" atomic-colorburn-pair "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output"',
+            '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_interleavedfeather_full_output" atomic-interleavedfeather-full "$atomic_interleavedfeather_full_provenance"',
+            'atomic_interleavedfeather_full_sha256="$(sha256_file "$atomic_interleavedfeather_full_output")"',
+            "artifact_sha256=$atomic_interleavedfeather_full_sha256",
+            "runtime_revision=$expected_runtime_revision",
+            "dawn_revision=$expected_dawn_revision",
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups',
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
@@ -1405,6 +1524,7 @@ class FormatTests(unittest.TestCase):
             'if [[ "$atomic_colorburn_pair_bytes" != "4194324" ]]',
             'if [[ "$atomic_colorburn_pair_color_bytes" != "4194328" ]]',
             'if [[ "$atomic_colorburn_pair_coverage_bytes" != "4194328" ]]',
+            'if [[ "$atomic_interleavedfeather_full_bytes" != "4000020" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
             'if [[ "$fill_blit_bytes" != "16404" ]]',
             'if [[ "$cusp_output_bytes" != "4628" ]]',
@@ -1448,6 +1568,7 @@ class FormatTests(unittest.TestCase):
             '#[ignore = "requires RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATOMIC_ADVANCED_BLEND from the C++ WebGPU atomic oracle"]',
+            '#[ignore = "requires RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL and its provenance from the C++ WebGPU-on-Metal oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_STROKES_ROUND_SPANS from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_INPUTS from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_SPANS from the C++ WebGPU oracle"]',

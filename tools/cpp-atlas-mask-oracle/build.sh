@@ -23,6 +23,8 @@ atomic_advanced_blend_output="${RIVE_ATOMIC_ADVANCED_BLEND_OUTPUT:-$script_dir/o
 atomic_colorburn_pair_output="${RIVE_ATOMIC_COLORBURN_PAIR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.rgba}"
 atomic_colorburn_pair_color_output="${RIVE_ATOMIC_COLORBURN_PAIR_COLOR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.color}"
 atomic_colorburn_pair_coverage_output="${RIVE_ATOMIC_COLORBURN_PAIR_COVERAGE_OUTPUT:-$script_dir/out/atomic-colorburn-pair.coverage}"
+atomic_interleavedfeather_full_output="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_OUTPUT:-$script_dir/out/atomic-interleavedfeather-full.rgba}"
+atomic_interleavedfeather_full_provenance="${RIVE_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE:-$script_dir/out/atomic-interleavedfeather-full.provenance}"
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
@@ -49,6 +51,8 @@ rawtext_generator="$script_dir/generate_rawtext_stream_path.py"
 rawtext_stream="$script_dir/../../fixtures/renderer/streams/gm/rawtext.rive-stream"
 colorburn_pair_generator="$script_dir/generate_interleaved_colorburn_pair_path.py"
 colorburn_pair_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
+path_stream_generator="$script_dir/generate_path_stream_replay.py"
+interleavedfeather_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -58,9 +62,16 @@ esac
 gn_bin="${RIVE_ATLAS_MASK_GN:-$default_gn}"
 naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"
 expected_naga_version="30.0.0"
+expected_interleavedfeather_sha256="8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
+expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
+expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 
 xcode_major() {
     xcodebuild -version 2>/dev/null | awk '/Xcode/ { split($2, version, "."); print version[1]; exit }'
+}
+
+sha256_file() {
+    python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$1"
 }
 
 needs_xcode26_patch() {
@@ -131,6 +142,15 @@ preflight() {
     python3 "$polyshark_generator" --stream "$polyshark_stream" --check
     python3 "$rawtext_generator" --stream "$rawtext_stream" --check
     python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" --check
+    python3 "$path_stream_generator" \
+        --stream "$interleavedfeather_stream" \
+        --expected-sha256 "$expected_interleavedfeather_sha256" \
+        --expected-source gm:interleavedfeather \
+        --expected-width 1000 --expected-height 1000 \
+        --expected-count save=301 --expected-count restore=301 \
+        --expected-count transform=900 --expected-count makeEmptyRenderPath=1 \
+        --expected-count makeRenderPaint=1 --expected-count drawPath=451 \
+        --function replayInterleavedFeatherFull --check
     for command in cmp git make mktemp premake5 python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
@@ -157,6 +177,22 @@ preflight() {
     fi
     if [[ ! -d "$runtime/.git" ]]; then
         echo "missing RIVE_RUNTIME_DIR git checkout: $runtime" >&2
+        return 2
+    fi
+    if [[ "$(git -C "$runtime" rev-parse HEAD)" != "$expected_runtime_revision" ]]; then
+        echo "Rive runtime revision drifted; review and update the full-stream oracle pin" >&2
+        return 2
+    fi
+    if ! git -C "$runtime" diff --quiet || ! git -C "$runtime" diff --cached --quiet; then
+        echo "Rive runtime has tracked changes; refusing to label a non-pinned oracle artifact" >&2
+        return 2
+    fi
+    if [[ "$(git -C "$dawn_dir" rev-parse HEAD)" != "$expected_dawn_revision" ]]; then
+        echo "Dawn revision drifted; review and update the full-stream oracle pin" >&2
+        return 2
+    fi
+    if ! git -C "$dawn_dir" diff --quiet || ! git -C "$dawn_dir" diff --cached --quiet; then
+        echo "Dawn has tracked changes; refusing to label a non-pinned oracle artifact" >&2
         return 2
     fi
     if ! git -C "$runtime" apply --check "$patch"; then
@@ -308,7 +344,9 @@ mkdir -p "$injected_dir" \
     "$(dirname "$atomic_advanced_blend_output")" \
     "$(dirname "$atomic_colorburn_pair_output")" \
     "$(dirname "$atomic_colorburn_pair_color_output")" \
-    "$(dirname "$atomic_colorburn_pair_coverage_output")"
+    "$(dirname "$atomic_colorburn_pair_coverage_output")" \
+    "$(dirname "$atomic_interleavedfeather_full_output")" \
+    "$(dirname "$atomic_interleavedfeather_full_provenance")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
@@ -316,6 +354,16 @@ python3 "$rawtext_generator" --stream "$rawtext_stream" \
     --output "$injected_dir/generated_rawtext_path.inc"
 python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" \
     --output "$injected_dir/generated_interleaved_colorburn_pair_path.inc"
+python3 "$path_stream_generator" \
+    --stream "$interleavedfeather_stream" \
+    --expected-sha256 "$expected_interleavedfeather_sha256" \
+    --expected-source gm:interleavedfeather \
+    --expected-width 1000 --expected-height 1000 \
+    --expected-count save=301 --expected-count restore=301 \
+    --expected-count transform=900 --expected-count makeEmptyRenderPath=1 \
+    --expected-count makeRenderPaint=1 --expected-count drawPath=451 \
+    --function replayInterleavedFeatherFull \
+    --output "$injected_dir/generated_interleavedfeather_full.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -340,7 +388,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -351,6 +399,13 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_colorburn_pair_output" atomic-colorburn-pair "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_interleavedfeather_full_output" atomic-interleavedfeather-full "$atomic_interleavedfeather_full_provenance"
+atomic_interleavedfeather_full_sha256="$(sha256_file "$atomic_interleavedfeather_full_output")"
+printf 'artifact_sha256=%s\nstream_sha256=%s\nruntime_revision=%s\ndawn_revision=%s\n' \
+    "$atomic_interleavedfeather_full_sha256" \
+    "$expected_interleavedfeather_sha256" \
+    "$expected_runtime_revision" \
+    "$expected_dawn_revision" >> "$atomic_interleavedfeather_full_provenance"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
@@ -441,6 +496,22 @@ if [[ "$atomic_colorburn_pair_coverage_bytes" != "4194328" ]]; then
     echo "atomic colorburn pair coverage must be exactly 4194328 bytes, got $atomic_colorburn_pair_coverage_bytes: $atomic_colorburn_pair_coverage_output" >&2
     exit 1
 fi
+atomic_interleavedfeather_full_bytes="$(wc -c < "$atomic_interleavedfeather_full_output" | tr -d ' ')"
+if [[ "$atomic_interleavedfeather_full_bytes" != "4000020" ]]; then
+    echo "atomic interleavedfeather full output must be exactly 4000020 bytes, got $atomic_interleavedfeather_full_bytes: $atomic_interleavedfeather_full_output" >&2
+    exit 1
+fi
+for provenance in \
+    "backend=metal" \
+    "artifact_sha256=$atomic_interleavedfeather_full_sha256" \
+    "stream_sha256=$expected_interleavedfeather_sha256" \
+    "runtime_revision=$expected_runtime_revision" \
+    "dawn_revision=$expected_dawn_revision"; do
+    if ! grep -Fqx "$provenance" "$atomic_interleavedfeather_full_provenance"; then
+        echo "atomic interleavedfeather provenance is missing $provenance: $atomic_interleavedfeather_full_provenance" >&2
+        exit 1
+    fi
+done
 fill_output_bytes="$(wc -c < "$fill_output" | tr -d ' ')"
 if [[ "$fill_output_bytes" != "4628" ]]; then
     echo "atlas fill mask must be exactly 4628 bytes, got $fill_output_bytes: $fill_output" >&2
@@ -535,6 +606,8 @@ echo "atomic advanced-blend output: $atomic_advanced_blend_output"
 echo "atomic colorburn-pair output: $atomic_colorburn_pair_output"
 echo "atomic colorburn-pair color storage: $atomic_colorburn_pair_color_output"
 echo "atomic colorburn-pair coverage storage: $atomic_colorburn_pair_coverage_output"
+echo "atomic interleavedfeather full output: $atomic_interleavedfeather_full_output"
+echo "atomic interleavedfeather full provenance: $atomic_interleavedfeather_full_provenance"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"

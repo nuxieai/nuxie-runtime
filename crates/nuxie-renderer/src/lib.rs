@@ -4528,6 +4528,7 @@ mod tests {
     const RAWTEXT_ORACLE_FRAME_WIDTH: u32 = 400;
     const RAWTEXT_ORACLE_FRAME_HEIGHT: u32 = 335;
     const ATOMIC_COLORBURN_PAIR_FRAME_SIZE: u32 = 1024;
+    const ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE: u32 = 1000;
     const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
         atlas_mask_oracle::MaskComparisonTolerances {
             support: 1.0 / 1024.0,
@@ -7321,6 +7322,37 @@ mod tests {
         frame
     }
 
+    fn interleaved_feather_full_output() -> atlas_blit_oracle::AtlasBlit {
+        let stream = nuxie_render_stream::RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
+        )))
+        .unwrap();
+        assert_eq!(
+            stream.frame_size,
+            Some((
+                ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+                ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+            ))
+        );
+        assert_eq!(stream.clear_color, Some(0));
+        assert_eq!(stream.frames.len(), 1);
+        let mut factory = WgpuFactory::new_with_mode(
+            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+            RenderMode::ClockwiseAtomic,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(0);
+        stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+        atlas_blit_oracle::AtlasBlit::new(
+            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+            ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE,
+            frame.finish().unwrap(),
+        )
+        .unwrap()
+    }
+
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         fixed_feather_atlas_blit_with_clip(Some([16.0, 8.0, 32.0, 56.0]))
     }
@@ -9202,6 +9234,108 @@ mod tests {
             blit_mismatch_coordinates.len() <= 3 && blit_max_delta <= 15,
             "resolved output exceeded the reviewed ColorBurn amplification bound: coordinates={blit_mismatch_coordinates:?} max-channel-delta={blit_max_delta}"
         );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL and its provenance from the C++ WebGPU-on-Metal oracle"]
+    fn cpp_webgpu_atomic_interleavedfeather_full_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL").expect(
+            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL is required for the ignored full-stream test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL must be absolute"
+        );
+        let bytes = fs::read(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        use sha2::Digest as _;
+        let artifact_sha256 = format!("{:x}", sha2::Sha256::digest(&bytes));
+        let provenance_path = PathBuf::from(
+            std::env::var_os("RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE").expect(
+                "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE is required for the ignored full-stream test",
+            ),
+        );
+        assert!(
+            provenance_path.is_absolute(),
+            "RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL_PROVENANCE must be absolute"
+        );
+        let provenance = fs::read_to_string(&provenance_path).unwrap_or_else(|error| {
+            panic!("failed to read {}: {error}", provenance_path.display())
+        });
+        for expected in [
+            "backend=metal",
+            "stream_sha256=8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a",
+            "runtime_revision=7c778d13c5d903b3b74eec1dd6bb68a811dea5f2",
+            "dawn_revision=211333b2e3e429c3508f25c81c547f602adf448c",
+        ] {
+            assert!(
+                provenance.lines().any(|line| line == expected),
+                "{} is missing {expected}",
+                provenance_path.display()
+            );
+        }
+        assert!(
+            provenance
+                .lines()
+                .any(|line| line == format!("artifact_sha256={artifact_sha256}")),
+            "{} does not match the RGBA artifact SHA-256",
+            provenance_path.display()
+        );
+        assert!(
+            provenance
+                .lines()
+                .any(|line| line.starts_with("adapter_device=") && line.len() > 15),
+            "{} does not identify the selected adapter",
+            provenance_path.display()
+        );
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes)
+            .unwrap_or_else(|error| panic!("malformed C++ output at {}: {error}", path.display()));
+        let rust_blit = interleaved_feather_full_output();
+        let mut largest = cpp_blit
+            .pixels()
+            .chunks_exact(4)
+            .zip(rust_blit.pixels().chunks_exact(4))
+            .enumerate()
+            .filter_map(|(index, (cpp, rust))| {
+                let max_delta = cpp
+                    .iter()
+                    .zip(rust)
+                    .map(|(&cpp, &rust)| cpp.abs_diff(rust))
+                    .max()
+                    .unwrap();
+                (max_delta != 0).then(|| {
+                    (
+                        max_delta,
+                        index % ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE as usize,
+                        index / ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE as usize,
+                        <[u8; 4]>::try_from(cpp).unwrap(),
+                        <[u8; 4]>::try_from(rust).unwrap(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        largest.sort_unstable_by(|left, right| right.cmp(left));
+        eprintln!(
+            "largest full-stream mismatches: {:?}",
+            &largest[..largest.len().min(12)]
+        );
+        atlas_blit_oracle::compare_cpp_to_rust_with_pixel_tolerance(
+            &cpp_blit,
+            &rust_blit,
+            2,
+            32,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ WebGPU-on-Metal full stream exceeded the corpus delta-2/32-pixel contract at {}: {error}",
+                path.display()
+            )
+        });
     }
 
     #[test]

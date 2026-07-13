@@ -275,10 +275,14 @@ Run `make renderer-golden`.
    pixels at max channel delta seven. The oracle exposed and fixed generic
    feathered-clockwise preparation retaining the nonzero flag, plus the
    advanced feather-fill pipeline culling the wrong face. This closes the Rust
-   defect without
-   justifying a native-Metal corpus tolerance. The
-   next evidence is an independent full-stream C++ WebGPU-on-Metal reference
-   lane for `interleavedfeather`, followed separately by `dstreadshuffle`.
+   defect without justifying a native-Metal corpus tolerance. A pinned
+   independent full-stream C++ WebGPU-on-Metal lane now replays all 451 draws
+   and passes the existing `2/32` contract at 6 pixels over delta 2. C++ Dawn
+   and Rust differ at 84 byte-inexact pixels/max 26, while native Metal differs
+   from both WebGPU paths almost identically: 18,492 and 18,495 pixels over
+   delta 2/max 78. Sol accepted algorithm parity and required the corpus gate
+   be renamed, not widened or promoted. `dstreadshuffle` is the next
+   independent full-stream reference lane.
    C++'s empty-segment outcome is now matched in
    stroke/feather preparation for coincident cubics, closing `zeroPath`.
    `dstreadshuffle` is parked under the same intermediate-color precision
@@ -324,6 +328,18 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Reclassify `interleavedfeather` from `algorithm-core` to
+  `metal-webgpu-atomic-intermediate-precision` after a pinned full-stream C++
+  Dawn WebGPU-on-Metal oracle. A strict stream compiler validates the SHA-256,
+  header, 451 draws, 900 transforms, 301 saves/restores, and exact path/paint
+  snapshots without using the Rust parser. Artifact provenance records the
+  C++ runtime, Dawn, adapter, and driver. Rust passes the entry's pre-existing
+  `2/32` contract against C++ Dawn at 6 pixels over delta 2; there are 84
+  byte-inexact pixels/max 26. Fresh native Metal differs from C++ Dawn and Rust
+  nearly identically at 18,492 and 18,495 pixels over delta 2/max 78. Sol
+  approved removing the algorithm attribution while keeping the entry gated,
+  its native reference unchanged, and its tolerance unchanged.
+  `dstreadshuffle` is next.
 - 2026-07-13: Keep both remaining clockwise-atomic GMs gated while accepting
   the isolated `interleavedfeather` ColorBurn pair as Dawn-versus-wgpu
   quantization. The source-generated C++ fixture pins all input f32 bits and
@@ -1641,3 +1657,9 @@ Run `make renderer-golden`.
   byte/channel deltas one and seven. Both remaining GMs stay gated pending
   independent full-stream C++ WebGPU references. The renderer ratchet remains
   exact=154/diverges=0/gated=1,313 with no tolerance or corpus edit.
+- 2026-07-13: Added the pinned full-stream C++ Dawn WebGPU-on-Metal oracle for
+  all 451 `interleavedfeather` draws. Rust passes its existing `2/32` contract
+  at 6 over-threshold pixels; three-way native Metal comparison proves the
+  remaining corpus gap is backend precision rather than algorithm core. The
+  entry remains gated under the named backend boundary, with the renderer
+  ratchet unchanged at exact=154/diverges=0/gated=1,313.

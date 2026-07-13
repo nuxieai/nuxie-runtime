@@ -19,6 +19,7 @@ nested_path_clipped_blit_output="${RIVE_ATLAS_NESTED_PATH_CLIPPED_BLIT_OUTPUT:-$
 nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-evenodd-path-clipped-blit.rgba}"
 nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"
 advanced_blend_blit_output="${RIVE_ATLAS_ADVANCED_BLEND_BLIT_OUTPUT:-$script_dir/out/atlas-advanced-blend-blit.rgba}"
+atomic_advanced_blend_output="${RIVE_ATOMIC_ADVANCED_BLEND_OUTPUT:-$script_dir/out/atomic-advanced-blend.rgba}"
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
@@ -280,7 +281,8 @@ mkdir -p "$injected_dir" \
     "$(dirname "$direct_grid_inputs_output")" \
     "$(dirname "$direct_flower_inputs_output")" \
     "$(dirname "$direct_bad_skin_inputs_output")" \
-    "$(dirname "$advanced_blend_blit_output")"
+    "$(dirname "$advanced_blend_blit_output")" \
+    "$(dirname "$atomic_advanced_blend_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
@@ -308,7 +310,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -317,6 +319,7 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_evenodd_path_clipped_blit_output" nested-evenodd-path-clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp
@@ -375,6 +378,11 @@ fi
 advanced_blend_blit_bytes="$(wc -c < "$advanced_blend_blit_output" | tr -d ' ')"
 if [[ "$advanced_blend_blit_bytes" != "16404" ]]; then
     echo "advanced-blend atlas blit must be exactly 16404 bytes, got $advanced_blend_blit_bytes: $advanced_blend_blit_output" >&2
+    exit 1
+fi
+atomic_advanced_blend_bytes="$(wc -c < "$atomic_advanced_blend_output" | tr -d ' ')"
+if [[ "$atomic_advanced_blend_bytes" != "16404" ]]; then
+    echo "atomic advanced-blend output must be exactly 16404 bytes, got $atomic_advanced_blend_bytes: $atomic_advanced_blend_output" >&2
     exit 1
 fi
 fill_output_bytes="$(wc -c < "$fill_output" | tr -d ' ')"
@@ -442,6 +450,7 @@ echo "atlas nested path-clipped blit: $nested_path_clipped_blit_output"
 echo "atlas nested even-odd path-clipped blit: $nested_evenodd_path_clipped_blit_output"
 echo "atlas nested clockwise path-clipped blit: $nested_clockwise_path_clipped_blit_output"
 echo "atlas advanced-blend blit: $advanced_blend_blit_output"
+echo "atomic advanced-blend output: $atomic_advanced_blend_output"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"

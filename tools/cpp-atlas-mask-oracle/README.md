@@ -146,13 +146,13 @@ triangle records, dimensions, and every texture texel without tolerances.
 `atlas-nested-path-clipped-blit.rgba`,
 `atlas-nested-evenodd-path-clipped-blit.rgba`,
 `atlas-nested-clockwise-path-clipped-blit.rgba`,
-`atlas-advanced-blend-blit.rgba`, and `atlas-fill-blit.rgba`
-use the `RIVEABL` version 1 contract for the matching MSAA mode: a 20-byte
+`atlas-advanced-blend-blit.rgba`,
+`atomic-advanced-blend.rgba`, and `atlas-fill-blit.rgba`
+use the `RIVEABL` version 1 contract: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
 complete tightly packed `64 x 64` RGBA8 render target. Since the paired input
 and mask oracles already prove the atlas contents, this artifact isolates the
-final atlas sampling, paint application, and MSAA output path. Clockwise-atomic
-final output is verified separately through the native Metal stream replay.
+final atlas sampling, paint application, and output path.
 
 `atlas-advanced-blend-blit.rgba` uses clear color `0xff204080` and a clockwise
 square fill with color `0xc0e08040`, feather `20`, and `ColorDodge`. The
@@ -163,6 +163,15 @@ renderer to end and resolve the MSAA pass, copy the draw's destination bounds
 to its single-sample destination texture, restart with MSAA attachments loaded,
 and finish RGB in the generated destination-reading shader while hardware
 src-over blending finishes alpha.
+
+`atomic-advanced-blend.rgba` uses the same clear, path, paint, and blend mode
+with direct atomic feather rendering. It requires the exact initialize,
+`midpointFanCenterAAPatches`, resolve schedule, atomic interlock, and shader
+color output. This isolates the generated destination-reading atomic path
+shader with `ENABLE_ADVANCED_BLEND | ENABLE_FEATHER | ENABLE_DITHER`.
+The configured Dawn-versus-wgpu comparator allows only the observed backend
+quantization envelope: at most eight pixels may differ, and no channel may
+differ by more than one. Either cap is independently enforced by unit tests.
 
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
@@ -232,6 +241,10 @@ RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-a
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_advanced_blend_matches_rust_output_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATOMIC_ADVANCED_BLEND="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-advanced-blend.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_atomic_advanced_blend_matches_within_backend_quantization_when_configured \
+  -- --exact --ignored --nocapture
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
@@ -246,7 +259,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_NESTED_PATH_CLIPPED_BLIT`,
 `RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT`, or
-`RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT` path;
+`RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT`, or
+`RIVE_CPP_ATOMIC_ADVANCED_BLEND` path;
 invoking either test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing

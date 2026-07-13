@@ -3274,7 +3274,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-bankcard-frame-0-msaa"
@@ -3716,7 +3716,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-msaa"
@@ -4355,7 +4355,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-coin-frame-0-msaa"
@@ -5993,7 +5993,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-data_viz_demo-frame-0-msaa"
@@ -6640,7 +6640,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-echo_show_demo-frame-0-msaa"
@@ -8434,7 +8434,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-hunter_x_demo-frame-0-msaa"
@@ -13070,7 +13070,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "advanced-blend-feather"
+gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-rewards_demo-frame-0-msaa"

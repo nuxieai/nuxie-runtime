@@ -74,6 +74,15 @@ pub(crate) fn compare_cpp_to_rust(
     cpp: &AtlasBlit,
     rust: &AtlasBlit,
 ) -> Result<(), AtlasBlitComparisonError> {
+    compare_cpp_to_rust_with_tolerance(cpp, rust, 0, 0)
+}
+
+pub(crate) fn compare_cpp_to_rust_with_tolerance(
+    cpp: &AtlasBlit,
+    rust: &AtlasBlit,
+    max_channel_delta_allowed: u8,
+    max_different_pixels_allowed: usize,
+) -> Result<(), AtlasBlitComparisonError> {
     if (cpp.width, cpp.height) != (rust.width, rust.height) {
         return Err(AtlasBlitComparisonError::Dimensions {
             cpp: (cpp.width, cpp.height),
@@ -105,6 +114,12 @@ pub(crate) fn compare_cpp_to_rust(
     }
     match first {
         None => Ok(()),
+        Some(_)
+            if max_channel_delta <= max_channel_delta_allowed
+                && different_pixels <= max_different_pixels_allowed =>
+        {
+            Ok(())
+        }
         Some((pixel, channel, first_cpp, first_rust)) => Err(AtlasBlitComparisonError::Pixels {
             first_x: pixel % cpp.width as usize,
             first_y: pixel / cpp.width as usize,
@@ -276,5 +291,14 @@ mod tests {
                 max_channel_delta: 7,
             })
         );
+    }
+
+    #[test]
+    fn bounded_comparator_enforces_pixel_and_channel_caps() {
+        let cpp = AtlasBlit::new(2, 1, vec![10, 20, 30, 40, 50, 60, 70, 80]).unwrap();
+        let within = AtlasBlit::new(2, 1, vec![11, 20, 30, 40, 50, 59, 70, 80]).unwrap();
+        assert!(compare_cpp_to_rust_with_tolerance(&cpp, &within, 1, 2).is_ok());
+        assert!(compare_cpp_to_rust_with_tolerance(&cpp, &within, 0, 2).is_err());
+        assert!(compare_cpp_to_rust_with_tolerance(&cpp, &within, 1, 1).is_err());
     }
 }

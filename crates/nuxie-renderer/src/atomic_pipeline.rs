@@ -16,10 +16,16 @@ pub(crate) struct AtomicPipeline {
     stroke_path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
     atlas_blit: wgpu::RenderPipeline,
+    advanced_atlas_blit: wgpu::RenderPipeline,
+    advanced_hsl_atlas_blit: wgpu::RenderPipeline,
     image_rect: wgpu::RenderPipeline,
     image_mesh: wgpu::RenderPipeline,
     advanced_path: wgpu::RenderPipeline,
     advanced_outer_path: wgpu::RenderPipeline,
+    advanced_feather_path: wgpu::RenderPipeline,
+    advanced_feather_hsl_path: wgpu::RenderPipeline,
+    advanced_feather_stroke_path: wgpu::RenderPipeline,
+    advanced_feather_hsl_stroke_path: wgpu::RenderPipeline,
     advanced_interior: wgpu::RenderPipeline,
     advanced_image_rect: wgpu::RenderPipeline,
     advanced_image_mesh: wgpu::RenderPipeline,
@@ -50,6 +56,7 @@ pub(crate) struct AtomicDraw<'a> {
     pub atlas_blit_vertices: &'a [TriangleVertex],
     pub is_stroke: bool,
     pub is_feather: bool,
+    pub hsl_blend: bool,
     pub image: Option<&'a wgpu::TextureView>,
     pub image_sampler: ImageSampler,
     pub image_uniforms: Option<ImageDrawUniforms>,
@@ -105,6 +112,11 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-atlas-blit-fragment",
             include_str!("generated/atomic_draw_atlas_blit.webgpu_fixedcolor_frag.wgsl"),
+        );
+        let advanced_atlas_blit_fragment = shader(
+            device,
+            "nuxie-atomic-advanced-atlas-blit-fragment",
+            include_str!("generated/atomic_draw_atlas_blit.webgpu_frag.wgsl"),
         );
         let image_rect_vertex = shader(
             device,
@@ -263,7 +275,7 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
-        let make_advanced_path = |label, cull_mode| {
+        let make_advanced_path = |label, cull_mode, feather, hsl, dither| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -286,10 +298,10 @@ impl AtomicPipeline {
                         ("0", 1.0),
                         ("1", 1.0),
                         ("2", 1.0),
-                        ("3", 0.0),
+                        ("3", feather),
                         ("4", 0.0),
-                        ("6", 1.0),
-                        ("7", 0.0),
+                        ("6", hsl),
+                        ("7", dither),
                     ]),
                     targets: &[Some(disabled_color_target())],
                 }),
@@ -300,10 +312,44 @@ impl AtomicPipeline {
         let advanced_path = make_advanced_path(
             "nuxie-atomic-advanced-path-pipeline",
             Some(wgpu::Face::Front),
+            0.0,
+            1.0,
+            0.0,
         );
         let advanced_outer_path = make_advanced_path(
             "nuxie-atomic-advanced-outer-path-pipeline",
             Some(wgpu::Face::Back),
+            0.0,
+            1.0,
+            0.0,
+        );
+        let advanced_feather_path = make_advanced_path(
+            "nuxie-atomic-advanced-feather-path-pipeline",
+            Some(wgpu::Face::Back),
+            1.0,
+            0.0,
+            1.0,
+        );
+        let advanced_feather_hsl_path = make_advanced_path(
+            "nuxie-atomic-advanced-feather-hsl-path-pipeline",
+            Some(wgpu::Face::Back),
+            1.0,
+            1.0,
+            1.0,
+        );
+        let advanced_feather_stroke_path = make_advanced_path(
+            "nuxie-atomic-advanced-feather-stroke-path-pipeline",
+            Some(wgpu::Face::Front),
+            1.0,
+            0.0,
+            1.0,
+        );
+        let advanced_feather_hsl_stroke_path = make_advanced_path(
+            "nuxie-atomic-advanced-feather-hsl-stroke-path-pipeline",
+            Some(wgpu::Face::Front),
+            1.0,
+            1.0,
+            1.0,
         );
         let advanced_interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-advanced-interior-pipeline"),
@@ -769,6 +815,43 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let make_advanced_atlas_blit = |label, hsl| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &atlas_blit_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(TriangleVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &advanced_atlas_blit_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[
+                        ("0", 1.0),
+                        ("1", 1.0),
+                        ("2", 1.0),
+                        ("4", 0.0),
+                        ("6", hsl),
+                        ("7", 1.0),
+                    ]),
+                    targets: &[Some(disabled_color_target())],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let advanced_atlas_blit =
+            make_advanced_atlas_blit("nuxie-atomic-advanced-atlas-blit-pipeline", 0.0);
+        let advanced_hsl_atlas_blit =
+            make_advanced_atlas_blit("nuxie-atomic-advanced-hsl-atlas-blit-pipeline", 1.0);
         Self {
             path,
             outer_path,
@@ -777,10 +860,16 @@ impl AtomicPipeline {
             stroke_path,
             interior,
             atlas_blit,
+            advanced_atlas_blit,
+            advanced_hsl_atlas_blit,
             image_rect,
             image_mesh,
             advanced_path,
             advanced_outer_path,
+            advanced_feather_path,
+            advanced_feather_hsl_path,
+            advanced_feather_stroke_path,
+            advanced_feather_hsl_stroke_path,
             advanced_interior,
             advanced_image_rect,
             advanced_image_mesh,
@@ -1059,7 +1148,13 @@ impl AtomicPipeline {
                 "nuxie-atomic-atlas-blit-pass",
                 &attachments,
             ));
-            pass.set_pipeline(&self.atlas_blit);
+            pass.set_pipeline(if advanced_blend && draw.hsl_blend {
+                &self.advanced_hsl_atlas_blit
+            } else if advanced_blend {
+                &self.advanced_atlas_blit
+            } else {
+                &self.atlas_blit
+            });
             pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
             pass.set_bind_group(1, image_group(draw_index), &[]);
             pass.set_bind_group(2, &atomics, &[]);
@@ -1082,17 +1177,31 @@ impl AtomicPipeline {
                 if draw.atlas.is_some() {
                     continue;
                 }
-                pass.set_pipeline(if draw.is_feather && draw.is_stroke {
-                    &self.feather_stroke_path
-                } else if draw.is_feather {
-                    &self.feather_path
-                } else if draw.is_stroke {
-                    &self.stroke_path
-                } else if !draw.triangle_vertices.is_empty() {
-                    &self.outer_path
-                } else {
-                    &self.path
-                });
+                pass.set_pipeline(
+                    if advanced_blend && draw.is_feather && draw.is_stroke && draw.hsl_blend {
+                        &self.advanced_feather_hsl_stroke_path
+                    } else if advanced_blend && draw.is_feather && draw.is_stroke {
+                        &self.advanced_feather_stroke_path
+                    } else if advanced_blend && draw.is_feather && draw.hsl_blend {
+                        &self.advanced_feather_hsl_path
+                    } else if advanced_blend && draw.is_feather {
+                        &self.advanced_feather_path
+                    } else if advanced_blend && !draw.triangle_vertices.is_empty() {
+                        &self.advanced_outer_path
+                    } else if advanced_blend {
+                        &self.advanced_path
+                    } else if draw.is_feather && draw.is_stroke {
+                        &self.feather_stroke_path
+                    } else if draw.is_feather {
+                        &self.feather_path
+                    } else if draw.is_stroke {
+                        &self.stroke_path
+                    } else if !draw.triangle_vertices.is_empty() {
+                        &self.outer_path
+                    } else {
+                        &self.path
+                    },
+                );
                 pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
@@ -1161,21 +1270,31 @@ impl AtomicPipeline {
                     "nuxie-atomic-path-pass",
                     &attachments,
                 ));
-                pass.set_pipeline(if advanced_blend && !draw.triangle_vertices.is_empty() {
-                    &self.advanced_outer_path
-                } else if advanced_blend {
-                    &self.advanced_path
-                } else if draw.is_feather && draw.is_stroke {
-                    &self.feather_stroke_path
-                } else if draw.is_feather {
-                    &self.feather_path
-                } else if draw.is_stroke {
-                    &self.stroke_path
-                } else if !draw.triangle_vertices.is_empty() {
-                    &self.outer_path
-                } else {
-                    &self.path
-                });
+                pass.set_pipeline(
+                    if advanced_blend && draw.is_feather && draw.is_stroke && draw.hsl_blend {
+                        &self.advanced_feather_hsl_stroke_path
+                    } else if advanced_blend && draw.is_feather && draw.is_stroke {
+                        &self.advanced_feather_stroke_path
+                    } else if advanced_blend && draw.is_feather && draw.hsl_blend {
+                        &self.advanced_feather_hsl_path
+                    } else if advanced_blend && draw.is_feather {
+                        &self.advanced_feather_path
+                    } else if advanced_blend && !draw.triangle_vertices.is_empty() {
+                        &self.advanced_outer_path
+                    } else if advanced_blend {
+                        &self.advanced_path
+                    } else if draw.is_feather && draw.is_stroke {
+                        &self.feather_stroke_path
+                    } else if draw.is_feather {
+                        &self.feather_path
+                    } else if draw.is_stroke {
+                        &self.stroke_path
+                    } else if !draw.triangle_vertices.is_empty() {
+                        &self.outer_path
+                    } else {
+                        &self.path
+                    },
+                );
                 pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                 pass.set_bind_group(1, image_group(draw_index), &[]);
                 pass.set_bind_group(2, &atomics, &[]);

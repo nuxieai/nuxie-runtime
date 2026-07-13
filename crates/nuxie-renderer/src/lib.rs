@@ -1328,6 +1328,7 @@ impl WgpuFrame {
                     atlas_blit_vertices: Vec<gpu::TriangleVertex>,
                     is_stroke: bool,
                     is_feather: bool,
+                    hsl_blend: bool,
                     image: Option<Arc<WgpuImageTexture>>,
                     image_sampler: ImageSampler,
                     image_uniforms: Option<gpu::ImageDrawUniforms>,
@@ -1718,6 +1719,7 @@ impl WgpuFrame {
                         atlas_blit_vertices,
                         is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
                         is_feather: draw.paint.feather != 0.0,
+                        hsl_blend: blend_mode_uses_hsl(draw.paint.blend_mode),
                         image: draw.image.as_ref().map(|image| Arc::clone(image.texture())),
                         image_sampler: draw
                             .image
@@ -1997,6 +1999,7 @@ impl WgpuFrame {
                         atlas_blit_vertices: &draw.atlas_blit_vertices,
                         is_stroke: draw.is_stroke,
                         is_feather: draw.is_feather,
+                        hsl_blend: draw.hsl_blend,
                         image: draw.image.as_ref().map(|image| &image.view),
                         image_sampler: draw.image_sampler,
                         image_uniforms: draw.image_uniforms,
@@ -2935,14 +2938,6 @@ impl WgpuFrame {
                     let has_advanced_blend =
                         self.draws[start..end].iter().any(draw_uses_advanced_blend);
                     if has_advanced_blend {
-                        if self.draws[start..end]
-                            .iter()
-                            .any(|draw| draw.paint.feather != 0.0)
-                        {
-                            return Err(RendererError::Unsupported(
-                                "advanced atomic blending with feather",
-                            ));
-                        }
                         if clear_target {
                             let attachments = [Some(wgpu::RenderPassColorAttachment {
                                 view: &view,
@@ -3949,6 +3944,13 @@ fn draw_uses_advanced_blend(draw: &SolidDraw) -> bool {
             .image
             .as_ref()
             .is_some_and(|image| image.blend_mode() != BlendMode::SrcOver)
+}
+
+fn blend_mode_uses_hsl(mode: BlendMode) -> bool {
+    matches!(
+        mode,
+        BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity
+    )
 }
 
 fn disjoint_atomic_draw_groups(
@@ -6542,13 +6544,12 @@ mod tests {
         fixed_feather_atlas_blit_with_clip(None).unwrap()
     }
 
-    fn advanced_feather_atlas_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
-        let factory = WgpuFactory::new_with_mode(
-            ATLAS_ORACLE_FRAME_SIZE,
-            ATLAS_ORACLE_FRAME_SIZE,
-            RenderMode::Msaa,
-        )
-        .unwrap();
+    fn advanced_feather_atlas_blit_with_mode(
+        mode: RenderMode,
+    ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        let factory =
+            WgpuFactory::new_with_mode(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE, mode)
+                .unwrap();
         let mut raw_path = RawPath::new();
         raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MIN);
@@ -6575,6 +6576,14 @@ mod tests {
             pixels,
         )
         .unwrap())
+    }
+
+    fn advanced_feather_atlas_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        advanced_feather_atlas_blit_with_mode(RenderMode::Msaa)
+    }
+
+    fn advanced_feather_atomic_output() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        advanced_feather_atlas_blit_with_mode(RenderMode::ClockwiseAtomic)
     }
 
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
@@ -7087,7 +7096,7 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_advanced_blends_match_generated_atomic_shader() {
+    fn msaa_and_atomic_feather_advanced_blends_match_at_opaque_centers() {
         let msaa_factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let atomic_factory =
             WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
@@ -7123,7 +7132,7 @@ mod tests {
             };
 
             let atlas = render(&msaa_factory, 1.0);
-            let atomic = render(&atomic_factory, 0.0);
+            let atomic = render(&atomic_factory, 1.0);
             assert!(
                 atlas
                     .iter()
@@ -7131,6 +7140,55 @@ mod tests {
                     .all(|(left, right)| left.abs_diff(right) <= 1),
                 "{blend_mode:?}: atlas={atlas:?} atomic={atomic:?}"
             );
+        }
+    }
+
+    #[test]
+    fn msaa_and_atomic_advanced_feather_atlas_draws_preserve_multiple_contributions() {
+        let msaa_factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let atomic_factory =
+            WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let left = rect_path([4.0, 8.0, 40.0, 56.0], FillRule::Clockwise);
+        let right = rect_path([24.0, 8.0, 60.0, 56.0], FillRule::Clockwise);
+
+        for blend_mode in [BlendMode::ColorDodge, BlendMode::Hue] {
+            let render = |factory: &WgpuFactory| {
+                let mut frame = factory.begin_frame(0xff20_4080);
+                frame.draw_path(
+                    &left,
+                    &WgpuPaint {
+                        color: 0xc0e0_8040,
+                        feather: 32.0,
+                        blend_mode,
+                        ..WgpuPaint::default()
+                    },
+                );
+                frame.draw_path(
+                    &right,
+                    &WgpuPaint {
+                        color: 0xc040_c0e0,
+                        feather: 32.0,
+                        blend_mode,
+                        ..WgpuPaint::default()
+                    },
+                );
+                frame.finish().unwrap()
+            };
+
+            let msaa = render(&msaa_factory);
+            let atomic = render(&atomic_factory);
+            for [x, y] in [[16, 32], [32, 32], [48, 32]] {
+                let offset = (y * 64 + x) * 4;
+                let msaa_pixel = &msaa[offset..offset + 4];
+                let atomic_pixel = &atomic[offset..offset + 4];
+                assert!(
+                    msaa_pixel
+                        .iter()
+                        .zip(atomic_pixel)
+                        .all(|(left, right)| left.abs_diff(*right) <= 2),
+                    "{blend_mode:?} at ({x}, {y}): msaa={msaa_pixel:?} atomic={atomic_pixel:?}"
+                );
+            }
         }
     }
 
@@ -7951,6 +8009,40 @@ mod tests {
                 path.display()
             )
         });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATOMIC_ADVANCED_BLEND from the C++ WebGPU atomic oracle"]
+    fn cpp_webgpu_atomic_advanced_blend_matches_within_backend_quantization_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATOMIC_ADVANCED_BLEND").expect(
+            "RIVE_CPP_ATOMIC_ADVANCED_BLEND is required for the ignored C++ atomic advanced-blend test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_ATOMIC_ADVANCED_BLEND is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATOMIC_ADVANCED_BLEND must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ atomic advanced-blend oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ atomic advanced-blend oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = advanced_feather_atomic_output().unwrap();
+        atlas_blit_oracle::compare_cpp_to_rust_with_tolerance(&cpp_blit, &rust_blit, 1, 8)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ atomic advanced-blend oracle exceeded the 8-pixel/delta-1 backend quantization budget at {}: {error}",
+                    path.display()
+                )
+            });
     }
 
     #[test]

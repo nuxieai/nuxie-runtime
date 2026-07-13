@@ -218,8 +218,9 @@ Run `make renderer-golden`.
    Five focused gradient GMs and `jellyfish_test` are promoted. A mechanical
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
-   budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. `bad_skin` is now promoted after ordering generic-atomic outer
+   budgets. Eight entries stop on native clockwise-atomic advanced-feather
+   parity or incompatible clip diagnostics. `bad_skin` is now promoted after
+   ordering generic-atomic outer
    and interior passes and proving all 69 isolated draws are bounded. The
    matching WebGPU MSAA final blit is now byte-exact across all 4,096 oracle
    pixels for the solid, unclipped, source-over slice. Parent-tight clip bounds
@@ -254,6 +255,27 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Added generic-atomic advanced blending for feathered fills and
+  strokes. The generated non-fixed atomic path and atlas-blit shaders now have
+  standard and HSL specializations; shared-flush, per-draw, and atlas paths
+  select them, while destination initialization, storage color, and coalesced
+  resolve remain unchanged. A C++ Dawn fixture pins the exact
+  initialize, `midpointFanCenterAAPatches`, resolve schedule with
+  `ENABLE_ADVANCED_BLEND | ENABLE_FEATHER | ENABLE_DITHER`. Dawn and wgpu stay
+  within a tested backend envelope of eight pixels at channel delta 1, and the
+  ordinary suite exercises all 15 advanced blend modes on direct paths. Sol
+  found that atlas-required feathers still selected the fixed-color blit and
+  could lose intermediate draws during advanced resolve. The accepted fix adds
+  non-fixed standard/HSL atlas pipelines; a two-atlas-draw regression preserves
+  both contributions in standard and HSL modes, all seven formerly unsupported
+  `.riv` clockwise-atomic entries replay, and Sol's closure review reports no
+  findings. A fresh native Metal bankcard reference still differs in 1,485,513
+  pixels (max delta 20), so none are promoted; their corpus gate is narrowed to
+  `native-clockwise-atomic-advanced-feather-parity`. This slice adds execution
+  support without moving the renderer ratchet: exact=118/diverges=0/gated=1,349;
+  normal V2 remains 263 files/584 segments, scripted V2 is 27 files/35 segments,
+  and `cargo test --workspace` passes. MSAA board-group scheduling is the next
+  measured `render_context.cpp` candidate.
 - 2026-07-12: Closed MSAA destination-copy shader blending for solid
   feather-atlas draws. A C++ Dawn fixture pins the unextended WebGPU schedule:
   resolve at `dstBlend`, copy the intersected draw bounds into a single-sample
@@ -471,8 +493,9 @@ Run `make renderer-golden`.
   C++'s exact `math::EPSILON` (`1/4096`) and forward/backward monotonic stop
   clamps; all five gradient GM oracles remain unchanged. Of 38 gated
   gradient-bearing clockwise entries, 30 render and now have fresh C++ Metal
-  references, while eight retain explicit advanced-blend-feather or clip-rect
-  diagnostics. Eleven pass under the existing strict delta-2/32-pixel budget:
+  references, while eight retain explicit native clockwise-atomic
+  advanced-feather parity or clip-rect diagnostics. Eleven pass under the
+  existing strict delta-2/32-pixel budget:
   `death_knight`, `deterministic_mode`, `interactive_scrolling`, all five
   `rocket` samples, `scroll_test`, `scroll_threshold`, and `zombie_skins`.
   Larger measured residuals remain gated rather than tolerated. The ratchet

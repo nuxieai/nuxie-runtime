@@ -8134,10 +8134,9 @@ reference = "fixtures/renderer/reference/metal/riv/hit_test_test-frame-0-clockwi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-hit_test_test-frame-0-msaa"
@@ -8160,10 +8159,9 @@ reference = "fixtures/renderer/reference/metal/riv/hittest_collapsed_layouts-fra
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-hittest_collapsed_layouts-frame-0-msaa"
@@ -8186,10 +8184,9 @@ reference = "fixtures/renderer/reference/metal/riv/hosted_font_file-frame-0-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-hosted_font_file-frame-0-msaa"
@@ -8212,10 +8209,9 @@ reference = "fixtures/renderer/reference/metal/riv/hosted_image_file-frame-0-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-hosted_image_file-frame-0-msaa"
@@ -8264,10 +8260,9 @@ reference = "fixtures/renderer/reference/metal/riv/image_binding_with_listener-f
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-image_binding_with_listener-frame-0-msaa"
@@ -8290,10 +8285,9 @@ reference = "fixtures/renderer/reference/metal/riv/image_fit_alignment-frame-0-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-image_fit_alignment-frame-0-msaa"
@@ -8316,10 +8310,9 @@ reference = "fixtures/renderer/reference/metal/riv/image_fit_alignment_2-frame-0
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-image_fit_alignment_2-frame-0-msaa"
@@ -8342,10 +8335,9 @@ reference = "fixtures/renderer/reference/metal/riv/image_fit_alignment_3-frame-0
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-image_fit_alignment_3-frame-0-msaa"
@@ -8368,10 +8360,9 @@ reference = "fixtures/renderer/reference/metal/riv/image_scripting_property_valu
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-image_scripting_property_value-frame-0-msaa"
@@ -8394,10 +8385,9 @@ reference = "fixtures/renderer/reference/metal/riv/in_band_asset-frame-0-clockwi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-in_band_asset-frame-0-msaa"

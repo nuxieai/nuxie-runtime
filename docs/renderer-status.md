@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=323, diverges=0, gated=1,145, total=1,468.
+- Rust wgpu: exact=333, diverges=0, gated=1,135, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -172,7 +172,15 @@ Run `make renderer-golden`.
   `riv-group_effect-frame-0-clockwise-atomic`, plus
   `riv-hide_test-frame-0-clockwise-atomic`,
   `riv-hit_test_nested-frame-0-clockwise-atomic`, and
-  `riv-hit_test_solos-frame-{0..7}-clockwise-atomic`.
+  `riv-hit_test_solos-frame-{0..7}-clockwise-atomic`, plus
+  `riv-hit_test_test-frame-0-clockwise-atomic`,
+  `riv-hittest_collapsed_layouts-frame-0-clockwise-atomic`,
+  `riv-hosted_font_file-frame-0-clockwise-atomic`,
+  `riv-hosted_image_file-frame-0-clockwise-atomic`,
+  `riv-image_binding_with_listener-frame-0-clockwise-atomic`,
+  `riv-image_fit_alignment{,_2,_3}-frame-0-clockwise-atomic`,
+  `riv-image_scripting_property_value-frame-0-clockwise-atomic`, and
+  `riv-in_band_asset-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -294,13 +302,18 @@ Run `make renderer-golden`.
     entries: `hide_test`, `hit_test_nested`, and `hit_test_solos` frames 0-7.
     Capture missing pinned Metal references and apply the unchanged contract
     and diagnostic rules.
-21. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+21. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `hit_test_test`, `hittest_collapsed_layouts`, `hosted_font_file`,
     `hosted_image_file`, `image_binding_with_listener`,
     `image_fit_alignment`, `image_fit_alignment_2`, `image_fit_alignment_3`,
     `image_scripting_property_value`, and `in_band_asset`. Capture missing
     pinned Metal references and apply the unchanged contract and diagnostic
     rules.
+22. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `interpolate_to_end`, `interpolation_zero_duration`, `joel_v3`,
+    `joystick_flag_test` frames 0-4, and `joystick_nested_remap` frames 0-1.
+    Capture missing pinned Metal references and apply the unchanged contract
+    and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2096,4 +2109,11 @@ Run `make renderer-golden`.
   pass with the same one-pixel/max-13 result. The unchanged `2/32` contract
   promotes all ten and advances the renderer ratchet to
   exact=323/diverges=0/gated=1,145 without a new diagnostic or tolerance
+  change.
+- 2026-07-13: Probed the twentieth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. `hit_test_test` passes at
+  6/max 22; the remaining nine text, hosted-asset, image-binding, image-fit,
+  scripting, and in-band-asset fixtures have no pixels beyond delta 2. The
+  unchanged `2/32` contract promotes all ten and advances the renderer ratchet
+  to exact=333/diverges=0/gated=1,135 without a new diagnostic or tolerance
   change.

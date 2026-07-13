@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=278, diverges=0, gated=1,190, total=1,468.
+- Rust wgpu: exact=288, diverges=0, gated=1,180, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -154,7 +154,8 @@ Run `make renderer-golden`.
   `riv-draw_rule_cycle-frame-{0..4}-clockwise-atomic`,
   `riv-entry-frame-0-clockwise-atomic`, and
   `riv-event_on_listener-frame-{0..7}-clockwise-atomic`, plus
-  `riv-event_trigger_event-frame-{0..3}-clockwise-atomic`.
+  `riv-event_trigger_event-frame-{0..7}-clockwise-atomic` and
+  `riv-events_on_states-frame-{0..5}-clockwise-atomic`.
 
 ## Milestones
 
@@ -252,9 +253,14 @@ Run `make renderer-golden`.
     entries: `event_on_listener` frames 2-7 and `event_trigger_event` frames
     0-3. Capture missing pinned Metal references and apply the unchanged
     contract and diagnostic rules.
-16. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+16. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `event_trigger_event` frames 4-7 and `events_on_states` frames
     0-5. Capture missing pinned Metal references and apply the unchanged
+    contract and diagnostic rules.
+17. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `events_on_states` frames 6-7, `feather_render_test`,
+    `fill_trim_path` frames 0-4, `fit_font_size_test`, and `fix_rectangle`
+    frame 0. Capture missing pinned Metal references and apply the unchanged
     contract and diagnostic rules.
 
 ## R2 Completion Record
@@ -2004,3 +2010,9 @@ Run `make renderer-golden`.
   all four `event_trigger_event` frames have zero over-threshold pixels. The
   unchanged `2/32` contract promotes all ten and advances the renderer ratchet
   to exact=278/diverges=0/gated=1,190.
+- 2026-07-13: Probed the fifteenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. The remaining four
+  `event_trigger_event` frames have zero over-threshold pixels and all six
+  `events_on_states` frames repeat the one-pixel/max-17 event-family result.
+  The unchanged `2/32` contract promotes all ten and advances the renderer
+  ratchet to exact=288/diverges=0/gated=1,180.

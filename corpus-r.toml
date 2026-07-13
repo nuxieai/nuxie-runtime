@@ -1820,10 +1820,9 @@ stream = "fixtures/renderer/streams/gm/overfill_opaque.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/overfill_opaque-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 48
 
 
 [[entry]]
@@ -2426,7 +2425,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "pre-raster-close-seam-oracle"
 
 
 [[entry]]

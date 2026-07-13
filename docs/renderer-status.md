@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=149, diverges=0, gated=1,318, total=1,467.
+- Rust wgpu: exact=150, diverges=0, gated=1,317, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -100,7 +100,8 @@ Run `make renderer-golden`.
   Roboto feather-text entries, plus
   `gm-overstroke_blendmodes-clockwise-atomic` and
   `gm-zeroPath-clockwise-atomic`, plus
-  `gm-overfill_blendmodes-clockwise-atomic`.
+  `gm-overfill_blendmodes-clockwise-atomic` and
+  `gm-overfill_opaque-clockwise-atomic`.
 
 ## Milestones
 
@@ -255,7 +256,8 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Seven real GM divergences remain.
+   Montserrat/Roboto feather-text pair. Six gated clockwise-atomic GM
+   divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
    storage erases a sub-8-bit RGB/alpha distinction that ColorBurn amplifies.
@@ -265,8 +267,13 @@ Run `make renderer-golden`.
    `dstreadshuffle` is parked under the same intermediate-color precision
    boundary: isolated ColorDodge passes, isolated ColorBurn differs, and the
    repeated blend board amplifies that backend delta. A fresh forced reference
-   also promotes `overfill_blendmodes` unchanged. Continue R2 with
-   `strokes_round`, now stable at 34 pixels/max-83 against its 2/32 contract.
+   also promotes `overfill_blendmodes` unchanged. `overfill_opaque` is now
+   promoted under a bounded 48-pixel cubic-edge allowance: its two translated
+   colored draws each contribute the same 20-pixel residual, while binary
+   foreground support is exact. Continue R2 with a record-exact
+   pre-rasterization oracle for `strokes_round` draw 38; its 34-pixel/max-83
+   result includes five foreground-support pixels at the smooth close seam,
+   so it is not yet a tolerance candidate.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -283,6 +290,21 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Kept `strokes_round` gated after a 100-draw prefix sweep and
+  isolated-draw oracle. Every isolated draw stays at max delta 1 except draw
+  38, whose only five threshold violations are contiguous at the smooth
+  start/close seam `(25,68..72)`; C++ leaves those pixels white while Rust
+  renders the stroke. Restoring C++'s five direct-miter join segments had no
+  pixel effect and was reverted. Sol rejected a shared 48-pixel allowance
+  because the foreground-support disagreement still admits a tessellation
+  input mismatch; the next proof is a record-exact C++/Rust pre-raster oracle
+  for draw 38. Separately, fresh `overfill_opaque` prefixes are exact through
+  the first colored draw, then add two identical 20-pixel/max-16 cubic-edge
+  residuals under a 60-pixel translation. C++ repeats byte-exactly and the
+  final C++/Rust foreground support is identical. A bounded 48-pixel
+  Metal-vs-wgpu allowance promotes that entry and raises the ratchet to 150.
+  Renderer verification is 150/0/1,317; V2 remains 263 files/584 segments,
+  scripted V2 remains 27/35, and `cargo test --workspace` is green.
 - 2026-07-13: Classified `dstreadshuffle` as the same native-Metal-versus-WebGPU
   atomic intermediate-color precision boundary as `interleavedfeather`.
   Prefixes through Lighten pass; ColorDodge first reaches 198 pixels/max-7,
@@ -1473,3 +1495,9 @@ Run `make renderer-golden`.
   `overfill_blendmodes` output at 7 pixels/max-3 under the unchanged 2/32
   contract; the ratchet is exact=149/diverges=0/gated=1,318 and
   `strokes_round` is next.
+- 2026-07-13: Localized `strokes_round` to five unresolved foreground-support
+  pixels at draw 38's smooth close seam and kept it gated for a pre-raster
+  record oracle after Sol rejected a tolerance promotion. Promoted
+  `overfill_opaque` under its independently proven 48-pixel cubic-edge
+  allowance; all renderer and V2 gates are green at
+  exact=150/diverges=0/gated=1,317.

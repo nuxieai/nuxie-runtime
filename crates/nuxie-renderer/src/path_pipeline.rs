@@ -8,6 +8,7 @@ pub(crate) struct PathPipeline {
     pub clip_borrowed_pipeline: wgpu::RenderPipeline,
     pub clip_update_pipeline: wgpu::RenderPipeline,
     pub clip_cleanup_pipeline: wgpu::RenderPipeline,
+    pub nested_clip_pipeline: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
@@ -181,11 +182,29 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             wgpu::ColorWrites::empty(),
         );
+        let nested_front = stencil_face(
+            wgpu::CompareFunction::LessEqual,
+            keep,
+            wgpu::StencilOperation::DecrementWrap,
+        );
+        let nested_back = stencil_face(
+            wgpu::CompareFunction::LessEqual,
+            keep,
+            wgpu::StencilOperation::IncrementWrap,
+        );
+        let nested_clip_pipeline = create_pipeline(
+            "nuxie-msaa-path-nested-clip-pipeline",
+            None,
+            stencil_state(nested_front, nested_back, 0xff, 0x7f),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
         Self {
             pipeline,
             clip_borrowed_pipeline,
             clip_update_pipeline,
             clip_cleanup_pipeline,
+            nested_clip_pipeline,
             flush_layout,
             image_layout,
             sampler_layout,

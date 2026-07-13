@@ -5,6 +5,7 @@ use wgpu::util::DeviceExt;
 
 pub(crate) struct MsaaStencilPipeline {
     pub clip_reset_pipeline: wgpu::RenderPipeline,
+    pub nested_clip_reset_pipeline: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
 }
 
@@ -95,8 +96,61 @@ impl MsaaStencilPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let nested_face = wgpu::StencilFaceState {
+            compare: wgpu::CompareFunction::Less,
+            fail_op: wgpu::StencilOperation::Zero,
+            depth_fail_op: wgpu::StencilOperation::Keep,
+            pass_op: wgpu::StencilOperation::Replace,
+        };
+        let nested_clip_reset_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("nuxie-msaa-nested-clip-reset-pipeline"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &vertex,
+                    entry_point: Some("main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[Some(TriangleVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24PlusStencil8,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: wgpu::StencilState {
+                        front: nested_face,
+                        back: nested_face,
+                        read_mask: 0xff,
+                        write_mask: 0xff,
+                    },
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 4,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &fragment,
+                    entry_point: Some("main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::empty(),
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
         Self {
             clip_reset_pipeline,
+            nested_clip_reset_pipeline,
             flush_layout,
         }
     }

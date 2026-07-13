@@ -15,6 +15,7 @@ blit_output="${RIVE_ATLAS_BLIT_OUTPUT:-$script_dir/out/atlas-blit.rgba}"
 clipped_blit_output="${RIVE_ATLAS_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-clipped-blit.rgba}"
 path_clipped_blit_output="${RIVE_ATLAS_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-path-clipped-blit.rgba}"
 changing_path_clipped_blit_output="${RIVE_ATLAS_CHANGING_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-changing-path-clipped-blit.rgba}"
+nested_path_clipped_blit_output="${RIVE_ATLAS_NESTED_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-path-clipped-blit.rgba}"
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
@@ -303,11 +304,12 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$changing_path_clipped_blit_output" changing-path-clipped
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_path_clipped_blit_output" nested-path-clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp
@@ -346,6 +348,11 @@ fi
 changing_path_clipped_blit_bytes="$(wc -c < "$changing_path_clipped_blit_output" | tr -d ' ')"
 if [[ "$changing_path_clipped_blit_bytes" != "16404" ]]; then
     echo "changing path-clipped atlas blit must be exactly 16404 bytes, got $changing_path_clipped_blit_bytes: $changing_path_clipped_blit_output" >&2
+    exit 1
+fi
+nested_path_clipped_blit_bytes="$(wc -c < "$nested_path_clipped_blit_output" | tr -d ' ')"
+if [[ "$nested_path_clipped_blit_bytes" != "16404" ]]; then
+    echo "nested path-clipped atlas blit must be exactly 16404 bytes, got $nested_path_clipped_blit_bytes: $nested_path_clipped_blit_output" >&2
     exit 1
 fi
 fill_output_bytes="$(wc -c < "$fill_output" | tr -d ' ')"
@@ -409,6 +416,7 @@ echo "atlas blit: $blit_output"
 echo "atlas clipped blit: $clipped_blit_output"
 echo "atlas path-clipped blit: $path_clipped_blit_output"
 echo "atlas changing path-clipped blit: $changing_path_clipped_blit_output"
+echo "atlas nested path-clipped blit: $nested_path_clipped_blit_output"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"

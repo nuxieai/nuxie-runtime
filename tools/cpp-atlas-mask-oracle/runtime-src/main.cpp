@@ -655,6 +655,8 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "path-clipped") == 0;
     const bool changingPathClippedCase =
         argc > 4 && std::strcmp(argv[4], "changing-path-clipped") == 0;
+    const bool nestedPathClippedCase =
+        argc > 4 && std::strcmp(argv[4], "nested-path-clipped") == 0;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
@@ -663,10 +665,10 @@ int main(int argc, char** argv)
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 ||
         (argc > 4 && !fillCase && !clippedCase && !pathClippedCase &&
-         !changingPathClippedCase) ||
+         !changingPathClippedCase && !nestedPathClippedCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -901,6 +903,22 @@ int main(int argc, char** argv)
         secondClip->close();
         renderer.clipPath(secondClip.get());
     }
+    else if (nestedPathClippedCase)
+    {
+        auto outerClip = context->makeEmptyRenderPath();
+        outerClip->moveTo(32, 8);
+        outerClip->lineTo(56, 56);
+        outerClip->lineTo(8, 56);
+        outerClip->close();
+        renderer.clipPath(outerClip.get());
+
+        auto innerClip = context->makeEmptyRenderPath();
+        innerClip->moveTo(32, 20);
+        innerClip->lineTo(44, 48);
+        innerClip->lineTo(20, 48);
+        innerClip->close();
+        renderer.clipPath(innerClip.get());
+    }
     renderer.drawPath(path.get(), paint.get());
 
     wgpu::CommandEncoder renderEncoder = device.CreateCommandEncoder();
@@ -967,6 +985,57 @@ int main(int argc, char** argv)
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
             fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
+        }
+    }
+    else if (nestedPathClippedCase)
+    {
+        const uint32_t clipUpdate =
+            static_cast<uint32_t>(rive::gpu::DrawContents::clipUpdate) |
+            static_cast<uint32_t>(rive::gpu::DrawContents::nonZeroFill);
+        const uint32_t nestedClipUpdate =
+            clipUpdate |
+            static_cast<uint32_t>(rive::gpu::DrawContents::activeClip);
+        const uint32_t activeClip =
+            static_cast<uint32_t>(rive::gpu::DrawContents::activeClip);
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+            !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 6 ||
+            facts.drawBatches[0].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+            facts.drawBatches[1].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFans) ||
+            facts.drawBatches[2].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+            facts.drawBatches[3].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFanPathsStencil) ||
+            facts.drawBatches[4].drawType !=
+                static_cast<uint32_t>(rive::gpu::DrawType::clipReset) ||
+            facts.drawBatches[5].drawType !=
+                static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
+            facts.drawBatches[0].drawContents != clipUpdate ||
+            facts.drawBatches[1].drawContents != clipUpdate ||
+            facts.drawBatches[2].drawContents != clipUpdate ||
+            facts.drawBatches[3].drawContents != nestedClipUpdate ||
+            facts.drawBatches[4].drawContents != nestedClipUpdate ||
+            facts.drawBatches[5].drawContents != activeClip ||
+            facts.drawBatches[0].baseElement != 1 ||
+            facts.drawBatches[1].baseElement != 1 ||
+            facts.drawBatches[2].baseElement != 1 ||
+            facts.drawBatches[0].elementCount != 1 ||
+            facts.drawBatches[1].elementCount != 1 ||
+            facts.drawBatches[2].elementCount != 1 ||
+            facts.drawBatches[3].baseElement != 2 ||
+            facts.drawBatches[3].elementCount != 1 ||
+            facts.drawBatches[4].baseElement != 0 ||
+            facts.drawBatches[4].elementCount != 6 ||
+            facts.drawBatches[5].baseElement != 6 ||
+            facts.drawBatches[5].elementCount != 6 ||
+            facts.drawBatches[5].shaderFeatures != static_cast<uint32_t>(
+                rive::gpu::ShaderFeatures::ENABLE_DITHER) ||
+            facts.drawBatches[5].shaderMiscFlags != static_cast<uint32_t>(
+                rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+        {
+            fail("nested path-clipped atlas oracle must stencil the inner non-zero path, intersect the parent clip, and draw one clipped atlas batch");
         }
     }
     else if (pathClippedCase || changingPathClippedCase)
@@ -1193,6 +1262,22 @@ int main(int argc, char** argv)
                 rightPixel[channel] != 79)
             {
                 fail("changing path-clipped oracle pixels must prove both clipped draws and the reset gap");
+            }
+        }
+    }
+    else if (nestedPathClippedCase)
+    {
+        const auto pixel = [&targetBytes](uint32_t x, uint32_t y) {
+            return targetBytes.data() + (y * kFrameWidth + x) * 4;
+        };
+        const uint8_t* outsideInnerClip = pixel(22, 40);
+        const uint8_t* insideInnerClip = pixel(24, 40);
+        for (uint32_t channel = 0; channel != 4; ++channel)
+        {
+            if (outsideInnerClip[channel] != 0 ||
+                insideInnerClip[channel] != 61)
+            {
+                fail("nested path-clipped oracle pixels must prove intersection with the inner non-zero clip");
             }
         }
     }

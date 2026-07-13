@@ -7632,10 +7632,9 @@ reference = "fixtures/renderer/reference/metal/riv/follow_path_path_0_opacity-fr
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-follow_path_path_0_opacity-frame-0-msaa"
@@ -7658,10 +7657,9 @@ reference = "fixtures/renderer/reference/metal/riv/follow_path_shapes-frame-0-cl
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-follow_path_shapes-frame-0-msaa"
@@ -7684,10 +7682,9 @@ reference = "fixtures/renderer/reference/metal/riv/follow_path_solos-frame-0-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-follow_path_solos-frame-0-msaa"
@@ -7710,10 +7707,9 @@ reference = "fixtures/renderer/reference/metal/riv/follow_path_with_0_opacity-fr
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-follow_path_with_0_opacity-frame-0-msaa"
@@ -7739,7 +7735,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-format_number_with_commas-frame-0-msaa"
@@ -7762,10 +7758,9 @@ reference = "fixtures/renderer/reference/metal/riv/formula_random-frame-0-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-formula_random-frame-0-msaa"
@@ -7788,10 +7783,9 @@ reference = "fixtures/renderer/reference/metal/riv/gamepad_test-frame-0-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-gamepad_test-frame-0-msaa"
@@ -7814,10 +7808,9 @@ reference = "fixtures/renderer/reference/metal/riv/gamepad_test-frame-1-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-gamepad_test-frame-1-msaa"
@@ -7840,10 +7833,9 @@ reference = "fixtures/renderer/reference/metal/riv/group_effect-frame-0-clockwis
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-group_effect-frame-0-msaa"
@@ -7869,7 +7861,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-hello_world-frame-0-msaa"

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=305, diverges=0, gated=1,163, total=1,468.
+- Rust wgpu: exact=313, diverges=0, gated=1,155, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -162,7 +162,14 @@ Run `make renderer-golden`.
   `riv-focus_collapsing-frame-0-clockwise-atomic`,
   `riv-focusable_element-frame-0-clockwise-atomic`,
   `riv-follow_path-frame-0-clockwise-atomic`, and
-  `riv-follow_path_constraint-frame-0-clockwise-atomic`.
+  `riv-follow_path_constraint-frame-0-clockwise-atomic`, plus
+  `riv-follow_path_path_0_opacity-frame-0-clockwise-atomic`,
+  `riv-follow_path_shapes-frame-0-clockwise-atomic`,
+  `riv-follow_path_solos-frame-0-clockwise-atomic`,
+  `riv-follow_path_with_0_opacity-frame-0-clockwise-atomic`,
+  `riv-formula_random-frame-0-clockwise-atomic`,
+  `riv-gamepad_test-frame-{0,1}-clockwise-atomic`, and
+  `riv-group_effect-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -274,12 +281,16 @@ Run `make renderer-golden`.
     `focus_traversal`, `focusable_element`, `follow_path`,
     `follow_path_constraint`, and `follow_path_path`. Capture missing pinned
     Metal references and apply the unchanged contract and diagnostic rules.
-19. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+19. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `follow_path_path_0_opacity`, `follow_path_shapes`,
     `follow_path_solos`, `follow_path_with_0_opacity`,
     `format_number_with_commas`, `formula_random`, `gamepad_test` frames 0-1,
     `group_effect`, and `hello_world`. Capture missing pinned Metal references
     and apply the unchanged contract and diagnostic rules.
+20. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `hide_test`, `hit_test_nested`, and `hit_test_solos` frames 0-7.
+    Capture missing pinned Metal references and apply the unchanged contract
+    and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2057,3 +2068,15 @@ Run `make renderer-golden`.
   alpha planes and stream inventories, and Sol approved the existing
   `metal-webgpu-subpixel-edge-coverage` diagnostic for both without changing
   either reference or tolerance.
+- 2026-07-13: Probed the eighteenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. Eight pass the unchanged
+  `2/32` contract and advance the renderer ratchet to
+  exact=313/diverges=0/gated=1,155. `format_number_with_commas` remains gated
+  at 496/max 27 across five fractionally translated white text-outline draws;
+  `hello_world` remains gated at 59/max 47 on the sole translated cyan glyph
+  outline. Every outlier in both fixtures has exact alpha, the backgrounds
+  are clean, and all over-threshold pixels map to glyph boundaries. Two
+  read-only Terra scouts supplied independent path attribution, main checked
+  the alpha and stream oracles, and Sol approved
+  `metal-webgpu-subpixel-edge-coverage` for both without changing either
+  reference or tolerance.

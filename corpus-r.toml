@@ -9127,10 +9127,9 @@ reference = "fixtures/renderer/reference/metal/riv/juice-frame-0-clockwise-atomi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 256
 
 [[entry]]
 id = "riv-juice-frame-0-msaa"
@@ -9153,10 +9152,9 @@ reference = "fixtures/renderer/reference/metal/riv/juice-frame-1-clockwise-atomi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 256
 
 [[entry]]
 id = "riv-juice-frame-1-msaa"
@@ -9179,10 +9177,9 @@ reference = "fixtures/renderer/reference/metal/riv/juice-frame-2-clockwise-atomi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 256
 
 [[entry]]
 id = "riv-juice-frame-2-msaa"
@@ -9205,10 +9202,9 @@ reference = "fixtures/renderer/reference/metal/riv/juice-frame-3-clockwise-atomi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 256
 
 [[entry]]
 id = "riv-juice-frame-3-msaa"
@@ -9231,10 +9227,9 @@ reference = "fixtures/renderer/reference/metal/riv/juice-frame-4-clockwise-atomi
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 256
 
 [[entry]]
 id = "riv-juice-frame-4-msaa"

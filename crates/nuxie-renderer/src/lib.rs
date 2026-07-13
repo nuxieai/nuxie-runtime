@@ -1249,6 +1249,16 @@ impl WgpuFrame {
                 let use_clockwise_atomic_batch = force_clockwise_atomic_batch
                     || homogeneous_global_fill
                     || clockwise_atomic_clip_run;
+                if load_color.is_some()
+                    && use_clockwise_atomic_batch
+                    && draws
+                        .iter()
+                        .any(|draw| !matches!(draw.role, DrawRole::Content { clip_id: 0 }))
+                {
+                    return Err(RendererError::Unsupported(
+                        "advanced clockwise-atomic blending with path clips",
+                    ));
+                }
                 let mut clockwise_atomic_coverage_words = 0usize;
                 let gradient_batch = prepare_gradient_batch(draws);
                 let mut prepared = Vec::with_capacity(draws.len());
@@ -1842,6 +1852,43 @@ impl WgpuFrame {
                     })
                     .collect::<Vec<_>>();
                 if use_clockwise_atomic_batch {
+                    let advanced_texture = load_color.map(|_| {
+                        self.context
+                            .device
+                            .create_texture(&wgpu::TextureDescriptor {
+                                label: Some("nuxie-cwa-advanced-source"),
+                                size: texture.size(),
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                dimension: wgpu::TextureDimension::D2,
+                                format: wgpu::TextureFormat::Rgba8Unorm,
+                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                                view_formats: &[],
+                            })
+                    });
+                    let advanced_view = advanced_texture
+                        .as_ref()
+                        .map(|texture| texture.create_view(&Default::default()));
+                    if let Some(advanced_view) = &advanced_view {
+                        let attachments = [Some(wgpu::RenderPassColorAttachment {
+                            view: advanced_view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })];
+                        let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("nuxie-cwa-advanced-source-clear"),
+                            color_attachments: &attachments,
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
+                    }
                     uniforms.coverage_buffer_prefix = 1 << 20;
                     let borrowed_triangles = prepared
                         .iter()
@@ -1906,7 +1953,7 @@ impl WgpuFrame {
                     let coverage_readback = self.context.clockwise_atomic_pipeline.encode_fills(
                         &self.context.device,
                         encoder,
-                        &view,
+                        advanced_view.as_ref().unwrap_or(&view),
                         &self.context.feather_lut.view,
                         gradient_texture.as_ref().map(|texture| &texture.view),
                         &self.context.patch_vertex_buffer,
@@ -1933,6 +1980,21 @@ impl WgpuFrame {
                                 .map(|draw| draw.kind)
                                 .collect::<Vec<_>>(),
                         ));
+                    }
+                    if let (Some(source), Some(destination)) = (&advanced_view, load_color) {
+                        if draws.len() != 1 || !draw_uses_advanced_blend(&draws[0]) {
+                            return Err(RendererError::Unsupported(
+                                "batched advanced clockwise-atomic blending",
+                            ));
+                        }
+                        self.context.composite_pipeline.encode_advanced(
+                            &self.context.device,
+                            encoder,
+                            &view,
+                            source,
+                            destination,
+                            gpu::blend_mode_id(draws[0].paint.blend_mode),
+                        );
                     }
                 } else {
                     self.context.atomic_pipeline.encode_batch(
@@ -2172,6 +2234,8 @@ impl WgpuFrame {
                 let atomic = atomic_draw_is_eligible(&self.draws[start]);
                 let clockwise_atomic = atomic
                     && draw_requires_clockwise_atomic(&self.draws[start], self.width, self.height);
+                let advanced_clockwise_atomic =
+                    clockwise_atomic && draw_uses_advanced_blend(&self.draws[start]);
                 let mut end = start + 1;
                 while end < self.draws.len()
                     && atomic_draw_is_eligible(&self.draws[end]) == atomic
@@ -2181,6 +2245,9 @@ impl WgpuFrame {
                             self.width,
                             self.height,
                         ) == clockwise_atomic)
+                    && (!clockwise_atomic
+                        || (!advanced_clockwise_atomic
+                            && !draw_uses_advanced_blend(&self.draws[end])))
                 {
                     end += 1;
                 }
@@ -4412,6 +4479,106 @@ mod tests {
         assert_eq!(pixel(16, 32), [0, 0, 0, 255]);
         assert_eq!(pixel(64, 32), [255, 0, 0, 255]);
         assert_eq!(pixel(112, 32), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn clockwise_atomic_compound_fill_applies_advanced_blend_through_clip_rect() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = rect_path([0.0, 0.0, 48.0, 64.0], FillRule::NonZero);
+        let mut fill = rect_path([8.0, 8.0, 28.0, 56.0], FillRule::NonZero);
+        fill.raw_path.add_path(
+            &rect_path([36.0, 8.0, 56.0, 56.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            blend_mode: BlendMode::Overlay,
+            ..WgpuPaint::default()
+        };
+        let base_paint = WgpuPaint {
+            color: 0xff80_4000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xffff_6600);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &base_paint);
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(16, 32), [255, 128, 0, 255]);
+        assert_eq!(pixel(40, 32), [255, 128, 0, 255]);
+        assert_eq!(pixel(52, 32), [255, 102, 0, 255]);
+    }
+
+    #[test]
+    fn clockwise_atomic_advanced_blends_match_generated_atomic_shader() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let simple = rect_path([8.0, 8.0, 28.0, 56.0], FillRule::NonZero);
+        let mut compound = simple.clone();
+        compound.raw_path.add_path(
+            &rect_path([36.0, 8.0, 56.0, 56.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        for blend_mode in [
+            BlendMode::Screen,
+            BlendMode::Overlay,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+            BlendMode::HardLight,
+            BlendMode::SoftLight,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+            BlendMode::Multiply,
+            BlendMode::Hue,
+            BlendMode::Saturation,
+            BlendMode::Color,
+            BlendMode::Luminosity,
+        ] {
+            let render = |path: &WgpuPath| {
+                let paint = WgpuPaint {
+                    color: 0x80c0_4020,
+                    blend_mode,
+                    ..WgpuPaint::default()
+                };
+                let mut frame = factory.begin_frame(0xff20_80c0);
+                frame.draw_path(path, &paint);
+                let pixels = frame.finish().unwrap();
+                <[u8; 4]>::try_from(&pixels[(16 * 64 + 16) * 4..][..4]).unwrap()
+            };
+
+            let clockwise = render(&compound);
+            let generic = render(&simple);
+            assert!(
+                clockwise
+                    .iter()
+                    .zip(generic)
+                    .all(|(left, right)| left.abs_diff(right) <= 1),
+                "{blend_mode:?}: clockwise={clockwise:?} generic={generic:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn advanced_clockwise_atomic_path_clip_returns_unsupported() {
+        let factory = WgpuFactory::new_with_mode(1600, 1600, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = negative_interior_checkerboard();
+        let fill = rect_path([0.0, 0.0, 1600.0, 1600.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            blend_mode: BlendMode::Overlay,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xffff_6600);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &paint);
+
+        assert_eq!(
+            frame.finish().unwrap_err().to_string(),
+            "unsupported renderer feature: advanced clockwise-atomic blending with path clips"
+        );
     }
 
     #[test]

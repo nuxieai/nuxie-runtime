@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=112, diverges=0, gated=1,355, total=1,467.
+- Rust wgpu: exact=117, diverges=0, gated=1,350, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -88,7 +88,8 @@ Run `make renderer-golden`.
   `riv-ai_assitant-frame-0-clockwise-atomic`, plus
   `riv-db_health_tracker-frame-0-clockwise-atomic` and
   `riv-off_road_car-frame-{0..4}-clockwise-atomic`, plus
-  `riv-joel_signed-frame-{0..4}-clockwise-atomic`.
+  `riv-joel_signed-frame-{0..4}-clockwise-atomic`, plus
+  `riv-juice-frame-{0..4}-clockwise-atomic`.
 
 ## Milestones
 
@@ -217,8 +218,8 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `juice` frames
-   (12,837 pixels) and `bad_skin` (22,932). Attribute `juice` first.
+   diagnostics. The runnable residual queue is finite: `bad_skin` is next at
+   22,932 pixels beyond delta 2.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -237,6 +238,25 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Added the combined clockwise-atomic and advanced-blend color
+  path. Draw-prefix Metal replay isolated `juice`'s first structural jump to
+  draw 15, an overlay compound fill routed through fixed-color CWA shaders;
+  the generic advanced shader already matched preceding multiply content.
+  Advanced CWA draws are now isolated at run boundaries and render their paint
+  and coverage through the existing fixed-function CWA pipeline into a
+  transparent intermediate. A one-fragment-per-pixel composite then applies
+  the upstream advanced equations against an explicit destination copy. This
+  preserves C++'s hardware source-over ordering without cross-fragment storage
+  races. Rectangle-clip specialization is supported, while path clips and
+  feather retain explicit gates after internal CWA selection. Focused GPU
+  regressions pin white overlay over a prior compound fill through a partial
+  clip rect, compare all fifteen advanced modes against the generated generic
+  atomic shader, and prove advanced CWA path clips return `Unsupported` rather
+  than panicking.
+  All 18 cumulative `juice` prefixes track Metal; all five byte-identical full
+  frames retain 140 edge pixels beyond delta 2/max delta 12 and are promoted
+  under a 256-pixel allowance. The ratchet advances to
+  exact=117/diverges=0/gated=1,350; `bad_skin` is next.
 - 2026-07-12: Preserved C++'s frame-wide clockwise fill override after an
   axis-aligned clip is reduced to paint metadata. Rust had excluded every
   clip-rect draw from the true clockwise pipeline, so `joel_signed` rendered a
@@ -1134,3 +1154,6 @@ Run `make renderer-golden`.
 - 2026-07-12: Routed clip-rect compound fills through clip-rect-specialized
   clockwise pipelines, promoted all five `joel_signed` frames, and advanced the
   renderer ratchet to exact=112/diverges=0/gated=1,355; `juice` is next.
+- 2026-07-12: Ported shader-based advanced blending into the clockwise-atomic
+  fill path, promoted all five `juice` frames, and advanced the renderer
+  ratchet to exact=117/diverges=0/gated=1,350; `bad_skin` is next.

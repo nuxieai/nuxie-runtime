@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=155, diverges=0, gated=1,313, total=1,468.
+- Rust wgpu: exact=164, diverges=0, gated=1,304, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -106,7 +106,11 @@ Run `make renderer-golden`.
   `gm-strokes_round-clockwise-atomic` and
   `gm-strokefill-clockwise-atomic`, plus
   `gm-rawtext-clockwise-atomic`, plus the zero-delta
-  `first-light-nested-clip-probe-clockwise-atomic` sampled-plane oracle.
+  `first-light-nested-clip-probe-clockwise-atomic` sampled-plane oracle, plus
+  `riv-advance_blend_mode-frame-{0,1}-clockwise-atomic`,
+  `riv-animated_clipping-frame-0-clockwise-atomic`,
+  `riv-animation_reset_cases-frame-{0..4}-clockwise-atomic`, and
+  `riv-artboard_list_map_rules-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -130,12 +134,18 @@ Run `make renderer-golden`.
    NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
    stacks, and hostile gradient stops. Rust must not panic, hang, or lose the
    device; behavioral deltas become named findings and a smoke gate enters CI.
-2. [ ] Probe the first ten gated clockwise-atomic `.riv` entries against their
+2. [x] Probe the first ten gated clockwise-atomic `.riv` entries against their
    pinned Metal references: `advance_blend_mode` frames 0-1, `align_target`,
    `animated_clipping`, `animation_reset_cases` frames 0-4, and
    `artboard_list_map_rules`. Promote unchanged-contract passes and replace
    the first failing `algorithm-core` placeholder with an evidence-backed
    diagnostic.
+3. [ ] Probe the next ten gated clockwise-atomic `.riv` entries:
+   `artboard_list_overrides`, `artboard_width_test`, `audio_script`,
+   `background_measure`, `ball_test`, `bidirectional_precedence`, and
+   `bindable_artboard_child` frames 0-3. Capture their missing pinned Metal
+   references first, then promote unchanged-contract passes and diagnose the
+   first failure without widening tolerance.
 
 ## R2 Completion Record
 
@@ -1767,3 +1777,11 @@ Run `make renderer-golden`.
   geometry are exact, deep clips stay within 21 pixels/max delta 1, and the
   absurd-stroke and invalid-gradient raster differences remain named
   out-of-contract findings. See `docs/renderer-fuzz-replay.md`.
+- 2026-07-13: Added an explicit, fail-closed `--probe-gated ID` corpus mode and
+  probed the first ten clockwise-atomic `.riv` entries against freshly pinned
+  native Metal references. Nine pass the unchanged `2/32` contract and advance
+  the renderer ratchet to exact=164/diverges=0/gated=1,304. `align_target`
+  remains gated at 77 pixels/max delta 52: 72 outliers lie on the transformed
+  glyph outline, four on a circle edge, and one on a large background edge, so
+  its placeholder is replaced by the evidence-backed
+  `metal-webgpu-subpixel-edge-coverage` diagnostic without changing tolerance.

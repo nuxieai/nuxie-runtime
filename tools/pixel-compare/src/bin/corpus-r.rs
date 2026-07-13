@@ -30,13 +30,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
     validate_reference_identity(&std::env::current_dir()?, &manifest.entry)?;
+    let entries = selected_entries(&manifest.entry, &options.probe_gated)?;
     fs::create_dir_all(&options.output_dir)?;
     let mut exact = 0usize;
     let mut diverges = 0usize;
     let mut gated = 0usize;
 
-    for entry in &manifest.entry {
-        if entry.status == "gated" {
+    for entry in &entries {
+        if entry.status == "gated" && options.probe_gated.is_empty() {
             gated += 1;
             println!(
                 "gated {}: {}",
@@ -69,15 +70,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         if report.within_tolerance {
             exact += 1;
             println!(
-                "exact {}: different-pixels={} max-channel-delta={}",
-                entry.id, report.different_pixels, report.max_channel_delta
+                "{} {}: different-pixels={} max-channel-delta={}",
+                if options.probe_gated.is_empty() {
+                    "exact"
+                } else {
+                    "probe-pass"
+                },
+                entry.id,
+                report.different_pixels,
+                report.max_channel_delta
             );
         } else {
             diverges += 1;
             let artifact_path = options.output_dir.join(format!("{}-diff.png", entry.id));
             artifact(&expected_image, &actual_image)?.write_png(&artifact_path)?;
             println!(
-                "diverges {}: different-pixels={} max-channel-delta={} artifact={}",
+                "{} {}: different-pixels={} max-channel-delta={} artifact={}",
+                if options.probe_gated.is_empty() {
+                    "diverges"
+                } else {
+                    "probe-diverges"
+                },
                 entry.id,
                 report.different_pixels,
                 report.max_channel_delta,
@@ -86,9 +99,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    if !options.probe_gated.is_empty() {
+        println!(
+            "renderer-corpus-probe passes={exact} diverges={diverges} total={}",
+            entries.len()
+        );
+        return Ok(());
+    }
     println!(
         "renderer-corpus exact={exact} diverges={diverges} gated={gated} total={}",
-        manifest.entry.len()
+        entries.len()
     );
     if options.expect_all_fail {
         if exact != 0 {
@@ -105,6 +125,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("renderer corpus ratchet failed".into());
     }
     Ok(())
+}
+
+fn selected_entries<'a>(
+    entries: &'a [Entry],
+    probe_gated: &[String],
+) -> Result<Vec<&'a Entry>, String> {
+    if probe_gated.is_empty() {
+        return Ok(entries.iter().collect());
+    }
+    let mut selected = Vec::with_capacity(probe_gated.len());
+    for id in probe_gated {
+        if selected.iter().any(|entry: &&Entry| entry.id == *id) {
+            return Err(format!("duplicate --probe-gated id `{id}`"));
+        }
+        let entry = entries
+            .iter()
+            .find(|entry| entry.id == *id)
+            .ok_or_else(|| format!("no manifest entry has id `{id}`"))?;
+        if entry.status != "gated" {
+            return Err(format!(
+                "--probe-gated entry `{id}` has status `{}`",
+                entry.status
+            ));
+        }
+        selected.push(entry);
+    }
+    Ok(selected)
 }
 
 fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), String> {
@@ -126,6 +173,7 @@ struct Options {
     backend: String,
     output_dir: PathBuf,
     expect_all_fail: bool,
+    probe_gated: Vec<String>,
 }
 
 impl Options {
@@ -135,6 +183,7 @@ impl Options {
         let mut backend = "rust-wgpu".to_owned();
         let mut output_dir = PathBuf::from("target/renderer-corpus");
         let mut expect_all_fail = false;
+        let mut probe_gated = Vec::new();
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -143,6 +192,7 @@ impl Options {
                 "--backend" => backend = args.next().ok_or(usage())?,
                 "--output-dir" => output_dir = PathBuf::from(args.next().ok_or(usage())?),
                 "--expect-all-fail" => expect_all_fail = true,
+                "--probe-gated" => probe_gated.push(args.next().ok_or(usage())?),
                 _ => return Err(format!("unknown argument `{arg}`\n{}", usage()).into()),
             }
         }
@@ -152,6 +202,7 @@ impl Options {
             backend,
             output_dir,
             expect_all_fail,
+            probe_gated,
         })
     }
 }
@@ -162,7 +213,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal] [--output-dir DIR] [--expect-all-fail]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal] [--output-dir DIR] [--expect-all-fail] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -218,5 +269,27 @@ mod tests {
             entry("two", "msaa", "/repo/fixtures/shared.png"),
         ];
         validate_reference_identity(Path::new("/repo"), &entries).unwrap_err();
+    }
+
+    #[test]
+    fn gated_probe_selection_is_explicit_and_fail_closed() {
+        let entries = [
+            entry("first", "clockwise-atomic", "first.png"),
+            entry("second", "clockwise-atomic", "second.png"),
+        ];
+        let selected = selected_entries(&entries, &["second".to_owned()]).unwrap();
+        assert_eq!(
+            selected
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["second"]
+        );
+        assert!(selected_entries(&entries, &["missing".to_owned()]).is_err());
+        assert!(selected_entries(&entries, &["first".to_owned(), "first".to_owned()]).is_err());
+
+        let mut exact = entry("exact", "clockwise-atomic", "exact.png");
+        exact.status = "exact".to_owned();
+        assert!(selected_entries(&[exact], &["exact".to_owned()]).is_err());
     }
 }

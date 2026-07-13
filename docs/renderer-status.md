@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=151, diverges=0, gated=1,316, total=1,467.
+- Rust wgpu: exact=152, diverges=0, gated=1,315, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -102,7 +102,8 @@ Run `make renderer-golden`.
   `gm-zeroPath-clockwise-atomic`, plus
   `gm-overfill_blendmodes-clockwise-atomic` and
   `gm-overfill_opaque-clockwise-atomic`, plus
-  `gm-strokes_round-clockwise-atomic`.
+  `gm-strokes_round-clockwise-atomic` and
+  `gm-strokefill-clockwise-atomic`.
 
 ## Milestones
 
@@ -257,7 +258,7 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Five gated clockwise-atomic GM
+   Montserrat/Roboto feather-text pair. Four gated clockwise-atomic GM
    divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
@@ -277,6 +278,14 @@ Run `make renderer-golden`.
    tangents, and writing flush padding before geometry. Native Metal
    comparison is clean at zero pixels beyond delta 2, so the entry is promoted
    under its unchanged `2/32` contract.
+   `strokefill` is also promoted as a bounded native-Metal-versus-wgpu edge
+   case. Its 14 isolated draws contribute no structural jump: each has at most
+   30 pixels beyond delta 2, the full frame has 109 pixels/max delta 48 across
+   19 components with largest area 15, and thresholded support IoU remains
+   above 99.985%. It keeps channel delta 2 with a 128-pixel allowance.
+   `rawtext` is next: both isolated compound fills have sparse edge residuals,
+   but its 263-pixel/max-80 total requires a midpoint-fan preparation oracle
+   before any backend allowance is considered.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -293,6 +302,17 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Promoted `strokefill` under a bounded 128-pixel
+  native-Metal-versus-wgpu allowance at unchanged channel delta 2. Prefix
+  replay shows no structural jump across its 14 mixed fill/stroke draws; every
+  isolated draw is at or below 30 threshold pixels, while the full frame has
+  109 pixels/max delta 48 split across 19 components with largest area 15.
+  Foreground-support IoU stays above 99.985% at darkness thresholds from 1 to
+  192, and the last four authored shapes are byte/threshold exact. A fresh
+  forced-clockwise Metal reference agrees with the legacy native reference at
+  zero pixels beyond delta 2. The ratchet advances to
+  exact=152/diverges=0/gated=1,315; renderer golden, both V2 golden floors,
+  and the full workspace tests pass. `rawtext` is the next unresolved GM.
 - 2026-07-13: Promoted `strokes_round` without changing tolerance. A new
   production-ring `RIVEATS` oracle pins `firstSpan=0`, `spanCount=11`, the
   64-byte ABI, stream provenance, and exact C++/Rust equality across all 176
@@ -1522,3 +1542,7 @@ Run `make renderer-golden`.
   spans/176 words. Fresh native output has zero pixels beyond delta 2; the
   unchanged `2/32` contract promotes the entry and advances the ratchet to
   exact=151/diverges=0/gated=1,316.
+- 2026-07-13: Audited all 14 `strokefill` draws independently and promoted the
+  edge-only 109-pixel residual under a bounded 128-pixel allowance, advancing
+  the renderer ratchet to exact=152/diverges=0/gated=1,315. Renderer golden,
+  both V2 golden floors, and the workspace tests pass; `rawtext` is next.

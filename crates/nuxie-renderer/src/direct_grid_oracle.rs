@@ -295,6 +295,21 @@ fn read_u32(bytes: &[u8], offset: usize) -> u32 {
 mod tests {
     use super::*;
 
+    fn canonical_triangles(records: &[TriangleRecord]) -> Vec<[(u32, u32, u32); 3]> {
+        assert_eq!(records.len() % 3, 0);
+        let mut triangles = records
+            .chunks_exact(3)
+            .map(|triangle| {
+                let mut vertices = [triangle[0], triangle[1], triangle[2]]
+                    .map(|vertex| (vertex.x_bits, vertex.y_bits, vertex.weight_path_id));
+                vertices.sort_unstable();
+                vertices
+            })
+            .collect::<Vec<_>>();
+        triangles.sort_unstable();
+        triangles
+    }
+
     fn fixture() -> DirectGridInputs {
         DirectGridInputs {
             interlock_mode: 1,
@@ -659,6 +674,11 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(rust_triangles.len(), capture.triangles.len());
+        let rust_canonical = canonical_triangles(&rust_triangles);
+        let cpp_canonical = canonical_triangles(&capture.triangles);
+        for (index, (rust, cpp)) in rust_canonical.iter().zip(&cpp_canonical).enumerate() {
+            assert_eq!(rust, cpp, "bad-skin canonical triangle {index} differs");
+        }
         for (index, (rust, cpp)) in rust_triangles.iter().zip(&capture.triangles).enumerate() {
             assert_eq!(rust, cpp, "bad-skin TriangleVertex record {index} differs");
         }

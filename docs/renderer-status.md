@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=117, diverges=0, gated=1,350, total=1,467.
+- Rust wgpu: exact=118, diverges=0, gated=1,349, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -89,7 +89,8 @@ Run `make renderer-golden`.
   `riv-db_health_tracker-frame-0-clockwise-atomic` and
   `riv-off_road_car-frame-{0..4}-clockwise-atomic`, plus
   `riv-joel_signed-frame-{0..4}-clockwise-atomic`, plus
-  `riv-juice-frame-{0..4}-clockwise-atomic`.
+  `riv-juice-frame-{0..4}-clockwise-atomic`, plus
+  `riv-bad_skin-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -218,8 +219,9 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `bad_skin` is next at
-   22,932 pixels beyond delta 2.
+   diagnostics. `bad_skin` is now promoted after ordering generic-atomic outer
+   and interior passes and proving all 69 isolated draws are bounded. The
+   matching WebGPU MSAA final-blit oracle is the next named R2 boundary.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -238,6 +240,30 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Removed a generic-atomic interior race in the invented wgpu
+  batching seam. Shared flush groups had submitted outer-curve patches and
+  interior triangles in one render pass; five identical isolated `bad_skin`
+  hair renders differed at 114-264 pixels/max delta 255 because attachment
+  writes were not ordered with the storage atomics. Triangle-backed draws now
+  use the existing ordered outer and interior render passes. A GPU regression
+  is red without the split and byte-stable across five repeats with it; the
+  isolated hair falls to one pixel/max delta 31 versus Metal.
+  A new direct C++ WebGPU preparation oracle reproduces the exact authored
+  non-zero hair path, transform, and frame under the clockwise override. It
+  captures one contour, 48 `TriangleVertex` records, and the complete 2048x1
+  RGBA32Uint tessellation texture. Sol rejected the lane's first authored-
+  clockwise capture as a false oracle; the amended non-zero capture passed
+  closure review. The current single-contour ear clip differs canonically from
+  C++ triangles, while substituting the global inner-fan stream and broad CWA
+  routing regressed four exact entries, so that separate port boundary was
+  reverted rather than traded against this fix.
+  Three full post-fix renders are stable at 2,701 pixels beyond delta 2/max
+  delta 159. Across 2,635 residual components, 2,626 are single pixels and
+  only four exceed area three; all 69 isolated draws stay at or below 40
+  pixels beyond delta 2. Sol accepted a bounded 4,096-pixel composite/backend
+  allowance at unchanged channel delta 2. The ratchet advances to
+  exact=118/diverges=0/gated=1,349; the matching WebGPU MSAA final-blit oracle
+  is next.
 - 2026-07-12: Added the combined clockwise-atomic and advanced-blend color
   path. Draw-prefix Metal replay isolated `juice`'s first structural jump to
   draw 15, an overlay compound fill routed through fixed-color CWA shaders;
@@ -1157,3 +1183,7 @@ Run `make renderer-golden`.
 - 2026-07-12: Ported shader-based advanced blending into the clockwise-atomic
   fill path, promoted all five `juice` frames, and advanced the renderer
   ratchet to exact=117/diverges=0/gated=1,350; `bad_skin` is next.
+- 2026-07-12: Ordered generic-atomic outer/interior passes, added the exact
+  `bad_skin` C++ preparation oracle, promoted its stable bounded residual, and
+  advanced the renderer ratchet to exact=118/diverges=0/gated=1,349; the
+  matching WebGPU MSAA final-blit oracle is next.

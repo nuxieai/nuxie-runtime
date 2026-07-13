@@ -3915,6 +3915,38 @@ mod tests {
     }
 
     #[test]
+    fn generic_atomic_large_interior_draw_is_repeatable() {
+        let mut factory =
+            WgpuFactory::new_with_mode(640, 640, RenderMode::ClockwiseAtomic).unwrap();
+        let mut raw_path = RawPath::new();
+        append_oval(&mut raw_path, [20.0, 20.0, 620.0, 620.0]);
+        let path = factory.make_render_path(raw_path, FillRule::NonZero);
+        let paint = WgpuPaint {
+            color: 0xff39_529f,
+            ..WgpuPaint::default()
+        };
+
+        let mut expected: Option<Vec<u8>> = None;
+        for _ in 0..5 {
+            let mut frame = factory.begin_frame(0xff31_3131);
+            frame.draw_path(path.as_ref(), &paint);
+            let pixels = frame.finish().unwrap();
+            if let Some(expected) = &expected {
+                if &pixels != expected {
+                    let differing_pixels = pixels
+                        .chunks_exact(4)
+                        .zip(expected.chunks_exact(4))
+                        .filter(|(actual, expected)| actual != expected)
+                        .count();
+                    panic!("repeat render differs at {differing_pixels} pixels");
+                }
+            } else {
+                expected = Some(pixels);
+            }
+        }
+    }
+
+    #[test]
     fn midpoint_tessellation_relocates_into_shared_texture_shelves() {
         let path = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
         let mut tessellation =

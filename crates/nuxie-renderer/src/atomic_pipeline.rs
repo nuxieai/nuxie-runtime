@@ -939,6 +939,7 @@ impl AtomicPipeline {
                 && draw.atlas.is_none()
                 && draws[0].atlas.is_none()
                 && draw.image.is_none()
+                && draw.triangle_vertices.is_empty()
         });
         let make_flush_group = |draw_index: usize, draw: &AtomicDraw<'_>| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {

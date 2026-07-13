@@ -5492,10 +5492,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_bind_solo-frame-4-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_bind_solo-frame-4-msaa"
@@ -5521,7 +5520,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-data_bind_test_cmdq-frame-0-msaa"
@@ -5547,7 +5546,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-data_binding_artboards_source_test-frame-0-msaa"
@@ -5573,7 +5572,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-data_binding_artboards_test-frame-0-msaa"
@@ -5599,7 +5598,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "platform-image-decode-color-profile"
 
 [[entry]]
 id = "riv-data_binding_images_test-frame-0-msaa"
@@ -5625,7 +5624,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-data_binding_test-frame-0-msaa"
@@ -5648,10 +5647,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_binding_test_2-frame-0-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_binding_test_2-frame-0-msaa"
@@ -5674,10 +5672,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_binding_test_2-frame-1-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_binding_test_2-frame-1-msaa"
@@ -5700,10 +5697,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_binding_test_2-frame-2-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_binding_test_2-frame-2-msaa"
@@ -5726,10 +5722,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_binding_test_2-frame-3-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_binding_test_2-frame-3-msaa"

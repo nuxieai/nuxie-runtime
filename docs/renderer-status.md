@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=238, diverges=0, gated=1,230, total=1,468.
+- Rust wgpu: exact=243, diverges=0, gated=1,225, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -138,7 +138,8 @@ Run `make renderer-golden`.
   `riv-custom_property_enum-frame-0-clockwise-atomic`,
   `riv-custom_property_trigger-frame-0-clockwise-atomic`,
   `riv-data_bind_artboard_input-frame-0-clockwise-atomic`, and
-  `riv-data_bind_solo-frame-{0..3}-clockwise-atomic`.
+  `riv-data_bind_solo-frame-{0..4}-clockwise-atomic`, plus
+  `riv-data_binding_test_2-frame-{0..3}-clockwise-atomic`.
 
 ## Milestones
 
@@ -210,12 +211,19 @@ Run `make renderer-golden`.
     `data_bind_artboard_input`, and `data_bind_solo` frames 0-3. Capture
     missing pinned Metal references and apply the unchanged contract and
     diagnostic rules.
-11. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+11. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `data_bind_solo` frame 4, `data_bind_test_cmdq`,
     `data_binding_artboards_source_test`, `data_binding_artboards_test`,
     `data_binding_images_test`, `data_binding_test`, and `data_binding_test_2`
     frames 0-3. Capture missing pinned Metal references and apply the
     unchanged contract and diagnostic rules.
+12. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `data_binding_test_2` frame 4, `data_binding_test_3`,
+    `data_binding_test_triggers`, `data_converter_interpolator_reset`,
+    `data_converter_to_number`, `databind_artboard`, both
+    `databind_external_artboard` fixtures, `databind_solo_to_enum`, and
+    `databind_viewmodel`. Capture missing pinned Metal references and apply
+    the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1913,3 +1921,16 @@ Run `make renderer-golden`.
   four-pixel/max-44 result, `custom_property_trigger` uses six pixels/max 5,
   and the other seven entries have zero over-threshold pixels. The renderer
   ratchet advances to exact=238/diverges=0/gated=1,230.
+- 2026-07-13: Probed the tenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. Five pass with zero
+  over-threshold pixels and advance the renderer ratchet to
+  exact=243/diverges=0/gated=1,225. Four vector failures remain gated under
+  `metal-webgpu-subpixel-edge-coverage`: `data_bind_test_cmdq` (792/max 95),
+  `data_binding_artboards_source_test` (130/max 55),
+  `data_binding_artboards_test` (65/max 66), and `data_binding_test`
+  (1,163/max 96). Read-only Terra scouts inventoried the draws; main completed
+  the missing coordinate-to-path join and corrected an over-broad glyph-only
+  claim before Sol approval. `data_binding_images_test` (5,269/max 22, exact
+  alpha) is wholly confined to its sole JPEG draw and remains gated under
+  `platform-image-decode-color-profile`; the pinned production decoder oracle
+  passes on the current upstream ref. No tolerance changed.

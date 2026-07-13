@@ -12,9 +12,13 @@ pub(crate) struct ClockwiseAtomicPipeline {
     borrowed_path: wgpu::RenderPipeline,
     borrowed_interior: wgpu::RenderPipeline,
     path: wgpu::RenderPipeline,
+    path_clip_rect: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
+    interior_clip_rect: wgpu::RenderPipeline,
     clipped_path: wgpu::RenderPipeline,
+    clipped_path_clip_rect: wgpu::RenderPipeline,
     clipped_interior: wgpu::RenderPipeline,
+    clipped_interior_clip_rect: wgpu::RenderPipeline,
     outer_clip_path: wgpu::RenderPipeline,
     outer_clip_interior: wgpu::RenderPipeline,
     nested_clip_path: wgpu::RenderPipeline,
@@ -35,6 +39,7 @@ pub(crate) struct ClockwiseAtomicDraw<'a> {
     pub borrowed_triangles: &'a [TriangleVertex],
     pub main_triangles: &'a [TriangleVertex],
     pub kind: ClockwiseAtomicDrawKind,
+    pub has_clip_rect: bool,
 }
 
 pub(crate) struct ClockwiseAtomicCoverageReadback {
@@ -201,6 +206,30 @@ impl ClockwiseAtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let path_clip_rect = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-cwa-path-clip-rect-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &path_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(PatchVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &path_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("3", 0.0), ("7", 0.0)]),
+                targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let borrowed_path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-cwa-borrowed-path-pipeline"),
             layout: Some(&layout),
@@ -241,6 +270,27 @@ impl ClockwiseAtomicPipeline {
                 module: &interior_fragment,
                 entry_point: Some("main"),
                 compilation_options: interior_options,
+                targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let interior_clip_rect = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-cwa-interior-clip-rect-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &interior_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(TriangleVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &interior_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 0.0), ("1", 1.0), ("7", 0.0)]),
                 targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
             }),
             multiview_mask: None,
@@ -288,6 +338,28 @@ impl ClockwiseAtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let clipped_path_clip_rect =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("nuxie-cwa-clipped-path-clip-rect-pipeline"),
+                layout: Some(&sampled_clip_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &path_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(PatchVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &sampled_clip_path_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[("0", 1.0), ("1", 1.0), ("3", 0.0), ("7", 0.0)]),
+                    targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
         let clipped_interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-cwa-clipped-interior-pipeline"),
             layout: Some(&sampled_clip_pipeline_layout),
@@ -309,6 +381,28 @@ impl ClockwiseAtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
+        let clipped_interior_clip_rect =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("nuxie-cwa-clipped-interior-clip-rect-pipeline"),
+                layout: Some(&sampled_clip_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &interior_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(TriangleVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &sampled_clip_interior_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[("0", 1.0), ("1", 1.0), ("7", 0.0)]),
+                    targets: &[Some(color_target(wgpu::ColorWrites::ALL))],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
         let make_clip_path = |label, nested| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
@@ -385,9 +479,13 @@ impl ClockwiseAtomicPipeline {
             borrowed_path,
             borrowed_interior,
             path,
+            path_clip_rect,
             interior,
+            interior_clip_rect,
             clipped_path,
+            clipped_path_clip_rect,
             clipped_interior,
+            clipped_interior_clip_rect,
             outer_clip_path,
             outer_clip_interior,
             nested_clip_path,
@@ -635,10 +733,13 @@ impl ClockwiseAtomicPipeline {
                         "nuxie-cwa-main-path-pass",
                         &attachments,
                     ));
-                    pass.set_pipeline(if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
-                        &self.clipped_path
-                    } else {
-                        &self.path
+                    pass.set_pipeline(match (draw.kind, draw.has_clip_rect) {
+                        (ClockwiseAtomicDrawKind::ClippedContent, true) => {
+                            &self.clipped_path_clip_rect
+                        }
+                        (ClockwiseAtomicDrawKind::ClippedContent, false) => &self.clipped_path,
+                        (_, true) => &self.path_clip_rect,
+                        (_, false) => &self.path,
                     });
                     if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
                         set_groups(
@@ -665,13 +766,16 @@ impl ClockwiseAtomicPipeline {
                             "nuxie-cwa-main-interior-pass",
                             &attachments,
                         ));
-                        pass.set_pipeline(
-                            if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
+                        pass.set_pipeline(match (draw.kind, draw.has_clip_rect) {
+                            (ClockwiseAtomicDrawKind::ClippedContent, true) => {
+                                &self.clipped_interior_clip_rect
+                            }
+                            (ClockwiseAtomicDrawKind::ClippedContent, false) => {
                                 &self.clipped_interior
-                            } else {
-                                &self.interior
-                            },
-                        );
+                            }
+                            (_, true) => &self.interior_clip_rect,
+                            (_, false) => &self.interior,
+                        });
                         if draw.kind == ClockwiseAtomicDrawKind::ClippedContent {
                             set_groups(
                                 &mut pass,

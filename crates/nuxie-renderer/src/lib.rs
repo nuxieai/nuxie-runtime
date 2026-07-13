@@ -1898,6 +1898,7 @@ impl WgpuFrame {
                                     borrowed_triangles,
                                     main_triangles,
                                     kind,
+                                    has_clip_rect: source.state.clip_rect.is_some(),
                                 }
                             },
                         )
@@ -2169,12 +2170,17 @@ impl WgpuFrame {
             let mut clear_target = true;
             while start < self.draws.len() {
                 let atomic = atomic_draw_is_eligible(&self.draws[start]);
-                let clockwise_atomic = atomic && draw_requires_clockwise_atomic(&self.draws[start]);
+                let clockwise_atomic = atomic
+                    && draw_requires_clockwise_atomic(&self.draws[start], self.width, self.height);
                 let mut end = start + 1;
                 while end < self.draws.len()
                     && atomic_draw_is_eligible(&self.draws[end]) == atomic
                     && (!atomic
-                        || draw_requires_clockwise_atomic(&self.draws[end]) == clockwise_atomic)
+                        || draw_requires_clockwise_atomic(
+                            &self.draws[end],
+                            self.width,
+                            self.height,
+                        ) == clockwise_atomic)
                 {
                     end += 1;
                 }
@@ -3371,12 +3377,25 @@ fn relocate_midpoint_tessellation(
     }
 }
 
-fn draw_requires_clockwise_atomic(draw: &SolidDraw) -> bool {
+fn draw_requires_clockwise_atomic(
+    draw: &SolidDraw,
+    viewport_width: u32,
+    viewport_height: u32,
+) -> bool {
+    // C++ keeps the frame-wide clockwise override when a clip is reduced to a
+    // paint-space rectangle; the generic atomic shader only models non-zero.
     matches!(draw.role, DrawRole::Content { clip_id: 0 })
         && draw.paint.style == RenderPaintStyle::Fill
         && draw.paint.feather == 0.0
-        && draw.state.clip_rect.is_none()
         && path_has_complex_fill_topology(&draw.path.raw_path)
+        && draw::clockwise_atomic_coverage_range(
+            &draw.path.raw_path,
+            draw.state.transform,
+            viewport_width,
+            viewport_height,
+            0,
+        )
+        .is_some()
 }
 
 fn path_has_complex_fill_topology(path: &RawPath) -> bool {
@@ -4047,6 +4066,31 @@ mod tests {
         assert_eq!(pixel(135, 135), [0xff; 4]);
     }
 
+    #[test]
+    fn clockwise_atomic_override_rejects_joel_signed_opposite_winding_leaf() {
+        use nuxie_render_stream::{Command, RenderStream};
+
+        let mut stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/riv/joel_signed.rive-stream"
+        )))
+        .unwrap();
+        let first_draw = stream.frames[0]
+            .commands
+            .iter()
+            .position(|command| matches!(command, Command::DrawPath { .. }))
+            .unwrap();
+        stream.frames[0].commands.truncate(first_draw + 1);
+        let mut factory =
+            WgpuFactory::new_with_mode(1000, 1000, RenderMode::ClockwiseAtomic).unwrap();
+        let mut frame = factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 1000 + x) * 4..][..4];
+
+        assert_eq!(pixel(321, 119), [0, 0, 0, 0]);
+    }
+
     fn negative_interior_path() -> WgpuPath {
         let mut raw_path = RawPath::new();
         raw_path.move_to(1600.0, 0.0);
@@ -4344,6 +4388,30 @@ mod tests {
         assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
         assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
         assert_eq!(pixel(56, 56), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn axis_aligned_clip_path_limits_clockwise_atomic_compound_fill_pixels() {
+        let factory = WgpuFactory::new_with_mode(128, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = rect_path([32.0, 0.0, 96.0, 64.0], FillRule::NonZero);
+        let mut fill = rect_path([0.0, 0.0, 128.0, 64.0], FillRule::NonZero);
+        fill.raw_path.add_path(
+            &rect_path([16.0, 8.0, 112.0, 56.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let paint = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 128 + x) * 4..][..4];
+
+        assert_eq!(pixel(16, 32), [0, 0, 0, 255]);
+        assert_eq!(pixel(64, 32), [255, 0, 0, 255]);
+        assert_eq!(pixel(112, 32), [0, 0, 0, 255]);
     }
 
     #[test]

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=107, diverges=0, gated=1,360, total=1,467.
+- Rust wgpu: exact=112, diverges=0, gated=1,355, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -87,7 +87,8 @@ Run `make renderer-golden`.
   `riv-new_text-frame-0-clockwise-atomic` and
   `riv-ai_assitant-frame-0-clockwise-atomic`, plus
   `riv-db_health_tracker-frame-0-clockwise-atomic` and
-  `riv-off_road_car-frame-{0..4}-clockwise-atomic`.
+  `riv-off_road_car-frame-{0..4}-clockwise-atomic`, plus
+  `riv-joel_signed-frame-{0..4}-clockwise-atomic`.
 
 ## Milestones
 
@@ -216,9 +217,8 @@ Run `make renderer-golden`.
    sweep of the remaining gradient-bearing `.riv` corpus captured 30 fresh
    C++ references and promoted 11 entries without changing their 32-pixel
    budgets. Eight entries stop on advanced-blend feather or incompatible clip
-   diagnostics. The runnable residual queue is finite: `joel_signed` frames
-   (6,557-6,559 pixels), `juice` frames (12,837), and `bad_skin` (22,932).
-   Attribute `joel_signed` first.
+   diagnostics. The runnable residual queue is finite: `juice` frames
+   (12,837 pixels) and `bad_skin` (22,932). Attribute `juice` first.
    Parent-tight clip bounds are a later performance refinement, not a
    correctness gate. The separate matching WebGPU MSAA
    final-blit oracle remains a named R2 failure at 4,096 pixels/max delta 80.
@@ -237,6 +237,20 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Preserved C++'s frame-wide clockwise fill override after an
+  axis-aligned clip is reduced to paint metadata. Rust had excluded every
+  clip-rect draw from the true clockwise pipeline, so `joel_signed` rendered a
+  detached opposite-winding leaf as non-zero content. Clip-rect-enabled path,
+  interior, sampled-clip path, and sampled-clip interior pipeline variants now
+  select upstream specialization ID 1 per draw. A visible-bounds eligibility
+  check mirrors C++'s pre-allocation cull for offscreen paths. Exact first-draw
+  and partial-clip GPU regressions pin winding and clip-rect behavior;
+  `gm-mesh` retains its partial clip at 14 pixels beyond delta 2, and
+  `db_health_tracker` no longer reaches coverage allocation for its offscreen
+  draw. All five byte-identical Joel references
+  retain only 191 mostly isolated edge pixels/max delta 5, so they keep delta 2
+  with a bounded 256-pixel allowance. The ratchet advances to
+  exact=112/diverges=0/gated=1,355; `juice` is next.
 - 2026-07-12: C++ `RiveRenderer::applyClip` generates a new clip ID whenever
   an element is rendered into the clip buffer. Rust had encoded stack depth as
   the ID, so unrelated root clips all reused ID 1 and stale coverage from an
@@ -1117,3 +1131,6 @@ Run `make renderer-golden`.
   coverage from all five identical `off_road_car` samples. The post-fix 1,862
   thin edge pixels fit a bounded 2,048-pixel backend allowance; the ratchet
   advances to exact=107/diverges=0/gated=1,360 and `joel_signed` is next.
+- 2026-07-12: Routed clip-rect compound fills through clip-rect-specialized
+  clockwise pipelines, promoted all five `joel_signed` frames, and advanced the
+  renderer ratchet to exact=112/diverges=0/gated=1,355; `juice` is next.

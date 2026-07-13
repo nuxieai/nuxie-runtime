@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=228, diverges=0, gated=1,240, total=1,468.
+- Rust wgpu: exact=238, diverges=0, gated=1,230, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -133,7 +133,12 @@ Run `make renderer-golden`.
   `riv-component_list_virtualized-frame-0-clockwise-atomic`, both
   `riv-component_stateful_vm_instance` fixtures,
   `riv-computed_root_transform-frame-0-clockwise-atomic`, and
-  `riv-cubic_value_test-frame-{0..2}-clockwise-atomic`.
+  `riv-cubic_value_test-frame-{0..4}-clockwise-atomic`, plus
+  `riv-custom_image_name-frame-0-clockwise-atomic`,
+  `riv-custom_property_enum-frame-0-clockwise-atomic`,
+  `riv-custom_property_trigger-frame-0-clockwise-atomic`,
+  `riv-data_bind_artboard_input-frame-0-clockwise-atomic`, and
+  `riv-data_bind_solo-frame-{0..3}-clockwise-atomic`.
 
 ## Milestones
 
@@ -199,11 +204,18 @@ Run `make renderer-golden`.
    `computed_root_transform`, `computed_values_test`, and `cubic_value_test`
    frames 0-2. Capture missing pinned Metal references and apply the unchanged
    contract and diagnostic rules.
-10. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+10. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `cubic_value_test` frames 3-4, `custom_image_name`,
-    `custom_property_enum`, `custom_property_trigger`, `data_bind_artboard_input`,
-    and `data_bind_solo` frames 0-3. Capture missing pinned Metal references
-    and apply the unchanged contract and diagnostic rules.
+    `custom_property_enum`, `custom_property_trigger`,
+    `data_bind_artboard_input`, and `data_bind_solo` frames 0-3. Capture
+    missing pinned Metal references and apply the unchanged contract and
+    diagnostic rules.
+11. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `data_bind_solo` frame 4, `data_bind_test_cmdq`,
+    `data_binding_artboards_source_test`, `data_binding_artboards_test`,
+    `data_binding_images_test`, `data_binding_test`, and `data_binding_test_2`
+    frames 0-3. Capture missing pinned Metal references and apply the
+    unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1895,3 +1907,9 @@ Run `make renderer-golden`.
   rectangle draws are clean. Sol approved applying the existing
   `metal-webgpu-subpixel-edge-coverage` diagnostic to both without tolerance
   changes.
+- 2026-07-13: Probed the ninth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. All ten pass the unchanged
+  `2/32` contract: `cubic_value_test` frames 3-4 repeat the family's
+  four-pixel/max-44 result, `custom_property_trigger` uses six pixels/max 5,
+  and the other seven entries have zero over-threshold pixels. The renderer
+  ratchet advances to exact=238/diverges=0/gated=1,230.

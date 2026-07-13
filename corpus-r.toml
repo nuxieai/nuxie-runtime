@@ -5242,10 +5242,9 @@ reference = "fixtures/renderer/reference/metal/riv/cubic_value_test-frame-3-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-cubic_value_test-frame-3-msaa"
@@ -5268,10 +5267,9 @@ reference = "fixtures/renderer/reference/metal/riv/cubic_value_test-frame-4-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-cubic_value_test-frame-4-msaa"
@@ -5294,10 +5292,9 @@ reference = "fixtures/renderer/reference/metal/riv/custom_image_name-frame-0-clo
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-custom_image_name-frame-0-msaa"
@@ -5320,10 +5317,9 @@ reference = "fixtures/renderer/reference/metal/riv/custom_property_enum-frame-0-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-custom_property_enum-frame-0-msaa"
@@ -5346,10 +5342,9 @@ reference = "fixtures/renderer/reference/metal/riv/custom_property_trigger-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-custom_property_trigger-frame-0-msaa"
@@ -5372,10 +5367,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_bind_artboard_input-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_bind_artboard_input-frame-0-msaa"
@@ -5398,10 +5392,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_bind_solo-frame-0-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_bind_solo-frame-0-msaa"
@@ -5424,10 +5417,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_bind_solo-frame-1-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_bind_solo-frame-1-msaa"
@@ -5450,10 +5442,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_bind_solo-frame-2-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_bind_solo-frame-2-msaa"
@@ -5476,10 +5467,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_bind_solo-frame-3-clockw
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-data_bind_solo-frame-3-msaa"

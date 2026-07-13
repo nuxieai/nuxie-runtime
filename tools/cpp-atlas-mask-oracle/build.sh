@@ -24,6 +24,7 @@ direct_cusp_blit_output="${RIVE_DIRECT_CUSP_BLIT_OUTPUT:-$script_dir/out/direct-
 direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"
 direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"
 direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"
+direct_bad_skin_inputs_output="${RIVE_DIRECT_BAD_SKIN_INPUT_OUTPUT:-$script_dir/out/direct-bad-skin-inputs.bin}"
 polyshark_generator="$script_dir/generate_polyshark_stream_path.py"
 polyshark_stream="$script_dir/../../fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
@@ -270,7 +271,8 @@ mkdir -p "$injected_dir" \
     "$(dirname "$direct_cusp_blit_output")" \
     "$(dirname "$direct_polyshark_inputs_output")" \
     "$(dirname "$direct_grid_inputs_output")" \
-    "$(dirname "$direct_flower_inputs_output")"
+    "$(dirname "$direct_flower_inputs_output")" \
+    "$(dirname "$direct_bad_skin_inputs_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
@@ -298,7 +300,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
@@ -306,8 +308,10 @@ rm -f "$output" "$inputs_output" "$blit_output" "$fill_output" "$fill_inputs_out
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_polyshark_inputs_output" /dev/null direct-polyshark
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_grid_inputs_output" /dev/null direct-grid
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_flower_inputs_output" /dev/null direct-flower
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_bad_skin_inputs_output" /dev/null direct-bad-skin
 python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"
+python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
 if [[ "$output_bytes" != "4628" ]]; then
     echo "atlas mask must be exactly 4628 bytes, got $output_bytes: $output" >&2
@@ -373,6 +377,11 @@ if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]; then
     echo "direct polyshark inputs must be exactly 163896 bytes: $direct_polyshark_inputs_output" >&2
     exit 1
 fi
+direct_bad_skin_inputs_bytes="$(wc -c < "$direct_bad_skin_inputs_output" | tr -d ' ')"
+if (( direct_bad_skin_inputs_bytes <= 56 )); then
+    echo "direct bad-skin inputs must contain a header, contour, triangle, and tessellation payload: $direct_bad_skin_inputs_output" >&2
+    exit 1
+fi
 echo "atlas mask: $output"
 echo "atlas inputs: $inputs_output"
 echo "atlas blit: $blit_output"
@@ -388,3 +397,4 @@ echo "direct cusp blit: $direct_cusp_blit_output"
 echo "direct polyshark inputs: $direct_polyshark_inputs_output"
 echo "direct grid inputs: $direct_grid_inputs_output"
 echo "direct flower inputs: $direct_flower_inputs_output"
+echo "direct bad-skin inputs: $direct_bad_skin_inputs_output"

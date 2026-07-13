@@ -20,6 +20,7 @@ BLIT_MAGIC = b"RIVEABL\0"
 DIRECT_INPUT_HEADER_BYTES = 64
 DIRECT_GRID_MAGIC = b"RIVEDGI\0"
 DIRECT_FLOWER_MAGIC = b"RIVEDFI\0"
+DIRECT_BAD_SKIN_MAGIC = b"RIVEDBI\0"
 # Production enum and patch-layout values from
 # renderer/include/rive/renderer/gpu.hpp. The generated direct-grid artifact
 # records this same four-draw schedule.
@@ -43,6 +44,7 @@ RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
 RUST_RENDERER = ROOT / "crates" / "nuxie-renderer" / "src" / "lib.rs"
 POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
+BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
 POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
@@ -184,6 +186,10 @@ def parse_direct_flower_inputs(data: bytes) -> dict:
     return _parse_direct_inputs(data, DIRECT_FLOWER_MAGIC, "RIVEDFI", 2)
 
 
+def parse_direct_bad_skin_inputs(data: bytes) -> dict:
+    return _parse_direct_inputs(data, DIRECT_BAD_SKIN_MAGIC, "RIVEDBI", 1)
+
+
 def _encode_direct_inputs(parsed: dict, magic: bytes) -> bytes:
     batches = parsed["batches"]
     contours = parsed["contours"]
@@ -205,6 +211,10 @@ def encode_direct_grid_inputs(parsed: dict) -> bytes:
 
 def encode_direct_flower_inputs(parsed: dict) -> bytes:
     return _encode_direct_inputs(parsed, DIRECT_FLOWER_MAGIC)
+
+
+def encode_direct_bad_skin_inputs(parsed: dict) -> bytes:
+    return _encode_direct_inputs(parsed, DIRECT_BAD_SKIN_MAGIC)
 
 
 def make_direct_grid_inputs() -> bytes:
@@ -241,6 +251,24 @@ def make_direct_flower_inputs() -> bytes:
         "tessellation": bytes(32 * 16 * 16),
     }
     return encode_direct_flower_inputs(parsed)
+
+
+def make_direct_bad_skin_inputs() -> bytes:
+    parsed = {
+        "interlock_mode": DIRECT_INTERLOCK_ATOMICS,
+        "batches": [
+            (DRAW_TYPE_RENDER_PASS_INITIALIZE, 0, 1, 0, 1),
+            (DRAW_TYPE_OUTER_CURVE_PATCHES, 0x80, 1, 1, 20),
+            (DRAW_TYPE_INTERIOR_TRIANGULATION, 0x80, 1, 0, 6),
+            (DRAW_TYPE_RENDER_PASS_RESOLVE, 0, 1, 0, 1),
+        ],
+        "contours": [(0, 0, 1, 0)],
+        "triangles": [(0, 0, 0x00010001)] * 6,
+        "tess_width": 32,
+        "tess_height": 16,
+        "tessellation": bytes(32 * 16 * 16),
+    }
+    return encode_direct_bad_skin_inputs(parsed)
 
 
 def parse_blit(data: bytes) -> dict:
@@ -401,6 +429,38 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "interior draw count"):
             parse_direct_flower_inputs(bad_interior_count)
 
+    def test_direct_bad_skin_format_round_trips_and_rejects_malformed_facts(self):
+        data = make_direct_bad_skin_inputs()
+        parsed = parse_direct_bad_skin_inputs(data)
+        self.assertEqual(parsed["interlock_mode"], DIRECT_INTERLOCK_ATOMICS)
+        self.assertEqual(len(parsed["batches"]), 4)
+        self.assertEqual(len(parsed["contours"]), 1)
+        self.assertEqual(len(parsed["triangles"]), 6)
+        self.assertEqual(encode_direct_bad_skin_inputs(parsed), data)
+
+        bad_magic = bytearray(data)
+        bad_magic[6] = ord("G")
+        with self.assertRaisesRegex(ValueError, "RIVEDBI magic"):
+            parse_direct_bad_skin_inputs(bad_magic)
+        bad_header = bytearray(data)
+        struct.pack_into("<I", bad_header, 12, 60)
+        with self.assertRaisesRegex(ValueError, "header"):
+            parse_direct_bad_skin_inputs(bad_header)
+        bad_contours = bytearray(data)
+        struct.pack_into("<I", bad_contours, 36, 2)
+        with self.assertRaisesRegex(ValueError, "1 contours"):
+            parse_direct_bad_skin_inputs(bad_contours)
+        bad_schedule = bytearray(data)
+        struct.pack_into("<I", bad_schedule, DIRECT_INPUT_HEADER_BYTES + 20,
+                         DRAW_TYPE_INTERIOR_TRIANGULATION)
+        with self.assertRaisesRegex(ValueError, "schedule shape"):
+            parse_direct_bad_skin_inputs(bad_schedule)
+        bad_interior_count = bytearray(data)
+        struct.pack_into("<I", bad_interior_count,
+                         DIRECT_INPUT_HEADER_BYTES + 2 * 20 + 16, 3)
+        with self.assertRaisesRegex(ValueError, "interior draw count"):
+            parse_direct_bad_skin_inputs(bad_interior_count)
+
     def test_accepts_and_rejects_canonical_atlas_blit(self):
         data = BLIT_MAGIC + struct.pack("<3I", 1, 2, 1) + bytes(8)
         self.assertEqual(parse_blit(data), {"width": 2, "height": 1})
@@ -424,6 +484,9 @@ class FormatTests(unittest.TestCase):
             "constexpr uint32_t kDirectGridFrameSize = 1000;",
             "constexpr uint32_t kDirectGridContourCount = 100;",
             "constexpr uint32_t kDirectFlowerContourCount = 2;",
+            "constexpr uint32_t kDirectBadSkinFrameWidth = 999;",
+            "constexpr uint32_t kDirectBadSkinFrameHeight = 720;",
+            "constexpr uint32_t kDirectBadSkinContourCount = 1;",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
             "facts.contentWidth != kExpectedLogicalAtlasSize",
@@ -443,7 +506,8 @@ class FormatTests(unittest.TestCase):
             'argc > 4 && std::strcmp(argv[4], "direct-polyshark") == 0;',
             'argc > 4 && std::strcmp(argv[4], "direct-grid") == 0;',
             'argc > 4 && std::strcmp(argv[4], "direct-flower") == 0;',
-            "const bool directTriangulatedCase = directGridCase || directFlowerCase;",
+            'argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;',
+            "directGridCase || directFlowerCase || directBadSkinCase;",
             "const bool fillCase = circleCase || cuspCase || directCase;",
             "path->fillRule(rive::FillRule::clockwise);",
             "path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);",
@@ -474,8 +538,10 @@ class FormatTests(unittest.TestCase):
             "writeInputs(inputsOutput,",
             "writeDirectGridInputs(inputsOutput,",
             "writeDirectFlowerInputs(inputsOutput,",
+            "writeDirectBadSkinInputs(inputsOutput,",
             "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'G', 'I', '\\0'};",
             "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'F', 'I', '\\0'};",
+            "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'B', 'I', '\\0'};",
             "writeBlit(blitOutput,",
             "readTexture(instance, device, queue, targetTexture, 4);",
             "atlasWidth = atlas.GetWidth();",
@@ -579,7 +645,7 @@ class FormatTests(unittest.TestCase):
             "void addClockwiseNestedFlower(rive::RenderPath* path)"
         )
         function_end = source.index(
-            "\nstd::vector<uint8_t> readTexture", function_start
+            "\nvoid addBadSkinHair", function_start
         )
         function_source = source[function_start:function_end]
         commands = re.findall(
@@ -613,6 +679,69 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(len(expected_point_bits), 41)
         self.assertEqual(actual_point_bits, expected_point_bits)
 
+    def test_direct_bad_skin_provenance_matches_stream_lines_328_to_330(self):
+        stream_lines = BAD_SKIN_STREAM.read_text().splitlines()
+        self.assertEqual(
+            stream_lines[327],
+            "transform matrix=[1.00501573,0.116219193,-0.11621917,1.00501561,550.433167,361.510925]",
+        )
+        self.assertIn("makeEmptyRenderPath {id=4,fillRule=0", stream_lines[328])
+        stream_line = stream_lines[329]
+        self.assertIn("drawPath path={id=4,fillRule=0", stream_line)
+        fixture_path = re.search(
+            r"verbs=\[([^]]+)\],points=\[(.*)\]\}\}", stream_line
+        )
+        self.assertIsNotNone(fixture_path)
+        expected_verbs = fixture_path.group(1).split(",")
+        expected_points = re.findall(
+            r"\(([^,]+),([^)]+)\)", fixture_path.group(2)
+        )
+
+        def f32_bits(literal: str) -> int:
+            return struct.unpack("<I", struct.pack("<f", float(literal.rstrip("f"))))[0]
+
+        expected_point_bits = [
+            (f32_bits(x), f32_bits(y)) for x, y in expected_points
+        ]
+        source = EXPORTER.read_text()
+        function_start = source.index("void addBadSkinHair(rive::RenderPath* path)")
+        function_end = source.index("\nstd::vector<uint8_t> readTexture", function_start)
+        function_source = source[function_start:function_end]
+        commands = re.findall(
+            r"path->(moveTo|cubicTo|close)\((.*?)\);",
+            function_source,
+            re.DOTALL,
+        )
+        actual_verbs = {"moveTo": "move", "cubicTo": "cubic", "close": "close"}
+        self.assertEqual(
+            [actual_verbs[command] for command, _ in commands], expected_verbs
+        )
+        actual_point_bits = []
+        for command, argument_list in commands:
+            if command == "close":
+                self.assertEqual(argument_list.strip(), "")
+                continue
+            arguments = [part.strip() for part in argument_list.split(",")]
+            self.assertEqual(len(arguments), 2 if command == "moveTo" else 6)
+            actual_point_bits.extend(
+                (f32_bits(arguments[index]), f32_bits(arguments[index + 1]))
+                for index in range(0, len(arguments), 2)
+            )
+        self.assertEqual(len(expected_verbs), 15)
+        self.assertEqual(len(expected_point_bits), 40)
+        self.assertEqual(actual_point_bits, expected_point_bits)
+        self.assertIn("constexpr uint32_t kDirectBadSkinFrameWidth = 999;", source)
+        self.assertIn("constexpr uint32_t kDirectBadSkinFrameHeight = 720;", source)
+        self.assertIn("constexpr uint32_t kDirectBadSkinContourCount = 1;", source)
+        self.assertIn("constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', 'B', 'I', '\\0'};", source)
+        self.assertIn('std::strcmp(argv[4], "direct-bad-skin")', source)
+        self.assertIn("addBadSkinHair(path.get());", source)
+        self.assertIn("renderer.transform(rive::Mat2D(1.00501573f,", source)
+        self.assertIn(
+            "if (fillCase && !directBadSkinCase)\n    {\n        path->fillRule(rive::FillRule::clockwise);",
+            source,
+        )
+
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
         for fragment in (
@@ -635,14 +764,17 @@ class FormatTests(unittest.TestCase):
             'direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"',
             'direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"',
             'direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"',
+            'direct_bad_skin_inputs_output="${RIVE_DIRECT_BAD_SKIN_INPUT_OUTPUT:-$script_dir/out/direct-bad-skin-inputs.bin}"',
             'polyshark_generator="$script_dir/generate_polyshark_stream_path.py"',
             'python3 "$polyshark_generator" --stream "$polyshark_stream" --check',
             '--output "$injected_dir/generated_polyshark_path.inc"',
             '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
             '"$direct_grid_inputs_output" /dev/null direct-grid',
             '"$direct_flower_inputs_output" /dev/null direct-flower',
+            '"$direct_bad_skin_inputs_output" /dev/null direct-bad-skin',
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
@@ -786,6 +918,8 @@ if __name__ == "__main__":
             ("direct-grid", "RIVEDGI", parse_direct_grid_inputs),
         "--validate-direct-flower":
             ("direct-flower", "RIVEDFI", parse_direct_flower_inputs),
+        "--validate-direct-bad-skin":
+            ("direct-bad-skin", "RIVEDBI", parse_direct_bad_skin_inputs),
     }
     if sys.argv[1:2] and sys.argv[1] in validators:
         if len(sys.argv) != 3:

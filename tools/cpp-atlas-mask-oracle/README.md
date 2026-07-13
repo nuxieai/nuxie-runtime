@@ -121,6 +121,26 @@ contours, a nonempty triangle count divisible by 3, a coherent outer-cubic
 range, and an interior draw `elementCount` equal to `triangleVertexCount`.
 `build.sh` emits and validates both direct artifacts independently.
 
+`direct-bad-skin-inputs.bin` is the bounded `direct-bad-skin` preparation
+oracle for the hair draw at lines 327-330 of
+`fixtures/renderer/streams/riv/bad_skin.rive-stream`. It reproduces the
+stream's single 13-cubic contour, transform
+`[1.00501573,0.116219193,-0.11621917,1.00501561,550.433167,361.510925]`, and
+`999 x 720` frame. It preserves the stream-authored `fillRule=0` (non-zero)
+while the frame has `clockwiseFillOverride=true`, with zero feathering so
+production atomic interior preparation is selected. It rejects a non-atomic
+capture, anything but exactly one contour, or any draw schedule other than
+initialize, outer cubics, interior triangulation, resolve.
+
+The artifact uses the distinct `RIVEDBI` version 1 little-endian magic and the
+same 64-byte header, canonical four-draw schedule, contour and
+`TriangleVertex` records, and complete row-packed `RGBA32Uint` tessellation
+texture as the other direct preparation artifacts. The configured Rust test
+reconstructs the exact `RawPath` and transform, runs
+`build_interior_tessellation`, then compares contour records, canonical
+triangle records, dimensions, and every texture texel without tolerances.
+`build.sh` writes and validates it independently.
+
 `atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
 mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
@@ -161,6 +181,10 @@ RIVE_CPP_DIRECT_POLYSHARK_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-po
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_direct_polyshark_input_oracle_matches_rust_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_BAD_SKIN_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-bad-skin-inputs.bin" \
+  cargo test -p nuxie-renderer \
+  direct_grid_oracle::tests::configured_cpp_bad_skin_preparation_matches_record_for_record \
+  -- --exact --ignored --nocapture
 RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
@@ -173,7 +197,7 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_CUSP_MASK`, `RIVE_CPP_ATLAS_CUSP_INPUTS`, or
 `RIVE_CPP_SOFTENED_CUSP`, or
 `RIVE_CPP_DIRECT_CUSP_INPUTS`, `RIVE_CPP_DIRECT_POLYSHARK_INPUTS`, or
-`RIVE_CPP_ATLAS_BLIT` path;
+`RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, or `RIVE_CPP_ATLAS_BLIT` path;
 invoking either test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing

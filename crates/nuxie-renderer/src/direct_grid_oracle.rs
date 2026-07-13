@@ -2,6 +2,7 @@
 
 const GRID_MAGIC: [u8; 8] = *b"RIVEDGI\0";
 const FLOWER_MAGIC: [u8; 8] = *b"RIVEDFI\0";
+const BAD_SKIN_MAGIC: [u8; 8] = *b"RIVEDBI\0";
 const VERSION: u32 = 1;
 const HEADER_SIZE: usize = 64;
 const DRAW_STRIDE: usize = 20;
@@ -55,6 +56,10 @@ impl DirectGridInputs {
 
     pub(crate) fn parse_flower(bytes: &[u8]) -> Result<Self, String> {
         Self::parse_contract(bytes, FLOWER_MAGIC, 2)
+    }
+
+    pub(crate) fn parse_bad_skin(bytes: &[u8]) -> Result<Self, String> {
+        Self::parse_contract(bytes, BAD_SKIN_MAGIC, 1)
     }
 
     fn parse_contract(
@@ -219,8 +224,16 @@ impl DirectGridInputs {
     }
 
     fn serialize(&self) -> Vec<u8> {
+        self.serialize_contract(GRID_MAGIC)
+    }
+
+    fn serialize_bad_skin(&self) -> Vec<u8> {
+        self.serialize_contract(BAD_SKIN_MAGIC)
+    }
+
+    fn serialize_contract(&self, magic: [u8; 8]) -> Vec<u8> {
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&GRID_MAGIC);
+        bytes.extend_from_slice(&magic);
         for value in [
             VERSION,
             HEADER_SIZE as u32,
@@ -364,6 +377,31 @@ mod tests {
     }
 
     #[test]
+    fn bad_skin_round_trips_and_rejects_malformed_header_and_facts() {
+        let mut fixture = fixture();
+        fixture.contours.truncate(1);
+        let bytes = fixture.serialize_bad_skin();
+        assert_eq!(DirectGridInputs::parse_bad_skin(&bytes).unwrap(), fixture);
+        assert!(DirectGridInputs::parse(&bytes).is_err());
+
+        let mutate = |offset: usize, value: u32| {
+            let mut bytes = bytes.clone();
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            bytes
+        };
+        assert!(DirectGridInputs::parse_bad_skin(&mutate(8, VERSION + 1)).is_err());
+        assert!(DirectGridInputs::parse_bad_skin(&mutate(12, 60)).is_err());
+        assert!(DirectGridInputs::parse_bad_skin(&mutate(36, 2)).is_err());
+        assert!(DirectGridInputs::parse_bad_skin(&mutate(40, 5)).is_err());
+        let schedule_offset = HEADER_SIZE + 2 * DRAW_STRIDE;
+        assert!(DirectGridInputs::parse_bad_skin(
+            &mutate(schedule_offset, DRAW_TYPE_OUTER_CUBICS,)
+        )
+        .is_err());
+        assert!(DirectGridInputs::parse_bad_skin(&bytes[..bytes.len() - 1]).is_err());
+    }
+
+    #[test]
     fn parses_configured_cpp_artifact() {
         let Ok(path) = std::env::var("RIVE_CPP_DIRECT_GRID_INPUTS") else {
             return;
@@ -374,5 +412,255 @@ mod tests {
         assert_eq!(capture.contours.len(), 100);
         assert_eq!(capture.triangles.len(), 7_500);
         assert_eq!((capture.tess_width, capture.tess_height), (2048, 212));
+    }
+
+    fn bad_skin_path() -> nuxie_render_api::RawPath {
+        let mut path = nuxie_render_api::RawPath::new();
+        path.move_to(-81.5608521, -65.8947601);
+        path.cubic_to(
+            -81.5608521,
+            -65.8947601,
+            -105.346954,
+            -143.298767,
+            -31.1603794,
+            -150.845825,
+        );
+        path.cubic_to(
+            -10.2647314,
+            -146.784561,
+            -5.52482748,
+            -138.151382,
+            3.95540905,
+            -135.285233,
+        );
+        path.cubic_to(
+            13.435585,
+            -132.419128,
+            45.7343864,
+            -139.608963,
+            67.0147171,
+            -116.697594,
+        );
+        path.cubic_to(
+            88.295105,
+            -93.7862701,
+            101.926819,
+            -73.546402,
+            114.122017,
+            -9.98956394,
+        );
+        path.cubic_to(
+            127.370155, 43.0014648, 179.42717, 98.3242035, 219.327179, 105.924187,
+        );
+        path.cubic_to(
+            259.227203, 113.524231, 219.327179, 296.024231, 219.327179, 296.024231,
+        );
+        path.cubic_to(
+            219.327179,
+            296.024231,
+            14.4906435,
+            346.763397,
+            -28.0207996,
+            347.893097,
+        );
+        path.cubic_to(
+            -70.5313416,
+            348.922821,
+            -254.072845,
+            382.324249,
+            -283.272827,
+            345.224243,
+        );
+        path.cubic_to(
+            -312.472809,
+            308.024261,
+            -167.772812,
+            149.824234,
+            -167.772812,
+            149.824234,
+        );
+        path.cubic_to(
+            -167.772812,
+            149.824234,
+            -173.372818,
+            117.124199,
+            -171.672791,
+            98.2241821,
+        );
+        path.cubic_to(
+            -169.270737,
+            76.4746246,
+            -171.432159,
+            54.370945,
+            -137.79129,
+            30.8296814,
+        );
+        path.cubic_to(
+            -104.150368,
+            7.28838682,
+            -136.469254,
+            -24.0374756,
+            -120.125793,
+            -40.795002,
+        );
+        path.cubic_to(
+            -98.6691818,
+            -62.6391525,
+            -81.5608521,
+            -65.8947601,
+            -81.5608521,
+            -65.8947601,
+        );
+        path.close();
+        path
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_BAD_SKIN_INPUTS from the C++ WebGPU oracle"]
+    fn configured_cpp_bad_skin_preparation_matches_record_for_record() {
+        use bytemuck::Zeroable;
+        use nuxie_render_api::{FillRule, Mat2D};
+
+        let path = std::env::var_os("RIVE_CPP_DIRECT_BAD_SKIN_INPUTS").expect(
+            "RIVE_CPP_DIRECT_BAD_SKIN_INPUTS is required for the ignored direct-bad-skin test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_DIRECT_BAD_SKIN_INPUTS is empty");
+        let path = std::path::PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_BAD_SKIN_INPUTS must be absolute"
+        );
+        let bytes = std::fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-bad-skin inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let capture = DirectGridInputs::parse_bad_skin(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-bad-skin inputs at {}: {error}",
+                path.display()
+            )
+        });
+        assert_eq!(capture.draws.len(), 4);
+        assert_eq!(capture.contours.len(), 1);
+        let transform = Mat2D([
+            1.005_015_73,
+            0.116_219_193,
+            -0.116_219_17,
+            1.005_015_61,
+            550.433_167,
+            361.510_925,
+        ]);
+        let tessellation = crate::draw::build_interior_tessellation(
+            &bad_skin_path(),
+            transform,
+            FillRule::NonZero,
+            true,
+        )
+        .expect("bad_skin hair must prepare an interior tessellation");
+        let rust_contours = tessellation
+            .contours
+            .iter()
+            .map(|contour| ContourRecord {
+                midpoint_x_bits: contour.midpoint[0].to_bits(),
+                midpoint_y_bits: contour.midpoint[1].to_bits(),
+                path_id: contour.path_id,
+                vertex_index0: contour.vertex_index0,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rust_contours.len(), capture.contours.len());
+        for (index, (rust, cpp)) in rust_contours.iter().zip(&capture.contours).enumerate() {
+            assert_eq!(rust, cpp, "bad-skin contour record {index} differs");
+        }
+
+        let factory = crate::WgpuFactory::new(999, 720).unwrap();
+        let height = crate::draw::tessellation_texture_height(&tessellation.spans);
+        assert_eq!([capture.tess_width, capture.tess_height], [2048, height]);
+        let uniforms = crate::analytic_uniforms(999, 720, height);
+        let paths = [crate::gpu::PathData::zeroed(), tessellation.path];
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-direct-bad-skin-tessellation-encoder"),
+                });
+        let texture = factory.context.tessellator.encode(
+            &factory.context.device,
+            &mut encoder,
+            &factory.context.feather_lut.view,
+            &tessellation.spans,
+            &uniforms,
+            &paths,
+            &tessellation.contours,
+            height,
+        );
+        let bytes_per_row = capture.tess_width * TEXEL_STRIDE as u32;
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-direct-bad-skin-tessellation-readback"),
+                size: u64::from(bytes_per_row) * u64::from(height),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            texture.size(),
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+        let slice = readback.slice(..);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).unwrap()
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let rust_texels = mapped
+            .chunks_exact(TEXEL_STRIDE)
+            .map(|texel| {
+                [
+                    u32::from_le_bytes(texel[0..4].try_into().unwrap()),
+                    u32::from_le_bytes(texel[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(texel[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(texel[12..16].try_into().unwrap()),
+                ]
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rust_texels.len(), capture.texels.len());
+        for (index, (rust, cpp)) in rust_texels.iter().zip(&capture.texels).enumerate() {
+            assert_eq!(rust, cpp, "bad-skin tessellation texel {index} differs");
+        }
+        drop(mapped);
+        readback.unmap();
+
+        let rust_triangles = tessellation
+            .triangles
+            .iter()
+            .map(|vertex| TriangleRecord {
+                x_bits: vertex.point[0].to_bits(),
+                y_bits: vertex.point[1].to_bits(),
+                weight_path_id: vertex.weight_path_id as u32,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rust_triangles.len(), capture.triangles.len());
+        for (index, (rust, cpp)) in rust_triangles.iter().zip(&capture.triangles).enumerate() {
+            assert_eq!(rust, cpp, "bad-skin TriangleVertex record {index} differs");
+        }
     }
 }

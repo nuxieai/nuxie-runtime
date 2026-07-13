@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=288, diverges=0, gated=1,180, total=1,468.
+- Rust wgpu: exact=297, diverges=0, gated=1,171, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -155,7 +155,10 @@ Run `make renderer-golden`.
   `riv-entry-frame-0-clockwise-atomic`, and
   `riv-event_on_listener-frame-{0..7}-clockwise-atomic`, plus
   `riv-event_trigger_event-frame-{0..7}-clockwise-atomic` and
-  `riv-events_on_states-frame-{0..5}-clockwise-atomic`.
+  `riv-events_on_states-frame-{0..7}-clockwise-atomic`, plus
+  `riv-feather_render_test-frame-0-clockwise-atomic`,
+  `riv-fill_trim_path-frame-{0..4}-clockwise-atomic`, and
+  `riv-fix_rectangle-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -257,11 +260,16 @@ Run `make renderer-golden`.
     entries: `event_trigger_event` frames 4-7 and `events_on_states` frames
     0-5. Capture missing pinned Metal references and apply the unchanged
     contract and diagnostic rules.
-17. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+17. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `events_on_states` frames 6-7, `feather_render_test`,
     `fill_trim_path` frames 0-4, `fit_font_size_test`, and `fix_rectangle`
     frame 0. Capture missing pinned Metal references and apply the unchanged
     contract and diagnostic rules.
+18. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `fix_rectangle` frames 1-4, `focus_collapsing`,
+    `focus_traversal`, `focusable_element`, `follow_path`,
+    `follow_path_constraint`, and `follow_path_path`. Capture missing pinned
+    Metal references and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2016,3 +2024,14 @@ Run `make renderer-golden`.
   `events_on_states` frames repeat the one-pixel/max-17 event-family result.
   The unchanged `2/32` contract promotes all ten and advances the renderer
   ratchet to exact=288/diverges=0/gated=1,180.
+- 2026-07-13: Probed the sixteenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. Nine pass the unchanged
+  `2/32` contract and advance the renderer ratchet to
+  exact=297/diverges=0/gated=1,171. `fit_font_size_test` remains gated at
+  106/max 42: every outlier has exact alpha and lies on draw 5's translated
+  right-column text contours, while panel fills and the zero-sized middle
+  text path are clean. A read-only Terra scout distinguished this residual
+  from the resolved runtime layout-bounds divergence; main checked the draw
+  structure and alpha plane, and Sol approved the existing
+  `metal-webgpu-subpixel-edge-coverage` diagnostic without changing the
+  reference or tolerance.

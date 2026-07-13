@@ -19,6 +19,9 @@ INPUT_MAGIC = b"RIVEATI\0"
 BLIT_MAGIC = b"RIVEABL\0"
 ATOMIC_COVERAGE_HEADER_BYTES = 24
 ATOMIC_COVERAGE_MAGIC = b"RIVEAPC\0"
+ATOMIC_COLOR_HEADER_BYTES = 24
+ATOMIC_COLOR_MAGIC = b"RIVEACO\0"
+ATOMIC_COLORBURN_PAIR_FRAME_SIZE = 1024
 TESS_SPAN_HEADER_BYTES = 28
 TESS_SPAN_MAGIC = b"RIVEATS\0"
 TESS_SPAN_RECORD_BYTES = 64
@@ -52,8 +55,12 @@ RAWTEXT_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "rawtext.ri
 POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
 BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
+INTERLEAVED_FEATHER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "interleavedfeather.rive-stream"
 POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
 RAWTEXT_GENERATOR = pathlib.Path(__file__).with_name("generate_rawtext_stream_path.py")
+COLORBURN_PAIR_GENERATOR = pathlib.Path(__file__).with_name(
+    "generate_interleaved_colorburn_pair_path.py"
+)
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
 # Exact bytes asserted by AtlasMask::serialize() in commit 10a64ec.
@@ -145,6 +152,56 @@ def make_atomic_coverage(width=2, height=2) -> bytes:
     return ATOMIC_COVERAGE_MAGIC + struct.pack(
         "<4I", 1, width, height, len(words)
     ) + struct.pack(f"<{len(words)}I", *words)
+
+
+def parse_atomic_color(data: bytes) -> dict:
+    if len(data) < ATOMIC_COLOR_HEADER_BYTES:
+        raise ValueError("file is shorter than the 24-byte RIVEACO header")
+    if data[:8] != ATOMIC_COLOR_MAGIC:
+        raise ValueError("bad RIVEACO magic")
+    version, width, height, word_count = struct.unpack_from("<4I", data, 8)
+    if version != 1:
+        raise ValueError("unsupported RIVEACO version")
+    if not width or not height:
+        raise ValueError("RIVEACO dimensions must be nonzero")
+    if word_count != width * height:
+        raise ValueError("RIVEACO word count must equal width times height")
+    expected = ATOMIC_COLOR_HEADER_BYTES + word_count * 4
+    if len(data) != expected:
+        raise ValueError("RIVEACO length mismatch")
+    # The payload preserves the native backing-buffer order, including tile swizzle.
+    words = struct.unpack_from(f"<{word_count}I", data, ATOMIC_COLOR_HEADER_BYTES)
+    return {"width": width, "height": height, "word_count": word_count,
+            "words": words}
+
+
+def make_atomic_color(width=2, height=2) -> bytes:
+    words = tuple(range(width * height))
+    return ATOMIC_COLOR_MAGIC + struct.pack(
+        "<4I", 1, width, height, len(words)
+    ) + struct.pack(f"<{len(words)}I", *words)
+
+
+def validate_atomic_colorburn_pair(data: bytes) -> dict:
+    validated = parse_atomic_color(data)
+    if (validated["width"], validated["height"], validated["word_count"]) != (
+        ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+        ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+        ATOMIC_COLORBURN_PAIR_FRAME_SIZE ** 2,
+    ):
+        raise ValueError("atomic-colorburn-pair color must be exactly 1024x1024 u32 words")
+    return validated
+
+
+def validate_atomic_colorburn_pair_coverage(data: bytes) -> dict:
+    validated = parse_atomic_coverage(data)
+    if (validated["width"], validated["height"], validated["word_count"]) != (
+        ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+        ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+        ATOMIC_COLORBURN_PAIR_FRAME_SIZE ** 2,
+    ):
+        raise ValueError("atomic-colorburn-pair coverage must be exactly 1024x1024 u32 words")
+    return validated
 
 
 def validate_direct_cusp_coverage(data: bytes) -> dict:
@@ -491,6 +548,62 @@ class FormatTests(unittest.TestCase):
             )
             self.assertNotEqual(invalid.returncode, 0)
             self.assertIn("direct-cusp-coverage artifact validation failed", invalid.stderr)
+
+    def test_atomic_colorburn_pair_color_is_native_order_and_strict(self):
+        color = make_atomic_color()
+        self.assertEqual(parse_atomic_color(color), {
+            "width": 2,
+            "height": 2,
+            "word_count": 4,
+            "words": (0, 1, 2, 3),
+        })
+        self.assertEqual(color[:ATOMIC_COLOR_HEADER_BYTES],
+                         ATOMIC_COLOR_MAGIC + struct.pack("<4I", 1, 2, 2, 4))
+        bad_word_count = bytearray(color)
+        struct.pack_into("<I", bad_word_count, 20, 3)
+        with self.assertRaisesRegex(ValueError, "word count"):
+            parse_atomic_color(bad_word_count)
+        with self.assertRaisesRegex(ValueError, "length"):
+            parse_atomic_color(color + b"\0")
+
+    def test_atomic_colorburn_pair_color_cli_validates_contract(self):
+        width = ATOMIC_COLORBURN_PAIR_FRAME_SIZE
+        artifact = ATOMIC_COLOR_MAGIC + struct.pack("<4I", 1, width, width, width * width)
+        artifact += bytes(width * width * 4)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_path = pathlib.Path(temp_dir) / "color.bin"
+            artifact_path.write_bytes(artifact)
+            result = subprocess.run(
+                [sys.executable, __file__, "--validate-atomic-colorburn-pair",
+                 str(artifact_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("RIVEACO valid: words=1048576 color=1024x1024", result.stdout)
+
+            invalid_path = pathlib.Path(temp_dir) / "invalid-color.bin"
+            invalid_path.write_bytes(make_atomic_color(2, 2))
+            invalid = subprocess.run(
+                [sys.executable, __file__, "--validate-atomic-colorburn-pair",
+                 str(invalid_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("atomic-colorburn-pair artifact validation failed", invalid.stderr)
+
+    def test_atomic_colorburn_pair_coverage_contract(self):
+        width = ATOMIC_COLORBURN_PAIR_FRAME_SIZE
+        artifact = ATOMIC_COVERAGE_MAGIC + struct.pack(
+            "<4I", 1, width, width, width * width
+        ) + bytes(width * width * 4)
+        validated = validate_atomic_colorburn_pair_coverage(artifact)
+        self.assertEqual(validated["word_count"], width * width)
+        with self.assertRaisesRegex(ValueError, "exactly 1024x1024"):
+            validate_atomic_colorburn_pair_coverage(make_atomic_coverage())
 
     def test_direct_strokes_round_inputs_require_one_contour_and_patches(self):
         self.assertEqual(validate_direct_strokes_round_inputs(make_inputs(patch_count=10)), {
@@ -1139,6 +1252,85 @@ class FormatTests(unittest.TestCase):
             source,
         )
 
+    def test_atomic_colorburn_pair_provenance_and_storage_contract(self):
+        stream_lines = INTERLEAVED_FEATHER_STREAM.read_text().splitlines()
+        self.assertEqual(
+            stream_lines[55],
+            "transform matrix=[1,0,0,1,485.557434,246.052628]",
+        )
+        self.assertEqual(
+            stream_lines[56],
+            "transform matrix=[0.490357965,0,0,0.490357965,0,0]",
+        )
+        self.assertEqual(
+            stream_lines[57],
+            "transform matrix=[-0.530765116,-0.847518981,0.847518981,-0.530765116,0,0]",
+        )
+        self.assertIn(
+            "paint={id=1,style=fill,color=0x4affafc5,thickness=6.35442448,join=0,cap=0,feather=9.56621265,blendMode=19,shader=0}",
+            stream_lines[58],
+        )
+        self.assertIn(
+            "paint={id=1,style=stroke,color=0xe0000000,thickness=5.00454855,join=1,cap=0,feather=9.56621265,blendMode=19,shader=0}",
+            stream_lines[59],
+        )
+        source = EXPORTER.read_text()
+        for fragment in (
+            "constexpr uint32_t kAtomicColorBurnPairFrameSize = 1024;",
+            '#include "generated_interleaved_colorburn_pair_path.inc"',
+            "addInterleavedFeatherColorBurnPairPath(path.get());",
+            "path->fillRule(rive::FillRule::clockwise);",
+            "renderer.translate(485.557434f, 246.052628f);",
+            "renderer.scale(0.490357965f, 0.490357965f);",
+            "rive::Mat2D(-0.530765116f,",
+            "paint->color(0x4affafc5);",
+            "paint->color(0xe0000000);",
+            "paint->thickness(5.00454855f);",
+            "paint->join(rive::StrokeJoin::round);",
+            "paint->cap(rive::StrokeCap::butt);",
+            "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'C', 'O', '\\0'};",
+            "writeAtomicColor(auxiliaryOutput,",
+        ):
+            self.assertIn(fragment, source)
+        patch = RUNTIME_PATCH.read_text()
+        self.assertIn("atomicPLSColorBufferForOracle() const", patch)
+        self.assertIn("atomicPLSColorBufferSizeForOracle() const", patch)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first = pathlib.Path(temp_dir) / "first.inc"
+            second = pathlib.Path(temp_dir) / "second.inc"
+            command = ["python3", str(COLORBURN_PAIR_GENERATOR), "--stream",
+                       str(INTERLEAVED_FEATHER_STREAM), "--output"]
+            subprocess.run(command + [str(first)], check=True)
+            subprocess.run(command + [str(second)], check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            generated = first.read_text()
+            self.assertIn("path->moveTo(100.f, 0.f);", generated)
+            self.assertIn("path->moveTo(60.0000038f, 0.f);", generated)
+            self.assertIn(
+                "path->cubicTo(60.0000038f, -33.1149063f, 33.1149063f, "
+                "-60.0000038f, 0.f, -60.0000038f);",
+                generated,
+            )
+
+            source_points = re.findall(
+                r"\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
+                stream_lines[58].split("points=[", 1)[1].split("]}} paint=", 1)[0],
+            )
+            generated_values = re.findall(
+                r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?=f)",
+                generated,
+            )
+            source_bits = [
+                struct.pack("<f", float(value))
+                for point in source_points
+                for value in point
+            ]
+            generated_bits = [
+                struct.pack("<f", float(value)) for value in generated_values
+            ]
+            self.assertEqual(generated_bits, source_bits)
+
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
         for fragment in (
@@ -1175,6 +1367,9 @@ class FormatTests(unittest.TestCase):
             'rawtext_generator="$script_dir/generate_rawtext_stream_path.py"',
             'python3 "$rawtext_generator" --stream "$rawtext_stream" --check',
             '--output "$injected_dir/generated_rawtext_path.inc"',
+            'colorburn_pair_generator="$script_dir/generate_interleaved_colorburn_pair_path.py"',
+            'python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" --check',
+            '--output "$injected_dir/generated_interleaved_colorburn_pair_path.inc"',
             '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
             '"$direct_grid_inputs_output" /dev/null direct-grid',
             '"$direct_flower_inputs_output" /dev/null direct-flower',
@@ -1185,15 +1380,21 @@ class FormatTests(unittest.TestCase):
             'nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"',
             'advanced_blend_blit_output="${RIVE_ATLAS_ADVANCED_BLEND_BLIT_OUTPUT:-$script_dir/out/atlas-advanced-blend-blit.rgba}"',
             'atomic_advanced_blend_output="${RIVE_ATOMIC_ADVANCED_BLEND_OUTPUT:-$script_dir/out/atomic-advanced-blend.rgba}"',
+            'atomic_colorburn_pair_output="${RIVE_ATOMIC_COLORBURN_PAIR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.rgba}"',
+            'atomic_colorburn_pair_color_output="${RIVE_ATOMIC_COLORBURN_PAIR_COLOR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.color}"',
+            'atomic_colorburn_pair_coverage_output="${RIVE_ATOMIC_COLORBURN_PAIR_COVERAGE_OUTPUT:-$script_dir/out/atomic-colorburn-pair.coverage}"',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_evenodd_path_clipped_blit_output" nested-evenodd-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend',
+            '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_colorburn_pair_output" atomic-colorburn-pair "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output"',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups',
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-cusp-coverage "$direct_cusp_coverage_output"',
+            'python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair "$atomic_colorburn_pair_color_output"',
+            'python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair-coverage "$atomic_colorburn_pair_coverage_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"',
@@ -1201,6 +1402,9 @@ class FormatTests(unittest.TestCase):
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$atomic_advanced_blend_bytes" != "16404" ]]',
+            'if [[ "$atomic_colorburn_pair_bytes" != "4194324" ]]',
+            'if [[ "$atomic_colorburn_pair_color_bytes" != "4194328" ]]',
+            'if [[ "$atomic_colorburn_pair_coverage_bytes" != "4194328" ]]',
             'if [[ "$fill_output_bytes" != "4628" ]]',
             'if [[ "$fill_blit_bytes" != "16404" ]]',
             'if [[ "$cusp_output_bytes" != "4628" ]]',
@@ -1332,6 +1536,9 @@ class FormatTests(unittest.TestCase):
             coverage = cpp[cpp.index("wgpu::Buffer RenderContextWebGPUImpl::atomicPLSCoverageBuffer()"):
                            cpp.index("wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline")]
             self.assertIn("desc.usage |= wgpu::BufferUsage::CopySrc", coverage)
+            color = cpp[cpp.index("wgpu::Buffer RenderContextWebGPUImpl::atomicPLSColorBuffer()"):
+                        cpp.index("wgpu::Buffer RenderContextWebGPUImpl::atomicPLSClipBuffer()")]
+            self.assertIn("desc.usage |= wgpu::BufferUsage::CopySrc", color)
 
             gpu = (temp / "renderer/include/rive/renderer/gpu.hpp").read_text()
             render_context_header = (
@@ -1377,6 +1584,8 @@ class FormatTests(unittest.TestCase):
                 "tessellationTextureForOracle() const",
                 "atomicPLSCoverageBufferForOracle() const",
                 "atomicPLSCoverageBufferSizeForOracle() const",
+                "atomicPLSColorBufferForOracle() const",
+                "atomicPLSColorBufferSizeForOracle() const",
                 "m_atlasMaskOracleFacts.contours.assign(",
                 "m_atlasMaskOracleFacts.triangles.assign(",
             ):
@@ -1403,6 +1612,10 @@ if __name__ == "__main__":
             ("direct-bad-skin", "RIVEDBI", parse_direct_bad_skin_inputs),
         "--validate-direct-cusp-coverage":
             ("direct-cusp-coverage", "RIVEAPC", validate_direct_cusp_coverage),
+        "--validate-atomic-colorburn-pair":
+            ("atomic-colorburn-pair", "RIVEACO", validate_atomic_colorburn_pair),
+        "--validate-atomic-colorburn-pair-coverage":
+            ("atomic-colorburn-pair-coverage", "RIVEAPC", validate_atomic_colorburn_pair_coverage),
         "--validate-direct-strokes-round":
             ("direct-strokes-round", "RIVEATI", validate_direct_strokes_round_inputs),
         "--validate-direct-strokes-round-spans":
@@ -1435,10 +1648,11 @@ if __name__ == "__main__":
                 f"firstSpan={validated['first_span']} "
                 f"spans={validated['span_count']}"
             )
-        elif format_name == "RIVEAPC":
+        elif format_name in ("RIVEAPC", "RIVEACO"):
             print(
                 f"{format_name} valid: words={validated['word_count']} "
-                f"coverage={validated['width']}x{validated['height']}"
+                f"{'coverage' if format_name == 'RIVEAPC' else 'color'}="
+                f"{validated['width']}x{validated['height']}"
             )
         else:
             print(

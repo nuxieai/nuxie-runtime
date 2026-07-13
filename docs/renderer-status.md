@@ -266,11 +266,20 @@ Run `make renderer-golden`.
    determinant-aware contour direction now closes the mirrored
    Montserrat/Roboto feather-text pair. Two gated clockwise-atomic GM
    divergences remain.
-   `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
-   intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
-   storage erases a sub-8-bit RGB/alpha distinction that ColorBurn amplifies.
-   Do not tolerate it or add a bespoke shader fork without a dedicated C++
-   color-plane suboracle. C++'s empty-segment outcome is now matched in
+   `interleavedfeather` remains parked as a named native-Metal-versus-WebGPU
+   atomic intermediate-precision discontinuity. Its exact-source draws 13-14
+   now have a dedicated C++ Dawn WebGPU suboracle: dimensions, f32 path bits,
+   transforms, paints, and initialize/fill/stroke/resolve schedule are pinned;
+   normalized raw coverage is exact; and only two packed color words
+   differ at max byte delta one, producing exactly the same two resolved
+   pixels at max channel delta seven. The oracle exposed and fixed generic
+   feathered-clockwise preparation retaining the nonzero flag, plus the
+   advanced feather-fill pipeline culling the wrong face. This closes the Rust
+   defect without
+   justifying a native-Metal corpus tolerance. The
+   next evidence is an independent full-stream C++ WebGPU-on-Metal reference
+   lane for `interleavedfeather`, followed separately by `dstreadshuffle`.
+   C++'s empty-segment outcome is now matched in
    stroke/feather preparation for coincident cubics, closing `zeroPath`.
    `dstreadshuffle` is parked under the same intermediate-color precision
    boundary: isolated ColorDodge passes, isolated ColorBurn differs, and the
@@ -315,6 +324,19 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Keep both remaining clockwise-atomic GMs gated while accepting
+  the isolated `interleavedfeather` ColorBurn pair as Dawn-versus-wgpu
+  quantization. The source-generated C++ fixture pins all input f32 bits and
+  the four production batches. Sol rejected an initial semantic normalization:
+  3,813 opposite-sign coverage words exposed that Rust encoded clockwise as
+  nonzero and culled the wrong advanced feather face. Correcting generic
+  feathered-clockwise preparation and the two advanced feather-fill pipelines
+  makes normalized raw coverage exact. The packed color plane differs at
+  exactly two words/max byte delta one, and the resolved frame differs at
+  exactly those two coordinates/max
+  channel delta seven. No corpus status or tolerance changes in this slice.
+  Full-stream C++ WebGPU references for `interleavedfeather` and
+  `dstreadshuffle` are the next independent gates.
 - 2026-07-13: Promote `feather_cusp` under a bounded 16,384-pixel
   Metal-versus-WebGPU allowance. C++ and Rust match the severe direct cusp's
   complete tessellation inputs and every non-clear atomic coverage word; after
@@ -1610,3 +1632,12 @@ Run `make renderer-golden`.
   promotion advances the renderer ratchet to
   exact=154/diverges=0/gated=1,313. Renderer golden, both V2 golden floors,
   and the full workspace suite pass.
+- 2026-07-13: Added the exact-source C++ Dawn atomic ColorBurn pair oracle for
+  `interleavedfeather` draws 13-14, including test-only Rust/C++ color and
+  coverage plane readbacks. It exposed and fixed generic feathered-clockwise
+  paint preparation and advanced feather-fill face culling. Normalized raw
+  coverage is exact; the only final difference is two coupled color
+  words/pixels at max
+  byte/channel deltas one and seven. Both remaining GMs stay gated pending
+  independent full-stream C++ WebGPU references. The renderer ratchet remains
+  exact=154/diverges=0/gated=1,313 with no tolerance or corpus edit.

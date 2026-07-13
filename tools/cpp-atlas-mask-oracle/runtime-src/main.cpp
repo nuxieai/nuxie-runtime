@@ -32,6 +32,7 @@ constexpr uint32_t kMaskHeaderBytes = 20;
 constexpr uint32_t kBlitHeaderBytes = 20;
 constexpr uint32_t kInputsHeaderBytes = 40;
 constexpr uint32_t kAtomicCoverageHeaderBytes = 24;
+constexpr uint32_t kAtomicColorHeaderBytes = 24;
 constexpr uint32_t kTessSpanHeaderBytes = 28;
 constexpr uint32_t kDirectGridHeaderBytes = 64;
 constexpr uint32_t kBytesPerTexel = 2;
@@ -54,8 +55,10 @@ constexpr uint32_t kDirectRawTextFrameHeight = 335;
 constexpr uint32_t kDirectRawTextContourCount = 36;
 constexpr uint32_t kDirectRawTextPatchCount = 318;
 constexpr uint32_t kIntersectionGroupBatchCount = 9;
+constexpr uint32_t kAtomicColorBurnPairFrameSize = 1024;
 #include "generated_polyshark_path.inc"
 #include "generated_rawtext_path.inc"
+#include "generated_interleaved_colorburn_pair_path.inc"
 
 void fail(const char* message)
 {
@@ -230,6 +233,45 @@ void writeAtomicCoverage(const char* output,
     if (!file)
     {
         fail("could not write atomic coverage output file");
+    }
+}
+
+void writeAtomicColor(const char* output,
+                      uint32_t width,
+                      uint32_t height,
+                      const std::vector<uint32_t>& words)
+{
+    const uint64_t expectedWordCount = static_cast<uint64_t>(width) * height;
+    if (width == 0 || height == 0 || expectedWordCount > UINT32_MAX ||
+        words.size() != expectedWordCount)
+    {
+        fail("atomic color readback dimensions or word count are invalid");
+    }
+    std::array<uint8_t, kAtomicColorHeaderBytes> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'C', 'O', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, width);
+    writeU32(header, 16, height);
+    writeU32(header, 20, static_cast<uint32_t>(words.size()));
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open atomic color output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    // Preserve the production 32x32-tiled storage order; do not linearize it.
+    for (uint32_t word : words)
+    {
+        std::array<uint8_t, sizeof(word)> encodedWord{};
+        writeU32(encodedWord, 0, word);
+        file.write(reinterpret_cast<const char*>(encodedWord.data()),
+                   encodedWord.size());
+    }
+    if (!file)
+    {
+        fail("could not write atomic color output file");
     }
 }
 
@@ -825,16 +867,19 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "advanced-blend") == 0;
     const bool atomicAdvancedBlendCase =
         argc > 4 && std::strcmp(argv[4], "atomic-advanced-blend") == 0;
+    const bool atomicColorBurnPairCase =
+        argc > 4 && std::strcmp(argv[4], "atomic-colorburn-pair") == 0;
     const bool intersectionGroupsCase =
         argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;
     const bool anyAdvancedBlendCase =
-        advancedBlendCase || atomicAdvancedBlendCase;
+        advancedBlendCase || atomicAdvancedBlendCase || atomicColorBurnPairCase;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase ||
         directStrokesRoundCase || directRawTextCase;
-    const bool directOutputCase = directCase || atomicAdvancedBlendCase;
+    const bool directOutputCase = directCase || atomicAdvancedBlendCase ||
+                                  atomicColorBurnPairCase;
     const bool fillCase = circleCase || cuspCase ||
                           (directCase && !directStrokesRoundCase) ||
                           anyAdvancedBlendCase ||
@@ -842,19 +887,23 @@ int main(int argc, char** argv)
                           nestedEvenOddPathClippedCase ||
                           nestedClockwisePathClippedCase;
     const char* auxiliaryOutput = argc > 5 ? argv[5] : nullptr;
-    if (argc > 6 ||
+    const char* secondaryOutput = argc > 6 ? argv[6] : nullptr;
+    if (argc > 7 ||
         (argc > 4 && !fillCase && !directStrokesRoundCase && !clippedCase &&
          !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
-         !advancedBlendCase && !atomicAdvancedBlendCase &&
-         !intersectionGroupsCase) ||
+        !advancedBlendCase && !atomicAdvancedBlendCase && !atomicColorBurnPairCase &&
+        !intersectionGroupsCase) ||
         (auxiliaryOutput != nullptr && !cuspCase && !directCuspCase &&
+         !atomicColorBurnPairCase &&
          !directStrokesRoundCase && !directRawTextCase) ||
-        ((directStrokesRoundCase || directRawTextCase) &&
-         auxiliaryOutput == nullptr))
+        ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase) &&
+         auxiliaryOutput == nullptr) ||
+        (secondaryOutput != nullptr && !atomicColorBurnPairCase) ||
+        (atomicColorBurnPairCase && secondaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [softened-coverage-or-tess-span-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -920,6 +969,8 @@ int main(int argc, char** argv)
                                     ? kDirectStrokesRoundFrameSize
                                 : directBadSkinCase
                                     ? kDirectBadSkinFrameWidth
+                                    : atomicColorBurnPairCase
+                                    ? kAtomicColorBurnPairFrameSize
                                     : (directTriangulatedCase ? kDirectGridFrameSize
                                                                : kFrameWidth);
     const uint32_t frameHeight = directRawTextCase
@@ -928,7 +979,9 @@ int main(int argc, char** argv)
                                      ? kDirectStrokesRoundFrameSize
                                  : directBadSkinCase
                                      ? kDirectBadSkinFrameHeight
-                                     : (directTriangulatedCase ? kDirectGridFrameSize
+                                 : atomicColorBurnPairCase
+                                 ? kAtomicColorBurnPairFrameSize
+                                 : (directTriangulatedCase ? kDirectGridFrameSize
                                                                 : kFrameHeight);
     targetDesc.size = {frameWidth, frameHeight, 1};
     targetDesc.format = wgpu::TextureFormat::RGBA8Unorm;
@@ -944,7 +997,9 @@ int main(int argc, char** argv)
                          .loadAction = rive::gpu::LoadAction::clear,
                          .clearColor = directStrokesRoundCase || directRawTextCase
                                            ? 0xffffffff
-                                           : (anyAdvancedBlendCase ? 0xff204080 : 0),
+                                           : ((advancedBlendCase || atomicAdvancedBlendCase)
+                                                  ? 0xff204080
+                                                  : 0),
                          .msaaSampleCount = directOutputCase ? 0u : 4u,
                          .disableRasterOrdering = directOutputCase,
                          .clockwiseFillOverride = directOutputCase});
@@ -994,6 +1049,10 @@ int main(int argc, char** argv)
                       25.5016327f,
                       70.300293f);
         path->close();
+    }
+    else if (atomicColorBurnPairCase)
+    {
+        addInterleavedFeatherColorBurnPairPath(path.get());
     }
     else if (directCuspCase)
     {
@@ -1088,7 +1147,7 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCase && !intersectionGroupsCase)
+    if (!directCase && !atomicColorBurnPairCase && !intersectionGroupsCase)
     {
         path->close();
     }
@@ -1113,7 +1172,8 @@ int main(int argc, char** argv)
                      : (anyAdvancedBlendCase ? 0xc0e08040 : 0xffffffff));
     if (anyAdvancedBlendCase)
     {
-        paint->blendMode(rive::BlendMode::colorDodge);
+        paint->blendMode(atomicColorBurnPairCase ? rive::BlendMode::colorBurn
+                                                 : rive::BlendMode::colorDodge);
     }
     if (clippedCase)
     {
@@ -1260,6 +1320,29 @@ int main(int argc, char** argv)
         draw2Paint->color(0x80ffffff);
         renderer.drawPath(draw2Path.get(), draw2Paint.get());
     }
+    else if (atomicColorBurnPairCase)
+    {
+        renderer.translate(485.557434f, 246.052628f);
+        renderer.scale(0.490357965f, 0.490357965f);
+        renderer.transform(rive::Mat2D(-0.530765116f,
+                                       -0.847518981f,
+                                       0.847518981f,
+                                       -0.530765116f,
+                                       0,
+                                       0));
+        paint->style(rive::RenderPaintStyle::fill);
+        paint->color(0x4affafc5);
+        paint->feather(9.56621265f);
+        renderer.drawPath(path.get(), paint.get());
+
+        paint->style(rive::RenderPaintStyle::stroke);
+        paint->color(0xe0000000);
+        paint->feather(9.56621265f);
+        paint->thickness(5.00454855f);
+        paint->join(rive::StrokeJoin::round); // Stream join=1.
+        paint->cap(rive::StrokeCap::butt);    // Stream cap=0.
+        renderer.drawPath(path.get(), paint.get());
+    }
     else
     {
         renderer.drawPath(path.get(), paint.get());
@@ -1270,6 +1353,45 @@ int main(int argc, char** argv)
                     .externalCommandBuffer = renderEncoder.Get()});
     wgpu::CommandBuffer renderCommands = renderEncoder.Finish();
     queue.Submit(1, &renderCommands);
+
+    if (atomicColorBurnPairCase)
+    {
+        const uint64_t expectedColorBytes =
+            static_cast<uint64_t>(kAtomicColorBurnPairFrameSize) *
+            kAtomicColorBurnPairFrameSize * sizeof(uint32_t);
+        const uint64_t colorBufferBytes =
+            webgpuContext->atomicPLSColorBufferSizeForOracle();
+        const wgpu::Buffer colorBuffer =
+            webgpuContext->atomicPLSColorBufferForOracle();
+        if (colorBuffer == nullptr || colorBufferBytes != expectedColorBytes)
+        {
+            fail("atomic colorburn pair backing must be exactly 1024x1024 u32 words");
+        }
+        writeAtomicColor(auxiliaryOutput,
+                         kAtomicColorBurnPairFrameSize,
+                         kAtomicColorBurnPairFrameSize,
+                         readBuffer(instance,
+                                    device,
+                                    queue,
+                                    colorBuffer,
+                                    colorBufferBytes));
+        const uint64_t coverageBufferBytes =
+            webgpuContext->atomicPLSCoverageBufferSizeForOracle();
+        const wgpu::Buffer coverageBuffer =
+            webgpuContext->atomicPLSCoverageBufferForOracle();
+        if (coverageBuffer == nullptr || coverageBufferBytes != expectedColorBytes)
+        {
+            fail("atomic colorburn pair coverage backing must be exactly 1024x1024 u32 words");
+        }
+        writeAtomicCoverage(secondaryOutput,
+                            kAtomicColorBurnPairFrameSize,
+                            kAtomicColorBurnPairFrameSize,
+                            readBuffer(instance,
+                                       device,
+                                       queue,
+                                       coverageBuffer,
+                                       coverageBufferBytes));
+    }
 
     const auto& facts = webgpuContext->atlasMaskFactsForOracle();
     std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu\n",
@@ -1417,6 +1539,55 @@ int main(int argc, char** argv)
             facts.drawBatches[2].elementCount != 1)
         {
             fail("atomic advanced-blend oracle must execute initialize, destination-reading feather patches, and resolve");
+        }
+    }
+    else if (atomicColorBurnPairCase)
+    {
+        const uint32_t expectedFeatures =
+            static_cast<uint32_t>(
+                rive::gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND) |
+            static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_FEATHER) |
+            static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_DITHER);
+        const uint32_t expectedFillContents =
+            static_cast<uint32_t>(rive::gpu::DrawContents::featheredFill) |
+            static_cast<uint32_t>(rive::gpu::DrawContents::clockwiseFill) |
+            static_cast<uint32_t>(rive::gpu::DrawContents::advancedBlend);
+        const uint32_t expectedStrokeContents =
+            static_cast<uint32_t>(rive::gpu::DrawContents::stroke) |
+            static_cast<uint32_t>(rive::gpu::DrawContents::advancedBlend);
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
+            facts.fixedFunctionColorOutput || facts.drawBatches.size() != 4 ||
+            facts.drawBatches[0].drawType != static_cast<uint32_t>(
+                                                  rive::gpu::DrawType::renderPassInitialize) ||
+            facts.drawBatches[0].shaderFeatures != 0 ||
+            facts.drawBatches[0].shaderMiscFlags != 0 ||
+            facts.drawBatches[0].drawContents != 0 ||
+            facts.drawBatches[0].baseElement != 0 ||
+            facts.drawBatches[0].elementCount != 1 ||
+            facts.drawBatches[1].drawType != static_cast<uint32_t>(
+                                                  rive::gpu::DrawType::midpointFanCenterAAPatches) ||
+            facts.drawBatches[1].shaderFeatures != expectedFeatures ||
+            facts.drawBatches[1].shaderMiscFlags != 0 ||
+            facts.drawBatches[1].drawContents != expectedFillContents ||
+            facts.drawBatches[1].baseElement != 1 ||
+            facts.drawBatches[1].elementCount != 104 ||
+            facts.drawBatches[2].drawType != static_cast<uint32_t>(
+                                                  rive::gpu::DrawType::midpointFanPatches) ||
+            facts.drawBatches[2].shaderFeatures != expectedFeatures ||
+            facts.drawBatches[2].shaderMiscFlags != 0 ||
+            facts.drawBatches[2].drawContents != expectedStrokeContents ||
+            facts.drawBatches[2].baseElement != 105 ||
+            facts.drawBatches[2].elementCount != 29 ||
+            facts.drawBatches[3].drawType != static_cast<uint32_t>(
+                                                  rive::gpu::DrawType::renderPassResolve) ||
+            facts.drawBatches[3].shaderFeatures != 0 ||
+            facts.drawBatches[3].shaderMiscFlags != 0 ||
+            facts.drawBatches[3].drawContents != 0 ||
+            facts.drawBatches[3].baseElement != 0 ||
+            facts.drawBatches[3].elementCount != 1)
+        {
+            fail("atomic colorburn pair must execute atomic initialize, fill, stroke, and resolve batches");
         }
     }
     else if (directCase)
@@ -1962,6 +2133,17 @@ int main(int argc, char** argv)
                     auxiliaryOutput,
                     kFrameWidth,
                     kFrameHeight);
+    }
+    if (atomicColorBurnPairCase)
+    {
+        std::printf("wrote %s: %ux%u u32 atomic PLS color words\n",
+                    auxiliaryOutput,
+                    kAtomicColorBurnPairFrameSize,
+                    kAtomicColorBurnPairFrameSize);
+        std::printf("wrote %s: %ux%u u32 atomic PLS coverage words\n",
+                    secondaryOutput,
+                    kAtomicColorBurnPairFrameSize,
+                    kAtomicColorBurnPairFrameSize);
     }
     return 0;
 }

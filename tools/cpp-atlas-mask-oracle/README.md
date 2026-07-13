@@ -235,6 +235,22 @@ The configured Dawn-versus-wgpu comparator allows only the observed backend
 quantization envelope: at most eight pixels may differ, and no channel may
 differ by more than one. Either cap is independently enforced by unit tests.
 
+`atomic-colorburn-pair.{rgba,color,coverage}` isolates draws 13-14 from
+`interleavedfeather.rive-stream`. The build-time generator validates the
+recorded draw and emits every path point as its exact f32 literal; the harness
+preserves the stream transforms, paints, clockwise fill, transparent frame,
+and the exact initialize/fill/stroke/resolve schedule. `RIVEACO` and
+`RIVEAPC` version 1 use a 24-byte little-endian header followed by all
+`1024 x 1024` native-order `u32` words from the atomic color and coverage
+planes. The paired `RIVEABL` file contains the complete resolved RGBA8 frame.
+
+The configured Rust comparison normalizes only C++'s untouched fixed-point
+zero sentinel at transparent-black pixels, then requires every raw coverage
+word to match. The packed color plane may differ at no more than three words
+with max byte delta one; the resolved output may differ at no more than those
+same three deswizzled coordinates with max channel delta 15. The current exact
+fixture has two coupled words/pixels and max resolved delta seven.
+
 `msaa-intersection-groups` is a schedule-only runtime assertion; it emits no
 artifact. It authors three non-feathered MSAA fills with distinct captured
 `DrawContents` identities: opaque clockwise draw 0, translucent non-zero draw
@@ -356,6 +372,12 @@ RIVE_CPP_ATOMIC_ADVANCED_BLEND="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-adva
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_atomic_advanced_blend_matches_within_backend_quantization_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATOMIC_COLORBURN_PAIR_COLOR="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-colorburn-pair.color" \
+RIVE_CPP_ATOMIC_COLORBURN_PAIR_COVERAGE="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-colorburn-pair.coverage" \
+RIVE_CPP_ATOMIC_COLORBURN_PAIR_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-colorburn-pair.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_atomic_colorburn_pair_has_only_coupled_quantization_when_configured \
+  -- --exact --ignored --nocapture
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
@@ -373,8 +395,9 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT`, or
-`RIVE_CPP_ATOMIC_ADVANCED_BLEND` path;
-invoking either test without its variable is an error.
+`RIVE_CPP_ATOMIC_ADVANCED_BLEND`, or the three
+`RIVE_CPP_ATOMIC_COLORBURN_PAIR_{COLOR,COVERAGE,BLIT}` paths;
+invoking a configured test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing
 Dawn prerequisite without building or changing the runtime checkout.

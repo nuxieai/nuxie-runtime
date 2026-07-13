@@ -1308,7 +1308,7 @@ impl WgpuFrame {
 
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, true)
-            .map(|(pixels, _, _)| pixels)
+            .map(|(pixels, _, _, _)| pixels)
     }
 
     #[cfg(test)]
@@ -1316,27 +1316,43 @@ impl WgpuFrame {
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
         self.finish_internal(true, false, true)
-            .map(|(pixels, coverage, _)| (pixels, coverage))
+            .map(|(pixels, coverage, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
         self.finish_internal(false, true, true)
-            .map(|(pixels, _, coverage)| (pixels, coverage))
+            .map(|(pixels, _, coverage, _)| (pixels, coverage))
+    }
+
+    #[cfg(test)]
+    fn finish_with_atomic_planes(
+        self,
+    ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
+        self.finish_internal(false, true, true)
+            .map(|(pixels, _, coverage, colors)| (pixels, coverage, colors))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, false)
-            .map(|(pixels, _, _)| pixels)
+            .map(|(pixels, _, _, _)| pixels)
     }
 
     fn finish_internal(
         self,
         capture_clockwise_atomic_coverage: bool,
-        capture_atomic_coverage: bool,
+        capture_atomic_planes: bool,
         schedule_msaa_draws: bool,
-    ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>, Vec<Vec<u32>>), RendererError> {
+    ) -> Result<
+        (
+            Vec<u8>,
+            Vec<ClockwiseAtomicCoverageSnapshot>,
+            Vec<Vec<u32>>,
+            Vec<Vec<u32>>,
+        ),
+        RendererError,
+    > {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
@@ -1395,6 +1411,7 @@ impl WgpuFrame {
                 });
         let mut pending_coverage_readbacks = Vec::new();
         let mut pending_atomic_coverage_readbacks = Vec::new();
+        let mut pending_atomic_color_readbacks = Vec::new();
         let mut encode_atomic_run =
             |draws: &[SolidDraw],
              clear_target: bool,
@@ -1781,7 +1798,6 @@ impl WgpuFrame {
                         }
                     };
                     if !use_clockwise_atomic_batch
-                        && load_color.is_none()
                         && draw.paint.style == RenderPaintStyle::Fill
                         && draw.paint.feather != 0.0
                         && source_fill_rule == FillRule::Clockwise
@@ -2267,7 +2283,7 @@ impl WgpuFrame {
                         );
                     }
                 } else {
-                    let coverage_readback = self.context.atomic_pipeline.encode_batch(
+                    let readbacks = self.context.atomic_pipeline.encode_batch(
                         &self.context.device,
                         encoder,
                         &view,
@@ -2283,10 +2299,13 @@ impl WgpuFrame {
                         &paint_aux,
                         &contours,
                         padded_width as usize * padded_height as usize,
-                        capture_atomic_coverage,
+                        capture_atomic_planes,
                     );
-                    if let Some(readback) = coverage_readback {
+                    if let Some(readback) = readbacks.coverage {
                         pending_atomic_coverage_readbacks.push(readback);
+                    }
+                    if let Some(readback) = readbacks.color {
+                        pending_atomic_color_readbacks.push(readback);
                     }
                 }
                 Ok::<(), RendererError>(())
@@ -3209,7 +3228,16 @@ impl WgpuFrame {
             .iter()
             .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok((pixels, coverage_snapshots, atomic_coverage_snapshots))
+        let atomic_color_snapshots = pending_atomic_color_readbacks
+            .iter()
+            .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((
+            pixels,
+            coverage_snapshots,
+            atomic_coverage_snapshots,
+            atomic_color_snapshots,
+        ))
     }
 }
 
@@ -4499,6 +4527,7 @@ mod tests {
     const STROKES_ROUND_ORACLE_THICKNESS: f32 = 4.5;
     const RAWTEXT_ORACLE_FRAME_WIDTH: u32 = 400;
     const RAWTEXT_ORACLE_FRAME_HEIGHT: u32 = 335;
+    const ATOMIC_COLORBURN_PAIR_FRAME_SIZE: u32 = 1024;
     const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
         atlas_mask_oracle::MaskComparisonTolerances {
             support: 1.0 / 1024.0,
@@ -7216,6 +7245,82 @@ mod tests {
         advanced_feather_atlas_blit_with_mode(RenderMode::ClockwiseAtomic)
     }
 
+    fn interleaved_feather_colorburn_pair_stream() -> nuxie_render_stream::RenderStream {
+        use nuxie_render_stream::{Command, Frame, RenderStream};
+
+        let source = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
+        )))
+        .unwrap();
+        let commands = &source.frames[0].commands;
+        let mut draw_count = 0usize;
+        let mut latest_save = 0usize;
+        let mut pair_start = None;
+        let mut pair_end = None;
+        for (index, command) in commands.iter().enumerate() {
+            match command {
+                Command::Save => latest_save = index,
+                Command::DrawPath { .. } => {
+                    draw_count += 1;
+                    if draw_count == 13 {
+                        pair_start = Some(latest_save);
+                    }
+                }
+                Command::Restore if draw_count == 14 && pair_start.is_some() => {
+                    pair_end = Some(index + 1);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let pair_start = pair_start.expect("interleavedfeather draw 13 group");
+        let pair_end = pair_end.expect("interleavedfeather draw 14 restore");
+        let pair_commands = commands[pair_start..pair_end].to_vec();
+        let pair_draws = pair_commands
+            .iter()
+            .filter_map(|command| match command {
+                Command::DrawPath { path, paint } => Some((path, paint)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(pair_draws.len(), 2);
+        assert_eq!(pair_draws[0].1.style, RenderPaintStyle::Fill);
+        assert_eq!(pair_draws[0].1.color, 0x4aff_afc5);
+        assert_eq!(pair_draws[1].1.style, RenderPaintStyle::Stroke);
+        assert_eq!(pair_draws[1].1.color, 0xe000_0000);
+        assert_eq!(pair_draws[1].1.thickness, 5.00454855);
+        assert_eq!(pair_draws[1].1.join, StrokeJoin::Round);
+        assert!(pair_draws.iter().all(|(_, paint)| {
+            paint.feather == 9.56621265 && paint.blend_mode == BlendMode::ColorBurn
+        }));
+
+        RenderStream {
+            frame_size: Some((
+                ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+                ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+            )),
+            clear_color: Some(0),
+            resources: source.resources,
+            frames: vec![Frame {
+                commands: pair_commands,
+            }],
+        }
+    }
+
+    fn interleaved_feather_colorburn_pair_frame() -> WgpuFrame {
+        let pair = interleaved_feather_colorburn_pair_stream();
+        let mut factory = WgpuFactory::new_with_mode(
+            ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+            ATOMIC_COLORBURN_PAIR_FRAME_SIZE,
+            RenderMode::ClockwiseAtomic,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(0);
+        pair.replay_frame(0, &mut factory, &mut frame).unwrap();
+        frame
+    }
+
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         fixed_feather_atlas_blit_with_clip(Some([16.0, 8.0, 32.0, 56.0]))
     }
@@ -8946,6 +9051,157 @@ mod tests {
                     path.display()
                 )
             });
+    }
+
+    #[test]
+    #[ignore = "requires the C++ WebGPU atomic colorburn-pair color, coverage, and blit artifacts"]
+    fn cpp_webgpu_atomic_colorburn_pair_has_only_coupled_quantization_when_configured() {
+        let read_plane = |variable: &str, magic: &[u8; 8]| {
+            let path = std::env::var_os(variable)
+                .unwrap_or_else(|| panic!("{variable} is required for the ignored pair test"));
+            assert!(!path.is_empty(), "{variable} is empty");
+            let path = PathBuf::from(path);
+            assert!(path.is_absolute(), "{variable} must be absolute");
+            let bytes = fs::read(&path)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+            assert!(
+                bytes.len() >= 24,
+                "{} has a truncated header",
+                path.display()
+            );
+            assert_eq!(&bytes[..8], magic);
+            let header_word =
+                |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+            assert_eq!(header_word(8), 1, "unsupported plane version");
+            assert_eq!(header_word(12), ATOMIC_COLORBURN_PAIR_FRAME_SIZE);
+            assert_eq!(header_word(16), ATOMIC_COLORBURN_PAIR_FRAME_SIZE);
+            let word_count = header_word(20) as usize;
+            assert_eq!(
+                word_count,
+                ATOMIC_COLORBURN_PAIR_FRAME_SIZE as usize
+                    * ATOMIC_COLORBURN_PAIR_FRAME_SIZE as usize
+            );
+            assert_eq!(bytes.len(), 24 + word_count * 4);
+            bytes[24..]
+                .chunks_exact(4)
+                .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
+                .collect::<Vec<_>>()
+        };
+        let cpp_colors = read_plane("RIVE_CPP_ATOMIC_COLORBURN_PAIR_COLOR", b"RIVEACO\0");
+        let mut cpp_coverage = read_plane("RIVE_CPP_ATOMIC_COLORBURN_PAIR_COVERAGE", b"RIVEAPC\0");
+        let blit_path = PathBuf::from(
+            std::env::var_os("RIVE_CPP_ATOMIC_COLORBURN_PAIR_BLIT")
+                .expect("RIVE_CPP_ATOMIC_COLORBURN_PAIR_BLIT is required"),
+        );
+        assert!(blit_path.is_absolute());
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&fs::read(&blit_path).unwrap()).unwrap();
+
+        let size = ATOMIC_COLORBURN_PAIR_FRAME_SIZE;
+        let word_index = |x: u32, y: u32| {
+            ((y >> 5) * (size << 5)
+                + (x >> 5) * 1024
+                + ((x & 28) << 5)
+                + ((y & 28) << 2)
+                + ((y & 3) << 2)
+                + (x & 3)) as usize
+        };
+        assert_eq!(cpp_blit.pixels().len(), (size * size * 4) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let pixel_index = (y * size + x) as usize;
+                let coverage_index = word_index(x, y);
+                if cpp_coverage[coverage_index] == 1 << 16
+                    && cpp_blit.pixels()[pixel_index * 4..][..4] == [0, 0, 0, 0]
+                {
+                    cpp_coverage[coverage_index] = 0;
+                }
+            }
+        }
+
+        let (rust_pixels, rust_coverage, rust_colors) = interleaved_feather_colorburn_pair_frame()
+            .finish_with_atomic_planes()
+            .unwrap();
+        assert_eq!(rust_coverage.len(), 1);
+        assert_eq!(rust_colors.len(), 1);
+        let mut coverage_mismatch_count = 0usize;
+        let mut coverage_max_delta = 0u32;
+        let mut first_coverage_mismatches = Vec::new();
+        for y in 0..size {
+            for x in 0..size {
+                let index = word_index(x, y);
+                let cpp = cpp_coverage[index];
+                let rust = rust_coverage[0][index];
+                if cpp == rust {
+                    continue;
+                }
+                coverage_mismatch_count += 1;
+                coverage_max_delta = coverage_max_delta.max(cpp.abs_diff(rust));
+                if first_coverage_mismatches.len() < 4 {
+                    let pixel_index = (y * size + x) as usize * 4;
+                    first_coverage_mismatches.push((
+                        x,
+                        y,
+                        cpp,
+                        rust,
+                        cpp_colors[index],
+                        rust_colors[0][index],
+                        <[u8; 4]>::try_from(&cpp_blit.pixels()[pixel_index..pixel_index + 4])
+                            .unwrap(),
+                        <[u8; 4]>::try_from(&rust_pixels[pixel_index..pixel_index + 4]).unwrap(),
+                    ));
+                }
+            }
+        }
+        assert_eq!(
+            coverage_mismatch_count, 0,
+            "normalized atomic coverage must be exact; first mismatches={first_coverage_mismatches:?} max-word-delta={coverage_max_delta}"
+        );
+
+        let mut color_mismatch_coordinates = Vec::new();
+        let mut color_max_delta = 0u8;
+        for y in 0..size {
+            for x in 0..size {
+                let index = word_index(x, y);
+                let cpp = cpp_colors[index];
+                let rust = rust_colors[0][index];
+                if cpp == rust {
+                    continue;
+                }
+                color_mismatch_coordinates.push((x, y));
+                for (cpp, rust) in cpp.to_le_bytes().into_iter().zip(rust.to_le_bytes()) {
+                    color_max_delta = color_max_delta.max(cpp.abs_diff(rust));
+                }
+            }
+        }
+        assert!(
+            color_mismatch_coordinates.len() <= 3 && color_max_delta <= 1,
+            "atomic color plane exceeded the reviewed quantization bound: coordinates={color_mismatch_coordinates:?} max-channel-delta={color_max_delta}"
+        );
+
+        let mut blit_mismatch_coordinates = Vec::new();
+        let mut blit_max_delta = 0u8;
+        for (index, (cpp, rust)) in cpp_blit
+            .pixels()
+            .chunks_exact(4)
+            .zip(rust_pixels.chunks_exact(4))
+            .enumerate()
+        {
+            if cpp == rust {
+                continue;
+            }
+            blit_mismatch_coordinates.push((index as u32 % size, index as u32 / size));
+            for (&cpp, &rust) in cpp.iter().zip(rust) {
+                blit_max_delta = blit_max_delta.max(cpp.abs_diff(rust));
+            }
+        }
+        assert_eq!(
+            blit_mismatch_coordinates, color_mismatch_coordinates,
+            "resolved mismatches must be exactly the deswizzled color-plane mismatches"
+        );
+        assert!(
+            blit_mismatch_coordinates.len() <= 3 && blit_max_delta <= 15,
+            "resolved output exceeded the reviewed ColorBurn amplification bound: coordinates={blit_mismatch_coordinates:?} max-channel-delta={blit_max_delta}"
+        );
     }
 
     #[test]

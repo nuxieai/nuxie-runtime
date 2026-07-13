@@ -95,7 +95,7 @@ index 4fcf8c0e..5f43743e 100644
  #include <webgpu/webgpu_cpp.h>
  
  #ifdef RIVE_WAGYU
-@@ -105,6 +106,55 @@ public:
+@@ -105,6 +106,63 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
@@ -140,6 +140,14 @@ index 4fcf8c0e..5f43743e 100644
 +        return m_atomicPLSCoverageBuffer;
 +    }
 +    uint64_t atomicPLSCoverageBufferSizeForOracle() const
++    {
++        return m_atomicPLSBackingBufferSize;
++    }
++    wgpu::Buffer atomicPLSColorBufferForOracle() const
++    {
++        return m_atomicPLSColorBuffer;
++    }
++    uint64_t atomicPLSColorBufferSizeForOracle() const
 +    {
 +        return m_atomicPLSBackingBufferSize;
 +    }
@@ -356,7 +364,15 @@ index ff41da4c..1e81784d 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
-@@ -2903,7 +2907,8 @@ wgpu::Buffer RenderContextWebGPUImpl::atomicPLSCoverageBuffer()
+@@ -2883,6 +2883,7 @@ wgpu::Buffer RenderContextWebGPUImpl::atomicPLSColorBuffer()
+     if (m_atomicPLSColorBuffer == nullptr)
+     {
+         auto desc = plsBackingBufferDesc(m_atomicPLSBackingBufferSize);
++        desc.usage |= wgpu::BufferUsage::CopySrc;
+         m_atomicPLSColorBuffer = m_device.CreateBuffer(&desc);
+     }
+     return m_atomicPLSColorBuffer;
+@@ -2903,7 +2904,8 @@ wgpu::Buffer RenderContextWebGPUImpl::atomicPLSCoverageBuffer()
      if (m_atomicPLSCoverageBuffer == nullptr)
      {
          auto desc = plsBackingBufferDesc(m_atomicPLSBackingBufferSize);

@@ -20,6 +20,9 @@ nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPE
 nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"
 advanced_blend_blit_output="${RIVE_ATLAS_ADVANCED_BLEND_BLIT_OUTPUT:-$script_dir/out/atlas-advanced-blend-blit.rgba}"
 atomic_advanced_blend_output="${RIVE_ATOMIC_ADVANCED_BLEND_OUTPUT:-$script_dir/out/atomic-advanced-blend.rgba}"
+atomic_colorburn_pair_output="${RIVE_ATOMIC_COLORBURN_PAIR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.rgba}"
+atomic_colorburn_pair_color_output="${RIVE_ATOMIC_COLORBURN_PAIR_COLOR_OUTPUT:-$script_dir/out/atomic-colorburn-pair.color}"
+atomic_colorburn_pair_coverage_output="${RIVE_ATOMIC_COLORBURN_PAIR_COVERAGE_OUTPUT:-$script_dir/out/atomic-colorburn-pair.coverage}"
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
@@ -44,6 +47,8 @@ polyshark_generator="$script_dir/generate_polyshark_stream_path.py"
 polyshark_stream="$script_dir/../../fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
 rawtext_generator="$script_dir/generate_rawtext_stream_path.py"
 rawtext_stream="$script_dir/../../fixtures/renderer/streams/gm/rawtext.rive-stream"
+colorburn_pair_generator="$script_dir/generate_interleaved_colorburn_pair_path.py"
+colorburn_pair_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -125,6 +130,7 @@ preflight() {
     python3 "$script_dir/format_test.py"
     python3 "$polyshark_generator" --stream "$polyshark_stream" --check
     python3 "$rawtext_generator" --stream "$rawtext_stream" --check
+    python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" --check
     for command in cmp git make mktemp premake5 python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
@@ -299,12 +305,17 @@ mkdir -p "$injected_dir" \
     "$(dirname "$direct_rawtext_blit_output")" \
     "$(dirname "$direct_rawtext_spans_output")" \
     "$(dirname "$advanced_blend_blit_output")" \
-    "$(dirname "$atomic_advanced_blend_output")"
+    "$(dirname "$atomic_advanced_blend_output")" \
+    "$(dirname "$atomic_colorburn_pair_output")" \
+    "$(dirname "$atomic_colorburn_pair_color_output")" \
+    "$(dirname "$atomic_colorburn_pair_coverage_output")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
 python3 "$rawtext_generator" --stream "$rawtext_stream" \
     --output "$injected_dir/generated_rawtext_path.inc"
+python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" \
+    --output "$injected_dir/generated_interleaved_colorburn_pair_path.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -329,7 +340,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -339,6 +350,7 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_colorburn_pair_output" atomic-colorburn-pair "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
@@ -353,6 +365,8 @@ python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs
 python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-cusp-coverage "$direct_cusp_coverage_output"
+python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair "$atomic_colorburn_pair_color_output"
+python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair-coverage "$atomic_colorburn_pair_coverage_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"
 python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"
@@ -410,6 +424,21 @@ fi
 atomic_advanced_blend_bytes="$(wc -c < "$atomic_advanced_blend_output" | tr -d ' ')"
 if [[ "$atomic_advanced_blend_bytes" != "16404" ]]; then
     echo "atomic advanced-blend output must be exactly 16404 bytes, got $atomic_advanced_blend_bytes: $atomic_advanced_blend_output" >&2
+    exit 1
+fi
+atomic_colorburn_pair_bytes="$(wc -c < "$atomic_colorburn_pair_output" | tr -d ' ')"
+if [[ "$atomic_colorburn_pair_bytes" != "4194324" ]]; then
+    echo "atomic colorburn pair output must be exactly 4194324 bytes, got $atomic_colorburn_pair_bytes: $atomic_colorburn_pair_output" >&2
+    exit 1
+fi
+atomic_colorburn_pair_color_bytes="$(wc -c < "$atomic_colorburn_pair_color_output" | tr -d ' ')"
+if [[ "$atomic_colorburn_pair_color_bytes" != "4194328" ]]; then
+    echo "atomic colorburn pair color storage must be exactly 4194328 bytes, got $atomic_colorburn_pair_color_bytes: $atomic_colorburn_pair_color_output" >&2
+    exit 1
+fi
+atomic_colorburn_pair_coverage_bytes="$(wc -c < "$atomic_colorburn_pair_coverage_output" | tr -d ' ')"
+if [[ "$atomic_colorburn_pair_coverage_bytes" != "4194328" ]]; then
+    echo "atomic colorburn pair coverage must be exactly 4194328 bytes, got $atomic_colorburn_pair_coverage_bytes: $atomic_colorburn_pair_coverage_output" >&2
     exit 1
 fi
 fill_output_bytes="$(wc -c < "$fill_output" | tr -d ' ')"
@@ -503,6 +532,9 @@ echo "atlas nested even-odd path-clipped blit: $nested_evenodd_path_clipped_blit
 echo "atlas nested clockwise path-clipped blit: $nested_clockwise_path_clipped_blit_output"
 echo "atlas advanced-blend blit: $advanced_blend_blit_output"
 echo "atomic advanced-blend output: $atomic_advanced_blend_output"
+echo "atomic colorburn-pair output: $atomic_colorburn_pair_output"
+echo "atomic colorburn-pair color storage: $atomic_colorburn_pair_color_output"
+echo "atomic colorburn-pair coverage storage: $atomic_colorburn_pair_coverage_output"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"

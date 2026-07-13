@@ -63,9 +63,14 @@ pub(crate) struct AtomicDraw<'a> {
     pub image_mesh: Option<ImageMeshBuffers<'a>>,
 }
 
-pub(crate) struct AtomicCoverageReadback {
+pub(crate) struct AtomicPlaneReadback {
     pub buffer: wgpu::Buffer,
     pub word_count: usize,
+}
+
+pub(crate) struct AtomicPlaneReadbacks {
+    pub coverage: Option<AtomicPlaneReadback>,
+    pub color: Option<AtomicPlaneReadback>,
 }
 
 #[derive(Clone, Copy)]
@@ -330,14 +335,14 @@ impl AtomicPipeline {
         );
         let advanced_feather_path = make_advanced_path(
             "nuxie-atomic-advanced-feather-path-pipeline",
-            Some(wgpu::Face::Back),
+            Some(wgpu::Face::Front),
             1.0,
             0.0,
             1.0,
         );
         let advanced_feather_hsl_path = make_advanced_path(
             "nuxie-atomic-advanced-feather-hsl-path-pipeline",
-            Some(wgpu::Face::Back),
+            Some(wgpu::Face::Front),
             1.0,
             1.0,
             1.0,
@@ -914,8 +919,8 @@ impl AtomicPipeline {
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         pixel_count: usize,
-        capture_coverage: bool,
-    ) -> Option<AtomicCoverageReadback> {
+        capture_planes: bool,
+    ) -> AtomicPlaneReadbacks {
         assert!(!draws.is_empty());
         // C++ RenderContextWebGPUImpl::AtomicDrawRenderPass switches the whole
         // flush to storage-buffer color when fixedFunctionColorOutput is false.
@@ -970,13 +975,13 @@ impl AtomicPipeline {
             "nuxie-atomic-coverage",
             &vec![0u32; pixel_count],
             wgpu::BufferUsages::STORAGE
-                | if capture_coverage {
+                | if capture_planes {
                     wgpu::BufferUsages::COPY_SRC
                 } else {
                     wgpu::BufferUsages::empty()
                 },
         );
-        let coverage_readback = capture_coverage.then(|| AtomicCoverageReadback {
+        let coverage_readback = capture_planes.then(|| AtomicPlaneReadback {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atomic-coverage-readback"),
                 size: coverage.size(),
@@ -994,8 +999,22 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-colors",
             &color_words,
-            wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::STORAGE
+                | if capture_planes {
+                    wgpu::BufferUsages::COPY_SRC
+                } else {
+                    wgpu::BufferUsages::empty()
+                },
         );
+        let color_readback = capture_planes.then(|| AtomicPlaneReadback {
+            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-atomic-color-readback"),
+                size: colors.size(),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }),
+            word_count: color_words.len(),
+        });
         let triangle_buffers = draws
             .iter()
             .map(|draw| {
@@ -1350,6 +1369,9 @@ impl AtomicPipeline {
         if let Some(readback) = &coverage_readback {
             encoder.copy_buffer_to_buffer(&coverage, 0, &readback.buffer, 0, coverage.size());
         }
+        if let Some(readback) = &color_readback {
+            encoder.copy_buffer_to_buffer(&colors, 0, &readback.buffer, 0, colors.size());
+        }
         {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
@@ -1369,7 +1391,10 @@ impl AtomicPipeline {
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
         }
-        coverage_readback
+        AtomicPlaneReadbacks {
+            coverage: coverage_readback,
+            color: color_readback,
+        }
     }
 }
 

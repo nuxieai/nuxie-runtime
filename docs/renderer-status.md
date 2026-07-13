@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=333, diverges=0, gated=1,135, total=1,468.
+- Rust wgpu: exact=360, diverges=0, gated=1,108, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -180,7 +180,18 @@ Run `make renderer-golden`.
   `riv-image_binding_with_listener-frame-0-clockwise-atomic`,
   `riv-image_fit_alignment{,_2,_3}-frame-0-clockwise-atomic`,
   `riv-image_scripting_property_value-frame-0-clockwise-atomic`, and
-  `riv-in_band_asset-frame-0-clockwise-atomic`.
+  `riv-in_band_asset-frame-0-clockwise-atomic`, plus
+  `riv-interpolation_zero_duration-frame-0-clockwise-atomic`,
+  `riv-joel_v3-frame-0-clockwise-atomic`,
+  `riv-joystick_flag_test-frame-{0..4}-clockwise-atomic`,
+  `riv-joystick_nested_remap-frame-{0..4}-clockwise-atomic`, and
+  `riv-keyboard_event_to_script-frame-{0..4}-clockwise-atomic`, plus
+  `riv-library_data_enum_test-frame-{0..4}-clockwise-atomic`,
+  `riv-library_export_animation_test-frame-0-clockwise-atomic`,
+  `riv-library_export_state_machine_test-frame-0-clockwise-atomic`,
+  `riv-library_export_test-frame-0-clockwise-atomic`,
+  `riv-library_view_model_test-frame-0-clockwise-atomic`, and
+  `riv-library_vmtest_1_host-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -309,11 +320,26 @@ Run `make renderer-golden`.
     `image_scripting_property_value`, and `in_band_asset`. Capture missing
     pinned Metal references and apply the unchanged contract and diagnostic
     rules.
-22. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+22. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `interpolate_to_end`, `interpolation_zero_duration`, `joel_v3`,
     `joystick_flag_test` frames 0-4, and `joystick_nested_remap` frames 0-1.
     Capture missing pinned Metal references and apply the unchanged contract
     and diagnostic rules.
+23. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `joystick_nested_remap` frames 2-4,
+    `keyboard_event_to_script` frames 0-4, `keyboard_listener`, and `library`.
+    Capture missing pinned Metal references and apply the unchanged contract
+    and diagnostic rules.
+24. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `library_data_enum_test` frames 0-4,
+    `library_export_animation_test`, `library_export_state_machine_test`,
+    `library_export_test`, `library_view_model_test`, and
+    `library_vmtest_1_host`. Capture missing pinned Metal references and apply
+    the unchanged contract and diagnostic rules.
+25. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `library_with_image`, `library_with_text_and_image`, and
+    `light_switch` frames 0-7. Capture missing pinned Metal references and
+    apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2117,3 +2143,15 @@ Run `make renderer-golden`.
   unchanged `2/32` contract promotes all ten and advances the renderer ratchet
   to exact=333/diverges=0/gated=1,135 without a new diagnostic or tolerance
   change.
+- 2026-07-13: Probed the twenty-first through twenty-third ten-entry
+  clockwise-atomic `.riv` batches as one parallel wave. Three disjoint Terra
+  workers captured and probed all 30 entries while main retained manifest and
+  gate ownership. Twenty-seven pass the unchanged `2/32` contract.
+  `interpolate_to_end` remains gated at 97/max 33, `keyboard_listener` at
+  178/max 58, and `library` at 119/max 59. Their dominant residuals have exact
+  alpha and are confined to fractional text/path boundaries; `library` also
+  has seven delta-3 image pixels that would pass the allowance independently.
+  Main verified the alpha oracles, three read-only Terra scouts attributed the
+  failures, and Sol approved `metal-webgpu-subpixel-edge-coverage` for all
+  three without changing references or tolerances. The combined wave advances
+  the ratchet to exact=360/diverges=0/gated=1,108.

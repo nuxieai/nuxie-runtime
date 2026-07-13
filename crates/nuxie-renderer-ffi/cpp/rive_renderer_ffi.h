@@ -13,6 +13,9 @@ typedef struct rive_ffi_render_path rive_ffi_render_path;
 typedef struct rive_ffi_render_paint rive_ffi_render_paint;
 typedef struct rive_ffi_render_shader rive_ffi_render_shader;
 typedef struct rive_ffi_render_image rive_ffi_render_image;
+#ifdef RIVE_FFI_DECODE_ORACLE
+typedef struct rive_ffi_decoded_bitmap rive_ffi_decoded_bitmap;
+#endif
 typedef struct rive_ffi_render_buffer rive_ffi_render_buffer;
 
 typedef struct rive_ffi_vec2d
@@ -114,6 +117,17 @@ rive_ffi_render_image* rive_ffi_decode_image(rive_ffi_context*,
 void rive_ffi_render_image_delete(rive_ffi_render_image*);
 uint32_t rive_ffi_render_image_width(const rive_ffi_render_image*);
 uint32_t rive_ffi_render_image_height(const rive_ffi_render_image*);
+
+#ifdef RIVE_FFI_DECODE_ORACLE
+rive_ffi_decoded_bitmap* rive_ffi_decode_bitmap_rgba(const uint8_t* bytes,
+                                                     size_t len);
+void rive_ffi_decoded_bitmap_delete(rive_ffi_decoded_bitmap*);
+uint32_t rive_ffi_decoded_bitmap_width(const rive_ffi_decoded_bitmap*);
+uint32_t rive_ffi_decoded_bitmap_height(const rive_ffi_decoded_bitmap*);
+size_t rive_ffi_decoded_bitmap_copy_bytes(const rive_ffi_decoded_bitmap*,
+                                          uint8_t* out,
+                                          size_t len);
+#endif
 
 rive_ffi_render_buffer* rive_ffi_make_render_buffer(rive_ffi_context*,
                                                     uint8_t buffer_type,

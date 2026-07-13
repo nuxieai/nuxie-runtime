@@ -754,7 +754,10 @@ dependencies = [
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-render-api",
+ "nuxie-render-stream",
+ "nuxie-renderer",
  "nuxie-runtime",
+ "sha2",
 ]
 
 [[package]]

@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
+[features]
+default = []
+decode-oracle = []
+
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
 jpeg-decoder = { version = "0.3", default-features = false }

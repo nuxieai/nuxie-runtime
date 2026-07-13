@@ -526,6 +526,68 @@ extern "C" uint32_t rive_ffi_render_image_height(
                                                        : image->image->height();
 }
 
+#ifdef RIVE_FFI_DECODE_ORACLE
+extern "C" rive_ffi_decoded_bitmap* rive_ffi_decode_bitmap_rgba(
+    const uint8_t* bytes,
+    size_t len)
+{
+    if (bytes == nullptr)
+    {
+        return nullptr;
+    }
+    auto bitmap = Bitmap::decode(bytes, len);
+    if (bitmap == nullptr)
+    {
+        return nullptr;
+    }
+    if (bitmap->pixelFormat() != Bitmap::PixelFormat::RGBAPremul)
+    {
+        bitmap->pixelFormat(Bitmap::PixelFormat::RGBAPremul);
+    }
+    return new rive_ffi_decoded_bitmap{std::move(bitmap)};
+}
+
+extern "C" void rive_ffi_decoded_bitmap_delete(
+    rive_ffi_decoded_bitmap* bitmap)
+{
+    delete bitmap;
+}
+
+extern "C" uint32_t rive_ffi_decoded_bitmap_width(
+    const rive_ffi_decoded_bitmap* bitmap)
+{
+    return bitmap == nullptr || bitmap->bitmap == nullptr
+               ? 0
+               : bitmap->bitmap->width();
+}
+
+extern "C" uint32_t rive_ffi_decoded_bitmap_height(
+    const rive_ffi_decoded_bitmap* bitmap)
+{
+    return bitmap == nullptr || bitmap->bitmap == nullptr
+               ? 0
+               : bitmap->bitmap->height();
+}
+
+extern "C" size_t rive_ffi_decoded_bitmap_copy_bytes(
+    const rive_ffi_decoded_bitmap* bitmap,
+    uint8_t* out,
+    size_t len)
+{
+    if (bitmap == nullptr || bitmap->bitmap == nullptr || out == nullptr)
+    {
+        return 0;
+    }
+    const size_t byteCount = bitmap->bitmap->numBytes();
+    if (len < byteCount)
+    {
+        return byteCount;
+    }
+    std::copy_n(bitmap->bitmap->bytes(), byteCount, out);
+    return byteCount;
+}
+#endif
+
 extern "C" rive_ffi_render_buffer* rive_ffi_make_render_buffer(
     rive_ffi_context* ctx,
     uint8_t bufferType,

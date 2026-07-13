@@ -106,16 +106,31 @@ normalizing physical RGBA8-versus-packed-u32 representations.
 
 ### R3-ST-04: Decoded-image color ingress
 
-**Verified decoder-path difference; decoded-byte effect open.** Rust JPEG decoding
-uploads the decoder's RGB values directly, while Apple C++ decodes through
-CoreGraphics into `DeviceRGB`. The reachable
-`riv-clipping_and_draw_order-frame-0-clockwise-atomic` entry currently accepts
-9,494 pixels at max delta 18 under a 10,000-pixel allowance. PNG ICC conversion
-also targets Rust sRGB versus C++ `DeviceRGB`, but no mismatch is yet proven.
+**Closed: production decode buffers measured.** The native FFI oracle calls the
+same C++ `Bitmap::decode` and `RGBAPremul` conversion as
+`RenderContext::decodeImage`, then compares that buffer directly with Rust's
+pre-upload decode result. `make renderer-decoder-oracle` reproduces the check.
 
-Required disposition: capture premultiplied RGBA immediately after C++ and
-Rust decode for the reachable JPEG and ICC PNG fixtures. Record exact byte
-deltas before deciding whether the existing frame contract is justified.
+On macOS 26.4.1 with runtime `7c778d13`, the reachable 278x278 JPEG
+(`62e087df734fa3a0f57524db98a4d5aa30a8628ede9a7d59ed67981cc71823de`)
+differs at 35,652 pixels and 78,669 channel bytes, with max delta 37 and exact
+alpha; 12,509 source pixels exceed the corpus channel threshold of 2. This
+independently confirms a decoder-level difference on the same image, supporting
+decoder attribution for the rendered image-interior delta. It does not
+numerically derive the rendered 9,494-pixel/max-18 result; the existing
+10,000-pixel frame cap remains its separately measured empirical contract and
+was not widened.
+
+The 319x320 ICC PNG
+(`a72cd2314ae2cb861da62dfb9782e323337fc600e44200cd16bd150d7c15f2cb`)
+differs at 4,950 pixels and 5,013 channel bytes, with max delta 2 and exact
+alpha. Color ingress therefore already fits the corpus channel threshold; any
+remaining greater-than-2 rendered samples arise after decode rather than from
+an unimplemented color transform. The executable contract pins both encoded
+fixture hashes, formats, dimensions, ICC presence, the runtime revision, clean
+decoder sources, and a non-stale decoder archive. It permits bounded Apple
+decoder drift while requiring exact alpha, JPEG max delta at most 40, and ICC
+PNG max delta at most 2.
 
 ### R3-ST-05: Non-finite replay input
 

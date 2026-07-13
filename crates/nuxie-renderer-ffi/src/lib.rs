@@ -11,6 +11,10 @@ mod native;
 #[cfg(feature = "native")]
 pub use native::{FfiFactory, FfiFrame, FfiRenderMode, NativeRendererError};
 
+#[cfg(feature = "decode-oracle")]
+#[doc(hidden)]
+pub use native::{DecodedBitmapRgba, decode_bitmap_rgba};
+
 /// Describes the state of the native bridge in default workspace builds.
 pub const NATIVE_FEATURE_STATUS: &str =
     "enable the `native` feature and build the C++ PLS renderer to use nuxie-renderer-ffi";

@@ -3842,6 +3842,24 @@ fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     }
 }
 
+#[cfg(feature = "decode-oracle")]
+#[doc(hidden)]
+pub struct DecodedImageRgba {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u8>,
+}
+
+#[cfg(feature = "decode-oracle")]
+#[doc(hidden)]
+pub fn decode_image_rgba_for_oracle(data: &[u8]) -> Option<DecodedImageRgba> {
+    decode_image_rgba(data).map(|(width, height, pixels)| DecodedImageRgba {
+        width,
+        height,
+        pixels,
+    })
+}
+
 fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = png::Decoder::new(Cursor::new(data));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);

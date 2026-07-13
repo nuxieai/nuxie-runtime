@@ -181,6 +181,9 @@ fn main() {
             );
         }
     }
+    if env::var_os("CARGO_FEATURE_DECODE_ORACLE").is_some() {
+        build.define("RIVE_FFI_DECODE_ORACLE", None);
+    }
 
     build.compile("nuxie_renderer_ffi");
 

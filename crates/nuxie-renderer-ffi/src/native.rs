@@ -39,6 +39,53 @@ pub struct FfiFactory {
     height: u32,
 }
 
+#[cfg(feature = "decode-oracle")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedBitmapRgba {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u8>,
+}
+
+#[cfg(feature = "decode-oracle")]
+pub fn decode_bitmap_rgba(data: &[u8]) -> Option<DecodedBitmapRgba> {
+    let handle = unsafe { ffi::rive_ffi_decode_bitmap_rgba(data.as_ptr(), data.len()) };
+    let handle = NonNull::new(handle)?;
+    let bitmap = DecodedBitmapHandle(handle);
+    let width = unsafe { ffi::rive_ffi_decoded_bitmap_width(bitmap.as_ptr()) };
+    let height = unsafe { ffi::rive_ffi_decoded_bitmap_height(bitmap.as_ptr()) };
+    let len = usize::try_from(width)
+        .ok()?
+        .checked_mul(usize::try_from(height).ok()?)?
+        .checked_mul(4)?;
+    let mut pixels = vec![0; len];
+    let actual = unsafe {
+        ffi::rive_ffi_decoded_bitmap_copy_bytes(bitmap.as_ptr(), pixels.as_mut_ptr(), pixels.len())
+    };
+    (actual == len).then_some(DecodedBitmapRgba {
+        width,
+        height,
+        pixels,
+    })
+}
+
+#[cfg(feature = "decode-oracle")]
+struct DecodedBitmapHandle(NonNull<ffi::DecodedBitmap>);
+
+#[cfg(feature = "decode-oracle")]
+impl DecodedBitmapHandle {
+    fn as_ptr(&self) -> *mut ffi::DecodedBitmap {
+        self.0.as_ptr()
+    }
+}
+
+#[cfg(feature = "decode-oracle")]
+impl Drop for DecodedBitmapHandle {
+    fn drop(&mut self) {
+        unsafe { ffi::rive_ffi_decoded_bitmap_delete(self.as_ptr()) };
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u32)]
 pub enum FfiRenderMode {
@@ -676,6 +723,8 @@ mod ffi {
     pub type RenderPaint = c_void;
     pub type RenderShader = c_void;
     pub type RenderImage = c_void;
+    #[cfg(feature = "decode-oracle")]
+    pub type DecodedBitmap = c_void;
     pub type RenderBuffer = c_void;
 
     unsafe extern "C" {
@@ -782,6 +831,20 @@ mod ffi {
         pub fn rive_ffi_render_image_delete(image: *mut RenderImage);
         pub fn rive_ffi_render_image_width(image: *mut RenderImage) -> u32;
         pub fn rive_ffi_render_image_height(image: *mut RenderImage) -> u32;
+        #[cfg(feature = "decode-oracle")]
+        pub fn rive_ffi_decode_bitmap_rgba(bytes: *const u8, len: usize) -> *mut DecodedBitmap;
+        #[cfg(feature = "decode-oracle")]
+        pub fn rive_ffi_decoded_bitmap_delete(bitmap: *mut DecodedBitmap);
+        #[cfg(feature = "decode-oracle")]
+        pub fn rive_ffi_decoded_bitmap_width(bitmap: *mut DecodedBitmap) -> u32;
+        #[cfg(feature = "decode-oracle")]
+        pub fn rive_ffi_decoded_bitmap_height(bitmap: *mut DecodedBitmap) -> u32;
+        #[cfg(feature = "decode-oracle")]
+        pub fn rive_ffi_decoded_bitmap_copy_bytes(
+            bitmap: *mut DecodedBitmap,
+            out: *mut u8,
+            len: usize,
+        ) -> usize;
 
         pub fn rive_ffi_make_render_buffer(
             context: *mut Context,

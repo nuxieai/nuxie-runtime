@@ -126,14 +126,7 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. [ ] Close the remaining decoded-image finding in
-   `docs/renderer-gpu-semantic-trap-audit.md`: compare decoded premultiplied
-   RGBA bytes for the reachable JPEG and ICC PNG fixtures. Shader provenance,
-   ABI coverage, the sampled nested clip-plane oracle, the wider
-   semantic-surface audit, and the two named
-   `metal-webgpu-atomic-intermediate-precision` boundaries are complete. Do
-   not promote entries, replace existing references, or change contracts.
-2. [ ] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
+1. [ ] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
    NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
    stacks, and hostile gradient stops. Rust must not panic, hang, or lose the
    device; behavioral deltas become named findings and a smoke gate enters CI.
@@ -1749,3 +1742,13 @@ Run `make renderer-golden`.
   routing test that pins `OutermostClip`, `NestedClip`, and `ClippedContent`.
   The renderer ratchet advances to exact=155/diverges=0/gated=1,313; decoded
   image bytes are the only remaining semantic-trap oracle before fuzz replay.
+- 2026-07-13: Closed decoded-image color ingress with a native raw-buffer
+  oracle over the production C++ and Rust decode paths. The reachable JPEG
+  differs at 35,652 pixels/78,669 channels, with 12,509 source pixels over
+  delta 2, max delta 37, and exact alpha, confirming a decoder-level difference
+  on the same rendered image. The ICC PNG differs at 4,950 pixels/5,013
+  channels, max delta 2, exact alpha, proving color conversion is already
+  within the corpus threshold.
+  `make renderer-decoder-oracle` pins fixture and runtime provenance plus the
+  bounded contracts; no corpus tolerance or reference changed. Dual-renderer
+  fuzz replay is now the only remaining R3 entry gate.

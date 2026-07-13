@@ -3,6 +3,9 @@
 #include "rive_renderer_ffi.h"
 
 #include "rive/renderer.hpp"
+#ifdef RIVE_FFI_DECODE_ORACLE
+#include "rive/decoders/bitmap_decoder.hpp"
+#endif
 #include "rive/renderer/render_context.hpp"
 #include "rive/renderer/render_target.hpp"
 #include "rive/span.hpp"
@@ -52,6 +55,13 @@ struct rive_ffi_render_image
 {
     rive::rcp<rive::RenderImage> image;
 };
+
+#ifdef RIVE_FFI_DECODE_ORACLE
+struct rive_ffi_decoded_bitmap
+{
+    std::unique_ptr<Bitmap> bitmap;
+};
+#endif
 
 struct rive_ffi_render_buffer
 {

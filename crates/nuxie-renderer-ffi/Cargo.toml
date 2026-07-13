@@ -8,6 +8,12 @@ repository.workspace = true
 [features]
 default = []
 native = []
+decode-oracle = ["native"]
+
+[[test]]
+name = "decode_oracle"
+path = "tests/decode_oracle.rs"
+required-features = ["decode-oracle"]
 
 [[example]]
 name = "ffi_null_draw"
@@ -27,6 +33,9 @@ anyhow = "1"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-runtime = { path = "../nuxie-runtime" }
+nuxie-renderer = { path = "../nuxie-renderer", features = ["decode-oracle"] }
+nuxie-render-stream = { path = "../nuxie-render-stream" }
+sha2 = "0.10"
 
 [build-dependencies]
 cc = "1"

@@ -118,12 +118,26 @@ Run `make renderer-golden`.
 - [x] R1: wgpu foundation and first light. Device/queue/offscreen readback,
   retained render-api objects, state stack, generated WGSL validation, 4x MSAA
   bootstrap coverage, one GM stream, and one real `.riv` stream are exact.
-- [ ] R2: Algorithm core.
+- [x] R2: Algorithm core.
 - [ ] R3: Corpus convergence.
 - [ ] R4: Performance parity.
 - [ ] R5: Native fast paths and extensions; demand-gated after R4.
 
 ## Next
+
+1. [ ] Complete R3's GPU semantic-trap audit across the GLSL/SPIR-V to
+   Dawn/Tint and WGSL/wgpu/naga paths: uniformity, texture/sampler semantics,
+   float precision and denormals, matrix packing, integer wrap, MSAA resolve,
+   and coordinate conventions. Carry `dstreadshuffle` and
+   `interleavedfeather` as named
+   `metal-webgpu-atomic-intermediate-precision` investigations without
+   promotion, reference replacement, or contract changes.
+2. [ ] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
+   NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
+   stacks, and hostile gradient stops. Rust must not panic, hang, or lose the
+   device; behavioral deltas become named findings and a smoke gate enters CI.
+
+## R2 Completion Record
 
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
    partitioning, direct/atlas threshold routing, atlas-stroke tessellation
@@ -334,6 +348,17 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Complete R2 after the exit-contract audit clarified the
+  algorithm milestone boundary. All 108 upstream clockwise-atomic GMs are
+  accounted for: 106 pass their committed contracts and the remaining two,
+  `dstreadshuffle` and `interleavedfeather`, are independently reviewed
+  `metal-webgpu-atomic-intermediate-precision` gates backed by SHA- and
+  provenance-bound C++ Dawn WebGPU-on-Metal evidence. Zero `algorithm-core`
+  gates remain. Both native references and tolerances stay unchanged. The
+  invented-wgpu adversarial review, workspace suite, renderer ratchet
+  (154/0/1,313), full V2 floor (263 files/584 segments), and scripted V2 floor
+  (27/35) are green with no `.riv` regression. R3 starts with the GPU
+  semantic-trap audit and renderer fuzz-replay harness.
 - 2026-07-13: Reclassify `dstreadshuffle` from `algorithm-core` to
   `metal-webgpu-atomic-intermediate-precision` after pinned untouched and
   SrcOver-control C++ Dawn WebGPU-on-Metal lanes. The strict compiler validates
@@ -1689,3 +1714,8 @@ Run `make renderer-golden`.
   delta 2/max 4. Sol approved reclassifying the corpus diagnostic to the named
   shader-stack precision boundary while preserving gated status, native
   reference, tolerance, and renderer ratchet.
+- 2026-07-13: Closed R2 at 106/108 passing clockwise-atomic upstream GMs plus
+  two reviewed backend/compiler precision gates and zero remaining
+  `algorithm-core` gates. No corpus tolerance or native reference changed.
+  R3's semantic-trap audit and dual-renderer fuzz replay are now the active
+  entry work.

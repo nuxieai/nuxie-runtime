@@ -217,8 +217,11 @@ accepted with rationale, same as the M8 audit protocol.
 
 ### Exit Criteria
 
-The GM stream corpus passes within tolerance in clockwise-atomic mode on the
-primary backend; no `.riv` regression versus #R-1.
+All clockwise-atomic upstream GM entries without an independently reviewed
+backend/compiler precision boundary pass their committed tolerances on the
+primary backend; no `algorithm-core` gates remain. Any retained boundary keeps
+its native reference and tolerance unchanged and has a named diagnostic. No
+`.riv` regression versus #R-1.
 
 ## #R-3: Corpus Convergence
 

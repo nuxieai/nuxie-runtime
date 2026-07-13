@@ -1239,19 +1239,25 @@ impl WgpuFrame {
     }
 
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false).map(|(pixels, _)| pixels)
+        self.finish_internal(false, true).map(|(pixels, _)| pixels)
     }
 
     #[cfg(test)]
     fn finish_with_clockwise_atomic_coverage(
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
-        self.finish_internal(true)
+        self.finish_internal(true, true)
+    }
+
+    #[cfg(test)]
+    fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
+        self.finish_internal(false, false).map(|(pixels, _)| pixels)
     }
 
     fn finish_internal(
         self,
         capture_clockwise_atomic_coverage: bool,
+        schedule_msaa_draws: bool,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
@@ -2905,7 +2911,16 @@ impl WgpuFrame {
                 }
                 Ok(())
             };
-        if self.draws.is_empty() || self.mode == RenderMode::Msaa {
+        if self.draws.is_empty() {
+            encode_fallback_run(&self.draws, true, &mut encoder)?;
+        } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
+            let scheduled_draws = disjoint_msaa_draw_groups(&self.draws, self.width, self.height)
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+            debug_assert_eq!(scheduled_draws.len(), self.draws.len());
+            encode_fallback_run(&scheduled_draws, true, &mut encoder)?;
+        } else if self.mode == RenderMode::Msaa {
             encode_fallback_run(&self.draws, true, &mut encoder)?;
         } else {
             let mut start = 0;
@@ -3953,6 +3968,86 @@ fn blend_mode_uses_hsl(mode: BlendMode) -> bool {
     )
 }
 
+fn msaa_draw_layer_count(draw: &SolidDraw, all_subpasses_in_same_group: bool) -> i16 {
+    // C++ reserves max(prepassCount, subpassCount) board layers, except when
+    // destination-copy blending requires every MSAA subpass to share a group.
+    if all_subpasses_in_same_group
+        || draw.paint.feather != 0.0
+        || draw.paint.style == RenderPaintStyle::Stroke
+        || matches!(
+            draw.role,
+            DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0
+        )
+        || matches!(draw.role, DrawRole::ClipReset { .. })
+    {
+        1
+    } else if draw.path.fill_rule == FillRule::EvenOdd {
+        2
+    } else {
+        3
+    }
+}
+
+fn disjoint_msaa_draw_groups(
+    draws: &[SolidDraw],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> Vec<Vec<SolidDraw>> {
+    const MAX_SAFE_GROUP: i32 = i16::MAX as i32 - 1;
+
+    // Rust currently has one logical flush per frame, so this is the
+    // conservative equivalent of C++'s combined-draw-contents check.
+    let all_subpasses_in_same_group = draws.iter().any(draw_uses_advanced_blend);
+    let mut board =
+        intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+    board.resize_and_reset(viewport_width, viewport_height);
+    let mut groups = Vec::<Vec<SolidDraw>>::new();
+    let mut group_base = 0usize;
+    let mut board_max_group = 0i32;
+
+    for draw in draws {
+        let layer_count = msaa_draw_layer_count(draw, all_subpasses_in_same_group);
+        if board_max_group > MAX_SAFE_GROUP - i32::from(layer_count) {
+            board.resize_and_reset(viewport_width, viewport_height);
+            group_base = groups.len();
+            board_max_group = 0;
+        }
+        let bounds = match draw.role {
+            DrawRole::ClipReset { bounds, .. } => [
+                bounds[0].floor() as i32,
+                bounds[1].floor() as i32,
+                bounds[2].ceil() as i32,
+                bounds[3].ceil() as i32,
+            ],
+            _ => draw::feather_pixel_bounds(
+                &draw.path.raw_path,
+                draw.state.transform,
+                draw.paint.feather,
+                draw.paint.effective_stroke(),
+            )
+            .unwrap_or([0, 0, viewport_width as i32, viewport_height as i32]),
+        };
+        let rect = intersection_board::Rect::new(
+            bounds[0].saturating_sub(1),
+            bounds[1].saturating_sub(1),
+            bounds[2].saturating_add(1),
+            bounds[3].saturating_add(1),
+        );
+        let local_group = board.add_rectangle(rect, layer_count).max(1) as usize;
+        board_max_group = board_max_group.max(local_group as i32 + i32::from(layer_count) - 1);
+        let group_index = group_base + local_group - 1;
+        if groups.len() <= group_index {
+            groups.resize_with(group_index + 1, Vec::new);
+        }
+        groups[group_index].push(draw.clone());
+    }
+
+    groups
+        .into_iter()
+        .filter(|group| !group.is_empty())
+        .collect()
+}
+
 fn disjoint_atomic_draw_groups(
     draws: &[SolidDraw],
     viewport_width: u32,
@@ -4693,6 +4788,88 @@ mod tests {
 
         assert_eq!(groups.len(), draws.len());
         assert!(groups.iter().all(|group| group.len() == 1));
+    }
+
+    #[test]
+    fn msaa_intersection_board_groups_disjoint_draws_before_overlapping_draws() {
+        let make_draw = |bounds, color| SolidDraw {
+            path: rect_path(bounds, FillRule::NonZero),
+            paint: WgpuPaint {
+                color,
+                ..WgpuPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let draws = [
+            make_draw([10.0, 10.0, 20.0, 20.0], 1),
+            make_draw([15.0, 10.0, 25.0, 20.0], 2),
+            make_draw([40.0, 40.0, 50.0, 50.0], 3),
+        ];
+
+        let groups = disjoint_msaa_draw_groups(&draws, 64, 64);
+        let colors = groups
+            .iter()
+            .map(|group| {
+                group
+                    .iter()
+                    .map(|draw| draw.paint.color)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(colors, vec![vec![1, 3], vec![2]]);
+    }
+
+    #[test]
+    fn msaa_intersection_board_reserves_cpp_subpass_layers() {
+        let mut draw = SolidDraw {
+            path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::NonZero),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+
+        assert_eq!(msaa_draw_layer_count(&draw, false), 3);
+        draw.path.fill_rule = FillRule::EvenOdd;
+        assert_eq!(msaa_draw_layer_count(&draw, false), 2);
+        draw.paint.style = RenderPaintStyle::Stroke;
+        assert_eq!(msaa_draw_layer_count(&draw, false), 1);
+        draw.paint.style = RenderPaintStyle::Fill;
+        draw.role = DrawRole::ClipUpdate {
+            replacement_id: 2,
+            parent_id: 1,
+        };
+        assert_eq!(msaa_draw_layer_count(&draw, false), 1);
+        assert_eq!(msaa_draw_layer_count(&draw, true), 1);
+    }
+
+    #[test]
+    fn msaa_intersection_board_reordering_preserves_overlapping_source_order() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let make_frame = || {
+            let mut frame = factory.begin_frame(0xff00_0000);
+            for (bounds, color) in [
+                ([10.0, 10.0, 20.0, 20.0], 0xffff_0000),
+                ([15.0, 10.0, 25.0, 20.0], 0xff00_ff00),
+                ([40.0, 40.0, 50.0, 50.0], 0xff00_00ff),
+            ] {
+                frame.draw_path(
+                    &rect_path(bounds, FillRule::NonZero),
+                    &WgpuPaint {
+                        color,
+                        ..WgpuPaint::default()
+                    },
+                );
+            }
+            frame
+        };
+
+        let scheduled = make_frame().finish().unwrap();
+        let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
+        assert_eq!(scheduled, serialized);
     }
 
     #[test]

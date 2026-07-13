@@ -45,6 +45,7 @@ constexpr uint32_t kDirectFlowerContourCount = 2;
 constexpr uint32_t kDirectBadSkinFrameWidth = 999;
 constexpr uint32_t kDirectBadSkinFrameHeight = 720;
 constexpr uint32_t kDirectBadSkinContourCount = 1;
+constexpr uint32_t kIntersectionGroupBatchCount = 9;
 #include "generated_polyshark_path.inc"
 
 void fail(const char* message)
@@ -183,6 +184,19 @@ void writeBlit(const char* output,
     {
         fail("could not write atlas-blit output file");
     }
+}
+
+void addIntersectionGroupRect(rive::RenderPath* path,
+                              float left,
+                              float top,
+                              float right,
+                              float bottom)
+{
+    path->moveTo(left, top);
+    path->lineTo(right, top);
+    path->lineTo(right, bottom);
+    path->lineTo(left, bottom);
+    path->close();
 }
 
 uint32_t floatBits(float value);
@@ -665,6 +679,8 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "advanced-blend") == 0;
     const bool atomicAdvancedBlendCase =
         argc > 4 && std::strcmp(argv[4], "atomic-advanced-blend") == 0;
+    const bool intersectionGroupsCase =
+        argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;
     const bool anyAdvancedBlendCase =
         advancedBlendCase || atomicAdvancedBlendCase;
     const bool directTriangulatedCase =
@@ -674,6 +690,7 @@ int main(int argc, char** argv)
     const bool directOutputCase = directCase || atomicAdvancedBlendCase;
     const bool fillCase = circleCase || cuspCase || directCase ||
                           anyAdvancedBlendCase ||
+                          intersectionGroupsCase ||
                           nestedEvenOddPathClippedCase ||
                           nestedClockwisePathClippedCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
@@ -681,10 +698,11 @@ int main(int argc, char** argv)
         (argc > 4 && !fillCase && !clippedCase && !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
-         !advancedBlendCase && !atomicAdvancedBlendCase) ||
+         !advancedBlendCase && !atomicAdvancedBlendCase &&
+         !intersectionGroupsCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -857,6 +875,10 @@ int main(int argc, char** argv)
                       kSquareMax,
                       kCenter);
     }
+    else if (intersectionGroupsCase)
+    {
+        // This mode creates its three authored paths after the paint setup.
+    }
     else
     {
         // Exact fixed_feather_atlas_mask() geometry from Rust's env test.
@@ -865,7 +887,7 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCase)
+    if (!directCase && !intersectionGroupsCase)
     {
         path->close();
     }
@@ -878,8 +900,9 @@ int main(int argc, char** argv)
         paint->join(rive::StrokeJoin::miter);
         paint->cap(rive::StrokeCap::butt);
     }
-    paint->feather(directTriangulatedCase ? 0.f
-                                         : (directCase ? 1.f : kFeather));
+    paint->feather(directTriangulatedCase || intersectionGroupsCase
+                       ? 0.f
+                       : (directCase ? 1.f : kFeather));
     paint->color(anyAdvancedBlendCase ? 0xc0e08040 : 0xffffffff);
     if (anyAdvancedBlendCase)
     {
@@ -999,7 +1022,41 @@ int main(int argc, char** argv)
         innerClip->close();
         renderer.clipPath(innerClip.get());
     }
-    renderer.drawPath(path.get(), paint.get());
+    if (intersectionGroupsCase)
+    {
+        // Draw 0 is opaque MSAA fast-path coverage: prepassCount=3,
+        // subpassCount=0. Draw 1 is its overlapping translucent counterpart.
+        // Draw 2 is disjoint from both and translucent clockwise coverage,
+        // which has prepassCount=0 and subpassCount=3. The distinct fill flags
+        // keep their identities in AtlasMaskOracleFacts::drawBatches.
+        auto draw0Path = context->makeEmptyRenderPath();
+        draw0Path->fillRule(rive::FillRule::clockwise);
+        addIntersectionGroupRect(draw0Path.get(), 8, 8, 28, 28);
+        auto draw0Paint = context->makeRenderPaint();
+        draw0Paint->style(rive::RenderPaintStyle::fill);
+        draw0Paint->color(0xffffffff);
+        renderer.drawPath(draw0Path.get(), draw0Paint.get());
+
+        auto draw1Path = context->makeEmptyRenderPath();
+        draw1Path->fillRule(rive::FillRule::nonZero);
+        addIntersectionGroupRect(draw1Path.get(), 20, 20, 44, 44);
+        auto draw1Paint = context->makeRenderPaint();
+        draw1Paint->style(rive::RenderPaintStyle::fill);
+        draw1Paint->color(0x80ffffff);
+        renderer.drawPath(draw1Path.get(), draw1Paint.get());
+
+        auto draw2Path = context->makeEmptyRenderPath();
+        draw2Path->fillRule(rive::FillRule::clockwise);
+        addIntersectionGroupRect(draw2Path.get(), 48, 8, 60, 20);
+        auto draw2Paint = context->makeRenderPaint();
+        draw2Paint->style(rive::RenderPaintStyle::fill);
+        draw2Paint->color(0x80ffffff);
+        renderer.drawPath(draw2Path.get(), draw2Paint.get());
+    }
+    else
+    {
+        renderer.drawPath(path.get(), paint.get());
+    }
 
     wgpu::CommandEncoder renderEncoder = device.CreateCommandEncoder();
     context->flush({.renderTarget = target.get(),
@@ -1022,7 +1079,79 @@ int main(int argc, char** argv)
                     batch.baseElement,
                     batch.elementCount);
     }
-    if (advancedBlendCase)
+    if (intersectionGroupsCase)
+    {
+        const uint32_t draw0Contents =
+            static_cast<uint32_t>(rive::gpu::DrawContents::opaquePaint) |
+            static_cast<uint32_t>(rive::gpu::DrawContents::clockwiseFill);
+        const uint32_t draw1Contents =
+            static_cast<uint32_t>(rive::gpu::DrawContents::nonZeroFill);
+        const uint32_t draw2Contents =
+            static_cast<uint32_t>(rive::gpu::DrawContents::clockwiseFill);
+        const std::array<uint32_t, kIntersectionGroupBatchCount> expectedTypes = {
+            static_cast<uint32_t>(
+                rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
+            static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+            static_cast<uint32_t>(
+                rive::gpu::DrawType::msaaMidpointFanStencilReset),
+            static_cast<uint32_t>(
+                rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
+            static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+            static_cast<uint32_t>(
+                rive::gpu::DrawType::msaaMidpointFanStencilReset),
+            static_cast<uint32_t>(
+                rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
+            static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+            static_cast<uint32_t>(
+                rive::gpu::DrawType::msaaMidpointFanStencilReset),
+        };
+        const std::array<uint32_t, kIntersectionGroupBatchCount>
+            expectedContents = {
+                draw0Contents,
+                draw0Contents,
+                draw0Contents,
+                draw2Contents,
+                draw2Contents,
+                draw2Contents,
+                draw1Contents,
+                draw1Contents,
+                draw1Contents,
+            };
+        const std::array<uint32_t, kIntersectionGroupBatchCount> expectedBases = {
+            1, 1, 1, 2, 2, 2, 3, 3, 3,
+        };
+        const uint32_t expectedFeatures =
+            static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_DITHER);
+        const uint32_t expectedMiscFlags = static_cast<uint32_t>(
+            rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput);
+        bool scheduleMatches =
+            facts.interlockMode ==
+                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) &&
+            facts.fixedFunctionColorOutput &&
+            facts.drawBatches.size() == kIntersectionGroupBatchCount;
+        for (size_t i = 0; scheduleMatches && i != facts.drawBatches.size(); ++i)
+        {
+            const auto& batch = facts.drawBatches[i];
+            scheduleMatches = batch.drawType == expectedTypes[i] &&
+                              batch.drawContents == expectedContents[i] &&
+                              batch.baseElement == expectedBases[i] &&
+                              batch.elementCount == 1 &&
+                              batch.shaderFeatures == expectedFeatures &&
+                              batch.shaderMiscFlags == expectedMiscFlags;
+        }
+        if (!scheduleMatches)
+        {
+            fail("msaa intersection-group oracle must schedule tagged draws 0 and 2 ahead of overlapping draw 1");
+        }
+        // Draws 1 and 2 are both positive-key three-pass fills. Draw 2's
+        // group-3 type 10 sorts ahead of draw 1's lower type 8 only because
+        // draw-group bits have higher priority and IntersectionBoard starts
+        // draw 1 above all three layers reserved by draw 0.
+        // This mode is schedule-only. It intentionally does not create an
+        // atlas artifact because its paths use native MSAA coverage.
+        return 0;
+    }
+    else if (advancedBlendCase)
     {
         const uint32_t expectedFeatures =
             static_cast<uint32_t>(

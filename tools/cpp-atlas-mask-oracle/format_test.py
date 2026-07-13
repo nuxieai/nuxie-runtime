@@ -511,9 +511,28 @@ class FormatTests(unittest.TestCase):
             'argc > 4 && std::strcmp(argv[4], "nested-clockwise-path-clipped") == 0;',
             'argc > 4 && std::strcmp(argv[4], "advanced-blend") == 0;',
             'argc > 4 && std::strcmp(argv[4], "atomic-advanced-blend") == 0;',
+            'argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;',
             "directGridCase || directFlowerCase || directBadSkinCase;",
             "nestedEvenOddPathClippedCase ||",
             "nestedClockwisePathClippedCase;",
+            "constexpr uint32_t kIntersectionGroupBatchCount = 9;",
+            "void addIntersectionGroupRect(rive::RenderPath* path,",
+            "draw0Path->fillRule(rive::FillRule::clockwise);",
+            "draw1Path->fillRule(rive::FillRule::nonZero);",
+            "draw2Path->fillRule(rive::FillRule::clockwise);",
+            "draw0Paint->color(0xffffffff);",
+            "draw1Paint->color(0x80ffffff);",
+            "draw2Paint->color(0x80ffffff);",
+            "facts.drawBatches.size() == kIntersectionGroupBatchCount;",
+            "expectedTypes = {",
+            "expectedContents = {",
+            "expectedBases = {",
+            "batch.elementCount == 1 &&",
+            "Draws 1 and 2 are both positive-key three-pass fills.",
+            "group-3 type 10 sorts ahead of draw 1's lower type 8",
+            "draw 1 above all three layers reserved by draw 0.",
+            "msaa intersection-group oracle must schedule tagged draws 0 and 2 ahead of overlapping draw 1",
+            "This mode is schedule-only.",
             "path->fillRule(rive::FillRule::clockwise);",
             "path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);",
             "path->cubicTo(133.635864f, 0, -33.6358566f, 0, 100, 100);",
@@ -532,7 +551,7 @@ class FormatTests(unittest.TestCase):
             "paint->thickness(kStrokeThickness);",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
-            "paint->feather(directTriangulatedCase ? 0.f",
+            "paint->feather(directTriangulatedCase || intersectionGroupsCase",
             ".msaaSampleCount = directOutputCase ? 0u : 4u",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
@@ -559,6 +578,58 @@ class FormatTests(unittest.TestCase):
             "writeU32(header, 16, height);",
         ):
             self.assertIn(fragment, source)
+        self.assertNotIn("kIntersectionGroupDrawCount", source)
+
+        assertion_start = source.index(
+            "    if (intersectionGroupsCase)\n"
+            "    {\n"
+            "        const uint32_t draw0Contents"
+        )
+        assertion_end = source.index(
+            "    else if (advancedBlendCase)", assertion_start
+        )
+        assertion = source[assertion_start:assertion_end]
+        type_block = assertion[
+            assertion.index("expectedTypes = {"):
+            assertion.index("expectedContents = {")
+        ]
+        self.assertEqual(
+            re.findall(r"DrawType::(\w+)", type_block),
+            [
+                "msaaMidpointFanBorrowedCoverage",
+                "msaaMidpointFans",
+                "msaaMidpointFanStencilReset",
+                "msaaMidpointFanBorrowedCoverage",
+                "msaaMidpointFans",
+                "msaaMidpointFanStencilReset",
+                "msaaMidpointFanBorrowedCoverage",
+                "msaaMidpointFans",
+                "msaaMidpointFanStencilReset",
+            ],
+        )
+        contents_block = assertion[
+            assertion.index("expectedContents = {"):
+            assertion.index("expectedBases = {")
+        ]
+        self.assertEqual(
+            re.findall(r"draw[012]Contents", contents_block),
+            [
+                "draw0Contents",
+                "draw0Contents",
+                "draw0Contents",
+                "draw2Contents",
+                "draw2Contents",
+                "draw2Contents",
+                "draw1Contents",
+                "draw1Contents",
+                "draw1Contents",
+            ],
+        )
+        bases_block = assertion[
+            assertion.index("expectedBases = {"):
+            assertion.index("expectedFeatures =")
+        ]
+        self.assertIn("1, 1, 1, 2, 2, 2, 3, 3, 3", bases_block)
         self.assertNotIn("WGPUBufferMapAsyncStatus", source)
         self.assertNotIn("context->makeRenderTarget(", source)
         self.assertNotIn("context->atlasMaskTextureForOracle()", source)
@@ -785,6 +856,7 @@ class FormatTests(unittest.TestCase):
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend',
             '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend',
+            '"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups',
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',

@@ -239,9 +239,10 @@ Run `make renderer-golden`.
    writes parity, and nested clockwise selects the `0xc0` reset mask. Filled
    C++ Dawn fixtures behaviorally distinguish every special mode with holes
    and opposite-winding contours. Destination-copy shader blending is now
-   byte-exact for solid feather-atlas draws. Continue R2 with the remaining
-   `render_context.cpp` behavior and integration of the translated intersection
-   board.
+   byte-exact for solid feather-atlas draws. The translated intersection board
+   now schedules disjoint MSAA draws with the C++ layer reservations. Continue
+   R2 with the remaining logical-flush draw-type, texture, scissor, and subpass
+   sorting from `render_context.cpp`.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -255,6 +256,25 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Integrated the translated intersection board into MSAA fallback
+  scheduling. Rust now reserves C++'s `max(prepassCount, subpassCount)` layers:
+  three for fast fills, two for even-odd fills, and one for strokes, atlas
+  draws, nested clip updates, and clip resets. Advanced destination-copy
+  frames conservatively collapse to one layer per draw, unknown bounds block
+  reordering, and the board resets before its signed group index can overflow.
+  A full-image regression proves the board order `[0,2],[1]` is byte-identical
+  to serialized source order while preserving the authored overlap. The C++
+  Dawn oracle independently pins nine tagged MSAA batches: opaque draw 0
+  reserves groups 1-3, disjoint translucent draw 2 occupies groups 1-3, and
+  overlapping translucent draw 1 begins at group 4. Sol rejected two weaker
+  fixtures whose ordering could be explained without all three board layers;
+  the final type-10/type-8 boundary distinguishes a short reservation, and
+  Sol's closure review reports no findings. `gm-batchedconvexpaths-msaa` now
+  executes but remains gated because native Metal has no valid MSAA reference.
+  The ratchet remains exact=118/diverges=0/gated=1,349; normal V2 remains 263
+  files/584 segments, scripted V2 is 27 files/35 segments, and
+  `cargo test --workspace` passes. Intra-group draw-type, texture, scissor, and
+  subpass sorting remain separate `render_context.cpp` work.
 - 2026-07-13: Added generic-atomic advanced blending for feathered fills and
   strokes. The generated non-fixed atomic path and atlas-blit shaders now have
   standard and HSL specializations; shared-flush, per-draw, and atlas paths

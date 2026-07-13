@@ -173,6 +173,27 @@ The configured Dawn-versus-wgpu comparator allows only the observed backend
 quantization envelope: at most eight pixels may differ, and no channel may
 differ by more than one. Either cap is independently enforced by unit tests.
 
+`msaa-intersection-groups` is a schedule-only runtime assertion; it emits no
+artifact. It authors three non-feathered MSAA fills with distinct captured
+`DrawContents` identities: opaque clockwise draw 0, translucent non-zero draw
+1, and translucent clockwise draw 2. Draw 0 overlaps draw 1; draw 2 is disjoint
+from both. Draw 0 is the opaque MSAA fast path
+(`prepassCount=3`, `subpassCount=0`), so the production scheduler must reserve
+three intersection-board layers via `max(prepassCount, subpassCount)`. Draws 1
+and 2 are both positive-key three-pass fast fills, so prepass polarity cannot
+order them. The exact positive schedule is draw 2's types `8,9,10` followed by
+draw 1's types `8,9,10`. In particular, draw 2's group-3 reset/type `10`
+precedes draw 1's lower borrowed-pass/type `8`. Because draw-group bits outrank
+draw-type bits, type `8` would sort first if draw 1 incorrectly started at
+group 3. The asserted order therefore proves that draw 0 reserved all three
+layers and forced overlapping draw 1 to start at group 4, while disjoint draw
+2 started at group 1. The proof does not depend on final pixels. The current
+oracle hook does not expose logical draw-group indices or barrier placement,
+so it cannot separately pin the unextended
+WebGPU advanced-destination-copy collapse-to-one-layer rule without an
+invasive runtime hook; the existing `advanced-blend` assertion remains limited
+to its one destination-reading MSAA atlas batch.
+
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh --preflight
 RIVE_RUNTIME_DIR=/path/to/rive-runtime tools/cpp-atlas-mask-oracle/build.sh

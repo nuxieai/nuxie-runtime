@@ -320,6 +320,7 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$nested_clockwise_path_clipped_blit_output" nested-clockwise-path-clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$advanced_blend_blit_output" advanced-blend
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$atomic_advanced_blend_output" atomic-advanced-blend
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp

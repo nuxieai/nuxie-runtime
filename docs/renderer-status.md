@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=251, diverges=0, gated=1,217, total=1,468.
+- Rust wgpu: exact=259, diverges=0, gated=1,209, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -145,7 +145,11 @@ Run `make renderer-golden`.
   `riv-data_converter_interpolator_reset-frame-0-clockwise-atomic`,
   `riv-databind_artboard-frame-0-clockwise-atomic`, both
   `riv-databind_external_artboard` fixtures, and
-  `riv-databind_solo_to_enum-frame-0-clockwise-atomic`.
+  `riv-databind_solo_to_enum-frame-0-clockwise-atomic`, plus
+  `riv-dependency_test-frame-{0..4}-clockwise-atomic`,
+  `riv-distance_constraint-frame-0-clockwise-atomic`,
+  `riv-double_library_with_image-frame-0-clockwise-atomic`, and
+  `riv-drag_event-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -230,11 +234,15 @@ Run `make renderer-golden`.
     `databind_external_artboard` fixtures, `databind_solo_to_enum`, and
     `databind_viewmodel`. Capture missing pinned Metal references and apply
     the unchanged contract and diagnostic rules.
-13. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+13. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `databind_viewmodel` frame 1, `dependency_test` frames 0-4,
     `distance_constraint`, `double_library_with_image`, `double_line`, and
     `drag_event`. Capture missing pinned Metal references and apply the
     unchanged contract and diagnostic rules.
+14. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `draw_index_list`, `draw_rule_cycle` frames 0-4, `ellipsis`,
+    `entry`, and `event_on_listener` frames 0-1. Capture missing pinned Metal
+    references and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1955,3 +1963,16 @@ Run `make renderer-golden`.
   A read-only Terra scout attributed every outlier and Sol approved the
   existing `metal-webgpu-subpixel-edge-coverage` diagnostic for both without
   tolerance changes.
+- 2026-07-13: Probed the twelfth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. Eight pass the unchanged
+  `2/32` contract and advance the renderer ratchet to
+  exact=259/diverges=0/gated=1,209: the five `dependency_test` frames and
+  `double_library_with_image` have zero over-threshold pixels,
+  `distance_constraint` uses two pixels/max 3, and `drag_event` uses four
+  pixels/max 58. `databind_viewmodel` frame 1 repeats frame 0's byte-identical
+  native reference and identical over-threshold mask, so it inherits the
+  reviewed edge-coverage gate. `double_line` remains gated at 145/max 57;
+  its 43 tiny components are confined to the sole translated even-odd
+  foreground fill. A read-only Terra scout supplied the draw inventory and
+  Sol approved `metal-webgpu-subpixel-edge-coverage` without a tolerance
+  change.

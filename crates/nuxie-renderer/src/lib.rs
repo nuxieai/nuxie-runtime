@@ -5956,6 +5956,76 @@ mod tests {
     }
 
     #[test]
+    fn nested_clip_probe_uses_sampled_clockwise_atomic_plane() {
+        let factory = WgpuFactory::new_with_mode(640, 640, RenderMode::ClockwiseAtomic).unwrap();
+        let path = |contours: &[&[[f32; 2]]]| {
+            let mut raw_path = RawPath::new();
+            for contour in contours {
+                raw_path.move_to(contour[0][0], contour[0][1]);
+                for point in &contour[1..] {
+                    raw_path.line_to(point[0], point[1]);
+                }
+                raw_path.close();
+            }
+            WgpuPath {
+                raw_path,
+                fill_rule: FillRule::Clockwise,
+            }
+        };
+        let outer = path(&[
+            &[
+                [40.0, 60.0],
+                [600.0, 60.0],
+                [600.0, 280.0],
+                [380.0, 280.0],
+                [380.0, 600.0],
+                [40.0, 600.0],
+            ],
+            &[
+                [420.0, 420.0],
+                [580.0, 420.0],
+                [580.0, 580.0],
+                [420.0, 580.0],
+            ],
+        ]);
+        let nested = path(&[&[
+            [140.0, 160.0],
+            [520.0, 160.0],
+            [520.0, 520.0],
+            [440.0, 520.0],
+            [440.0, 320.0],
+            [300.0, 320.0],
+            [300.0, 520.0],
+            [140.0, 520.0],
+        ]]);
+        let fill = rect_path([0.0, 0.0, 640.0, 640.0], FillRule::Clockwise);
+        let mut frame = factory.begin_frame(0x0000_0000);
+        frame.clip_path(&outer);
+        frame.clip_path(&nested);
+        frame.draw_path(
+            &fill,
+            &WgpuPaint {
+                color: 0xffff_ffff,
+                ..WgpuPaint::default()
+            },
+        );
+
+        let (pixels, captures) = frame.finish_with_clockwise_atomic_coverage().unwrap();
+        assert_eq!(captures.len(), 1);
+        assert_eq!(
+            captures[0].kinds,
+            [
+                clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::OutermostClip,
+                clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::NestedClip,
+                clockwise_atomic_pipeline::ClockwiseAtomicDrawKind::ClippedContent,
+            ]
+        );
+        assert_eq!(captures[0].clip_updates.len(), 1);
+        assert_eq!(captures[0].clip_bytes_per_row, 640 * 4);
+        assert_eq!(captures[0].clip_updates[0], pixels);
+    }
+
+    #[test]
     fn arbitrary_clip_path_updates_atomic_clip_buffer() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let mut clip_path = RawPath::new();

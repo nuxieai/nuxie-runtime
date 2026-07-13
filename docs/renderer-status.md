@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=154, diverges=0, gated=1,313, total=1,467.
+- Rust wgpu: exact=155, diverges=0, gated=1,313, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -105,7 +105,8 @@ Run `make renderer-golden`.
   `gm-overfill_opaque-clockwise-atomic`, plus
   `gm-strokes_round-clockwise-atomic` and
   `gm-strokefill-clockwise-atomic`, plus
-  `gm-rawtext-clockwise-atomic`.
+  `gm-rawtext-clockwise-atomic`, plus the zero-delta
+  `first-light-nested-clip-probe-clockwise-atomic` sampled-plane oracle.
 
 ## Milestones
 
@@ -125,13 +126,13 @@ Run `make renderer-golden`.
 
 ## Next
 
-1. [ ] Close the two remaining findings in
-   `docs/renderer-gpu-semantic-trap-audit.md`: compare the complete sampled
-   clockwise-atomic nested clip plane against C++ Metal, then compare decoded
-   premultiplied RGBA bytes for the reachable JPEG and ICC PNG fixtures.
-   Shader provenance, ABI coverage, the wider semantic-surface audit, and the
-   two named `metal-webgpu-atomic-intermediate-precision` boundaries are
-   complete. Do not promote entries, replace references, or change contracts.
+1. [ ] Close the remaining decoded-image finding in
+   `docs/renderer-gpu-semantic-trap-audit.md`: compare decoded premultiplied
+   RGBA bytes for the reachable JPEG and ICC PNG fixtures. Shader provenance,
+   ABI coverage, the sampled nested clip-plane oracle, the wider
+   semantic-surface audit, and the two named
+   `metal-webgpu-atomic-intermediate-precision` boundaries are complete. Do
+   not promote entries, replace existing references, or change contracts.
 2. [ ] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
    NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
    stacks, and hostile gradient stops. Rust must not panic, hang, or lose the
@@ -348,6 +349,14 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Close the sampled clockwise-atomic clip-plane finding with a
+  production-path readout rather than private Metal instrumentation. A large,
+  pixel-aligned compound outer clip forces the global clockwise scheduler; an
+  asymmetric nested clip followed by opaque white content records the exact
+  `OutermostClip`, `NestedClip`, `ClippedContent` sequence. Rust proves its
+  complete captured clip texture equals the probe output, and the 640x640
+  output matches the pinned native Metal reference at zero delta. Sol rejected
+  the initial small generic-atomic fixture, then approved this routed oracle.
 - 2026-07-13: Pin the complete renderer shader lineage before closing R3's
   semantic-trap audit. Clean regeneration now requires runtime `7c778d13`,
   Naga 30.0.0, glslang 16.2.0, SPIRV-Tools 2026.1, ply 3.11, clean tracked and
@@ -1735,3 +1744,8 @@ Run `make renderer-golden`.
   Renderer tests pass 193/193 active cases and the corpus ratchet remains
   exact=154/diverges=0/gated=1,313 after Sol approval. The sampled nested clip
   plane and decoded-image bytes are the only open semantic-trap oracles.
+- 2026-07-13: Closed the sampled nested clip-plane semantic fork with a
+  zero-delta 640x640 native Metal versus Rust production readout and a Rust
+  routing test that pins `OutermostClip`, `NestedClip`, and `ClippedContent`.
+  The renderer ratchet advances to exact=155/diverges=0/gated=1,313; decoded
+  image bytes are the only remaining semantic-trap oracle before fuzz replay.

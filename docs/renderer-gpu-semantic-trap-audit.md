@@ -83,16 +83,26 @@ native references or `2/32` contract.
 
 ### R3-ST-03: Sampled clockwise-atomic clip plane
 
-**Verified source fork, parity hypothesis open.**
+**Verified source fork, closed by production readout oracle.**
 `tools/renderer-shaders/clockwise_atomic_path_webgpu.main` replaces C++ Metal
 PLS input-attachment reads with
 `texelFetch(..., floor(gl_FragCoord.xy), 0)` and omits a no-op PLS store. It is
-reachable in nested clockwise clips. Existing tests prove scheduling and a few
-readback positions, but not the complete intermediate plane.
+reachable in nested clockwise clips.
 
-Required disposition: capture an asymmetric outer/nested clip plane from C++
-Metal and Rust after each clip update and compare the raw values. A passing
-sub-oracle closes the finding; a mismatch becomes a focused fix or named gate.
+`first-light-nested-clip-probe-clockwise-atomic` forces one large asymmetric
+compound outer clip, one nested arbitrary clip update, and an opaque white
+full-frame draw. A focused Rust test records the production draw kinds as
+`OutermostClip`, `NestedClip`, and `ClippedContent`, then proves the complete
+captured clip update equals the final probe bytes. Because the clip paths are
+pixel-aligned and binary, that draw is an identity readout of every
+semantically consumed clip-plane red byte: C++ Metal reads PLS and Rust reads
+the sampled texture. The pinned 640x640 native Metal reference and Rust output
+match at zero delta across all 409,600 pixels. The stream SHA-256 is
+`efbb8df4b4c1bf877b5723154da980a28c84f064df90cbb92fef2fceed7798dc`;
+the reference SHA-256 is
+`f064bdf9fd879e7161123c127a39e50e4fe833379d4bb15f255785370045f4ea`.
+This closes the semantic fork without exposing private backend storage or
+normalizing physical RGBA8-versus-packed-u32 representations.
 
 ### R3-ST-04: Decoded-image color ingress
 
@@ -156,9 +166,9 @@ An upstream UBSan test would improve the C++ oracle but does not gate this port.
   upstream runtime.
 - [x] Cross-language ABI/layout tests cover every translated shader-visible
   Rust upload record.
-- [ ] Focused pixel or intermediate-plane oracles cover every accepted
+- [x] Focused pixel or intermediate-plane oracles cover every accepted
   precision/compiler boundary.
-- [ ] The renderer corpus remains at or above its committed ratchet with no
+- [x] The renderer corpus remains at or above its committed ratchet with no
   `.riv` regression.
 - [ ] Every residual semantic difference has a named corpus or milestone gate;
   no generic `algorithm-core` diagnostic may hide a shader-stack issue.

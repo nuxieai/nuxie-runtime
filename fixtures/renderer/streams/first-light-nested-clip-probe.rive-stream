@@ -1,0 +1,8 @@
+rive-golden-stream-v1
+source file="first-light:nested-clip-probe" artboard="" scene="nested-clip-probe"
+frameSize width=640 height=640
+clearColor value=0x00000000
+clipPath path={id=1,fillRule=2,path={verbs=[move,line,line,line,line,line,close,move,line,line,line,close],points=[(40,60),(600,60),(600,280),(380,280),(380,600),(40,600),(420,420),(580,420),(580,580),(420,580)]}}
+clipPath path={id=2,fillRule=2,path={verbs=[move,line,line,line,line,line,line,line,close],points=[(140,160),(520,160),(520,520),(440,520),(440,320),(300,320),(300,520),(140,520)]}}
+drawPath path={id=3,fillRule=2,path={verbs=[move,line,line,line,close],points=[(0,0),(640,0),(640,640),(0,640)]}} paint={id=1,style=fill,color=0xffffffff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+frame

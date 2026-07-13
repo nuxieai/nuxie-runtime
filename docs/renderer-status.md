@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=313, diverges=0, gated=1,155, total=1,468.
+- Rust wgpu: exact=323, diverges=0, gated=1,145, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -169,7 +169,10 @@ Run `make renderer-golden`.
   `riv-follow_path_with_0_opacity-frame-0-clockwise-atomic`,
   `riv-formula_random-frame-0-clockwise-atomic`,
   `riv-gamepad_test-frame-{0,1}-clockwise-atomic`, and
-  `riv-group_effect-frame-0-clockwise-atomic`.
+  `riv-group_effect-frame-0-clockwise-atomic`, plus
+  `riv-hide_test-frame-0-clockwise-atomic`,
+  `riv-hit_test_nested-frame-0-clockwise-atomic`, and
+  `riv-hit_test_solos-frame-{0..7}-clockwise-atomic`.
 
 ## Milestones
 
@@ -287,10 +290,17 @@ Run `make renderer-golden`.
     `format_number_with_commas`, `formula_random`, `gamepad_test` frames 0-1,
     `group_effect`, and `hello_world`. Capture missing pinned Metal references
     and apply the unchanged contract and diagnostic rules.
-20. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+20. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `hide_test`, `hit_test_nested`, and `hit_test_solos` frames 0-7.
     Capture missing pinned Metal references and apply the unchanged contract
     and diagnostic rules.
+21. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `hit_test_test`, `hittest_collapsed_layouts`, `hosted_font_file`,
+    `hosted_image_file`, `image_binding_with_listener`,
+    `image_fit_alignment`, `image_fit_alignment_2`, `image_fit_alignment_3`,
+    `image_scripting_property_value`, and `in_band_asset`. Capture missing
+    pinned Metal references and apply the unchanged contract and diagnostic
+    rules.
 
 ## R2 Completion Record
 
@@ -2080,3 +2090,10 @@ Run `make renderer-golden`.
   the alpha and stream oracles, and Sol approved
   `metal-webgpu-subpixel-edge-coverage` for both without changing either
   reference or tolerance.
+- 2026-07-13: Probed the nineteenth ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. `hide_test` is pixel exact;
+  `hit_test_nested` passes at 18/max 45; and all eight `hit_test_solos` frames
+  pass with the same one-pixel/max-13 result. The unchanged `2/32` contract
+  promotes all ten and advances the renderer ratchet to
+  exact=323/diverges=0/gated=1,145 without a new diagnostic or tolerance
+  change.

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=192, diverges=0, gated=1,276, total=1,468.
+- Rust wgpu: exact=200, diverges=0, gated=1,268, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -119,7 +119,10 @@ Run `make renderer-golden`.
   `riv-bindable_artboard_child-frame-{0..7}-clockwise-atomic`, plus
   `riv-blend_test-frame-{0..4}-clockwise-atomic`, plus
   `riv-clear_viewmodel_list-frame-{0..4}-clockwise-atomic` and
-  `riv-click_event-frame-{0..4}-clockwise-atomic`.
+  `riv-click_event-frame-{0..7}-clockwise-atomic`, plus
+  `riv-collapsable_data_binding-frame-0-clockwise-atomic`,
+  `riv-complex_ik_dependency-frame-0-clockwise-atomic`, and
+  `riv-component_based_conditions-frame-{0..2}-clockwise-atomic`.
 
 ## Milestones
 
@@ -164,11 +167,16 @@ Run `make renderer-golden`.
    entries: `clear_viewmodel_list` frames 0-4 and `click_event` frames 0-4.
    Capture missing pinned Metal references, preserve the unchanged `2/32`
    contract, and classify any first failure before promotion.
-6. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+6. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
    entries: `click_event` frames 5-7, `collapsable_data_binding`,
    `collapse_data_binds`, `collapsing_elements`, `complex_ik_dependency`, and
    `component_based_conditions` frames 0-2. Capture missing pinned Metal
    references and apply the unchanged contract and diagnostic rules.
+7. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+   entries: `component_based_conditions` frames 3-4, `component_list_1`,
+   `component_list_2` frames 0-4, `component_list_child_origin`, and
+   `component_list_follow_path`. Capture missing pinned Metal references and
+   apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1828,3 +1836,13 @@ Run `make renderer-golden`.
   frames are pixel-identical and all five `click_event` frames stay entirely
   within channel delta 2, so the unchanged `2/32` contract promotes all ten
   and advances the renderer ratchet to exact=192/diverges=0/gated=1,276.
+- 2026-07-13: Probed the fifth ten-entry clockwise-atomic `.riv` batch against
+  freshly pinned native Metal references. Eight pass the unchanged `2/32`
+  contract and advance the renderer ratchet to
+  exact=200/diverges=0/gated=1,268. `collapse_data_binds` remains gated at 61
+  pixels/max delta 31: 59 pixels lie on four glyph outlines and two on
+  transformed dark/rectangle edges. `collapsing_elements` remains gated at 37
+  pixels/max delta 31: every outlier is a single pixel on the fractional right
+  edge of five stripe rectangles and its other 43 draws are clean. Sol
+  approved applying the existing `metal-webgpu-subpixel-edge-coverage` gate
+  to both without tolerance changes.

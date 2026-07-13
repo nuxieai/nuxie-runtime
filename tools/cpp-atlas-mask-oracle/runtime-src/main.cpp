@@ -651,16 +651,19 @@ int main(int argc, char** argv)
     const bool directBadSkinCase =
         argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;
     const bool clippedCase = argc > 4 && std::strcmp(argv[4], "clipped") == 0;
+    const bool pathClippedCase =
+        argc > 4 && std::strcmp(argv[4], "path-clipped") == 0;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase;
     const bool fillCase = circleCase || cuspCase || directCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
-    if (argc > 6 || (argc > 4 && !fillCase && !clippedCase) ||
+    if (argc > 6 ||
+        (argc > 4 && !fillCase && !clippedCase && !pathClippedCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -867,6 +870,15 @@ int main(int argc, char** argv)
         clip->close();
         renderer.clipPath(clip.get());
     }
+    else if (pathClippedCase)
+    {
+        auto clip = context->makeEmptyRenderPath();
+        clip->moveTo(32, 16);
+        clip->lineTo(48, 48);
+        clip->lineTo(16, 48);
+        clip->close();
+        renderer.clipPath(clip.get());
+    }
     renderer.drawPath(path.get(), paint.get());
 
     wgpu::CommandEncoder renderEncoder = device.CreateCommandEncoder();
@@ -882,10 +894,11 @@ int main(int argc, char** argv)
                 facts.drawBatches.size());
     for (const auto& batch : facts.drawBatches)
     {
-        std::printf("  drawType=%u shaderFeatures=0x%x shaderMiscFlags=0x%x range=%u+%u\n",
+        std::printf("  drawType=%u shaderFeatures=0x%x shaderMiscFlags=0x%x drawContents=0x%x range=%u+%u\n",
                     batch.drawType,
                     batch.shaderFeatures,
                     batch.shaderMiscFlags,
+                    batch.drawContents,
                     batch.baseElement,
                     batch.elementCount);
     }
@@ -932,6 +945,36 @@ int main(int argc, char** argv)
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
             fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
+        }
+    }
+    else if (pathClippedCase)
+    {
+        const uint32_t clipUpdate =
+            static_cast<uint32_t>(rive::gpu::DrawContents::clipUpdate) |
+            static_cast<uint32_t>(rive::gpu::DrawContents::nonZeroFill);
+        const uint32_t activeClip =
+            static_cast<uint32_t>(rive::gpu::DrawContents::activeClip);
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+            !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 4 ||
+            facts.drawBatches[0].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+            facts.drawBatches[1].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFans) ||
+            facts.drawBatches[2].drawType != static_cast<uint32_t>(
+                                                   rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+            facts.drawBatches[3].drawType !=
+                static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
+            facts.drawBatches[0].drawContents != clipUpdate ||
+            facts.drawBatches[1].drawContents != clipUpdate ||
+            facts.drawBatches[2].drawContents != clipUpdate ||
+            facts.drawBatches[3].drawContents != activeClip ||
+            facts.drawBatches[3].shaderFeatures != static_cast<uint32_t>(
+                rive::gpu::ShaderFeatures::ENABLE_DITHER) ||
+            facts.drawBatches[3].shaderMiscFlags != static_cast<uint32_t>(
+                rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+        {
+            fail("path-clipped atlas oracle must execute the top-level MSAA clip update followed by one clipped atlas batch");
         }
     }
     else if (facts.interlockMode !=

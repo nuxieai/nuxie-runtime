@@ -5,6 +5,9 @@ use wgpu::util::DeviceExt;
 
 pub(crate) struct PathPipeline {
     pub pipeline: wgpu::RenderPipeline,
+    pub clip_borrowed_pipeline: wgpu::RenderPipeline,
+    pub clip_update_pipeline: wgpu::RenderPipeline,
+    pub clip_cleanup_pipeline: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
@@ -78,48 +81,111 @@ impl PathPipeline {
             constants: &[("2", 0.0), ("7", 0.0)],
             ..Default::default()
         };
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nuxie-msaa-path-pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &vertex,
-                entry_point: Some("main"),
-                compilation_options: vertex_options,
-                buffers: &[Some(PatchVertex::layout())],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Stencil8,
-                depth_write_enabled: None,
-                depth_compare: None,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 4,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &fragment,
-                entry_point: Some("main"),
-                compilation_options: fragment_options,
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let keep = wgpu::StencilOperation::Keep;
+        let stencil_face = |compare, fail_op, pass_op| wgpu::StencilFaceState {
+            compare,
+            fail_op,
+            depth_fail_op: keep,
+            pass_op,
+        };
+        let disabled_face = stencil_face(wgpu::CompareFunction::Always, keep, keep);
+        let stencil_state = |front, back, read_mask, write_mask| wgpu::StencilState {
+            front,
+            back,
+            read_mask,
+            write_mask,
+        };
+        let create_pipeline = |label, cull_mode, stencil, depth_compare, color_write_mask| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &vertex,
+                    entry_point: Some("main"),
+                    compilation_options: vertex_options.clone(),
+                    buffers: &[Some(PatchVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24PlusStencil8,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(depth_compare),
+                    stencil,
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 4,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &fragment,
+                    entry_point: Some("main"),
+                    compilation_options: fragment_options.clone(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: (color_write_mask == wgpu::ColorWrites::ALL)
+                            .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: color_write_mask,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = create_pipeline(
+            "nuxie-msaa-path-pipeline",
+            None,
+            stencil_state(disabled_face, disabled_face, 0xff, 0xff),
+            wgpu::CompareFunction::Always,
+            wgpu::ColorWrites::ALL,
+        );
+        let clip_borrowed_face = stencil_face(
+            wgpu::CompareFunction::Always,
+            keep,
+            wgpu::StencilOperation::IncrementWrap,
+        );
+        let clip_borrowed_pipeline = create_pipeline(
+            "nuxie-msaa-path-clip-borrowed-pipeline",
+            Some(wgpu::Face::Front),
+            stencil_state(clip_borrowed_face, clip_borrowed_face, 0xff, 0x7f),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
+        let clip_front = stencil_face(
+            wgpu::CompareFunction::Equal,
+            wgpu::StencilOperation::DecrementClamp,
+            wgpu::StencilOperation::Replace,
+        );
+        let clip_back = stencil_face(
+            wgpu::CompareFunction::Less,
+            keep,
+            wgpu::StencilOperation::Replace,
+        );
+        let clip_update_pipeline = create_pipeline(
+            "nuxie-msaa-path-clip-update-pipeline",
+            Some(wgpu::Face::Back),
+            stencil_state(clip_front, clip_back, 0x7f, 0xff),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
+        let clip_cleanup_pipeline = create_pipeline(
+            "nuxie-msaa-path-clip-cleanup-pipeline",
+            Some(wgpu::Face::Front),
+            stencil_state(clip_front, clip_back, 0x7f, 0xff),
+            wgpu::CompareFunction::Less,
+            wgpu::ColorWrites::empty(),
+        );
         Self {
             pipeline,
+            clip_borrowed_pipeline,
+            clip_update_pipeline,
+            clip_cleanup_pipeline,
             flush_layout,
             image_layout,
             sampler_layout,

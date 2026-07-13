@@ -224,11 +224,14 @@ Run `make renderer-golden`.
    matching WebGPU MSAA final blit is now byte-exact across all 4,096 oracle
    pixels for the solid, unclipped, source-over slice. Parent-tight clip bounds
    are a later performance refinement, not a correctness gate. MSAA rectangle
-   clip-distance is now byte-exact against C++ WebGPU. Continue R2 with
-   path-clip/stencil behavior, then destination-copy shader blending. Those
-   remaining unsupported boundaries are explicit and tested. Continue afterward with
-   remaining `render_context.cpp` behavior and integration of the translated
-   intersection board.
+   clip-distance is now byte-exact against C++ WebGPU. The unchanged outer
+   non-zero path-clip slice is also exact: three stencil-update batches feed a
+   fixed-function clipped atlas draw, including the combined path-plus-rect
+   state. Continue R2 with clip-reset/changing-outer behavior and the nested,
+   even-odd, and clockwise clip transitions, then destination-copy shader
+   blending. Those remaining unsupported boundaries are explicit and tested.
+   Continue afterward with remaining `render_context.cpp` behavior and
+   integration of the translated intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
@@ -242,6 +245,24 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Closed the unchanged outer non-zero MSAA path-clip slice for
+  atlas draws. The fallback attachment is now depth/stencil, the path pipeline
+  implements C++'s borrowed/update/cleanup stencil states and exact inner-fan
+  range, and the atlas pipeline selects fixed-function path, rectangle, or
+  combined path-plus-rectangle clipping. A new C++ Dawn oracle asserts the
+  exact four-batch schedule: three clip-update draws followed by an
+  active-clip atlas draw whose shader features remain dither-only. Rust matches
+  all 4,096 pixels for unclipped, rectangle-clipped, and path-clipped atlas
+  frames. Nested clips, changing outer clips, alternate clip fill rules,
+  non-atlas MSAA path clips, and MSAA images remain named `Unsupported`
+  boundaries with early-ingress regressions. Terra supplied the bounded C++
+  batch inventory; the executable oracle corrected its shader-feature
+  inference. Sol then found and closed the alternate-fill and image-mesh
+  ingress leaks before reporting the final diff clean. `make renderer-golden`
+  remains exact=118/diverges=0/gated=1,349; normal V2 is 263 files/584
+  segments, scripted V2 is 27 files/35 segments, and
+  `cargo test --workspace` passes. Clip reset and the remaining clip-stack
+  transitions are the next source-order R2 boundary.
 - 2026-07-12: Closed MSAA rectangle clip-distance atlas blits. Device creation
   requests `CLIP_DISTANCES` only when the adapter exposes it; the atlas blit
   pipeline then selects upstream's generated clip-distance vertex permutation

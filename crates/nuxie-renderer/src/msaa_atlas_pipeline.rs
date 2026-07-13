@@ -6,6 +6,8 @@ use wgpu::util::DeviceExt;
 pub(crate) struct MsaaAtlasPipeline {
     no_clip_pipeline: wgpu::RenderPipeline,
     clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    path_clip_pipeline: wgpu::RenderPipeline,
+    path_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
@@ -17,7 +19,8 @@ pub(crate) struct PreparedAtlasBlit {
     pub sampler_group: wgpu::BindGroup,
     pub vertices: wgpu::Buffer,
     pub vertex_count: u32,
-    clipped: bool,
+    clip_rect: bool,
+    path_clip: bool,
 }
 
 impl MsaaAtlasPipeline {
@@ -71,7 +74,17 @@ impl MsaaAtlasPipeline {
             ],
             immediate_size: 0,
         });
-        let create_pipeline = |label, vertex: &wgpu::ShaderModule, clipped| {
+        let create_pipeline = |label, vertex: &wgpu::ShaderModule, clip_rect, path_clip| {
+            let stencil_face = wgpu::StencilFaceState {
+                compare: if path_clip {
+                    wgpu::CompareFunction::Equal
+                } else {
+                    wgpu::CompareFunction::Always
+                },
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            };
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -79,7 +92,7 @@ impl MsaaAtlasPipeline {
                     module: vertex,
                     entry_point: Some("main"),
                     compilation_options: wgpu::PipelineCompilationOptions {
-                        constants: if clipped {
+                        constants: if clip_rect {
                             &[("0", 0.0), ("1", 1.0), ("2", 0.0)]
                         } else {
                             &[("0", 0.0), ("2", 0.0)]
@@ -93,10 +106,15 @@ impl MsaaAtlasPipeline {
                     ..Default::default()
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Stencil8,
-                    depth_write_enabled: None,
-                    depth_compare: None,
-                    stencil: wgpu::StencilState::default(),
+                    format: wgpu::TextureFormat::Depth24PlusStencil8,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: wgpu::StencilState {
+                        front: stencil_face,
+                        back: stencil_face,
+                        read_mask: 0xff,
+                        write_mask: 0xff,
+                    },
                     bias: wgpu::DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState {
@@ -121,22 +139,49 @@ impl MsaaAtlasPipeline {
                 cache: None,
             })
         };
-        let no_clip_pipeline =
-            create_pipeline("nuxie-msaa-atlas-blit-pipeline", &no_clip_vertex, false);
-        let clip_rect_pipeline = device
+        let no_clip_pipeline = create_pipeline(
+            "nuxie-msaa-atlas-blit-pipeline",
+            &no_clip_vertex,
+            false,
+            false,
+        );
+        let path_clip_pipeline = create_pipeline(
+            "nuxie-msaa-atlas-path-clip-pipeline",
+            &no_clip_vertex,
+            false,
+            true,
+        );
+        let clip_rect_vertex = device
             .features()
             .contains(wgpu::Features::CLIP_DISTANCES)
             .then(|| {
-                let vertex = shader(
+                shader(
                     device,
                     "nuxie-msaa-atlas-blit-clip-rect-vertex",
                     include_str!("generated/draw_msaa_atlas_blit.webgpu_vert.wgsl"),
-                );
-                create_pipeline("nuxie-msaa-atlas-blit-clip-rect-pipeline", &vertex, true)
+                )
             });
+        let clip_rect_pipeline = clip_rect_vertex.as_ref().map(|vertex| {
+            create_pipeline(
+                "nuxie-msaa-atlas-blit-clip-rect-pipeline",
+                vertex,
+                true,
+                false,
+            )
+        });
+        let path_clip_rect_pipeline = clip_rect_vertex.as_ref().map(|vertex| {
+            create_pipeline(
+                "nuxie-msaa-atlas-path-clip-rect-pipeline",
+                vertex,
+                true,
+                true,
+            )
+        });
         Self {
             no_clip_pipeline,
             clip_rect_pipeline,
+            path_clip_pipeline,
+            path_clip_rect_pipeline,
             flush_layout,
             image_layout,
             sampler_layout,
@@ -148,13 +193,22 @@ impl MsaaAtlasPipeline {
     }
 
     pub(crate) fn pipeline<'a>(&'a self, draw: &PreparedAtlasBlit) -> &'a wgpu::RenderPipeline {
-        if draw.clipped {
-            self.clip_rect_pipeline
+        match (draw.clip_rect, draw.path_clip) {
+            (false, false) => &self.no_clip_pipeline,
+            (false, true) => &self.path_clip_pipeline,
+            (true, false) => self
+                .clip_rect_pipeline
                 .as_ref()
-                .expect("clipped atlas blit prepared without clip-distance pipeline")
-        } else {
-            &self.no_clip_pipeline
+                .expect("clip-rect atlas blit prepared without clip-distance pipeline"),
+            (true, true) => self
+                .path_clip_rect_pipeline
+                .as_ref()
+                .expect("path-and-rect clipped atlas blit prepared without clip-distance pipeline"),
         }
+    }
+
+    pub(crate) fn uses_path_clip(draw: &PreparedAtlasBlit) -> bool {
+        draw.path_clip
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -170,7 +224,8 @@ impl MsaaAtlasPipeline {
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         vertices: &[TriangleVertex],
-        clipped: bool,
+        clip_rect: bool,
+        path_clip: bool,
     ) -> PreparedAtlasBlit {
         let uniform = upload(
             device,
@@ -267,7 +322,8 @@ impl MsaaAtlasPipeline {
             sampler_group,
             vertices: vertex_buffer,
             vertex_count: vertices.len() as u32,
-            clipped,
+            clip_rect,
+            path_clip,
         }
     }
 }

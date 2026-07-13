@@ -174,9 +174,9 @@ impl WgpuFactory {
             pass_op,
         };
         let stencil_state = |front, back| wgpu::DepthStencilState {
-            format: wgpu::TextureFormat::Stencil8,
-            depth_write_enabled: None,
-            depth_compare: None,
+            format: wgpu::TextureFormat::Depth24PlusStencil8,
+            depth_write_enabled: Some(false),
+            depth_compare: Some(wgpu::CompareFunction::Always),
             stencil: wgpu::StencilState {
                 front,
                 back,
@@ -291,6 +291,7 @@ impl WgpuFactory {
             draws: Vec::new(),
             clips: Vec::new(),
             next_clip_id: 1,
+            msaa_path_clip: None,
             unsupported: None,
             mode: self.mode,
         }
@@ -801,6 +802,7 @@ pub struct WgpuFrame {
     draws: Vec<SolidDraw>,
     clips: Vec<ClipElement>,
     next_clip_id: u32,
+    msaa_path_clip: Option<ClipElement>,
     unsupported: Option<&'static str>,
     mode: RenderMode,
 }
@@ -849,6 +851,35 @@ impl Renderer for WgpuFrame {
             role: DrawRole::Content { clip_id },
             image: None,
         };
+        let msaa_feather_atlas = self.mode == RenderMode::Msaa && paint.feather != 0.0;
+        if self.mode == RenderMode::Msaa && clip_id != 0 {
+            if self.state.clip_stack_height != 1 {
+                self.unsupported
+                    .get_or_insert("nested path clips on msaa feather atlas draws");
+                return;
+            }
+            let clip = self.clips[0].clone();
+            if clip.path.fill_rule != FillRule::NonZero {
+                self.unsupported
+                    .get_or_insert("even-odd or clockwise path clips on msaa feather atlas draws");
+                return;
+            }
+            if self
+                .msaa_path_clip
+                .as_ref()
+                .is_some_and(|active| active.matrix != clip.matrix || active.path != clip.path)
+            {
+                self.unsupported
+                    .get_or_insert("changing path clips on msaa feather atlas draws");
+                return;
+            }
+            if !msaa_feather_atlas {
+                self.unsupported
+                    .get_or_insert("path clips on non-atlas msaa draws");
+                return;
+            }
+            self.msaa_path_clip = Some(clip);
+        }
         if self.mode == RenderMode::Msaa && paint.feather != 0.0 {
             if self.state.clip_rect.is_some()
                 && !self.context.msaa_atlas_pipeline.supports_clip_rect()
@@ -857,18 +888,13 @@ impl Renderer for WgpuFrame {
                     .get_or_insert("clip rectangles on msaa feather atlas draws");
                 return;
             }
-            if clip_id != 0 {
-                self.unsupported
-                    .get_or_insert("path clips on msaa feather atlas draws");
-                return;
-            }
             if paint.blend_mode != BlendMode::SrcOver {
                 self.unsupported
                     .get_or_insert("advanced blending on msaa feather atlas draws");
                 return;
             }
         }
-        if clip_id != 0 {
+        if clip_id != 0 && !msaa_feather_atlas {
             if !atomic_draw_is_eligible(&content) {
                 self.unsupported
                     .get_or_insert("non-rectangular clips on fallback draws");
@@ -984,6 +1010,10 @@ impl Renderer for WgpuFrame {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
+        if self.mode != RenderMode::ClockwiseAtomic {
+            self.unsupported.get_or_insert("images in msaa mode");
+            return;
+        }
         if self.state.clip_is_empty {
             return;
         }
@@ -1172,7 +1202,7 @@ impl WgpuFrame {
                 mip_level_count: 1,
                 sample_count: 4,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Stencil8,
+                format: wgpu::TextureFormat::Depth24PlusStencil8,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             });
@@ -2045,11 +2075,53 @@ impl WgpuFrame {
             |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
                 enum PreparedDraw {
                     Analytic(path_pipeline::PreparedPathDraw),
+                    ClipUpdate(path_pipeline::PreparedPathDraw),
                     Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
                 let mut prepared_draws = Vec::with_capacity(draws.len());
                 for draw in draws {
+                    if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
+                        assert_eq!(parent_id, 0, "nested MSAA clip update escaped validation");
+                        if let Some(mut tessellation) =
+                            draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+                        {
+                            tessellation.path.z_index = 1;
+                            let tessellation_height =
+                                draw::tessellation_texture_height(&tessellation.spans);
+                            let uniforms =
+                                analytic_uniforms(self.width, self.height, tessellation_height);
+                            let tessellation_texture = self.context.tessellator.encode(
+                                &self.context.device,
+                                encoder,
+                                &self.context.feather_lut.view,
+                                &tessellation.spans,
+                                &uniforms,
+                                std::slice::from_ref(&tessellation.path),
+                                &tessellation.contours,
+                                tessellation_height,
+                            );
+                            let tessellation_view = tessellation_texture
+                                .create_view(&wgpu::TextureViewDescriptor::default());
+                            let paint =
+                                gpu::PaintData::solid(0, draw.path.fill_rule, BlendMode::SrcOver);
+                            prepared_draws.push(PreparedDraw::ClipUpdate(
+                                self.context.path_pipeline.prepare(
+                                    &self.context.device,
+                                    &tessellation_view,
+                                    &self.context.feather_lut.view,
+                                    &uniforms,
+                                    &tessellation.path,
+                                    &paint,
+                                    &gpu::PaintAuxData::zeroed(),
+                                    &tessellation.contours,
+                                    tessellation.base_instance,
+                                    tessellation.instance_count,
+                                ),
+                            ));
+                        }
+                        continue;
+                    }
                     if draw.paint.shader.is_none()
                         && draw.paint.feather != 0.0
                         && draw.paint.blend_mode == BlendMode::SrcOver
@@ -2077,6 +2149,7 @@ impl WgpuFrame {
                                 translate_x: placement.translate[0],
                                 translate_y: placement.translate[1],
                             };
+                            tessellation.path.z_index = 1;
                             for contour in &mut tessellation.contours {
                                 contour.path_id = 1;
                             }
@@ -2194,6 +2267,10 @@ impl WgpuFrame {
                                     &tessellation.contours,
                                     &vertices,
                                     draw.state.clip_rect.is_some(),
+                                    matches!(
+                                        draw.role,
+                                        DrawRole::Content { clip_id } if clip_id != 0
+                                    ),
                                 ),
                             ));
                             continue;
@@ -2340,7 +2417,10 @@ impl WgpuFrame {
                         })],
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &stencil_view,
-                            depth_ops: None,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(1.0),
+                                store: wgpu::StoreOp::Discard,
+                            }),
                             stencil_ops: Some(wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(0),
                                 store: wgpu::StoreOp::Discard,
@@ -2354,6 +2434,7 @@ impl WgpuFrame {
                     for prepared in &prepared_draws {
                         match prepared {
                             PreparedDraw::Analytic(draw) => {
+                                pass.set_stencil_reference(0);
                                 pass.set_pipeline(&self.context.path_pipeline.pipeline);
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
@@ -2372,7 +2453,44 @@ impl WgpuFrame {
                                     draw.base_instance..draw.base_instance + draw.instance_count,
                                 );
                             }
+                            PreparedDraw::ClipUpdate(draw) => {
+                                pass.set_stencil_reference(0x80);
+                                pass.set_bind_group(0, &draw.flush_group, &[]);
+                                pass.set_bind_group(1, &draw.image_group, &[]);
+                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                pass.set_vertex_buffer(
+                                    0,
+                                    self.context.patch_vertex_buffer.slice(..),
+                                );
+                                pass.set_index_buffer(
+                                    self.context.patch_index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint16,
+                                );
+                                let indices = gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT as u32
+                                    ..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32;
+                                for pipeline in [
+                                    &self.context.path_pipeline.clip_borrowed_pipeline,
+                                    &self.context.path_pipeline.clip_update_pipeline,
+                                    &self.context.path_pipeline.clip_cleanup_pipeline,
+                                ] {
+                                    pass.set_pipeline(pipeline);
+                                    pass.draw_indexed(
+                                        indices.clone(),
+                                        0,
+                                        draw.base_instance
+                                            ..draw.base_instance + draw.instance_count,
+                                    );
+                                }
+                            }
                             PreparedDraw::Atlas(draw) => {
+                                pass.set_stencil_reference(
+                                    if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_path_clip(draw)
+                                    {
+                                        0x80
+                                    } else {
+                                        0
+                                    },
+                                );
                                 pass.set_pipeline(self.context.msaa_atlas_pipeline.pipeline(draw));
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
@@ -2381,6 +2499,7 @@ impl WgpuFrame {
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
                             PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
+                                pass.set_stencil_reference(0);
                                 pass.set_pipeline(match fill_rule {
                                     FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,
                                     FillRule::NonZero | FillRule::Clockwise => {
@@ -5977,6 +6096,13 @@ mod tests {
     fn fixed_feather_atlas_blit_with_clip(
         clip_rect: Option<[f32; 4]>,
     ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        fixed_feather_atlas_blit_with_clips(clip_rect, false)
+    }
+
+    fn fixed_feather_atlas_blit_with_clips(
+        clip_rect: Option<[f32; 4]>,
+        path_clip: bool,
+    ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         let factory = WgpuFactory::new_with_mode(
             ATLAS_ORACLE_FRAME_SIZE,
             ATLAS_ORACLE_FRAME_SIZE,
@@ -6015,6 +6141,17 @@ mod tests {
                 fill_rule: FillRule::NonZero,
             });
         }
+        if path_clip {
+            let mut raw_clip = RawPath::new();
+            raw_clip.move_to(32.0, 16.0);
+            raw_clip.line_to(48.0, 48.0);
+            raw_clip.line_to(16.0, 48.0);
+            raw_clip.close();
+            frame.clip_path(&WgpuPath {
+                raw_path: raw_clip,
+                fill_rule: FillRule::NonZero,
+            });
+        }
         frame.draw_path(&path, &paint);
         let pixels = frame.finish()?;
         Ok(atlas_blit_oracle::AtlasBlit::new(
@@ -6031,6 +6168,10 @@ mod tests {
 
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         fixed_feather_atlas_blit_with_clip(Some([16.0, 8.0, 32.0, 56.0]))
+    }
+
+    fn fixed_feather_atlas_path_clipped_blit() -> atlas_blit_oracle::AtlasBlit {
+        fixed_feather_atlas_blit_with_clips(None, true).unwrap()
     }
 
     #[test]
@@ -6113,40 +6254,180 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_blit_rejects_path_clip_until_stencil_clip_is_supported() {
+    fn msaa_feather_atlas_blit_applies_outer_path_clip_with_stencil() {
+        let blit = fixed_feather_atlas_path_clipped_blit();
+        let pixels = blit.pixels();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(8, 32), [0; 4]);
+        assert_ne!(pixel(32, 32), [0; 4]);
+        assert_eq!(pixel(32, 8), [0; 4]);
+        assert_ne!(pixel(32, 47), [0; 4]);
+    }
+
+    #[test]
+    fn msaa_feather_atlas_blit_combines_path_and_rectangle_clips() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let mut square = RawPath::new();
-        square.move_to(16.0, 16.0);
-        square.line_to(48.0, 16.0);
-        square.line_to(48.0, 48.0);
-        square.line_to(16.0, 48.0);
-        square.close();
-        let path = WgpuPath {
-            raw_path: square,
-            fill_rule: FillRule::NonZero,
-        };
-        let mut clip = RawPath::new();
-        clip.move_to(32.0, 16.0);
-        clip.line_to(48.0, 48.0);
-        clip.line_to(16.0, 48.0);
-        clip.close();
-        let clip = WgpuPath {
-            raw_path: clip,
-            fill_rule: FillRule::NonZero,
+        let supports_clip_rect = factory.context.msaa_atlas_pipeline.supports_clip_rect();
+        let result = fixed_feather_atlas_blit_with_clips(Some([28.0, 0.0, 40.0, 64.0]), true);
+        if !supports_clip_rect {
+            assert!(matches!(
+                result,
+                Err(RendererError::Unsupported(
+                    "clip rectangles on msaa feather atlas draws"
+                ))
+            ));
+            return;
+        }
+        let blit = result.unwrap();
+        let pixels = blit.pixels();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(24, 32), [0; 4]);
+        assert_ne!(pixel(32, 32), [0; 4]);
+        assert_eq!(pixel(40, 32), [0; 4]);
+    }
+
+    #[test]
+    fn msaa_feather_atlas_blit_keeps_nested_path_clip_as_named_boundary() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let triangle = |inset: f32| {
+            let mut path = RawPath::new();
+            path.move_to(32.0, 8.0 + inset);
+            path.line_to(56.0 - inset, 56.0 - inset);
+            path.line_to(8.0 + inset, 56.0 - inset);
+            path.close();
+            WgpuPath {
+                raw_path: path,
+                fill_rule: FillRule::NonZero,
+            }
         };
         let paint = WgpuPaint {
-            feather: 20.0,
+            feather: ATLAS_ORACLE_FEATHER,
             ..WgpuPaint::default()
         };
-
         let mut frame = factory.begin_frame(0);
-        frame.clip_path(&clip);
-        frame.draw_path(&path, &paint);
+        frame.clip_path(&triangle(0.0));
+        frame.clip_path(&triangle(8.0));
+        frame.draw_path(&triangle(12.0), &paint);
+
         assert!(matches!(
             frame.finish(),
             Err(RendererError::Unsupported(
-                "path clips on msaa feather atlas draws"
+                "nested path clips on msaa feather atlas draws"
             ))
+        ));
+    }
+
+    #[test]
+    fn msaa_feather_atlas_blit_keeps_changing_outer_clip_as_named_boundary() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let triangle = |offset: f32| {
+            let mut path = RawPath::new();
+            path.move_to(32.0 + offset, 16.0);
+            path.line_to(48.0 + offset, 48.0);
+            path.line_to(16.0 + offset, 48.0);
+            path.close();
+            WgpuPath {
+                raw_path: path,
+                fill_rule: FillRule::NonZero,
+            }
+        };
+        let paint = WgpuPaint {
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.save();
+        frame.clip_path(&triangle(0.0));
+        frame.draw_path(&triangle(0.0), &paint);
+        frame.restore();
+        frame.clip_path(&triangle(4.0));
+        frame.draw_path(&triangle(4.0), &paint);
+
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "changing path clips on msaa feather atlas draws"
+            ))
+        ));
+    }
+
+    #[test]
+    fn msaa_path_clip_fill_rules_remain_an_explicit_boundary() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(32.0, 16.0);
+        raw_path.line_to(48.0, 48.0);
+        raw_path.line_to(16.0, 48.0);
+        raw_path.close();
+        let clip = WgpuPath {
+            raw_path: raw_path.clone(),
+            fill_rule: FillRule::EvenOdd,
+        };
+        let content = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let paint = WgpuPaint {
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&clip);
+        frame.draw_path(&content, &paint);
+
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "even-odd or clockwise path clips on msaa feather atlas draws"
+            ))
+        ));
+    }
+
+    #[test]
+    fn msaa_path_clip_on_non_atlas_draw_remains_an_explicit_boundary() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(32.0, 16.0);
+        raw_path.line_to(48.0, 48.0);
+        raw_path.line_to(16.0, 48.0);
+        raw_path.close();
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&path);
+        frame.draw_path(&path, &WgpuPaint::default());
+
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "path clips on non-atlas msaa draws"
+            ))
+        ));
+    }
+
+    #[test]
+    fn image_mesh_rejects_msaa_before_enqueuing_clip_updates() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame(0);
+        frame.draw_image_mesh(
+            None,
+            ImageSampler::default(),
+            None,
+            None,
+            None,
+            0,
+            0,
+            BlendMode::SrcOver,
+            1.0,
+        );
+
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported("images in msaa mode"))
         ));
     }
 
@@ -6729,6 +7010,42 @@ mod tests {
         atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
             panic!(
                 "C++ clipped atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_path_clipped_blit_matches_fixed_rust_output_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT").expect(
+            "RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT is required for the ignored C++ path-clipped atlas-blit test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ path-clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ path-clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = fixed_feather_atlas_path_clipped_blit();
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ path-clipped atlas-blit oracle mismatch at {}: {error}",
                 path.display()
             )
         });

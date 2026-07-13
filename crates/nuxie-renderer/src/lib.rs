@@ -1491,21 +1491,29 @@ impl WgpuFrame {
                             draw.state.transform,
                             false,
                         );
-                        let tessellation = if requires_atlas {
-                            draw::build_feather_atlas_tessellation(
-                                raw_path,
-                                draw.state.transform,
-                                draw.paint.feather,
-                                stroke,
-                            )
+                        let fill_direction = if is_stroke {
+                            draw::FeatherFillDirection::Forward
                         } else {
-                            draw::build_feather_tessellation(
+                            let negate_coverage = draw::clockwise_atomic_negate_coverage(
                                 raw_path,
                                 draw.state.transform,
-                                draw.paint.feather,
-                                stroke,
-                            )
-                        }
+                                source_fill_rule,
+                                clockwise_override,
+                            );
+                            match (requires_atlas, negate_coverage) {
+                                (true, true) => draw::FeatherFillDirection::Reverse,
+                                (true, false) => draw::FeatherFillDirection::Forward,
+                                (false, true) => draw::FeatherFillDirection::ForwardThenReverse,
+                                (false, false) => draw::FeatherFillDirection::ReverseThenForward,
+                            }
+                        };
+                        let tessellation = draw::build_feather_tessellation_with_direction(
+                            raw_path,
+                            draw.state.transform,
+                            draw.paint.feather,
+                            stroke,
+                            fill_direction,
+                        )
                         .expect("atomic eligibility already validated feather tessellation");
                         let patch_index_range = if is_stroke {
                             0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32

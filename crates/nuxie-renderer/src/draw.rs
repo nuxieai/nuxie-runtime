@@ -36,6 +36,14 @@ pub(crate) struct InteriorTessellation {
     pub instance_count: u32,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum FeatherFillDirection {
+    Forward,
+    Reverse,
+    ReverseThenForward,
+    ForwardThenReverse,
+}
+
 #[derive(Clone)]
 struct StrokeCurve {
     cubic: [Vec2D; 4],
@@ -74,7 +82,13 @@ pub(crate) fn build_feather_tessellation(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<FillTessellation> {
-    build_feather_tessellation_with_directions(path, transform, paint_feather, stroke, true)
+    build_feather_tessellation_with_direction(
+        path,
+        transform,
+        paint_feather,
+        stroke,
+        FeatherFillDirection::ReverseThenForward,
+    )
 }
 
 pub(crate) fn build_feather_atlas_tessellation(
@@ -83,15 +97,21 @@ pub(crate) fn build_feather_atlas_tessellation(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<FillTessellation> {
-    build_feather_tessellation_with_directions(path, transform, paint_feather, stroke, false)
+    build_feather_tessellation_with_direction(
+        path,
+        transform,
+        paint_feather,
+        stroke,
+        FeatherFillDirection::Forward,
+    )
 }
 
-fn build_feather_tessellation_with_directions(
+pub(crate) fn build_feather_tessellation_with_direction(
     path: &RawPath,
     transform: Mat2D,
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
-    double_sided_fill: bool,
+    fill_direction: FeatherFillDirection,
 ) -> Option<FillTessellation> {
     let feather_radius = paint_feather * 1.5;
     if feather_radius <= 0.0 || !feather_radius.is_finite() {
@@ -99,8 +119,15 @@ fn build_feather_tessellation_with_directions(
     }
     let mut tessellation =
         build_stroke_or_feather_tessellation(path, transform, stroke, feather_radius)?;
-    if stroke.is_none() && double_sided_fill {
-        tessellation.make_double_sided();
+    if stroke.is_none() {
+        match fill_direction {
+            FeatherFillDirection::Forward => {}
+            FeatherFillDirection::Reverse => tessellation.make_single_sided_reverse(true),
+            FeatherFillDirection::ReverseThenForward => tessellation.make_double_sided(),
+            FeatherFillDirection::ForwardThenReverse => {
+                tessellation.make_double_sided_with_direction(true);
+            }
+        }
     }
     Some(tessellation)
 }
@@ -1321,6 +1348,47 @@ impl FillTessellation {
             (self.base_instance + self.instance_count) * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         push_midpoint_tail_padding(&mut self.spans, location as i32);
     }
+
+    fn make_single_sided_reverse(&mut self, negate_coverage: bool) {
+        while self.spans.len() > 1
+            && self.spans.last().unwrap().contour_id_with_flags & CONTOUR_ID_MASK == 0
+        {
+            self.spans.pop();
+        }
+        let base = self.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let vertex_count = self.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let end = base + vertex_count;
+        let mut reversed_spans = Vec::with_capacity(self.spans.len());
+        let mut previous_logical_x0 = None;
+        for mut span in self.spans.iter().copied() {
+            if span.contour_id_with_flags & CONTOUR_ID_MASK == 0 {
+                reversed_spans.push(span);
+                continue;
+            }
+            let (x0, x1) = span.x_range();
+            let logical_x0 = span.y as i32 * TESS_TEXTURE_WIDTH + x0;
+            if previous_logical_x0 == Some(logical_x0) {
+                continue;
+            }
+            previous_logical_x0 = Some(logical_x0);
+            if negate_coverage {
+                span.contour_id_with_flags |= NEGATE_PATH_FILL_COVERAGE_FLAG;
+            }
+            push_reverse_tessellation_spans(
+                &mut reversed_spans,
+                span,
+                logical_x0,
+                logical_x0 + x1 - x0,
+                base as i32,
+                end as i32,
+            );
+        }
+        self.spans = reversed_spans;
+        for contour in &mut self.contours {
+            contour.vertex_index0 = base + end - contour.vertex_index0 - 1;
+        }
+        push_midpoint_tail_padding(&mut self.spans, end as i32);
+    }
 }
 
 pub(crate) fn clockwise_atomic_negate_coverage(
@@ -1404,6 +1472,32 @@ fn push_double_sided_tessellation_spans(
         reflection_y -= 1;
         reflection_x0 += TESS_TEXTURE_WIDTH;
         reflection_x1 += TESS_TEXTURE_WIDTH;
+    }
+}
+
+fn push_reverse_tessellation_spans(
+    spans: &mut Vec<TessVertexSpan>,
+    mut span: TessVertexSpan,
+    logical_x0: i32,
+    logical_x1: i32,
+    base: i32,
+    end: i32,
+) {
+    let vertex_count = logical_x1 - logical_x0;
+    let reverse_location = end - (logical_x0 - base);
+    let mut y = (reverse_location - 1) / TESS_TEXTURE_WIDTH;
+    let mut x0 = (reverse_location - 1) % TESS_TEXTURE_WIDTH + 1;
+    let mut x1 = x0 - vertex_count;
+    loop {
+        span.y = y as f32;
+        span.set_ranges(x0, x1, -1, -1, f32::NAN);
+        spans.push(span);
+        if x1 >= 0 {
+            break;
+        }
+        y -= 1;
+        x0 += TESS_TEXTURE_WIDTH;
+        x1 += TESS_TEXTURE_WIDTH;
     }
 }
 
@@ -2352,6 +2446,83 @@ mod tests {
         let atlas = build_feather_atlas_tessellation(&path, Mat2D::IDENTITY, 10.0, None).unwrap();
         assert_eq!(atlas.contours[0].vertex_index0, 8);
         assert_eq!(atlas.instance_count * 2, direct.instance_count);
+    }
+
+    #[test]
+    fn mirrored_feather_fill_uses_cpp_contour_directions() {
+        let mut path = RawPath::new();
+        path.move_to(4.0, 4.0);
+        path.line_to(60.0, 4.0);
+        path.line_to(32.0, 60.0);
+        path.close();
+        let transform = Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0]);
+
+        let direct = build_feather_tessellation_with_direction(
+            &path,
+            transform,
+            2.0,
+            None,
+            FeatherFillDirection::ForwardThenReverse,
+        )
+        .unwrap();
+        assert_eq!(direct.contours[0].vertex_index0, 8);
+        assert!(direct
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0));
+
+        let atlas = build_feather_tessellation_with_direction(
+            &path,
+            transform,
+            40.0,
+            None,
+            FeatherFillDirection::Reverse,
+        )
+        .unwrap();
+        let base = atlas.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let end = base + atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        assert_eq!(atlas.contours[0].vertex_index0, end - 1);
+        assert!(atlas
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| {
+                let (x0, x1) = span.x_range();
+                x0 > x1 && span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0
+            }));
+    }
+
+    #[test]
+    fn reverse_feather_atlas_wraps_descending_spans_across_rows() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        for index in 1..=320 {
+            path.line_to(index as f32, (index & 1) as f32);
+        }
+        path.close();
+
+        let atlas = build_feather_tessellation_with_direction(
+            &path,
+            Mat2D::IDENTITY,
+            1.0,
+            None,
+            FeatherFillDirection::Reverse,
+        )
+        .unwrap();
+        assert!(
+            atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
+                > TESS_TEXTURE_WIDTH as u32
+        );
+        assert!(atlas
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| span.x_range().0 > span.x_range().1));
+        assert!(atlas
+            .spans
+            .iter()
+            .any(|span| span.x_range().1 < 0 || span.x_range().0 > TESS_TEXTURE_WIDTH));
     }
 
     #[test]

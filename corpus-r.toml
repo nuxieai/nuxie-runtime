@@ -1019,10 +1019,9 @@ stream = "fixtures/renderer/streams/gm/feathertext_montserrat_mirrored.rive-stre
 reference = "fixtures/renderer/reference/metal/gm/feathertext_montserrat_mirrored-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1070,10 +1069,9 @@ stream = "fixtures/renderer/streams/gm/feathertext_roboto_mirrored.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/feathertext_roboto_mirrored-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

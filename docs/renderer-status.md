@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=144, diverges=0, gated=1,323, total=1,467.
+- Rust wgpu: exact=146, diverges=0, gated=1,321, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -96,7 +96,8 @@ Run `make renderer-golden`.
   `mandoline`, both `mesh_ht` cases, transparent overfill, opaque and
   transparent overstroke, `path_skbug_11859`, `quadcap`, `skbug12244`,
   `strokes_zoomed`, `teenyStrokes`, all three tricky-cubic stroke variants,
-  and both transparent-clear blend cases.
+  and both transparent-clear blend cases, plus the mirrored Montserrat and
+  Roboto feather-text entries.
 
 ## Milestones
 
@@ -249,10 +250,12 @@ Run `make renderer-golden`.
    now schedules disjoint MSAA draws with the C++ layer reservations. A forced
    C++ clockwise-atomic sweep of the 38 remaining gated GMs promoted 24 under
    their unchanged contracts. Two more clear-state GMs became exact after
-   frame attachments adopted C++'s integer-premultiplied clear color. Twelve
-   real GM divergences remain. Continue R2 with the mirrored Montserrat/Roboto
-   feather-text pair, whose roughly 750k-pixel failures are the largest shared
-   structural feather gap. The remaining logical-flush sort-key fields are
+   frame attachments adopted C++'s integer-premultiplied clear color. C++'s
+   determinant-aware contour direction now closes the mirrored
+   Montserrat/Roboto feather-text pair. Ten real GM divergences remain.
+   Continue R2 with `interleavedfeather`, the largest remaining structural
+   feather gap not already covered by the named severe-cusp investigation.
+   The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
 2. Expand corpus entries only as focused pixel replay proves each feature.
@@ -268,6 +271,14 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Mirrored clockwise feather fills now use C++'s contour-direction
+  contract: direct fills write forward-then-reverse tessellation and atlas
+  fills write single-sided descending spans, with matching contour anchors and
+  negative-coverage flags. Structural row-wrap tests and fresh native Metal
+  references pin the layout. Montserrat drops from 753,955 differing pixels to
+  14 and Roboto from 744,884 to zero under the unchanged 2/32 contract, raising
+  the ratchet from 144 to 146 exact entries. `interleavedfeather` is next; the
+  already-isolated `feather_cusp` residual remains named rather than tolerated.
 - 2026-07-13: Reclassified all 38 gated clockwise-atomic GMs against freshly
   forced C++ Metal output. Twenty-four already pass their existing contracts
   and are promoted with mode-correct references; no tolerance changed. The
@@ -1403,3 +1414,6 @@ Run `make renderer-golden`.
   feathered draws, including all 15 advanced modes, repeated bounded copies,
   attachment preservation, path clipping, and an exact C++ Dawn frame. The
   renderer ratchet remains exact=118/diverges=0/gated=1,349.
+- 2026-07-13: Ported determinant-aware direct and atlas feather contour
+  directions, promoted both mirrored feather-text GMs, and advanced the
+  renderer ratchet to exact=146/diverges=0/gated=1,321.

@@ -603,6 +603,11 @@ impl PaintData {
         self
     }
 
+    pub(crate) fn with_generic_clockwise_fill(mut self) -> Self {
+        self.params &= !(0x100 | 0x200);
+        self
+    }
+
     pub(crate) fn with_clip_id(mut self, clip_id: u16) -> Self {
         self.params |= u32::from(clip_id) << 16;
         self
@@ -904,6 +909,12 @@ mod tests {
         assert_eq!(
             PaintData::clip_update(7, 3, FillRule::EvenOdd).value,
             7 << 16
+        );
+        assert_eq!(
+            PaintData::solid(0x8040_2010, FillRule::Clockwise, BlendMode::Multiply)
+                .with_generic_clockwise_fill()
+                .params,
+            1 | 11 << 4
         );
         let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
         assert_eq!(stroke.params, 1 | 11 << 4);

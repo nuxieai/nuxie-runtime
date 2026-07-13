@@ -31,6 +31,7 @@ constexpr uint32_t kExpectedPhysicalAtlasSize = 48;
 constexpr uint32_t kMaskHeaderBytes = 20;
 constexpr uint32_t kBlitHeaderBytes = 20;
 constexpr uint32_t kInputsHeaderBytes = 40;
+constexpr uint32_t kAtomicCoverageHeaderBytes = 24;
 constexpr uint32_t kTessSpanHeaderBytes = 28;
 constexpr uint32_t kDirectGridHeaderBytes = 64;
 constexpr uint32_t kBytesPerTexel = 2;
@@ -191,6 +192,44 @@ void writeBlit(const char* output,
     if (!file)
     {
         fail("could not write atlas-blit output file");
+    }
+}
+
+void writeAtomicCoverage(const char* output,
+                         uint32_t width,
+                         uint32_t height,
+                         const std::vector<uint32_t>& words)
+{
+    const uint64_t expectedWordCount = static_cast<uint64_t>(width) * height;
+    if (width == 0 || height == 0 || expectedWordCount > UINT32_MAX ||
+        words.size() != expectedWordCount)
+    {
+        fail("atomic coverage readback dimensions or word count are invalid");
+    }
+    std::array<uint8_t, kAtomicCoverageHeaderBytes> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'P', 'C', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, width);
+    writeU32(header, 16, height);
+    writeU32(header, 20, static_cast<uint32_t>(words.size()));
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open atomic coverage output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    for (uint32_t word : words)
+    {
+        std::array<uint8_t, sizeof(word)> encodedWord{};
+        writeU32(encodedWord, 0, word);
+        file.write(reinterpret_cast<const char*>(encodedWord.data()),
+                   encodedWord.size());
+    }
+    if (!file)
+    {
+        fail("could not write atomic coverage output file");
     }
 }
 
@@ -704,6 +743,51 @@ std::vector<uint8_t> readTexture(wgpu::Instance instance,
     wgpuBufferUnmap(readback.Get());
     return packed;
 }
+
+std::vector<uint32_t> readBuffer(wgpu::Instance instance,
+                                 wgpu::Device device,
+                                 wgpu::Queue queue,
+                                 wgpu::Buffer buffer,
+                                 uint64_t bufferSize)
+{
+    if (buffer == nullptr || bufferSize == 0 || bufferSize % sizeof(uint32_t) != 0)
+    {
+        fail("atomic coverage buffer is absent or not u32-addressable");
+    }
+    wgpu::BufferDescriptor readbackDesc = {};
+    readbackDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
+    readbackDesc.size = bufferSize;
+    wgpu::Buffer readback = device.CreateBuffer(&readbackDesc);
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    encoder.CopyBufferToBuffer(buffer, 0, readback, 0, bufferSize);
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    MapResult mapResult;
+    WGPUBufferMapCallbackInfo mapCallback = {};
+    mapCallback.mode = WGPUCallbackMode_WaitAnyOnly;
+    mapCallback.callback = onMap;
+    mapCallback.userdata1 = &mapResult;
+    await(instance.Get(), wgpuBufferMapAsync(readback.Get(), WGPUMapMode_Read, 0,
+                                              bufferSize, mapCallback));
+    if (!mapResult.succeeded)
+    {
+        fail("could not map atomic coverage readback buffer");
+    }
+    const uint8_t* mapped = static_cast<const uint8_t*>(
+        wgpuBufferGetConstMappedRange(readback.Get(), 0, bufferSize));
+    if (mapped == nullptr)
+    {
+        fail("mapped atomic coverage readback buffer has no range");
+    }
+    std::vector<uint32_t> words(bufferSize / sizeof(uint32_t));
+    for (size_t i = 0; i != words.size(); ++i)
+    {
+        std::memcpy(&words[i], mapped + i * sizeof(uint32_t), sizeof(uint32_t));
+    }
+    wgpuBufferUnmap(readback.Get());
+    return words;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -765,12 +849,12 @@ int main(int argc, char** argv)
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
          !advancedBlendCase && !atomicAdvancedBlendCase &&
          !intersectionGroupsCase) ||
-        (auxiliaryOutput != nullptr && !cuspCase && !directStrokesRoundCase &&
-         !directRawTextCase) ||
+        (auxiliaryOutput != nullptr && !cuspCase && !directCuspCase &&
+         !directStrokesRoundCase && !directRawTextCase) ||
         ((directStrokesRoundCase || directRawTextCase) &&
          auxiliaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [softened-or-tess-span-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [softened-coverage-or-tess-span-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1392,7 +1476,8 @@ int main(int argc, char** argv)
             (!directTriangulatedCase &&
              (facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
               facts.strokePatchCount == 0)) ||
-            (directCuspCase && facts.contours.size() != 2) ||
+            (directCuspCase &&
+             (!facts.fixedFunctionColorOutput || facts.contours.size() != 2)) ||
             (directPolySharkCase &&
              (facts.strokePatchCount != kExpectedPolySharkPatchCount ||
               facts.contours.size() != kExpectedPolySharkContourCount)) ||
@@ -1755,6 +1840,27 @@ int main(int argc, char** argv)
     }
     const std::vector<uint8_t> targetBytes =
         readTexture(instance, device, queue, targetTexture, 4);
+    if (directCuspCase && auxiliaryOutput != nullptr)
+    {
+        const uint64_t expectedCoverageBytes =
+            static_cast<uint64_t>(kFrameWidth) * kFrameHeight * sizeof(uint32_t);
+        const uint64_t coverageBufferBytes =
+            webgpuContext->atomicPLSCoverageBufferSizeForOracle();
+        const wgpu::Buffer coverageBuffer =
+            webgpuContext->atomicPLSCoverageBufferForOracle();
+        if (coverageBuffer == nullptr || coverageBufferBytes != expectedCoverageBytes)
+        {
+            fail("direct cusp atomic coverage backing must be exactly 64x64 u32 words");
+        }
+        writeAtomicCoverage(auxiliaryOutput,
+                            kFrameWidth,
+                            kFrameHeight,
+                            readBuffer(instance,
+                                       device,
+                                       queue,
+                                       coverageBuffer,
+                                       coverageBufferBytes));
+    }
     if (changingPathClippedCase)
     {
         const auto pixel = [&targetBytes](uint32_t x, uint32_t y) {
@@ -1850,5 +1956,12 @@ int main(int argc, char** argv)
                 blitOutput,
                 frameWidth,
                 frameHeight);
+    if (directCuspCase && auxiliaryOutput != nullptr)
+    {
+        std::printf("wrote %s: %ux%u u32 atomic PLS coverage words\n",
+                    auxiliaryOutput,
+                    kFrameWidth,
+                    kFrameHeight);
+    }
     return 0;
 }

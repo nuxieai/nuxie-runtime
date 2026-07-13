@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=153, diverges=0, gated=1,314, total=1,467.
+- Rust wgpu: exact=154, diverges=0, gated=1,313, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -30,6 +30,7 @@ Run `make renderer-golden`.
   `first-light-atlas-feather-stroke-clockwise-atomic`, and
   `gm-feather_strokes-clockwise-atomic`, and
   `gm-feather_shapes-clockwise-atomic`,
+  `gm-feather_cusp-clockwise-atomic`,
   `gm-feather_ellipse-clockwise-atomic`, and
   `gm-feather_polyshapes-clockwise-atomic`, and
   `gm-feather_corner-clockwise-atomic`,
@@ -127,9 +128,13 @@ Run `make renderer-golden`.
 1. Finish feather coverage in source dependency order. Ordered atomic/fallback
    partitioning, direct/atlas threshold routing, atlas-stroke tessellation
    inputs, and the R16 mask are exact against C++ WebGPU. Direct severe-cusp
-   topology and tessellation inputs are also exact; its remaining isolated
-   558-pixel/max-255 cusp-tip lobe is downstream of tessellation and stays
-   named rather than tolerated. Double-sided tessellation now wraps paired
+   topology, tessellation, normalized atomic coverage, and same-backend final
+   pixels are now exact or within the standard `2/32` contract. Porting C++'s
+   fixed-color generic-atomic face selection and clockwise `DrawContents`
+   encoding removes the max-255 cusp-tip lobe. Fresh native Metal output has
+   9,480 pixels beyond delta 2/max delta 11, matching the bounded cross-backend
+   feather-overlap family, so Sol approved promotion under a 16,384-pixel
+   allowance. Double-sided tessellation now wraps paired
    forward/mirrored spans across texture rows, making all 42 isolated
    `feather_polyshapes` cells exact. C++'s axis-aligned clip-rect fast path and
    arbitrary clip stacks/IDs are ported. The clipping sweep now leaves three
@@ -259,7 +264,7 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Three gated clockwise-atomic GM
+   Montserrat/Roboto feather-text pair. Two gated clockwise-atomic GM
    divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
@@ -310,6 +315,15 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Promote `feather_cusp` under a bounded 16,384-pixel
+  Metal-versus-WebGPU allowance. C++ and Rust match the severe direct cusp's
+  complete tessellation inputs and every non-clear atomic coverage word; after
+  matching C++'s fixed-color generic-atomic face and clockwise paint encoding,
+  the same-backend final blit passes `2/32`. The full native Metal GM retains
+  9,480 pixels beyond delta 2/max delta 11, in line with promoted overlapping
+  feather families. Sol approved that cross-backend classification after
+  catching and requiring fixes for advanced-blend culling and clipped authored
+  fill-rule preservation; both now have focused regressions and C++ oracles.
 - 2026-07-13: The mid-R2 wgpu resource-seam review is complete. Generated WGSL
   bindings, retained resource lifetimes, queue/readback ordering, and
   factory-lifetime pipeline ownership have no observed correctness mismatch.
@@ -1588,3 +1602,11 @@ Run `make renderer-golden`.
   batches at 65,535 paths, replaced oversized inseparable-run panics with a
   named error, and recorded the R3/R4 boundaries without changing the renderer
   ratchet.
+- 2026-07-13: Closed the direct `feather_cusp` structural mismatch with C++'s
+  fixed-color generic-atomic face and clockwise paint encoding. Added exact
+  C++ atomic-coverage capture plus same-backend final-blit oracles, preserved
+  authored clipped fill rules, and kept advanced feather blending green after
+  Sol review. Native Metal comparison is bounded at 9,480 pixels/max delta 11;
+  promotion advances the renderer ratchet to
+  exact=154/diverges=0/gated=1,313. Renderer golden, both V2 golden floors,
+  and the full workspace suite pass.

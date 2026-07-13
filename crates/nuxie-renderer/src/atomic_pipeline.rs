@@ -63,6 +63,11 @@ pub(crate) struct AtomicDraw<'a> {
     pub image_mesh: Option<ImageMeshBuffers<'a>>,
 }
 
+pub(crate) struct AtomicCoverageReadback {
+    pub buffer: wgpu::Buffer,
+    pub word_count: usize,
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct ImageMeshBuffers<'a> {
     pub vertices: &'a wgpu::Buffer,
@@ -633,7 +638,7 @@ impl AtomicPipeline {
                 buffers: &[Some(PatchVertex::layout())],
             },
             primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: Some(wgpu::Face::Front),
                 ..Default::default()
             },
             depth_stencil: None,
@@ -909,7 +914,8 @@ impl AtomicPipeline {
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         pixel_count: usize,
-    ) {
+        capture_coverage: bool,
+    ) -> Option<AtomicCoverageReadback> {
         assert!(!draws.is_empty());
         // C++ RenderContextWebGPUImpl::AtomicDrawRenderPass switches the whole
         // flush to storage-buffer color when fixedFunctionColorOutput is false.
@@ -963,8 +969,22 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-coverage",
             &vec![0u32; pixel_count],
-            wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::STORAGE
+                | if capture_coverage {
+                    wgpu::BufferUsages::COPY_SRC
+                } else {
+                    wgpu::BufferUsages::empty()
+                },
         );
+        let coverage_readback = capture_coverage.then(|| AtomicCoverageReadback {
+            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-atomic-coverage-readback"),
+                size: coverage.size(),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }),
+            word_count: pixel_count,
+        });
         let color_words = if advanced_blend {
             vec![0u32; pixel_count]
         } else {
@@ -1327,6 +1347,9 @@ impl AtomicPipeline {
                 }
             }
         }
+        if let Some(readback) = &coverage_readback {
+            encoder.copy_buffer_to_buffer(&coverage, 0, &readback.buffer, 0, coverage.size());
+        }
         {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
@@ -1346,6 +1369,7 @@ impl AtomicPipeline {
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
         }
+        coverage_readback
     }
 }
 

@@ -95,7 +95,7 @@ index 4fcf8c0e..5f43743e 100644
  #include <webgpu/webgpu_cpp.h>
  
  #ifdef RIVE_WAGYU
-@@ -105,6 +106,47 @@ public:
+@@ -105,6 +106,55 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
@@ -134,6 +134,14 @@ index 4fcf8c0e..5f43743e 100644
 +    wgpu::Texture tessellationTextureForOracle() const
 +    {
 +        return m_tessVertexTexture;
++    }
++    wgpu::Buffer atomicPLSCoverageBufferForOracle() const
++    {
++        return m_atomicPLSCoverageBuffer;
++    }
++    uint64_t atomicPLSCoverageBufferSizeForOracle() const
++    {
++        return m_atomicPLSBackingBufferSize;
 +    }
 +    const AtlasMaskOracleFacts& atlasMaskFactsForOracle() const
 +    {
@@ -348,6 +356,15 @@ index ff41da4c..1e81784d 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
+@@ -2903,7 +2907,8 @@ wgpu::Buffer RenderContextWebGPUImpl::atomicPLSCoverageBuffer()
+     if (m_atomicPLSCoverageBuffer == nullptr)
+     {
+         auto desc = plsBackingBufferDesc(m_atomicPLSBackingBufferSize);
++        desc.usage |= wgpu::BufferUsage::CopySrc;
+         m_atomicPLSCoverageBuffer = m_device.CreateBuffer(&desc);
+     }
+     return m_atomicPLSCoverageBuffer;
+ }
 @@ -3846,6 +3850,95 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
  
  void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)

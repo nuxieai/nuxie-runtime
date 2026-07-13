@@ -99,6 +99,16 @@ the independent pixel oracle first, keep the corpus ratchet green, and port the
 algorithm behind the existing render-api boundary. The big-bang variant remains
 documented but inactive.
 
+**Decision (2026-07-13): orchestrator-first delegation.** The main Phase R agent
+owns decomposition, the critical path, integration, and the final oracle verdict.
+It implements linear or tightly coupled work directly. Worker agents are optional
+parallel capacity for bounded, disjoint slices with an objective compiler, test,
+or C++ comparison oracle; they are not a mandatory pipeline stage. The main agent
+reviews every worker diff and reruns its named oracle before integration. A Sol
+review is reserved for consequential worker patches or explicit architecture,
+tolerance, and gate decisions, not added mechanically to every slice. When work
+becomes linear, delegation stops and the main agent continues locally.
+
 Added 2026-07-09, informed by Bun's Zig→Rust migration
 (https://bun.com/blog/bun-in-rust): 1,448 files mechanically translated in 11
 days by ~64 parallel agents — translate everything (tree deliberately

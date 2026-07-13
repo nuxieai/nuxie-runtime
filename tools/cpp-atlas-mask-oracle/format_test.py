@@ -17,6 +17,8 @@ MAGIC = b"RIVEMSK\0"
 INPUT_HEADER_BYTES = 40
 INPUT_MAGIC = b"RIVEATI\0"
 BLIT_MAGIC = b"RIVEABL\0"
+ATOMIC_COVERAGE_HEADER_BYTES = 24
+ATOMIC_COVERAGE_MAGIC = b"RIVEAPC\0"
 TESS_SPAN_HEADER_BYTES = 28
 TESS_SPAN_MAGIC = b"RIVEATS\0"
 TESS_SPAN_RECORD_BYTES = 64
@@ -116,6 +118,42 @@ def make_inputs(base_patch=1, patch_count=2, contour_count=1,
         width, height, 16, 16
     )
     return header + bytes(contour_count * 16) + bytes(width * height * 16)
+
+
+def parse_atomic_coverage(data: bytes) -> dict:
+    if len(data) < ATOMIC_COVERAGE_HEADER_BYTES:
+        raise ValueError("file is shorter than the 24-byte RIVEAPC header")
+    if data[:8] != ATOMIC_COVERAGE_MAGIC:
+        raise ValueError("bad RIVEAPC magic")
+    version, width, height, word_count = struct.unpack_from("<4I", data, 8)
+    if version != 1:
+        raise ValueError("unsupported RIVEAPC version")
+    if not width or not height:
+        raise ValueError("RIVEAPC dimensions must be nonzero")
+    if word_count != width * height:
+        raise ValueError("RIVEAPC word count must equal width times height")
+    expected = ATOMIC_COVERAGE_HEADER_BYTES + word_count * 4
+    if len(data) != expected:
+        raise ValueError("RIVEAPC length mismatch")
+    words = struct.unpack_from(f"<{word_count}I", data, ATOMIC_COVERAGE_HEADER_BYTES)
+    return {"width": width, "height": height, "word_count": word_count,
+            "words": words}
+
+
+def make_atomic_coverage(width=2, height=2) -> bytes:
+    words = tuple(range(width * height))
+    return ATOMIC_COVERAGE_MAGIC + struct.pack(
+        "<4I", 1, width, height, len(words)
+    ) + struct.pack(f"<{len(words)}I", *words)
+
+
+def validate_direct_cusp_coverage(data: bytes) -> dict:
+    validated = parse_atomic_coverage(data)
+    if (validated["width"], validated["height"], validated["word_count"]) != (
+        64, 64, 4096
+    ):
+        raise ValueError("direct-cusp coverage must be exactly 64x64 u32 words")
+    return validated
 
 
 def _parse_direct_inputs(data: bytes, magic: bytes, name: str,
@@ -405,6 +443,54 @@ class FormatTests(unittest.TestCase):
         struct.pack_into("<I", bad_stride, 32, 12)
         with self.assertRaisesRegex(ValueError, "stride"):
             parse_inputs(bad_stride)
+
+    def test_direct_cusp_atomic_coverage_is_little_endian_and_strict(self):
+        coverage = make_atomic_coverage()
+        self.assertEqual(parse_atomic_coverage(coverage), {
+            "width": 2,
+            "height": 2,
+            "word_count": 4,
+            "words": (0, 1, 2, 3),
+        })
+        self.assertEqual(coverage[:ATOMIC_COVERAGE_HEADER_BYTES],
+                         ATOMIC_COVERAGE_MAGIC + struct.pack("<4I", 1, 2, 2, 4))
+        bad_word_count = bytearray(coverage)
+        struct.pack_into("<I", bad_word_count, 20, 3)
+        with self.assertRaisesRegex(ValueError, "word count"):
+            parse_atomic_coverage(bad_word_count)
+        with self.assertRaisesRegex(ValueError, "length"):
+            parse_atomic_coverage(coverage + b"\0")
+        self.assertEqual(
+            validate_direct_cusp_coverage(make_atomic_coverage(64, 64))["word_count"],
+            4096,
+        )
+        with self.assertRaisesRegex(ValueError, "exactly 64x64"):
+            validate_direct_cusp_coverage(make_atomic_coverage(63, 64))
+
+    def test_direct_cusp_atomic_coverage_cli_validates_contract(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_path = pathlib.Path(temp_dir) / "coverage.bin"
+            artifact_path.write_bytes(make_atomic_coverage(64, 64))
+            result = subprocess.run(
+                [sys.executable, __file__, "--validate-direct-cusp-coverage",
+                 str(artifact_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("RIVEAPC valid: words=4096 coverage=64x64", result.stdout)
+
+            artifact_path.write_bytes(make_atomic_coverage(63, 64))
+            invalid = subprocess.run(
+                [sys.executable, __file__, "--validate-direct-cusp-coverage",
+                 str(artifact_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("direct-cusp-coverage artifact validation failed", invalid.stderr)
 
     def test_direct_strokes_round_inputs_require_one_contour_and_patches(self):
         self.assertEqual(validate_direct_strokes_round_inputs(make_inputs(patch_count=10)), {
@@ -1071,7 +1157,8 @@ class FormatTests(unittest.TestCase):
             '"$output" "$inputs_output"',
             '"$fill_output" "$fill_inputs_output" "$fill_blit_output" fill',
             '"$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"',
-            '"$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp',
+            'direct_cusp_coverage_output="${RIVE_DIRECT_CUSP_COVERAGE_OUTPUT:-$script_dir/out/direct-cusp-coverage.bin}"',
+            '"$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp "$direct_cusp_coverage_output"',
             'direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"',
             'direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"',
             'direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"',
@@ -1106,6 +1193,7 @@ class FormatTests(unittest.TestCase):
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-cusp-coverage "$direct_cusp_coverage_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"',
@@ -1119,6 +1207,7 @@ class FormatTests(unittest.TestCase):
             'if [[ "$cusp_blit_bytes" != "16404" ]]',
             'if (( softened_cusp_bytes <= 20 ))',
             'if (( direct_cusp_inputs_bytes <= 56 ))',
+            'if [[ "$direct_cusp_coverage_bytes" != "16408" ]]',
             'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
             'if [[ "$direct_strokes_round_blit_bytes" != "640020" ]]',
             'if [[ "$direct_rawtext_inputs_bytes" != "66152" ]]',
@@ -1240,6 +1329,9 @@ class FormatTests(unittest.TestCase):
             self.assertIn("wgpu::TextureFormat::R16Float", atlas)
             self.assertIn("wgpu::TextureFormat::RGBA32Uint", tessellation)
             self.assertNotIn("wgpu::TextureUsage::CopySrc", gradient)
+            coverage = cpp[cpp.index("wgpu::Buffer RenderContextWebGPUImpl::atomicPLSCoverageBuffer()"):
+                           cpp.index("wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline")]
+            self.assertIn("desc.usage |= wgpu::BufferUsage::CopySrc", coverage)
 
             gpu = (temp / "renderer/include/rive/renderer/gpu.hpp").read_text()
             render_context_header = (
@@ -1283,6 +1375,8 @@ class FormatTests(unittest.TestCase):
                 "batch.drawType == DrawType::midpointFanCenterAAPatches",
                 "m_atlasMaskOracleFacts.tessVertexSpans.assign(",
                 "tessellationTextureForOracle() const",
+                "atomicPLSCoverageBufferForOracle() const",
+                "atomicPLSCoverageBufferSizeForOracle() const",
                 "m_atlasMaskOracleFacts.contours.assign(",
                 "m_atlasMaskOracleFacts.triangles.assign(",
             ):
@@ -1307,6 +1401,8 @@ if __name__ == "__main__":
             ("direct-flower", "RIVEDFI", parse_direct_flower_inputs),
         "--validate-direct-bad-skin":
             ("direct-bad-skin", "RIVEDBI", parse_direct_bad_skin_inputs),
+        "--validate-direct-cusp-coverage":
+            ("direct-cusp-coverage", "RIVEAPC", validate_direct_cusp_coverage),
         "--validate-direct-strokes-round":
             ("direct-strokes-round", "RIVEATI", validate_direct_strokes_round_inputs),
         "--validate-direct-strokes-round-spans":
@@ -1338,6 +1434,11 @@ if __name__ == "__main__":
                 f"{format_name} valid: "
                 f"firstSpan={validated['first_span']} "
                 f"spans={validated['span_count']}"
+            )
+        elif format_name == "RIVEAPC":
+            print(
+                f"{format_name} valid: words={validated['word_count']} "
+                f"coverage={validated['width']}x{validated['height']}"
             )
         else:
             print(

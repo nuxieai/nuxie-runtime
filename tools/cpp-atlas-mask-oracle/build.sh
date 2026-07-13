@@ -29,6 +29,7 @@ cusp_blit_output="${RIVE_ATLAS_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-cusp-blit
 softened_cusp_output="${RIVE_SOFTENED_CUSP_OUTPUT:-$script_dir/out/softened-cusp.bin}"
 direct_cusp_inputs_output="${RIVE_DIRECT_CUSP_INPUT_OUTPUT:-$script_dir/out/direct-cusp-inputs.bin}"
 direct_cusp_blit_output="${RIVE_DIRECT_CUSP_BLIT_OUTPUT:-$script_dir/out/direct-cusp-blit.rgba}"
+direct_cusp_coverage_output="${RIVE_DIRECT_CUSP_COVERAGE_OUTPUT:-$script_dir/out/direct-cusp-coverage.bin}"
 direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_dir/out/direct-polyshark-inputs.bin}"
 direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"
 direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"
@@ -286,6 +287,7 @@ mkdir -p "$injected_dir" \
     "$(dirname "$softened_cusp_output")" \
     "$(dirname "$direct_cusp_inputs_output")" \
     "$(dirname "$direct_cusp_blit_output")" \
+    "$(dirname "$direct_cusp_coverage_output")" \
     "$(dirname "$direct_polyshark_inputs_output")" \
     "$(dirname "$direct_grid_inputs_output")" \
     "$(dirname "$direct_flower_inputs_output")" \
@@ -327,7 +329,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -340,7 +342,7 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
-"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp "$direct_cusp_coverage_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_polyshark_inputs_output" /dev/null direct-polyshark
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_grid_inputs_output" /dev/null direct-grid
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_flower_inputs_output" /dev/null direct-flower
@@ -350,6 +352,7 @@ rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_cl
 python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"
+python3 "$script_dir/format_test.py" --validate-direct-cusp-coverage "$direct_cusp_coverage_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"
 python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"
@@ -454,6 +457,11 @@ if [[ "$direct_cusp_blit_bytes" != "16404" ]]; then
     echo "direct cusp blit must be exactly 16404 bytes, got $direct_cusp_blit_bytes: $direct_cusp_blit_output" >&2
     exit 1
 fi
+direct_cusp_coverage_bytes="$(wc -c < "$direct_cusp_coverage_output" | tr -d ' ')"
+if [[ "$direct_cusp_coverage_bytes" != "16408" ]]; then
+    echo "direct cusp atomic coverage must be exactly 16408 bytes, got $direct_cusp_coverage_bytes: $direct_cusp_coverage_output" >&2
+    exit 1
+fi
 direct_polyshark_inputs_bytes="$(wc -c < "$direct_polyshark_inputs_output" | tr -d ' ')"
 if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]; then
     echo "direct polyshark inputs must be exactly 163896 bytes: $direct_polyshark_inputs_output" >&2
@@ -504,6 +512,7 @@ echo "atlas cusp blit: $cusp_blit_output"
 echo "softened cusp: $softened_cusp_output"
 echo "direct cusp inputs: $direct_cusp_inputs_output"
 echo "direct cusp blit: $direct_cusp_blit_output"
+echo "direct cusp atomic coverage: $direct_cusp_coverage_output"
 echo "direct polyshark inputs: $direct_polyshark_inputs_output"
 echo "direct grid inputs: $direct_grid_inputs_output"
 echo "direct flower inputs: $direct_flower_inputs_output"

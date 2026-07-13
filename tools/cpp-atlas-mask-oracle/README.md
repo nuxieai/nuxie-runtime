@@ -51,9 +51,21 @@ captures both contour records and the complete double-sided tessellation
 texture after path softening and before coverage. Dawn WebGPU advertises
 general atomics but not `clockwiseAtomic`, so this artifact is an
 intermediate-geometry oracle only. `direct-cusp-blit.rgba` retains the general
-atomic final target for diagnosis; it is not compared to Rust's
-clockwise-atomic output. Native Metal stream replay remains the final-pixel
-oracle for that mode.
+atomic final target and is compared to Rust's matching generic-atomic draw
+path. Native Metal stream replay remains the full-GM final-pixel oracle for the
+clockwise-atomic mode.
+
+`direct-cusp-coverage.bin` is the corresponding atomic PLS coverage-plane
+sub-oracle. It uses `RIVEAPC` version 1: an exact 24-byte little-endian header
+of `magic[8]`, `version`, `width`, `height`, and `wordCount`, followed by every
+coverage `u32` encoded little-endian in native backing-buffer index order.
+The direct-cusp harness reads it after rendering through a temporary
+`CopySrc` capability on the production coverage backing buffer. The build
+requires exactly `64 x 64 = 4096` words, so the canonical file is `16408`
+bytes; a changed capacity, header, word count, order, or payload length fails
+validation. The Rust comparison normalizes only C++'s untouched fixed-point
+zero sentinel (`65536`) at transparent-black final pixels to Rust's raw-zero
+clear representation; every drawn coverage word must then match exactly.
 
 `direct-strokes-round-spans.bin`, `direct-strokes-round-inputs.bin`, and
 `direct-strokes-round-blit.rgba` isolate draw 38 from
@@ -271,6 +283,18 @@ RIVE_CPP_SOFTENED_CUSP="$PWD/tools/cpp-atlas-mask-oracle/out/softened-cusp.bin" 
 RIVE_CPP_DIRECT_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-inputs.bin" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_direct_cusp_input_oracle_matches_rust_when_configured \
+  -- --exact --ignored --nocapture
+python3 tools/cpp-atlas-mask-oracle/format_test.py \
+  --validate-direct-cusp-coverage \
+  "$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-coverage.bin"
+RIVE_CPP_DIRECT_CUSP_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-blit.rgba" \
+RIVE_CPP_DIRECT_CUSP_COVERAGE="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-coverage.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_direct_cusp_atomic_coverage_matches_rust_when_configured \
+  -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_CUSP_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/direct-cusp-blit.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_direct_cusp_blit_matches_rust_when_configured \
   -- --exact --ignored --nocapture
 RIVE_CPP_DIRECT_POLYSHARK_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-polyshark-inputs.bin" \
   cargo test -p nuxie-renderer \

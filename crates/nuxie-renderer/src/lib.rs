@@ -1307,26 +1307,36 @@ impl WgpuFrame {
     }
 
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, true).map(|(pixels, _)| pixels)
+        self.finish_internal(false, false, true)
+            .map(|(pixels, _, _)| pixels)
     }
 
     #[cfg(test)]
     fn finish_with_clockwise_atomic_coverage(
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
-        self.finish_internal(true, true)
+        self.finish_internal(true, false, true)
+            .map(|(pixels, coverage, _)| (pixels, coverage))
+    }
+
+    #[cfg(test)]
+    fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
+        self.finish_internal(false, true, true)
+            .map(|(pixels, _, coverage)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false).map(|(pixels, _)| pixels)
+        self.finish_internal(false, false, false)
+            .map(|(pixels, _, _)| pixels)
     }
 
     fn finish_internal(
         self,
         capture_clockwise_atomic_coverage: bool,
+        capture_atomic_coverage: bool,
         schedule_msaa_draws: bool,
-    ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
+    ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>, Vec<Vec<u32>>), RendererError> {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
@@ -1384,6 +1394,7 @@ impl WgpuFrame {
                     label: Some("nuxie-frame-encoder"),
                 });
         let mut pending_coverage_readbacks = Vec::new();
+        let mut pending_atomic_coverage_readbacks = Vec::new();
         let mut encode_atomic_run =
             |draws: &[SolidDraw],
              clear_target: bool,
@@ -1535,6 +1546,8 @@ impl WgpuFrame {
                     } else {
                         source_fill_rule
                     };
+                    let paint_fill_rule =
+                        atomic_paint_fill_rule(source_fill_rule, use_clockwise_atomic_batch);
                     let (
                         mut spans,
                         mut path,
@@ -1745,7 +1758,7 @@ impl WgpuFrame {
                                     gpu::PaintData::gradient(
                                         gradient.paint_type,
                                         gradient.texture_y,
-                                        fill_rule,
+                                        paint_fill_rule,
                                         draw.paint.blend_mode,
                                     )
                                 }
@@ -1757,7 +1770,7 @@ impl WgpuFrame {
                             } else {
                                 gpu::PaintData::solid(
                                     modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                    fill_rule,
+                                    paint_fill_rule,
                                     draw.paint.blend_mode,
                                 )
                             };
@@ -1767,6 +1780,14 @@ impl WgpuFrame {
                             unreachable!("MSAA clip reset escaped atomic preparation")
                         }
                     };
+                    if !use_clockwise_atomic_batch
+                        && load_color.is_none()
+                        && draw.paint.style == RenderPaintStyle::Fill
+                        && draw.paint.feather != 0.0
+                        && source_fill_rule == FillRule::Clockwise
+                    {
+                        paint = paint.with_generic_clockwise_fill();
+                    }
                     if draw.state.clip_rect.is_some() {
                         paint = paint.with_clip_rect();
                     }
@@ -2246,7 +2267,7 @@ impl WgpuFrame {
                         );
                     }
                 } else {
-                    self.context.atomic_pipeline.encode_batch(
+                    let coverage_readback = self.context.atomic_pipeline.encode_batch(
                         &self.context.device,
                         encoder,
                         &view,
@@ -2262,7 +2283,11 @@ impl WgpuFrame {
                         &paint_aux,
                         &contours,
                         padded_width as usize * padded_height as usize,
+                        capture_atomic_coverage,
                     );
+                    if let Some(readback) = coverage_readback {
+                        pending_atomic_coverage_readbacks.push(readback);
+                    }
                 }
                 Ok::<(), RendererError>(())
             };
@@ -3180,7 +3205,11 @@ impl WgpuFrame {
                 clip_bytes_per_row: readback.clip_bytes_per_row,
             });
         }
-        Ok((pixels, coverage_snapshots))
+        let atomic_coverage_snapshots = pending_atomic_coverage_readbacks
+            .iter()
+            .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((pixels, coverage_snapshots, atomic_coverage_snapshots))
     }
 }
 
@@ -4029,6 +4058,17 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
             draw.paint.cap,
         )
         .is_some(),
+    }
+}
+
+fn atomic_paint_fill_rule(
+    source_fill_rule: FillRule,
+    use_clockwise_atomic_batch: bool,
+) -> FillRule {
+    if use_clockwise_atomic_batch {
+        FillRule::Clockwise
+    } else {
+        source_fill_rule
     }
 }
 
@@ -5806,17 +5846,20 @@ mod tests {
         assert_eq!(pixel(939, 302), [255, 0, 0, 255]);
     }
 
-    fn coverage_word_at(words: &[u32], range: gpu::CoverageBufferRange, x: u32, y: u32) -> u32 {
+    fn coverage_word_index(range: gpu::CoverageBufferRange, x: u32, y: u32) -> usize {
         let x = (x as f32 + range.offset_x).floor() as u32;
         let y = (y as f32 + range.offset_y).floor() as u32;
-        let index = range.offset
+        (range.offset
             + (y >> 5) * (range.pitch << 5)
             + (x >> 5) * 1024
             + ((x & 28) << 5)
             + ((y & 28) << 2)
             + ((y & 3) << 2)
-            + (x & 3);
-        words[index as usize]
+            + (x & 3)) as usize
+    }
+
+    fn coverage_word_at(words: &[u32], range: gpu::CoverageBufferRange, x: u32, y: u32) -> u32 {
+        words[coverage_word_index(range, x, y)]
     }
 
     #[test]
@@ -5906,6 +5949,46 @@ mod tests {
         assert_eq!(pixel(4, 4), [0, 0, 0, 255]);
         assert_eq!(pixel(32, 24), [255, 255, 255, 255]);
         assert_eq!(pixel(60, 60), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn direct_feather_path_clip_preserves_authored_fill_rules() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = triangle_path([[4.0, 4.0], [60.0, 4.0], [32.0, 60.0]], FillRule::NonZero);
+        let render = |fill_rule| {
+            let fill = rect_path([8.0, 8.0, 56.0, 56.0], fill_rule);
+            let mut frame = factory.begin_frame(0xff00_0000);
+            frame.clip_path(&clip);
+            frame.draw_path(
+                &fill,
+                &WgpuPaint {
+                    color: 0xffff_ffff,
+                    feather: 1.0,
+                    ..WgpuPaint::default()
+                },
+            );
+            frame.finish().unwrap()
+        };
+        let pixel = |pixels: &[u8], x: usize, y: usize| {
+            <[u8; 4]>::try_from(&pixels[(y * 64 + x) * 4..][..4]).unwrap()
+        };
+
+        for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
+            assert_eq!(
+                atomic_paint_fill_rule(fill_rule, false),
+                fill_rule,
+                "generic atomic paint must retain its authored rule"
+            );
+            assert_eq!(
+                atomic_paint_fill_rule(fill_rule, true),
+                FillRule::Clockwise,
+                "the dedicated clockwise batch uses the frame override"
+            );
+            let pixels = render(fill_rule);
+            assert_eq!(pixel(&pixels, 20, 20), [255, 255, 255, 255]);
+            assert_eq!(pixel(&pixels, 32, 32), [255, 255, 255, 255]);
+            assert_eq!(pixel(&pixels, 4, 60), [0, 0, 0, 255]);
+        }
     }
 
     #[test]
@@ -6609,6 +6692,42 @@ mod tests {
             raw_path,
             Mat2D([1.46300006, 0.0, 0.0, 1.46300006, -40.0, -20.0]),
         )
+    }
+
+    fn fixed_feather_direct_cusp_frame() -> WgpuFrame {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 100.0);
+        raw_path.move_to(0.0, 100.0);
+        raw_path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::Clockwise,
+        };
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            feather: 1.0,
+            ..WgpuPaint::default()
+        };
+        let factory = WgpuFactory::new_with_mode(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            RenderMode::ClockwiseAtomic,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(0);
+        frame.transform(Mat2D([1.46300006, 0.0, 0.0, 1.46300006, -40.0, -20.0]));
+        frame.draw_path(&path, &paint);
+        frame
+    }
+
+    fn fixed_feather_direct_cusp_blit() -> atlas_blit_oracle::AtlasBlit {
+        let frame = fixed_feather_direct_cusp_frame();
+        atlas_blit_oracle::AtlasBlit::new(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            frame.finish().unwrap(),
+        )
+        .unwrap()
     }
 
     fn fixed_feather_direct_polyshark_inputs() -> atlas_input_oracle::AtlasInputs {
@@ -8349,6 +8468,130 @@ mod tests {
                 )
             },
         );
+    }
+
+    #[test]
+    #[ignore = "diagnostic generic-atomic coverage readback"]
+    fn direct_cusp_atomic_coverage_capture_has_one_full_frame() {
+        let (_, coverage) = fixed_feather_direct_cusp_frame()
+            .finish_with_atomic_coverage()
+            .unwrap();
+        assert_eq!(coverage.len(), 1);
+        assert_eq!(coverage[0].len(), 64 * 64);
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_CUSP_COVERAGE and RIVE_CPP_DIRECT_CUSP_BLIT"]
+    fn cpp_webgpu_direct_cusp_atomic_coverage_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_CUSP_COVERAGE").expect(
+            "RIVE_CPP_DIRECT_CUSP_COVERAGE is required for the ignored direct-cusp coverage test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_DIRECT_CUSP_COVERAGE is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_CUSP_COVERAGE must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-cusp coverage at {}: {error}",
+                path.display()
+            )
+        });
+        assert!(
+            bytes.len() >= 24,
+            "direct-cusp coverage header is truncated"
+        );
+        assert_eq!(&bytes[..8], b"RIVEAPC\0");
+        let read_u32 = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+        assert_eq!(read_u32(8), 1, "unsupported direct-cusp coverage version");
+        let width = read_u32(12);
+        let height = read_u32(16);
+        let word_count = read_u32(20) as usize;
+        assert_eq!((width, height, word_count), (64, 64, 64 * 64));
+        assert_eq!(bytes.len(), 24 + word_count * 4);
+        let blit_path = PathBuf::from(
+            std::env::var_os("RIVE_CPP_DIRECT_CUSP_BLIT")
+                .expect("RIVE_CPP_DIRECT_CUSP_BLIT is required for coverage normalization"),
+        );
+        let cpp_blit =
+            atlas_blit_oracle::AtlasBlit::parse(&fs::read(&blit_path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ direct-cusp blit at {}: {error}",
+                    blit_path.display()
+                )
+            }))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "malformed C++ direct-cusp blit at {}: {error}",
+                    blit_path.display()
+                )
+            });
+        assert_eq!(cpp_blit.pixels().len(), word_count * 4);
+        let mut cpp_coverage = bytes[24..]
+            .chunks_exact(4)
+            .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
+            .collect::<Vec<_>>();
+        let range = gpu::CoverageBufferRange {
+            offset: 0,
+            pitch: width,
+            offset_x: 0.0,
+            offset_y: 0.0,
+        };
+        for y in 0..height {
+            for x in 0..width {
+                let pixel_index = (y * width + x) as usize;
+                let word_index = coverage_word_index(range, x, y);
+                if cpp_coverage[word_index] == 1 << 16
+                    && cpp_blit.pixels()[pixel_index * 4..][..4] == [0, 0, 0, 0]
+                {
+                    cpp_coverage[word_index] = 0;
+                }
+            }
+        }
+        let (_, rust_captures) = fixed_feather_direct_cusp_frame()
+            .finish_with_atomic_coverage()
+            .unwrap();
+        assert_eq!(rust_captures.len(), 1);
+        let mismatch = cpp_coverage
+            .iter()
+            .zip(&rust_captures[0])
+            .enumerate()
+            .find(|(_, (cpp, rust))| cpp != rust);
+        assert!(mismatch.is_none(), "coverage mismatch: {mismatch:?}");
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_CUSP_BLIT from the C++ WebGPU oracle"]
+    fn cpp_webgpu_direct_cusp_blit_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_CUSP_BLIT")
+            .expect("RIVE_CPP_DIRECT_CUSP_BLIT is required for the ignored direct-cusp blit test");
+        assert!(!path.is_empty(), "RIVE_CPP_DIRECT_CUSP_BLIT is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_CUSP_BLIT must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-cusp blit at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-cusp blit at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = fixed_feather_direct_cusp_blit();
+        atlas_blit_oracle::compare_cpp_to_rust_with_tolerance(&cpp_blit, &rust_blit, 2, 32)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ direct-cusp blit mismatch at {}: {error}",
+                    path.display()
+                )
+            });
     }
 
     #[test]

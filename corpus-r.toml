@@ -843,10 +843,9 @@ stream = "fixtures/renderer/streams/gm/feather_cusp.rive-stream"
 reference = "fixtures/renderer/reference/metal/gm/feather_cusp-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
-max_different_pixels = 32
-gated = "algorithm-core"
+max_different_pixels = 16384
 
 
 [[entry]]

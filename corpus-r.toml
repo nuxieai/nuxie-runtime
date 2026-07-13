@@ -4990,10 +4990,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_hit_order-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_hit_order-frame-4-msaa"
@@ -5016,10 +5015,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_virtualized-fr
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_virtualized-frame-0-msaa"
@@ -5045,7 +5043,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-component_stateful-frame-0-msaa"
@@ -5068,10 +5066,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_stateful_vm_instanc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_stateful_vm_instance-frame-0-msaa"
@@ -5094,10 +5091,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_stateful_vm_instanc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_stateful_vm_instance_2-frame-0-msaa"
@@ -5120,10 +5116,9 @@ reference = "fixtures/renderer/reference/metal/riv/computed_root_transform-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-computed_root_transform-frame-0-msaa"
@@ -5149,7 +5144,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-computed_values_test-frame-0-msaa"
@@ -5172,10 +5167,9 @@ reference = "fixtures/renderer/reference/metal/riv/cubic_value_test-frame-0-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-cubic_value_test-frame-0-msaa"
@@ -5198,10 +5192,9 @@ reference = "fixtures/renderer/reference/metal/riv/cubic_value_test-frame-1-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-cubic_value_test-frame-1-msaa"
@@ -5224,10 +5217,9 @@ reference = "fixtures/renderer/reference/metal/riv/cubic_value_test-frame-2-cloc
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-cubic_value_test-frame-2-msaa"

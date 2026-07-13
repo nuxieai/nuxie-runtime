@@ -47,6 +47,12 @@ pub enum RendererError {
     Adapter(String),
     AtlasPacking(&'static str),
     Device(String),
+    InvalidTextureExtent {
+        label: &'static str,
+        width: u32,
+        height: u32,
+        max_dimension: u32,
+    },
     Map(String),
     Unsupported(&'static str),
 }
@@ -57,6 +63,15 @@ impl fmt::Display for RendererError {
             Self::Adapter(message) => write!(f, "wgpu adapter error: {message}"),
             Self::AtlasPacking(message) => write!(f, "atlas packing error: {message}"),
             Self::Device(message) => write!(f, "wgpu device error: {message}"),
+            Self::InvalidTextureExtent {
+                label,
+                width,
+                height,
+                max_dimension,
+            } => write!(
+                f,
+                "invalid {label} texture extent {width}x{height}; dimensions must be between 1 and {max_dimension}"
+            ),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
         }
@@ -64,6 +79,40 @@ impl fmt::Display for RendererError {
 }
 
 impl Error for RendererError {}
+
+const MAX_ATOMIC_PATHS: usize = u16::MAX as usize;
+
+fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
+    width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
+}
+
+fn validate_texture_extent(
+    label: &'static str,
+    width: u32,
+    height: u32,
+    max_dimension: u32,
+) -> Result<(), RendererError> {
+    if texture_extent_supported(width, height, max_dimension) {
+        Ok(())
+    } else {
+        Err(RendererError::InvalidTextureExtent {
+            label,
+            width,
+            height,
+            max_dimension,
+        })
+    }
+}
+
+fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
+    if path_count <= MAX_ATOMIC_PATHS {
+        Ok(())
+    } else {
+        Err(RendererError::Unsupported(
+            "atomic runs with more than 65535 paths",
+        ))
+    }
+}
 
 struct Context {
     device: wgpu::Device,
@@ -120,6 +169,12 @@ impl WgpuFactory {
             .await
             .map_err(|error| RendererError::Adapter(error.to_string()))?;
         let adapter_limits = adapter.limits();
+        validate_texture_extent(
+            "render target",
+            width,
+            height,
+            adapter_limits.max_texture_dimension_2d,
+        )?;
         let required_features = adapter.features() & wgpu::Features::CLIP_DISTANCES;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -380,6 +435,17 @@ impl Factory for WgpuFactory {
                 texture: None,
             });
         };
+        if !texture_extent_supported(
+            width,
+            height,
+            self.context.device.limits().max_texture_dimension_2d,
+        ) {
+            return Box::new(WgpuImage {
+                width,
+                height,
+                texture: None,
+            });
+        }
         let mip_level_count = u32::BITS - (width | height).leading_zeros();
         let texture = self
             .context
@@ -1349,6 +1415,8 @@ impl WgpuFrame {
                     indices: Arc<wgpu::Buffer>,
                     index_count: u32,
                 }
+
+                validate_atomic_path_count(draws.len())?;
 
                 if clear_target {
                     let attachments = [Some(wgpu::RenderPassColorAttachment {
@@ -4078,7 +4146,24 @@ fn disjoint_atomic_draw_groups_with_limit(
     viewport_height: u32,
     group_limit: usize,
 ) -> Vec<Vec<SolidDraw>> {
+    disjoint_atomic_draw_groups_with_limits(
+        draws,
+        viewport_width,
+        viewport_height,
+        group_limit,
+        MAX_ATOMIC_PATHS,
+    )
+}
+
+fn disjoint_atomic_draw_groups_with_limits(
+    draws: &[SolidDraw],
+    viewport_width: u32,
+    viewport_height: u32,
+    group_limit: usize,
+    path_limit: usize,
+) -> Vec<Vec<SolidDraw>> {
     assert!((1..i16::MAX as usize).contains(&group_limit));
+    assert!(path_limit > 0);
     let mut board =
         intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
     board.resize_and_reset(viewport_width, viewport_height);
@@ -4119,6 +4204,14 @@ fn disjoint_atomic_draw_groups_with_limit(
         groups[group_index].push(draw.clone());
     }
     groups
+        .into_iter()
+        .flat_map(|group| {
+            group
+                .chunks(path_limit)
+                .map(|chunk| chunk.to_vec())
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4373,6 +4466,41 @@ mod tests {
         };
 
     #[test]
+    fn texture_extent_validation_rejects_zero_and_oversized_dimensions() {
+        assert!(validate_texture_extent("test", 1, 8, 8).is_ok());
+        assert!(validate_texture_extent("test", 8, 8, 8).is_ok());
+        assert!(matches!(
+            validate_texture_extent("test", 0, 8, 8),
+            Err(RendererError::InvalidTextureExtent {
+                width: 0,
+                height: 8,
+                max_dimension: 8,
+                ..
+            })
+        ));
+        assert!(matches!(
+            validate_texture_extent("test", 8, 9, 8),
+            Err(RendererError::InvalidTextureExtent {
+                width: 8,
+                height: 9,
+                max_dimension: 8,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn atomic_path_count_rejects_only_values_that_overflow_path_ids() {
+        assert!(validate_atomic_path_count(MAX_ATOMIC_PATHS).is_ok());
+        assert!(matches!(
+            validate_atomic_path_count(MAX_ATOMIC_PATHS + 1),
+            Err(RendererError::Unsupported(
+                "atomic runs with more than 65535 paths"
+            ))
+        ));
+    }
+
+    #[test]
     fn oversized_atlas_layout_returns_renderer_error_before_wgpu() {
         let result = pack_atlas_for_device(1920, 2048, &[(1920, 100); 21]);
 
@@ -4545,6 +4673,30 @@ mod tests {
             .unwrap()
             .texture
             .is_some());
+    }
+
+    #[test]
+    fn image_decode_rejects_dimensions_above_the_adapter_limit_before_wgpu() {
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let width = factory.context.device.limits().max_texture_dimension_2d + 1;
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, width, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&vec![255; width as usize * 4])
+                .unwrap();
+        }
+
+        let image = factory.decode_image(&encoded);
+        let image = image.as_any().downcast_ref::<WgpuImage>().unwrap();
+
+        assert_eq!(image.width, width);
+        assert_eq!(image.height, 1);
+        assert!(image.texture.is_none());
     }
 
     #[test]
@@ -4816,6 +4968,38 @@ mod tests {
 
         assert_eq!(groups.len(), draws.len());
         assert!(groups.iter().all(|group| group.len() == 1));
+    }
+
+    #[test]
+    fn disjoint_atomic_groups_split_before_atomic_path_id_overflow() {
+        let draws = (0..5)
+            .map(|index| SolidDraw {
+                path: rect_path(
+                    [index as f32 * 10.0, 0.0, index as f32 * 10.0 + 2.0, 2.0],
+                    FillRule::NonZero,
+                ),
+                paint: WgpuPaint {
+                    color: index,
+                    ..WgpuPaint::default()
+                },
+                state: DrawState::default(),
+                role: DrawRole::Content { clip_id: 0 },
+                image: None,
+            })
+            .collect::<Vec<_>>();
+
+        let groups = disjoint_atomic_draw_groups_with_limits(&draws, 64, 64, 32, 2);
+        let colors = groups
+            .iter()
+            .map(|group| {
+                group
+                    .iter()
+                    .map(|draw| draw.paint.color)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(colors, vec![vec![0, 1], vec![2, 3], vec![4]]);
     }
 
     #[test]

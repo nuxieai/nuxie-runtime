@@ -301,16 +301,24 @@ Run `make renderer-golden`.
 2. Expand corpus entries only as focused pixel replay proves each feature.
    Do not tune broad tolerances around missing algorithm work.
 
-3. Bun-lesson hardening additions (user decision 2026-07-11; details in
-   the map): mid-R2 adversarial review of the invented wgpu
-   resource/binding plumbing (the ORE-replacement seam — where V2's
-   audits proved bugs live); R3 entry criteria: GPU semantic-trap audit
-   (GLSL->WGSL/naga divergence surface) and a renderer fuzz-replay
-   harness (degenerate streams through both renderers; no panic/hang/
-   device-loss; behavioral deltas as named findings).
+3. [x] Complete the mid-R2 adversarial review of the invented wgpu
+   resource/binding plumbing. `docs/renderer-wgpu-adversarial-review.md`
+   records the binding, buffer, synchronization, pipeline-cache, and replay
+   findings. Texture extents and atomic path-ID exhaustion are hardened; full
+   logical-flush rollover and hostile resource/numeric streams are named R3
+   work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
 
+- 2026-07-13: The mid-R2 wgpu resource-seam review is complete. Generated WGSL
+  bindings, retained resource lifetimes, queue/readback ordering, and
+  factory-lifetime pipeline ownership have no observed correctness mismatch.
+  Render-target and decoded-image extents are now validated before wgpu, and
+  generic disjoint atomic groups split before their 16-bit path IDs overflow.
+  Clip-dependent logical-flush rollover remains a named R3 parity task because
+  C++ budgets paths, contours, and tessellation resources together. Buffer
+  rings, per-draw dummy resources, submit/wait cadence, and cross-factory
+  pipeline caches remain measurement-led R4 work.
 - 2026-07-13: Promoted `rawtext` after closing its complete pre-raster path.
   A deterministic stream-derived C++ production oracle pins provenance and
   matches Rust across all 438 CPU tessellation-span records (7,008 words),
@@ -1575,3 +1583,8 @@ Run `make renderer-golden`.
   raster residual under a bounded 288-pixel allowance. The renderer ratchet is
   exact=153/diverges=0/gated=1,314; renderer golden, the full workspace suite,
   and both V2 golden floors pass.
+- 2026-07-13: Closed the required mid-R2 wgpu resource-seam audit. Added
+  adapter-limit preflight for frame and image textures, bounded disjoint atomic
+  batches at 65,535 paths, replaced oversized inseparable-run panics with a
+  named error, and recorded the R3/R4 boundaries without changing the renderer
+  ratchet.

@@ -3057,10 +3057,9 @@ reference = "fixtures/renderer/reference/metal/riv/artboard_list_overrides-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-artboard_list_overrides-frame-0-msaa"
@@ -3083,10 +3082,9 @@ reference = "fixtures/renderer/reference/metal/riv/artboard_width_test-frame-0-c
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-artboard_width_test-frame-0-msaa"
@@ -3137,7 +3135,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-audio_script-frame-0-msaa"
@@ -3160,10 +3158,9 @@ reference = "fixtures/renderer/reference/metal/riv/background_measure-frame-0-cl
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-background_measure-frame-0-msaa"
@@ -3211,10 +3208,9 @@ reference = "fixtures/renderer/reference/metal/riv/ball_test-frame-0-clockwise-a
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-ball_test-frame-0-msaa"
@@ -3263,10 +3259,9 @@ reference = "fixtures/renderer/reference/metal/riv/bidirectional_precedence-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-bidirectional_precedence-frame-0-msaa"
@@ -3289,10 +3284,9 @@ reference = "fixtures/renderer/reference/metal/riv/bindable_artboard_child-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-bindable_artboard_child-frame-0-msaa"
@@ -3315,10 +3309,9 @@ reference = "fixtures/renderer/reference/metal/riv/bindable_artboard_child-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-bindable_artboard_child-frame-1-msaa"
@@ -3341,10 +3334,9 @@ reference = "fixtures/renderer/reference/metal/riv/bindable_artboard_child-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-bindable_artboard_child-frame-2-msaa"
@@ -3367,10 +3359,9 @@ reference = "fixtures/renderer/reference/metal/riv/bindable_artboard_child-frame
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-bindable_artboard_child-frame-3-msaa"

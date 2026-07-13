@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=164, diverges=0, gated=1,304, total=1,468.
+- Rust wgpu: exact=173, diverges=0, gated=1,295, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -110,7 +110,13 @@ Run `make renderer-golden`.
   `riv-advance_blend_mode-frame-{0,1}-clockwise-atomic`,
   `riv-animated_clipping-frame-0-clockwise-atomic`,
   `riv-animation_reset_cases-frame-{0..4}-clockwise-atomic`, and
-  `riv-artboard_list_map_rules-frame-0-clockwise-atomic`.
+  `riv-artboard_list_map_rules-frame-0-clockwise-atomic`, plus
+  `riv-artboard_list_overrides-frame-0-clockwise-atomic`,
+  `riv-artboard_width_test-frame-0-clockwise-atomic`,
+  `riv-background_measure-frame-0-clockwise-atomic`,
+  `riv-ball_test-frame-0-clockwise-atomic`,
+  `riv-bidirectional_precedence-frame-0-clockwise-atomic`, and
+  `riv-bindable_artboard_child-frame-{0..3}-clockwise-atomic`.
 
 ## Milestones
 
@@ -140,12 +146,17 @@ Run `make renderer-golden`.
    `artboard_list_map_rules`. Promote unchanged-contract passes and replace
    the first failing `algorithm-core` placeholder with an evidence-backed
    diagnostic.
-3. [ ] Probe the next ten gated clockwise-atomic `.riv` entries:
+3. [x] Probe the next ten gated clockwise-atomic `.riv` entries:
    `artboard_list_overrides`, `artboard_width_test`, `audio_script`,
    `background_measure`, `ball_test`, `bidirectional_precedence`, and
    `bindable_artboard_child` frames 0-3. Capture their missing pinned Metal
    references first, then promote unchanged-contract passes and diagnose the
    first failure without widening tolerance.
+4. [ ] Probe the next ten gated clockwise-atomic `.riv` entries:
+   `bindable_artboard_child` frames 4-7,
+   `bindable_artboard_nesty` frame 0, and `blend_test` frames 0-4. Capture
+   their missing pinned Metal references first, then apply the same unchanged
+   contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1785,3 +1796,11 @@ Run `make renderer-golden`.
   glyph outline, four on a circle edge, and one on a large background edge, so
   its placeholder is replaced by the evidence-backed
   `metal-webgpu-subpixel-edge-coverage` diagnostic without changing tolerance.
+- 2026-07-13: Probed the second ten-entry clockwise-atomic `.riv` batch against
+  freshly pinned native Metal references. Nine pass the unchanged `2/32`
+  contract and advance the renderer ratchet to
+  exact=173/diverges=0/gated=1,295. `audio_script` remains gated at 251
+  pixels/max delta 36: every outlier is a tiny component on one of seven text
+  outline draws, while the eight axis-aligned background/rectangle draws are
+  clean, so the existing reviewed `metal-webgpu-subpixel-edge-coverage`
+  diagnostic applies without a tolerance change.

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=150, diverges=0, gated=1,317, total=1,467.
+- Rust wgpu: exact=151, diverges=0, gated=1,316, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -101,7 +101,8 @@ Run `make renderer-golden`.
   `gm-overstroke_blendmodes-clockwise-atomic` and
   `gm-zeroPath-clockwise-atomic`, plus
   `gm-overfill_blendmodes-clockwise-atomic` and
-  `gm-overfill_opaque-clockwise-atomic`.
+  `gm-overfill_opaque-clockwise-atomic`, plus
+  `gm-strokes_round-clockwise-atomic`.
 
 ## Milestones
 
@@ -256,7 +257,7 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Six gated clockwise-atomic GM
+   Montserrat/Roboto feather-text pair. Five gated clockwise-atomic GM
    divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
@@ -270,10 +271,12 @@ Run `make renderer-golden`.
    also promotes `overfill_blendmodes` unchanged. `overfill_opaque` is now
    promoted under a bounded 48-pixel cubic-edge allowance: its two translated
    colored draws each contribute the same 20-pixel residual, while binary
-   foreground support is exact. Continue R2 with a record-exact
-   pre-rasterization oracle for `strokes_round` draw 38; its 34-pixel/max-83
-   result includes five foreground-support pixels at the smooth close seam,
-   so it is not yet a tolerance candidate.
+   foreground support is exact. The `strokes_round` draw-38 CPU
+   `TessVertexSpan` range now matches C++ all 11 records/176 words exactly
+   after restoring five-segment miter/bevel joins, preserving raw line
+   tangents, and writing flush padding before geometry. Native Metal
+   comparison is clean at zero pixels beyond delta 2, so the entry is promoted
+   under its unchanged `2/32` contract.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -290,6 +293,18 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Promoted `strokes_round` without changing tolerance. A new
+  production-ring `RIVEATS` oracle pins `firstSpan=0`, `spanCount=11`, the
+  64-byte ABI, stream provenance, and exact C++/Rust equality across all 176
+  words. It exposed three Rust departures: non-round joins had an invented
+  one-segment shortcut instead of C++'s fixed five segments, line tangents
+  came from the cubicized one-third control handle instead of the raw line,
+  and tail padding followed geometry instead of preceding it at flush scope.
+  Porting all three makes the CPU span oracle exact; the post-tessellation
+  oracle is exact outside a bounded `0.00035`-radian backend angle delta. Fresh
+  native comparison has zero pixels beyond delta 2 and max delta 2 under the
+  unchanged `2/32` contract. The ratchet advances to
+  exact=151/diverges=0/gated=1,316.
 - 2026-07-13: Kept `strokes_round` gated after a 100-draw prefix sweep and
   isolated-draw oracle. Every isolated draw stays at max delta 1 except draw
   38, whose only five threshold violations are contiguous at the smooth
@@ -1501,3 +1516,9 @@ Run `make renderer-golden`.
   `overfill_opaque` under its independently proven 48-pixel cubic-edge
   allowance; all renderer and V2 gates are green at
   exact=150/diverges=0/gated=1,317.
+- 2026-07-13: Built a record-exact C++ CPU tessellation-span oracle for
+  `strokes_round` draw 38, ported C++'s five-segment non-round joins, full raw
+  line tangents, and padding-before-geometry write order, and matched all 11
+  spans/176 words. Fresh native output has zero pixels beyond delta 2; the
+  unchanged `2/32` contract promotes the entry and advances the ratchet to
+  exact=151/diverges=0/gated=1,316.

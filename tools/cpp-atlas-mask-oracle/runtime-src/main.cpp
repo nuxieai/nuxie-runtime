@@ -31,6 +31,7 @@ constexpr uint32_t kExpectedPhysicalAtlasSize = 48;
 constexpr uint32_t kMaskHeaderBytes = 20;
 constexpr uint32_t kBlitHeaderBytes = 20;
 constexpr uint32_t kInputsHeaderBytes = 40;
+constexpr uint32_t kTessSpanHeaderBytes = 28;
 constexpr uint32_t kDirectGridHeaderBytes = 64;
 constexpr uint32_t kBytesPerTexel = 2;
 constexpr uint32_t kTessBytesPerTexel = 16;
@@ -45,6 +46,8 @@ constexpr uint32_t kDirectFlowerContourCount = 2;
 constexpr uint32_t kDirectBadSkinFrameWidth = 999;
 constexpr uint32_t kDirectBadSkinFrameHeight = 720;
 constexpr uint32_t kDirectBadSkinContourCount = 1;
+constexpr uint32_t kDirectStrokesRoundFrameSize = 400;
+constexpr float kDirectStrokesRoundThickness = 4.5f;
 constexpr uint32_t kIntersectionGroupBatchCount = 9;
 #include "generated_polyshark_path.inc"
 
@@ -295,6 +298,56 @@ void writeInputs(
     if (!file)
     {
         fail("could not write atlas-input output file");
+    }
+}
+
+void writeTessVertexSpans(
+    const char* output,
+    const rive::gpu::RenderContextWebGPUImpl::AtlasMaskOracleFacts& facts)
+{
+    if (facts.firstTessVertexSpan > UINT32_MAX ||
+        facts.tessVertexSpans.empty() ||
+        facts.tessVertexSpans.size() > UINT32_MAX)
+    {
+        fail("tessellation-span facts are incomplete or too large");
+    }
+    static_assert(sizeof(rive::gpu::TessVertexSpan) == 64);
+    std::array<uint8_t, kTessSpanHeaderBytes> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'T', 'S', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, kTessSpanHeaderBytes);
+    writeU32(header, 16, static_cast<uint32_t>(facts.firstTessVertexSpan));
+    writeU32(header, 20, static_cast<uint32_t>(facts.tessVertexSpans.size()));
+    writeU32(header, 24, sizeof(rive::gpu::TessVertexSpan));
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open tessellation-span output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    for (const auto& span : facts.tessVertexSpans)
+    {
+        std::array<uint8_t, 64> record{};
+        for (size_t point = 0; point != 4; ++point)
+        {
+            writeU32(record, point * 8, floatBits(span.pts[point].x));
+            writeU32(record, point * 8 + 4, floatBits(span.pts[point].y));
+        }
+        writeU32(record, 32, floatBits(span.joinTangent.x));
+        writeU32(record, 36, floatBits(span.joinTangent.y));
+        writeU32(record, 40, floatBits(span.y));
+        writeU32(record, 44, floatBits(span.reflectionY));
+        writeU32(record, 48, static_cast<uint32_t>(span.x0x1));
+        writeU32(record, 52, static_cast<uint32_t>(span.reflectionX0X1));
+        writeU32(record, 56, span.segmentCounts);
+        writeU32(record, 60, span.contourIDWithFlags);
+        file.write(reinterpret_cast<const char*>(record.data()), record.size());
+    }
+    if (!file)
+    {
+        fail("could not write tessellation-span output file");
     }
 }
 
@@ -664,6 +717,8 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "direct-flower") == 0;
     const bool directBadSkinCase =
         argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;
+    const bool directStrokesRoundCase =
+        argc > 4 && std::strcmp(argv[4], "direct-strokes-round") == 0;
     const bool clippedCase = argc > 4 && std::strcmp(argv[4], "clipped") == 0;
     const bool pathClippedCase =
         argc > 4 && std::strcmp(argv[4], "path-clipped") == 0;
@@ -686,23 +741,27 @@ int main(int argc, char** argv)
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
-        directCuspCase || directPolySharkCase || directTriangulatedCase;
+        directCuspCase || directPolySharkCase || directTriangulatedCase ||
+        directStrokesRoundCase;
     const bool directOutputCase = directCase || atomicAdvancedBlendCase;
-    const bool fillCase = circleCase || cuspCase || directCase ||
+    const bool fillCase = circleCase || cuspCase ||
+                          (directCase && !directStrokesRoundCase) ||
                           anyAdvancedBlendCase ||
                           intersectionGroupsCase ||
                           nestedEvenOddPathClippedCase ||
                           nestedClockwisePathClippedCase;
-    const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
+    const char* auxiliaryOutput = argc > 5 ? argv[5] : nullptr;
     if (argc > 6 ||
-        (argc > 4 && !fillCase && !clippedCase && !pathClippedCase &&
+        (argc > 4 && !fillCase && !directStrokesRoundCase && !clippedCase &&
+         !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
          !advancedBlendCase && !atomicAdvancedBlendCase &&
          !intersectionGroupsCase) ||
-        (softenedOutput != nullptr && !cuspCase))
+        (auxiliaryOutput != nullptr && !cuspCase && !directStrokesRoundCase) ||
+        (directStrokesRoundCase && auxiliaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round] [softened-or-tess-span-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -762,11 +821,15 @@ int main(int argc, char** argv)
     targetDesc.usage =
         wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     targetDesc.dimension = wgpu::TextureDimension::e2D;
-    const uint32_t frameWidth = directBadSkinCase
+    const uint32_t frameWidth = directStrokesRoundCase
+                                    ? kDirectStrokesRoundFrameSize
+                                : directBadSkinCase
                                     ? kDirectBadSkinFrameWidth
                                     : (directTriangulatedCase ? kDirectGridFrameSize
                                                                : kFrameWidth);
-    const uint32_t frameHeight = directBadSkinCase
+    const uint32_t frameHeight = directStrokesRoundCase
+                                     ? kDirectStrokesRoundFrameSize
+                                 : directBadSkinCase
                                      ? kDirectBadSkinFrameHeight
                                      : (directTriangulatedCase ? kDirectGridFrameSize
                                                                 : kFrameHeight);
@@ -782,7 +845,9 @@ int main(int argc, char** argv)
     context->beginFrame({.renderTargetWidth = frameWidth,
                          .renderTargetHeight = frameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
-                         .clearColor = anyAdvancedBlendCase ? 0xff204080 : 0,
+                         .clearColor = directStrokesRoundCase
+                                           ? 0xffffffff
+                                           : (anyAdvancedBlendCase ? 0xff204080 : 0),
                          .msaaSampleCount = directOutputCase ? 0u : 4u,
                          .disableRasterOrdering = directOutputCase,
                          .clockwiseFillOverride = directOutputCase});
@@ -794,7 +859,42 @@ int main(int argc, char** argv)
     {
         path->fillRule(rive::FillRule::clockwise);
     }
-    if (directCuspCase)
+    if (directStrokesRoundCase)
+    {
+        // Source: strokes_round.rive-stream draw 38. The clip is intentionally
+        // omitted because the isolated seam residual is unchanged without it.
+        path->moveTo(25.5016327f, 70.300293f);
+        path->lineTo(67.7646637f, 70.300293f);
+        path->cubicTo(79.4274673f,
+                      70.300293f,
+                      88.8961792f,
+                      80.9101868f,
+                      88.8961792f,
+                      89.5240784f);
+        path->lineTo(88.8961792f, 127.971649f);
+        path->cubicTo(88.8961792f,
+                      138.581543f,
+                      79.4274673f,
+                      147.195435f,
+                      67.7646637f,
+                      147.195435f);
+        path->lineTo(25.5016327f, 147.195435f);
+        path->cubicTo(16.0329189f,
+                      147.195435f,
+                      4.37011719f,
+                      138.581543f,
+                      4.37011719f,
+                      127.971649f);
+        path->lineTo(4.37011719f, 89.5240784f);
+        path->cubicTo(4.37011719f,
+                      80.9101868f,
+                      16.0329189f,
+                      70.300293f,
+                      25.5016327f,
+                      70.300293f);
+        path->close();
+    }
+    else if (directCuspCase)
     {
         renderer.transform(
             rive::Mat2D(1.46300006f, 0, 0, 1.46300006f, -40, -20));
@@ -834,7 +934,7 @@ int main(int argc, char** argv)
     {
         path->moveTo(16, 48);
         path->cubicTo(51.2f, 16, 12.8f, 16, 48, 48);
-        if (softenedOutput != nullptr)
+        if (auxiliaryOutput != nullptr)
         {
             rive::RiveRenderPath source;
             source.fillRule(rive::FillRule::clockwise);
@@ -842,7 +942,7 @@ int main(int argc, char** argv)
             source.moveTo(0, 100);
             source.cubicTo(110, 0, -10, 0, 100, 100);
             auto softened = source.makeSoftenedCopyForFeathering(1, 1.46300006f);
-            writeSoftenedPath(softenedOutput, softened->getRawPath());
+            writeSoftenedPath(auxiliaryOutput, softened->getRawPath());
         }
     }
     else if (circleCase)
@@ -896,14 +996,18 @@ int main(int argc, char** argv)
                           : rive::RenderPaintStyle::stroke);
     if (!fillCase)
     {
-        paint->thickness(kStrokeThickness);
+        paint->thickness(directStrokesRoundCase ? kDirectStrokesRoundThickness
+                                                : kStrokeThickness);
         paint->join(rive::StrokeJoin::miter);
         paint->cap(rive::StrokeCap::butt);
     }
-    paint->feather(directTriangulatedCase || intersectionGroupsCase
+    paint->feather(directTriangulatedCase || directStrokesRoundCase ||
+                           intersectionGroupsCase
                        ? 0.f
                        : (directCase ? 1.f : kFeather));
-    paint->color(anyAdvancedBlendCase ? 0xc0e08040 : 0xffffffff);
+    paint->color(directStrokesRoundCase
+                     ? 0x7a52bdb0
+                     : (anyAdvancedBlendCase ? 0xc0e08040 : 0xffffffff));
     if (anyAdvancedBlendCase)
     {
         paint->blendMode(rive::BlendMode::colorDodge);
@@ -1214,12 +1318,15 @@ int main(int argc, char** argv)
     }
     else if (directCase)
     {
+        const uint32_t expectedPatchDrawType = static_cast<uint32_t>(
+            directStrokesRoundCase
+                ? rive::gpu::DrawType::midpointFanPatches
+                : rive::gpu::DrawType::midpointFanCenterAAPatches);
         bool directScheduleValid =
             facts.drawBatches.size() == 3 &&
             facts.drawBatches[0].drawType == static_cast<uint32_t>(
                                                    rive::gpu::DrawType::renderPassInitialize) &&
-            facts.drawBatches[1].drawType == static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::midpointFanCenterAAPatches) &&
+            facts.drawBatches[1].drawType == expectedPatchDrawType &&
             facts.drawBatches[2].drawType == static_cast<uint32_t>(
                                                    rive::gpu::DrawType::renderPassResolve);
         if (directTriangulatedCase)
@@ -1234,9 +1341,21 @@ int main(int argc, char** argv)
                                   facts.drawBatches.back().drawType == static_cast<uint32_t>(
                                       rive::gpu::DrawType::renderPassResolve);
         }
+        const bool strokesRoundScheduleValid =
+            !directStrokesRoundCase ||
+            (directScheduleValid && facts.fixedFunctionColorOutput &&
+             facts.drawBatches[1].shaderFeatures == static_cast<uint32_t>(
+                 rive::gpu::ShaderFeatures::ENABLE_DITHER) &&
+             facts.drawBatches[1].shaderMiscFlags == static_cast<uint32_t>(
+                 rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput) &&
+             facts.drawBatches[1].drawContents ==
+                 static_cast<uint32_t>(rive::gpu::DrawContents::stroke) &&
+             facts.drawBatches[1].baseElement == 1 &&
+             facts.drawBatches[1].elementCount == 10 &&
+             facts.strokePatchCount == 10);
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
-            !directScheduleValid ||
+            !directScheduleValid || !strokesRoundScheduleValid ||
             (!directTriangulatedCase &&
              (facts.strokeBatchCount != 1 || facts.atlasBatchIsStroke ||
               facts.strokePatchCount == 0)) ||
@@ -1244,6 +1363,7 @@ int main(int argc, char** argv)
             (directPolySharkCase &&
              (facts.strokePatchCount != kExpectedPolySharkPatchCount ||
               facts.contours.size() != kExpectedPolySharkContourCount)) ||
+            (directStrokesRoundCase && facts.contours.size() != 1) ||
             (directGridCase &&
              (facts.contours.size() != kDirectGridContourCount ||
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)) ||
@@ -1254,7 +1374,11 @@ int main(int argc, char** argv)
              (facts.contours.size() != kDirectBadSkinContourCount ||
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
-            fail("direct oracle must execute one atomic feather-fill patch batch between initialize and resolve");
+            fail("direct oracle must execute one atomic path-patch batch between initialize and resolve");
+        }
+        if (directStrokesRoundCase)
+        {
+            writeTessVertexSpans(auxiliaryOutput, facts);
         }
     }
     else if (nestedEvenOddPathClippedCase || nestedClockwisePathClippedCase)

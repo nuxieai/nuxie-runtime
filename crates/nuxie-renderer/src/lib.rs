@@ -25,6 +25,8 @@ mod msaa_atlas_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
 mod skyline;
+#[cfg(test)]
+mod tess_span_oracle;
 mod tessellator;
 
 use bytemuck::{Pod, Zeroable};
@@ -4360,6 +4362,8 @@ mod tests {
     const ATLAS_ORACLE_STROKE_JOIN: StrokeJoin = StrokeJoin::Miter;
     const ATLAS_ORACLE_STROKE_CAP: StrokeCap = StrokeCap::Butt;
     const ATLAS_ORACLE_FEATHER: f32 = 20.0;
+    const STROKES_ROUND_ORACLE_FRAME_SIZE: u32 = 400;
+    const STROKES_ROUND_ORACLE_THICKNESS: f32 = 4.5;
     const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
         atlas_mask_oracle::MaskComparisonTolerances {
             support: 1.0 / 1024.0,
@@ -5140,7 +5144,15 @@ mod tests {
             * gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let alignment = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
         let index = logical_end.div_ceil(alignment) * alignment;
-        let padding = tessellation.spans.last().unwrap();
+        let padding = tessellation
+            .spans
+            .iter()
+            .find(|span| {
+                span.x_range() == (index as i32, index as i32 + 1)
+                    && span.segment_counts == 0x0010_0000
+                    && span.contour_id_with_flags == 0
+            })
+            .expect("final C++-ordered padding span");
         assert_eq!(padding.x_range(), (index as i32, index as i32 + 1));
         assert_eq!(padding.segment_counts, 0x0010_0000);
         assert_eq!(padding.contour_id_with_flags, 0);
@@ -5189,17 +5201,22 @@ mod tests {
             assert_eq!(tessellation.base_instance, 1);
             assert_eq!(tessellation.instance_count, 5);
             assert_eq!(tessellation.spans.len(), 7);
+            let geometry = tessellation
+                .spans
+                .iter()
+                .filter(|span| span.contour_id_with_flags != 0)
+                .collect::<Vec<_>>();
             assert_eq!(
-                tessellation.spans[1..5]
+                geometry
                     .iter()
                     .map(|span| span.x_range())
                     .collect::<Vec<_>>(),
                 vec![(8, 18), (18, 28), (28, 38), (38, 48)]
             );
-            assert!(tessellation.spans[1..5]
+            assert!(geometry
                 .iter()
                 .all(|span| span.segment_counts == 0x0090_0401));
-            assert!(tessellation.spans[1..5]
+            assert!(geometry
                 .iter()
                 .all(|span| span.contour_id_with_flags == 0x0800_0001));
             assert_post_contour_padding(&tessellation);
@@ -5239,12 +5256,18 @@ mod tests {
             assert_eq!(tessellation.base_instance, 1);
             assert_eq!(tessellation.instance_count, 5);
             assert_eq!(tessellation.spans.len(), 5);
-            assert_eq!(tessellation.spans[1].x_range(), (8, 27));
-            assert_eq!(tessellation.spans[2].x_range(), (27, 48));
-            assert_eq!(tessellation.spans[1].segment_counts, 0x0140_0000);
-            assert_eq!(tessellation.spans[2].segment_counts, 0x0140_0401);
-            assert_eq!(tessellation.spans[1].contour_id_with_flags, 0x0a00_0001);
-            assert_eq!(tessellation.spans[2].contour_id_with_flags, 0x0a00_0001);
+            let geometry = tessellation
+                .spans
+                .iter()
+                .filter(|span| span.contour_id_with_flags != 0)
+                .collect::<Vec<_>>();
+            assert_eq!(geometry.len(), 2);
+            assert_eq!(geometry[0].x_range(), (8, 27));
+            assert_eq!(geometry[1].x_range(), (27, 48));
+            assert_eq!(geometry[0].segment_counts, 0x0140_0000);
+            assert_eq!(geometry[1].segment_counts, 0x0140_0401);
+            assert_eq!(geometry[0].contour_id_with_flags, 0x0a00_0001);
+            assert_eq!(geometry[1].contour_id_with_flags, 0x0a00_0001);
             assert_post_contour_padding(&tessellation);
         }
     }
@@ -6282,20 +6305,28 @@ mod tests {
         raw_path: RawPath,
         transform: Mat2D,
     ) -> atlas_input_oracle::AtlasInputs {
-        let mut tessellation =
+        let tessellation =
             draw::build_feather_tessellation(&raw_path, transform, 1.0, None).unwrap();
+        fixed_direct_inputs_from_tessellation(
+            tessellation,
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+        )
+    }
+
+    fn fixed_direct_inputs_from_tessellation(
+        mut tessellation: draw::FillTessellation,
+        frame_width: u32,
+        frame_height: u32,
+    ) -> atlas_input_oracle::AtlasInputs {
         for contour in &mut tessellation.contours {
             contour.path_id = 1;
         }
-        let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
+        let factory = WgpuFactory::new(frame_width, frame_height).unwrap();
         let logical_tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
         // The C++ oracle exports the complete allocation, including its 125% growth tail.
         let tessellation_height = logical_tessellation_height * 5 / 4;
-        let uniforms = analytic_uniforms(
-            ATLAS_ORACLE_FRAME_SIZE,
-            ATLAS_ORACLE_FRAME_SIZE,
-            tessellation_height,
-        );
+        let uniforms = analytic_uniforms(frame_width, frame_height, tessellation_height);
         let paths = [gpu::PathData::zeroed(), tessellation.path];
         let mut encoder =
             factory
@@ -6421,6 +6452,54 @@ mod tests {
             .expect("feather_polyshapes row 0 shark draw");
         assert_eq!(paint.feather, 1.0);
         fixed_feather_direct_inputs(path.raw_path.clone(), transform)
+    }
+
+    fn strokes_round_draw_38_path() -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(25.5016327, 70.300293);
+        path.line_to(67.7646637, 70.300293);
+        path.cubic_to(
+            79.4274673, 70.300293, 88.8961792, 80.9101868, 88.8961792, 89.5240784,
+        );
+        path.line_to(88.8961792, 127.971649);
+        path.cubic_to(
+            88.8961792, 138.581543, 79.4274673, 147.195435, 67.7646637, 147.195435,
+        );
+        path.line_to(25.5016327, 147.195435);
+        path.cubic_to(
+            16.0329189, 147.195435, 4.37011719, 138.581543, 4.37011719, 127.971649,
+        );
+        path.line_to(4.37011719, 89.5240784);
+        path.cubic_to(
+            4.37011719, 80.9101868, 16.0329189, 70.300293, 25.5016327, 70.300293,
+        );
+        path.close();
+        path
+    }
+
+    fn fixed_strokes_round_tessellation() -> draw::FillTessellation {
+        let path = strokes_round_draw_38_path();
+        draw::build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            STROKES_ROUND_ORACLE_THICKNESS,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap()
+    }
+
+    fn fixed_strokes_round_direct_inputs() -> atlas_input_oracle::AtlasInputs {
+        fixed_direct_inputs_from_tessellation(
+            fixed_strokes_round_tessellation(),
+            STROKES_ROUND_ORACLE_FRAME_SIZE,
+            STROKES_ROUND_ORACLE_FRAME_SIZE,
+        )
+    }
+
+    fn fixed_strokes_round_spans() -> tess_span_oracle::TessSpanArtifact {
+        let tessellation = fixed_strokes_round_tessellation();
+        tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
     }
 
     fn fixed_feather_atlas_oracle_for(
@@ -7918,6 +7997,87 @@ mod tests {
         .unwrap_or_else(|error| {
             panic!(
                 "C++ direct-polyshark input mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_direct_strokes_round_tessellation_matches_bounded_tangent_angles() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS").expect(
+            "RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS is required for the ignored direct-strokes-round input test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-strokes-round inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-strokes-round inputs at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_inputs = fixed_strokes_round_direct_inputs();
+        assert_eq!(cpp_inputs.base_patch, 1);
+        assert_eq!(cpp_inputs.patch_count, 10);
+        assert_eq!(cpp_inputs.contours, rust_inputs.contours);
+        atlas_input_oracle::compare_cpp_to_rust_with_float_tolerances(
+            &cpp_inputs,
+            &rust_inputs,
+            0,
+            0.00035,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "C++ direct-strokes-round input mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_STROKES_ROUND_SPANS from the C++ WebGPU oracle"]
+    fn cpp_direct_strokes_round_cpu_spans_match_rust_record_for_record() {
+        let path = std::env::var_os("RIVE_CPP_DIRECT_STROKES_ROUND_SPANS").expect(
+            "RIVE_CPP_DIRECT_STROKES_ROUND_SPANS is required for the ignored direct-strokes-round span test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_DIRECT_STROKES_ROUND_SPANS is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_STROKES_ROUND_SPANS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-strokes-round spans at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_spans = tess_span_oracle::TessSpanArtifact::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-strokes-round spans at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_spans = fixed_strokes_round_spans();
+        tess_span_oracle::compare_exact(&cpp_spans, &rust_spans).unwrap_or_else(|error| {
+            panic!(
+                "C++ direct-strokes-round CPU span mismatch at {}: {error}",
                 path.display()
             )
         });

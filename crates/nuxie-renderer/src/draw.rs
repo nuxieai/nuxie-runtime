@@ -369,7 +369,12 @@ fn build_stroke_or_feather_tessellation(
                 };
                 let chopped_count = chopped.len();
                 for (index, cubic) in chopped.into_iter().enumerate() {
-                    let tangents = cubic_tangents(cubic);
+                    let tangents = if curve.is_line {
+                        let tangent = subtract(cubic[3], cubic[0]);
+                        [tangent, tangent]
+                    } else {
+                        cubic_tangents(cubic)
+                    };
                     let (parametric_segments, polar_segments) = if curve.is_line {
                         (1, 1)
                     } else {
@@ -421,20 +426,17 @@ fn build_stroke_or_feather_tessellation(
                     (prepared[index + 1].tangents[0], 1, contour_id | join_flags)
                 } else {
                     let next_tangent = prepared[(index + 1) % prepared.len()].tangents[0];
-                    let segment_count =
-                        if is_stroke && same_direction(curve.tangents[1], next_tangent) {
-                            1
-                        } else if !is_stroke {
-                            feather_join_segments
-                        } else if join == StrokeJoin::Round {
-                            round_join_segment_count(
-                                curve.tangents[1],
-                                next_tangent,
-                                polar_segments_per_radian,
-                            )
-                        } else {
-                            5
-                        };
+                    let segment_count = if !is_stroke {
+                        feather_join_segments
+                    } else if join == StrokeJoin::Round {
+                        round_join_segment_count(
+                            curve.tangents[1],
+                            next_tangent,
+                            polar_segments_per_radian,
+                        )
+                    } else {
+                        5
+                    };
                     (next_tangent, segment_count, contour_id | join_flags)
                 };
                 pending.push((
@@ -480,7 +482,10 @@ fn build_stroke_or_feather_tessellation(
     if contour_data.is_empty() {
         return None;
     }
+    // C++ LogicalFlush writes every padding span before PathDraw geometry.
+    let geometry_spans = spans.split_off(1);
     push_midpoint_tail_padding(&mut spans, location);
+    spans.extend(geometry_spans);
     Some(FillTessellation {
         spans,
         path: PathData::new(
@@ -965,10 +970,6 @@ fn dot(a: Vec2D, b: Vec2D) -> f32 {
 
 fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
     a.x * b.y - a.y * b.x
-}
-
-fn same_direction(a: Vec2D, b: Vec2D) -> bool {
-    vector_cross(a, b) == 0.0 && dot(a, b) > 0.0
 }
 
 pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
@@ -2094,21 +2095,34 @@ mod tests {
         assert!(triangulate_contour(&contour.points).is_some());
     }
 
+    fn geometry_spans(tessellation: &FillTessellation) -> impl Iterator<Item = &TessVertexSpan> {
+        tessellation
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+    }
+
     fn assert_post_contour_padding(tessellation: &FillTessellation) {
         let logical_end = (tessellation.base_instance + tessellation.instance_count)
             * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let location = align_up(logical_end as i32, OUTER_CURVE_PATCH_SEGMENT_SPAN as i32) as u32;
-        let padding = tessellation.spans.last().unwrap();
+        let expected_range = (
+            location as i32 % TESS_TEXTURE_WIDTH,
+            location as i32 % TESS_TEXTURE_WIDTH + 1,
+        );
+        let padding = tessellation
+            .spans
+            .iter()
+            .find(|span| {
+                span.contour_id_with_flags == 0
+                    && span.segment_counts == 0x0010_0000
+                    && span.x_range() == expected_range
+            })
+            .expect("final C++-ordered padding span");
         assert_eq!(padding.points, [[0.0; 2]; 4]);
         assert_eq!(padding.join_tangent, [0.0; 2]);
         assert_eq!(padding.y, (location as i32 / TESS_TEXTURE_WIDTH) as f32);
-        assert_eq!(
-            padding.x_range(),
-            (
-                location as i32 % TESS_TEXTURE_WIDTH,
-                location as i32 % TESS_TEXTURE_WIDTH + 1,
-            )
-        );
+        assert_eq!(padding.x_range(), expected_range);
         assert_eq!(padding.segment_counts, 0x0010_0000);
         assert_eq!(padding.contour_id_with_flags, 0);
         assert!(
@@ -2337,10 +2351,12 @@ mod tests {
         assert_eq!(tessellation.contours[0].midpoint, [0.0, 0.0]);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
         assert_eq!(tessellation.spans.len(), 5);
-        assert_eq!(tessellation.spans[1].x_range(), (8, 18));
-        assert_eq!(tessellation.spans[2].x_range(), (18, 24));
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry.len(), 2);
+        assert_eq!(geometry[0].x_range(), (8, 18));
+        assert_eq!(geometry[1].x_range(), (18, 24));
         assert_eq!(
-            tessellation.spans[1].contour_id_with_flags,
+            geometry[0].contour_id_with_flags,
             1 | BEVEL_JOIN_CONTOUR_FLAG | EMULATED_STROKE_CAP_CONTOUR_FLAG
         );
         assert_post_contour_padding(&tessellation);
@@ -2359,8 +2375,10 @@ mod tests {
             StrokeCap::Round,
         )
         .unwrap();
-        assert!(tessellation.spans[2].segment_counts & 1023 > 1);
-        assert!(tessellation.spans[2].segment_counts >> 10 & 1023 > 1);
+        let cubic = geometry_spans(&tessellation)
+            .find(|span| span.segment_counts & 1023 > 1)
+            .expect("analytic cubic span");
+        assert!(cubic.segment_counts >> 10 & 1023 > 1);
     }
 
     #[test]
@@ -2376,8 +2394,7 @@ mod tests {
         assert_eq!(tessellation.contours[0].midpoint, [8.0, 2.0]);
         assert_eq!(tessellation.contours[0].vertex_index0, 64);
         assert_eq!(tessellation.instance_count % 2, 0);
-        assert!(tessellation.spans[1..tessellation.spans.len() - 2]
-            .iter()
+        assert!(geometry_spans(&tessellation)
             .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
     }
 
@@ -2650,13 +2667,12 @@ mod tests {
         assert_eq!(tessellation.path.stroke_radius, 5.0);
         assert_eq!(tessellation.path.feather_radius, 6.0);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert!(tessellation.spans[1..tessellation.spans.len() - 1]
-            .iter()
+        assert!(geometry_spans(&tessellation)
             .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 }));
     }
 
     #[test]
-    fn smooth_cubic_stroke_joins_emit_no_join_wedge() {
+    fn smooth_miter_stroke_joins_keep_cpp_five_segment_budget() {
         let mut path = RawPath::new();
         path.move_to(100.0, 50.0);
         path.cubic_to(100.0, 75.0, 75.0, 100.0, 50.0, 100.0);
@@ -2672,9 +2688,22 @@ mod tests {
             Some((10.0, StrokeJoin::Miter, StrokeCap::Butt)),
         )
         .unwrap();
-        assert!(tessellation.spans[1..tessellation.spans.len() - 1]
+        let first_geometry = tessellation
+            .spans
             .iter()
-            .all(|span| span.segment_counts >> 20 == 1));
+            .position(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .unwrap();
+        assert!(tessellation.spans[..first_geometry]
+            .iter()
+            .all(|span| span.contour_id_with_flags == 0));
+        assert!(tessellation.spans[first_geometry..]
+            .iter()
+            .all(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0));
+        assert!(tessellation
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| span.segment_counts >> 20 == 5));
     }
 
     #[test]
@@ -2691,11 +2720,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(tessellation.spans.len(), 9);
-        for index in [3, 5] {
-            let pivot = &tessellation.spans[index].points;
-            assert_eq!(pivot[0], pivot[3]);
-            assert_eq!(pivot[1], pivot[2]);
-        }
+        let pivots = geometry_spans(&tessellation)
+            .filter(|span| span.points[0] == span.points[3] && span.points[1] == span.points[2])
+            .count();
+        assert_eq!(pivots, 2);
     }
 
     #[test]
@@ -2711,10 +2739,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(tessellation.spans.len(), 5);
-        assert_eq!(tessellation.spans[1].points[3], [20.0, 30.0]);
-        assert_eq!(tessellation.spans[2].points[3], [20.0, 30.0]);
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry.len(), 2);
+        assert_eq!(geometry[0].points[3], [20.0, 30.0]);
+        assert_eq!(geometry[1].points[3], [20.0, 30.0]);
         assert_eq!(
-            tessellation.spans[1].contour_id_with_flags,
+            geometry[0].contour_id_with_flags,
             1 | ROUND_JOIN_CONTOUR_FLAG | EMULATED_STROKE_CAP_CONTOUR_FLAG
         );
     }
@@ -2734,12 +2764,14 @@ mod tests {
                     .unwrap();
 
             assert_eq!(tessellation.spans.len(), 5);
-            assert_eq!(tessellation.spans[1].points[0], [21.0, 30.0]);
-            assert_eq!(tessellation.spans[1].points[3], [20.0, 30.0]);
-            assert_eq!(tessellation.spans[2].points[0], [19.0, 30.0]);
-            assert_eq!(tessellation.spans[2].points[3], [20.0, 30.0]);
+            let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+            assert_eq!(geometry.len(), 2);
+            assert_eq!(geometry[0].points[0], [21.0, 30.0]);
+            assert_eq!(geometry[0].points[3], [20.0, 30.0]);
+            assert_eq!(geometry[1].points[0], [19.0, 30.0]);
+            assert_eq!(geometry[1].points[3], [20.0, 30.0]);
             assert_eq!(
-                tessellation.spans[1].contour_id_with_flags,
+                geometry[0].contour_id_with_flags,
                 1 | flags | EMULATED_STROKE_CAP_CONTOUR_FLAG
             );
         }
@@ -2761,7 +2793,7 @@ mod tests {
         )
         .unwrap();
 
-        let close = &tessellation.spans[1];
+        let close = geometry_spans(&tessellation).next().unwrap();
         assert_eq!(close.points[0][0].to_bits(), 0.0f32.to_bits());
         assert_eq!(close.points[3][0].to_bits(), (-0.0f32).to_bits());
     }

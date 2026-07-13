@@ -17,6 +17,9 @@ MAGIC = b"RIVEMSK\0"
 INPUT_HEADER_BYTES = 40
 INPUT_MAGIC = b"RIVEATI\0"
 BLIT_MAGIC = b"RIVEABL\0"
+TESS_SPAN_HEADER_BYTES = 28
+TESS_SPAN_MAGIC = b"RIVEATS\0"
+TESS_SPAN_RECORD_BYTES = 64
 DIRECT_INPUT_HEADER_BYTES = 64
 DIRECT_GRID_MAGIC = b"RIVEDGI\0"
 DIRECT_FLOWER_MAGIC = b"RIVEDFI\0"
@@ -42,6 +45,7 @@ BUILD_SCRIPT = pathlib.Path(__file__).with_name("build.sh")
 README = pathlib.Path(__file__).with_name("README.md")
 RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
 RUST_RENDERER = ROOT / "crates" / "nuxie-renderer" / "src" / "lib.rs"
+STROKES_ROUND_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "strokes_round.rive-stream"
 POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
 BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
@@ -103,9 +107,11 @@ def parse_inputs(data: bytes) -> dict:
     }
 
 
-def make_inputs() -> bytes:
-    header = INPUT_MAGIC + struct.pack("<8I", 1, 1, 2, 1, 2, 1, 16, 16)
-    return header + bytes(16) + bytes(2 * 16)
+def make_inputs(base_patch=1, patch_count=2, contour_count=1) -> bytes:
+    header = INPUT_MAGIC + struct.pack(
+        "<8I", 1, base_patch, patch_count, contour_count, 2, 1, 16, 16
+    )
+    return header + bytes(contour_count * 16) + bytes(2 * 16)
 
 
 def _parse_direct_inputs(data: bytes, magic: bytes, name: str,
@@ -286,6 +292,56 @@ def parse_blit(data: bytes) -> dict:
     return {"width": width, "height": height}
 
 
+def validate_direct_strokes_round_inputs(data: bytes) -> dict:
+    validated = parse_inputs(data)
+    if validated["contour_count"] != 1:
+        raise ValueError("direct-strokes-round must contain exactly one contour")
+    if (validated["base_patch"], validated["patch_count"]) != (1, 10):
+        raise ValueError("direct-strokes-round patch range must be exactly 1+10")
+    return validated
+
+
+def parse_tess_spans(data: bytes) -> dict:
+    if len(data) < TESS_SPAN_HEADER_BYTES:
+        raise ValueError("file is shorter than the 28-byte RIVEATS header")
+    if data[:8] != TESS_SPAN_MAGIC:
+        raise ValueError("bad RIVEATS magic")
+    version, header_bytes, first_span, span_count, record_bytes = struct.unpack_from(
+        "<5I", data, 8
+    )
+    if version != 1 or header_bytes != TESS_SPAN_HEADER_BYTES:
+        raise ValueError("unsupported RIVEATS header")
+    if record_bytes != TESS_SPAN_RECORD_BYTES:
+        raise ValueError("RIVEATS record stride mismatch")
+    if not span_count:
+        raise ValueError("RIVEATS must contain at least one span")
+    expected = TESS_SPAN_HEADER_BYTES + span_count * record_bytes
+    if len(data) != expected:
+        raise ValueError("RIVEATS length mismatch")
+    records = [
+        struct.unpack_from("<16I", data, TESS_SPAN_HEADER_BYTES + i * record_bytes)
+        for i in range(span_count)
+    ]
+    return {"first_span": first_span, "span_count": span_count, "records": records}
+
+
+def make_tess_spans(first_span=0, span_count=1) -> bytes:
+    header = TESS_SPAN_MAGIC + struct.pack(
+        "<5I", 1, TESS_SPAN_HEADER_BYTES, first_span, span_count,
+        TESS_SPAN_RECORD_BYTES
+    )
+    return header + bytes(span_count * TESS_SPAN_RECORD_BYTES)
+
+
+def validate_direct_strokes_round_spans(data: bytes) -> dict:
+    validated = parse_tess_spans(data)
+    if (validated["first_span"], validated["span_count"]) != (0, 11):
+        raise ValueError(
+            "direct-strokes-round span range must be exactly 0+11"
+        )
+    return validated
+
+
 class FormatTests(unittest.TestCase):
     def test_accepts_rust_serializer_fixture_byte_for_byte(self):
         self.assertEqual(parse_mask(RUST_SERIALIZER_FIXTURE), {
@@ -325,6 +381,107 @@ class FormatTests(unittest.TestCase):
         struct.pack_into("<I", bad_stride, 32, 12)
         with self.assertRaisesRegex(ValueError, "stride"):
             parse_inputs(bad_stride)
+
+    def test_direct_strokes_round_inputs_require_one_contour_and_patches(self):
+        self.assertEqual(validate_direct_strokes_round_inputs(make_inputs(patch_count=10)), {
+            "base_patch": 1,
+            "patch_count": 10,
+            "contour_count": 1,
+            "width": 2,
+            "height": 1,
+        })
+        wrong_range = make_inputs(patch_count=9)
+        with self.assertRaisesRegex(ValueError, r"exactly 1\+10"):
+            validate_direct_strokes_round_inputs(wrong_range)
+        two_contours = make_inputs(patch_count=10, contour_count=2)
+        with self.assertRaisesRegex(ValueError, "exactly one contour"):
+            validate_direct_strokes_round_inputs(two_contours)
+
+    def test_direct_strokes_round_cli_validates_arguments_and_contract(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_path = pathlib.Path(temp_dir) / "inputs.bin"
+            artifact_path.write_bytes(make_inputs(patch_count=10))
+            result = subprocess.run(
+                [sys.executable, __file__, "--validate-direct-strokes-round",
+                 str(artifact_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("RIVEATI valid: patchCount=10 contours=1", result.stdout)
+
+            missing_path = subprocess.run(
+                [sys.executable, __file__, "--validate-direct-strokes-round"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(missing_path.returncode, 0)
+            self.assertIn("usage: format_test.py --validate-direct-strokes-round PATH",
+                          missing_path.stderr)
+
+            artifact_path.write_bytes(make_inputs(patch_count=9))
+            invalid = subprocess.run(
+                [sys.executable, __file__, "--validate-direct-strokes-round",
+                 str(artifact_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("direct-strokes-round artifact validation failed: "
+                          "direct-strokes-round patch range must be exactly 1+10",
+                          invalid.stderr)
+
+    def test_tess_span_format_pins_header_stride_and_exact_length(self):
+        self.assertEqual(parse_tess_spans(make_tess_spans(first_span=4)), {
+            "first_span": 4,
+            "span_count": 1,
+            "records": [(0,) * 16],
+        })
+        wrong_stride = bytearray(make_tess_spans())
+        struct.pack_into("<I", wrong_stride, 24, 60)
+        with self.assertRaisesRegex(ValueError, "stride"):
+            parse_tess_spans(wrong_stride)
+        with self.assertRaisesRegex(ValueError, "length"):
+            parse_tess_spans(make_tess_spans() + b"\0")
+        self.assertEqual(
+            validate_direct_strokes_round_spans(
+                make_tess_spans(first_span=0, span_count=11)
+            )["span_count"],
+            11,
+        )
+        with self.assertRaisesRegex(ValueError, r"exactly 0\+11"):
+            validate_direct_strokes_round_spans(
+                make_tess_spans(first_span=1, span_count=11)
+            )
+
+    def test_strokes_round_oracle_literal_matches_stream_draw_38(self):
+        stream_draw = STROKES_ROUND_STREAM.read_text().splitlines()[123]
+        self.assertIn(
+            "points=[(25.5016327,70.300293),(67.7646637,70.300293),"
+            "(79.4274673,70.300293),(88.8961792,80.9101868),"
+            "(88.8961792,89.5240784)",
+            stream_draw,
+        )
+        self.assertIn(
+            "paint={id=1,style=stroke,color=0x7a52bdb0,thickness=4.5,"
+            "join=0,cap=0,feather=0",
+            stream_draw,
+        )
+        exporter = EXPORTER.read_text()
+        for fragment in (
+            "path->moveTo(25.5016327f, 70.300293f);",
+            "path->lineTo(67.7646637f, 70.300293f);",
+            "79.4274673f,",
+            "88.8961792f,",
+            "4.37011719f,",
+            "16.0329189f,",
+            "paint->thickness(directStrokesRoundCase ? kDirectStrokesRoundThickness",
+            "? 0x7a52bdb0",
+        ):
+            self.assertIn(fragment, exporter)
 
     def test_direct_grid_format_round_trips_and_rejects_malformed_counts(self):
         data = make_direct_grid_inputs()
@@ -548,10 +705,10 @@ class FormatTests(unittest.TestCase):
             "paint->style(fillCase ? rive::RenderPaintStyle::fill",
             ": rive::RenderPaintStyle::stroke);",
             "path->cubicTo(kSquareMax,",
-            "paint->thickness(kStrokeThickness);",
+            "paint->thickness(directStrokesRoundCase ? kDirectStrokesRoundThickness",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
-            "paint->feather(directTriangulatedCase || intersectionGroupsCase",
+            "paint->feather(directTriangulatedCase || directStrokesRoundCase ||",
             ".msaaSampleCount = directOutputCase ? 0u : 4u",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
@@ -841,6 +998,9 @@ class FormatTests(unittest.TestCase):
             'direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"',
             'direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"',
             'direct_bad_skin_inputs_output="${RIVE_DIRECT_BAD_SKIN_INPUT_OUTPUT:-$script_dir/out/direct-bad-skin-inputs.bin}"',
+            'direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"',
+            'direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"',
+            'direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"',
             'polyshark_generator="$script_dir/generate_polyshark_stream_path.py"',
             'python3 "$polyshark_generator" --stream "$polyshark_stream" --check',
             '--output "$injected_dir/generated_polyshark_path.inc"',
@@ -848,6 +1008,7 @@ class FormatTests(unittest.TestCase):
             '"$direct_grid_inputs_output" /dev/null direct-grid',
             '"$direct_flower_inputs_output" /dev/null direct-flower',
             '"$direct_bad_skin_inputs_output" /dev/null direct-bad-skin',
+            '"$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"',
             'nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-evenodd-path-clipped-blit.rgba}"',
             'nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"',
             'advanced_blend_blit_output="${RIVE_ATLAS_ADVANCED_BLEND_BLIT_OUTPUT:-$script_dir/out/atlas-advanced-blend-blit.rgba}"',
@@ -860,6 +1021,8 @@ class FormatTests(unittest.TestCase):
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"',
             'if [[ "$output_bytes" != "4628" ]]',
             'if [[ "$blit_bytes" != "16404" ]]',
             'if [[ "$atomic_advanced_blend_bytes" != "16404" ]]',
@@ -870,6 +1033,7 @@ class FormatTests(unittest.TestCase):
             'if (( softened_cusp_bytes <= 20 ))',
             'if (( direct_cusp_inputs_bytes <= 56 ))',
             'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
+            'if [[ "$direct_strokes_round_blit_bytes" != "640020" ]]',
         ):
             self.assertIn(fragment, source)
 
@@ -901,6 +1065,7 @@ class FormatTests(unittest.TestCase):
             '#[ignore = "requires RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT from the C++ WebGPU MSAA oracle"]',
             '#[ignore = "requires RIVE_CPP_ATOMIC_ADVANCED_BLEND from the C++ WebGPU atomic oracle"]',
+            '#[ignore = "requires RIVE_CPP_DIRECT_STROKES_ROUND_SPANS from the C++ WebGPU oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
             'path.is_absolute()',
             "fn documented_cpp_atlas_mask_path_is_absolute_from_repo_root()",
@@ -941,6 +1106,10 @@ class FormatTests(unittest.TestCase):
                       readme)
         self.assertIn('RIVE_CPP_DIRECT_POLYSHARK_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-polyshark-inputs.bin"',
                       readme)
+        self.assertIn('RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-inputs.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_DIRECT_STROKES_ROUND_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-spans.bin"',
+                      readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 
     def test_runtime_patch_applies_and_observes_production_atlas_state(self):
@@ -977,6 +1146,9 @@ class FormatTests(unittest.TestCase):
             self.assertNotIn("wgpu::TextureUsage::CopySrc", gradient)
 
             gpu = (temp / "renderer/include/rive/renderer/gpu.hpp").read_text()
+            render_context_header = (
+                temp / "renderer/include/rive/renderer/render_context.hpp"
+            ).read_text()
             logical_flush = (temp / "renderer/src/render_context.cpp").read_text()
             webgpu_header = (
                 temp / "renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp"
@@ -988,8 +1160,13 @@ class FormatTests(unittest.TestCase):
                 "AtlasInputContourForOracle",
                 "AtlasInputTriangleForOracle",
                 "atlasInputTrianglesForOracle",
+                "const TessVertexSpan* tessVertexSpansForOracle = nullptr;",
             ):
                 self.assertIn(fragment, gpu)
+            self.assertIn(
+                "std::vector<gpu::TessVertexSpan> m_tessVertexSpansForOracle;",
+                render_context_header,
+            )
             self.assertIn(
                 "m_pendingAtlasDraws.front()->atlasTransform().translateX;", logical_flush
             )
@@ -1006,6 +1183,9 @@ class FormatTests(unittest.TestCase):
                 "oracleBatch != nullptr ? oracleBatch->scissor",
                 "oracleBatch != nullptr ? oracleBatch->basePatch",
                 "oracleBatch != nullptr ? oracleBatch->patchCount",
+                "batch.drawType == DrawType::midpointFanPatches ||",
+                "batch.drawType == DrawType::midpointFanCenterAAPatches",
+                "m_atlasMaskOracleFacts.tessVertexSpans.assign(",
                 "tessellationTextureForOracle() const",
                 "m_atlasMaskOracleFacts.contours.assign(",
                 "m_atlasMaskOracleFacts.triangles.assign(",
@@ -1013,6 +1193,7 @@ class FormatTests(unittest.TestCase):
                 self.assertIn(fragment, webgpu_header + cpp)
             self.assertIn("m_atlasInputContoursForOracle.push_back(", logical_flush)
             self.assertIn("m_atlasInputTrianglesForOracle.push_back(", logical_flush)
+            self.assertIn("m_tessVertexSpansForOracle.resize(", logical_flush)
             self.assertIn("copy_range_for_oracle", gpu + logical_flush)
             self.assertIn("pointForOracle", gpu + logical_flush)
 
@@ -1030,6 +1211,11 @@ if __name__ == "__main__":
             ("direct-flower", "RIVEDFI", parse_direct_flower_inputs),
         "--validate-direct-bad-skin":
             ("direct-bad-skin", "RIVEDBI", parse_direct_bad_skin_inputs),
+        "--validate-direct-strokes-round":
+            ("direct-strokes-round", "RIVEATI", validate_direct_strokes_round_inputs),
+        "--validate-direct-strokes-round-spans":
+            ("direct-strokes-round-spans", "RIVEATS",
+             validate_direct_strokes_round_spans),
     }
     if sys.argv[1:2] and sys.argv[1] in validators:
         if len(sys.argv) != 3:
@@ -1040,12 +1226,26 @@ if __name__ == "__main__":
             validated = parser(artifact)
         except (OSError, ValueError) as error:
             raise SystemExit(f"{artifact_name} artifact validation failed: {error}")
-        print(
-            f"{format_name} valid: "
-            f"batches={len(validated['batches'])} "
-            f"contours={len(validated['contours'])} "
-            f"triangleVertices={len(validated['triangles'])} "
-            f"tessellation={validated['tess_width']}x{validated['tess_height']}"
-        )
+        if format_name == "RIVEATI":
+            print(
+                f"{format_name} valid: "
+                f"patchCount={validated['patch_count']} "
+                f"contours={validated['contour_count']} "
+                f"tessellation={validated['width']}x{validated['height']}"
+            )
+        elif format_name == "RIVEATS":
+            print(
+                f"{format_name} valid: "
+                f"firstSpan={validated['first_span']} "
+                f"spans={validated['span_count']}"
+            )
+        else:
+            print(
+                f"{format_name} valid: "
+                f"batches={len(validated['batches'])} "
+                f"contours={len(validated['contours'])} "
+                f"triangleVertices={len(validated['triangles'])} "
+                f"tessellation={validated['tess_width']}x{validated['tess_height']}"
+            )
     else:
         unittest.main()

@@ -1,8 +1,8 @@
 diff --git a/renderer/include/rive/renderer/gpu.hpp b/renderer/include/rive/renderer/gpu.hpp
-index f831f3c..b53ce4c 100644
+index f831f3c6..ed19ae22 100644
 --- a/renderer/include/rive/renderer/gpu.hpp
 +++ b/renderer/include/rive/renderer/gpu.hpp
-@@ -1383,6 +1383,28 @@ struct FlushDescriptor
+@@ -1383,6 +1383,30 @@ struct FlushDescriptor
      const AtlasDrawBatch* atlasStrokeBatches = nullptr;
      size_t atlasStrokeBatchCount = 0;
  
@@ -27,26 +27,27 @@ index f831f3c..b53ce4c 100644
 +    size_t atlasInputContourCount = 0;
 +    const AtlasInputTriangleForOracle* atlasInputTrianglesForOracle = nullptr;
 +    size_t atlasInputTriangleCount = 0;
++    const TessVertexSpan* tessVertexSpansForOracle = nullptr;
++    size_t tessVertexSpanCountForOracle = 0;
 +
      // List of draws in the main render pass. These are rendered directly to the
      // renderTarget.
      const BlockAllocatedLinkedList<DrawBatch>* drawList = nullptr;
-@@ -1683,7 +1707,14 @@ struct TriangleVertex
-     TriangleVertex() = default;
-     TriangleVertex(Vec2D point, int16_t weight, uint16_t pathID) :
-         m_point(point),
+@@ -1686,6 +1710,13 @@ public:
          m_weight_pathID((static_cast<int32_t>(weight) << 16) | pathID)
      {}
-+
+ 
 +    // Temporary atlas-input oracle accessors. build.sh reverses this patch.
 +    Vec2D pointForOracle() const { return {m_point.x, m_point.y}; }
 +    uint32_t weightPathIDForOracle() const
 +    {
 +        return static_cast<uint32_t>(m_weight_pathID);
 +    }
- 
++
  #ifdef TESTING
-@@ -1824,6 +1855,19 @@ template <typename T> class WriteOnlyMappedMemory
+     Vec2D testing_point() const { return {m_point.x, m_point.y}; }
+     int32_t testing_weight_pathID() const { return m_weight_pathID; }
+@@ -1823,6 +1854,19 @@ public:
  
      size_t elementsWritten() const { return bytesWritten() / sizeof(T); }
  
@@ -67,10 +68,10 @@ index f831f3c..b53ce4c 100644
      bool hasRoomFor(size_t itemCount)
      {
 diff --git a/renderer/include/rive/renderer/render_context.hpp b/renderer/include/rive/renderer/render_context.hpp
-index bf29125..83e7efb 100644
+index bf291250..1c2aa787 100644
 --- a/renderer/include/rive/renderer/render_context.hpp
 +++ b/renderer/include/rive/renderer/render_context.hpp
-@@ -886,6 +886,10 @@ private:
+@@ -886,6 +886,11 @@ private:
          uint32_t m_atlasMaxX = 0;
          uint32_t m_atlasMaxY = 0;
          std::vector<PathDraw*> m_pendingAtlasDraws;
@@ -78,11 +79,12 @@ index bf29125..83e7efb 100644
 +            m_atlasInputContoursForOracle;
 +        std::vector<gpu::FlushDescriptor::AtlasInputTriangleForOracle>
 +            m_atlasInputTrianglesForOracle;
++        std::vector<gpu::TessVertexSpan> m_tessVertexSpansForOracle;
  
          // Total coverage allocated via allocateCoverageBufferRange().
          // (clockwiseAtomic mode only.)
 diff --git a/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp b/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
-index 4fcf8c0..52e7406 100644
+index 4fcf8c0e..5f43743e 100644
 --- a/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
 +++ b/renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp
 @@ -9,6 +9,7 @@
@@ -93,7 +95,7 @@ index 4fcf8c0..52e7406 100644
  #include <webgpu/webgpu_cpp.h>
  
  #ifdef RIVE_WAGYU
-@@ -105,6 +106,45 @@ public:
+@@ -105,6 +106,47 @@ public:
      std::unique_ptr<rive::ore::Context> makeOreContext() override;
  #endif
  
@@ -111,6 +113,8 @@ index 4fcf8c0..52e7406 100644
 +        uint32_t strokePatchCount = 0;
 +        std::vector<FlushDescriptor::AtlasInputContourForOracle> contours;
 +        std::vector<FlushDescriptor::AtlasInputTriangleForOracle> triangles;
++        size_t firstTessVertexSpan = 0;
++        std::vector<TessVertexSpan> tessVertexSpans;
 +        struct DrawBatchFact
 +        {
 +            uint32_t drawType = 0;
@@ -139,7 +143,7 @@ index 4fcf8c0..52e7406 100644
  private:
      RenderContextWebGPUImpl(wgpu::Adapter,
                              wgpu::Device,
-@@ -227,6 +264,7 @@ private:
+@@ -227,6 +269,7 @@ private:
      std::unique_ptr<AtlasPipeline> m_atlasPipeline;
      wgpu::Texture m_atlasTexture;
      wgpu::TextureView m_atlasTextureView;
@@ -208,19 +212,20 @@ index 308f1f45..6c60a2f0 100644
 +    end
 +end
 diff --git a/renderer/src/render_context.cpp b/renderer/src/render_context.cpp
-index 5fdeb58..ff33e03 100644
+index 5fdeb585..5543edf7 100644
 --- a/renderer/src/render_context.cpp
 +++ b/renderer/src/render_context.cpp
-@@ -330,6 +330,8 @@ void RenderContext::LogicalFlush::rewind()
+@@ -330,6 +330,9 @@ void RenderContext::LogicalFlush::rewind()
      m_atlasMaxX = 0;
      m_atlasMaxY = 0;
      m_pendingAtlasDraws.clear();
 +    m_atlasInputContoursForOracle.clear();
 +    m_atlasInputTrianglesForOracle.clear();
++    m_tessVertexSpansForOracle.clear();
  
      m_coverageBufferLength = 0;
  
-@@ -364,6 +365,10 @@ void RenderContext::LogicalFlush::resetContainers()
+@@ -364,6 +367,12 @@ void RenderContext::LogicalFlush::resetContainers()
  
      m_pendingAtlasDraws.clear();
      m_pendingAtlasDraws.shrink_to_fit();
@@ -228,10 +233,12 @@ index 5fdeb58..ff33e03 100644
 +    m_atlasInputContoursForOracle.shrink_to_fit();
 +    m_atlasInputTrianglesForOracle.clear();
 +    m_atlasInputTrianglesForOracle.shrink_to_fit();
++    m_tessVertexSpansForOracle.clear();
++    m_tessVertexSpansForOracle.shrink_to_fit();
      // Don't reserve any space in m_pendingAtlasDraws since there are many
      // usecases where it isn't used at all.
  }
-@@ -2289,8 +2292,25 @@ void RenderContext::LogicalFlush::writeResources()
+@@ -2289,8 +2298,25 @@ void RenderContext::LogicalFlush::writeResources()
          assert(m_flushDesc.atlasFillBatchCount +
                     m_flushDesc.atlasStrokeBatchCount <=
                 m_pendingAtlasDraws.size());
@@ -257,7 +264,22 @@ index 5fdeb58..ff33e03 100644
      // Pad our buffers to 256-byte alignment.
      m_ctx->m_pathData.push_back_n(nullptr, m_pathPaddingCount);
      m_ctx->m_paintData.push_back_n(nullptr, m_paintPaddingCount);
-@@ -3046,6 +3062,11 @@ uint32_t RenderContext::LogicalFlush::pushContour(uint32_t pathID,
+@@ -2333,6 +2359,14 @@ void RenderContext::LogicalFlush::writeResources()
+     m_flushDesc.tessVertexSpanCount = math::lossless_numeric_cast<uint32_t>(
+         m_ctx->m_tessSpanData.elementsWritten() -
+         m_flushDesc.firstTessVertexSpan);
++    m_tessVertexSpansForOracle.resize(m_flushDesc.tessVertexSpanCount);
++    m_ctx->m_tessSpanData.copy_range_for_oracle(
++        m_flushDesc.firstTessVertexSpan,
++        m_flushDesc.tessVertexSpanCount,
++        m_tessVertexSpansForOracle.data());
++    m_flushDesc.tessVertexSpansForOracle = m_tessVertexSpansForOracle.data();
++    m_flushDesc.tessVertexSpanCountForOracle =
++        m_tessVertexSpansForOracle.size();
+ 
+     m_flushDesc.hasTriangleVertices =
+         m_ctx->m_triangleVertexData.bytesWritten() !=
+@@ -3046,6 +3080,11 @@ uint32_t RenderContext::LogicalFlush::pushContour(uint32_t pathID,
      {
          midpoint.x = closed ? 1 : 0;
      }
@@ -269,10 +291,7 @@ index 5fdeb58..ff33e03 100644
      m_ctx->m_contourData.emplace_back(midpoint, pathID, vertexIndex0);
  
      ++m_currentContourID;
-@@ -3381,9 +3397,26 @@ gpu::DrawBatch* RenderContext::LogicalFlush::pushInteriorTriangulationDraw(
-     size_t actualVertexCount =
-         draw->triangulator()->polysToTriangles(pathID,
-                                                windingFaces,
+@@ -3384,6 +3423,23 @@ gpu::DrawBatch* RenderContext::LogicalFlush::pushInteriorTriangulationDraw(
                                                 &m_ctx->m_triangleVertexData);
      assert(baseVertex + actualVertexCount ==
             m_ctx->m_triangleVertexData.elementsWritten());
@@ -297,10 +316,19 @@ index 5fdeb58..ff33e03 100644
      if (actualVertexCount > 0)
      {
 diff --git a/renderer/src/webgpu/render_context_webgpu_impl.cpp b/renderer/src/webgpu/render_context_webgpu_impl.cpp
-index ff41da4..7baa8b3 100644
+index ff41da4c..1e81784d 100644
 --- a/renderer/src/webgpu/render_context_webgpu_impl.cpp
 +++ b/renderer/src/webgpu/render_context_webgpu_impl.cpp
-@@ -2835,7 +2835,8 @@ void RenderContextWebGPUImpl::resizeTessellationTexture(uint32_t width,
+@@ -1830,6 +1830,8 @@ RenderContextWebGPUImpl::RenderContextWebGPUImpl(
+     m_platformFeatures.clipSpaceBottomUp = true;
+     m_platformFeatures.framebufferBottomUp = false;
+     m_platformFeatures.msaaColorPreserveNeedsDraw = true;
++    m_platformFeatures.supportsClipPlanes =
++        m_device.HasFeature(wgpu::FeatureName::ClipDistances);
+ 
+     m_platformFeatures.supportsTextureCompressionBC =
+         m_device.HasFeature(wgpu::FeatureName::TextureCompressionBC);
+@@ -2835,7 +2837,8 @@ void RenderContextWebGPUImpl::resizeTessellationTexture(uint32_t width,
  
      wgpu::TextureDescriptor desc{
          .usage = wgpu::TextureUsage::RenderAttachment |
@@ -310,7 +338,7 @@ index ff41da4..7baa8b3 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::RGBA32Uint,
      };
-@@ -2852,7 +2853,8 @@ void RenderContextWebGPUImpl::resizeAtlasTexture(uint32_t width,
+@@ -2852,7 +2855,8 @@ void RenderContextWebGPUImpl::resizeAtlasTexture(uint32_t width,
  
      wgpu::TextureDescriptor desc{
          .usage = wgpu::TextureUsage::RenderAttachment |
@@ -320,7 +348,7 @@ index ff41da4..7baa8b3 100644
          .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
          .format = wgpu::TextureFormat::R16Float,
      };
-@@ -3846,6 +3848,81 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
+@@ -3846,6 +3850,95 @@ wgpu::TextureView webgpu_storage_texture_view(const BufferRing* bufferRing)
  
  void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
  {
@@ -368,7 +396,8 @@ index ff41da4..7baa8b3 100644
 +    {
 +        for (const auto& batch : *desc.drawList)
 +        {
-+            if (batch.drawType == DrawType::midpointFanCenterAAPatches)
++            if (batch.drawType == DrawType::midpointFanPatches ||
++                batch.drawType == DrawType::midpointFanCenterAAPatches)
 +            {
 +                ++m_atlasMaskOracleFacts.strokeBatchCount;
 +                m_atlasMaskOracleFacts.atlasBatchIsStroke = false;
@@ -399,19 +428,19 @@ index ff41da4..7baa8b3 100644
 +            desc.atlasInputTrianglesForOracle + desc.atlasInputTriangleCount);
 +    }
 +
++    m_atlasMaskOracleFacts.firstTessVertexSpan = desc.firstTessVertexSpan;
++    if (desc.tessVertexSpanCountForOracle == 0)
++    {
++        m_atlasMaskOracleFacts.tessVertexSpans.clear();
++    }
++    else
++    {
++        m_atlasMaskOracleFacts.tessVertexSpans.assign(
++            desc.tessVertexSpansForOracle,
++            desc.tessVertexSpansForOracle +
++                desc.tessVertexSpanCountForOracle);
++    }
++
      auto* const renderTarget =
          static_cast<RenderTargetWebGPU*>(desc.renderTarget);
      const auto& drawPipelineLayout =
-diff --git a/renderer/src/webgpu/render_context_webgpu_impl.cpp b/renderer/src/webgpu/render_context_webgpu_impl.cpp
-index 78c9160..5e13aa8 100644
---- a/renderer/src/webgpu/render_context_webgpu_impl.cpp
-+++ b/renderer/src/webgpu/render_context_webgpu_impl.cpp
-@@ -1830,6 +1830,8 @@ RenderContextWebGPUImpl::RenderContextWebGPUImpl(
-     m_platformFeatures.clipSpaceBottomUp = true;
-     m_platformFeatures.framebufferBottomUp = false;
-     m_platformFeatures.msaaColorPreserveNeedsDraw = true;
-+    m_platformFeatures.supportsClipPlanes =
-+        m_device.HasFeature(wgpu::FeatureName::ClipDistances);
- 
-     m_platformFeatures.supportsTextureCompressionBC =
-         m_device.HasFeature(wgpu::FeatureName::TextureCompressionBC);

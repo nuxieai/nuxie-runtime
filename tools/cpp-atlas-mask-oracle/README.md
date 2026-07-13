@@ -55,6 +55,39 @@ atomic final target for diagnosis; it is not compared to Rust's
 clockwise-atomic output. Native Metal stream replay remains the final-pixel
 oracle for that mode.
 
+`direct-strokes-round-spans.bin`, `direct-strokes-round-inputs.bin`, and
+`direct-strokes-round-blit.rgba` isolate draw 38 from
+`fixtures/renderer/streams/gm/strokes_round.rive-stream`. The exact closed
+stroke path is:
+
+```text
+moveTo(25.5016327, 70.300293)
+lineTo(67.7646637, 70.300293)
+cubicTo(79.4274673, 70.300293, 88.8961792, 80.9101868, 88.8961792, 89.5240784)
+lineTo(88.8961792, 127.971649)
+cubicTo(88.8961792, 138.581543, 79.4274673, 147.195435, 67.7646637, 147.195435)
+lineTo(25.5016327, 147.195435)
+cubicTo(16.0329189, 147.195435, 4.37011719, 138.581543, 4.37011719, 127.971649)
+lineTo(4.37011719, 89.5240784)
+cubicTo(4.37011719, 80.9101868, 16.0329189, 70.300293, 25.5016327, 70.300293)
+close()
+```
+
+It preserves the stream stroke's thickness `4.5`, miter join, butt cap, and
+zero feathering in a `400 x 400` frame cleared white. The `RIVEATS` version 1
+artifact is the exact CPU-side `TessVertexSpan` range copied from C++'s mapped
+production ring before unmap. Its 28-byte header pins `firstSpan=0`,
+`spanCount=11`, and a 64-byte record stride; the payload stores every raw field
+in production order. This is the strict pre-raster topology oracle.
+
+The `RIVEATI` artifact captures post-tessellation contour and texture state.
+All non-angle fields compare exactly; the backend-computed tangent angle has a
+bounded `0.00035` radian allowance. The `RIVEABL` artifact is the C++ Dawn
+final frame and remains a cross-backend diagnostic, not the native-Metal
+corpus promotion gate. `build.sh` requires exactly one contour, patch range
+`1+10`, a nonempty canonical span artifact, and a final-frame artifact of
+exactly `640020` bytes.
+
 `direct-polyshark-inputs.bin` uses the same contract for row 0, shark cell
 (stream lines 14 and 28) of `feather_polyshapes`. During each build,
 `generate_polyshark_stream_path.py` validates that canonical stream record and
@@ -226,6 +259,14 @@ RIVE_CPP_DIRECT_POLYSHARK_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-po
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_direct_polyshark_input_oracle_matches_rust_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-inputs.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_direct_strokes_round_tessellation_matches_bounded_tangent_angles \
+  -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_STROKES_ROUND_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-spans.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_direct_strokes_round_cpu_spans_match_rust_record_for_record \
+  -- --exact --ignored --nocapture
 RIVE_CPP_DIRECT_BAD_SKIN_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-bad-skin-inputs.bin" \
   cargo test -p nuxie-renderer \
   direct_grid_oracle::tests::configured_cpp_bad_skin_preparation_matches_record_for_record \
@@ -274,7 +315,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_CUSP_MASK`, `RIVE_CPP_ATLAS_CUSP_INPUTS`, or
 `RIVE_CPP_SOFTENED_CUSP`, or
 `RIVE_CPP_DIRECT_CUSP_INPUTS`, `RIVE_CPP_DIRECT_POLYSHARK_INPUTS`, or
-`RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, `RIVE_CPP_ATLAS_BLIT`, or
+`RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, `RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS`,
+`RIVE_CPP_DIRECT_STROKES_ROUND_SPANS`, `RIVE_CPP_ATLAS_BLIT`, or
 `RIVE_CPP_ATLAS_CLIPPED_BLIT`, `RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_CHANGING_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_NESTED_PATH_CLIPPED_BLIT`,

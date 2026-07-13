@@ -116,10 +116,11 @@ impl WgpuFactory {
             .await
             .map_err(|error| RendererError::Adapter(error.to_string()))?;
         let adapter_limits = adapter.limits();
+        let required_features = adapter.features() & wgpu::Features::CLIP_DISTANCES;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("nuxie-renderer-device"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: wgpu::Limits {
                     max_storage_buffers_per_shader_stage: 7,
                     max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
@@ -849,7 +850,9 @@ impl Renderer for WgpuFrame {
             image: None,
         };
         if self.mode == RenderMode::Msaa && paint.feather != 0.0 {
-            if self.state.clip_rect.is_some() {
+            if self.state.clip_rect.is_some()
+                && !self.context.msaa_atlas_pipeline.supports_clip_rect()
+            {
                 self.unsupported
                     .get_or_insert("clip rectangles on msaa feather atlas draws");
                 return;
@@ -2050,7 +2053,8 @@ impl WgpuFrame {
                     if draw.paint.shader.is_none()
                         && draw.paint.feather != 0.0
                         && draw.paint.blend_mode == BlendMode::SrcOver
-                        && draw.state.clip_rect.is_none()
+                        && (draw.state.clip_rect.is_none()
+                            || self.context.msaa_atlas_pipeline.supports_clip_rect())
                     {
                         if let (Some(mut tessellation), Some(placement)) = (
                             draw::build_feather_atlas_tessellation(
@@ -2077,7 +2081,7 @@ impl WgpuFrame {
                                 contour.path_id = 1;
                             }
                             let paths = [gpu::PathData::zeroed(), tessellation.path];
-                            let paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                            let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
                                 gpu::PaintData::solid_stroke(
                                     modulate_color_alpha(draw.paint.color, draw.state.opacity),
                                     draw.paint.blend_mode,
@@ -2089,12 +2093,17 @@ impl WgpuFrame {
                                     draw.paint.blend_mode,
                                 )
                             };
+                            if draw.state.clip_rect.is_some() {
+                                paint = paint.with_clip_rect();
+                            }
                             let paints = [
                                 gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
                                 paint,
                             ];
-                            let paint_aux =
-                                [gpu::PaintAuxData::zeroed(), gpu::PaintAuxData::zeroed()];
+                            let paint_aux = [
+                                gpu::PaintAuxData::zeroed(),
+                                clip_rect_paint_aux(draw.state.clip_rect),
+                            ];
                             let tessellation_height =
                                 draw::tessellation_texture_height(&tessellation.spans);
                             let atlas_content_size = [placement.width, placement.height];
@@ -2184,6 +2193,7 @@ impl WgpuFrame {
                                     &paint_aux,
                                     &tessellation.contours,
                                     &vertices,
+                                    draw.state.clip_rect.is_some(),
                                 ),
                             ));
                             continue;
@@ -2363,7 +2373,7 @@ impl WgpuFrame {
                                 );
                             }
                             PreparedDraw::Atlas(draw) => {
-                                pass.set_pipeline(&self.context.msaa_atlas_pipeline.pipeline);
+                                pass.set_pipeline(self.context.msaa_atlas_pipeline.pipeline(draw));
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
                                 pass.set_bind_group(3, &draw.sampler_group, &[]);
@@ -5964,7 +5974,9 @@ mod tests {
         fixed_feather_atlas_oracle(join).mask
     }
 
-    fn fixed_feather_atlas_blit() -> atlas_blit_oracle::AtlasBlit {
+    fn fixed_feather_atlas_blit_with_clip(
+        clip_rect: Option<[f32; 4]>,
+    ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         let factory = WgpuFactory::new_with_mode(
             ATLAS_ORACLE_FRAME_SIZE,
             ATLAS_ORACLE_FRAME_SIZE,
@@ -5991,10 +6003,34 @@ mod tests {
             ..WgpuPaint::default()
         };
         let mut frame = factory.begin_frame(0);
+        if let Some([left, top, right, bottom]) = clip_rect {
+            let mut raw_clip = RawPath::new();
+            raw_clip.move_to(left, top);
+            raw_clip.line_to(right, top);
+            raw_clip.line_to(right, bottom);
+            raw_clip.line_to(left, bottom);
+            raw_clip.close();
+            frame.clip_path(&WgpuPath {
+                raw_path: raw_clip,
+                fill_rule: FillRule::NonZero,
+            });
+        }
         frame.draw_path(&path, &paint);
-        let pixels = frame.finish().unwrap();
-        atlas_blit_oracle::AtlasBlit::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE, pixels)
-            .unwrap()
+        let pixels = frame.finish()?;
+        Ok(atlas_blit_oracle::AtlasBlit::new(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            pixels,
+        )
+        .unwrap())
+    }
+
+    fn fixed_feather_atlas_blit() -> atlas_blit_oracle::AtlasBlit {
+        fixed_feather_atlas_blit_with_clip(None).unwrap()
+    }
+
+    fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
+        fixed_feather_atlas_blit_with_clip(Some([16.0, 8.0, 32.0, 56.0]))
     }
 
     #[test]
@@ -6048,42 +6084,32 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_blit_rejects_clip_rect_until_clip_distance_is_supported() {
+    fn msaa_feather_atlas_blit_applies_clip_rect_with_clip_distances() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let mut square = RawPath::new();
-        square.move_to(16.0, 16.0);
-        square.line_to(48.0, 16.0);
-        square.line_to(48.0, 48.0);
-        square.line_to(16.0, 48.0);
-        square.close();
-        let path = WgpuPath {
-            raw_path: square,
-            fill_rule: FillRule::NonZero,
-        };
-        let mut clip = RawPath::new();
-        clip.move_to(24.0, 24.0);
-        clip.line_to(40.0, 24.0);
-        clip.line_to(40.0, 40.0);
-        clip.line_to(24.0, 40.0);
-        clip.close();
-        let clip = WgpuPath {
-            raw_path: clip,
-            fill_rule: FillRule::NonZero,
-        };
-        let paint = WgpuPaint {
-            feather: 20.0,
-            ..WgpuPaint::default()
-        };
+        let supports_clip_rect = factory.context.msaa_atlas_pipeline.supports_clip_rect();
+        let result = fixed_feather_atlas_clipped_blit();
+        if !supports_clip_rect {
+            assert!(matches!(
+                result,
+                Err(RendererError::Unsupported(
+                    "clip rectangles on msaa feather atlas draws"
+                ))
+            ));
+            return;
+        }
+        let blit = result.unwrap();
+        let pixels = blit.pixels();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
-        let mut frame = factory.begin_frame(0);
-        frame.clip_path(&clip);
-        frame.draw_path(&path, &paint);
-        assert!(matches!(
-            frame.finish(),
-            Err(RendererError::Unsupported(
-                "clip rectangles on msaa feather atlas draws"
-            ))
-        ));
+        assert_eq!(pixel(15, 32), [0; 4]);
+        assert_ne!(pixel(24, 16), [0; 4]);
+        assert_ne!(pixel(31, 16), [0; 4]);
+        assert_eq!(pixel(32, 16), [0; 4]);
+        assert!(pixels.chunks_exact(4).enumerate().all(|(index, rgba)| {
+            let x = index % 64;
+            let y = index / 64;
+            (16..32).contains(&x) && (8..56).contains(&y) || rgba == [0; 4]
+        }));
     }
 
     #[test]
@@ -6670,6 +6696,39 @@ mod tests {
         atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
             panic!(
                 "C++ atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_CLIPPED_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_clipped_blit_matches_fixed_rust_output_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_CLIPPED_BLIT").expect(
+            "RIVE_CPP_ATLAS_CLIPPED_BLIT is required for the ignored C++ clipped atlas-blit test",
+        );
+        assert!(!path.is_empty(), "RIVE_CPP_ATLAS_CLIPPED_BLIT is empty");
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_CLIPPED_BLIT must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ clipped atlas-blit oracle at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_blit = fixed_feather_atlas_clipped_blit().unwrap();
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ clipped atlas-blit oracle mismatch at {}: {error}",
                 path.display()
             )
         });

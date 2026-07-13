@@ -141,8 +141,8 @@ reconstructs the exact `RawPath` and transform, runs
 triangle records, dimensions, and every texture texel without tolerances.
 `build.sh` writes and validates it independently.
 
-`atlas-blit.rgba` and `atlas-fill-blit.rgba` use the `RIVEABL` version 1 contract for the matching MSAA
-mode: a 20-byte
+`atlas-blit.rgba`, `atlas-clipped-blit.rgba`, and `atlas-fill-blit.rgba` use the
+`RIVEABL` version 1 contract for the matching MSAA mode: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by the
 complete tightly packed `64 x 64` RGBA8 render target. Since the paired input
 and mask oracles already prove the atlas contents, this artifact isolates the
@@ -189,6 +189,10 @@ RIVE_CPP_ATLAS_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-blit.rgba" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATLAS_CLIPPED_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-clipped-blit.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_msaa_atlas_clipped_blit_matches_fixed_rust_output_when_configured \
+  -- --exact --ignored --nocapture
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
@@ -197,7 +201,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_CUSP_MASK`, `RIVE_CPP_ATLAS_CUSP_INPUTS`, or
 `RIVE_CPP_SOFTENED_CUSP`, or
 `RIVE_CPP_DIRECT_CUSP_INPUTS`, `RIVE_CPP_DIRECT_POLYSHARK_INPUTS`, or
-`RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, or `RIVE_CPP_ATLAS_BLIT` path;
+`RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, `RIVE_CPP_ATLAS_BLIT`, or
+`RIVE_CPP_ATLAS_CLIPPED_BLIT` path;
 invoking either test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing

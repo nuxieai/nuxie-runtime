@@ -650,16 +650,17 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "direct-flower") == 0;
     const bool directBadSkinCase =
         argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;
+    const bool clippedCase = argc > 4 && std::strcmp(argv[4], "clipped") == 0;
     const bool directTriangulatedCase =
         directGridCase || directFlowerCase || directBadSkinCase;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase;
     const bool fillCase = circleCase || cuspCase || directCase;
     const char* softenedOutput = argc > 5 ? argv[5] : nullptr;
-    if (argc > 6 || (argc > 4 && !fillCase) ||
+    if (argc > 6 || (argc > 4 && !fillCase && !clippedCase) ||
         (softenedOutput != nullptr && !cuspCase))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin] [softened-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -689,6 +690,13 @@ int main(int argc, char** argv)
 
     WGPUDeviceDescriptor deviceDesc = {};
     deviceDesc.uncapturedErrorCallbackInfo.callback = onDeviceError;
+    constexpr WGPUFeatureName kClipDistances = WGPUFeatureName_ClipDistances;
+    if (clippedCase && !wgpuAdapterHasFeature(adapter.Get(), kClipDistances))
+    {
+        fail("Dawn adapter does not support clip distances");
+    }
+    deviceDesc.requiredFeatureCount = clippedCase ? 1 : 0;
+    deviceDesc.requiredFeatures = clippedCase ? &kClipDistances : nullptr;
     wgpu::Device device =
         wgpu::Device::Acquire(wgpuAdapterCreateDevice(adapter.Get(), &deviceDesc));
     if (!device)
@@ -849,6 +857,16 @@ int main(int argc, char** argv)
     paint->feather(directTriangulatedCase ? 0.f
                                          : (directCase ? 1.f : kFeather));
     paint->color(0xffffffff);
+    if (clippedCase)
+    {
+        auto clip = context->makeEmptyRenderPath();
+        clip->moveTo(16, 8);
+        clip->lineTo(32, 8);
+        clip->lineTo(32, 56);
+        clip->lineTo(16, 56);
+        clip->close();
+        renderer.clipPath(clip.get());
+    }
     renderer.drawPath(path.get(), paint.get());
 
     wgpu::CommandEncoder renderEncoder = device.CreateCommandEncoder();
@@ -921,8 +939,12 @@ int main(int argc, char** argv)
         !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 1 ||
         facts.drawBatches.front().drawType !=
             static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
-        facts.drawBatches.front().shaderFeatures != static_cast<uint32_t>(
-            rive::gpu::ShaderFeatures::ENABLE_DITHER) ||
+        facts.drawBatches.front().shaderFeatures !=
+            (static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_DITHER) |
+             (clippedCase
+                  ? static_cast<uint32_t>(
+                        rive::gpu::ShaderFeatures::ENABLE_CLIP_RECT)
+                  : 0u)) ||
         facts.drawBatches.front().shaderMiscFlags != static_cast<uint32_t>(
             rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))
     {

@@ -400,3 +400,16 @@ index ff41da4..7baa8b3 100644
      auto* const renderTarget =
          static_cast<RenderTargetWebGPU*>(desc.renderTarget);
      const auto& drawPipelineLayout =
+diff --git a/renderer/src/webgpu/render_context_webgpu_impl.cpp b/renderer/src/webgpu/render_context_webgpu_impl.cpp
+index 78c9160..5e13aa8 100644
+--- a/renderer/src/webgpu/render_context_webgpu_impl.cpp
++++ b/renderer/src/webgpu/render_context_webgpu_impl.cpp
+@@ -1830,6 +1830,8 @@ RenderContextWebGPUImpl::RenderContextWebGPUImpl(
+     m_platformFeatures.clipSpaceBottomUp = true;
+     m_platformFeatures.framebufferBottomUp = false;
+     m_platformFeatures.msaaColorPreserveNeedsDraw = true;
++    m_platformFeatures.supportsClipPlanes =
++        m_device.HasFeature(wgpu::FeatureName::ClipDistances);
+ 
+     m_platformFeatures.supportsTextureCompressionBC =
+         m_device.HasFeature(wgpu::FeatureName::TextureCompressionBC);

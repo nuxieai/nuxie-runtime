@@ -223,10 +223,10 @@ Run `make renderer-golden`.
    and interior passes and proving all 69 isolated draws are bounded. The
    matching WebGPU MSAA final blit is now byte-exact across all 4,096 oracle
    pixels for the solid, unclipped, source-over slice. Parent-tight clip bounds
-   are a later performance refinement, not a correctness gate. Continue R2
-   with MSAA clip semantics in source order: rectangle clip-distance,
+   are a later performance refinement, not a correctness gate. MSAA rectangle
+   clip-distance is now byte-exact against C++ WebGPU. Continue R2 with
    path-clip/stencil behavior, then destination-copy shader blending. Those
-   unsupported boundaries are explicit and tested. Continue afterward with
+   remaining unsupported boundaries are explicit and tested. Continue afterward with
    remaining `render_context.cpp` behavior and integration of the translated
    intersection board.
 2. Expand corpus entries only as focused pixel replay proves each feature.
@@ -242,6 +242,22 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-12: Closed MSAA rectangle clip-distance atlas blits. Device creation
+  requests `CLIP_DISTANCES` only when the adapter exposes it; the atlas blit
+  pipeline then selects upstream's generated clip-distance vertex permutation
+  and uploads the existing C++-shaped clip inverse matrix through
+  `PaintAuxData`. Adapters without the feature retain the named `Unsupported`
+  result. The C++ Dawn oracle now enables WebGPU clip planes only for a new
+  clipped case, asserts the `ENABLE_DITHER | ENABLE_CLIP_RECT` batch, and emits
+  a complete 64x64 `RIVEABL` artifact. Rust matches all 4,096 pixels exactly;
+  an always-on GPU fence also proves output is confined to the clip rectangle.
+  Sol's adversarial review found and closed two portability gaps: the ordinary
+  test now preserves the unsupported branch, and unrelated C++ oracle modes no
+  longer require clip distances. `make renderer-golden` remains
+  exact=118/diverges=0/gated=1,349; normal V2 is 263 files/584 segments,
+  scripted V2 is 27 files/35 segments, and `cargo test --workspace` passes.
+  Path-clip/stencil is the next R2 boundary, followed by destination-copy
+  shader blending.
 - 2026-07-12: Closed the matching C++ WebGPU MSAA atlas final-blit oracle.
   MSAA now forces feathered solid fills and strokes through the translated
   atlas tessellation and R16 mask passes, then draws the upstream six-vertex
@@ -255,9 +271,8 @@ Run `make renderer-golden`.
   Those cases now return named `Unsupported` errors with regressions instead
   of drawing incorrect pixels; Sol's final review reports no remaining blocker
   for the intentionally narrow slice. `make renderer-golden` remains
-  exact=118/diverges=0/gated=1,349. The next R2 boundary is MSAA rectangle
-  clip-distance support, followed by path-clip/stencil and destination-copy
-  blend variants.
+  exact=118/diverges=0/gated=1,349. Rectangle clip-distance, path-clip/stencil,
+  and destination-copy blend variants remained as the next source-order work.
 - 2026-07-12: Removed a generic-atomic interior race in the invented wgpu
   batching seam. Shared flush groups had submitted outer-curve patches and
   interior triangles in one render pass; five identical isolated `bad_skin`

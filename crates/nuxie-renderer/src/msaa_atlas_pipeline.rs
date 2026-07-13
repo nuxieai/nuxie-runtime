@@ -4,7 +4,8 @@ use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, 
 use wgpu::util::DeviceExt;
 
 pub(crate) struct MsaaAtlasPipeline {
-    pub pipeline: wgpu::RenderPipeline,
+    no_clip_pipeline: wgpu::RenderPipeline,
+    clip_rect_pipeline: Option<wgpu::RenderPipeline>,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
@@ -16,11 +17,12 @@ pub(crate) struct PreparedAtlasBlit {
     pub sampler_group: wgpu::BindGroup,
     pub vertices: wgpu::Buffer,
     pub vertex_count: u32,
+    clipped: bool,
 }
 
 impl MsaaAtlasPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let vertex = shader(
+        let no_clip_vertex = shader(
             device,
             "nuxie-msaa-atlas-blit-vertex",
             include_str!("generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl"),
@@ -69,55 +71,89 @@ impl MsaaAtlasPipeline {
             ],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nuxie-msaa-atlas-blit-pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &vertex,
-                entry_point: Some("main"),
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[("2", 0.0)],
+        let create_pipeline = |label, vertex: &wgpu::ShaderModule, clipped| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: vertex,
+                    entry_point: Some("main"),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: if clipped {
+                            &[("0", 0.0), ("1", 1.0), ("2", 0.0)]
+                        } else {
+                            &[("0", 0.0), ("2", 0.0)]
+                        },
+                        ..Default::default()
+                    },
+                    buffers: &[Some(TriangleVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: None,
                     ..Default::default()
                 },
-                buffers: &[Some(TriangleVertex::layout())],
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Stencil8,
-                depth_write_enabled: None,
-                depth_compare: None,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 4,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &fragment,
-                entry_point: Some("main"),
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[("2", 0.0), ("7", 1.0)],
-                    ..Default::default()
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Stencil8,
+                    depth_write_enabled: None,
+                    depth_compare: None,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 4,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
                 },
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+                fragment: Some(wgpu::FragmentState {
+                    module: &fragment,
+                    entry_point: Some("main"),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &[("2", 0.0), ("7", 1.0)],
+                        ..Default::default()
+                    },
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let no_clip_pipeline =
+            create_pipeline("nuxie-msaa-atlas-blit-pipeline", &no_clip_vertex, false);
+        let clip_rect_pipeline = device
+            .features()
+            .contains(wgpu::Features::CLIP_DISTANCES)
+            .then(|| {
+                let vertex = shader(
+                    device,
+                    "nuxie-msaa-atlas-blit-clip-rect-vertex",
+                    include_str!("generated/draw_msaa_atlas_blit.webgpu_vert.wgsl"),
+                );
+                create_pipeline("nuxie-msaa-atlas-blit-clip-rect-pipeline", &vertex, true)
+            });
         Self {
-            pipeline,
+            no_clip_pipeline,
+            clip_rect_pipeline,
             flush_layout,
             image_layout,
             sampler_layout,
+        }
+    }
+
+    pub(crate) fn supports_clip_rect(&self) -> bool {
+        self.clip_rect_pipeline.is_some()
+    }
+
+    pub(crate) fn pipeline<'a>(&'a self, draw: &PreparedAtlasBlit) -> &'a wgpu::RenderPipeline {
+        if draw.clipped {
+            self.clip_rect_pipeline
+                .as_ref()
+                .expect("clipped atlas blit prepared without clip-distance pipeline")
+        } else {
+            &self.no_clip_pipeline
         }
     }
 
@@ -134,6 +170,7 @@ impl MsaaAtlasPipeline {
         paint_aux: &[PaintAuxData],
         contours: &[ContourData],
         vertices: &[TriangleVertex],
+        clipped: bool,
     ) -> PreparedAtlasBlit {
         let uniform = upload(
             device,
@@ -230,6 +267,7 @@ impl MsaaAtlasPipeline {
             sampler_group,
             vertices: vertex_buffer,
             vertex_count: vertices.len() as u32,
+            clipped,
         }
     }
 }

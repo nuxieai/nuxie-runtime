@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=147, diverges=0, gated=1,320, total=1,467.
+- Rust wgpu: exact=148, diverges=0, gated=1,319, total=1,467.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -97,7 +97,9 @@ Run `make renderer-golden`.
   transparent overstroke, `path_skbug_11859`, `quadcap`, `skbug12244`,
   `strokes_zoomed`, `teenyStrokes`, all three tricky-cubic stroke variants,
   and both transparent-clear blend cases, plus the mirrored Montserrat and
-  Roboto feather-text entries, plus `gm-overstroke_blendmodes-clockwise-atomic`.
+  Roboto feather-text entries, plus
+  `gm-overstroke_blendmodes-clockwise-atomic` and
+  `gm-zeroPath-clockwise-atomic`.
 
 ## Milestones
 
@@ -252,13 +254,14 @@ Run `make renderer-golden`.
    their unchanged contracts. Two more clear-state GMs became exact after
    frame attachments adopted C++'s integer-premultiplied clear color. C++'s
    determinant-aware contour direction now closes the mirrored
-   Montserrat/Roboto feather-text pair. Nine real GM divergences remain.
+   Montserrat/Roboto feather-text pair. Eight real GM divergences remain.
    `interleavedfeather` is parked as a named native-Metal-versus-WebGPU atomic
    intermediate-precision discontinuity: isolated draws agree, but RGBA8 PLS
    storage erases a sub-8-bit RGB/alpha distinction that ColorBurn amplifies.
    Do not tolerate it or add a bespoke shader fork without a dedicated C++
-   color-plane suboracle. Continue R2 with `zeroPath`, the next structural
-   target; `dstreadshuffle` follows.
+   color-plane suboracle. C++'s empty-segment outcome is now matched in
+   stroke/feather preparation for coincident cubics, closing `zeroPath`. Continue R2 with
+   `dstreadshuffle`, the next structural target.
    The remaining logical-flush sort-key fields are
    deferred until pass-level batching is an explicit R4 task: whole-draw Rust
    execution already preserves their only current correctness dependency.
@@ -275,6 +278,15 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Matched C++ `RawPath::pruneEmptySegments` behavior in
+  stroke/feather preparation for cubic strokes whose four points coincide.
+  Rust had retained these curves with zero
+  tangents, dropping the round and square cap geometry in `zeroPath`; treating
+  them as empty contours emits C++'s opposed synthetic cap joins. A unit test
+  pins both cap types. Fresh native Metal comparison falls from 1,490
+  pixels/max-128 to 26 sparse edge pixels/max-55 under the unchanged 2/32
+  contract, promoting `zeroPath` and raising the ratchet to 148 exact entries.
+  `dstreadshuffle` is next.
 - 2026-07-13: Parked `interleavedfeather` after isolating its first meaningful
   failure to draws 13-14. Each draw alone is within one channel value of C++,
   but their ColorBurn pair differs at 97 pixels/max-18 and the complete GM at
@@ -1437,3 +1449,8 @@ Run `make renderer-golden`.
   color-plane suboracle or backend-matched reference. Promoted the independently
   verified `overstroke_blendmodes` reference under its unchanged 2/32 contract;
   the ratchet is exact=147/diverges=0/gated=1,320 and `zeroPath` is next.
+- 2026-07-13: Pruned fully coincident cubics in stroke/feather preparation,
+  matching C++ behavior and restoring `zeroPath` round/square caps.
+  Fresh native Metal comparison passes the unchanged 2/32 contract at
+  26 pixels/max-55; the ratchet is exact=148/diverges=0/gated=1,319 and
+  `dstreadshuffle` is next.

@@ -300,13 +300,16 @@ fn build_stroke_or_feather_tessellation(
     let path_start = location;
     for (contour_index, contour) in contours.iter().enumerate() {
         let mut curves = contour.curves.clone();
+        curves.retain(|curve| {
+            let [p0, p1, p2, p3] = curve.cubic;
+            !(points_equal(p0, p1) && points_equal(p1, p2) && points_equal(p2, p3))
+        });
         if contour.closed && !same_point(contour.first, contour.current) {
             curves.push(StrokeCurve {
                 cubic: line_cubic(contour.current, contour.first),
                 is_line: true,
             });
         }
-        curves.retain(|curve| !curve.is_line || !same_point(curve.cubic[0], curve.cubic[3]));
         let contour_start = location as u32;
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
         let mut pending = Vec::new();
@@ -1849,6 +1852,10 @@ fn same_point(a: Vec2D, b: Vec2D) -> bool {
     a.x.to_bits() == b.x.to_bits() && a.y.to_bits() == b.y.to_bits()
 }
 
+fn points_equal(a: Vec2D, b: Vec2D) -> bool {
+    a.x == b.x && a.y == b.y
+}
+
 fn append_cubic(contour: &mut Contour, cubic: [Vec2D; 4]) {
     let segment_count = cubic_segment_count(cubic);
     for segment in 1..=segment_count {
@@ -2710,6 +2717,53 @@ mod tests {
             tessellation.spans[1].contour_id_with_flags,
             1 | ROUND_JOIN_CONTOUR_FLAG | EMULATED_STROKE_CAP_CONTOUR_FLAG
         );
+    }
+
+    #[test]
+    fn zero_length_cubic_stroke_uses_empty_cap_geometry() {
+        let mut path = RawPath::new();
+        path.move_to(20.0, 30.0);
+        path.cubic_to(20.0, 30.0, 20.0, 30.0, 20.0, 30.0);
+
+        for (cap, flags) in [
+            (StrokeCap::Round, ROUND_JOIN_CONTOUR_FLAG),
+            (StrokeCap::Square, MITER_CLIP_JOIN_CONTOUR_FLAG),
+        ] {
+            let tessellation =
+                build_stroke_tessellation(&path, Mat2D::IDENTITY, 10.0, StrokeJoin::Bevel, cap)
+                    .unwrap();
+
+            assert_eq!(tessellation.spans.len(), 5);
+            assert_eq!(tessellation.spans[1].points[0], [21.0, 30.0]);
+            assert_eq!(tessellation.spans[1].points[3], [20.0, 30.0]);
+            assert_eq!(tessellation.spans[2].points[0], [19.0, 30.0]);
+            assert_eq!(tessellation.spans[2].points[3], [20.0, 30.0]);
+            assert_eq!(
+                tessellation.spans[1].contour_id_with_flags,
+                1 | flags | EMULATED_STROKE_CAP_CONTOUR_FLAG
+            );
+        }
+    }
+
+    #[test]
+    fn signed_zero_implicit_close_is_not_pruned() {
+        let mut path = RawPath::new();
+        path.move_to(-0.0, 0.0);
+        path.line_to(0.0, 0.0);
+        path.close();
+
+        let tessellation = build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            10.0,
+            StrokeJoin::Bevel,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+
+        let close = &tessellation.spans[1];
+        assert_eq!(close.points[0][0].to_bits(), 0.0f32.to_bits());
+        assert_eq!(close.points[3][0].to_bits(), (-0.0f32).to_bits());
     }
 
     #[test]

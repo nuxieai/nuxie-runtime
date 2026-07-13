@@ -4740,10 +4740,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_follow_path_di
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_follow_path_distance-frame-0-msaa"
@@ -4766,10 +4765,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_grouped-frame-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_grouped-frame-0-msaa"
@@ -4792,10 +4790,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_grouped-frame-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_grouped-frame-1-msaa"
@@ -4818,10 +4815,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_grouped-frame-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_grouped-frame-2-msaa"
@@ -4844,10 +4840,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_grouped-frame-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_grouped-frame-3-msaa"
@@ -4870,10 +4865,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_grouped-frame-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_grouped-frame-4-msaa"
@@ -4896,10 +4890,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_hit_order-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_hit_order-frame-0-msaa"
@@ -4922,10 +4915,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_hit_order-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_hit_order-frame-1-msaa"
@@ -4948,10 +4940,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_hit_order-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_hit_order-frame-2-msaa"
@@ -4974,10 +4965,9 @@ reference = "fixtures/renderer/reference/metal/riv/component_list_hit_order-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 [[entry]]
 id = "riv-component_list_hit_order-frame-3-msaa"

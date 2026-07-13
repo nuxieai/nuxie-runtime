@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=210, diverges=0, gated=1,258, total=1,468.
+- Rust wgpu: exact=220, diverges=0, gated=1,248, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -126,7 +126,10 @@ Run `make renderer-golden`.
   `riv-component_list_1-frame-0-clockwise-atomic`,
   `riv-component_list_2-frame-{0..4}-clockwise-atomic`,
   `riv-component_list_child_origin-frame-0-clockwise-atomic`, and
-  `riv-component_list_follow_path-frame-0-clockwise-atomic`.
+  `riv-component_list_follow_path-frame-0-clockwise-atomic`, plus
+  `riv-component_list_follow_path_distance-frame-0-clockwise-atomic`,
+  `riv-component_list_grouped-frame-{0..4}-clockwise-atomic`, and
+  `riv-component_list_hit_order-frame-{0..3}-clockwise-atomic`.
 
 ## Milestones
 
@@ -181,11 +184,17 @@ Run `make renderer-golden`.
    `component_list_2` frames 0-4, `component_list_child_origin`, and
    `component_list_follow_path`. Capture missing pinned Metal references and
    apply the unchanged contract and diagnostic rules.
-8. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+8. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
    entries: `component_list_follow_path_distance`, `component_list_grouped`
    frames 0-4, and `component_list_hit_order` frames 0-3. Capture missing
    pinned Metal references and apply the unchanged contract and diagnostic
    rules.
+9. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+   entries: `component_list_hit_order` frame 4, `component_list_virtualized`,
+   `component_stateful`, both `component_stateful_vm_instance` fixtures,
+   `computed_root_transform`, `computed_values_test`, and `cubic_value_test`
+   frames 0-2. Capture missing pinned Metal references and apply the unchanged
+   contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -1861,3 +1870,9 @@ Run `make renderer-golden`.
   `component_based_conditions` frames repeat the family's one-pixel/max-19
   result. The renderer ratchet advances to
   exact=210/diverges=0/gated=1,258.
+- 2026-07-13: Probed the seventh ten-entry clockwise-atomic `.riv` batch
+  against freshly pinned native Metal references. All ten pass the unchanged
+  `2/32` contract: `component_list_grouped` frames consistently use 15
+  over-threshold pixels/max delta 44, while the other five entries have zero
+  over-threshold pixels. The renderer ratchet advances to
+  exact=220/diverges=0/gated=1,248.

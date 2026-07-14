@@ -17,6 +17,12 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-runtime = { path = "../nuxie-runtime" }
 nuxie-scripting = { path = "../nuxie-scripting", optional = true }
 
+[build-dependencies]
+nuxie-schema = { path = "../nuxie-schema" }
+
+[dev-dependencies]
+nuxie-render-stream = { path = "../nuxie-render-stream" }
+
 # This crate is fully CLEAN on the workspace panic-freedom clippy lints (see
 # [workspace.lints.clippy] in the root Cargo.toml), so it pins them at DENY
 # here (a crate lints table cannot combine `workspace = true` with overrides).

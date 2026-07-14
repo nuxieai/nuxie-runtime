@@ -14,6 +14,10 @@ use nuxie_runtime::{
     preallocate_render_paint_cache_for_artboard_tree,
 };
 
+mod scene;
+
+pub use scene::*;
+
 pub use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb,
     RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
@@ -41,6 +45,10 @@ impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
     pub fn import(bytes: &[u8]) -> Result<Self> {
         let runtime = read_runtime_file(bytes).context("failed to import Rive file")?;
+        Self::from_runtime(runtime)
+    }
+
+    pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         Ok(Self { runtime, graph })
     }

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,354, diverges=0, gated=114, total=1,468.
+- Rust wgpu: exact=1,355, diverges=0, gated=113, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -76,7 +76,8 @@ Run `make renderer-golden`.
   `gm-concavepaths-clockwise-atomic` and
   the `gm-poly_{clockwise,evenOdd,nonZero}-clockwise-atomic` family, plus
   `gm-cubicpath-clockwise-atomic` and
-  `gm-cubicclosepath-clockwise-atomic`, plus `gm-beziers-clockwise-atomic`
+  `gm-cubicclosepath-clockwise-atomic`, plus
+  `gm-beziers-{clockwise-atomic,msaa}`
   and the `gm-bug{5099,6083,615686,6987,7792}-clockwise-atomic` set, plus
   `gm-bug339297-clockwise-atomic` and
   `gm-bug339297_as_clip-clockwise-atomic`, plus
@@ -1085,8 +1086,15 @@ Run `make renderer-golden`.
     stack, matching C++. The focused regression, all 231 enabled renderer
     tests, and the full corpus pass; Bullet Man is byte-exact and advances the
     ratchet to exact=1,354/diverges=0/gated=114.
-88. [ ] Close `msaa-cubic-stroke-raster-parity` in `gm-beziers-msaa` using its
+88. [x] Close `msaa-cubic-stroke-raster-parity` in `gm-beziers-msaa` using its
     pinned C++ Dawn reference and a single-stroke tessellation/raster oracle.
+    Historical replay against unchanged stream/reference hashes proves the
+    gate was stale and misclassified: the row moves from 5,385 pixels/max 152
+    immediately before `90c8fd52` to 8 pixels/max 3 immediately after C++'s
+    dedicated MSAA stroke depth state landed. Its focused duplicate-contour GPU
+    regression pins the actual self-overdraw boundary. The current probe passes
+    the unchanged `2/32` contract and advances the ratchet to
+    exact=1,355/diverges=0/gated=113.
 89. [ ] Close `msaa-clip-intersection-edge-coverage` in
     `gm-cliprectintersections-msaa` from its pinned C++ Dawn reference without
     broadening the 240-pixel residual into a tolerance.
@@ -3521,3 +3529,9 @@ Run `make renderer-golden`.
   `riv-bullet_man-frame-0-clockwise-atomic` byte-exact under its unchanged
   `2/32` contract. All 231 enabled renderer tests and the full 1,468-row corpus
   pass at exact=1,354/diverges=0/gated=114; nine substantive R3.1 rows remain.
+- 2026-07-14: Closed R3.1 queue item 88 by bisecting the stale
+  `gm-beziers-msaa` gate against unchanged Dawn assets. The row changes from
+  5,385 pixels/max 152 before `90c8fd52` to 8 pixels/max 3 after its dedicated
+  C++ MSAA stroke depth state, whose duplicate-contour GPU test pins the actual
+  self-overdraw behavior. Promoted under the unchanged `2/32` contract; the
+  ratchet is exact=1,355/diverges=0/gated=113 with eight substantive rows left.

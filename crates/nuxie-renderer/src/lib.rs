@@ -1128,14 +1128,9 @@ impl Renderer for WgpuFrame {
         let Some(texture) = &image.texture else {
             return;
         };
-        let Some((clip_updates, clip_id)) = self.prepare_clip_updates() else {
+        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
-        if self.mode == RenderMode::Msaa && clip_id != 0 {
-            self.unsupported
-                .get_or_insert("path clips on non-atlas msaa draws");
-            return;
-        }
         // C++ RiveRenderer::drawImage uses ImageRectDraw only for atomics;
         // MSAA draws this unit rectangle with an image paint.
         let mut raw_path = RawPath::new();
@@ -2563,6 +2558,8 @@ impl WgpuFrame {
                                 &self.context.device,
                                 &uniforms,
                                 bounds,
+                                u16::try_from(z_index)
+                                    .expect("MSAA clip reset z-index must fit the shader contract"),
                             ),
                             action,
                         ));
@@ -4445,7 +4442,8 @@ fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
     let decoded = decoder.decode().ok()?;
     let info = decoder.info()?;
-    let pixels = match info.pixel_format {
+    let icc_profile = decoder.icc_profile();
+    let mut pixels: Vec<u8> = match info.pixel_format {
         jpeg_decoder::PixelFormat::L8 => decoded
             .into_iter()
             .flat_map(|value| [value, value, value, 255])
@@ -4471,6 +4469,10 @@ fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
             })
             .collect(),
     };
+    if let Some(profile) = icc_profile {
+        convert_icc_rgba_to_srgb(&mut pixels, u32::from(info.width), &profile);
+    }
+    premultiply_rgba(&mut pixels);
     Some((u32::from(info.width), u32::from(info.height), pixels))
 }
 
@@ -5506,7 +5508,7 @@ mod tests {
     }
 
     #[test]
-    fn decodes_corpus_jpeg_to_opaque_rgba() {
+    fn decodes_profiled_corpus_jpeg_to_opaque_rgba() {
         let stream = include_str!(
             "../../../fixtures/renderer/streams/riv/clipping_and_draw_order.rive-stream"
         );
@@ -5524,6 +5526,9 @@ mod tests {
                     .collect::<Vec<_>>()
             })
             .expect("fixture must contain an encoded image");
+        let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(&encoded));
+        decoder.read_info().unwrap();
+        assert!(decoder.icc_profile().is_some());
 
         let (width, height, rgba) = decode_image_rgba(&encoded).expect("JPEG must decode");
         assert_eq!((width, height), (278, 278));
@@ -5694,6 +5699,48 @@ mod tests {
         assert_eq!(pixel(3, 8), [0, 0, 255, 255]);
         assert_eq!(pixel(8, 8), [255, 255, 255, 255]);
         assert_eq!(pixel(11, 11), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_path_clip_applies_to_image_rect() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let image = factory.decode_image(&encoded);
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 8.0);
+        raw_clip.line_to(56.0, 56.0);
+        raw_clip.line_to(8.0, 56.0);
+        raw_clip.close();
+        let clip = WgpuPath {
+            raw_path: raw_clip,
+            fill_rule: FillRule::NonZero,
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&clip);
+        frame.transform(Mat2D([64.0, 0.0, 0.0, 64.0, 0.0, 0.0]));
+        frame.draw_image(
+            Some(image.as_ref()),
+            ImageSampler::default(),
+            BlendMode::SrcOver,
+            1.0,
+        );
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(8, 32), [0; 4]);
+        assert_eq!(pixel(32, 32), [255, 0, 0, 255]);
+        assert_eq!(pixel(32, 4), [0; 4]);
+        assert_eq!(pixel(32, 48), [255, 0, 0, 255]);
     }
 
     #[test]
@@ -6123,6 +6170,10 @@ mod tests {
         let scheduled = make_frame().finish().unwrap();
         let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
         assert_eq!(scheduled, serialized);
+        let pixel = |x: usize, y: usize| &scheduled[(y * 64 + x) * 4..][..4];
+        assert_eq!(pixel(12, 15), [255, 0, 0, 255]);
+        assert_eq!(pixel(18, 15), [0, 255, 0, 255]);
+        assert_eq!(pixel(45, 45), [0, 0, 255, 255]);
     }
 
     #[test]
@@ -9353,6 +9404,36 @@ mod tests {
         assert_eq!(pixel(32, 32), [255, 0, 0, 255]);
         assert_eq!(pixel(32, 8), [0; 4]);
         assert_eq!(pixel(32, 47), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_nested_path_clip_survives_prior_overlapping_content() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let outer = triangle_path([[32.0, 4.0], [60.0, 60.0], [4.0, 60.0]], FillRule::NonZero);
+        let inner = triangle_path(
+            [[32.0, 20.0], [48.0, 52.0], [16.0, 52.0]],
+            FillRule::NonZero,
+        );
+        let content = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::NonZero);
+        let green = WgpuPaint {
+            color: 0xff00_ff00,
+            ..WgpuPaint::default()
+        };
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&outer);
+        frame.draw_path(&content, &green);
+        frame.clip_path(&inner);
+        frame.draw_path(&content, &red);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(32, 36), [255, 0, 0, 255]);
+        assert_eq!(pixel(8, 56), [0, 255, 0, 255]);
+        assert_eq!(pixel(2, 2), [0; 4]);
     }
 
     #[test]

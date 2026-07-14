@@ -4125,7 +4125,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
+gated = "platform-image-decode-color-profile"
 
 [[entry]]
 id = "riv-coin-frame-0-clockwise-atomic"
@@ -15052,7 +15052,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-path-clip-draw-order"
+gated = "msaa-overlapping-contour-edge-coverage"
 
 [[entry]]
 id = "riv-stacked_path_effects-frame-0-clockwise-atomic"

@@ -1036,13 +1036,28 @@ Run `make renderer-golden`.
     2,058 artifacts, every retained GM PNG is unchanged, and 581 RIV rows pass
     unchanged `2/32` contracts. The ratchet advances to
     exact=1,352/diverges=0/gated=116.
-84. [ ] Port non-atlas MSAA path clipping for
+84. [x] Port non-atlas MSAA path clipping for
     `riv-clipping_and_draw_order-frame-0-msaa`, then reprobe the missing
     clipped facial draws in `riv-spotify_kids_demo-frame-0-msaa`. Both strict
     Dawn references are pinned; the first reaches the explicit
     `path clips on non-atlas msaa draws` rejection and the second differs at
     3,788 pixels/max delta 230. Preserve the unchanged `2/32` contracts and
-    the existing direct-path clip behavior.
+    the existing direct-path clip behavior. MSAA image rectangles now use the
+    scheduled path-clip stack, and nested clip-reset rectangles carry their
+    actual draw-group depth instead of a hardcoded depth that failed over prior
+    content. The latter restores all 3,690 missing Spotify facial pixels. The
+    two rows now narrow independently: `clipping_and_draw_order` is
+    8,905/max 18 entirely inside its profiled JPEG and joins the existing
+    `platform-image-decode-color-profile` gate; Spotify is 98/max 41 on the
+    mirrored foot/leg contour edges and moves to
+    `msaa-overlapping-contour-edge-coverage`. The ratchet remains
+    exact=1,352/diverges=0/gated=116 without changing a tolerance.
+85. [ ] Close `msaa-overlapping-contour-edge-coverage` in
+    `riv-spotify_kids_demo-frame-0-msaa`. Isolate the two mirrored foot fills
+    and round strokes against their pinned Dawn pixels, capture exact C++/Rust
+    tessellation inputs for the boundary samples, then port the first proven
+    topology or pipeline mismatch and promote under the unchanged `2/32`
+    contract.
 
 ## R2 Completion Record
 
@@ -3420,3 +3435,14 @@ Run `make renderer-golden`.
   exact=1,352/diverges=0/gated=116. The 43 oracle-format tests, 12 capture
   tests, full renderer ratchet, workspace suite, normal 584-segment floor, and
   scripted 35-segment floor pass. Queue item 84 ports the clipping boundary.
+- 2026-07-14: Ported non-atlas MSAA path clipping through image rectangles and
+  fixed nested clip-reset depth to use the scheduled draw group, matching C++
+  instead of hardcoding z=1. Focused pixel regressions pin both behaviors, and
+  the latter restores all 3,690 previously missing Spotify facial pixels.
+  `clipping_and_draw_order` now reaches rendering and narrows to its existing
+  platform JPEG decode family at 8,905/max 18; Spotify narrows from
+  3,788/max 230 to 98/max 41 on two mirrored foot/leg contour edges. The
+  renderer ratchet stays exact=1,352/diverges=0/gated=116 under unchanged
+  contracts. All 228 enabled renderer tests, the workspace, the full renderer
+  corpus, the normal 584-segment V2 floor, and the scripted 35-segment floor
+  pass. Queue item 85 targets the isolated contour-edge coverage residual.

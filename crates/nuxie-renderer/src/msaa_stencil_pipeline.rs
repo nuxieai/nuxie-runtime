@@ -169,6 +169,7 @@ impl MsaaStencilPipeline {
         device: &wgpu::Device,
         uniforms: &FlushUniforms,
         bounds: [f32; 4],
+        z_index: u16,
     ) -> PreparedStencilDraw {
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-msaa-stencil-uniforms"),
@@ -185,12 +186,12 @@ impl MsaaStencilPipeline {
         });
         let [left, top, right, bottom] = bounds;
         let vertices = [
-            TriangleVertex::new([left, bottom], 0, 1),
-            TriangleVertex::new([left, top], 0, 1),
-            TriangleVertex::new([right, bottom], 0, 1),
-            TriangleVertex::new([right, bottom], 0, 1),
-            TriangleVertex::new([left, top], 0, 1),
-            TriangleVertex::new([right, top], 0, 1),
+            TriangleVertex::new([left, bottom], 0, z_index),
+            TriangleVertex::new([left, top], 0, z_index),
+            TriangleVertex::new([right, bottom], 0, z_index),
+            TriangleVertex::new([right, bottom], 0, z_index),
+            TriangleVertex::new([left, top], 0, z_index),
+            TriangleVertex::new([right, top], 0, z_index),
         ];
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-msaa-stencil-vertices"),

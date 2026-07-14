@@ -1643,7 +1643,7 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(len(accepted), 11)
         self.assertEqual(len(set(accepted)), len(accepted))
 
-    def test_msaa_inventory_rejects_tampered_provenance_and_png(self):
+    def test_msaa_inventory_rejects_non_corpus_fixture_tampering(self):
         inventory = load_inventory_module()
         capture = inventory.load_capture_validator()
         registry_generator = inventory.load_registry_generator()
@@ -1654,8 +1654,8 @@ class FormatTests(unittest.TestCase):
             case["id"]: case
             for case in tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
         }
-        case = cases["gm-beziers-msaa"]
-        source_png = MSAA_REFERENCE_FIXTURES / "gm-beziers-msaa.png"
+        case = cases["gm-strokes_zoomed-msaa"]
+        source_png = MSAA_REFERENCE_FIXTURES / "gm-strokes_zoomed-msaa.png"
         source_provenance = source_png.with_suffix(".provenance")
         _, source_fields = capture.parse_provenance(source_provenance)
 
@@ -1760,21 +1760,21 @@ class FormatTests(unittest.TestCase):
                 discovered, {discovered["id"]: mismatched}
             )
 
-    def test_msaa_reference_manifest_has_complete_fixture_provenance(self):
+    def test_msaa_reference_manifest_has_strict_fixture_provenance(self):
+        inventory = load_inventory_module()
+        capture = inventory.load_capture_validator()
+        registry_generator = inventory.load_registry_generator()
+        registry_sha256 = inventory.registry_sha256(
+            MSAA_REFERENCE_MANIFEST, registry_generator
+        )
         cases = tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
         for case in cases:
             with self.subTest(case_id=case["id"]):
                 png = MSAA_REFERENCE_FIXTURES / f"{case['id']}.png"
-                provenance = png.with_suffix(".provenance")
                 self.assertTrue(png.is_file())
-                fields = dict(
-                    line.split("=", 1)
-                    for line in provenance.read_text().splitlines()
+                inventory.validate_strict_reference(
+                    png, case, registry_sha256, capture
                 )
-                self.assertEqual(fields["backend"], "metal")
-                self.assertEqual(fields["renderer_implementation"], "cpp-dawn-webgpu")
-                self.assertEqual(fields["case_id"], case["id"])
-                self.assertEqual(fields["stream_sha256"], case["sha256"])
 
     def test_msaa_reference_registry_is_deterministic_and_strict(self):
         command = [

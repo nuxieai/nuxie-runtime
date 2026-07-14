@@ -329,3 +329,113 @@ width = 64
 height = 64
 clear_color = "0xff00ff00"
 counts = { restore = 1, save = 1 }
+
+[[case]]
+id = "gm-emptyfeather-msaa"
+stream = "fixtures/renderer/streams/gm/emptyfeather.rive-stream"
+sha256 = "8fcc6bf344da9ae096479bf75a3ec56e43e8b4c7a19515ba3941f474a30460e5"
+source = "gm:emptyfeather"
+scene = "emptyfeather"
+width = 180
+height = 540
+clear_color = "0xffffffff"
+counts = { drawPath = 48, makeEmptyRenderPath = 96, makeRenderPaint = 2, restore = 1, save = 1, transform = 12 }
+
+[[case]]
+id = "gm-emptystroke-msaa"
+stream = "fixtures/renderer/streams/gm/emptystroke.rive-stream"
+sha256 = "f1d21eb83fa4a0d60155c75fab8f23484e25bf7f409a72e91f7e86d849ac25b8"
+source = "gm:emptystroke"
+scene = "emptystroke"
+width = 180
+height = 540
+clear_color = "0xffffffff"
+counts = { drawPath = 48, makeEmptyRenderPath = 96, makeRenderPaint = 2, restore = 1, save = 1, transform = 12 }
+
+[[case]]
+id = "gm-emptystrokefeather-msaa"
+stream = "fixtures/renderer/streams/gm/emptystrokefeather.rive-stream"
+sha256 = "913763eebbad63b2a0b5739d1025bbf658a68ebd89cddcbf5540236482a72537"
+source = "gm:emptystrokefeather"
+scene = "emptystrokefeather"
+width = 180
+height = 540
+clear_color = "0xffffffff"
+counts = { drawPath = 48, makeEmptyRenderPath = 96, makeRenderPaint = 2, restore = 1, save = 1, transform = 12 }
+
+[[case]]
+id = "gm-emptytransparentclear-msaa"
+stream = "fixtures/renderer/streams/gm/emptytransparentclear.rive-stream"
+sha256 = "8acd9b02e7a9ffeed265f7c58ce9f56698daa89ca883adfc447880a1a62a4905"
+source = "gm:emptytransparentclear"
+scene = "emptytransparentclear"
+width = 320
+height = 320
+clear_color = "0x00000000"
+counts = { restore = 1, save = 1 }
+
+[[case]]
+id = "gm-feather_corner-msaa"
+stream = "fixtures/renderer/streams/gm/feather_corner.rive-stream"
+sha256 = "f025a5c9e4adc30d45d18af9c4c026f4425b11e0eed7b4eb3d03982d605bcc0f"
+source = "gm:feather_corner"
+scene = "feather_corner"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { clipPath = 42, drawPath = 42, makeEmptyRenderPath = 126, makeRenderPaint = 1, restore = 50, save = 50, transform = 134 }
+
+[[case]]
+id = "gm-feather_cusp-msaa"
+stream = "fixtures/renderer/streams/gm/feather_cusp.rive-stream"
+sha256 = "9dfba63d6c0ca8b438c65bbc38074c5bba820e83e25aa64320093f13bafece64"
+source = "gm:feather_cusp"
+scene = "feather_cusp"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { drawPath = 42, makeEmptyRenderPath = 42, makeRenderPaint = 1, restore = 50, save = 50, transform = 92 }
+
+[[case]]
+id = "gm-feather_ellipse-msaa"
+stream = "fixtures/renderer/streams/gm/feather_ellipse.rive-stream"
+sha256 = "d3531716b7e872519565c6bf3573d448b354a4c85ec6eaa78435b8425d223db0"
+source = "gm:feather_ellipse"
+scene = "feather_ellipse"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { drawPath = 42, makeEmptyRenderPath = 126, makeRenderPaint = 1, restore = 50, save = 50, transform = 134 }
+
+[[case]]
+id = "gm-feather_polyshapes-msaa"
+stream = "fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
+sha256 = "3c712d745bb7db74c210d6b40e7c572dbd5e0d6138883765b63d8ca8d790dd4f"
+source = "gm:feather_polyshapes"
+scene = "feather_polyshapes"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { drawPath = 42, makeEmptyRenderPath = 7, makeRenderPaint = 1, restore = 50, save = 50, transform = 92 }
+
+[[case]]
+id = "gm-feather_roundcorner-msaa"
+stream = "fixtures/renderer/streams/gm/feather_roundcorner.rive-stream"
+sha256 = "786f1a09cea35c33db9e5869033f9d713766f4d20badf53e6845bff260547f19"
+source = "gm:feather_roundcorner"
+scene = "feather_roundcorner"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { clipPath = 42, drawPath = 42, makeEmptyRenderPath = 126, makeRenderPaint = 1, restore = 50, save = 50, transform = 134 }
+
+[[case]]
+id = "gm-feather_shapes-msaa"
+stream = "fixtures/renderer/streams/gm/feather_shapes.rive-stream"
+sha256 = "aff881dd36158ac6eb909d7323d112e78c55f6f0f5d5b6f0921af1d03301b9a1"
+source = "gm:feather_shapes"
+scene = "feather_shapes"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { drawPath = 42, makeEmptyRenderPath = 7, makeRenderPaint = 1, restore = 50, save = 50, transform = 92 }

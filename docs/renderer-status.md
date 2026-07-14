@@ -7,13 +7,16 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=700, diverges=0, gated=768, total=1,468.
+- Rust wgpu: exact=707, diverges=0, gated=761, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
   `batchedtriangulations`, `concavepaths`, `convex_lineonly_ths`,
   `convexpaths`, `oval`, `pathfill`, and the
   `poly_{clockwise,evenOdd,nonZero}` family,
+  plus `emptyfeather`, `emptystroke`, `emptytransparentclear`,
+  `feather_corner`, `feather_ellipse`, `feather_polyshapes`, and
+  `feather_roundcorner`,
   plus `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
   `bug5099`, `bug6083`, `bug615686`, and `bug6987`,
   plus `bug7792`, `clippedcubic`, `crbug_996140`, `cubicclosepath`,
@@ -702,13 +705,28 @@ Run `make renderer-golden`.
     full-frame copy is byte-identical to the bounded copy. It remains gated as
     `dawn-wgpu-msaa-advanced-blend-intermediate-precision` under unchanged
     `2/32` rather than fitting a tolerance to the residual.
-66. [ ] Add and capture the next ten strict source-order C++ Dawn MSAA cases,
+66. [x] Add and capture the next ten strict source-order C++ Dawn MSAA cases,
     then probe them under the unchanged `2/32` contract: `emptyfeather`,
     `emptystroke`, `emptystrokefeather`, `emptytransparentclear`,
     `feather_corner`, `feather_cusp`, `feather_ellipse`,
     `feather_polyshapes`, `feather_roundcorner`, and `feather_shapes`. The
-    strict compiler accepts all ten. Require the existing 30 references to
-    recapture byte-identically before classifying or promoting any new row.
+    strict compiler accepts all ten. All prior 30 PNGs recapture
+    byte-identically. Seven rows pass unchanged `2/32` and are promoted.
+    `emptystrokefeather` remains gated as
+    `msaa-empty-feather-stroke-inner-coverage` at 1,728 pixels/max 174: its 36
+    equal-size components cover only degenerate cap centers, with exact alpha
+    and matching feather halos. `feather_cusp` remains at 435/max 4 and
+    `feather_shapes` at 180/max 4 under
+    `msaa-atlas-feather-large-radius-coverage-precision`: their exact-alpha
+    residuals are isolated to sparse, mostly single-pixel larger-radius atlas
+    feather contours. Sol approved the first gate and required the less-causal
+    precision name for the latter two. No tolerance changed.
+67. [ ] Port C++'s degenerate feather-stroke cap inner coverage through the
+    MSAA atlas path, then reprobe `emptystrokefeather` against its pinned C++
+    Dawn reference. Preserve the already-matching halo, all seven newly exact
+    siblings, and the unchanged `2/32` contract. The focused oracle must prove
+    the 36 cap-center components gain inner stroke coverage without changing
+    nondegenerate feather strokes.
 
 ## R2 Completion Record
 
@@ -921,6 +939,20 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Extend the strict C++ Dawn WebGPU-on-Metal MSAA registry from 30
+  to 40 cases. All prior PNGs recapture byte-identically. `emptyfeather`,
+  `emptystroke`, `emptytransparentclear`, `feather_corner`,
+  `feather_ellipse`, `feather_polyshapes`, and `feather_roundcorner` pass the
+  unchanged `2/32` contract and advance the ratchet to
+  exact=707/diverges=0/gated=761. `emptystrokefeather` retains the localized
+  `msaa-empty-feather-stroke-inner-coverage` gate: Rust and C++ both emit the
+  synthetic cap topology, but only C++ applies inner coverage to the 36 cap
+  centers. The RGB-only max-delta-4 residuals in `feather_cusp` and
+  `feather_shapes` retain
+  `msaa-atlas-feather-large-radius-coverage-precision`; Sol rejected a
+  compiler-specific name because intermediate atlas inputs are not yet exact
+  enough to attribute the residual to Dawn/Tint versus wgpu/Naga. No reference
+  or tolerance changed.
 - 2026-07-13: Port C++ WebGPU's direct MSAA destination-read advanced blend
   path at the pipeline and render-pass boundaries. Color-writing direct path
   states now compile upstream's generated advanced and HSL fragment variants,
@@ -2793,3 +2825,13 @@ Run `make renderer-golden`.
   with no reference or tolerance change. The renderer ratchet remains
   exact=700/diverges=0/gated=768. Queue item 66 names the next ten strict
   source-order C++ Dawn MSAA captures.
+- 2026-07-13: Captured the fourth ten strict C++ Dawn MSAA references with the
+  40-case provenance registry; all prior 30 PNGs recapture byte-identically.
+  Seven rows pass unchanged `2/32`, advancing the renderer ratchet to
+  exact=707/diverges=0/gated=761. `emptystrokefeather` isolates missing inner
+  coverage at 36 degenerate cap centers while preserving exact alpha and the
+  C++ feather halo. `feather_cusp` and `feather_shapes` retain sparse
+  exact-alpha max-delta-4 larger-radius atlas contour residuals. Sol approved
+  the evidence-backed gates, narrowed the precision gate name to avoid an
+  unsupported compiler attribution, and found no blocker. No tolerance
+  changed. Queue item 67 targets the degenerate feather-stroke cap behavior.

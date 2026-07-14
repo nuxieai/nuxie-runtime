@@ -717,13 +717,12 @@ max_different_pixels = 144
 id = "gm-emptyfeather-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/emptyfeather.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/emptyfeather-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptyfeather-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -742,13 +741,12 @@ max_different_pixels = 1400
 id = "gm-emptystroke-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/emptystroke.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/emptystroke-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystroke-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -767,13 +765,13 @@ max_different_pixels = 128
 id = "gm-emptystrokefeather-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/emptystrokefeather.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/emptystrokefeather-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystrokefeather-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "msaa-empty-feather-stroke-inner-coverage"
 
 
 [[entry]]
@@ -792,13 +790,12 @@ max_different_pixels = 32
 id = "gm-emptytransparentclear-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/emptytransparentclear.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/emptytransparentclear-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptytransparentclear-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -817,13 +814,12 @@ max_different_pixels = 8192
 id = "gm-feather_corner-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_corner.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_corner-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_corner-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -842,13 +838,13 @@ max_different_pixels = 16384
 id = "gm-feather_cusp-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_cusp.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_cusp-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_cusp-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "msaa-atlas-feather-large-radius-coverage-precision"
 
 
 [[entry]]
@@ -867,13 +863,12 @@ max_different_pixels = 8192
 id = "gm-feather_ellipse-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_ellipse.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_ellipse-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_ellipse-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -892,13 +887,12 @@ max_different_pixels = 16384
 id = "gm-feather_polyshapes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_polyshapes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_polyshapes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_polyshapes-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -917,13 +911,12 @@ max_different_pixels = 8192
 id = "gm-feather_roundcorner-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_roundcorner.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_roundcorner-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_roundcorner-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -942,13 +935,13 @@ max_different_pixels = 16384
 id = "gm-feather_shapes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_shapes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_shapes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_shapes-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "msaa-atlas-feather-large-radius-coverage-precision"
 
 
 [[entry]]

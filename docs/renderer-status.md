@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=360, diverges=0, gated=1,108, total=1,468.
+- Rust wgpu: exact=388, diverges=0, gated=1,080, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -191,7 +191,17 @@ Run `make renderer-golden`.
   `riv-library_export_state_machine_test-frame-0-clockwise-atomic`,
   `riv-library_export_test-frame-0-clockwise-atomic`,
   `riv-library_view_model_test-frame-0-clockwise-atomic`, and
-  `riv-library_vmtest_1_host-frame-0-clockwise-atomic`.
+  `riv-library_vmtest_1_host-frame-0-clockwise-atomic`, plus
+  `riv-library_with_image-frame-0-clockwise-atomic`,
+  `riv-library_with_text_and_image-frame-0-clockwise-atomic`, and
+  `riv-light_switch-frame-{0..7}-clockwise-atomic`, plus
+  `riv-list_index_script_access-frame-0-clockwise-atomic`,
+  `riv-list_items-frame-0-clockwise-atomic`,
+  `riv-list_to_length_test-frame-0-clockwise-atomic`,
+  `riv-list_to_path-frame-{0..4}-clockwise-atomic`, and
+  `riv-listener_action_inputs-frame-0-clockwise-atomic`, plus
+  `riv-lock_icon_demo-frame-{0..4}-clockwise-atomic` and
+  `riv-long_name-frame-{0..3}-clockwise-atomic`.
 
 ## Milestones
 
@@ -336,10 +346,24 @@ Run `make renderer-golden`.
     `library_export_test`, `library_view_model_test`, and
     `library_vmtest_1_host`. Capture missing pinned Metal references and apply
     the unchanged contract and diagnostic rules.
-25. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+25. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `library_with_image`, `library_with_text_and_image`, and
     `light_switch` frames 0-7. Capture missing pinned Metal references and
     apply the unchanged contract and diagnostic rules.
+26. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `list_index_script_access`, `list_items`, `list_to_length_test`,
+    `list_to_path` frames 0-4, `listener_action_inputs`, and
+    `listener_view_model`. Capture missing pinned Metal references and apply
+    the unchanged contract and diagnostic rules.
+27. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `local_bounds`, `lock_icon_demo` frames 0-4, and `long_name`
+    frames 0-3. Capture missing pinned Metal references and apply the
+    unchanged contract and diagnostic rules.
+28. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `long_name` frame 4, `looping_timeline_events` frames 0-4,
+    `magic_alley_db_reduced_export`, `modifier_test`, `modifier_to_run`, and
+    `multi_listeners`. Capture missing pinned Metal references and apply the
+    unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2155,3 +2179,16 @@ Run `make renderer-golden`.
   failures, and Sol approved `metal-webgpu-subpixel-edge-coverage` for all
   three without changing references or tolerances. The combined wave advances
   the ratchet to exact=360/diverges=0/gated=1,108.
+- 2026-07-13: Probed the twenty-fourth through twenty-sixth ten-entry
+  clockwise-atomic `.riv` batches as one parallel wave. Main captured all 30
+  native Metal references; three read-only Terra workers probed disjoint
+  batches into `/tmp`, with two infrastructure-only retries after workers
+  omitted the explicit workspace `cd`. Twenty-eight entries pass the
+  unchanged `2/32` contract. `listener_view_model` remains gated at 118/max
+  81 across three translated text-outline bands, and `local_bounds` at
+  144/max 56 across two text draws plus nine vector-edge pixels. Both have
+  exact alpha and no over-threshold interior or image residual. Main verified
+  the alpha oracles, Terra attributed both failures, and Sol approved
+  `metal-webgpu-subpixel-edge-coverage` without changing references or
+  tolerances. The combined wave advances the ratchet to
+  exact=388/diverges=0/gated=1,080.

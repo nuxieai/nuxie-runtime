@@ -46,7 +46,7 @@ completed reference set. Use `RENDERER_JOBS=4 make renderer-golden` to apply
 the same bounded parallelism to local Rust corpus verification; the default
 remains one GPU process.
 
-The exporter draws four coordinated fixtures:
+The exporter draws five coordinated fixtures:
 
 * render target: `64 x 64`
 * stroke fixture: closed square `(16,16) -> (48,16) -> (48,48) -> (16,48)`,
@@ -56,13 +56,16 @@ The exporter draws four coordinated fixtures:
 * cusp-fill fixture: clockwise cubic from `(16,48)` to `(48,48)` with controls
   `(51.2,16)` and `(12.8,16)`, feather `20`; this exercises convex/cusp
   preparation and the short-line cusp crossing
+* empty-stroke fixture: a move-only path centered at `(32,32)`, thickness `8`,
+  miter join, round cap, feather `20`; this isolates synthetic cap coverage
 * frame: 4x MSAA, which selects atlas feather rendering
 * atlas contract: `39 x 39` logical content at `(2,2)`, in the complete
   `48 x 48` physical allocation produced by C++'s 125% resource growth
 
 The harness emits a mask, tessellation input, and final blit for each fixture.
-The masks (`atlas-mask.r16f`, `atlas-fill-mask.r16f`, and
-`atlas-cusp-mask.r16f`) use the exact `RIVEMSK` version 1
+The masks (`atlas-mask.r16f`, `atlas-fill-mask.r16f`,
+`atlas-cusp-mask.r16f`, and `atlas-empty-stroke-mask.r16f`) use the exact
+`RIVEMSK` version 1
 Rust interchange format: a 20-byte
 little-endian header (`magic`, `version`, `width`, `height`) followed by a
 canonical, tightly row-packed `R16Float` payload. WebGPU's 256-byte copy rows
@@ -72,12 +75,19 @@ exactly `4628` bytes. The exporter validates the frame, logical allocation,
 placement, and physical allocation, then fails on drift without cropping,
 padding, or normalization.
 
-`atlas-inputs.bin`, `atlas-fill-inputs.bin`, and `atlas-cusp-inputs.bin` use
-the `RIVEATI` version 1 contract. Their 40-byte
+`atlas-inputs.bin`, `atlas-fill-inputs.bin`, `atlas-cusp-inputs.bin`, and
+`atlas-empty-stroke-inputs.bin` use the `RIVEATI` version 1 contract. Their
+40-byte
 little-endian header records the atlas batch range, contour count, and
 tessellation dimensions, followed by canonical 16-byte contour records and
 the complete tightly packed `RGBA32Uint` tessellation texture. All artifacts
 come from the same submitted C++ frame.
+
+The empty-stroke input pins one contour with `basePatch=1` and `patchCount=5`.
+Its mask pins the nonzero inner coverage at the center of the synthetic round
+cap.
+`atlas-empty-stroke-overlap-blit.rgba` adds an opaque marker before the stroke
+and pins the cap's scheduled MSAA depth against that earlier draw.
 
 `softened-cusp.bin` uses the `RIVESFT` version 1 contract: verb and point
 counts followed by canonical C++ `PathVerb` values and raw XY float bits. It

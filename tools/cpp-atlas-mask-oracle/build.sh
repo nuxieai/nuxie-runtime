@@ -40,6 +40,10 @@ fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit
 cusp_output="${RIVE_ATLAS_CUSP_MASK_OUTPUT:-$script_dir/out/atlas-cusp-mask.r16f}"
 cusp_inputs_output="${RIVE_ATLAS_CUSP_INPUT_OUTPUT:-$script_dir/out/atlas-cusp-inputs.bin}"
 cusp_blit_output="${RIVE_ATLAS_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-cusp-blit.rgba}"
+empty_stroke_output="${RIVE_ATLAS_EMPTY_STROKE_MASK_OUTPUT:-$script_dir/out/atlas-empty-stroke-mask.r16f}"
+empty_stroke_inputs_output="${RIVE_ATLAS_EMPTY_STROKE_INPUT_OUTPUT:-$script_dir/out/atlas-empty-stroke-inputs.bin}"
+empty_stroke_blit_output="${RIVE_ATLAS_EMPTY_STROKE_BLIT_OUTPUT:-$script_dir/out/atlas-empty-stroke-blit.rgba}"
+empty_stroke_overlap_blit_output="${RIVE_ATLAS_EMPTY_STROKE_OVERLAP_BLIT_OUTPUT:-$script_dir/out/atlas-empty-stroke-overlap-blit.rgba}"
 softened_cusp_output="${RIVE_SOFTENED_CUSP_OUTPUT:-$script_dir/out/softened-cusp.bin}"
 direct_cusp_inputs_output="${RIVE_DIRECT_CUSP_INPUT_OUTPUT:-$script_dir/out/direct-cusp-inputs.bin}"
 direct_cusp_blit_output="${RIVE_DIRECT_CUSP_BLIT_OUTPUT:-$script_dir/out/direct-cusp-blit.rgba}"
@@ -409,6 +413,10 @@ mkdir -p "$injected_dir" \
     "$(dirname "$cusp_output")" \
     "$(dirname "$cusp_inputs_output")" \
     "$(dirname "$cusp_blit_output")" \
+    "$(dirname "$empty_stroke_output")" \
+    "$(dirname "$empty_stroke_inputs_output")" \
+    "$(dirname "$empty_stroke_blit_output")" \
+    "$(dirname "$empty_stroke_overlap_blit_output")" \
     "$(dirname "$softened_cusp_output")" \
     "$(dirname "$direct_cusp_inputs_output")" \
     "$(dirname "$direct_cusp_blit_output")" \
@@ -528,7 +536,7 @@ if [[ "$run_mode" == build-only ]]; then
     exit 0
 fi
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$empty_stroke_output" "$empty_stroke_inputs_output" "$empty_stroke_blit_output" "$empty_stroke_overlap_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -580,6 +588,8 @@ validate_spotify_artifacts
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$empty_stroke_output" "$empty_stroke_inputs_output" "$empty_stroke_blit_output" empty-stroke
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$empty_stroke_overlap_blit_output" empty-stroke-overlap
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp "$direct_cusp_coverage_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_polyshark_inputs_output" /dev/null direct-polyshark
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_grid_inputs_output" /dev/null direct-grid
@@ -769,6 +779,26 @@ if [[ "$cusp_blit_bytes" != "16404" ]]; then
     echo "atlas cusp blit must be exactly 16404 bytes, got $cusp_blit_bytes: $cusp_blit_output" >&2
     exit 1
 fi
+empty_stroke_output_bytes="$(wc -c < "$empty_stroke_output" | tr -d ' ')"
+if [[ "$empty_stroke_output_bytes" != "4628" ]]; then
+    echo "atlas empty-stroke mask must be exactly 4628 bytes, got $empty_stroke_output_bytes: $empty_stroke_output" >&2
+    exit 1
+fi
+empty_stroke_inputs_bytes="$(wc -c < "$empty_stroke_inputs_output" | tr -d ' ')"
+if (( empty_stroke_inputs_bytes <= 56 )); then
+    echo "atlas empty-stroke inputs must contain a header, contour, and tessellation payload: $empty_stroke_inputs_output" >&2
+    exit 1
+fi
+empty_stroke_blit_bytes="$(wc -c < "$empty_stroke_blit_output" | tr -d ' ')"
+if [[ "$empty_stroke_blit_bytes" != "16404" ]]; then
+    echo "atlas empty-stroke blit must be exactly 16404 bytes, got $empty_stroke_blit_bytes: $empty_stroke_blit_output" >&2
+    exit 1
+fi
+empty_stroke_overlap_blit_bytes="$(wc -c < "$empty_stroke_overlap_blit_output" | tr -d ' ')"
+if [[ "$empty_stroke_overlap_blit_bytes" != "16404" ]]; then
+    echo "atlas empty-stroke overlap blit must be exactly 16404 bytes, got $empty_stroke_overlap_blit_bytes: $empty_stroke_overlap_blit_output" >&2
+    exit 1
+fi
 softened_cusp_bytes="$(wc -c < "$softened_cusp_output" | tr -d ' ')"
 if (( softened_cusp_bytes <= 20 )); then
     echo "softened cusp must contain a header and path payload: $softened_cusp_output" >&2
@@ -849,6 +879,10 @@ echo "atlas fill blit: $fill_blit_output"
 echo "atlas cusp mask: $cusp_output"
 echo "atlas cusp inputs: $cusp_inputs_output"
 echo "atlas cusp blit: $cusp_blit_output"
+echo "atlas empty-stroke mask: $empty_stroke_output"
+echo "atlas empty-stroke inputs: $empty_stroke_inputs_output"
+echo "atlas empty-stroke blit: $empty_stroke_blit_output"
+echo "atlas empty-stroke overlap blit: $empty_stroke_overlap_blit_output"
 echo "softened cusp: $softened_cusp_output"
 echo "direct cusp inputs: $direct_cusp_inputs_output"
 echo "direct cusp blit: $direct_cusp_blit_output"

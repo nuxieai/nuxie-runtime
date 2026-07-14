@@ -981,6 +981,11 @@ int main(int argc, char** argv)
     const char* blitOutput = argc > 3 ? argv[3] : "atlas-blit.rgba";
     const bool circleCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;
     const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;
+    const bool emptyStrokeOverlapCase =
+        argc > 4 && std::strcmp(argv[4], "empty-stroke-overlap") == 0;
+    const bool emptyStrokeCase =
+        (argc > 4 && std::strcmp(argv[4], "empty-stroke") == 0) ||
+        emptyStrokeOverlapCase;
     const bool directCuspCase =
         argc > 4 && std::strcmp(argv[4], "direct-cusp") == 0;
     const bool directPolySharkCase =
@@ -1057,7 +1062,8 @@ int main(int argc, char** argv)
             : nullptr;
     const bool pinnedMetalCase = fullStreamCase || msaaReferenceMode;
     if (argc > 7 ||
-        (argc > 4 && !fillCase && !directStrokesRoundCase && !clippedCase &&
+        (argc > 4 && !fillCase && !emptyStrokeCase &&
+         !directStrokesRoundCase && !clippedCase &&
          !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
@@ -1077,7 +1083,7 @@ int main(int argc, char** argv)
         (msaaReferenceMode &&
          (msaaReference == nullptr || secondaryOutput == nullptr)))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output-or-case-id] [secondary-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output-or-case-id] [secondary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1299,6 +1305,14 @@ int main(int argc, char** argv)
                                        361.510925f));
         addBadSkinHair(path.get());
     }
+    else if (emptyStrokeCase)
+    {
+        // Isolates the two opposed synthetic caps emitted for a move-only
+        // round stroke. This is the center-cell primitive in
+        // gm:emptystrokefeather.
+        path->moveTo((kSquareMin + kSquareMax) * .5f,
+                     (kSquareMin + kSquareMax) * .5f);
+    }
     else if (cuspCase)
     {
         path->moveTo(16, 48);
@@ -1356,8 +1370,8 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCase && !atomicColorBurnPairCase && !fullStreamCase &&
-        !intersectionGroupsCase)
+    if (!directCase && !emptyStrokeCase && !atomicColorBurnPairCase &&
+        !fullStreamCase && !intersectionGroupsCase)
     {
         path->close();
     }
@@ -1369,7 +1383,8 @@ int main(int argc, char** argv)
         paint->thickness(directStrokesRoundCase ? kDirectStrokesRoundThickness
                                                 : kStrokeThickness);
         paint->join(rive::StrokeJoin::miter);
-        paint->cap(rive::StrokeCap::butt);
+        paint->cap(emptyStrokeCase ? rive::StrokeCap::round
+                                   : rive::StrokeCap::butt);
     }
     paint->feather(directTriangulatedCase || directStrokesRoundCase ||
                            directRawTextCase ||
@@ -1571,6 +1586,22 @@ int main(int argc, char** argv)
         paint->thickness(5.00454855f);
         paint->join(rive::StrokeJoin::round); // Stream join=1.
         paint->cap(rive::StrokeCap::butt);    // Stream cap=0.
+        renderer.drawPath(path.get(), paint.get());
+    }
+    else if (emptyStrokeOverlapCase)
+    {
+        constexpr float center = (kSquareMin + kSquareMax) * .5f;
+        constexpr float markerRadius = 3.5f;
+        auto markerPath = context->makeEmptyRenderPath();
+        markerPath->moveTo(center - markerRadius, center - markerRadius);
+        markerPath->lineTo(center + markerRadius, center - markerRadius);
+        markerPath->lineTo(center + markerRadius, center + markerRadius);
+        markerPath->lineTo(center - markerRadius, center + markerRadius);
+        markerPath->close();
+        auto markerPaint = context->makeRenderPaint();
+        markerPaint->style(rive::RenderPaintStyle::fill);
+        markerPaint->color(0xffff0000);
+        renderer.drawPath(markerPath.get(), markerPaint.get());
         renderer.drawPath(path.get(), paint.get());
     }
     else
@@ -2225,16 +2256,31 @@ int main(int argc, char** argv)
     }
     else if (facts.interlockMode !=
             static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
-        !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 1 ||
-        facts.drawBatches.front().drawType !=
+        !facts.fixedFunctionColorOutput ||
+        (emptyStrokeOverlapCase
+             ? (facts.drawBatches.size() != 4 ||
+                facts.drawBatches[0].drawType != static_cast<uint32_t>(
+                                                      rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+                facts.drawBatches[1].drawType != static_cast<uint32_t>(
+                                                      rive::gpu::DrawType::msaaMidpointFans) ||
+                facts.drawBatches[2].drawType != static_cast<uint32_t>(
+                                                      rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+                facts.drawBatches[0].baseElement != 1 ||
+                facts.drawBatches[1].baseElement != 1 ||
+                facts.drawBatches[2].baseElement != 1 ||
+                facts.drawBatches[0].elementCount != 1 ||
+                facts.drawBatches[1].elementCount != 1 ||
+                facts.drawBatches[2].elementCount != 1)
+             : facts.drawBatches.size() != 1) ||
+        facts.drawBatches.back().drawType !=
             static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
-        facts.drawBatches.front().shaderFeatures !=
+        facts.drawBatches.back().shaderFeatures !=
             (static_cast<uint32_t>(rive::gpu::ShaderFeatures::ENABLE_DITHER) |
              (clippedCase
                   ? static_cast<uint32_t>(
                         rive::gpu::ShaderFeatures::ENABLE_CLIP_RECT)
                   : 0u)) ||
-        facts.drawBatches.front().shaderMiscFlags != static_cast<uint32_t>(
+        facts.drawBatches.back().shaderMiscFlags != static_cast<uint32_t>(
             rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput))
     {
         fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");

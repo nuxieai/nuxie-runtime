@@ -2463,7 +2463,7 @@ impl WgpuFrame {
                                 translate_x: placement.translate[0],
                                 translate_y: placement.translate[1],
                             };
-                            tessellation.path.z_index = 1;
+                            tessellation.path.z_index = z_index;
                             for contour in &mut tessellation.contours {
                                 contour.path_id = 1;
                             }
@@ -6954,6 +6954,21 @@ mod tests {
         fixed_feather_atlas_oracle_for(raw_path, paint)
     }
 
+    fn fixed_feather_atlas_empty_stroke_oracle() -> FixedFeatherAtlasOracle {
+        let paint = WgpuPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: ATLAS_ORACLE_STROKE_THICKNESS,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Round,
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let mut raw_path = RawPath::new();
+        let center = (ATLAS_ORACLE_SQUARE_MIN + ATLAS_ORACLE_SQUARE_MAX) * 0.5;
+        raw_path.move_to(center, center);
+        fixed_feather_atlas_oracle_for(raw_path, paint)
+    }
+
     fn fixed_feather_atlas_fill_oracle() -> FixedFeatherAtlasOracle {
         const CONTROL_OFFSET: f32 = 8.83064;
         let paint = WgpuPaint {
@@ -7617,6 +7632,55 @@ mod tests {
 
     fn fixed_feather_atlas_blit() -> atlas_blit_oracle::AtlasBlit {
         fixed_feather_atlas_blit_with_clip(None).unwrap()
+    }
+
+    fn fixed_feather_atlas_empty_stroke_blit() -> atlas_blit_oracle::AtlasBlit {
+        let factory = WgpuFactory::new_with_mode(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            RenderMode::Msaa,
+        )
+        .unwrap();
+        let center = (ATLAS_ORACLE_SQUARE_MIN + ATLAS_ORACLE_SQUARE_MAX) * 0.5;
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(center, center);
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let marker_radius = 3.5;
+        let mut marker_path = RawPath::new();
+        marker_path.move_to(center - marker_radius, center - marker_radius);
+        marker_path.line_to(center + marker_radius, center - marker_radius);
+        marker_path.line_to(center + marker_radius, center + marker_radius);
+        marker_path.line_to(center - marker_radius, center + marker_radius);
+        marker_path.close();
+        let marker_path = WgpuPath {
+            raw_path: marker_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let marker_paint = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            style: RenderPaintStyle::Stroke,
+            thickness: ATLAS_ORACLE_STROKE_THICKNESS,
+            join: ATLAS_ORACLE_STROKE_JOIN,
+            cap: StrokeCap::Round,
+            feather: ATLAS_ORACLE_FEATHER,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(&marker_path, &marker_paint);
+        frame.draw_path(&path, &paint);
+        atlas_blit_oracle::AtlasBlit::new(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            frame.finish().unwrap(),
+        )
+        .unwrap()
     }
 
     fn advanced_feather_atlas_blit_with_mode(
@@ -8500,6 +8564,29 @@ mod tests {
     }
 
     #[test]
+    fn feather_atlas_empty_round_stroke_preserves_cpp_patch_and_center_coverage() {
+        let oracle = fixed_feather_atlas_empty_stroke_oracle();
+        assert_eq!(oracle.inputs.base_patch, 1);
+        assert_eq!(oracle.inputs.patch_count, 5);
+        assert_eq!(oracle.inputs.contours.len(), 1);
+        assert_eq!(oracle.mask.sample_bits(19, 19), 0x34f1);
+    }
+
+    #[test]
+    fn msaa_feather_atlas_empty_stroke_uses_scheduled_depth_over_prior_draw() {
+        let blit = fixed_feather_atlas_empty_stroke_blit();
+        let center = (ATLAS_ORACLE_FRAME_SIZE / 2) as usize;
+        let offset = (center * ATLAS_ORACLE_FRAME_SIZE as usize + center) * 4;
+        let pixel = &blit.pixels()[offset..offset + 4];
+        assert_eq!(pixel[3], 255);
+        assert_eq!(pixel[1], pixel[2]);
+        assert!(
+            pixel[1] > 0,
+            "atlas cap coverage must pass depth over the earlier red marker: {pixel:?}"
+        );
+    }
+
+    #[test]
     fn feather_atlas_fill_pass_writes_r16_coverage() {
         let mask = fixed_feather_atlas_fill_oracle().mask;
         assert!((0..ATLAS_ORACLE_PHYSICAL_SIZE as usize).any(|y| {
@@ -8649,6 +8736,69 @@ mod tests {
             |error| {
                 panic!(
                     "C++ atlas-input oracle mismatch at {}: {error}",
+                    path.display()
+                )
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_EMPTY_STROKE_MASK from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_empty_stroke_mask_matches_rust_when_configured() {
+        let path = PathBuf::from(
+            std::env::var_os("RIVE_CPP_ATLAS_EMPTY_STROKE_MASK")
+                .expect("RIVE_CPP_ATLAS_EMPTY_STROKE_MASK is required"),
+        );
+        assert!(path.is_absolute());
+        let cpp_mask =
+            atlas_mask_oracle::AtlasMask::parse(&fs::read(&path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ empty-stroke mask at {}: {error}",
+                    path.display()
+                )
+            }))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "malformed C++ empty-stroke mask at {}: {error}",
+                    path.display()
+                )
+            });
+        let rust_mask = fixed_feather_atlas_empty_stroke_oracle().mask;
+        atlas_mask_oracle::compare_cpp_to_rust(&cpp_mask, &rust_mask, ATLAS_ORACLE_TOLERANCES)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ empty-stroke mask mismatch at {}: {error}",
+                    path.display()
+                )
+            });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_EMPTY_STROKE_INPUTS from the C++ WebGPU oracle"]
+    fn cpp_webgpu_atlas_empty_stroke_inputs_match_rust_when_configured() {
+        let path = PathBuf::from(
+            std::env::var_os("RIVE_CPP_ATLAS_EMPTY_STROKE_INPUTS")
+                .expect("RIVE_CPP_ATLAS_EMPTY_STROKE_INPUTS is required"),
+        );
+        assert!(path.is_absolute());
+        let cpp_inputs =
+            atlas_input_oracle::AtlasInputs::parse(&fs::read(&path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ empty-stroke inputs at {}: {error}",
+                    path.display()
+                )
+            }))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "malformed C++ empty-stroke inputs at {}: {error}",
+                    path.display()
+                )
+            });
+        let rust_inputs = fixed_feather_atlas_empty_stroke_oracle().inputs;
+        atlas_input_oracle::compare_cpp_to_rust(&cpp_inputs, &rust_inputs).unwrap_or_else(
+            |error| {
+                panic!(
+                    "C++ empty-stroke input mismatch at {}: {error}",
                     path.display()
                 )
             },
@@ -9268,6 +9418,50 @@ mod tests {
         atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
             panic!(
                 "C++ atlas-blit oracle mismatch at {}: {error}",
+                path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_ATLAS_EMPTY_STROKE_OVERLAP_BLIT from the C++ WebGPU MSAA oracle"]
+    fn cpp_webgpu_msaa_atlas_empty_stroke_blit_matches_rust_when_configured() {
+        let path = std::env::var_os("RIVE_CPP_ATLAS_EMPTY_STROKE_OVERLAP_BLIT").expect(
+            "RIVE_CPP_ATLAS_EMPTY_STROKE_OVERLAP_BLIT is required for the ignored empty-stroke blit test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_ATLAS_EMPTY_STROKE_OVERLAP_BLIT is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_ATLAS_EMPTY_STROKE_OVERLAP_BLIT must be absolute"
+        );
+        let cpp_blit =
+            atlas_blit_oracle::AtlasBlit::parse(&fs::read(&path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ empty-stroke blit at {}: {error}",
+                    path.display()
+                )
+            }))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "malformed C++ empty-stroke blit at {}: {error}",
+                    path.display()
+                )
+            });
+        let rust_blit = fixed_feather_atlas_empty_stroke_blit();
+        let center = (ATLAS_ORACLE_FRAME_SIZE / 2) as usize;
+        let center_offset = (center * ATLAS_ORACLE_FRAME_SIZE as usize + center) * 4;
+        assert_eq!(
+            &rust_blit.pixels()[center_offset..center_offset + 4],
+            &cpp_blit.pixels()[center_offset..center_offset + 4],
+            "empty feather-stroke cap center must pass the scheduled MSAA depth test"
+        );
+        atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit).unwrap_or_else(|error| {
+            panic!(
+                "C++ empty-stroke blit mismatch at {}: {error}",
                 path.display()
             )
         });

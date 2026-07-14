@@ -7,14 +7,15 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=707, diverges=0, gated=761, total=1,468.
+- Rust wgpu: exact=708, diverges=0, gated=760, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
   `batchedtriangulations`, `concavepaths`, `convex_lineonly_ths`,
   `convexpaths`, `oval`, `pathfill`, and the
   `poly_{clockwise,evenOdd,nonZero}` family,
-  plus `emptyfeather`, `emptystroke`, `emptytransparentclear`,
+  plus `emptyfeather`, `emptystroke`, `emptystrokefeather`,
+  `emptytransparentclear`,
   `feather_corner`, `feather_ellipse`, `feather_polyshapes`, and
   `feather_roundcorner`,
   plus `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
@@ -721,12 +722,27 @@ Run `make renderer-golden`.
     residuals are isolated to sparse, mostly single-pixel larger-radius atlas
     feather contours. Sol approved the first gate and required the less-causal
     precision name for the latter two. No tolerance changed.
-67. [ ] Port C++'s degenerate feather-stroke cap inner coverage through the
+67. [x] Port C++'s degenerate feather-stroke cap inner coverage through the
     MSAA atlas path, then reprobe `emptystrokefeather` against its pinned C++
     Dawn reference. Preserve the already-matching halo, all seven newly exact
     siblings, and the unchanged `2/32` contract. The focused oracle must prove
     the 36 cap-center components gain inner stroke coverage without changing
-    nondegenerate feather strokes.
+    nondegenerate feather strokes. The atlas branch was discarding the
+    intersection-board draw group and uploading `z_index=1`; its `Less` depth
+    test therefore rejected cap coverage over earlier marker draws while the
+    untouched halo still passed. Carrying the scheduled index makes the paired
+    C++/Rust marker-cap oracle byte-exact and promotes the GM at zero pixels
+    beyond delta 2. An enabled Rust GPU regression keeps the marker-overlap
+    depth behavior in the default suite. The seven exact siblings remain
+    green; the two unrelated large-radius gates are unchanged at 435/max-4
+    and 180/max-4.
+68. [ ] Isolate the shared C++/Rust atlas-feather larger-radius coverage
+    precision boundary in `feather_cusp` and `feather_shapes`. Start with a
+    single residual contour and compare tessellation inputs, R16 mask samples,
+    atlas placement, and final sampling under the unchanged `2/32` contract;
+    port a proven semantic mismatch or retain the existing backend-precision
+    gate with a bounded oracle. Preserve the now-exact empty-stroke depth path
+    and all seven exact siblings from the same source-order wave.
 
 ## R2 Completion Record
 
@@ -2835,3 +2851,16 @@ Run `make renderer-golden`.
   the evidence-backed gates, narrowed the precision gate name to avoid an
   unsupported compiler attribution, and found no blocker. No tolerance
   changed. Queue item 67 targets the degenerate feather-stroke cap behavior.
+- 2026-07-14: Ported C++'s scheduled MSAA depth index through feather-atlas
+  blits instead of resetting every atlas path to group 1. A new isolated C++
+  oracle keeps the move-only cap tessellation and R16 mask pinned, then places
+  an opaque marker beneath the cap to prove the depth dependency: the old Rust
+  path leaves center RGBA `[255,0,0,255]`, while C++ and the fixed Rust path
+  are byte-exact at `[255,79,79,255]`; an enabled Rust GPU regression retains
+  that marker-overlap behavior in the default suite.
+  `gm-emptystrokefeather-msaa` now has zero pixels beyond delta 2, all seven
+  exact siblings remain green, and the two larger-radius feather gates retain
+  their prior 435/max-4 and 180/max-4 results. The renderer ratchet advances
+  to exact=708/diverges=0/gated=760 without changing a reference or tolerance.
+  Queue item 68 targets the shared larger-radius atlas-feather precision
+  boundary.

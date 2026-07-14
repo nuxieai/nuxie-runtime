@@ -259,10 +259,9 @@ stream = "fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-bug339297_as_clip-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1394,10 +1393,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_clockwise-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1419,10 +1417,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-st
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_clockwise_nested-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1444,10 +1441,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_evenodd-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1469,10 +1465,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd_nested.rive-stre
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_evenodd_nested-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1494,10 +1489,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_winding.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_winding-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1519,10 +1513,9 @@ stream = "fixtures/renderer/streams/gm/largeclippedpath_winding_nested.rive-stre
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_winding_nested-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]

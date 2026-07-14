@@ -979,11 +979,6 @@ impl Renderer for WgpuFrame {
         let mut current_msaa_path_clips = Vec::new();
         if self.mode == RenderMode::Msaa && clip_id != 0 {
             let clips = self.clips[..self.state.clip_stack_height].to_vec();
-            if !msaa_feather_atlas {
-                self.unsupported
-                    .get_or_insert("path clips on non-atlas msaa draws");
-                return;
-            }
             if !reuses_msaa_path_clip {
                 let mut scheduled_updates =
                     Vec::with_capacity(clip_updates.len() + clips.len().saturating_sub(1));
@@ -2367,6 +2362,7 @@ impl WgpuFrame {
                     .map(|texture| texture.create_view(&Default::default()));
                 #[derive(Clone, Copy)]
                 struct DirectPathOptions {
+                    path_clip: bool,
                     clip_rect: bool,
                     advanced_blend: bool,
                     hsl_blend: bool,
@@ -2629,6 +2625,10 @@ impl WgpuFrame {
                         let has_clip_rect = draw.state.clip_rect.is_some();
                         let advanced_blend = draw.paint.blend_mode != BlendMode::SrcOver;
                         let options = DirectPathOptions {
+                            path_clip: matches!(
+                                draw.role,
+                                DrawRole::Content { clip_id } if clip_id != 0
+                            ),
                             clip_rect: has_clip_rect,
                             advanced_blend,
                             hsl_blend: blend_mode_uses_hsl(draw.paint.blend_mode),
@@ -2914,9 +2914,14 @@ impl WgpuFrame {
                     for prepared in &prepared_draws[segment_start..segment_end] {
                         match prepared {
                             PreparedDraw::Analytic(draw, options) => {
-                                pass.set_stencil_reference(0);
+                                pass.set_stencil_reference(if options.path_clip {
+                                    0x80
+                                } else {
+                                    0
+                                });
                                 pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
                                     path_pipeline::DirectPathPipelineKind::Analytic,
+                                    options.path_clip,
                                     options.clip_rect,
                                     options.advanced_blend,
                                     options.hsl_blend,
@@ -2976,6 +2981,7 @@ impl WgpuFrame {
                                     };
                                     pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
                                         pipeline,
+                                        options.path_clip,
                                         options.clip_rect,
                                         options.advanced_blend,
                                         options.hsl_blend,
@@ -8641,27 +8647,73 @@ mod tests {
     }
 
     #[test]
-    fn msaa_path_clip_on_non_atlas_draw_remains_an_explicit_boundary() {
+    fn msaa_path_clip_applies_to_direct_fill_draw() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let mut raw_path = RawPath::new();
-        raw_path.move_to(32.0, 16.0);
-        raw_path.line_to(48.0, 48.0);
-        raw_path.line_to(16.0, 48.0);
-        raw_path.close();
-        let path = WgpuPath {
-            raw_path,
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 16.0);
+        raw_clip.line_to(48.0, 48.0);
+        raw_clip.line_to(16.0, 48.0);
+        raw_clip.close();
+        let clip = WgpuPath {
+            raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
+        let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::NonZero);
+        let paint = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
         let mut frame = factory.begin_frame(0);
-        frame.clip_path(&path);
-        frame.draw_path(&path, &WgpuPaint::default());
+        frame.clip_path(&clip);
+        frame.draw_path(&path, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
-        assert!(matches!(
-            frame.finish(),
-            Err(RendererError::Unsupported(
-                "path clips on non-atlas msaa draws"
-            ))
-        ));
+        assert_eq!(pixel(8, 32), [0; 4]);
+        assert_eq!(pixel(32, 32), [255, 0, 0, 255]);
+        assert_eq!(pixel(32, 8), [0; 4]);
+        assert_eq!(pixel(32, 47), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_path_clip_combines_with_direct_clip_rect() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let supports_clip_rect = factory.context.path_pipeline.supports_clip_rect();
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 8.0);
+        raw_clip.line_to(56.0, 56.0);
+        raw_clip.line_to(8.0, 56.0);
+        raw_clip.close();
+        let path_clip = WgpuPath {
+            raw_path: raw_clip,
+            fill_rule: FillRule::NonZero,
+        };
+        let clip_rect = rect_path([28.0, 0.0, 40.0, 64.0], FillRule::NonZero);
+        let path = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::NonZero);
+        let paint = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&path_clip);
+        frame.clip_path(&clip_rect);
+        frame.draw_path(&path, &paint);
+        let result = frame.finish();
+        if !supports_clip_rect {
+            assert!(matches!(
+                result,
+                Err(RendererError::Unsupported(
+                    "clip rectangles on msaa direct path draws"
+                ))
+            ));
+            return;
+        }
+        let pixels = result.unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(24, 40), [0; 4]);
+        assert_eq!(pixel(32, 40), [255, 0, 0, 255]);
+        assert_eq!(pixel(40, 40), [0; 4]);
     }
 
     #[test]

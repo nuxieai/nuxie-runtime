@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=727, diverges=0, gated=741, total=1,468.
+- Rust wgpu: exact=734, diverges=0, gated=734, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -65,6 +65,9 @@ Run `make renderer-golden`.
   `gm-largeclippedpath_clockwise-clockwise-atomic` and
   `gm-largeclippedpath_clockwise_nested-clockwise-atomic`, and the
   `gm-largeclippedpath_{winding,evenodd}{,_nested}-clockwise-atomic` matrix,
+  plus `gm-bug339297_as_clip-msaa` and the six
+  `gm-largeclippedpath_{clockwise,evenodd,winding}{,_nested}-msaa` Dawn
+  references,
   `gm-negative_interior_triangles-clockwise-atomic`, and
   `gm-negative_interior_triangles_as_clip-clockwise-atomic`, and
   `gm-convexpaths-clockwise-atomic`, `gm-pathfill-clockwise-atomic`,
@@ -863,14 +866,32 @@ Run `make renderer-golden`.
     latter narrow to `non-atlas-msaa-path-clip`, advancing the ratchet to
     exact=727/diverges=0/gated=741 without changing a tolerance. The full
     workspace, normal 584-segment floor, and scripted 35-segment floor pass.
-75. [ ] Port C++ non-atlas MSAA path-clip execution through Rust's direct path
+75. [x] Port C++ non-atlas MSAA path-clip execution through Rust's direct path
     pipeline. Begin with `gm-bug339297_as_clip-msaa` and the six pinned
     `gm-largeclippedpath_*` Dawn references, preserving the existing atlas
     stencil path, clip-stack ID reuse, nested non-zero/even-odd/clockwise
     semantics, clip rectangles, and unclipped draws. Replace the focused
     explicit-boundary regression with GPU coverage for direct clipped draws,
     probe all seven rows under their unchanged contracts, and preserve the 727
-    exact entries.
+    exact entries. Rust now mirrors C++ `gpu.cpp`'s active-stencil-clip states:
+    analytic draws compare equal to `0x80`; borrowed coverage and nested/even-
+    odd stencil passes compare less-or-equal; forward/cleanup passes include
+    the clip bit in their compare mask while preserving fill-rule bits. Direct
+    path pipelines select independent path-clip and clip-rectangle variants,
+    while the existing atlas path and clip-stack reuse/reset scheduling remain
+    unchanged. Focused GPU tests prove both a triangular direct clip and its
+    intersection with a clip rectangle. All seven Dawn probes pass unchanged
+    `2/32` contracts with zero over-threshold pixels and max delta 1, advancing
+    the full ratchet to exact=734/diverges=0/gated=734. The renderer suite,
+    workspace, normal 584-segment floor, and scripted 35-segment floor pass.
+76. [ ] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
+    entries after `largeclippedpath_*`: `lots_of_tess_spans_stroke`,
+    `mandoline`, `mesh`, `mesh_ht_{1,7}`, `mutating_fill_rule`,
+    `negative_interior_triangles{,_as_clip}`, `overfill_blendmodes`, and
+    `overfill_opaque`. Extend the 64-case registry without changing retained
+    artifacts, require byte-identical serial/four-job capture, probe accepted
+    rows under their unchanged `2/32` contracts, narrow every rejection to an
+    observed diagnostic, and preserve all 734 exact entries.
 
 ## R2 Completion Record
 

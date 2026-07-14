@@ -71,6 +71,7 @@ constexpr uint32_t kAtomicSpotifyKidsAppIconFullPhysicalHeight = 1440;
 #include "generated_dstreadshuffle_full.inc"
 #include "generated_dstreadshuffle_srcover_control.inc"
 #include "generated_spotify_kids_app_icon_full.inc"
+#include "generated_msaa_reference_registry.inc"
 
 void fail(const char* message)
 {
@@ -210,7 +211,9 @@ void writeBlit(const char* output,
     }
 }
 
-void writeAdapterProvenance(const char* output, WGPUAdapter adapter)
+void writeAdapterProvenance(const char* output,
+                            WGPUAdapter adapter,
+                            const MsaaReferenceCase* msaaReference)
 {
     WGPUAdapterInfo info = {};
     if (wgpuAdapterGetInfo(adapter, &info) != WGPUStatus_Success)
@@ -220,7 +223,7 @@ void writeAdapterProvenance(const char* output, WGPUAdapter adapter)
     if (info.backendType != WGPUBackendType_Metal)
     {
         wgpuAdapterInfoFreeMembers(info);
-        fail("full-stream oracle did not select the Metal backend");
+        fail("pinned Dawn oracle did not select the Metal backend");
     }
     std::ofstream file(output, std::ios::trunc);
     if (!file)
@@ -234,12 +237,21 @@ void writeAdapterProvenance(const char* output, WGPUAdapter adapter)
         file << '\n';
     };
     file << "backend=metal\n";
+    file << "renderer_implementation=cpp-dawn-webgpu\n";
     writeString("adapter_vendor", info.vendor);
     writeString("adapter_architecture", info.architecture);
     writeString("adapter_device", info.device);
     writeString("adapter_description", info.description);
     file << "adapter_vendor_id=" << info.vendorID << '\n';
     file << "adapter_device_id=" << info.deviceID << '\n';
+    if (msaaReference != nullptr)
+    {
+        file << "case_id=" << msaaReference->id << '\n';
+        file << "stream_sha256=" << msaaReference->streamSha256 << '\n';
+        file << "runtime_revision=" << kMsaaReferenceRuntimeRevision << '\n';
+        file << "dawn_revision=" << kMsaaReferenceDawnRevision << '\n';
+        file << "registry_sha256=" << kMsaaReferenceRegistrySha256 << '\n';
+    }
     wgpuAdapterInfoFreeMembers(info);
     if (!file)
     {
@@ -1011,6 +1023,8 @@ int main(int argc, char** argv)
     const bool atomicSpotifyKidsAppIconFullCase =
         argc > 4 &&
         std::strcmp(argv[4], "atomic-spotify-kids-app-icon-full") == 0;
+    const bool msaaReferenceMode =
+        argc > 4 && std::strcmp(argv[4], "msaa-reference") == 0;
     const bool atomicDstReadShuffleCase =
         atomicDstReadShuffleFullCase || atomicDstReadShuffleSrcOverCase;
     const bool fullStreamCase =
@@ -1028,6 +1042,7 @@ int main(int argc, char** argv)
     const bool directOutputCase = directCase || atomicAdvancedBlendCase ||
                                   atomicColorBurnPairCase ||
                                   fullStreamCase;
+    const bool skipAtlasDiagnosticsCase = directOutputCase || msaaReferenceMode;
     const bool fillCase = circleCase || cuspCase ||
                           (directCase && !directStrokesRoundCase) ||
                           anyAdvancedBlendCase ||
@@ -1036,26 +1051,33 @@ int main(int argc, char** argv)
                           nestedClockwisePathClippedCase;
     const char* auxiliaryOutput = argc > 5 ? argv[5] : nullptr;
     const char* secondaryOutput = argc > 6 ? argv[6] : nullptr;
+    const MsaaReferenceCase* msaaReference =
+        msaaReferenceMode && auxiliaryOutput != nullptr
+            ? findMsaaReferenceCase(auxiliaryOutput)
+            : nullptr;
+    const bool pinnedMetalCase = fullStreamCase || msaaReferenceMode;
     if (argc > 7 ||
         (argc > 4 && !fillCase && !directStrokesRoundCase && !clippedCase &&
          !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
          !nestedEvenOddPathClippedCase && !nestedClockwisePathClippedCase &&
-        !advancedBlendCase && !atomicAdvancedBlendCase && !atomicColorBurnPairCase &&
-        !fullStreamCase &&
-        !intersectionGroupsCase) ||
+         !advancedBlendCase && !atomicAdvancedBlendCase &&
+         !atomicColorBurnPairCase && !fullStreamCase && !msaaReferenceMode &&
+         !intersectionGroupsCase) ||
         (auxiliaryOutput != nullptr && !cuspCase && !directCuspCase &&
-         !atomicColorBurnPairCase && !fullStreamCase &&
+         !atomicColorBurnPairCase && !fullStreamCase && !msaaReferenceMode &&
          !directStrokesRoundCase && !directRawTextCase) ||
         ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase ||
           fullStreamCase) &&
          auxiliaryOutput == nullptr) ||
         (secondaryOutput != nullptr && !atomicColorBurnPairCase &&
-         !atomicSpotifyKidsAppIconFullCase) ||
+         !atomicSpotifyKidsAppIconFullCase && !msaaReferenceMode) ||
         ((atomicColorBurnPairCase || atomicSpotifyKidsAppIconFullCase) &&
-         secondaryOutput == nullptr))
+         secondaryOutput == nullptr) ||
+        (msaaReferenceMode &&
+         (msaaReference == nullptr || secondaryOutput == nullptr)))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output] [secondary-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output-or-case-id] [secondary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1072,7 +1094,7 @@ int main(int argc, char** argv)
 
     WGPUAdapter adapterHandle = nullptr;
     WGPURequestAdapterOptions adapterOptions = {};
-    if (fullStreamCase)
+    if (pinnedMetalCase)
     {
         adapterOptions.backendType = WGPUBackendType_Metal;
     }
@@ -1082,7 +1104,7 @@ int main(int argc, char** argv)
     adapterCallback.userdata1 = &adapterHandle;
     await(instance.Get(),
           wgpuInstanceRequestAdapter(instance.Get(),
-                                     fullStreamCase
+                                     pinnedMetalCase
                                          ? &adapterOptions
                                          : nullptr,
                                      adapterCallback));
@@ -1091,9 +1113,12 @@ int main(int argc, char** argv)
         fail("could not acquire Dawn WebGPU adapter");
     }
     wgpu::Adapter adapter = wgpu::Adapter::Acquire(adapterHandle);
-    if (fullStreamCase)
+    if (pinnedMetalCase)
     {
-        writeAdapterProvenance(auxiliaryOutput, adapter.Get());
+        writeAdapterProvenance(msaaReferenceMode ? secondaryOutput
+                                                 : auxiliaryOutput,
+                               adapter.Get(),
+                               msaaReferenceMode ? msaaReference : nullptr);
     }
 
     WGPUDeviceDescriptor deviceDesc = {};
@@ -1128,7 +1153,9 @@ int main(int argc, char** argv)
     targetDesc.usage =
         wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     targetDesc.dimension = wgpu::TextureDimension::e2D;
-    const uint32_t frameWidth = directRawTextCase
+    const uint32_t frameWidth = msaaReferenceMode
+                                    ? msaaReference->width
+                                : directRawTextCase
                                     ? kDirectRawTextFrameWidth
                                 : directStrokesRoundCase
                                     ? kDirectStrokesRoundFrameSize
@@ -1144,7 +1171,9 @@ int main(int argc, char** argv)
                                     ? kAtomicDstReadShuffleFullFrameWidth
                                     : (directTriangulatedCase ? kDirectGridFrameSize
                                                                : kFrameWidth);
-    const uint32_t frameHeight = directRawTextCase
+    const uint32_t frameHeight = msaaReferenceMode
+                                     ? msaaReference->height
+                                 : directRawTextCase
                                      ? kDirectRawTextFrameHeight
                                  : directStrokesRoundCase
                                      ? kDirectStrokesRoundFrameSize
@@ -1172,7 +1201,9 @@ int main(int argc, char** argv)
     context->beginFrame({.renderTargetWidth = frameWidth,
                          .renderTargetHeight = frameHeight,
                          .loadAction = rive::gpu::LoadAction::clear,
-                         .clearColor = directStrokesRoundCase || directRawTextCase ||
+                         .clearColor = msaaReferenceMode
+                                           ? msaaReference->clearColor
+                                       : directStrokesRoundCase || directRawTextCase ||
                                                atomicDstReadShuffleCase
                                            ? 0xffffffff
                                            : ((advancedBlendCase || atomicAdvancedBlendCase)
@@ -1468,7 +1499,11 @@ int main(int argc, char** argv)
         innerClip->close();
         renderer.clipPath(innerClip.get());
     }
-    if (atomicInterleavedFeatherFullCase)
+    if (msaaReferenceMode)
+    {
+        msaaReference->replay(&renderer, context.get());
+    }
+    else if (atomicInterleavedFeatherFullCase)
     {
         replayInterleavedFeatherFull(&renderer, context.get());
     }
@@ -1644,7 +1679,16 @@ int main(int argc, char** argv)
                     batch.baseElement,
                     batch.elementCount);
     }
-    if (intersectionGroupsCase)
+    if (msaaReferenceMode)
+    {
+        if (facts.interlockMode !=
+                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+            facts.drawBatches.empty())
+        {
+            fail("MSAA reference replay must execute at least one MSAA draw batch");
+        }
+    }
+    else if (intersectionGroupsCase)
     {
         const uint32_t draw0Contents =
             static_cast<uint32_t>(rive::gpu::DrawContents::opaquePaint) |
@@ -2151,7 +2195,7 @@ int main(int argc, char** argv)
     {
         fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");
     }
-    if (!directOutputCase && !changingPathClippedCase &&
+    if (!skipAtlasDiagnosticsCase && !changingPathClippedCase &&
         (facts.contentWidth != kExpectedLogicalAtlasSize ||
         facts.contentHeight != kExpectedLogicalAtlasSize ||
         !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
@@ -2185,7 +2229,7 @@ int main(int argc, char** argv)
     }
     uint32_t atlasWidth = 0;
     uint32_t atlasHeight = 0;
-    if (!directOutputCase)
+    if (!skipAtlasDiagnosticsCase)
     {
         const wgpu::Texture atlas = webgpuContext->atlasMaskTextureForOracle();
         atlasWidth = atlas.GetWidth();
@@ -2216,7 +2260,7 @@ int main(int argc, char** argv)
 
     uint32_t tessWidth = 0;
     uint32_t tessHeight = 0;
-    if (!fullStreamCase)
+    if (!fullStreamCase && !msaaReferenceMode)
     {
         const wgpu::Texture tessellation =
             webgpuContext->tessellationTextureForOracle();
@@ -2370,14 +2414,14 @@ int main(int argc, char** argv)
               frameWidth,
               frameHeight,
               targetBytes.data());
-    if (!directOutputCase && !changingPathClippedCase)
+    if (!directOutputCase && !changingPathClippedCase && !msaaReferenceMode)
     {
         std::printf("wrote %s: %ux%u R16Float row-packed atlas mask\\n",
                     output,
                     atlasWidth,
                     atlasHeight);
     }
-    if (!changingPathClippedCase && !fullStreamCase)
+    if (!changingPathClippedCase && !fullStreamCase && !msaaReferenceMode)
     {
         std::printf("wrote %s: batch=%u+%u contours=%zu interiorTriangles=%zu tessellation=%ux%u RGBA32Uint\\n",
                     inputsOutput,

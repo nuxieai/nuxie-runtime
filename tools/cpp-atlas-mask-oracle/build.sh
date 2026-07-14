@@ -61,6 +61,8 @@ rawtext_stream="$script_dir/../../fixtures/renderer/streams/gm/rawtext.rive-stre
 colorburn_pair_generator="$script_dir/generate_interleaved_colorburn_pair_path.py"
 colorburn_pair_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 path_stream_generator="$script_dir/generate_path_stream_replay.py"
+msaa_reference_generator="$script_dir/generate_msaa_reference_registry.py"
+msaa_reference_manifest="$script_dir/msaa-reference-corpus.toml"
 interleavedfeather_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 dstreadshuffle_stream="$script_dir/../../fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
 spotify_kids_app_icon_stream="$script_dir/../../fixtures/renderer/streams/riv/spotify_kids_app_icon.rive-stream"
@@ -185,7 +187,7 @@ configure_xcode26_dawn_args() {
 }
 
 usage() {
-    echo "usage: tools/cpp-atlas-mask-oracle/build.sh [--preflight]" >&2
+    echo "usage: tools/cpp-atlas-mask-oracle/build.sh [--preflight|--build-only]" >&2
 }
 
 preflight() {
@@ -193,9 +195,16 @@ preflight() {
     local naga_output
     local naga_version
     python3 "$script_dir/format_test.py"
+    PYTHONDONTWRITEBYTECODE=1 python3 "$script_dir/test_capture_msaa_references.py"
     python3 "$polyshark_generator" --stream "$polyshark_stream" --check
     python3 "$rawtext_generator" --stream "$rawtext_stream" --check
     python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" --check
+    python3 "$msaa_reference_generator" \
+        --manifest "$msaa_reference_manifest" \
+        --repo-root "$script_dir/../.." \
+        --runtime-revision "$expected_runtime_revision" \
+        --dawn-revision "$expected_dawn_revision" \
+        --check
     python3 "$path_stream_generator" \
         --stream "$interleavedfeather_stream" \
         --expected-sha256 "$expected_interleavedfeather_sha256" \
@@ -329,10 +338,14 @@ preflight() {
     echo "preflight: READY"
 }
 
+run_mode=full
 case "${1:-}" in
     --preflight)
         preflight
         exit $?
+        ;;
+    --build-only)
+        run_mode=build-only
         ;;
     "")
         ;;
@@ -480,6 +493,12 @@ python3 "$path_stream_generator" \
     --expected-count drawPath=14 \
     --function replaySpotifyKidsAppIconFull \
     --output "$injected_dir/generated_spotify_kids_app_icon_full.inc"
+python3 "$msaa_reference_generator" \
+    --manifest "$msaa_reference_manifest" \
+    --repo-root "$script_dir/../.." \
+    --runtime-revision "$expected_runtime_revision" \
+    --dawn-revision "$expected_dawn_revision" \
+    --output "$injected_dir/generated_msaa_reference_registry.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -503,6 +522,11 @@ configure_xcode26_dawn_args
         premake5 gmake2 --file=premake5.lua --config=release --out="$build_out" --with-dawn
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
+
+if [[ "$run_mode" == build-only ]]; then
+    echo "built $runtime/renderer/$build_out/rive_atlas_mask_oracle"
+    exit 0
+fi
 
 rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"

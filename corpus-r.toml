@@ -137,13 +137,12 @@ max_different_pixels = 32
 id = "gm-batchedconvexpaths-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/batchedconvexpaths-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-batchedconvexpaths-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -162,13 +161,12 @@ max_different_pixels = 32
 id = "gm-batchedtriangulations-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/batchedtriangulations.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/batchedtriangulations-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-batchedtriangulations-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -512,13 +510,13 @@ max_different_pixels = 32
 id = "gm-concavepaths-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/concavepaths.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/concavepaths-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-concavepaths-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-webgpu-metal-msaa-nonconvex-fill-divergence"
 
 
 [[entry]]
@@ -537,13 +535,12 @@ max_different_pixels = 32
 id = "gm-convex_lineonly_ths-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/convex_lineonly_ths.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/convex_lineonly_ths-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convex_lineonly_ths-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -562,13 +559,12 @@ max_different_pixels = 64
 id = "gm-convexpaths-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/convexpaths.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/convexpaths-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convexpaths-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1789,13 +1785,12 @@ max_different_pixels = 128
 id = "gm-oval-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/oval.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/oval-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-oval-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2064,13 +2059,13 @@ max_different_pixels = 256
 id = "gm-pathfill-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/pathfill.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/pathfill-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-pathfill-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-webgpu-metal-msaa-nonconvex-fill-divergence"
 
 
 [[entry]]
@@ -2089,13 +2084,13 @@ max_different_pixels = 32
 id = "gm-poly_clockwise-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/poly_clockwise.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/poly_clockwise-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-poly_clockwise-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-webgpu-metal-msaa-fill-rule-divergence"
 
 
 [[entry]]
@@ -2114,13 +2109,13 @@ max_different_pixels = 32
 id = "gm-poly_evenOdd-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/poly_evenOdd.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/poly_evenOdd-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-poly_evenOdd-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-webgpu-metal-msaa-fill-rule-divergence"
 
 
 [[entry]]
@@ -2139,13 +2134,13 @@ max_different_pixels = 32
 id = "gm-poly_nonZero-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/poly_nonZero.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/poly_nonZero-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-poly_nonZero-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-webgpu-metal-msaa-fill-rule-divergence"
 
 
 [[entry]]

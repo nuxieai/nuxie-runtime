@@ -71,6 +71,14 @@ COLORBURN_PAIR_GENERATOR = pathlib.Path(__file__).with_name(
 PATH_STREAM_GENERATOR = pathlib.Path(__file__).with_name(
     "generate_path_stream_replay.py"
 )
+MSAA_REFERENCE_GENERATOR = pathlib.Path(__file__).with_name(
+    "generate_msaa_reference_registry.py"
+)
+MSAA_REFERENCE_MANIFEST = pathlib.Path(__file__).with_name(
+    "msaa-reference-corpus.toml"
+)
+MSAA_TEST_RUNTIME_REVISION = "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
+MSAA_TEST_DAWN_REVISION = "211333b2e3e429c3508f25c81c547f602adf448c"
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
 
 # Exact bytes asserted by AtlasMask::serialize() in commit 10a64ec.
@@ -912,15 +920,15 @@ class FormatTests(unittest.TestCase):
             "atomicDstReadShuffleSrcOverCase",
             "atomicDstReadShuffleCase =",
             "adapterOptions.backendType = WGPUBackendType_Metal;",
-            "fullStreamCase\n                                         ? &adapterOptions",
-            "writeAdapterProvenance(auxiliaryOutput, adapter.Get());",
+            "pinnedMetalCase\n                                         ? &adapterOptions",
+            "writeAdapterProvenance(msaaReferenceMode ? secondaryOutput",
             "info.backendType != WGPUBackendType_Metal",
             'file << "backend=metal\\n";',
             "replayInterleavedFeatherFull(&renderer, context.get());",
             "replayDstReadShuffleFull(&renderer, context.get());",
             "replayDstReadShuffleSrcOverControl(&renderer, context.get());",
             "facts.drawBatches.size() < 3",
-            "if (!fullStreamCase)",
+            "if (!fullStreamCase && !msaaReferenceMode)",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
             "facts.contentWidth != kExpectedLogicalAtlasSize",
@@ -1058,7 +1066,7 @@ class FormatTests(unittest.TestCase):
         )
 
         assertion_start = source.index(
-            "    if (intersectionGroupsCase)\n"
+            "    else if (intersectionGroupsCase)\n"
             "    {\n"
             "        const uint32_t draw0Contents"
         )
@@ -1574,6 +1582,114 @@ class FormatTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("header or clear-color contract drifted", result.stderr)
 
+    def test_msaa_reference_registry_is_deterministic_and_strict(self):
+        command = [
+            sys.executable,
+            str(MSAA_REFERENCE_GENERATOR),
+            "--manifest",
+            str(MSAA_REFERENCE_MANIFEST),
+            "--repo-root",
+            str(ROOT),
+            "--runtime-revision",
+            MSAA_TEST_RUNTIME_REVISION,
+            "--dawn-revision",
+            MSAA_TEST_DAWN_REVISION,
+        ]
+        subprocess.run(command + ["--check"], check=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            first = temp_dir / "first.inc"
+            second = temp_dir / "second.inc"
+            subprocess.run(command + ["--output", str(first)], check=True)
+            subprocess.run(command + ["--output", str(second)], check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            generated = first.read_text()
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 10>", generated)
+            self.assertIn("kMsaaReferenceRegistrySha256", generated)
+            self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
+            self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
+            self.assertEqual(generated.count("void replayMsaaReference"), 10)
+            self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
+            self.assertIn('"gm-poly_nonZero-msaa"', generated)
+            registry_sha256 = subprocess.run(
+                command + ["--print-registry-sha256"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.strip()
+            self.assertRegex(registry_sha256, r"^[0-9a-f]{64}$")
+            self.assertIn(registry_sha256, generated)
+
+            drifted = temp_dir / "drifted.toml"
+            drifted.write_text(
+                MSAA_REFERENCE_MANIFEST.read_text().replace(
+                    "ac03c58dba7b9e1ee8497989abad2c921a532462b257f8851d4847ef410a1d9f",
+                    "0" * 64,
+                    1,
+                )
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MSAA_REFERENCE_GENERATOR),
+                    "--manifest",
+                    str(drifted),
+                    "--repo-root",
+                    str(ROOT),
+                    "--runtime-revision",
+                    MSAA_TEST_RUNTIME_REVISION,
+                    "--dawn-revision",
+                    MSAA_TEST_DAWN_REVISION,
+                    "--check",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("sha256 drifted", result.stderr)
+
+            boolean_version = temp_dir / "boolean-version.toml"
+            boolean_version.write_text(
+                MSAA_REFERENCE_MANIFEST.read_text().replace(
+                    "version = 1", "version = true", 1
+                )
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MSAA_REFERENCE_GENERATOR),
+                    "--manifest",
+                    str(boolean_version),
+                    "--repo-root",
+                    str(ROOT),
+                    "--runtime-revision",
+                    MSAA_TEST_RUNTIME_REVISION,
+                    "--dawn-revision",
+                    MSAA_TEST_DAWN_REVISION,
+                    "--check",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must be version 1", result.stderr)
+
+        exporter = EXPORTER.read_text()
+        for fragment in (
+            '#include "generated_msaa_reference_registry.inc"',
+            'std::strcmp(argv[4], "msaa-reference") == 0',
+            "findMsaaReferenceCase(auxiliaryOutput)",
+            "msaaReference->replay(&renderer, context.get())",
+            'file << "renderer_implementation=cpp-dawn-webgpu\\n"',
+            'file << "case_id=" << msaaReference->id',
+            'file << "stream_sha256=" << msaaReference->streamSha256',
+            "kMsaaReferenceRuntimeRevision",
+            "kMsaaReferenceDawnRevision",
+            "kMsaaReferenceRegistrySha256",
+            "facts.drawBatches.empty()",
+        ):
+            self.assertIn(fragment, exporter)
+
     def test_dstreadshuffle_replay_is_deterministic_and_enforces_opaque_clear_color(self):
         expected_counts = [
             "save=97",
@@ -1880,6 +1996,12 @@ class FormatTests(unittest.TestCase):
             'colorburn_pair_generator="$script_dir/generate_interleaved_colorburn_pair_path.py"',
             'python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" --check',
             '--output "$injected_dir/generated_interleaved_colorburn_pair_path.inc"',
+            'msaa_reference_generator="$script_dir/generate_msaa_reference_registry.py"',
+            'msaa_reference_manifest="$script_dir/msaa-reference-corpus.toml"',
+            'PYTHONDONTWRITEBYTECODE=1 python3 "$script_dir/test_capture_msaa_references.py"',
+            '--output "$injected_dir/generated_msaa_reference_registry.inc"',
+            'run_mode=build-only',
+            'if [[ "$run_mode" == build-only ]]',
             '"$direct_polyshark_inputs_output" /dev/null direct-polyshark',
             '"$direct_grid_inputs_output" /dev/null direct-grid',
             '"$direct_flower_inputs_output" /dev/null direct-flower',

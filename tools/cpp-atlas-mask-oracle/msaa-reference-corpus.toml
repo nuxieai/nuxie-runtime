@@ -1,0 +1,111 @@
+version = 1
+
+[[case]]
+id = "gm-batchedconvexpaths-msaa"
+stream = "fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream"
+sha256 = "ac03c58dba7b9e1ee8497989abad2c921a532462b257f8851d4847ef410a1d9f"
+source = "gm:batchedconvexpaths"
+scene = "batchedconvexpaths"
+width = 512
+height = 512
+clear_color = "0xff000000"
+counts = { drawPath = 10, makeEmptyRenderPath = 10, makeRenderPaint = 10, restore = 11, save = 11, transform = 20 }
+
+[[case]]
+id = "gm-batchedtriangulations-msaa"
+stream = "fixtures/renderer/streams/gm/batchedtriangulations.rive-stream"
+sha256 = "8d3d4492081f0d18af05db200686d9d058973849194ff210945add839e552b81"
+source = "gm:batchedtriangulations"
+scene = "batchedtriangulations"
+width = 1600
+height = 1600
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 8, makeRenderPaint = 1, restore = 2, save = 2, transform = 3 }
+
+[[case]]
+id = "gm-concavepaths-msaa"
+stream = "fixtures/renderer/streams/gm/concavepaths.rive-stream"
+sha256 = "afd941fc29871c022774f5bc8109fdc1417f6d49036acd3808b0659ac3e6a136"
+source = "gm:concavepaths"
+scene = "concavepaths"
+width = 500
+height = 600
+clear_color = "0xffffffff"
+counts = { drawPath = 29, makeEmptyRenderPath = 58, makeRenderPaint = 1, restore = 29, save = 29, transform = 30 }
+
+[[case]]
+id = "gm-convex_lineonly_ths-msaa"
+stream = "fixtures/renderer/streams/gm/convex_lineonly_ths.rive-stream"
+sha256 = "29feb282a830d3902c63b18248c98e903a6bfd9cbed210096d6e6b5ca91bca9f"
+source = "gm:convex_lineonly_ths"
+scene = "convex_lineonly_ths"
+width = 540
+height = 680
+clear_color = "0xffffffff"
+counts = { drawPath = 140, makeEmptyRenderPath = 320, makeRenderPaint = 20, restore = 141, save = 141, transform = 280 }
+
+[[case]]
+id = "gm-convexpaths-msaa"
+stream = "fixtures/renderer/streams/gm/convexpaths.rive-stream"
+sha256 = "efac2068202fefbfafa7407f9e212ce5649af04bd0053d8f237c5eb9e14bc07e"
+source = "gm:convexpaths"
+scene = "convexpaths"
+width = 1200
+height = 1100
+clear_color = "0xff000000"
+counts = { drawPath = 38, makeEmptyRenderPath = 49, makeRenderPaint = 1, restore = 39, save = 39, transform = 40 }
+
+[[case]]
+id = "gm-oval-msaa"
+stream = "fixtures/renderer/streams/gm/oval.rive-stream"
+sha256 = "b277bc13e7673e0626acb2027a35a7d4ee83ee9179f25e49d07b6d0a5a638d20"
+source = "gm:oval"
+scene = "oval"
+width = 410
+height = 410
+clear_color = "0xffffffff"
+counts = { drawPath = 5, makeEmptyRenderPath = 4, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-pathfill-msaa"
+stream = "fixtures/renderer/streams/gm/pathfill.rive-stream"
+sha256 = "cd130fd0a9c700fbb63b7d93d380f482321e90284cca4fba842cb1c4528934e0"
+source = "gm:pathfill"
+scene = "pathfill"
+width = 365
+height = 425
+clear_color = "0xffffffff"
+counts = { drawPath = 12, makeEmptyRenderPath = 36, makeRenderPaint = 1, restore = 2, save = 2, transform = 15 }
+
+[[case]]
+id = "gm-poly_clockwise-msaa"
+stream = "fixtures/renderer/streams/gm/poly_clockwise.rive-stream"
+sha256 = "6099490edf8996712b50dd25fcd541a0bf4e88048e16e006cbaa7177daab224d"
+source = "gm:poly_clockwise"
+scene = "poly_clockwise"
+width = 480
+height = 480
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 4, makeRenderPaint = 4, restore = 5, save = 5, transform = 8 }
+
+[[case]]
+id = "gm-poly_evenOdd-msaa"
+stream = "fixtures/renderer/streams/gm/poly_evenOdd.rive-stream"
+sha256 = "014e42ab71b846fb34027e6ba3066a4c26de14134d7d8a69cfdd1c1f3b39b41e"
+source = "gm:poly_evenOdd"
+scene = "poly_evenOdd"
+width = 480
+height = 480
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 4, makeRenderPaint = 4, restore = 5, save = 5, transform = 8 }
+
+[[case]]
+id = "gm-poly_nonZero-msaa"
+stream = "fixtures/renderer/streams/gm/poly_nonZero.rive-stream"
+sha256 = "50c6c25dea75022c709e7e0fbd9155360f3ebc31cbcd9e11cc71e5db7c9393c4"
+source = "gm:poly_nonZero"
+scene = "poly_nonZero"
+width = 480
+height = 480
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 4, makeRenderPaint = 4, restore = 5, save = 5, transform = 8 }

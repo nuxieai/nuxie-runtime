@@ -7,9 +7,11 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=674, diverges=0, gated=794, total=1,468.
+- Rust wgpu: exact=679, diverges=0, gated=789, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
+  the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
+  `batchedtriangulations`, `convex_lineonly_ths`, `convexpaths`, and `oval`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
   `gm-path_skbug_11886-clockwise-atomic`,
   `gm-convex_lineonly_ths-clockwise-atomic`, and
@@ -631,13 +633,18 @@ Run `make renderer-golden`.
     99.9% mask overlap. Sol approved the separate
     `metal-webgpu-fixed-function-color-output` gate without changing the
     reference or contract.
-60. [ ] Build the reusable C++ Dawn WebGPU-on-Metal MSAA reference runner and
+60. [x] Build the reusable C++ Dawn WebGPU-on-Metal MSAA reference runner and
     provenance-bound PNG capture path, then probe the first solid-path upstream
     GMs in disjoint Terra batches. Native C++ Metal has no MSAA flush and the
     corpus currently has zero MSAA reference PNGs, so references must live
     under a distinct Dawn-WebGPU-on-Metal identity rather than the native Metal
     root. The strict generator now accepts 39 of the first 40 candidate streams;
     `degengrad` remains the one gradient-resource compiler gap.
+61. [ ] Isolate the shared Dawn-versus-wgpu MSAA fill-rule divergence across
+    `poly_clockwise`, `poly_evenOdd`, and `poly_nonZero`. Start with the exact
+    draw schedule and stencil/coverage intermediate rather than widening the
+    unchanged `2/32` contract; use the result to determine whether
+    `concavepaths` and `pathfill` share the same failure class.
 
 ## R2 Completion Record
 
@@ -850,6 +857,18 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: The first ten strict C++ Dawn WebGPU-on-Metal MSAA references
+  are provenance-bound to the embedded replay-registry digest, C++ runtime,
+  Dawn revision, stream digest, adapter, and final artifacts. Parallel and
+  serial capture are byte-identical. Five entries pass the unchanged `2/32`
+  contract and are promoted; `concavepaths` and `pathfill` retain named
+  nonconvex-fill gates, while the three `poly_*` entries retain a shared
+  fill-rule gate. The generic corpus runner now accepts explicit bounded
+  `--jobs`; Sol review caught and drove fixes for image retention, fail-fast,
+  deterministic diagnostics, output collisions, and worker-panic handling.
+  The default remains one GPU process. A representative 40-entry run improved
+  from 40.12s at one job to 15.78s at four jobs (2.54x), and the complete
+  four-job ratchet finished in 4m42.87s at exact=679/diverges=0/gated=789.
 - 2026-07-13: Use C++ Dawn WebGPU-on-Metal as the MSAA corpus oracle, with a
   distinct reference root and explicit producer/runtime/Dawn/adapter/artifact
   provenance. Native C++ Metal intentionally has no MSAA flush, and all 733
@@ -2594,3 +2613,14 @@ Run `make renderer-golden`.
   passed all 33 oracle-format tests; a slower registry lane was stopped rather
   than held on the critical path. Build the provenance-bound runner next, then
   fan out the actual probes.
+- 2026-07-13: Completed the provenance-bound C++ Dawn MSAA reference runner
+  and first ten-case capture. The strict embedded registry, runtime, Dawn,
+  stream, adapter, RIVEABL, PNG-pixel, and artifact identities all validate;
+  jobs 1 and 4 recaptures are byte-identical. `batchedconvexpaths`,
+  `batchedtriangulations`, `convex_lineonly_ths`, `convexpaths`, and `oval`
+  pass the unchanged `2/32` contract and advance the ratchet to
+  exact=679/diverges=0/gated=789. `concavepaths`, `pathfill`, and the three
+  `poly_*` cases retain named evidence-backed gates with no tolerance change.
+  Bounded corpus parallelism passed two Terra implementation rounds and Sol
+  adversarial review; a 40-entry benchmark measured 2.54x wall-clock speedup
+  at four jobs, while the full four-job ratchet finished green in 4m42.87s.

@@ -6,6 +6,46 @@ This harness produces a deterministic readback of the C++ renderer's WebGPU
 renderer configuration, then reverses the patch and removes only the injected
 source directory.
 
+## Parallel MSAA reference capture
+
+The generic `msaa-reference` mode replays the strict cases in
+`msaa-reference-corpus.toml` through C++ Dawn WebGPU on Metal. Build the
+shared binary once, then run the independent captures with bounded
+parallelism:
+
+```sh
+tools/cpp-atlas-mask-oracle/build.sh --build-only
+cargo build -p pixel-compare --bin riveabl-to-png
+python3 tools/cpp-atlas-mask-oracle/generate_msaa_reference_registry.py \
+  --manifest tools/cpp-atlas-mask-oracle/msaa-reference-corpus.toml \
+  --repo-root . \
+  --runtime-revision 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2 \
+  --dawn-revision 211333b2e3e429c3508f25c81c547f602adf448c \
+  --output target/generated_msaa_reference_registry.inc
+python3 tools/cpp-atlas-mask-oracle/capture_msaa_references.py \
+  --binary /Users/levi/dev/oss/rive-runtime/renderer/out/cpp-atlas-mask-oracle/rive_atlas_mask_oracle \
+  --converter target/debug/riveabl-to-png \
+  --manifest tools/cpp-atlas-mask-oracle/msaa-reference-corpus.toml \
+  --output-dir tools/cpp-atlas-mask-oracle/out/msaa-reference \
+  --repo-root . --jobs 4 --case-timeout-seconds 120 \
+  --runtime-revision 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2 \
+  --dawn-revision 211333b2e3e429c3508f25c81c547f602adf448c \
+  --registry-sha256 "$(python3 tools/cpp-atlas-mask-oracle/generate_msaa_reference_registry.py \
+    --manifest tools/cpp-atlas-mask-oracle/msaa-reference-corpus.toml \
+    --repo-root . \
+    --runtime-revision 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2 \
+    --dawn-revision 211333b2e3e429c3508f25c81c547f602adf448c \
+    --print-registry-sha256)"
+```
+
+The coordinator validates every stream digest, RIVEABL payload, PNG, and
+provenance record before atomically installing the output directory. Results
+print in manifest order even when captures finish out of order. A failed wave
+is retained under an isolated `.failed-*` directory and never replaces a
+completed reference set. Use `RENDERER_JOBS=4 make renderer-golden` to apply
+the same bounded parallelism to local Rust corpus verification; the default
+remains one GPU process.
+
 The exporter draws four coordinated fixtures:
 
 * render target: `64 x 64`

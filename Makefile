@@ -5,6 +5,7 @@ DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
 CPP_CONFIG ?= debug
 RUST_PROFILE ?= debug
 RUST_GOLDEN_RUNNER_FLAGS = $(if $(filter release,$(RUST_PROFILE)),--release,)
+RENDERER_JOBS ?= 1
 CPP_PROBE ?= $(CURDIR)/tools/cpp-probe/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_cpp_probe
 GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner
 SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
@@ -123,10 +124,10 @@ renderer-fuzz-replay:
 	cargo run --quiet -p renderer-fuzz-replay -- --replay "$(CURDIR)/target/renderer-ffi/debug/renderer-replay"
 
 renderer-golden: renderer-replay
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend rust-wgpu
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend rust-wgpu --jobs "$(RENDERER_JOBS)"
 
 renderer-stub-baseline: renderer-replay
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --expect-all-fail
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --expect-all-fail
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release

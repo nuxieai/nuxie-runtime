@@ -535,7 +535,7 @@ configure_xcode26_dawn_args
 (
     cd "$runtime/renderer"
     PREMAKE_PATH="$runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
-        premake5 gmake2 --file=premake5.lua --config=release --out="$build_out" --with-dawn
+        premake5 gmake2 --file=premake5.lua --config=release --out="$build_out" --with-dawn --no-lto
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 

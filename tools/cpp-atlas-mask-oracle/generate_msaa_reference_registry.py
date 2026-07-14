@@ -23,6 +23,90 @@ CASE_KEYS = {
 }
 ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 REVISION_RE = re.compile(r"[0-9a-f]{40}")
+PATH_DECLARATION_RE = re.compile(r"    auto path(\d+) = context->makeEmptyRenderPath\(\);")
+PATH_REFERENCE_RE = re.compile(r"\bpath(\d+)\b")
+
+
+def chunk_large_path_replay(
+    replay: str,
+    function_name: str,
+    first_local_path_id: int = 3,
+    paths_per_chunk: int = 128,
+) -> str:
+    """Split the strict hit-test tail into bounded compiler functions."""
+    lines = replay.rstrip().splitlines()
+    first_declaration = f"    auto path{first_local_path_id} = context->makeEmptyRenderPath();"
+    try:
+        body_start = lines.index(first_declaration)
+        body_end = len(lines) - 1 - lines[::-1].index("    renderer->restore();")
+    except ValueError as error:
+        raise ValueError("large path replay does not match the chunking contract") from error
+    if body_start >= body_end or lines[-1] != "}":
+        raise ValueError("large path replay has an invalid chunk boundary")
+
+    groups: list[list[str]] = []
+    for line in lines[body_start:body_end]:
+        if PATH_DECLARATION_RE.fullmatch(line):
+            groups.append([])
+        if not groups:
+            raise ValueError("large path replay tail must begin with a path declaration")
+        groups[-1].append(line)
+    if not groups:
+        raise ValueError("large path replay has no local path groups")
+
+    helpers = []
+    calls = []
+    for chunk_index, offset in enumerate(range(0, len(groups), paths_per_chunk)):
+        chunk_groups = groups[offset : offset + paths_per_chunk]
+        helper_name = f"{function_name}Chunk{chunk_index}"
+        helper = [
+            "__attribute__((optnone))",
+            f"void {helper_name}(rive::RiveRenderer* renderer,",
+            "                rive::gpu::RenderContext* context,",
+            "                rive::RenderPaint* paint1,",
+            "                std::vector<rive::rcp<rive::RenderPath>>& retainedPaths)",
+            "{",
+        ]
+        for group in chunk_groups:
+            declaration = PATH_DECLARATION_RE.fullmatch(group[0])
+            if declaration is None:
+                raise ValueError("large path replay group has no path declaration")
+            path_id = declaration.group(1)
+            referenced_paths = {
+                match.group(1)
+                for line in group
+                for match in PATH_REFERENCE_RE.finditer(line)
+            }
+            if referenced_paths != {path_id}:
+                raise ValueError(
+                    f"large path replay group {path_id} references paths {sorted(referenced_paths)}"
+                )
+            if any(
+                "paint" in line and "paint1" not in line
+                or "renderer->save()" in line
+                or "renderer->restore()" in line
+                or "renderer->transform(" in line
+                for line in group
+            ):
+                raise ValueError(f"large path replay group {path_id} is not self-contained")
+            helper.extend(line.replace("paint1.get()", "paint1") for line in group)
+            helper.append(f"    retainedPaths.emplace_back(std::move(path{path_id}));")
+        helper.extend(["}", ""])
+        helpers.extend(helper)
+        calls.append(
+            f"    {helper_name}(renderer, context, paint1.get(), retainedPaths);"
+        )
+
+    retained_paths = [
+        "    std::vector<rive::rcp<rive::RenderPath>> retainedPaths;",
+        f"    retainedPaths.reserve({len(groups)});",
+    ]
+    return (
+        "\n".join(
+            [*helpers, *lines[:body_start], *retained_paths, *calls, *lines[body_end:]]
+        )
+        + "\n"
+    )
 
 
 def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[dict]:
@@ -78,24 +162,26 @@ def generate_registry(
         "",
     ]
     for index, case in enumerate(cases):
-        body.append(
-            generate_include(
-                stream=case["stream_path"],
-                profile="gm",
-                expected_sha256=case["sha256"],
-                expected_source=case["source"],
-                expected_source_suffix=None,
-                expected_artboard="",
-                expected_scene=case["scene"],
-                expected_width=case["width"],
-                expected_height=case["height"],
-                expected_clear_color=case["clear_color"],
-                expected_sample_seconds=None,
-                expected_counts=case["counts"],
-                function_name=f"replayMsaaReference{index}",
-                blend_mode_override=None,
-            ).rstrip()
+        replay = generate_include(
+            stream=case["stream_path"],
+            profile="gm",
+            expected_sha256=case["sha256"],
+            expected_source=case["source"],
+            expected_source_suffix=None,
+            expected_artboard="",
+            expected_scene=case["scene"],
+            expected_width=case["width"],
+            expected_height=case["height"],
+            expected_clear_color=case["clear_color"],
+            expected_sample_seconds=None,
+            expected_counts=case["counts"],
+            function_name=f"replayMsaaReference{index}",
+            blend_mode_override=None,
+            function_attribute="__attribute__((optnone))",
         )
+        if case["counts"].get("drawPath", 0) > 10_000:
+            replay = chunk_large_path_replay(replay, f"replayMsaaReference{index}")
+        body.append(replay.rstrip())
         body.append("")
     body.append(
         f"constexpr std::array<MsaaReferenceCase, {len(cases)}> kMsaaReferenceCases = {{{{"

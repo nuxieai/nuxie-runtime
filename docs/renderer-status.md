@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=710, diverges=0, gated=758, total=1,468.
+- Rust wgpu: exact=715, diverges=0, gated=753, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -17,7 +17,9 @@ Run `make renderer-golden`.
   plus `emptyfeather`, `emptystroke`, `emptystrokefeather`,
   `emptytransparentclear`,
   `feather_corner`, `feather_cusp`, `feather_ellipse`,
-  `feather_polyshapes`, `feather_roundcorner`, and `feather_shapes`,
+  `feather_polyshapes`, `feather_roundcorner`, `feather_shapes`, and
+  `feather_strokes`, plus non-mirrored Montserrat and Roboto feather text,
+  `gamma_correction_clip`, and `inner_join_geometry`,
   plus `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
   `bug5099`, `bug6083`, `bug615686`, and `bug6987`,
   plus `bug7792`, `clippedcubic`, `crbug_996140`, `cubicclosepath`,
@@ -753,12 +755,34 @@ Run `make renderer-golden`.
     `feather_cusp` improves from 435/max 4 to zero pixels beyond delta 2;
     `feather_shapes` improves from 180/max 4 to 11/max 3. Both are promoted,
     while the empty-stroke depth path and seven siblings remain green.
-69. [ ] Add and capture the next ten accepted strict source-order C++ Dawn
+69. [x] Add and capture the next ten accepted strict source-order C++ Dawn
     MSAA cases after `feather_shapes`, beginning with `feather_strokes` and
     continuing through the feather-text, gamma-clip, hit-test, and image
     candidates. Record strict-generator rejections as named harness gaps,
     prove all prior 40 captures remain byte-identical, and probe accepted
-    references under the unchanged `2/32` contract before changing gates.
+    references under the unchanged `2/32` contract before changing gates. The
+    strict registry now contains 50 cases. `image`, `image_aa_border`,
+    `image_filter_options`, and `image_lod` retain the explicit
+    `strict-replay-decode-image` harness gate, so `inner_join_geometry` and
+    `interleavedfeather` complete the wave. Jobs 1 and 4 produce all 150
+    artifacts byte-identically, and the
+    prior 40 PNGs remain byte-identical. `feather_strokes`, non-mirrored
+    Montserrat and Roboto feather text, `gamma_correction_clip`, and
+    `inner_join_geometry` pass unchanged `2/32` and are promoted. Both
+    mirrored text streams render blank only after their `scaleX=-1` transform
+    and retain `dawn-wgpu-msaa-reflected-feather-atlas-transform`. Both
+    32k-draw hit-test streams independently fail Rust readback mapping and
+    retain `rust-wgpu-msaa-large-draw-readback-map`. `interleavedfeather`
+    retains `dawn-wgpu-msaa-interleaved-feather-color-precision` at 145
+    pixels/max 85 across 140 tiny components with alpha within one. The
+    generator now splits those oversized hit-test replays into strictly
+    validated 128-path helpers, and the oracle uses the runtime's supported
+    no-LTO build so the 44 MB registry compiles repeatably.
+70. [ ] Port reflected atlas-feather transform parity, beginning with the
+    `scaleX=-1` Montserrat stream. Compare C++ and Rust atlas path bounds,
+    placement, contour orientation, and final sampling before changing either
+    mirrored text gate. Preserve the five exact siblings from queue item 69
+    and the unchanged `2/32` contract.
 
 ## R2 Completion Record
 
@@ -970,6 +994,19 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Extend the provenance-bound C++ Dawn MSAA registry from 40 to
+  50 cases. The two 32k-path hit-test streams exposed pathological monolithic
+  compiler functions, so strict generation now validates and emits bounded
+  128-path helpers; the diagnostic executable uses the runtime's supported
+  no-LTO mode while linked renderer code retains release optimization. Serial
+  and four-job captures are byte-identical across all 150 artifacts, and the
+  original 40 PNGs recapture byte-identically, proving no oracle pixel drift.
+  Five cases pass unchanged `2/32`, advancing the ratchet to
+  exact=715/diverges=0/gated=753. Four image candidates retain the named
+  `strict-replay-decode-image` compiler gate. The five nonpassing rows receive separate
+  reflected-transform, large-draw-readback, and sparse interleaved-color
+  diagnostics; no tolerance changed.
 
 - 2026-07-13: Extend the strict C++ Dawn WebGPU-on-Metal MSAA registry from 30
   to 40 cases. All prior PNGs recapture byte-identically. `emptyfeather`,
@@ -2894,3 +2931,13 @@ Run `make renderer-golden`.
   584-segment golden floor, scripted 35-segment floor, and full renderer
   corpus all pass. Queue item 69 names the next strict source-order Dawn MSAA
   capture wave.
+- 2026-07-14: Captured the fifth ten strict source-order C++ Dawn MSAA
+  references with the 50-case registry. Bounded helper generation and the
+  supported no-LTO oracle build make the two 32k-path hit-test streams compile
+  repeatably. Jobs 1 and 4 produce all 150 artifacts byte-identically, and the
+  prior 40 PNGs remain byte-identical. Five rows pass unchanged `2/32`, moving
+  the renderer ratchet to exact=715/diverges=0/gated=753. Reflected feather
+  transforms, large-draw readback mapping, sparse interleaved feather color,
+  and four `strict-replay-decode-image` rejections have separate named gates.
+  No tolerance changed. Queue item 70 targets reflected atlas-feather
+  transforms.

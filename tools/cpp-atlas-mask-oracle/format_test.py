@@ -1604,14 +1604,42 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 40>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 50>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
-            self.assertEqual(generated.count("void replayMsaaReference"), 40)
+            self.assertEqual(
+                len(re.findall(r"void replayMsaaReference\d+\(", generated)),
+                50,
+            )
+            self.assertEqual(
+                len(
+                    re.findall(
+                        r"__attribute__\(\(optnone\)\) void replayMsaaReference\d+\(",
+                        generated,
+                    )
+                ),
+                50,
+            )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
+            self.assertIn('"gm-interleavedfeather-msaa"', generated)
+            self.assertIn("void replayMsaaReference46Chunk0(", generated)
+            self.assertIn("void replayMsaaReference47Chunk0(", generated)
+            self.assertIn("retainedPaths.reserve(32578);", generated)
+            self.assertIn("retainedPaths.reserve(34397);", generated)
+            self.assertIn("void replayMsaaReference46Chunk254(", generated)
+            self.assertNotIn("void replayMsaaReference46Chunk255(", generated)
+            self.assertIn("void replayMsaaReference47Chunk268(", generated)
+            self.assertNotIn("void replayMsaaReference47Chunk269(", generated)
+            for rejected_image_case in (
+                "gm-image-msaa",
+                "gm-image_aa_border-msaa",
+                "gm-image_filter_options-msaa",
+                "gm-image_lod-msaa",
+            ):
+                self.assertNotIn(f'"{rejected_image_case}"', generated)
             self.assertIn("0xff00ff00, false, replayMsaaReference29", generated)
             registry_sha256 = subprocess.run(
                 command + ["--print-registry-sha256"],
@@ -1970,6 +1998,7 @@ class FormatTests(unittest.TestCase):
             'ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"',
             'Darwin) default_gn="$dawn_dir/buildtools/mac/gn"',
             'expected_naga_version="30.0.0"',
+            'premake5 gmake2 --file=premake5.lua --config=release --out="$build_out" --with-dawn --no-lto',
             '"$naga_bin" --version',
             'export PATH="$(dirname "$naga_bin"):$PATH"',
             'dawn_args_snapshot_candidate="$(mktemp ',
@@ -2345,7 +2374,7 @@ class FormatTests(unittest.TestCase):
             premake = (temp / "renderer/premake5.lua").read_text()
             self.assertGreater(premake.index("project('rive_atlas_mask_oracle')"),
                                premake.index("if RIVE_WAGYU_PORT then"))
-            self.assertTrue(premake.rstrip().endswith("end"))
+            self.assertTrue(premake.rstrip().endswith("filter({})\n    end\nend"))
 
 
 if __name__ == "__main__":

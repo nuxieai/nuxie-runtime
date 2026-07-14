@@ -957,13 +957,12 @@ max_different_pixels = 16384
 id = "gm-feather_strokes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feather_strokes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feather_strokes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_strokes-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -982,13 +981,12 @@ max_different_pixels = 32
 id = "gm-feathertext_montserrat-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feathertext_montserrat.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feathertext_montserrat-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feathertext_montserrat-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1007,13 +1005,13 @@ max_different_pixels = 32
 id = "gm-feathertext_montserrat_mirrored-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feathertext_montserrat_mirrored.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feathertext_montserrat_mirrored-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feathertext_montserrat_mirrored-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-wgpu-msaa-reflected-feather-atlas-transform"
 
 
 [[entry]]
@@ -1032,13 +1030,12 @@ max_different_pixels = 32
 id = "gm-feathertext_roboto-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feathertext_roboto.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feathertext_roboto-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feathertext_roboto-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1057,13 +1054,13 @@ max_different_pixels = 32
 id = "gm-feathertext_roboto_mirrored-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/feathertext_roboto_mirrored.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/feathertext_roboto_mirrored-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feathertext_roboto_mirrored-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-wgpu-msaa-reflected-feather-atlas-transform"
 
 
 [[entry]]
@@ -1082,13 +1079,12 @@ max_different_pixels = 8
 id = "gm-gamma_correction_clip-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/gamma_correction_clip.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/gamma_correction_clip-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-gamma_correction_clip-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1107,13 +1103,13 @@ max_different_pixels = 512
 id = "gm-hittest_evenOdd-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/hittest_evenOdd.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/hittest_evenOdd-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-hittest_evenOdd-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "rust-wgpu-msaa-large-draw-readback-map"
 
 
 [[entry]]
@@ -1132,13 +1128,13 @@ max_different_pixels = 512
 id = "gm-hittest_nonZero-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/hittest_nonZero.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/hittest_nonZero-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-hittest_nonZero-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "rust-wgpu-msaa-large-draw-readback-map"
 
 
 [[entry]]
@@ -1163,7 +1159,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-decode-image"
 
 
 [[entry]]
@@ -1188,7 +1184,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-decode-image"
 
 
 [[entry]]
@@ -1213,7 +1209,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-decode-image"
 
 
 [[entry]]
@@ -1238,7 +1234,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-decode-image"
 
 
 [[entry]]
@@ -1257,13 +1253,12 @@ max_different_pixels = 32
 id = "gm-inner_join_geometry-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/inner_join_geometry.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/inner_join_geometry-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-inner_join_geometry-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1283,13 +1278,13 @@ gated = "metal-webgpu-atomic-intermediate-precision"
 id = "gm-interleavedfeather-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/interleavedfeather-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-interleavedfeather-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-wgpu-msaa-interleaved-feather-color-precision"
 
 
 [[entry]]

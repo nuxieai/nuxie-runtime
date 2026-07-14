@@ -439,3 +439,113 @@ width = 1756
 height = 2048
 clear_color = "0xff000000"
 counts = { drawPath = 42, makeEmptyRenderPath = 7, makeRenderPaint = 1, restore = 50, save = 50, transform = 92 }
+
+[[case]]
+id = "gm-feather_strokes-msaa"
+stream = "fixtures/renderer/streams/gm/feather_strokes.rive-stream"
+sha256 = "444ae0a0aa5b835b7180a6ae9f13651fdb4dee2a7c50b3b2e1b6c52909fd3871"
+source = "gm:feather_strokes"
+scene = "feather_strokes"
+width = 1756
+height = 2048
+clear_color = "0xff000000"
+counts = { drawPath = 42, makeEmptyRenderPath = 8, makeRenderPaint = 1, restore = 50, save = 50, transform = 92 }
+
+[[case]]
+id = "gm-feathertext_montserrat-msaa"
+stream = "fixtures/renderer/streams/gm/feathertext_montserrat.rive-stream"
+sha256 = "6552ead660177e1b09a5a77db9a5d4b534af7cf3c347b28a42e0350c9b454933"
+source = "gm:feathertext_montserrat"
+scene = "feathertext_montserrat"
+width = 1600
+height = 1840
+clear_color = "0xffffffff"
+counts = { drawPath = 6, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 7 }
+
+[[case]]
+id = "gm-feathertext_montserrat_mirrored-msaa"
+stream = "fixtures/renderer/streams/gm/feathertext_montserrat_mirrored.rive-stream"
+sha256 = "6e84e7f8d7d9e1812ca56b884c04af88acbfcf0e0646b2e3d4b30b5fc6113665"
+source = "gm:feathertext_montserrat_mirrored"
+scene = "feathertext_montserrat_mirrored"
+width = 1600
+height = 1840
+clear_color = "0xffffffff"
+counts = { drawPath = 6, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 9 }
+
+[[case]]
+id = "gm-feathertext_roboto-msaa"
+stream = "fixtures/renderer/streams/gm/feathertext_roboto.rive-stream"
+sha256 = "9893a8e6971c49a9de2935493fe25616143a3b43dabbd52ee9de040b1b24bfc5"
+source = "gm:feathertext_roboto"
+scene = "feathertext_roboto"
+width = 1600
+height = 1840
+clear_color = "0xffffffff"
+counts = { drawPath = 6, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 7 }
+
+[[case]]
+id = "gm-feathertext_roboto_mirrored-msaa"
+stream = "fixtures/renderer/streams/gm/feathertext_roboto_mirrored.rive-stream"
+sha256 = "b4339f008bc8bda894cd0ef5f3acaee64f2fe7d9cb23b30d1732ed7e83f43597"
+source = "gm:feathertext_roboto_mirrored"
+scene = "feathertext_roboto_mirrored"
+width = 1600
+height = 1840
+clear_color = "0xffffffff"
+counts = { drawPath = 6, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 9 }
+
+[[case]]
+id = "gm-gamma_correction_clip-msaa"
+stream = "fixtures/renderer/streams/gm/gamma_correction_clip.rive-stream"
+sha256 = "b24f55b8f78613e05199def1b1b883a569e3b0d1d7fd53ae0fe365f1ac165a1b"
+source = "gm:gamma_correction_clip"
+scene = "gamma_correction_clip"
+width = 500
+height = 500
+clear_color = "0xffffffff"
+counts = { clipPath = 1, drawPath = 2, makeEmptyRenderPath = 4, makeRenderPaint = 2, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-hittest_evenOdd-msaa"
+stream = "fixtures/renderer/streams/gm/hittest_evenOdd.rive-stream"
+sha256 = "d9667d5f6cde32a3419ee8d5c2367e8110178ab775494ae33343791a333ab2b5"
+source = "gm:hittest_evenOdd"
+scene = "hittest_evenOdd"
+width = 320
+height = 460
+clear_color = "0xffffffff"
+counts = { drawPath = 32580, makeEmptyRenderPath = 32580, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-hittest_nonZero-msaa"
+stream = "fixtures/renderer/streams/gm/hittest_nonZero.rive-stream"
+sha256 = "8007388967982d295a84af4181b2e075c30572c408ce66e83925f22a7330a49e"
+source = "gm:hittest_nonZero"
+scene = "hittest_nonZero"
+width = 320
+height = 460
+clear_color = "0xffffffff"
+counts = { drawPath = 34399, makeEmptyRenderPath = 34399, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-inner_join_geometry-msaa"
+stream = "fixtures/renderer/streams/gm/inner_join_geometry.rive-stream"
+sha256 = "0d13df3b8c550089c51eaa4e50f8ef47fb58b286bec43af822c5c3d26f26cceb"
+source = "gm:inner_join_geometry"
+scene = "inner_join_geometry"
+width = 1000
+height = 700
+clear_color = "0xffffffff"
+counts = { drawPath = 8, makeEmptyRenderPath = 16, makeRenderPaint = 1, restore = 1, save = 1, transform = 11 }
+
+[[case]]
+id = "gm-interleavedfeather-msaa"
+stream = "fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
+sha256 = "8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
+source = "gm:interleavedfeather"
+scene = "interleavedfeather"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+counts = { drawPath = 451, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 301, save = 301, transform = 900 }

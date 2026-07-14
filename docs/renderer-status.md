@@ -374,7 +374,7 @@ Run `make renderer-golden`.
   retained render-api objects, state stack, generated WGSL validation, 4x MSAA
   bootstrap coverage, one GM stream, and one real `.riv` stream are exact.
 - [x] R2: Algorithm core.
-- [ ] R3: Corpus convergence.
+- [x] R3: Corpus convergence.
 - [ ] R4: Performance parity.
 - [ ] R5: Native fast paths and extensions; demand-gated after R4.
 
@@ -1063,11 +1063,23 @@ Run `make renderer-golden`.
     destination-read draw. Porting those three contracts makes Spotify
     byte-exact and advances the ratchet to
     exact=1,353/diverges=0/gated=115.
-86. [ ] Run the formal R3 exit audit. Prove every one of the 115 retained
+86. [x] Run the formal R3 exit audit. Prove every one of the 115 retained
     gates has a specific feature, backend/compiler boundary, or harness
     diagnostic; eliminate any generic placeholder that still masks runnable
     work. If the `#R-3` exit criteria hold, mark R3 complete and make the R4
-    same-backend benchmark harness the next executable queue item.
+    same-backend benchmark harness the next executable queue item. The checked-
+    in strict Dawn inventory accounts for all 43 final placeholders: 41 are
+    `strict-replay-gradient-paint` and two are
+    `strict-replay-render-buffer`. The complete 115-gate taxonomy now has zero
+    generic or empty diagnostics, so R3 closes. See
+    `docs/renderer-r3-exit-audit.md`.
+87. [ ] Wire the live same-backend C++ Dawn and Rust wgpu runners to the
+    existing `rive-renderer-perf-runner-v1` protocol. Start with one pinned
+    scene in both modes, prove release builds, concrete adapter identity,
+    submit-to-GPU-complete timing, per-frame completion, and exact
+    draw/logical-flush counters, then run the fixed 8-scene x 2-mode manifest
+    without setting a performance threshold. Do not optimize from the result;
+    use the first report to rank R4 work.
 
 ## R2 Completion Record
 
@@ -3467,3 +3479,11 @@ Run `make renderer-golden`.
   35-segment floor pass. Spotify promotes under the unchanged `2/32` contract
   and advances the ratchet to exact=1,353/diverges=0/gated=115. Queue item 86
   is the bounded R3 exit audit before performance work begins.
+- 2026-07-14: Closed R3 with a formal audit of all 115 retained gates. The
+  strict Dawn inventory reclassifies the final 43 generic MSAA placeholders as
+  41 gradient-paint replay gaps and two render-buffer replay gaps; combined
+  with the already named rows, the manifest now has 43
+  `strict-replay-gradient-paint`, three `strict-replay-render-buffer`, and zero
+  `algorithm-core` gates. Every non-gated row passes, both R3 entry gates are
+  closed, and `docs/renderer-r3-exit-audit.md` records the complete taxonomy.
+  Queue item 87 starts R4 by wiring live same-backend benchmark runners.

@@ -646,7 +646,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 
 [[entry]]
@@ -2551,7 +2551,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 
 [[entry]]
@@ -2600,7 +2600,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 
 [[entry]]
@@ -2746,7 +2746,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-align_target-frame-0-clockwise-atomic"
@@ -3085,7 +3085,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-ball_test-frame-0-clockwise-atomic"
@@ -3135,7 +3135,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-bidirectional_precedence-frame-0-clockwise-atomic"
@@ -3522,7 +3522,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-clockwise-atomic"
@@ -3548,7 +3548,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-circle_clips-frame-0-clockwise-atomic"
@@ -4151,7 +4151,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-collapsable_data_binding-frame-0-clockwise-atomic"
@@ -5676,7 +5676,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-databind_artboard-frame-0-clockwise-atomic"
@@ -5847,7 +5847,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-death_knight-frame-0-clockwise-atomic"
@@ -5872,7 +5872,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-dependency_test-frame-0-clockwise-atomic"
@@ -6017,7 +6017,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-distance_constraint-frame-0-clockwise-atomic"
@@ -6284,7 +6284,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-ellipsis-frame-0-clockwise-atomic"
@@ -7948,7 +7948,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-image_binding_with_listener-frame-0-clockwise-atomic"
@@ -8117,7 +8117,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-interpolate_to_end-frame-0-clockwise-atomic"
@@ -8191,7 +8191,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-render-buffer"
 
 [[entry]]
 id = "riv-joel_signed-frame-0-clockwise-atomic"
@@ -8216,7 +8216,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-joel_signed-frame-1-clockwise-atomic"
@@ -8241,7 +8241,7 @@ frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-joel_signed-frame-2-clockwise-atomic"
@@ -8266,7 +8266,7 @@ frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-joel_signed-frame-3-clockwise-atomic"
@@ -8291,7 +8291,7 @@ frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-joel_signed-frame-4-clockwise-atomic"
@@ -8316,7 +8316,7 @@ frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-joel_v3-frame-0-clockwise-atomic"
@@ -8605,7 +8605,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-juice-frame-1-clockwise-atomic"
@@ -8630,7 +8630,7 @@ frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-juice-frame-2-clockwise-atomic"
@@ -8655,7 +8655,7 @@ frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-juice-frame-3-clockwise-atomic"
@@ -8680,7 +8680,7 @@ frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-juice-frame-4-clockwise-atomic"
@@ -8705,7 +8705,7 @@ frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-keyboard_event_to_script-frame-0-clockwise-atomic"
@@ -10663,7 +10663,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-number_to_list_nested_children-frame-0-clockwise-atomic"
@@ -10712,7 +10712,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-off_road_car-frame-1-clockwise-atomic"
@@ -10737,7 +10737,7 @@ frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-off_road_car-frame-2-clockwise-atomic"
@@ -10762,7 +10762,7 @@ frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-off_road_car-frame-3-clockwise-atomic"
@@ -10787,7 +10787,7 @@ frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-off_road_car-frame-4-clockwise-atomic"
@@ -10812,7 +10812,7 @@ frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-oneshotblend-frame-0-clockwise-atomic"
@@ -12280,7 +12280,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-rocket-frame-0-clockwise-atomic"
@@ -12305,7 +12305,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-rocket-frame-1-clockwise-atomic"
@@ -12330,7 +12330,7 @@ frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-rocket-frame-2-clockwise-atomic"
@@ -12355,7 +12355,7 @@ frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-rocket-frame-3-clockwise-atomic"
@@ -12380,7 +12380,7 @@ frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-rocket-frame-4-clockwise-atomic"
@@ -12405,7 +12405,7 @@ frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-rotation_constraint-frame-0-clockwise-atomic"
@@ -14041,7 +14041,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-scroll_threshold-frame-0-clockwise-atomic"
@@ -14066,7 +14066,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-settler-frame-0-clockwise-atomic"
@@ -15988,7 +15988,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-render-buffer"
 
 [[entry]]
 id = "riv-target_event-frame-0-clockwise-atomic"
@@ -17726,4 +17726,4 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"

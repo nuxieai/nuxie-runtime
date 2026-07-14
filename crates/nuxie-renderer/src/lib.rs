@@ -22,6 +22,7 @@ mod gradient_pipeline;
 // Kept standalone until a renderer path has a proven grouping integration.
 #[allow(dead_code)]
 mod intersection_board;
+mod logical_flush;
 mod mipmap_pipeline;
 mod msaa_atlas_pipeline;
 mod msaa_stencil_pipeline;
@@ -82,7 +83,7 @@ impl fmt::Display for RendererError {
 
 impl Error for RendererError {}
 
-const MAX_ATOMIC_PATHS: usize = u16::MAX as usize;
+const MAX_ATOMIC_PATHS: usize = logical_flush::MAX_PATH_COUNT;
 // A single Metal command buffer first fails at 2,044 direct MSAA draws with
 // the current per-draw tessellation resources. Keep twofold headroom while
 // the shared C++ logical-flush resource layout is still being translated.
@@ -115,7 +116,7 @@ fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
         Ok(())
     } else {
         Err(RendererError::Unsupported(
-            "atomic runs with more than 65535 paths",
+            "atomic runs exceed the C++ logical-flush path budget",
         ))
     }
 }
@@ -356,6 +357,9 @@ impl WgpuFactory {
             state: DrawState::default(),
             stack: Vec::new(),
             draws: Vec::new(),
+            logical_flush: logical_flush::LogicalFlush::default(),
+            logical_flush_allocations: LogicalFlushAllocations::default(),
+            logical_flush_starts: vec![0],
             clips: Vec::new(),
             next_clip_id: 1,
             msaa_path_clips: Vec::new(),
@@ -896,12 +900,116 @@ pub struct WgpuFrame {
     state: DrawState,
     stack: Vec<DrawState>,
     draws: Vec<SolidDraw>,
+    logical_flush: logical_flush::LogicalFlush,
+    logical_flush_allocations: LogicalFlushAllocations,
+    logical_flush_starts: Vec<usize>,
     clips: Vec<ClipElement>,
     next_clip_id: u32,
     msaa_path_clips: Vec<ClipElement>,
     msaa_path_clip_id: u16,
     unsupported: Option<&'static str>,
     mode: RenderMode,
+}
+
+#[derive(Clone, Default)]
+struct LogicalFlushAllocations {
+    simple_gradient_count: usize,
+    complex_gradient_count: usize,
+    atlas_regions: Vec<(u32, u32)>,
+    coverage_word_count: usize,
+}
+
+impl LogicalFlushAllocations {
+    fn with_batch(&self, frame: &WgpuFrame, draws: &[SolidDraw]) -> Option<Self> {
+        const MAX_GRADIENT_HEIGHT: usize = 2048;
+        const MAX_COVERAGE_WORD_COUNT: usize = (1 << 27) / std::mem::size_of::<u32>();
+        const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
+
+        let mut next = self.clone();
+        for draw in draws {
+            if let Some(gradient) = draw
+                .paint
+                .shader
+                .as_ref()
+                .and_then(|shader| normalize_gradient(shader, draw.state.opacity))
+            {
+                let simple = gradient.stops.len() == 1
+                    || (gradient.stops.len() == 2
+                        && gradient.stops[0] == 0.0
+                        && gradient.stops[1] == 1.0);
+                if simple {
+                    next.simple_gradient_count = next.simple_gradient_count.checked_add(1)?;
+                } else {
+                    next.complex_gradient_count = next.complex_gradient_count.checked_add(1)?;
+                }
+            }
+
+            let uses_clockwise_coverage =
+                draw_requires_clockwise_atomic(draw, frame.width, frame.height)
+                    || matches!(draw.role, DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0)
+                    || matches!(draw.role, DrawRole::Content { clip_id } if clip_id != 0);
+            if frame.mode == RenderMode::ClockwiseAtomic
+                && uses_clockwise_coverage
+                && draw.image.is_none()
+                && !matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. })
+            {
+                let (_, word_count) = draw::clockwise_atomic_coverage_range(
+                    &draw.path.raw_path,
+                    draw.state.transform,
+                    frame.width,
+                    frame.height,
+                    next.coverage_word_count,
+                )?;
+                next.coverage_word_count = next.coverage_word_count.checked_add(word_count)?;
+            }
+
+            if frame.mode == RenderMode::ClockwiseAtomic
+                && draw.paint.feather != 0.0
+                && draw::feather_requires_atlas(draw.paint.feather, draw.state.transform, false)
+            {
+                let placement = feather_atlas_placement(
+                    &draw.path.raw_path,
+                    draw.state.transform,
+                    draw.paint.feather,
+                    draw.paint.effective_stroke(),
+                    frame.width,
+                    frame.height,
+                )?;
+                next.atlas_regions.push((placement.width, placement.height));
+            }
+        }
+
+        let gradient_height = next
+            .simple_gradient_count
+            .div_ceil(RAMPS_PER_SIMPLE_ROW)
+            .checked_add(next.complex_gradient_count)?;
+        let limits = frame.context.device.limits();
+        if gradient_height > MAX_GRADIENT_HEIGHT.min(limits.max_texture_dimension_2d as usize) {
+            return None;
+        }
+        let max_coverage_words = MAX_COVERAGE_WORD_COUNT
+            .min(limits.max_storage_buffer_binding_size as usize / std::mem::size_of::<u32>())
+            .min(limits.max_buffer_size as usize / std::mem::size_of::<u32>());
+        if next.coverage_word_count > max_coverage_words {
+            return None;
+        }
+        if !next.atlas_regions.is_empty() {
+            let max_dimension = limits.max_texture_dimension_2d;
+            let max_region_width = next
+                .atlas_regions
+                .iter()
+                .map(|&(width, _)| width)
+                .max()
+                .unwrap_or(1);
+            pack_atlas_for_device(
+                frame.width.max(1).max(max_region_width),
+                max_dimension,
+                &next.atlas_regions,
+            )
+            .ok()?;
+        }
+        Some(next)
+    }
 }
 
 #[allow(dead_code)]
@@ -938,34 +1046,7 @@ impl Renderer for WgpuFrame {
         if path_draw_is_noop(path, paint, self.state.transform) {
             return;
         }
-        let current_clip_stack = &self.clips[..self.state.clip_stack_height];
-        let shared_msaa_clip_prefix = self
-            .msaa_path_clips
-            .iter()
-            .zip(current_clip_stack)
-            .take_while(|(active, current)| active == current)
-            .count();
-        let reuses_msaa_path_clip = self.mode == RenderMode::Msaa
-            && !current_clip_stack.is_empty()
-            && shared_msaa_clip_prefix == current_clip_stack.len()
-            && shared_msaa_clip_prefix == self.msaa_path_clips.len();
-        let extends_msaa_path_clip = self.mode == RenderMode::Msaa
-            && !self.msaa_path_clips.is_empty()
-            && shared_msaa_clip_prefix == self.msaa_path_clips.len()
-            && shared_msaa_clip_prefix < current_clip_stack.len();
-        let msaa_clip_update_start = if extends_msaa_path_clip {
-            shared_msaa_clip_prefix
-        } else {
-            0
-        };
-        let prepared_clip = if reuses_msaa_path_clip {
-            Some((Vec::new(), self.msaa_path_clip_id))
-        } else if extends_msaa_path_clip {
-            self.prepare_clip_updates_from(msaa_clip_update_start, self.msaa_path_clip_id)
-        } else {
-            self.prepare_clip_updates()
-        };
-        let Some((mut clip_updates, clip_id)) = prepared_clip else {
+        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
         let content = SolidDraw {
@@ -976,29 +1057,6 @@ impl Renderer for WgpuFrame {
             image: None,
         };
         let msaa_feather_atlas = self.mode == RenderMode::Msaa && paint.feather != 0.0;
-        let mut current_msaa_path_clips = Vec::new();
-        if self.mode == RenderMode::Msaa && clip_id != 0 {
-            let clips = self.clips[..self.state.clip_stack_height].to_vec();
-            if !reuses_msaa_path_clip {
-                let mut scheduled_updates =
-                    Vec::with_capacity(clip_updates.len() + clips.len().saturating_sub(1));
-                for (offset, update) in clip_updates.into_iter().enumerate() {
-                    scheduled_updates.push(update);
-                    let clip_index = msaa_clip_update_start + offset;
-                    if clip_index != 0 {
-                        let action = match clips[clip_index].path.fill_rule {
-                            FillRule::NonZero => MsaaClipResetAction::IntersectPreviousNonZero,
-                            FillRule::EvenOdd => MsaaClipResetAction::IntersectPreviousEvenOdd,
-                            FillRule::Clockwise => MsaaClipResetAction::IntersectPreviousClockwise,
-                        };
-                        scheduled_updates
-                            .push(self.msaa_clip_reset_draw(&clips[clip_index - 1], action));
-                    }
-                }
-                clip_updates = scheduled_updates;
-            }
-            current_msaa_path_clips = clips;
-        }
         if self.mode == RenderMode::Msaa && paint.feather != 0.0 {
             if paint.blend_mode != BlendMode::SrcOver && paint.shader.is_some() {
                 self.unsupported
@@ -1020,22 +1078,7 @@ impl Renderer for WgpuFrame {
                 return;
             }
         }
-        if !current_msaa_path_clips.is_empty() {
-            if reuses_msaa_path_clip {
-                clip_updates.clear();
-            } else if !extends_msaa_path_clip {
-                if let Some(active) = self.msaa_path_clips.last().cloned() {
-                    clip_updates.insert(
-                        0,
-                        self.msaa_clip_reset_draw(&active, MsaaClipResetAction::ClearPrevious),
-                    );
-                }
-            }
-            self.msaa_path_clips = current_msaa_path_clips;
-            self.msaa_path_clip_id = clip_id;
-        }
-        self.draws.extend(clip_updates);
-        self.draws.push(content);
+        self.push_content_batch(clip_updates, content);
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
@@ -1130,8 +1173,7 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("images on fallback draw path");
             return;
         }
-        self.draws.extend(clip_updates);
-        self.draws.push(content);
+        self.push_content_batch(clip_updates, content);
     }
 
     fn draw_image_mesh(
@@ -1220,8 +1262,7 @@ impl Renderer for WgpuFrame {
                 index_count,
             })),
         };
-        self.draws.extend(clip_updates);
-        self.draws.push(content);
+        self.push_content_batch(clip_updates, content);
     }
 
     fn modulate_opacity(&mut self, opacity: f32) {
@@ -1230,6 +1271,130 @@ impl Renderer for WgpuFrame {
 }
 
 impl WgpuFrame {
+    fn prepare_scheduled_clip_updates(&mut self) -> Option<(Vec<SolidDraw>, u16)> {
+        if self.mode != RenderMode::Msaa {
+            return self.prepare_clip_updates();
+        }
+
+        let current_clips = self.clips[..self.state.clip_stack_height].to_vec();
+        let shared_prefix = self
+            .msaa_path_clips
+            .iter()
+            .zip(&current_clips)
+            .take_while(|(active, current)| active == current)
+            .count();
+        let reuses = !current_clips.is_empty()
+            && shared_prefix == current_clips.len()
+            && shared_prefix == self.msaa_path_clips.len();
+        let extends = !self.msaa_path_clips.is_empty()
+            && shared_prefix == self.msaa_path_clips.len()
+            && shared_prefix < current_clips.len();
+        let update_start = if extends { shared_prefix } else { 0 };
+        let previous_active = self.msaa_path_clips.last().cloned();
+        let (updates, clip_id) = if reuses {
+            (Vec::new(), self.msaa_path_clip_id)
+        } else if extends {
+            self.prepare_clip_updates_from(update_start, self.msaa_path_clip_id)?
+        } else {
+            self.prepare_clip_updates()?
+        };
+
+        if current_clips.is_empty() {
+            return Some((updates, clip_id));
+        }
+        let mut scheduled = Vec::with_capacity(updates.len() + current_clips.len());
+        if !reuses && !extends {
+            if let Some(active) = previous_active.as_ref() {
+                scheduled
+                    .push(self.msaa_clip_reset_draw(active, MsaaClipResetAction::ClearPrevious));
+            }
+        }
+        if !reuses {
+            for (offset, update) in updates.into_iter().enumerate() {
+                scheduled.push(update);
+                let clip_index = update_start + offset;
+                if clip_index != 0 {
+                    let action = match current_clips[clip_index].path.fill_rule {
+                        FillRule::NonZero => MsaaClipResetAction::IntersectPreviousNonZero,
+                        FillRule::EvenOdd => MsaaClipResetAction::IntersectPreviousEvenOdd,
+                        FillRule::Clockwise => MsaaClipResetAction::IntersectPreviousClockwise,
+                    };
+                    scheduled
+                        .push(self.msaa_clip_reset_draw(&current_clips[clip_index - 1], action));
+                }
+            }
+        }
+        self.msaa_path_clips = current_clips;
+        self.msaa_path_clip_id = clip_id;
+        Some((scheduled, clip_id))
+    }
+
+    fn begin_logical_flush(&mut self) {
+        debug_assert_ne!(self.logical_flush_starts.last(), Some(&self.draws.len()));
+        self.logical_flush_starts.push(self.draws.len());
+        self.logical_flush.rewind();
+        self.logical_flush_allocations = LogicalFlushAllocations::default();
+        self.next_clip_id = 1;
+        self.msaa_path_clips.clear();
+        self.msaa_path_clip_id = 0;
+    }
+
+    fn push_content_batch(&mut self, clip_updates: Vec<SolidDraw>, content: SolidDraw) {
+        let make_batch = |updates: Vec<SolidDraw>, content: SolidDraw| {
+            let mut batch = Vec::with_capacity(updates.len() + 1);
+            batch.extend(updates);
+            batch.push(content);
+            batch
+        };
+        let batch = make_batch(clip_updates, content.clone());
+        if self.try_push_logical_batch(&batch) {
+            self.draws.extend(batch);
+            return;
+        }
+        if self.logical_flush_starts.last() == Some(&self.draws.len()) {
+            self.unsupported
+                .get_or_insert("draw batch exceeds logical flush resource limits");
+            return;
+        }
+
+        self.begin_logical_flush();
+        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
+            return;
+        };
+        let mut content = content;
+        match &mut content.role {
+            DrawRole::Content {
+                clip_id: content_clip_id,
+            } => *content_clip_id = clip_id,
+            DrawRole::ClipUpdate { .. } | DrawRole::ClipReset { .. } => {
+                unreachable!("content batch must end in a content draw")
+            }
+        }
+        let batch = make_batch(clip_updates, content);
+        if !self.try_push_logical_batch(&batch) {
+            self.unsupported
+                .get_or_insert("draw batch exceeds logical flush resource limits");
+            return;
+        }
+        self.draws.extend(batch);
+    }
+
+    fn try_push_logical_batch(&mut self, batch: &[SolidDraw]) -> bool {
+        let Some(resources) =
+            logical_flush_batch_resources(batch, self.mode, self.width, self.height)
+        else {
+            return false;
+        };
+        let Some(allocations) = self.logical_flush_allocations.with_batch(self, batch) else {
+            return false;
+        };
+        if !self.logical_flush.push_draws(resources) {
+            return false;
+        }
+        self.logical_flush_allocations = allocations;
+        true
+    }
+
     fn msaa_clip_reset_draw(&self, clip: &ClipElement, action: MsaaClipResetAction) -> SolidDraw {
         let bounds = draw::path_pixel_bounds(&clip.path.raw_path, clip.matrix).unwrap_or([
             0,
@@ -2336,9 +2501,11 @@ impl WgpuFrame {
         let encode_fallback_run =
             |draws: &[SolidDraw],
              draw_groups: Option<&[u32]>,
+             logical_flush_starts: &[usize],
              clear_target: bool,
              encoder: &mut wgpu::CommandEncoder| {
                 debug_assert!(draw_groups.is_none_or(|groups| groups.len() == draws.len()));
+                debug_assert!(logical_flush_starts.first().is_none_or(|start| *start == 0));
                 let has_advanced_msaa = draws.iter().any(|draw| {
                     draw.paint.shader.is_none() && draw.paint.blend_mode != BlendMode::SrcOver
                 });
@@ -2844,15 +3011,59 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                 }
+                #[derive(Clone, Copy)]
+                struct SegmentEnd {
+                    index: usize,
+                    starts_logical_flush: bool,
+                    copies_destination: bool,
+                }
                 let mut segment_ends = prepared_draws
                     .iter()
                     .enumerate()
-                    .filter_map(|(index, draw)| destination_copy_bounds(draw).map(|_| index))
+                    .filter_map(|(index, draw)| {
+                        destination_copy_bounds(draw).map(|_| SegmentEnd {
+                            index,
+                            starts_logical_flush: false,
+                            copies_destination: true,
+                        })
+                    })
                     .collect::<Vec<_>>();
-                segment_ends.push(prepared_draws.len());
+                segment_ends.extend(logical_flush_starts.iter().copied().skip(1).map(|index| {
+                    SegmentEnd {
+                        index,
+                        starts_logical_flush: true,
+                        copies_destination: false,
+                    }
+                }));
+                segment_ends.sort_unstable_by_key(|segment| segment.index);
+                let mut merged_segment_ends =
+                    Vec::<SegmentEnd>::with_capacity(segment_ends.len() + 1);
+                for segment in segment_ends {
+                    let merged = if let Some(previous) = merged_segment_ends.last_mut() {
+                        if previous.index == segment.index {
+                            previous.starts_logical_flush |= segment.starts_logical_flush;
+                            previous.copies_destination |= segment.copies_destination;
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+                    if !merged {
+                        merged_segment_ends.push(segment);
+                    }
+                }
+                merged_segment_ends.push(SegmentEnd {
+                    index: prepared_draws.len(),
+                    starts_logical_flush: false,
+                    copies_destination: false,
+                });
                 let mut segment_start = 0;
-                for (segment_index, segment_end) in segment_ends.into_iter().enumerate() {
+                let mut starts_logical_flush = true;
+                for (segment_index, segment_end) in merged_segment_ends.into_iter().enumerate() {
                     let first_segment = segment_index == 0;
+                    let reset_depth_stencil = first_segment || starts_logical_flush;
                     let resolve_target = if has_advanced_msaa {
                         &view
                     } else {
@@ -2882,28 +3093,20 @@ impl WgpuFrame {
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &stencil_view,
                             depth_ops: Some(wgpu::Operations {
-                                load: if first_segment {
+                                load: if reset_depth_stencil {
                                     wgpu::LoadOp::Clear(1.0)
                                 } else {
                                     wgpu::LoadOp::Load
                                 },
-                                store: if has_advanced_msaa {
-                                    wgpu::StoreOp::Store
-                                } else {
-                                    wgpu::StoreOp::Discard
-                                },
+                                store: wgpu::StoreOp::Store,
                             }),
                             stencil_ops: Some(wgpu::Operations {
-                                load: if first_segment {
+                                load: if reset_depth_stencil {
                                     wgpu::LoadOp::Clear(0)
                                 } else {
                                     wgpu::LoadOp::Load
                                 },
-                                store: if has_advanced_msaa {
-                                    wgpu::StoreOp::Store
-                                } else {
-                                    wgpu::StoreOp::Discard
-                                },
+                                store: wgpu::StoreOp::Store,
                             }),
                         }),
                         timestamp_writes: None,
@@ -2911,7 +3114,7 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                     pass.set_stencil_reference(0);
-                    for prepared in &prepared_draws[segment_start..segment_end] {
+                    for prepared in &prepared_draws[segment_start..segment_end.index] {
                         match prepared {
                             PreparedDraw::Stroke(draw, options) => {
                                 pass.set_stencil_reference(if options.path_clip {
@@ -3150,12 +3353,16 @@ impl WgpuFrame {
                         }
                     }
                     drop(pass);
-                    if segment_end < prepared_draws.len() {
-                        let bounds = destination_copy_bounds(&prepared_draws[segment_end])
+                    if segment_end.copies_destination {
+                        let bounds = destination_copy_bounds(&prepared_draws[segment_end.index])
                             .expect("MSAA destination barrier must precede an advanced draw");
                         let [left, top, right, bottom] = bounds;
                         if left == right || top == bottom {
-                            segment_start = segment_end;
+                            if segment_end.starts_logical_flush {
+                                submit_and_wait(encoder)?;
+                            }
+                            segment_start = segment_end.index;
+                            starts_logical_flush = segment_end.starts_logical_flush;
                             continue;
                         }
                         let origin = wgpu::Origin3d {
@@ -3186,7 +3393,11 @@ impl WgpuFrame {
                             },
                         );
                     }
-                    segment_start = segment_end;
+                    if segment_end.starts_logical_flush {
+                        submit_and_wait(encoder)?;
+                    }
+                    segment_start = segment_end.index;
+                    starts_logical_flush = segment_end.starts_logical_flush;
                 }
                 if !has_advanced_msaa {
                     self.context.composite_pipeline.encode(
@@ -3201,48 +3412,102 @@ impl WgpuFrame {
                 Ok(())
             };
         if self.draws.is_empty() {
-            encode_fallback_run(&self.draws, None, true, &mut encoder)?;
+            encode_fallback_run(&self.draws, None, &[0], true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
-            let scheduled_groups = disjoint_msaa_draw_groups(&self.draws, self.width, self.height);
             if self.draws.len() > MAX_MSAA_DRAWS_PER_SUBMISSION
                 && msaa_draws_can_submit_independently(&self.draws)
             {
                 let mut clear_target = true;
-                for (group_index, group) in scheduled_groups.iter().enumerate() {
-                    let z_index = u32::try_from(group_index + 1)
-                        .expect("MSAA draw group must fit the path-data contract");
-                    for chunk in group.chunks(MAX_MSAA_DRAWS_PER_SUBMISSION) {
-                        let draw_groups = vec![z_index; chunk.len()];
-                        encode_fallback_run(chunk, Some(&draw_groups), clear_target, &mut encoder)?;
-                        submit_and_wait(&mut encoder)?;
-                        clear_target = false;
+                for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
+                    let flush_end = self
+                        .logical_flush_starts
+                        .get(flush_index + 1)
+                        .copied()
+                        .unwrap_or(self.draws.len());
+                    for (group_index, group) in disjoint_msaa_draw_groups(
+                        &self.draws[flush_start..flush_end],
+                        self.width,
+                        self.height,
+                    )
+                    .iter()
+                    .enumerate()
+                    {
+                        let z_index = u32::try_from(group_index + 1)
+                            .expect("MSAA draw group must fit the path-data contract");
+                        for chunk in group.chunks(MAX_MSAA_DRAWS_PER_SUBMISSION) {
+                            let draw_groups = vec![z_index; chunk.len()];
+                            encode_fallback_run(
+                                chunk,
+                                Some(&draw_groups),
+                                &[0],
+                                clear_target,
+                                &mut encoder,
+                            )?;
+                            submit_and_wait(&mut encoder)?;
+                            clear_target = false;
+                        }
                     }
                 }
             } else {
                 let mut scheduled_draws = Vec::with_capacity(self.draws.len());
                 let mut draw_groups = Vec::with_capacity(self.draws.len());
-                for (group_index, group) in scheduled_groups.into_iter().enumerate() {
-                    let z_index = u32::try_from(group_index + 1)
-                        .expect("MSAA draw group must fit the path-data contract");
-                    draw_groups.extend(std::iter::repeat_n(z_index, group.len()));
-                    scheduled_draws.extend(group);
+                let mut scheduled_flush_starts =
+                    Vec::with_capacity(self.logical_flush_starts.len());
+                for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
+                    scheduled_flush_starts.push(scheduled_draws.len());
+                    let flush_end = self
+                        .logical_flush_starts
+                        .get(flush_index + 1)
+                        .copied()
+                        .unwrap_or(self.draws.len());
+                    for (group_index, group) in disjoint_msaa_draw_groups(
+                        &self.draws[flush_start..flush_end],
+                        self.width,
+                        self.height,
+                    )
+                    .into_iter()
+                    .enumerate()
+                    {
+                        let z_index = u32::try_from(group_index + 1)
+                            .expect("MSAA draw group must fit the path-data contract");
+                        draw_groups.extend(std::iter::repeat_n(z_index, group.len()));
+                        scheduled_draws.extend(group);
+                    }
                 }
                 debug_assert_eq!(scheduled_draws.len(), self.draws.len());
-                encode_fallback_run(&scheduled_draws, Some(&draw_groups), true, &mut encoder)?;
+                encode_fallback_run(
+                    &scheduled_draws,
+                    Some(&draw_groups),
+                    &scheduled_flush_starts,
+                    true,
+                    &mut encoder,
+                )?;
             }
         } else if self.mode == RenderMode::Msaa {
-            encode_fallback_run(&self.draws, None, true, &mut encoder)?;
+            encode_fallback_run(
+                &self.draws,
+                None,
+                &self.logical_flush_starts,
+                true,
+                &mut encoder,
+            )?;
         } else {
             let mut start = 0;
             let mut clear_target = true;
+            let mut logical_flush_index = 0;
             while start < self.draws.len() {
+                let logical_flush_end = self
+                    .logical_flush_starts
+                    .get(logical_flush_index + 1)
+                    .copied()
+                    .unwrap_or(self.draws.len());
                 let atomic = atomic_draw_is_eligible(&self.draws[start]);
                 let clockwise_atomic = atomic
                     && draw_requires_clockwise_atomic(&self.draws[start], self.width, self.height);
                 let advanced_clockwise_atomic =
                     clockwise_atomic && draw_uses_advanced_blend(&self.draws[start]);
                 let mut end = start + 1;
-                while end < self.draws.len()
+                while end < logical_flush_end
                     && atomic_draw_is_eligible(&self.draws[end]) == atomic
                     && (!atomic
                         || draw_requires_clockwise_atomic(
@@ -3330,10 +3595,22 @@ impl WgpuFrame {
                         }
                     }
                 } else {
-                    encode_fallback_run(&self.draws[start..end], None, clear_target, &mut encoder)?;
+                    encode_fallback_run(
+                        &self.draws[start..end],
+                        None,
+                        &[0],
+                        clear_target,
+                        &mut encoder,
+                    )?;
                 }
                 clear_target = false;
                 start = end;
+                if start == logical_flush_end {
+                    logical_flush_index += 1;
+                    if start < self.draws.len() {
+                        submit_and_wait(&mut encoder)?;
+                    }
+                }
             }
         }
 
@@ -4340,6 +4617,276 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     }
 }
 
+fn tessellated_segment_count(spans: &[gpu::TessVertexSpan]) -> usize {
+    spans
+        .iter()
+        .filter(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0)
+        .count()
+}
+
+fn midpoint_resource_counts(
+    tessellation: &draw::FillTessellation,
+    draw_pass_count: usize,
+) -> logical_flush::ResourceCounters {
+    logical_flush::ResourceCounters {
+        midpoint_fan_tess_vertex_count: tessellation.instance_count as usize
+            * gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN,
+        path_count: 1,
+        contour_count: tessellation.contours.len(),
+        max_tessellated_segment_count: tessellated_segment_count(&tessellation.spans),
+        draw_pass_count,
+        ..Default::default()
+    }
+}
+
+fn interior_resource_counts(
+    tessellation: &draw::InteriorTessellation,
+    draw_pass_count: usize,
+) -> logical_flush::ResourceCounters {
+    logical_flush::ResourceCounters {
+        outer_cubic_tess_vertex_count: tessellation.instance_count as usize
+            * gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN,
+        path_count: 1,
+        contour_count: tessellation.contours.len(),
+        max_tessellated_segment_count: tessellated_segment_count(&tessellation.spans),
+        max_triangle_vertex_count: tessellation.triangles.len(),
+        draw_pass_count,
+        ..Default::default()
+    }
+}
+
+fn logical_flush_draw_resources(
+    draw: &SolidDraw,
+    mode: RenderMode,
+    width: u32,
+    height: u32,
+) -> logical_flush::ResourceCounters {
+    if matches!(draw.role, DrawRole::ClipReset { .. }) {
+        return logical_flush::ResourceCounters {
+            max_triangle_vertex_count: 6,
+            draw_pass_count: 1,
+            ..Default::default()
+        };
+    }
+    if matches!(draw.image, Some(ImageDraw::Mesh(_)))
+        || (mode == RenderMode::ClockwiseAtomic && matches!(draw.image, Some(ImageDraw::Rect(_))))
+    {
+        return logical_flush::ResourceCounters {
+            image_draw_count: 1,
+            draw_pass_count: 1,
+            ..Default::default()
+        };
+    }
+
+    if mode == RenderMode::Msaa {
+        if draw.paint.feather != 0.0 {
+            let stroke = draw.paint.effective_stroke();
+            let direction = draw::feather_atlas_fill_direction(
+                draw.state.transform,
+                draw.path.fill_rule,
+                stroke.is_some(),
+            );
+            return draw::build_feather_tessellation_with_direction(
+                &draw.path.raw_path,
+                draw.state.transform,
+                draw.paint.feather,
+                stroke,
+                direction,
+            )
+            .map(|tessellation| midpoint_resource_counts(&tessellation, 1))
+            .unwrap_or(logical_flush::ResourceCounters {
+                draw_pass_count: 1,
+                ..Default::default()
+            });
+        }
+        let pass_count = if draw.paint.style == RenderPaintStyle::Stroke
+            || matches!(draw.role, DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0)
+        {
+            1
+        } else if draw.path.fill_rule == FillRule::EvenOdd {
+            2
+        } else {
+            3
+        };
+        let tessellation = match draw.paint.style {
+            RenderPaintStyle::Fill => {
+                draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform)
+            }
+            RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
+                &draw.path.raw_path,
+                draw.state.transform,
+                draw.paint.thickness,
+                draw.paint.join,
+                draw.paint.cap,
+            ),
+        };
+        return tessellation
+            .map(|tessellation| midpoint_resource_counts(&tessellation, pass_count))
+            .unwrap_or(logical_flush::ResourceCounters {
+                draw_pass_count: pass_count,
+                ..Default::default()
+            });
+    }
+
+    let outermost_clip = matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. });
+    let nested_clip = matches!(draw.role, DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0);
+    let inverse_path = nested_clip
+        .then(|| {
+            invert_clockwise_path(
+                &draw.path.raw_path,
+                draw.path.fill_rule,
+                draw.state.transform,
+                width,
+                height,
+            )
+        })
+        .flatten();
+    let raw_path = inverse_path.as_ref().unwrap_or(&draw.path.raw_path);
+    let fill_rule = if inverse_path.is_some() {
+        FillRule::Clockwise
+    } else {
+        draw.path.fill_rule
+    };
+    if draw.paint.feather != 0.0 {
+        let stroke = draw.paint.effective_stroke();
+        let is_stroke = stroke.is_some();
+        let uses_atlas =
+            draw::feather_requires_atlas(draw.paint.feather, draw.state.transform, false);
+        let negate_coverage =
+            draw::clockwise_atomic_negate_coverage(raw_path, draw.state.transform, fill_rule, true);
+        let direction = if is_stroke {
+            draw::FeatherFillDirection::Forward
+        } else {
+            match (uses_atlas, negate_coverage) {
+                (true, true) => draw::FeatherFillDirection::Reverse,
+                (true, false) => draw::FeatherFillDirection::Forward,
+                (false, true) => draw::FeatherFillDirection::ForwardThenReverse,
+                (false, false) => draw::FeatherFillDirection::ReverseThenForward,
+            }
+        };
+        let pass_count = if uses_atlas || is_stroke || outermost_clip {
+            1
+        } else {
+            2
+        };
+        return draw::build_feather_tessellation_with_direction(
+            raw_path,
+            draw.state.transform,
+            draw.paint.feather,
+            stroke,
+            direction,
+        )
+        .map(|tessellation| midpoint_resource_counts(&tessellation, pass_count))
+        .unwrap_or(logical_flush::ResourceCounters {
+            draw_pass_count: pass_count,
+            ..Default::default()
+        });
+    }
+    if draw.paint.style == RenderPaintStyle::Stroke {
+        return draw::build_stroke_tessellation(
+            raw_path,
+            draw.state.transform,
+            draw.paint.thickness,
+            draw.paint.join,
+            draw.paint.cap,
+        )
+        .map(|tessellation| midpoint_resource_counts(&tessellation, 1))
+        .unwrap_or(logical_flush::ResourceCounters {
+            draw_pass_count: 1,
+            ..Default::default()
+        });
+    }
+    if draw::should_use_interior_tessellation(raw_path, draw.state.transform) {
+        if let Some(tessellation) =
+            draw::build_interior_tessellation(raw_path, draw.state.transform, fill_rule, true)
+        {
+            let interior =
+                interior_resource_counts(&tessellation, if outermost_clip { 2 } else { 4 });
+            let contour_count = raw_path
+                .verbs()
+                .iter()
+                .filter(|verb| **verb == PathVerb::Move)
+                .count();
+            if contour_count > 1 {
+                return interior;
+            }
+            if let Some(mut midpoint) =
+                draw::build_fill_tessellation(raw_path, draw.state.transform)
+            {
+                midpoint.make_double_sided_with_direction(draw::clockwise_atomic_negate_coverage(
+                    raw_path,
+                    draw.state.transform,
+                    fill_rule,
+                    true,
+                ));
+                let midpoint =
+                    midpoint_resource_counts(&midpoint, if outermost_clip { 1 } else { 2 });
+                // A surrounding global clip can switch a single-contour draw
+                // from interior to midpoint tessellation at run assembly.
+                // Reserve both texture sections so either encoded form fits.
+                return logical_flush::ResourceCounters {
+                    midpoint_fan_tess_vertex_count: midpoint.midpoint_fan_tess_vertex_count,
+                    outer_cubic_tess_vertex_count: interior.outer_cubic_tess_vertex_count,
+                    path_count: 1,
+                    contour_count: midpoint.contour_count.max(interior.contour_count),
+                    max_tessellated_segment_count: midpoint
+                        .max_tessellated_segment_count
+                        .max(interior.max_tessellated_segment_count),
+                    max_triangle_vertex_count: interior.max_triangle_vertex_count,
+                    image_draw_count: 0,
+                    draw_pass_count: midpoint.draw_pass_count.max(interior.draw_pass_count),
+                };
+            }
+            return interior;
+        }
+    }
+    draw::build_fill_tessellation(raw_path, draw.state.transform)
+        .map(|mut tessellation| {
+            tessellation.make_double_sided_with_direction(draw::clockwise_atomic_negate_coverage(
+                raw_path,
+                draw.state.transform,
+                fill_rule,
+                true,
+            ));
+            midpoint_resource_counts(&tessellation, if outermost_clip { 1 } else { 2 })
+        })
+        .unwrap_or(logical_flush::ResourceCounters {
+            draw_pass_count: 1,
+            ..Default::default()
+        })
+}
+
+fn logical_flush_batch_resources(
+    draws: &[SolidDraw],
+    mode: RenderMode,
+    width: u32,
+    height: u32,
+) -> Option<logical_flush::ResourceCounters> {
+    draws.iter().try_fold(
+        logical_flush::ResourceCounters::default(),
+        |mut total, draw| {
+            let draw = logical_flush_draw_resources(draw, mode, width, height);
+            total.midpoint_fan_tess_vertex_count = total
+                .midpoint_fan_tess_vertex_count
+                .checked_add(draw.midpoint_fan_tess_vertex_count)?;
+            total.outer_cubic_tess_vertex_count = total
+                .outer_cubic_tess_vertex_count
+                .checked_add(draw.outer_cubic_tess_vertex_count)?;
+            total.path_count = total.path_count.checked_add(draw.path_count)?;
+            total.contour_count = total.contour_count.checked_add(draw.contour_count)?;
+            total.max_tessellated_segment_count = total
+                .max_tessellated_segment_count
+                .checked_add(draw.max_tessellated_segment_count)?;
+            total.max_triangle_vertex_count = total
+                .max_triangle_vertex_count
+                .checked_add(draw.max_triangle_vertex_count)?;
+            total.image_draw_count = total.image_draw_count.checked_add(draw.image_draw_count)?;
+            total.draw_pass_count = total.draw_pass_count.checked_add(draw.draw_pass_count)?;
+            Some(total)
+        },
+    )
+}
+
 fn atomic_paint_fill_rule(
     source_fill_rule: FillRule,
     use_clockwise_atomic_batch: bool,
@@ -4861,7 +5408,7 @@ mod tests {
         assert!(matches!(
             validate_atomic_path_count(MAX_ATOMIC_PATHS + 1),
             Err(RendererError::Unsupported(
-                "atomic runs with more than 65535 paths"
+                "atomic runs exceed the C++ logical-flush path budget"
             ))
         ));
     }
@@ -8946,6 +9493,258 @@ mod tests {
         assert_eq!(pixel(&single, 8, 8), [32, 128, 192, 255]);
         assert_eq!(pixel(&double, 8, 8), [32, 128, 192, 255]);
         assert_ne!(pixel(&single, 32, 32), pixel(&double, 32, 32));
+    }
+
+    #[test]
+    fn msaa_logical_flush_replays_clips_and_preserves_destination_read_order() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let content = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 16.0);
+        raw_clip.line_to(48.0, 48.0);
+        raw_clip.line_to(16.0, 48.0);
+        raw_clip.close();
+        let clip = WgpuPath {
+            raw_path: raw_clip,
+            fill_rule: FillRule::NonZero,
+        };
+        let first = WgpuPaint {
+            color: 0x80c0_4020,
+            feather: 1.0,
+            blend_mode: BlendMode::ColorDodge,
+            ..WgpuPaint::default()
+        };
+        let second = WgpuPaint {
+            color: 0xa040_c080,
+            feather: 1.0,
+            blend_mode: BlendMode::Multiply,
+            ..WgpuPaint::default()
+        };
+        let make_frame = |force_rollover: bool| {
+            let mut frame = factory.begin_frame(0xff20_80c0);
+            frame.clip_path(&clip);
+            frame.draw_path(&content, &first);
+            if force_rollover {
+                let used = frame.logical_flush.counters().path_count;
+                assert!(used > 0 && used < logical_flush::MAX_PATH_COUNT);
+                assert!(frame
+                    .logical_flush
+                    .push_draws(logical_flush::ResourceCounters {
+                        path_count: logical_flush::MAX_PATH_COUNT - used,
+                        ..Default::default()
+                    }));
+            }
+            frame.draw_path(&content, &second);
+            frame
+        };
+
+        let forced = make_frame(true);
+        assert_eq!(forced.logical_flush_starts, [0, 2]);
+        assert!(matches!(
+            forced.draws[2].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 1,
+                parent_id: 0
+            }
+        ));
+        assert!(matches!(
+            forced.draws[3].role,
+            DrawRole::Content { clip_id: 1 }
+        ));
+
+        let scheduled = forced.finish().unwrap();
+        let serialized = make_frame(true)
+            .finish_without_msaa_board_scheduling()
+            .unwrap();
+        let uninterrupted = make_frame(false).finish().unwrap();
+        assert_eq!(scheduled, serialized);
+        let differing = scheduled
+            .chunks_exact(4)
+            .zip(uninterrupted.chunks_exact(4))
+            .enumerate()
+            .filter(|(_, (left, right))| left != right)
+            .take(8)
+            .map(|(index, (left, right))| (index % 64, index / 64, left, right))
+            .collect::<Vec<_>>();
+        assert!(
+            differing.is_empty(),
+            "logical flush changed rendered pixels: {differing:?}"
+        );
+    }
+
+    #[test]
+    fn real_msaa_stroke_accounting_reaches_the_cpp_path_boundary() {
+        let draw = SolidDraw {
+            path: rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
+            paint: WgpuPaint {
+                style: RenderPaintStyle::Stroke,
+                thickness: 1.0,
+                ..WgpuPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let resources = logical_flush_draw_resources(&draw, RenderMode::Msaa, 64, 64);
+        assert_eq!(resources.path_count, 1);
+        assert_eq!(resources.draw_pass_count, 1);
+
+        let mut flush = logical_flush::LogicalFlush::default();
+        for _ in 0..logical_flush::MAX_PATH_COUNT {
+            assert!(flush.push_draws(resources));
+        }
+        assert!(!flush.push_draws(resources));
+    }
+
+    #[test]
+    fn logical_flush_allocations_bound_complex_gradient_rows() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let frame = factory.begin_frame(0);
+        let mut allocations = LogicalFlushAllocations::default();
+        let mut draw = SolidDraw {
+            path: rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        for index in 0..2048u32 {
+            draw.paint.shader = Some(WgpuShader::Linear {
+                start: (0.0, 0.0),
+                end: (64.0, 64.0),
+                colors: vec![0xff00_0000 | index, 0xff00_ff00, 0xff00_00ff],
+                stops: vec![0.0, 0.5, 1.0],
+            });
+            allocations = allocations
+                .with_batch(&frame, std::slice::from_ref(&draw))
+                .unwrap();
+        }
+        assert_eq!(allocations.complex_gradient_count, 2048);
+        assert!(allocations
+            .with_batch(&frame, std::slice::from_ref(&draw))
+            .is_none());
+        assert!(LogicalFlushAllocations::default()
+            .with_batch(&frame, std::slice::from_ref(&draw))
+            .is_some());
+    }
+
+    #[test]
+    fn logical_flush_allocations_roll_atlas_and_coverage_independently() {
+        let atlas_factory =
+            WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let atlas_frame = atlas_factory.begin_frame(0);
+        let atlas_draw = SolidDraw {
+            path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
+            paint: WgpuPaint {
+                feather: 32.0,
+                ..WgpuPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let mut atlas = LogicalFlushAllocations::default();
+        let atlas_count = (1..10_000)
+            .find(|_| {
+                let Some(next) = atlas.with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+                else {
+                    return true;
+                };
+                atlas = next;
+                false
+            })
+            .expect("atlas allocation must reach the device texture limit");
+        assert!(atlas_count > 1);
+        assert!(LogicalFlushAllocations::default()
+            .with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+            .is_some());
+
+        let coverage_factory =
+            WgpuFactory::new_with_mode(1024, 1024, RenderMode::ClockwiseAtomic).unwrap();
+        let coverage_frame = coverage_factory.begin_frame(0);
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 0.0);
+        raw_path.line_to(1024.0, 1024.0);
+        raw_path.line_to(1024.0, 0.0);
+        raw_path.line_to(0.0, 1024.0);
+        raw_path.close();
+        let coverage_draw = SolidDraw {
+            path: WgpuPath {
+                raw_path,
+                fill_rule: FillRule::Clockwise,
+            },
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        assert!(draw_requires_clockwise_atomic(
+            &coverage_draw,
+            coverage_frame.width,
+            coverage_frame.height
+        ));
+        let mut coverage = LogicalFlushAllocations::default();
+        let coverage_count = (1..1_000)
+            .find(|_| {
+                let Some(next) =
+                    coverage.with_batch(&coverage_frame, std::slice::from_ref(&coverage_draw))
+                else {
+                    return true;
+                };
+                coverage = next;
+                false
+            })
+            .expect("coverage allocation must reach the storage-buffer limit");
+        assert!(coverage_count > 1);
+        assert!(LogicalFlushAllocations::default()
+            .with_batch(&coverage_frame, std::slice::from_ref(&coverage_draw))
+            .is_some());
+    }
+
+    #[test]
+    fn atomic_logical_flush_replays_the_active_clip_stack() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let content = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 16.0);
+        raw_clip.line_to(48.0, 48.0);
+        raw_clip.line_to(16.0, 48.0);
+        raw_clip.close();
+        let clip = WgpuPath {
+            raw_path: raw_clip,
+            fill_rule: FillRule::NonZero,
+        };
+        let paint = WgpuPaint {
+            color: 0x80ff_0000,
+            ..WgpuPaint::default()
+        };
+        let render = |force_rollover: bool| {
+            let mut frame = factory.begin_frame(0xff20_80c0);
+            frame.clip_path(&clip);
+            frame.draw_path(&content, &paint);
+            if force_rollover {
+                let used = frame.logical_flush.counters().path_count;
+                assert!(frame
+                    .logical_flush
+                    .push_draws(logical_flush::ResourceCounters {
+                        path_count: logical_flush::MAX_PATH_COUNT - used,
+                        ..Default::default()
+                    }));
+            }
+            frame.draw_path(&content, &paint);
+            frame
+        };
+
+        let forced = render(true);
+        let boundary = forced.logical_flush_starts[1];
+        assert!(matches!(
+            forced.draws[boundary].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 1,
+                parent_id: 0
+            }
+        ));
+        assert_eq!(forced.finish().unwrap(), render(false).finish().unwrap());
     }
 
     #[test]

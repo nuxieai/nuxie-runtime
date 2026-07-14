@@ -964,14 +964,34 @@ Run `make renderer-golden`.
     to `dawn-wgpu-msaa-stroke-edge-coverage`: its 60 over-threshold pixels/max
     58 split into 59 components, none larger than two pixels. The ratchet is
     exact=760/diverges=0/gated=708 with no tolerance change.
-80. [ ] Port C++ `render_context.cpp::LogicalFlush::{pushDraws,rewind}` resource
+80. [x] Port C++ `render_context.cpp::LogicalFlush::{pushDraws,rewind}` resource
     rollover into Rust for clip-dependent and destination-read schedules.
     Translate the complete path, contour, tessellation, and signed draw-pass
     budgets; preserve clip-stack, destination-copy, and intersection-board
     ordering across submissions; and add focused boundary tests for every
     rollover cause. This closes the remaining R3 resource-budget finding from
     `docs/renderer-wgpu-adversarial-review.md` while the independent Dawn
-    reference campaign continues outside the main implementation queue.
+    reference campaign continues outside the main implementation queue. Rust
+    now rolls at C++'s 30,719 path IDs, 65,535 contours, 4,194,279 combined
+    tessellation vertices, and 32,767 signed reordered passes; its standalone
+    image draws share the atomic path-index budget. Late gradient-height,
+    clockwise feather-atlas, and clockwise coverage-storage allocations are
+    admitted transactionally against C++ and device limits. MSAA and atomic
+    flush boundaries regenerate active clips and preserve destination-read,
+    depth/stencil, and intersection-board order. Exact-boundary, natural
+    allocation, clip-replay, and forced-versus-uninterrupted pixel tests pass;
+    Sol accepted the implementation after the dynamic-allocation and
+    run-level tessellation review findings were closed. The full renderer
+    corpus remains exact=760/diverges=0/gated=708, all 223 enabled renderer
+    tests and the workspace pass, and the five-case fuzz-replay gate is green.
+81. [ ] Integrate the independently reviewed strict Dawn reference campaign,
+    then probe its eleven new MSAA rows under the unchanged `2/32` contract:
+    `strokes_zoomed`, `teenyStrokes`, `transparentclear`,
+    `transparentclear_blendmode`, `trickycubicstrokes`,
+    `trickycubicstrokes_feather`, `trickycubicstrokes_roundcaps`,
+    `widebuttcaps`, `zeroPath`, `zero_control_stroke`, and
+    `zerolinestroke`. Promote passes and narrow failures to observed
+    diagnostics without changing references or tolerances.
 
 ## R2 Completion Record
 
@@ -3305,3 +3325,13 @@ Run `make renderer-golden`.
   unchanged `2/32` contract. The renderer ratchet advances to
   exact=743/diverges=0/gated=725; workspace, renderer, and both V2 floors pass.
   Queue item 77 names the next strict source-order capture batch.
+- 2026-07-14: Ported C++ logical-flush resource rollover across hard path,
+  contour, tessellation, and signed-pass limits plus late gradient, feather
+  atlas, and coverage-storage allocation limits. Active clips regenerate and
+  MSAA/atomic ordering survives forced submissions, including destination
+  reads and intersection-board schedules. Sol accepted the focused boundary
+  and pixel-equivalence evidence. The renderer corpus remains
+  exact=760/diverges=0/gated=708; format/check, the five-case dual-renderer
+  fuzz gate, all 223 enabled renderer tests, the workspace, normal 584-segment
+  floor, and scripted 35-segment floor pass. Queue item 81 integrates and
+  probes the independently captured Dawn references.

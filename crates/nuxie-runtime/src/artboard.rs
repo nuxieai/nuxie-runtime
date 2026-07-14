@@ -743,7 +743,13 @@ impl ArtboardInstance {
         }
     }
 
-    pub(crate) fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
+    /// Reads one typed color property from the live object arena.
+    ///
+    /// Returns `None` when either the local object or a color property with
+    /// this key does not exist. Schema defaults are already materialized in
+    /// the object arena, so a matching property returns its current value
+    /// even when the source record omitted that default.
+    pub fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
         self.objects.color_property(local_id, property_key)
     }
 
@@ -850,7 +856,13 @@ impl ArtboardInstance {
         true
     }
 
-    pub(crate) fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
+    /// Reads one typed double property from the live object arena.
+    ///
+    /// Returns `None` when either the local object or a double property with
+    /// this key does not exist. Schema defaults are already materialized in
+    /// the object arena, so a matching property returns its current value
+    /// even when the source record omitted that default.
+    pub fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
         self.objects.double_property(local_id, property_key)
     }
 
@@ -4529,6 +4541,23 @@ mod tests {
         assert_eq!(arena.double_property(0, node_x_key), Some(7.5));
         assert_eq!(arena.bool_property(1, artboard_clip_key), Some(true));
         assert_eq!(arena.string_property(2, bytes_key), Some(&[1, 2, 3][..]));
+    }
+
+    #[test]
+    fn artboard_typed_property_reads_surface_defaults_and_reject_wrong_value_kinds() {
+        let opacity_key = property_key_for_name("Shape", "opacity").expect("Shape.opacity");
+        let color_key =
+            property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(0, "Shape", Vec::new())),
+            Some(synthetic_runtime_object(1, "SolidColor", Vec::new())),
+        ]);
+
+        assert_eq!(instance.double_property(0, opacity_key), Some(1.0));
+        assert_eq!(instance.color_property(1, color_key), Some(0xff74_7474));
+        assert_eq!(instance.color_property(0, opacity_key), None);
+        assert_eq!(instance.double_property(1, color_key), None);
     }
 
     #[test]

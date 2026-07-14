@@ -149,14 +149,19 @@ def generate_include(
         assert expected_source is not None
         assert expected_clear_color is not None
         expected_header = [
-            "rive-golden-stream-v1",
             f'source file="{expected_source}" artboard="" scene="{expected_scene}"',
             f"frameSize width={expected_width} height={expected_height}",
             f"clearColor value={expected_clear_color}",
         ]
-        if lines[:4] != expected_header:
+        metadata_index = 1
+        while metadata_index < len(lines) and (
+            lines[metadata_index].startswith("makeEmptyRenderPath ")
+            or lines[metadata_index].startswith("makeRenderPaint ")
+        ):
+            metadata_index += 1
+        if lines[metadata_index : metadata_index + 3] != expected_header:
             raise ValueError("path-only stream header or clear-color contract drifted")
-        command_lines = lines[4:-1]
+        command_lines = lines[1:metadata_index] + lines[metadata_index + 3 : -1]
     elif profile == "riv":
         metadata_index = 1
         while metadata_index < len(lines) and (
@@ -224,7 +229,7 @@ def generate_include(
                         f"    path{path.object_id}->{methods[verb]}({arguments});"
                     )
             paths[path.object_id] = path
-        elif paths[path.object_id] != path:
+        elif paths[path.object_id].records != path.records:
             raise ValueError(
                 f"path {path.object_id} mutates after its first snapshot; unsupported by this oracle"
             )

@@ -631,11 +631,13 @@ Run `make renderer-golden`.
     99.9% mask overlap. Sol approved the separate
     `metal-webgpu-fixed-function-color-output` gate without changing the
     reference or contract.
-60. [ ] Probe the first forty `algorithm-core` MSAA upstream GMs as four
-    disjoint ten-entry Terra batches: fill/topology, clip/stencil, stroke
-    geometry, and feather coverage. Main owns reference validation/capture and
-    final ratchet accounting; workers only report unchanged-contract results,
-    and Sol reviews any new residual classification.
+60. [ ] Build the reusable C++ Dawn WebGPU-on-Metal MSAA reference runner and
+    provenance-bound PNG capture path, then probe the first solid-path upstream
+    GMs in disjoint Terra batches. Native C++ Metal has no MSAA flush and the
+    corpus currently has zero MSAA reference PNGs, so references must live
+    under a distinct Dawn-WebGPU-on-Metal identity rather than the native Metal
+    root. The strict generator now accepts 39 of the first 40 candidate streams;
+    `degengrad` remains the one gradient-resource compiler gap.
 
 ## R2 Completion Record
 
@@ -848,6 +850,14 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Use C++ Dawn WebGPU-on-Metal as the MSAA corpus oracle, with a
+  distinct reference root and explicit producer/runtime/Dawn/adapter/artifact
+  provenance. Native C++ Metal intentionally has no MSAA flush, and all 733
+  MSAA rows currently point at nonexistent native-Metal PNGs; default-mode or
+  Rust-generated images are not valid substitutes. The C++ runner emits the
+  existing exact `RIVEABL` format, and the Rust pixel toolchain validates and
+  converts that payload to PNG. This wires the C++ backend anticipated by the
+  2026-07-11 reference identity decision without changing any tolerance.
 - 2026-07-13: Keep `spotify_kids_app_icon` gated under the new
   `metal-webgpu-fixed-function-color-output` diagnostic. The pinned full-stream
   C++ Dawn oracle executes one 24-batch fixed-function atomic flush while Rust
@@ -2573,3 +2583,14 @@ Run `make renderer-golden`.
   the same native-Metal residual without a packed atomic color plane. Sol's
   three review findings were fixed before reclassification. The ratchet stays
   exact=674/diverges=0/gated=794; only the named diagnostic changed.
+- 2026-07-13: Audited the next parallel MSAA wave before dispatch. The corpus
+  has 730 `algorithm-core` MSAA rows and zero MSAA reference PNGs because the
+  native Metal capture path correctly rejects that mode. Three read-only Terra
+  scouts isolated the reusable C++ Dawn path and found the strict source
+  generator accepted 26/40 initial GMs. A bounded worker then fixed GM
+  pre-metadata declarations and fill-rule-only path reuse, raising support to
+  39/40 while preserving geometry-mutation rejection. `pixel-compare` now
+  validates exact `RIVEABL` payloads and converts them to PNG. The first worker
+  passed all 33 oracle-format tests; a slower registry lane was stopped rather
+  than held on the critical path. Build the provenance-bound runner next, then
+  fan out the actual probes.

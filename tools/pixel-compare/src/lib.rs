@@ -2,7 +2,7 @@ use png::{BitDepth, ColorType, Decoder, Encoder, Transformations};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::{Component, Path, PathBuf};
 
@@ -195,6 +195,19 @@ impl RgbaImage {
         Self::new(info.width, info.height, pixels)
     }
 
+    pub fn read_riveabl(path: impl AsRef<Path>) -> Result<Self, PixelError> {
+        const HEADER_SIZE: usize = 20;
+        let bytes = fs::read(path).map_err(io_error)?;
+        if bytes.len() < HEADER_SIZE || &bytes[..8] != b"RIVEABL\0" {
+            return Err(message_error("invalid or truncated RIVEABL header"));
+        }
+        let word = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+        if word(8) != 1 {
+            return Err(message_error("unsupported RIVEABL version"));
+        }
+        Self::new(word(12), word(16), bytes[HEADER_SIZE..].to_vec())
+    }
+
     pub fn write_png(&self, path: impl AsRef<Path>) -> Result<(), PixelError> {
         let file = File::create(path).map_err(io_error)?;
         let mut encoder = Encoder::new(BufWriter::new(file), self.width, self.height);
@@ -354,5 +367,33 @@ mod tests {
         let actual = RgbaImage::read_png(&path).unwrap();
         let _ = std::fs::remove_file(path);
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn reads_exact_riveabl_payload_and_rejects_malformed_artifacts() {
+        let root =
+            std::env::temp_dir().join(format!("pixel-compare-riveabl-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("frame.rgba");
+        let expected = image(&[[10, 20, 30, 255], [1, 2, 3, 4]]);
+        let mut artifact = b"RIVEABL\0".to_vec();
+        artifact.extend_from_slice(&1u32.to_le_bytes());
+        artifact.extend_from_slice(&expected.width.to_le_bytes());
+        artifact.extend_from_slice(&expected.height.to_le_bytes());
+        artifact.extend_from_slice(&expected.pixels);
+        fs::write(&path, &artifact).unwrap();
+        assert_eq!(RgbaImage::read_riveabl(&path).unwrap(), expected);
+
+        artifact[8..12].copy_from_slice(&2u32.to_le_bytes());
+        fs::write(&path, &artifact).unwrap();
+        assert!(RgbaImage::read_riveabl(&path)
+            .unwrap_err()
+            .to_string()
+            .contains("version"));
+        artifact.truncate(19);
+        fs::write(&path, artifact).unwrap();
+        assert!(RgbaImage::read_riveabl(&path).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 }

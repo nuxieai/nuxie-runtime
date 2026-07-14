@@ -1490,6 +1490,90 @@ class FormatTests(unittest.TestCase):
                 "header or clear-color contract drifted", wrong_header.stderr
             )
 
+    def test_gm_replay_accepts_premetadata_declarations_and_fill_rule_changes(self):
+        empty_path = "{id=1,fillRule=0,path={verbs=[],points=[]}}"
+        paint = (
+            "{id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,"
+            "feather=0,blendMode=3,shader=0}"
+        )
+        first_path = "{id=1,fillRule=1,path={verbs=[move,line],points=[(0,0),(1,0)]}}"
+        second_path = "{id=1,fillRule=2,path={verbs=[move,line],points=[(0,0),(1,0)]}}"
+        stream = "\n".join(
+            (
+                "rive-golden-stream-v1",
+                f"makeEmptyRenderPath {empty_path}",
+                f"makeRenderPaint {paint}",
+                'source file="gm:premetadata" artboard="" scene="premetadata"',
+                "frameSize width=2 height=2",
+                "clearColor value=0x00000000",
+                f"drawPath path={first_path} paint={paint}",
+                f"drawPath path={second_path} paint={paint}",
+                "frame",
+            )
+        ) + "\n"
+
+        def command(path, output=None, check=False):
+            result = [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--stream",
+                str(path),
+                "--expected-sha256",
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+                "--expected-source",
+                "gm:premetadata",
+                "--expected-width",
+                "2",
+                "--expected-height",
+                "2",
+                "--expected-count",
+                "makeEmptyRenderPath=1",
+                "--expected-count",
+                "makeRenderPaint=1",
+                "--expected-count",
+                "drawPath=2",
+                "--function",
+                "replayPremetadata",
+            ]
+            result.extend(["--check"] if check else ["--output", str(output)])
+            return result
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            source = temp_dir / "premetadata.rive-stream"
+            output = temp_dir / "premetadata.inc"
+            source.write_text(stream)
+            subprocess.run(command(source, output), check=True)
+
+            generated = output.read_text()
+            self.assertEqual(generated.count("context->makeEmptyRenderPath()"), 1)
+            self.assertEqual(generated.count("context->makeRenderPaint()"), 1)
+            self.assertEqual(generated.count("path1->moveTo("), 1)
+            self.assertEqual(
+                generated.count("path1->fillRule(static_cast<rive::FillRule>(1));"),
+                1,
+            )
+            self.assertEqual(
+                generated.count("path1->fillRule(static_cast<rive::FillRule>(2));"),
+                1,
+            )
+
+            mutated = temp_dir / "mutated.rive-stream"
+            mutated.write_text(stream.replace(second_path, second_path.replace("(1,0)", "(2,0)")))
+            result = subprocess.run(
+                command(mutated, check=True), text=True, capture_output=True
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("mutates after its first snapshot", result.stderr)
+
+            unsupported = temp_dir / "unsupported.rive-stream"
+            unsupported.write_text(stream.replace(f"makeRenderPaint {paint}", "makeRenderImage id=1"))
+            result = subprocess.run(
+                command(unsupported, check=True), text=True, capture_output=True
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("header or clear-color contract drifted", result.stderr)
+
     def test_dstreadshuffle_replay_is_deterministic_and_enforces_opaque_clear_color(self):
         expected_counts = [
             "save=97",

@@ -652,6 +652,18 @@ impl WgpuPaint {
             },
         ))
     }
+
+    fn is_opaque(&self) -> bool {
+        if self.feather != 0.0 || self.blend_mode != BlendMode::SrcOver {
+            return false;
+        }
+        match &self.shader {
+            None => self.color >> 24 == 0xff,
+            Some(WgpuShader::Linear { colors, .. }) | Some(WgpuShader::Radial { colors, .. }) => {
+                colors.iter().all(|color| color >> 24 == 0xff)
+            }
+        }
+    }
 }
 
 impl RenderPaint for WgpuPaint {
@@ -2526,6 +2538,7 @@ impl WgpuFrame {
                 struct DirectPathOptions {
                     path_clip: bool,
                     clip_rect: bool,
+                    opaque: bool,
                     advanced_blend: bool,
                     hsl_blend: bool,
                     destination_copy_bounds: [u32; 4],
@@ -2794,6 +2807,7 @@ impl WgpuFrame {
                                 DrawRole::Content { clip_id } if clip_id != 0
                             ),
                             clip_rect: has_clip_rect,
+                            opaque: msaa_draw_has_opaque_paint(draw),
                             advanced_blend,
                             hsl_blend: blend_mode_uses_hsl(draw.paint.blend_mode),
                             destination_copy_bounds: msaa_destination_copy_bounds(
@@ -3013,6 +3027,8 @@ impl WgpuFrame {
                     index: usize,
                     starts_logical_flush: bool,
                     copies_destination: bool,
+                    submits_encoder: bool,
+                    resets_depth: bool,
                 }
                 let mut segment_ends = prepared_draws
                     .iter()
@@ -3022,14 +3038,32 @@ impl WgpuFrame {
                             index,
                             starts_logical_flush: false,
                             copies_destination: true,
+                            submits_encoder: false,
+                            resets_depth: false,
                         })
                     })
                     .collect::<Vec<_>>();
+                // A destination-read draw ends C++'s MSAA submission. Its
+                // color and stencil are preserved, but later draws begin with
+                // fresh depth state.
+                segment_ends.extend(prepared_draws.iter().enumerate().filter_map(
+                    |(index, draw)| {
+                        destination_copy_bounds(draw).map(|_| SegmentEnd {
+                            index: index + 1,
+                            starts_logical_flush: false,
+                            copies_destination: false,
+                            submits_encoder: true,
+                            resets_depth: true,
+                        })
+                    },
+                ));
                 segment_ends.extend(logical_flush_starts.iter().copied().skip(1).map(|index| {
                     SegmentEnd {
                         index,
                         starts_logical_flush: true,
                         copies_destination: false,
+                        submits_encoder: false,
+                        resets_depth: false,
                     }
                 }));
                 segment_ends.sort_unstable_by_key(|segment| segment.index);
@@ -3040,6 +3074,8 @@ impl WgpuFrame {
                         if previous.index == segment.index {
                             previous.starts_logical_flush |= segment.starts_logical_flush;
                             previous.copies_destination |= segment.copies_destination;
+                            previous.submits_encoder |= segment.submits_encoder;
+                            previous.resets_depth |= segment.resets_depth;
                             true
                         } else {
                             false
@@ -3055,12 +3091,16 @@ impl WgpuFrame {
                     index: prepared_draws.len(),
                     starts_logical_flush: false,
                     copies_destination: false,
+                    submits_encoder: false,
+                    resets_depth: false,
                 });
                 let mut segment_start = 0;
                 let mut starts_logical_flush = true;
+                let mut resets_depth = false;
                 for (segment_index, segment_end) in merged_segment_ends.into_iter().enumerate() {
                     let first_segment = segment_index == 0;
-                    let reset_depth_stencil = first_segment || starts_logical_flush;
+                    let reset_depth = first_segment || starts_logical_flush || resets_depth;
+                    let reset_stencil = first_segment || starts_logical_flush;
                     let resolve_target = if has_advanced_msaa {
                         &view
                     } else {
@@ -3090,7 +3130,7 @@ impl WgpuFrame {
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &stencil_view,
                             depth_ops: Some(wgpu::Operations {
-                                load: if reset_depth_stencil {
+                                load: if reset_depth {
                                     wgpu::LoadOp::Clear(1.0)
                                 } else {
                                     wgpu::LoadOp::Load
@@ -3098,7 +3138,7 @@ impl WgpuFrame {
                                 store: wgpu::StoreOp::Store,
                             }),
                             stencil_ops: Some(wgpu::Operations {
-                                load: if reset_depth_stencil {
+                                load: if reset_stencil {
                                     wgpu::LoadOp::Clear(0)
                                 } else {
                                     wgpu::LoadOp::Load
@@ -3123,6 +3163,7 @@ impl WgpuFrame {
                                     path_pipeline::DirectPathPipelineKind::Stroke,
                                     options.path_clip,
                                     options.clip_rect,
+                                    options.opaque,
                                     options.advanced_blend,
                                     options.hsl_blend,
                                 ));
@@ -3183,6 +3224,7 @@ impl WgpuFrame {
                                         pipeline,
                                         options.path_clip,
                                         options.clip_rect,
+                                        options.opaque,
                                         options.advanced_blend,
                                         options.hsl_blend,
                                     ));
@@ -3355,11 +3397,12 @@ impl WgpuFrame {
                             .expect("MSAA destination barrier must precede an advanced draw");
                         let [left, top, right, bottom] = bounds;
                         if left == right || top == bottom {
-                            if segment_end.starts_logical_flush {
+                            if segment_end.starts_logical_flush || segment_end.submits_encoder {
                                 submit_and_wait(encoder)?;
                             }
                             segment_start = segment_end.index;
                             starts_logical_flush = segment_end.starts_logical_flush;
+                            resets_depth = segment_end.resets_depth;
                             continue;
                         }
                         let origin = wgpu::Origin3d {
@@ -3390,11 +3433,12 @@ impl WgpuFrame {
                             },
                         );
                     }
-                    if segment_end.starts_logical_flush {
+                    if segment_end.starts_logical_flush || segment_end.submits_encoder {
                         submit_and_wait(encoder)?;
                     }
                     segment_start = segment_end.index;
                     starts_logical_flush = segment_end.starts_logical_flush;
+                    resets_depth = segment_end.resets_depth;
                 }
                 if !has_advanced_msaa {
                     self.context.composite_pipeline.encode(
@@ -3421,28 +3465,25 @@ impl WgpuFrame {
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    for (group_index, group) in disjoint_msaa_draw_groups(
+                    let (scheduled_draws, draw_groups) = ordered_msaa_draws(
                         &self.draws[flush_start..flush_end],
                         self.width,
                         self.height,
-                    )
-                    .iter()
-                    .enumerate()
+                    );
+                    for chunk_start in
+                        (0..scheduled_draws.len()).step_by(MAX_MSAA_DRAWS_PER_SUBMISSION)
                     {
-                        let z_index = u32::try_from(group_index + 1)
-                            .expect("MSAA draw group must fit the path-data contract");
-                        for chunk in group.chunks(MAX_MSAA_DRAWS_PER_SUBMISSION) {
-                            let draw_groups = vec![z_index; chunk.len()];
-                            encode_fallback_run(
-                                chunk,
-                                Some(&draw_groups),
-                                &[0],
-                                clear_target,
-                                &mut encoder,
-                            )?;
-                            submit_and_wait(&mut encoder)?;
-                            clear_target = false;
-                        }
+                        let chunk_end = (chunk_start + MAX_MSAA_DRAWS_PER_SUBMISSION)
+                            .min(scheduled_draws.len());
+                        encode_fallback_run(
+                            &scheduled_draws[chunk_start..chunk_end],
+                            Some(&draw_groups[chunk_start..chunk_end]),
+                            &[0],
+                            clear_target,
+                            &mut encoder,
+                        )?;
+                        submit_and_wait(&mut encoder)?;
+                        clear_target = false;
                     }
                 }
             } else {
@@ -3457,19 +3498,13 @@ impl WgpuFrame {
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    for (group_index, group) in disjoint_msaa_draw_groups(
+                    let (flush_draws, flush_groups) = ordered_msaa_draws(
                         &self.draws[flush_start..flush_end],
                         self.width,
                         self.height,
-                    )
-                    .into_iter()
-                    .enumerate()
-                    {
-                        let z_index = u32::try_from(group_index + 1)
-                            .expect("MSAA draw group must fit the path-data contract");
-                        draw_groups.extend(std::iter::repeat_n(z_index, group.len()));
-                        scheduled_draws.extend(group);
-                    }
+                    );
+                    scheduled_draws.extend(flush_draws);
+                    draw_groups.extend(flush_groups);
                 }
                 debug_assert_eq!(scheduled_draws.len(), self.draws.len());
                 encode_fallback_run(
@@ -4964,11 +4999,39 @@ fn msaa_draw_layer_count(draw: &SolidDraw, all_subpasses_in_same_group: bool) ->
     }
 }
 
-fn disjoint_msaa_draw_groups(
+fn msaa_draw_rect(
+    draw: &SolidDraw,
+    viewport_width: u32,
+    viewport_height: u32,
+) -> intersection_board::Rect {
+    let bounds = match draw.role {
+        DrawRole::ClipReset { bounds, .. } => [
+            bounds[0].floor() as i32,
+            bounds[1].floor() as i32,
+            bounds[2].ceil() as i32,
+            bounds[3].ceil() as i32,
+        ],
+        _ => draw::feather_pixel_bounds(
+            &draw.path.raw_path,
+            draw.state.transform,
+            draw.paint.feather,
+            draw.paint.effective_stroke(),
+        )
+        .unwrap_or([0, 0, viewport_width as i32, viewport_height as i32]),
+    };
+    intersection_board::Rect::new(
+        bounds[0].saturating_sub(1),
+        bounds[1].saturating_sub(1),
+        bounds[2].saturating_add(1),
+        bounds[3].saturating_add(1),
+    )
+}
+
+fn disjoint_msaa_draw_indices(
     draws: &[SolidDraw],
     viewport_width: u32,
     viewport_height: u32,
-) -> Vec<Vec<SolidDraw>> {
+) -> Vec<Vec<usize>> {
     const MAX_SAFE_GROUP: i32 = i16::MAX as i32 - 1;
 
     // Rust currently has one logical flush per frame, so this is the
@@ -4977,51 +5040,113 @@ fn disjoint_msaa_draw_groups(
     let mut board =
         intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
     board.resize_and_reset(viewport_width, viewport_height);
-    let mut groups = Vec::<Vec<SolidDraw>>::new();
+    let mut groups = Vec::<Vec<usize>>::new();
     let mut group_base = 0usize;
     let mut board_max_group = 0i32;
 
-    for draw in draws {
+    for (draw_index, draw) in draws.iter().enumerate() {
         let layer_count = msaa_draw_layer_count(draw, all_subpasses_in_same_group);
         if board_max_group > MAX_SAFE_GROUP - i32::from(layer_count) {
             board.resize_and_reset(viewport_width, viewport_height);
             group_base = groups.len();
             board_max_group = 0;
         }
-        let bounds = match draw.role {
-            DrawRole::ClipReset { bounds, .. } => [
-                bounds[0].floor() as i32,
-                bounds[1].floor() as i32,
-                bounds[2].ceil() as i32,
-                bounds[3].ceil() as i32,
-            ],
-            _ => draw::feather_pixel_bounds(
-                &draw.path.raw_path,
-                draw.state.transform,
-                draw.paint.feather,
-                draw.paint.effective_stroke(),
-            )
-            .unwrap_or([0, 0, viewport_width as i32, viewport_height as i32]),
-        };
-        let rect = intersection_board::Rect::new(
-            bounds[0].saturating_sub(1),
-            bounds[1].saturating_sub(1),
-            bounds[2].saturating_add(1),
-            bounds[3].saturating_add(1),
-        );
+        let rect = msaa_draw_rect(draw, viewport_width, viewport_height);
         let local_group = board.add_rectangle(rect, layer_count).max(1) as usize;
         board_max_group = board_max_group.max(local_group as i32 + i32::from(layer_count) - 1);
         let group_index = group_base + local_group - 1;
         if groups.len() <= group_index {
             groups.resize_with(group_index + 1, Vec::new);
         }
-        groups[group_index].push(draw.clone());
+        groups[group_index].push(draw_index);
     }
 
+    // Preserve empty slots because the vector index is the draw group's
+    // z-index. A nonzero fill reserves three contiguous C++ draw groups, so
+    // compacting the vector would move a later overlapping fill from z=4 to
+    // z=2 and break depth ordering between its subpasses.
     groups
+}
+
+#[cfg(test)]
+fn disjoint_msaa_draw_groups(
+    draws: &[SolidDraw],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> Vec<Vec<SolidDraw>> {
+    disjoint_msaa_draw_indices(draws, viewport_width, viewport_height)
         .into_iter()
-        .filter(|group| !group.is_empty())
+        .map(|group| {
+            group
+                .into_iter()
+                .map(|draw_index| draws[draw_index].clone())
+                .collect()
+        })
         .collect()
+}
+
+fn msaa_draw_has_opaque_paint(draw: &SolidDraw) -> bool {
+    draw.image.is_none() && draw.paint.is_opaque()
+}
+
+fn msaa_draw_uses_opaque_prepass(draw: &SolidDraw) -> bool {
+    msaa_draw_has_opaque_paint(draw) && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+}
+
+fn rects_intersect(left: intersection_board::Rect, right: intersection_board::Rect) -> bool {
+    left.left < right.right
+        && left.top < right.bottom
+        && left.right > right.left
+        && left.bottom > right.top
+}
+
+fn ordered_msaa_draws(
+    draws: &[SolidDraw],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> (Vec<SolidDraw>, Vec<u32>) {
+    // renderer/src/render_context.cpp sorts negative-key opaque prepasses
+    // front-to-back before positive-key clipped/translucent subpasses. Until
+    // Rust records those subpasses separately, move only the opaque draws that
+    // must precede an overlapping destination-read draw.
+    let rects = draws
+        .iter()
+        .map(|draw| msaa_draw_rect(draw, viewport_width, viewport_height))
+        .collect::<Vec<_>>();
+    let mut prepasses = Vec::<(u32, usize)>::new();
+    let mut subpasses = Vec::<(u32, usize)>::new();
+    for (group_index, group) in disjoint_msaa_draw_indices(draws, viewport_width, viewport_height)
+        .into_iter()
+        .enumerate()
+    {
+        let z_index = u32::try_from(group_index + 1)
+            .expect("MSAA draw group must fit the path-data contract");
+        for draw_index in group {
+            let needs_prepass = msaa_draw_uses_opaque_prepass(&draws[draw_index])
+                && draws[..draw_index]
+                    .iter()
+                    .enumerate()
+                    .any(|(prior_index, prior)| {
+                        matches!(prior.role, DrawRole::Content { clip_id: 0 })
+                            && draw_uses_advanced_blend(prior)
+                            && rects_intersect(rects[draw_index], rects[prior_index])
+                    });
+            if needs_prepass {
+                prepasses.push((z_index, draw_index));
+            } else {
+                subpasses.push((z_index, draw_index));
+            }
+        }
+    }
+    prepasses.sort_by(|left, right| right.0.cmp(&left.0));
+    prepasses.extend(subpasses);
+    let mut scheduled_draws = Vec::with_capacity(prepasses.len());
+    let mut draw_groups = Vec::with_capacity(prepasses.len());
+    for (z_index, draw_index) in prepasses {
+        draw_groups.push(z_index);
+        scheduled_draws.push(draws[draw_index].clone());
+    }
+    (scheduled_draws, draw_groups)
 }
 
 fn msaa_draws_can_submit_independently(draws: &[SolidDraw]) -> bool {
@@ -5365,6 +5490,8 @@ mod tests {
     const LARGE_FEATHER_RADIUS: f32 = 403.428802;
     const STROKES_ROUND_ORACLE_FRAME_SIZE: u32 = 400;
     const STROKES_ROUND_ORACLE_THICKNESS: f32 = 4.5;
+    const SPOTIFY_FOOT_ORACLE_FRAME_WIDTH: u32 = 369;
+    const SPOTIFY_FOOT_ORACLE_FRAME_HEIGHT: u32 = 781;
     const RAWTEXT_ORACLE_FRAME_WIDTH: u32 = 400;
     const RAWTEXT_ORACLE_FRAME_HEIGHT: u32 = 335;
     const ATOMIC_COLORBURN_PAIR_FRAME_SIZE: u32 = 1024;
@@ -6023,7 +6150,7 @@ mod tests {
         let make_draw = |bounds, color| SolidDraw {
             path: rect_path(bounds, FillRule::NonZero),
             paint: WgpuPaint {
-                color,
+                color: 0xff00_0000u32 | color,
                 ..WgpuPaint::default()
             },
             state: DrawState::default(),
@@ -6042,12 +6169,53 @@ mod tests {
             .map(|group| {
                 group
                     .iter()
-                    .map(|draw| draw.paint.color)
+                    .map(|draw| draw.paint.color & 0xff)
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
-        assert_eq!(colors, vec![vec![1, 3], vec![2]]);
+        assert_eq!(colors, vec![vec![1, 3], vec![], vec![], vec![2]]);
+
+        let (scheduled, z_indices) = ordered_msaa_draws(&draws, 64, 64);
+        assert_eq!(
+            scheduled
+                .iter()
+                .map(|draw| draw.paint.color & 0xff)
+                .collect::<Vec<_>>(),
+            [1, 3, 2]
+        );
+        assert_eq!(z_indices, [1, 1, 4]);
+    }
+
+    #[test]
+    fn msaa_scheduler_runs_opaque_prepasses_before_translucent_subpasses() {
+        let make_draw = |color, blend_mode| SolidDraw {
+            path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::NonZero),
+            paint: WgpuPaint {
+                color: 0xff00_0000u32 | color,
+                blend_mode,
+                ..WgpuPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let draws = [
+            make_draw(1, BlendMode::Difference),
+            make_draw(2, BlendMode::SrcOver),
+            make_draw(3, BlendMode::SrcOver),
+        ];
+
+        let (scheduled, z_indices) = ordered_msaa_draws(&draws, 64, 64);
+
+        assert_eq!(
+            scheduled
+                .iter()
+                .map(|draw| draw.paint.color & 0xff)
+                .collect::<Vec<_>>(),
+            [3, 2, 1]
+        );
+        assert_eq!(z_indices, [3, 2, 1]);
     }
 
     #[test]
@@ -8181,6 +8349,49 @@ mod tests {
         tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
     }
 
+    fn spotify_prefix_blit(draw_count: usize) -> atlas_blit_oracle::AtlasBlit {
+        use nuxie_render_stream::{Command, RenderStream};
+
+        let mut stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/riv/spotify_kids_demo.rive-stream"
+        )))
+        .unwrap();
+        let mut draws = 0usize;
+        let end = stream.frames[0]
+            .commands
+            .iter()
+            .position(|command| {
+                if matches!(command, Command::DrawPath { .. }) {
+                    draws += 1;
+                }
+                draws == draw_count && matches!(command, Command::Restore)
+            })
+            .expect("Spotify draw prefix restore");
+        stream.frames[0].commands.truncate(end + 1);
+        let mut factory = WgpuFactory::new_with_mode(
+            SPOTIFY_FOOT_ORACLE_FRAME_WIDTH,
+            SPOTIFY_FOOT_ORACLE_FRAME_HEIGHT,
+            RenderMode::Msaa,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+        atlas_blit_oracle::AtlasBlit::new(
+            SPOTIFY_FOOT_ORACLE_FRAME_WIDTH,
+            SPOTIFY_FOOT_ORACLE_FRAME_HEIGHT,
+            frame.finish().unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn spotify_right_foot_prefix_matches_dawn_boundary_pixel() {
+        let actual = spotify_prefix_blit(4);
+        let offset = (382 * SPOTIFY_FOOT_ORACLE_FRAME_WIDTH as usize + 202) * 4;
+
+        assert_eq!(&actual.pixels()[offset..offset + 4], &[152, 156, 186, 255]);
+    }
     fn fixed_degenerate_cubic_draw(selector: &str) -> (WgpuPath, Mat2D, WgpuPaint) {
         let mut path = RawPath::new();
         let (transform, thickness) = match selector {
@@ -10674,7 +10885,6 @@ mod tests {
             )
         });
     }
-
     #[test]
     #[ignore = "requires RIVE_CPP_DIRECT_DEGENERATE_SPANS_DIR from the C++ WebGPU oracle"]
     fn cpp_direct_degenerate_cubic_cpu_spans_match_rust_record_for_record() {

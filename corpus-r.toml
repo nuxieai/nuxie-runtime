@@ -15049,10 +15049,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-overlapping-contour-edge-coverage"
 
 [[entry]]
 id = "riv-stacked_path_effects-frame-0-clockwise-atomic"

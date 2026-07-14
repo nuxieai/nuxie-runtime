@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,352, diverges=0, gated=116, total=1,468.
+- Rust wgpu: exact=1,353, diverges=0, gated=115, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -1052,12 +1052,22 @@ Run `make renderer-golden`.
     mirrored foot/leg contour edges and moves to
     `msaa-overlapping-contour-edge-coverage`. The ratchet remains
     exact=1,352/diverges=0/gated=116 without changing a tolerance.
-85. [ ] Close `msaa-overlapping-contour-edge-coverage` in
+85. [x] Close `msaa-overlapping-contour-edge-coverage` in
     `riv-spotify_kids_demo-frame-0-msaa`. Isolate the two mirrored foot fills
     and round strokes against their pinned Dawn pixels, capture exact C++/Rust
     tessellation inputs for the boundary samples, then port the first proven
     topology or pipeline mismatch and promote under the unchanged `2/32`
-    contract.
+    contract. C++ schedules opaque, unclipped MSAA paths ahead of overlapping
+    advanced-blend subpasses, disables fixed-function blending for opaque
+    paint, and starts later clipped work in a fresh-depth submission after the
+    destination-read draw. Porting those three contracts makes Spotify
+    byte-exact and advances the ratchet to
+    exact=1,353/diverges=0/gated=115.
+86. [ ] Run the formal R3 exit audit. Prove every one of the 115 retained
+    gates has a specific feature, backend/compiler boundary, or harness
+    diagnostic; eliminate any generic placeholder that still masks runnable
+    work. If the `#R-3` exit criteria hold, mark R3 complete and make the R4
+    same-backend benchmark harness the next executable queue item.
 
 ## R2 Completion Record
 
@@ -3446,3 +3456,14 @@ Run `make renderer-golden`.
   contracts. All 228 enabled renderer tests, the workspace, the full renderer
   corpus, the normal 584-segment V2 floor, and the scripted 35-segment floor
   pass. Queue item 85 targets the isolated contour-edge coverage residual.
+- 2026-07-14: Closed Spotify Kids Demo's final MSAA residual by porting the
+  interacting C++ opaque-path contracts: authored-paint opacity
+  classification, no fixed-function blend for opaque paint, front-to-back
+  scheduling when an opaque path overlaps an earlier unclipped advanced blend,
+  and a post-destination-read submission that refreshes depth while preserving
+  clip stencil. The focused four-draw prefix and full 369x781 Dawn comparison
+  are byte-exact; all 230 enabled renderer tests, the workspace, the full
+  renderer corpus, the normal 584-segment V2 floor, and the scripted
+  35-segment floor pass. Spotify promotes under the unchanged `2/32` contract
+  and advances the ratchet to exact=1,353/diverges=0/gated=115. Queue item 86
+  is the bounded R3 exit audit before performance work begins.

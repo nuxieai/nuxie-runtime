@@ -30,6 +30,7 @@ pub(crate) struct PathPipeline {
 
 struct DirectPipelineSet {
     fixed: PipelineVariants,
+    opaque_fixed: PipelineVariants,
     advanced: Option<PipelineVariants>,
     advanced_hsl: Option<PipelineVariants>,
 }
@@ -154,7 +155,8 @@ impl PathPipeline {
                                stencil,
                                depth_compare,
                                depth_write_enabled,
-                               color_write_mask| {
+                               color_write_mask,
+                               blend_enabled| {
             let vertex_constants: &[(&str, f64)] = match (clip_rect, advanced_blend) {
                 (true, true) => &[("0", 0.0), ("1", 1.0), ("2", 1.0)],
                 (true, false) => &[("0", 0.0), ("1", 1.0), ("2", 0.0)],
@@ -211,7 +213,7 @@ impl PathPipeline {
                     },
                     targets: &[Some(wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Rgba8Unorm,
-                        blend: (color_write_mask == wgpu::ColorWrites::ALL)
+                        blend: (blend_enabled && color_write_mask == wgpu::ColorWrites::ALL)
                             .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                         write_mask: color_write_mask,
                     })],
@@ -229,7 +231,8 @@ impl PathPipeline {
                                       path_clip_stencil: wgpu::StencilState,
                                       depth_compare,
                                       depth_write_enabled,
-                                      color_write_mask| {
+                                      color_write_mask,
+                                      blend_enabled| {
             let unclipped = create_pipeline(
                 label,
                 &no_clip_vertex,
@@ -242,6 +245,7 @@ impl PathPipeline {
                 depth_compare,
                 depth_write_enabled,
                 color_write_mask,
+                blend_enabled,
             );
             let unclipped_rect = clip_rect_vertex.as_ref().map(|vertex| {
                 create_pipeline(
@@ -252,10 +256,11 @@ impl PathPipeline {
                     advanced_blend,
                     hsl_blend,
                     cull_mode,
-                    stencil,
+                    stencil.clone(),
                     depth_compare,
                     depth_write_enabled,
                     color_write_mask,
+                    blend_enabled,
                 )
             });
             let path_clip = create_pipeline(
@@ -270,6 +275,7 @@ impl PathPipeline {
                 depth_compare,
                 depth_write_enabled,
                 color_write_mask,
+                blend_enabled,
             );
             let path_clip_rect = clip_rect_vertex.as_ref().map(|vertex| {
                 create_pipeline(
@@ -284,6 +290,7 @@ impl PathPipeline {
                     depth_compare,
                     depth_write_enabled,
                     color_write_mask,
+                    blend_enabled,
                 )
             });
             PipelineVariants {
@@ -312,6 +319,20 @@ impl PathPipeline {
                 depth_compare,
                 depth_write_enabled,
                 color_write_mask,
+                true,
+            );
+            let opaque_fixed = create_direct_variants(
+                fixed_label,
+                &fixed_fragment,
+                false,
+                false,
+                cull_mode,
+                stencil.clone(),
+                path_clip_stencil.clone(),
+                depth_compare,
+                depth_write_enabled,
+                color_write_mask,
+                false,
             );
             let advanced = advanced_labels.map(|(advanced_label, _)| {
                 create_direct_variants(
@@ -325,6 +346,7 @@ impl PathPipeline {
                     depth_compare,
                     depth_write_enabled,
                     color_write_mask,
+                    true,
                 )
             });
             let advanced_hsl = advanced_labels.map(|(_, advanced_hsl_label)| {
@@ -339,10 +361,12 @@ impl PathPipeline {
                     depth_compare,
                     depth_write_enabled,
                     color_write_mask,
+                    true,
                 )
             });
             DirectPipelineSet {
                 fixed,
+                opaque_fixed,
                 advanced,
                 advanced_hsl,
             }
@@ -498,6 +522,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let clip_front = stencil_face(
             wgpu::CompareFunction::Equal,
@@ -521,6 +546,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let clip_cleanup_pipeline = create_pipeline(
             "nuxie-msaa-path-clip-cleanup-pipeline",
@@ -534,6 +560,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let clockwise_clip_cleanup_pipeline = create_pipeline(
             "nuxie-msaa-path-clockwise-clip-cleanup-pipeline",
@@ -547,6 +574,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let even_odd_clip_front = stencil_face(
             wgpu::CompareFunction::Always,
@@ -570,6 +598,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let even_odd_cover_face = stencil_face(
             wgpu::CompareFunction::NotEqual,
@@ -588,6 +617,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let nested_front = stencil_face(
             wgpu::CompareFunction::LessEqual,
@@ -611,6 +641,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         let nested_even_odd_clip_pipeline = create_pipeline(
             "nuxie-msaa-path-nested-even-odd-clip-pipeline",
@@ -624,6 +655,7 @@ impl PathPipeline {
             wgpu::CompareFunction::Less,
             false,
             wgpu::ColorWrites::empty(),
+            false,
         );
         Self {
             stroke,
@@ -656,6 +688,7 @@ impl PathPipeline {
         kind: DirectPathPipelineKind,
         path_clip: bool,
         clip_rect: bool,
+        opaque: bool,
         advanced_blend: bool,
         hsl_blend: bool,
     ) -> &wgpu::RenderPipeline {
@@ -675,6 +708,8 @@ impl PathPipeline {
                 pipelines.advanced.as_ref()
             }
             .unwrap_or(&pipelines.fixed)
+        } else if opaque {
+            &pipelines.opaque_fixed
         } else {
             &pipelines.fixed
         };

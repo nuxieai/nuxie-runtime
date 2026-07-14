@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=583, diverges=0, gated=885, total=1,468.
+- Rust wgpu: exact=674, diverges=0, gated=794, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -275,8 +275,49 @@ Run `make renderer-golden`.
   `riv-sound-frame-{0..8}-clockwise-atomic`,
   `riv-sound2-frame-{0..4}-clockwise-atomic`,
   `riv-spotify_kids_demo-frame-0-clockwise-atomic`,
-  `riv-stacked_path_effects-frame-{0..4}-clockwise-atomic`, and
-  `riv-state_machine_transition-frame-{0..2}-clockwise-atomic`.
+  `riv-stacked_path_effects-frame-{0..4}-clockwise-atomic`,
+  `riv-state_machine_transition-frame-{0..7}-clockwise-atomic`,
+  `riv-state_machine_triggers-frame-{0..7}-clockwise-atomic`,
+  `riv-state_transition_fire_trigger-frame-0-clockwise-atomic`,
+  `riv-stateful_artboard_swap-frame-0-clockwise-atomic`,
+  `riv-stateful_keyed_trigger-frame-0-clockwise-atomic`,
+  `riv-stateful_list_props-frame-{0..4}-clockwise-atomic`,
+  `riv-stateful_multi_property-frame-0-clockwise-atomic`,
+  `riv-stateful_nested-frame-0-clockwise-atomic`,
+  `riv-stateful_source_switch-frame-0-clockwise-atomic`,
+  `riv-stroke_name_test-frame-{0..4}-clockwise-atomic`,
+  `riv-target_event-frame-0-clockwise-atomic`,
+  `riv-test_elastic-frame-{0..4}-clockwise-atomic`,
+  `riv-text_input_event-frame-{0..4}-clockwise-atomic`,
+  `riv-text_opacity_modifier-frame-0-clockwise-atomic`,
+  `riv-text_stroke_test-frame-0-clockwise-atomic`,
+  `riv-time_based_interpolation-frame-0-clockwise-atomic`,
+  `riv-timeline_event_test-frame-{0..4}-clockwise-atomic`,
+  `riv-transform_constraint-frame-0-clockwise-atomic`,
+  `riv-transition_artboard_condition_test-frame-0-clockwise-atomic`,
+  `riv-transition_duration_bind_{list,nested}-frame-0-clockwise-atomic`,
+  `riv-transition_index_condition-frame-0-clockwise-atomic`,
+  `riv-transition_self_comparator_test-frame-0-clockwise-atomic`,
+  `riv-translation_constraint-frame-0-clockwise-atomic`,
+  `riv-trigger_based_listeners-frame-0-clockwise-atomic`,
+  `riv-trim-frame-0-clockwise-atomic`,
+  `riv-trim_path-frame-{0..4}-clockwise-atomic`,
+  `riv-trim_path_linear-frame-{0..4}-clockwise-atomic`,
+  `riv-two_artboards-frame-{0..4}-clockwise-atomic`,
+  `riv-two_bone_ik-frame-0-clockwise-atomic`,
+  `riv-unbound_stateful_component-frame-0-clockwise-atomic`,
+  `riv-viewmodel_based_condition-frame-0-clockwise-atomic`,
+  `riv-viewmodel_from_context-frame-0-clockwise-atomic`,
+  `riv-viewmodel_from_instance-frame-{0,1}-clockwise-atomic`,
+  `riv-viewmodel_image_reset-frame-0-clockwise-atomic`,
+  `riv-viewmodel_instance_to_artboard-frame-0-clockwise-atomic`,
+  `riv-viewmodel_list_trigger-frame-0-clockwise-atomic`,
+  `riv-viewmodel_runtime_file-frame-{0..4}-clockwise-atomic`,
+  `riv-virtualize_blendmode-frame-0-clockwise-atomic`,
+  `riv-virtualized_artboard_databound_children-frame-0-clockwise-atomic`,
+  `riv-walle-frame-0-clockwise-atomic`,
+  `riv-word_joiner_test-frame-0-clockwise-atomic`, and
+  `riv-zero_width_space_line_break-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -540,10 +581,52 @@ Run `make renderer-golden`.
     `stacked_path_effects` frames 0-4, and `state_machine_transition` frames
     0-2. Capture missing pinned Metal references and apply the unchanged
     contract and diagnostic rules.
-49. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+49. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `state_machine_transition` frames 3-7 and
     `state_machine_triggers` frames 0-4. Capture missing pinned Metal
     references and apply the unchanged contract and diagnostic rules.
+50. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `state_machine_triggers` frames 5-7,
+    `state_transition_fire_trigger`, `stateful_artboard_swap`,
+    `stateful_keyed_trigger`, and `stateful_list_props` frames 0-3.
+51. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `stateful_list_props` frame 4, `stateful_multi_property`,
+    `stateful_nested`, `stateful_source_switch`, `stroke_name_test` frames
+    0-4, and `target_event`.
+52. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `test_elastic` frames 0-4, `test_modifier_run`,
+    `text_follow_path_shape_length`, `text_input`, and `text_input_event`
+    frames 0-1.
+53. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `text_input_event` frames 2-4, `text_listener_simpler`,
+    `text_opacity_modifier`, `text_stroke_test`, `text_vertical_trim_test`,
+    `time_based_interpolation`, and `timeline_event_test` frames 0-1.
+54. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `timeline_event_test` frames 2-4, `transform_constraint`,
+    `transition_actions`, `transition_artboard_condition_test`, both
+    `transition_duration_bind` fixtures, `transition_index_condition`, and
+    `transition_self_comparator_test`.
+55. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `translation_constraint`, `trigger_based_listeners`,
+    `trigger_fires_single_change`, `trim`, `trim_path` frames 0-4, and
+    `trim_path_linear` frame 0.
+56. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `trim_path_linear` frames 1-4, `two_artboards` frames 0-4, and
+    `two_bone_ik`.
+57. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `unbound_stateful_component`, `vertical_align_ellipsis`,
+    `viewmodel_access`, `viewmodel_based_condition`,
+    `viewmodel_from_context`, `viewmodel_from_instance` frames 0-1,
+    `viewmodel_image_reset`, `viewmodel_instance_to_artboard`, and
+    `viewmodel_list_trigger`.
+58. [x] Probe the final ten unprobed `algorithm-core` gated
+    clockwise-atomic `.riv` entries: `viewmodel_runtime_file` frames 0-4,
+    `virtualize_blendmode`, `virtualized_artboard_databound_children`,
+    `walle`, `word_joiner_test`, and `zero_width_space_line_break`.
+59. [ ] Build the pinned C++ Dawn full-stream and representative atomic
+    coverage/color-plane oracle for `spotify_kids_app_icon`. Use it to prove
+    or reject the candidate native-Metal-versus-WebGPU intermediate-color
+    residual without changing its reference or `2/32` contract.
 
 ## R2 Completion Record
 
@@ -2443,3 +2526,18 @@ Run `make renderer-golden`.
   pinned C++ Dawn full-stream and representative coverage/color-plane oracle.
   No existing reference or tolerance changed. The wave advances the ratchet to
   exact=583/diverges=0/gated=885.
+- 2026-07-13: Probed the final one hundred previously unprobed
+  `algorithm-core` clockwise-atomic `.riv` entries as ten read-only Terra
+  batches in scheduler-limited parallel tranches. Main captured all 100
+  native Metal references. Ninety-one entries pass the unchanged `2/32`
+  contract. The nine residuals are `test_modifier_run`,
+  `text_follow_path_shape_length`, `text_input`, `text_listener_simpler`,
+  `text_vertical_trim_test`, `transition_actions`,
+  `trigger_fires_single_change`, `vertical_align_ellipsis`, and
+  `viewmodel_access`. Every residual has an exact alpha plane and only tiny
+  transformed text/path contour components with clean fills and interiors;
+  Terra attributed each and Sol independently approved
+  `metal-webgpu-subpixel-edge-coverage`. No tolerance changed. The only
+  remaining clockwise-atomic `.riv` `algorithm-core` gate is the previously
+  probed `spotify_kids_app_icon` oracle hold. The wave advances the ratchet
+  to exact=674/diverges=0/gated=794.

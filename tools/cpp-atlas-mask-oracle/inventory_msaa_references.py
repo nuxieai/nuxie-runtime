@@ -8,26 +8,50 @@ import importlib.util
 import json
 import pathlib
 import re
+import struct
 import sys
 import tomllib
 
 
+sys.dont_write_bytecode = True
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 STRICT_ROOT = pathlib.Path("fixtures/renderer/reference/dawn-webgpu-metal")
 SOURCE_RE = re.compile(r'^source file="([^"]*)" artboard="([^"]*)" scene="([^"]*)"$')
 FRAME_SIZE_RE = re.compile(r"^frameSize width=(\d+) height=(\d+)$")
 CLEAR_COLOR_RE = re.compile(r"^clearColor value=(0x[0-9a-f]{8})$")
+EXPECTED_RUNTIME_REVISION = "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
+EXPECTED_DAWN_REVISION = "211333b2e3e429c3508f25c81c547f602adf448c"
+EXPECTED_ADAPTER = {
+    "adapter_vendor": "apple",
+    "adapter_architecture": "metal-3",
+    "adapter_device": "Apple M5 Max",
+    "adapter_description": "Metal driver on macOS Version 26.4.1 (Build 25E253)",
+    "adapter_vendor_id": "4203",
+    "adapter_device_id": "0",
+}
 
 
-def load_generator():
-    path = pathlib.Path(__file__).with_name("generate_path_stream_replay.py")
-    spec = importlib.util.spec_from_file_location("strict_path_replay", path)
+def load_module(name: str, filename: str):
+    path = pathlib.Path(__file__).with_name(filename)
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError("could not load strict path replay generator")
+        raise RuntimeError(f"could not load {filename}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def load_generator():
+    return load_module("strict_path_replay", "generate_path_stream_replay.py")
+
+
+def load_capture_validator():
+    return load_module("strict_capture_validator", "capture_msaa_references.py")
+
+
+def load_registry_generator():
+    return load_module("strict_registry_generator", "generate_msaa_reference_registry.py")
 
 
 def command_counts(lines: list[str]) -> dict[str, int]:
@@ -91,12 +115,120 @@ def inspect_upstream_gm(entry: dict, generator) -> tuple[dict | None, str | None
     return case, None
 
 
-def has_strict_reference(entry: dict) -> bool:
+def registry_sha256(manifest_path: pathlib.Path, registry_generator) -> str:
+    _, digest = registry_generator.generate_registry(
+        manifest_path,
+        ROOT,
+        EXPECTED_RUNTIME_REVISION,
+        EXPECTED_DAWN_REVISION,
+    )
+    return digest
+
+
+def canonical_riveabl_sha256(width: int, height: int, pixels: bytes, capture) -> str:
+    artifact = (
+        capture.RIVEABL_MAGIC
+        + struct.pack("<III", 1, width, height)
+        + pixels
+    )
+    return hashlib.sha256(artifact).hexdigest()
+
+
+def validate_strict_reference(
+    png: pathlib.Path,
+    case: dict,
+    expected_registry_sha256: str,
+    capture,
+) -> None:
+    provenance = png.with_suffix(".provenance")
+    _, fields = capture.parse_provenance(provenance)
+    expected_keys = set(capture.UPSTREAM_PROVENANCE_KEYS) | set(
+        capture.COORDINATOR_PROVENANCE_KEYS
+    )
+    if set(fields) != expected_keys:
+        missing = sorted(expected_keys - set(fields))
+        extra = sorted(set(fields) - expected_keys)
+        raise ValueError(
+            f"strict provenance schema mismatch: missing={missing} extra={extra}"
+        )
+    expected_fields = {
+        "backend": "metal",
+        "renderer_implementation": "cpp-dawn-webgpu",
+        **EXPECTED_ADAPTER,
+        "runtime_revision": EXPECTED_RUNTIME_REVISION,
+        "dawn_revision": EXPECTED_DAWN_REVISION,
+        "registry_sha256": expected_registry_sha256,
+        "case_id": case["id"],
+        "stream_sha256": case["sha256"],
+        "frame_width": str(case["width"]),
+        "frame_height": str(case["height"]),
+        "sample_count": "4",
+    }
+    for key, expected in expected_fields.items():
+        if fields[key] != expected:
+            raise ValueError(
+                f"strict provenance {key} mismatch: expected {expected}, got {fields[key]}"
+            )
+    for key in ("artifact_sha256", "png_sha256"):
+        if capture.SHA256_RE.fullmatch(fields[key]) is None:
+            raise ValueError(f"strict provenance {key} is not a canonical SHA-256")
+    actual_png_sha256 = capture.sha256_file(png)
+    if fields["png_sha256"] != actual_png_sha256:
+        raise ValueError(
+            "strict provenance png_sha256 mismatch: "
+            f"expected {actual_png_sha256}, got {fields['png_sha256']}"
+        )
+    pixels = capture.decode_png_rgba8(png, case["width"], case["height"])
+    actual_artifact_sha256 = canonical_riveabl_sha256(
+        case["width"], case["height"], pixels, capture
+    )
+    if fields["artifact_sha256"] != actual_artifact_sha256:
+        raise ValueError(
+            "strict provenance artifact_sha256 mismatch: "
+            f"expected {actual_artifact_sha256}, got {fields['artifact_sha256']}"
+        )
+
+
+def has_strict_reference(
+    entry: dict,
+    manifest_cases: dict[str, dict],
+    expected_registry_sha256: str,
+    capture,
+) -> bool:
     reference = pathlib.Path(entry["reference"])
     if STRICT_ROOT not in reference.parents:
         return False
     png = ROOT / reference
-    return png.is_file() and png.with_suffix(".provenance").is_file()
+    case = manifest_cases.get(entry["id"])
+    if (
+        case is None
+        or case["stream"] != entry["stream"]
+        or png.name != f"{entry['id']}.png"
+    ):
+        return False
+    try:
+        validate_strict_reference(png, case, expected_registry_sha256, capture)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return False
+    return True
+
+
+def require_capture_case(discovered: dict, manifest_cases: dict[str, dict]) -> None:
+    expected = manifest_cases.get(discovered["id"])
+    if expected is None:
+        raise ValueError(
+            f"accepted strict case is missing from the capture manifest: {discovered['id']}"
+        )
+    if discovered != expected:
+        differing_fields = sorted(
+            key
+            for key in set(discovered) | set(expected)
+            if discovered.get(key) != expected.get(key)
+        )
+        raise ValueError(
+            f"accepted strict case does not match capture manifest: {discovered['id']}; "
+            f"fields={differing_fields}"
+        )
 
 
 def build_inventory(corpus_path: pathlib.Path, manifest_path: pathlib.Path) -> dict:
@@ -104,14 +236,22 @@ def build_inventory(corpus_path: pathlib.Path, manifest_path: pathlib.Path) -> d
         corpus = tomllib.load(source)["entry"]
     with manifest_path.open("rb") as source:
         manifest_cases = tomllib.load(source)["case"]
-    manifest_ids = {case["id"] for case in manifest_cases}
+    manifest_cases_by_id = {case["id"]: case for case in manifest_cases}
     generator = load_generator()
+    capture = load_capture_validator()
+    registry_generator = load_registry_generator()
+    expected_registry_sha256 = registry_sha256(manifest_path, registry_generator)
     gated_msaa = [
         entry for entry in corpus if entry["mode"] == "msaa" and entry["status"] == "gated"
     ]
     rows = []
     for entry in gated_msaa:
-        if has_strict_reference(entry):
+        if has_strict_reference(
+            entry,
+            manifest_cases_by_id,
+            expected_registry_sha256,
+            capture,
+        ):
             continue
         row = {
             "id": entry["id"],
@@ -124,10 +264,7 @@ def build_inventory(corpus_path: pathlib.Path, manifest_path: pathlib.Path) -> d
             if case is not None:
                 row["result"] = "accepted"
                 row["case"] = case
-                if entry["id"] not in manifest_ids:
-                    raise ValueError(
-                        f"accepted strict case is missing from the capture manifest: {entry['id']}"
-                    )
+                require_capture_case(case, manifest_cases_by_id)
             else:
                 row["result"] = "unsupported"
                 row["reason"] = rejection

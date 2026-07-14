@@ -2,6 +2,7 @@
 """Cross-language contract tests for the atlas oracle formats."""
 
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -91,6 +92,18 @@ MSAA_REFERENCE_FIXTURES = (
 MSAA_TEST_RUNTIME_REVISION = "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 MSAA_TEST_DAWN_REVISION = "211333b2e3e429c3508f25c81c547f602adf448c"
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
+
+
+def load_inventory_module():
+    spec = importlib.util.spec_from_file_location(
+        "inventory_msaa_references", MSAA_REFERENCE_INVENTORY_TOOL
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load MSAA reference inventory")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 # Exact bytes asserted by AtlasMask::serialize() in commit 10a64ec.
 RUST_SERIALIZER_FIXTURE = bytes([
@@ -1629,6 +1642,123 @@ class FormatTests(unittest.TestCase):
         ]
         self.assertEqual(len(accepted), 11)
         self.assertEqual(len(set(accepted)), len(accepted))
+
+    def test_msaa_inventory_rejects_tampered_provenance_and_png(self):
+        inventory = load_inventory_module()
+        capture = inventory.load_capture_validator()
+        registry_generator = inventory.load_registry_generator()
+        registry_sha256 = inventory.registry_sha256(
+            MSAA_REFERENCE_MANIFEST, registry_generator
+        )
+        cases = {
+            case["id"]: case
+            for case in tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
+        }
+        case = cases["gm-beziers-msaa"]
+        source_png = MSAA_REFERENCE_FIXTURES / "gm-beziers-msaa.png"
+        source_provenance = source_png.with_suffix(".provenance")
+        _, source_fields = capture.parse_provenance(source_provenance)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = pathlib.Path(temp_dir)
+            strict_root = pathlib.Path("strict")
+            png = temp_root / strict_root / source_png.name
+            png.parent.mkdir()
+            shutil.copy2(source_png, png)
+            provenance = png.with_suffix(".provenance")
+            entry = {
+                "id": case["id"],
+                "stream": case["stream"],
+                "reference": str(strict_root / png.name),
+            }
+
+            def write_provenance(fields):
+                provenance.write_text(
+                    "".join(f"{key}={value}\n" for key, value in fields.items())
+                )
+
+            original_root = inventory.ROOT
+            original_strict_root = inventory.STRICT_ROOT
+            inventory.ROOT = temp_root
+            inventory.STRICT_ROOT = strict_root
+            try:
+                write_provenance(source_fields)
+                self.assertTrue(
+                    inventory.has_strict_reference(
+                        entry, cases, registry_sha256, capture
+                    )
+                )
+
+                false_values = {
+                    "runtime_revision": "0" * 40,
+                    "dawn_revision": "0" * 40,
+                    "registry_sha256": "0" * 64,
+                    "adapter_vendor": "not-apple",
+                    "adapter_architecture": "not-metal",
+                    "adapter_device": "not-the-captured-device",
+                    "adapter_description": "not-the-captured-driver",
+                    "adapter_vendor_id": "1",
+                    "adapter_device_id": "1",
+                    "artifact_sha256": "0" * 64,
+                    "png_sha256": "0" * 64,
+                    "frame_width": str(case["width"] + 1),
+                    "frame_height": str(case["height"] + 1),
+                    "sample_count": "1",
+                }
+                for key, value in false_values.items():
+                    with self.subTest(tampered_key=key):
+                        fields = dict(source_fields)
+                        fields[key] = value
+                        write_provenance(fields)
+                        self.assertFalse(
+                            inventory.has_strict_reference(
+                                entry, cases, registry_sha256, capture
+                            )
+                        )
+
+                for key in source_fields:
+                    with self.subTest(missing_key=key):
+                        fields = dict(source_fields)
+                        del fields[key]
+                        write_provenance(fields)
+                        self.assertFalse(
+                            inventory.has_strict_reference(
+                                entry, cases, registry_sha256, capture
+                            )
+                        )
+
+                write_provenance(source_fields)
+                tampered_png = bytearray(source_png.read_bytes())
+                tampered_png[-1] ^= 1
+                png.write_bytes(tampered_png)
+                self.assertFalse(
+                    inventory.has_strict_reference(
+                        entry, cases, registry_sha256, capture
+                    )
+                )
+            finally:
+                inventory.ROOT = original_root
+                inventory.STRICT_ROOT = original_strict_root
+
+    def test_msaa_inventory_rejects_same_id_mismatched_manifest_case(self):
+        inventory = load_inventory_module()
+        generator = inventory.load_generator()
+        corpus = tomllib.loads((ROOT / "corpus-r.toml").read_text())["entry"]
+        entry = next(
+            entry for entry in corpus if entry["id"] == "gm-strokes_zoomed-msaa"
+        )
+        discovered, rejection = inventory.inspect_upstream_gm(entry, generator)
+        self.assertIsNone(rejection)
+        self.assertIsNotNone(discovered)
+        mismatched = dict(discovered)
+        mismatched["width"] += 1
+        with self.assertRaisesRegex(
+            ValueError,
+            "accepted strict case does not match capture manifest.*width",
+        ):
+            inventory.require_capture_case(
+                discovered, {discovered["id"]: mismatched}
+            )
 
     def test_msaa_reference_manifest_has_complete_fixture_provenance(self):
         cases = tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]

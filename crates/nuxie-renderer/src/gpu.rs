@@ -598,6 +598,15 @@ impl PaintData {
         }
     }
 
+    pub(crate) fn image(opacity: f32, fill_rule: FillRule, blend_mode: BlendMode) -> Self {
+        Self {
+            params: PaintType::Image as u32
+                | Self::fill_flag(fill_rule)
+                | blend_mode_id(blend_mode) << 4,
+            value: opacity.to_bits(),
+        }
+    }
+
     pub(crate) fn with_clip_rect(mut self) -> Self {
         self.params |= PAINT_FLAG_HAS_CLIP_RECT;
         self
@@ -919,6 +928,10 @@ mod tests {
         );
         let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
         assert_eq!(stroke.params, 1 | 11 << 4);
+
+        let image_paint = PaintData::image(0.5, FillRule::NonZero, BlendMode::Screen);
+        assert_eq!(image_paint.params, 4 | 0x100 | 1 << 4);
+        assert_eq!(image_paint.value, 0.5f32.to_bits());
 
         let image = ImageDrawUniforms::new(
             Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),

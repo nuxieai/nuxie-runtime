@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=719, diverges=0, gated=749, total=1,468.
+- Rust wgpu: exact=723, diverges=0, gated=745, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -82,7 +82,9 @@ Run `make renderer-golden`.
   `gm-image_filter_options-clockwise-atomic`,
   `gm-image_lod-clockwise-atomic`, and
   `gm-image-clockwise-atomic`,
-  `gm-image_aa_border-clockwise-atomic`, and
+  `gm-image_aa_border-clockwise-atomic`, plus
+  `gm-image-msaa`, `gm-image_aa_border-msaa`,
+  `gm-image_filter_options-msaa`, and `gm-image_lod-msaa`, and
   `gm-mesh-clockwise-atomic`, and
   `gm-degengrad-clockwise-atomic`,
   `gm-rect_grad-clockwise-atomic`,
@@ -828,14 +830,28 @@ Run `make renderer-golden`.
     references are installed but the rows remain gated under the narrower
     `rust-wgpu-msaa-image-rect` diagnostic. The ratchet remains
     exact=719/diverges=0/gated=749 with no tolerance change.
-73. [ ] Port C++ `gpu::ImageRectDraw` scheduling and WebGPU draw execution for
-    rectangular images in Rust MSAA mode, beginning with
+73. [x] Port C++ rectangular-image execution in Rust MSAA mode, beginning with
     `image_filter_options` and then `image`, `image_aa_border`, and
-    `image_lod`. Preserve the existing clockwise-atomic image path, exact
-    sampler-key semantics, mip generation/LOD selection, image-edge AA,
-    opacity, and blend behavior. Add a focused GPU regression before removing
-    the shared rejection, then probe all four pinned Dawn references under
-    their unchanged `2/32` contracts. Preserve the 719 exact entries.
+    `image_lod`. The upstream trace corrected the initial task wording:
+    `gpu::ImageRectDraw` is atomic-only; C++ MSAA scales a unit-rectangle
+    `PathDraw` and evaluates an image paint through the generated path shader.
+    Rust now follows that route with C++-encoded image `PaintData`, inverse
+    paint coordinates, constant mip LOD and bias, the existing generated MSAA
+    image-paint shader branch, and exact filter/wrap sampler conversion. A
+    focused GPU regression proves the MSAA result byte-identical to Rust's
+    atomic path, and a pure test pins the C++ LOD formula. All four Dawn probes
+    have zero pixels beyond delta 2 (`image_filter_options` max 1; the other
+    three max 2), so they are promoted without changing any contract. The
+    renderer suite passes 210 enabled tests, and the full ratchet advances to
+    exact=723/diverges=0/gated=745 while preserving all 719 prior exact rows.
+74. [ ] Capture and probe the next ten strict source-order C++ Dawn MSAA
+    entries after `interleavedfeather`: `interleavedfillrule`, the three
+    `labyrinth_*` streams, and the six `largeclippedpath_*` variants. Preserve
+    the existing 54-case registry byte-for-byte in serial and four-job modes,
+    record strict-generator rejections as named harness gaps, and install only
+    provenance-complete references. Probe accepted rows under their unchanged
+    contracts before changing any `algorithm-core` gate, and preserve the 723
+    exact entries.
 
 ## R2 Completion Record
 
@@ -3045,3 +3061,12 @@ Run `make renderer-golden`.
   ratchet remains exact=719/diverges=0/gated=749; the workspace, normal
   584-segment, and scripted 35-segment V2 floors pass. Queue item 73 ports the
   image-rectangle path.
+- 2026-07-14: Ported C++'s MSAA rectangular-image path as a unit rectangle with
+  image paint, including inverse paint coordinates, constant biased mip LOD,
+  real texture/sampler bindings, opacity, blend mode, and edge coverage. The
+  focused atomic/MSAA GPU oracle is byte-exact; all four pinned Dawn image
+  probes pass unchanged `2/32` with zero over-threshold pixels. The renderer
+  ratchet advances to exact=723/diverges=0/gated=745, all 719 prior exact rows
+  remain green, the 245-test renderer suite passes, and workspace plus normal
+  584-segment and scripted 35-segment V2 floors pass. Queue item 74 names the
+  next strict source-order capture batch.

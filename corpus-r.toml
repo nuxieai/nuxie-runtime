@@ -1152,10 +1152,9 @@ stream = "fixtures/renderer/streams/gm/image.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]
@@ -1177,10 +1176,9 @@ stream = "fixtures/renderer/streams/gm/image_aa_border.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image_aa_border-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]
@@ -1202,10 +1200,9 @@ stream = "fixtures/renderer/streams/gm/image_filter_options.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image_filter_options-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]
@@ -1227,10 +1224,9 @@ stream = "fixtures/renderer/streams/gm/image_lod.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image_lod-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]

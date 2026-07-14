@@ -1081,10 +1081,6 @@ impl Renderer for WgpuFrame {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
-        if self.mode != RenderMode::ClockwiseAtomic {
-            self.unsupported.get_or_insert("images in msaa mode");
-            return;
-        }
         if self.state.clip_is_empty {
             return;
         }
@@ -1097,6 +1093,13 @@ impl Renderer for WgpuFrame {
         let Some((clip_updates, clip_id)) = self.prepare_clip_updates() else {
             return;
         };
+        if self.mode == RenderMode::Msaa && clip_id != 0 {
+            self.unsupported
+                .get_or_insert("path clips on non-atlas msaa draws");
+            return;
+        }
+        // C++ RiveRenderer::drawImage uses ImageRectDraw only for atomics;
+        // MSAA draws this unit rectangle with an image paint.
         let mut raw_path = RawPath::new();
         raw_path.move_to(0.0, 0.0);
         raw_path.line_to(1.0, 0.0);
@@ -2441,6 +2444,7 @@ impl WgpuFrame {
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
                                 None,
+                                None,
                                 &uniforms,
                                 &tessellation.path,
                                 &paint,
@@ -2681,7 +2685,21 @@ impl WgpuFrame {
                             );
                             let tessellation_view = tessellation_texture
                                 .create_view(&wgpu::TextureViewDescriptor::default());
-                            let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                            let image = draw.image.as_ref().map(|image| match image {
+                                ImageDraw::Rect(image) => image,
+                                ImageDraw::Mesh(_) => {
+                                    unreachable!(
+                                        "MSAA image meshes are rejected before preparation"
+                                    )
+                                }
+                            });
+                            let mut paint = if let Some(image) = image {
+                                gpu::PaintData::image(
+                                    image.opacity,
+                                    draw.path.fill_rule,
+                                    image.blend_mode,
+                                )
+                            } else if draw.paint.style == RenderPaintStyle::Stroke {
                                 gpu::PaintData::solid_stroke(
                                     modulate_color_alpha(draw.paint.color, draw.state.opacity),
                                     draw.paint.blend_mode,
@@ -2696,7 +2714,16 @@ impl WgpuFrame {
                             if draw.state.clip_rect.is_some() {
                                 paint = paint.with_clip_rect();
                             }
-                            let paint_aux = clip_rect_paint_aux(draw.state.clip_rect);
+                            let paint_aux = image.map_or_else(
+                                || clip_rect_paint_aux(draw.state.clip_rect),
+                                |image| {
+                                    image_paint_aux(
+                                        draw.state.clip_rect,
+                                        draw.state.transform,
+                                        image.texture.as_ref(),
+                                    )
+                                },
+                            );
                             let prepared = self.context.path_pipeline.prepare(
                                 &self.context.device,
                                 &tessellation_view,
@@ -2706,6 +2733,7 @@ impl WgpuFrame {
                                 } else {
                                     None
                                 },
+                                image.map(|image| (&image.texture.view, image.sampler)),
                                 &uniforms,
                                 &tessellation.path,
                                 &paint,
@@ -3716,6 +3744,33 @@ fn clip_rect_paint_aux(clip: Option<ClipRectState>) -> gpu::PaintAuxData {
         clip_rect_inverse_matrix: inverse.0,
         inverse_fwidth: [-1.0 / (xx.abs() + xy.abs()), -1.0 / (yx.abs() + yy.abs())],
     }
+}
+
+fn image_paint_aux(
+    clip: Option<ClipRectState>,
+    transform: Mat2D,
+    texture: &WgpuImageTexture,
+) -> gpu::PaintAuxData {
+    // Mirrors the image branch of gpu::PaintAuxData::set in renderer/src/gpu.cpp.
+    let mut aux = clip_rect_paint_aux(clip);
+    let inverse =
+        invert(transform).expect("an enqueued image draw must have an invertible transform");
+    aux.matrix = inverse.0;
+    aux.paint_value[0] =
+        image_texture_lod(inverse, texture.texture.width(), texture.texture.height());
+    aux
+}
+
+fn image_texture_lod(inverse_transform: Mat2D, width: u32, height: u32) -> f32 {
+    let [xx, yx, xy, yy, _, _] = inverse_transform.0;
+    let width = width as f32;
+    let height = height as f32;
+    let dudx = xx * width;
+    let dudy = yx * height;
+    let dvdx = xy * width;
+    let dvdy = yy * height;
+    let max_scale_factor_pow2 = (dudx * dudx + dvdx * dvdx).max(dudy * dudy + dvdy * dvdy);
+    max_scale_factor_pow2.max(1.0).log2() * 0.5 + gpu::MIP_MAP_LOD_BIAS
 }
 
 fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
@@ -5030,6 +5085,62 @@ mod tests {
         );
 
         assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn image_texture_lod_matches_cpp_constant_lod_contract() {
+        assert_eq!(
+            image_texture_lod(Mat2D([0.25, 0.0, 0.0, 0.125, 0.0, 0.0]), 4, 8),
+            -0.5
+        );
+        assert_eq!(
+            image_texture_lod(Mat2D([1.0, 0.0, 0.0, 0.5, 0.0, 0.0]), 4, 8),
+            1.5
+        );
+    }
+
+    #[test]
+    fn msaa_image_rect_matches_atomic_image_sampling() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 2, 2);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[
+                    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+                ])
+                .unwrap();
+        }
+        let render = |mode| {
+            let mut factory = WgpuFactory::new_with_mode(16, 16, mode).unwrap();
+            let image = factory.decode_image(&encoded);
+            let mut frame = factory.begin_frame(0xff00_0000);
+            frame.transform(Mat2D([4.0, 0.0, 0.0, 4.0, 2.0, 2.0]));
+            frame.draw_image(
+                Some(image.as_ref()),
+                ImageSampler {
+                    wrap_x: nuxie_render_api::ImageWrap::Clamp,
+                    wrap_y: nuxie_render_api::ImageWrap::Clamp,
+                    filter: nuxie_render_api::ImageFilter::Nearest,
+                },
+                BlendMode::SrcOver,
+                1.0,
+            );
+            frame.finish().unwrap()
+        };
+
+        let atomic = render(RenderMode::ClockwiseAtomic);
+        let msaa = render(RenderMode::Msaa);
+        assert_eq!(msaa, atomic);
+        let pixel = |x: usize, y: usize| &msaa[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+        assert_eq!(pixel(3, 3), [255, 0, 0, 255]);
+        assert_eq!(pixel(8, 3), [0, 255, 0, 255]);
+        assert_eq!(pixel(3, 8), [0, 0, 255, 255]);
+        assert_eq!(pixel(8, 8), [255, 255, 255, 255]);
+        assert_eq!(pixel(11, 11), [0, 0, 0, 255]);
     }
 
     #[test]

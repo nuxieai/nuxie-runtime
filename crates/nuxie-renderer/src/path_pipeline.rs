@@ -1,6 +1,10 @@
 //! MSAA analytic path draw translated from `draw_path.vert` and `draw_msaa_object.frag`.
 
-use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData};
+use crate::{
+    atomic_pipeline::image_sampler,
+    gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData},
+};
+use nuxie_render_api::ImageSampler;
 use wgpu::util::DeviceExt;
 
 pub(crate) struct PathPipeline {
@@ -620,6 +624,7 @@ impl PathPipeline {
         tessellation_view: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
         destination: Option<&wgpu::TextureView>,
+        image: Option<(&wgpu::TextureView, ImageSampler)>,
         uniforms: &FlushUniforms,
         path: &PathData,
         paint: &PaintData,
@@ -679,6 +684,15 @@ impl PathPipeline {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+        let image_sampler_resource = device.create_sampler(&image.map_or_else(
+            || wgpu::SamplerDescriptor {
+                label: Some("nuxie-msaa-path-dummy-image-sampler"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            },
+            |(_, sampler)| image_sampler(sampler),
+        ));
         let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-flush-group"),
             layout: &self.flush_layout,
@@ -701,8 +715,11 @@ impl PathPipeline {
             label: Some("nuxie-msaa-path-image-group"),
             layout: &self.image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
+                binding(
+                    12,
+                    wgpu::BindingResource::TextureView(image.map_or(&dummy_view, |(view, _)| view)),
+                ),
+                binding(14, wgpu::BindingResource::Sampler(&image_sampler_resource)),
             ],
         });
         let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

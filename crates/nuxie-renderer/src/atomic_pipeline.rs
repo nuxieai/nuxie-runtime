@@ -1524,7 +1524,7 @@ fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
     }
 }
 
-fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'static> {
+pub(crate) fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'static> {
     let address_mode = |wrap| match wrap {
         ImageWrap::Clamp => wgpu::AddressMode::ClampToEdge,
         ImageWrap::Repeat => wgpu::AddressMode::Repeat,

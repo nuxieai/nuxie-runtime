@@ -840,10 +840,9 @@ stream = "fixtures/renderer/streams/gm/feather_cusp.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_cusp-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-atlas-feather-large-radius-coverage-precision"
 
 
 [[entry]]
@@ -937,10 +936,9 @@ stream = "fixtures/renderer/streams/gm/feather_shapes.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_shapes-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-atlas-feather-large-radius-coverage-precision"
 
 
 [[entry]]

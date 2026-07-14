@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=708, diverges=0, gated=760, total=1,468.
+- Rust wgpu: exact=710, diverges=0, gated=758, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -16,8 +16,8 @@ Run `make renderer-golden`.
   `poly_{clockwise,evenOdd,nonZero}` family,
   plus `emptyfeather`, `emptystroke`, `emptystrokefeather`,
   `emptytransparentclear`,
-  `feather_corner`, `feather_ellipse`, `feather_polyshapes`, and
-  `feather_roundcorner`,
+  `feather_corner`, `feather_cusp`, `feather_ellipse`,
+  `feather_polyshapes`, `feather_roundcorner`, and `feather_shapes`,
   plus `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
   `bug5099`, `bug6083`, `bug615686`, and `bug6987`,
   plus `bug7792`, `clippedcubic`, `crbug_996140`, `cubicclosepath`,
@@ -736,13 +736,29 @@ Run `make renderer-golden`.
     depth behavior in the default suite. The seven exact siblings remain
     green; the two unrelated large-radius gates are unchanged at 435/max-4
     and 180/max-4.
-68. [ ] Isolate the shared C++/Rust atlas-feather larger-radius coverage
+68. [x] Isolate the shared C++/Rust atlas-feather larger-radius coverage
     precision boundary in `feather_cusp` and `feather_shapes`. Start with a
     single residual contour and compare tessellation inputs, R16 mask samples,
     atlas placement, and final sampling under the unchanged `2/32` contract;
     port a proven semantic mismatch or retain the existing backend-precision
     gate with a bounded oracle. Preserve the now-exact empty-stroke depth path
-    and all seven exact siblings from the same source-order wave.
+    and all seven exact siblings from the same source-order wave. C++ computes
+    atlas bounds from the softened fill path while Rust used the original
+    controls, and C++ relaxes Wang parametric precision for large feather
+    radii while Rust retained the normal precision. Rust now matches both
+    rules and uses fused placement translation arithmetic. Paired high-radius
+    oracles pin runtime-derived exact placement, exact signed zero/nonzero mask
+    topology, bounded tessellation/R16 precision, and final C++ Dawn/Rust
+    pixels under `2/32`.
+    `feather_cusp` improves from 435/max 4 to zero pixels beyond delta 2;
+    `feather_shapes` improves from 180/max 4 to 11/max 3. Both are promoted,
+    while the empty-stroke depth path and seven siblings remain green.
+69. [ ] Add and capture the next ten accepted strict source-order C++ Dawn
+    MSAA cases after `feather_shapes`, beginning with `feather_strokes` and
+    continuing through the feather-text, gamma-clip, hit-test, and image
+    candidates. Record strict-generator rejections as named harness gaps,
+    prove all prior 40 captures remain byte-identical, and probe accepted
+    references under the unchanged `2/32` contract before changing gates.
 
 ## R2 Completion Record
 
@@ -2864,3 +2880,17 @@ Run `make renderer-golden`.
   to exact=708/diverges=0/gated=760 without changing a reference or tolerance.
   Queue item 68 targets the shared larger-radius atlas-feather precision
   boundary.
+- 2026-07-14: Closed the larger-radius atlas-feather gap with three C++ parity
+  fixes. Atlas placement now uses the same softened fill path as C++, fused
+  multiply-add translation matches C++ float contraction, and feather
+  tessellation applies C++'s radius-scaled Wang precision. New paired oracles
+  capture runtime-derived exact `RIVEATP` placement, complete `RIVEATI` inputs,
+  physical `RIVEMSK` coverage with exact signed support and a calibrated
+  `2^-9` value bound, and full `RIVEABL` MSAA output for the strongest cusp
+  and shapes-cusp contours. The cusp is now 0/max 2 and shapes is 11/max 3
+  under the unchanged `2/32` contract, promoting both entries and advancing
+  the ratchet to exact=710/diverges=0/gated=758. The workspace suite, 206
+  enabled renderer tests, 35 oracle-format tests, C++ oracle build, normal
+  584-segment golden floor, scripted 35-segment floor, and full renderer
+  corpus all pass. Queue item 69 names the next strict source-order Dawn MSAA
+  capture wave.

@@ -920,7 +920,7 @@ class FormatTests(unittest.TestCase):
             "atomicDstReadShuffleSrcOverCase",
             "atomicDstReadShuffleCase =",
             "adapterOptions.backendType = WGPUBackendType_Metal;",
-            "pinnedMetalCase\n                                         ? &adapterOptions",
+            "metalBackendCase\n                                         ? &adapterOptions",
             "writeAdapterProvenance(msaaReferenceMode ? secondaryOutput",
             "info.backendType != WGPUBackendType_Metal",
             'file << "backend=metal\\n";',
@@ -931,13 +931,13 @@ class FormatTests(unittest.TestCase):
             "if (!fullStreamCase && !msaaReferenceMode)",
             "const auto& facts = webgpuContext->atlasMaskFactsForOracle();",
             'std::printf("draw schedule: interlock=%u fixedFunctionColorOutput=%d batches=%zu',
-            "facts.contentWidth != kExpectedLogicalAtlasSize",
-            "facts.contentHeight != kExpectedLogicalAtlasSize",
-            "facts.pathTranslateX != kAtlasPadding",
-            "facts.pathTranslateY != kAtlasPadding",
+            "facts.contentWidth != expectedContentWidth",
+            "facts.contentHeight != expectedContentHeight",
+            "facts.pathTranslateX != expectedTranslateX",
+            "facts.pathTranslateY != expectedTranslateY",
             "facts.strokeBatchCount != 1",
-            "facts.strokeScissor.right != kExpectedLogicalAtlasSize",
-            "facts.strokeScissor.bottom != kExpectedLogicalAtlasSize",
+            "facts.strokeScissor.right != expectedContentWidth",
+            "facts.strokeScissor.bottom != expectedContentHeight",
             "path->moveTo(kSquareMin, kSquareMin);",
             "path->lineTo(kSquareMax, kSquareMin);",
             "path->lineTo(kSquareMax, kSquareMax);",
@@ -2121,10 +2121,11 @@ class FormatTests(unittest.TestCase):
             "const ATLAS_ORACLE_LOGICAL_SIZE: u32 = 39;",
             "const ATLAS_ORACLE_PLACEMENT: [f32; 2] = [2.0, 2.0];",
             "let mut placement = feather_atlas_placement(",
-            "assert_eq!([placement.width, placement.height], [39, 39]);",
+            "assert_eq!(oracle.placement.content_size, [39, 39]);",
+            "assert_eq!(oracle.placement.physical_size, [48, 48]);",
             "uniforms.atlas_texture_inverse_size =",
-            "2.0 / placement.width as f32",
-            "placement.width,",
+            "2.0 / layout.extent()[0] as f32",
+            "placement.width",
             '#[ignore = "requires RIVE_CPP_ATLAS_MASK from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_FILL_MASK from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_ATLAS_FILL_INPUTS from the C++ WebGPU oracle"]',
@@ -2195,6 +2196,46 @@ class FormatTests(unittest.TestCase):
                       readme)
         self.assertIn("-- --exact --ignored --nocapture", readme)
 
+    def test_large_feather_stage_oracle_is_complete_and_documented(self):
+        exporter = EXPORTER.read_text()
+        build = BUILD_SCRIPT.read_text()
+        rust = RUST_RENDERER.read_text()
+        readme = README.read_text()
+        placement = (ROOT / "crates/nuxie-renderer/src/atlas_placement_oracle.rs").read_text()
+        for fragment in (
+            '"large-feather-cusp"',
+            '"large-feather-shapes-cusp"',
+            "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'T', 'P', '\\0'};",
+            "writePlacement(auxiliaryOutput,",
+            "clippedPathBounds(frameWidth, frameHeight, facts)",
+            "floatBits(facts.pathScale)",
+            "facts.pathAtlasScissor.left",
+        ):
+            self.assertIn(fragment, exporter)
+        for fragment in (
+            '"$large_feather_cusp_output" "$large_feather_cusp_inputs_output"',
+            '"$large_feather_shapes_cusp_output" "$large_feather_shapes_cusp_inputs_output"',
+            '"$large_feather_cusp_mask_bytes" != "2600"',
+            '"$large_feather_cusp_inputs_bytes" != "32840"',
+            '"$large_feather_shapes_cusp_inputs_bytes" != "32824"',
+            '"$large_feather_cusp_placement_bytes" != "88"',
+            '"$large_feather_cusp_blit_bytes" != "14385172"',
+        ):
+            self.assertIn(fragment, build)
+        self.assertIn('const MAGIC: [u8; 8] = *b"RIVEATP\\0";', placement)
+        self.assertIn("const BYTE_COUNT: usize = 8 + 4 + FIELD_COUNT * 4;", placement)
+        self.assertIn(
+            "cpp_webgpu_large_radius_feather_atlas_stages_match_rust_when_configured",
+            rust,
+        )
+        self.assertIn("compare_cpp_to_rust_signed(", rust)
+        for prefix in (
+            "RIVE_CPP_ATLAS_LARGE_FEATHER_CUSP",
+            "RIVE_CPP_ATLAS_LARGE_FEATHER_SHAPES_CUSP",
+        ):
+            for suffix in ("MASK", "INPUTS", "PLACEMENT", "BLIT"):
+                self.assertIn(f"{prefix}_{suffix}", readme)
+
     def test_runtime_patch_applies_and_observes_production_atlas_state(self):
         files = (
             "renderer/include/rive/renderer/gpu.hpp",
@@ -2245,6 +2286,9 @@ class FormatTests(unittest.TestCase):
             for fragment in (
                 "float atlasPathTranslateXForOracle = 0;",
                 "float atlasPathTranslateYForOracle = 0;",
+                "float atlasPathScaleForOracle = 0;",
+                "IAABB atlasPathPixelBoundsForOracle = {};",
+                "AABBu16 atlasPathScissorForOracle = {};",
                 "bool atlasPathTransformForOracleValid = false;",
                 "AtlasInputContourForOracle",
                 "AtlasInputTriangleForOracle",
@@ -2262,11 +2306,19 @@ class FormatTests(unittest.TestCase):
             self.assertIn(
                 "m_pendingAtlasDraws.front()->atlasTransform().translateY;", logical_flush
             )
+            self.assertIn(
+                "m_pendingAtlasDraws.front()->atlasTransform().scaleFactor;", logical_flush
+            )
+            self.assertIn("m_pendingAtlasDraws.front()->pixelBounds();", logical_flush)
+            self.assertIn("m_pendingAtlasDraws.front()->atlasScissor();", logical_flush)
             for fragment in (
                 "const AtlasMaskOracleFacts& atlasMaskFactsForOracle() const",
                 "m_atlasMaskOracleFacts.contentWidth = desc.atlasContentWidth;",
                 "desc.atlasPathTranslateXForOracle;",
                 "desc.atlasPathTranslateYForOracle;",
+                "desc.atlasPathScaleForOracle;",
+                "desc.atlasPathPixelBoundsForOracle;",
+                "desc.atlasPathScissorForOracle;",
                 "desc.atlasStrokeBatchCount + desc.atlasFillBatchCount",
                 "const AtlasDrawBatch* oracleBatch =",
                 "oracleBatch != nullptr ? oracleBatch->scissor",

@@ -118,7 +118,7 @@ pub(crate) fn build_feather_tessellation_with_direction(
         return None;
     }
     let mut tessellation =
-        build_stroke_or_feather_tessellation(path, transform, stroke, feather_radius)?;
+        build_stroke_or_feather_tessellation(path, transform, stroke, paint_feather)?;
     if stroke.is_none() {
         match fill_direction {
             FeatherFillDirection::Forward => {}
@@ -151,6 +151,11 @@ pub(crate) fn feather_pixel_bounds(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<[i32; 4]> {
+    let matrix_scale = max_matrix_scale(transform);
+    let softened_path = (stroke.is_none()
+        && feather_fill_requires_softening(paint_feather, matrix_scale))
+    .then(|| softened_path_for_feathering(path, paint_feather * 1.5, matrix_scale));
+    let path = softened_path.as_ref().unwrap_or(path);
     let (min, max) = transformed_control_bounds(path, transform)?;
     let mut radius = stroke.map_or(0.0, |(thickness, join, cap)| {
         let stroke_radius = thickness * 0.5;
@@ -249,11 +254,13 @@ fn build_stroke_or_feather_tessellation(
     path: &RawPath,
     transform: Mat2D,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
-    feather_radius: f32,
+    paint_feather: f32,
 ) -> Option<FillTessellation> {
     let matrix_scale = max_matrix_scale(transform);
-    let softened_path = (stroke.is_none() && feather_radius / 1.5 * matrix_scale > 1.0)
-        .then(|| softened_path_for_feathering(path, feather_radius, matrix_scale));
+    let feather_radius = paint_feather * 1.5;
+    let softened_path = (stroke.is_none()
+        && feather_fill_requires_softening(paint_feather, matrix_scale))
+    .then(|| softened_path_for_feathering(path, feather_radius, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
     let mut contours = stroke_contours(path)?;
     let is_stroke = stroke.is_some();
@@ -268,6 +275,12 @@ fn build_stroke_or_feather_tessellation(
         return None;
     }
     let feather_screen_radius = (feather_radius * matrix_scale).min(feather_max_screen_radius());
+    let parametric_precision = if feather_radius > 1.0 {
+        (PARAMETRIC_PRECISION as f32 * 100.0 / (feather_radius * matrix_scale))
+            .min(PARAMETRIC_PRECISION as f32)
+    } else {
+        PARAMETRIC_PRECISION as f32
+    };
     let polar_segments_per_radian =
         polar_segments_per_radian(feather_screen_radius + stroke_radius * matrix_scale);
     let cap_segments = match cap {
@@ -378,7 +391,7 @@ fn build_stroke_or_feather_tessellation(
                     } else {
                         let transformed = cubic.map(|point| transform.transform_point(point));
                         (
-                            cubic_segment_count(transformed),
+                            cubic_segment_count_with_precision(transformed, parametric_precision),
                             if is_stroke {
                                 round_join_segment_count(
                                     tangents[0],
@@ -498,6 +511,10 @@ fn build_stroke_or_feather_tessellation(
         base_instance: 1,
         instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
     })
+}
+
+fn feather_fill_requires_softening(paint_feather: f32, matrix_scale: f32) -> bool {
+    paint_feather * matrix_scale > 1.0
 }
 
 pub(crate) fn softened_path_for_feathering(
@@ -1899,6 +1916,10 @@ fn append_cubic(contour: &mut Contour, cubic: [Vec2D; 4]) {
 }
 
 pub(crate) fn cubic_segment_count(points: [Vec2D; 4]) -> u32 {
+    cubic_segment_count_with_precision(points, PARAMETRIC_PRECISION as f32)
+}
+
+fn cubic_segment_count_with_precision(points: [Vec2D; 4], precision: f32) -> u32 {
     let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
         let x = a.x - 2.0 * b.x + c.x;
         let y = a.y - 2.0 * b.y + c.y;
@@ -1906,7 +1927,7 @@ pub(crate) fn cubic_segment_count(points: [Vec2D; 4]) -> u32 {
     };
     let max_length_squared = second_difference(points[0], points[1], points[2])
         .max(second_difference(points[1], points[2], points[3]));
-    let length_term_squared = (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
+    let length_term_squared = (9.0 / 16.0) * precision.powi(2);
     (max_length_squared * length_term_squared)
         .sqrt()
         .sqrt()
@@ -2630,6 +2651,16 @@ mod tests {
             false
         ));
         assert!(feather_requires_atlas(0.01, Mat2D::IDENTITY, true));
+    }
+
+    #[test]
+    fn feather_softening_threshold_uses_authored_feather_without_radius_round_trip() {
+        let paint_feather = 5.389_884_f32;
+        let matrix_scale = 0.185_532_76_f32;
+
+        assert!(paint_feather * matrix_scale > 1.0);
+        assert_eq!((paint_feather * 1.5) / 1.5 * matrix_scale, 1.0);
+        assert!(feather_fill_requires_softening(paint_feather, matrix_scale));
     }
 
     #[test]

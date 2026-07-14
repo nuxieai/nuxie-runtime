@@ -40,6 +40,14 @@ fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit
 cusp_output="${RIVE_ATLAS_CUSP_MASK_OUTPUT:-$script_dir/out/atlas-cusp-mask.r16f}"
 cusp_inputs_output="${RIVE_ATLAS_CUSP_INPUT_OUTPUT:-$script_dir/out/atlas-cusp-inputs.bin}"
 cusp_blit_output="${RIVE_ATLAS_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-cusp-blit.rgba}"
+large_feather_cusp_output="${RIVE_ATLAS_LARGE_FEATHER_CUSP_MASK_OUTPUT:-$script_dir/out/atlas-large-feather-cusp-mask.r16f}"
+large_feather_cusp_inputs_output="${RIVE_ATLAS_LARGE_FEATHER_CUSP_INPUT_OUTPUT:-$script_dir/out/atlas-large-feather-cusp-inputs.bin}"
+large_feather_cusp_blit_output="${RIVE_ATLAS_LARGE_FEATHER_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-large-feather-cusp-blit.rgba}"
+large_feather_cusp_placement_output="${RIVE_ATLAS_LARGE_FEATHER_CUSP_PLACEMENT_OUTPUT:-$script_dir/out/atlas-large-feather-cusp-placement.bin}"
+large_feather_shapes_cusp_output="${RIVE_ATLAS_LARGE_FEATHER_SHAPES_CUSP_MASK_OUTPUT:-$script_dir/out/atlas-large-feather-shapes-cusp-mask.r16f}"
+large_feather_shapes_cusp_inputs_output="${RIVE_ATLAS_LARGE_FEATHER_SHAPES_CUSP_INPUT_OUTPUT:-$script_dir/out/atlas-large-feather-shapes-cusp-inputs.bin}"
+large_feather_shapes_cusp_blit_output="${RIVE_ATLAS_LARGE_FEATHER_SHAPES_CUSP_BLIT_OUTPUT:-$script_dir/out/atlas-large-feather-shapes-cusp-blit.rgba}"
+large_feather_shapes_cusp_placement_output="${RIVE_ATLAS_LARGE_FEATHER_SHAPES_CUSP_PLACEMENT_OUTPUT:-$script_dir/out/atlas-large-feather-shapes-cusp-placement.bin}"
 empty_stroke_output="${RIVE_ATLAS_EMPTY_STROKE_MASK_OUTPUT:-$script_dir/out/atlas-empty-stroke-mask.r16f}"
 empty_stroke_inputs_output="${RIVE_ATLAS_EMPTY_STROKE_INPUT_OUTPUT:-$script_dir/out/atlas-empty-stroke-inputs.bin}"
 empty_stroke_blit_output="${RIVE_ATLAS_EMPTY_STROKE_BLIT_OUTPUT:-$script_dir/out/atlas-empty-stroke-blit.rgba}"
@@ -588,6 +596,8 @@ validate_spotify_artifacts
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$large_feather_cusp_output" "$large_feather_cusp_inputs_output" "$large_feather_cusp_blit_output" large-feather-cusp "$large_feather_cusp_placement_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$large_feather_shapes_cusp_output" "$large_feather_shapes_cusp_inputs_output" "$large_feather_shapes_cusp_blit_output" large-feather-shapes-cusp "$large_feather_shapes_cusp_placement_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$empty_stroke_output" "$empty_stroke_inputs_output" "$empty_stroke_blit_output" empty-stroke
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$empty_stroke_overlap_blit_output" empty-stroke-overlap
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_cusp_inputs_output" "$direct_cusp_blit_output" direct-cusp "$direct_cusp_coverage_output"
@@ -620,6 +630,28 @@ fi
 blit_bytes="$(wc -c < "$blit_output" | tr -d ' ')"
 if [[ "$blit_bytes" != "16404" ]]; then
     echo "atlas blit must be exactly 16404 bytes, got $blit_bytes: $blit_output" >&2
+    exit 1
+fi
+large_feather_cusp_mask_bytes="$(wc -c < "$large_feather_cusp_output" | tr -d ' ')"
+large_feather_cusp_inputs_bytes="$(wc -c < "$large_feather_cusp_inputs_output" | tr -d ' ')"
+large_feather_cusp_placement_bytes="$(wc -c < "$large_feather_cusp_placement_output" | tr -d ' ')"
+large_feather_cusp_blit_bytes="$(wc -c < "$large_feather_cusp_blit_output" | tr -d ' ')"
+if [[ "$large_feather_cusp_mask_bytes" != "2600" ||
+      "$large_feather_cusp_inputs_bytes" != "32840" ||
+      "$large_feather_cusp_placement_bytes" != "88" ||
+      "$large_feather_cusp_blit_bytes" != "14385172" ]]; then
+    echo "large-feather cusp artifacts have unexpected sizes" >&2
+    exit 1
+fi
+large_feather_shapes_cusp_mask_bytes="$(wc -c < "$large_feather_shapes_cusp_output" | tr -d ' ')"
+large_feather_shapes_cusp_inputs_bytes="$(wc -c < "$large_feather_shapes_cusp_inputs_output" | tr -d ' ')"
+large_feather_shapes_cusp_placement_bytes="$(wc -c < "$large_feather_shapes_cusp_placement_output" | tr -d ' ')"
+large_feather_shapes_cusp_blit_bytes="$(wc -c < "$large_feather_shapes_cusp_blit_output" | tr -d ' ')"
+if [[ "$large_feather_shapes_cusp_mask_bytes" != "2600" ||
+      "$large_feather_shapes_cusp_inputs_bytes" != "32824" ||
+      "$large_feather_shapes_cusp_placement_bytes" != "88" ||
+      "$large_feather_shapes_cusp_blit_bytes" != "14385172" ]]; then
+    echo "large-feather shapes-cusp artifacts have unexpected sizes" >&2
     exit 1
 fi
 clipped_blit_bytes="$(wc -c < "$clipped_blit_output" | tr -d ' ')"
@@ -879,6 +911,14 @@ echo "atlas fill blit: $fill_blit_output"
 echo "atlas cusp mask: $cusp_output"
 echo "atlas cusp inputs: $cusp_inputs_output"
 echo "atlas cusp blit: $cusp_blit_output"
+echo "atlas large-feather cusp mask: $large_feather_cusp_output"
+echo "atlas large-feather cusp inputs: $large_feather_cusp_inputs_output"
+echo "atlas large-feather cusp placement: $large_feather_cusp_placement_output"
+echo "atlas large-feather cusp blit: $large_feather_cusp_blit_output"
+echo "atlas large-feather shapes-cusp mask: $large_feather_shapes_cusp_output"
+echo "atlas large-feather shapes-cusp inputs: $large_feather_shapes_cusp_inputs_output"
+echo "atlas large-feather shapes-cusp placement: $large_feather_shapes_cusp_placement_output"
+echo "atlas large-feather shapes-cusp blit: $large_feather_shapes_cusp_blit_output"
 echo "atlas empty-stroke mask: $empty_stroke_output"
 echo "atlas empty-stroke inputs: $empty_stroke_inputs_output"
 echo "atlas empty-stroke blit: $empty_stroke_blit_output"

@@ -89,6 +89,19 @@ cap.
 `atlas-empty-stroke-overlap-blit.rgba` adds an opaque marker before the stroke
 and pins the cap's scheduled MSAA depth against that earlier draw.
 
+The two `atlas-large-feather-*` fixture families reproduce the strongest
+residual contours from `gm-feather_cusp-msaa` and
+`gm-feather_shapes-msaa` at paint feather `403.428802` and frame scale
+`1.46300006`. Each family emits the complete `RIVEATI` tessellation input,
+physical `RIVEMSK` atlas, and `RIVEABL` 1756-by-2048 final frame. Its
+88-byte `RIVEATP` version 1 placement record contains the frame size, clipped
+pixel bounds, atlas origin, logical and physical extents, raw scale and
+translation float bits, and scissor. The paired Rust test requires exact
+placement and exact signed zero/nonzero mask topology, bounds every nonzero
+R16 sample including negative near-degenerate coverage at `2^-9` (the smallest
+passing power-of-two budget; `2^-10` fails), and retains the corpus `2/32`
+final-pixel contract.
+
 `softened-cusp.bin` uses the `RIVESFT` version 1 contract: verb and point
 counts followed by canonical C++ `PathVerb` values and raw XY float bits. It
 captures the dedicated cusp source after C++ fill softening at feather `1` and
@@ -364,6 +377,17 @@ RIVE_CPP_ATLAS_CUSP_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-cusp-mask.r
 RIVE_CPP_ATLAS_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-cusp-inputs.bin" \
   cargo test -p nuxie-renderer cpp_webgpu_atlas_cusp_ \
   -- --ignored --nocapture
+RIVE_CPP_ATLAS_LARGE_FEATHER_CUSP_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-cusp-mask.r16f" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-cusp-inputs.bin" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_CUSP_PLACEMENT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-cusp-placement.bin" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_CUSP_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-cusp-blit.rgba" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_SHAPES_CUSP_MASK="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-shapes-cusp-mask.r16f" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_SHAPES_CUSP_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-shapes-cusp-inputs.bin" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_SHAPES_CUSP_PLACEMENT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-shapes-cusp-placement.bin" \
+RIVE_CPP_ATLAS_LARGE_FEATHER_SHAPES_CUSP_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atlas-large-feather-shapes-cusp-blit.rgba" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_large_radius_feather_atlas_stages_match_rust_when_configured \
+  -- --exact --ignored --nocapture
 RIVE_CPP_SOFTENED_CUSP="$PWD/tools/cpp-atlas-mask-oracle/out/softened-cusp.bin" \
   cargo test -p nuxie-renderer \
   tests::cpp_softened_cusp_path_oracle_matches_rust_when_configured \

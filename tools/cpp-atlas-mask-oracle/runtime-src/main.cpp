@@ -8,6 +8,7 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -25,6 +26,10 @@ constexpr float kSquareMin = 16;
 constexpr float kSquareMax = 48;
 constexpr float kStrokeThickness = 8;
 constexpr float kFeather = 20;
+constexpr uint32_t kLargeFeatherFrameWidth = 1756;
+constexpr uint32_t kLargeFeatherFrameHeight = 2048;
+constexpr float kLargeFeatherScale = 1.46300006f;
+constexpr float kLargeFeatherRadius = 403.428802f;
 constexpr uint32_t kAtlasPadding = 2;
 constexpr uint32_t kExpectedLogicalAtlasSize = 39;
 constexpr uint32_t kExpectedPhysicalAtlasSize = 48;
@@ -182,6 +187,81 @@ void writeMask(const char* output,
     if (!file)
     {
         fail("could not write output file");
+    }
+}
+
+uint32_t floatBits(float value)
+{
+    uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+using AtlasMaskOracleFacts =
+    rive::gpu::RenderContextWebGPUImpl::AtlasMaskOracleFacts;
+
+std::array<int32_t, 4> clippedPathBounds(uint32_t frameWidth,
+                                         uint32_t frameHeight,
+                                         const AtlasMaskOracleFacts& facts)
+{
+    return {
+        std::max<int32_t>(0, facts.pathPixelBounds.left),
+        std::max<int32_t>(0, facts.pathPixelBounds.top),
+        std::min<int32_t>(static_cast<int32_t>(frameWidth),
+                          facts.pathPixelBounds.right),
+        std::min<int32_t>(static_cast<int32_t>(frameHeight),
+                          facts.pathPixelBounds.bottom),
+    };
+}
+
+void writePlacement(const char* output,
+                    uint32_t frameWidth,
+                    uint32_t frameHeight,
+                    uint32_t physicalWidth,
+                    uint32_t physicalHeight,
+                    const AtlasMaskOracleFacts& facts)
+{
+    const std::array<int32_t, 4> bounds =
+        clippedPathBounds(frameWidth, frameHeight, facts);
+    constexpr size_t kPlacementBytes = 88;
+    std::array<uint8_t, kPlacementBytes> bytes{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'T', 'P', '\0'};
+    std::memcpy(bytes.data(), kMagic, sizeof(kMagic));
+    const std::array<uint32_t, 20> fields = {
+        1,
+        frameWidth,
+        frameHeight,
+        static_cast<uint32_t>(bounds[0]),
+        static_cast<uint32_t>(bounds[1]),
+        static_cast<uint32_t>(bounds[2]),
+        static_cast<uint32_t>(bounds[3]),
+        facts.pathAtlasScissor.left,
+        facts.pathAtlasScissor.top,
+        facts.contentWidth,
+        facts.contentHeight,
+        physicalWidth,
+        physicalHeight,
+        floatBits(facts.pathScale),
+        floatBits(facts.pathTranslateX),
+        floatBits(facts.pathTranslateY),
+        facts.pathAtlasScissor.left,
+        facts.pathAtlasScissor.top,
+        facts.pathAtlasScissor.right,
+        facts.pathAtlasScissor.bottom,
+    };
+    for (size_t i = 0; i != fields.size(); ++i)
+    {
+        writeU32(bytes, 8 + i * 4, fields[i]);
+    }
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open atlas-placement output file");
+    }
+    file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    if (!file)
+    {
+        fail("failed to write atlas-placement output file");
     }
 }
 
@@ -463,13 +543,6 @@ void writeSoftenedPath(const char* output, const rive::RawPath& path)
     {
         fail("could not write softened-path output file");
     }
-}
-
-uint32_t floatBits(float value)
-{
-    uint32_t bits;
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
 }
 
 void writeInputs(
@@ -981,6 +1054,12 @@ int main(int argc, char** argv)
     const char* blitOutput = argc > 3 ? argv[3] : "atlas-blit.rgba";
     const bool circleCase = argc > 4 && std::strcmp(argv[4], "fill") == 0;
     const bool cuspCase = argc > 4 && std::strcmp(argv[4], "cusp") == 0;
+    const bool largeFeatherCuspCase =
+        argc > 4 && std::strcmp(argv[4], "large-feather-cusp") == 0;
+    const bool largeFeatherShapesCuspCase =
+        argc > 4 && std::strcmp(argv[4], "large-feather-shapes-cusp") == 0;
+    const bool largeFeatherCase =
+        largeFeatherCuspCase || largeFeatherShapesCuspCase;
     const bool emptyStrokeOverlapCase =
         argc > 4 && std::strcmp(argv[4], "empty-stroke-overlap") == 0;
     const bool emptyStrokeCase =
@@ -1048,7 +1127,7 @@ int main(int argc, char** argv)
                                   atomicColorBurnPairCase ||
                                   fullStreamCase;
     const bool skipAtlasDiagnosticsCase = directOutputCase || msaaReferenceMode;
-    const bool fillCase = circleCase || cuspCase ||
+    const bool fillCase = circleCase || cuspCase || largeFeatherCase ||
                           (directCase && !directStrokesRoundCase) ||
                           anyAdvancedBlendCase ||
                           intersectionGroupsCase ||
@@ -1061,6 +1140,7 @@ int main(int argc, char** argv)
             ? findMsaaReferenceCase(auxiliaryOutput)
             : nullptr;
     const bool pinnedMetalCase = fullStreamCase || msaaReferenceMode;
+    const bool metalBackendCase = pinnedMetalCase || largeFeatherCase;
     if (argc > 7 ||
         (argc > 4 && !fillCase && !emptyStrokeCase &&
          !directStrokesRoundCase && !clippedCase &&
@@ -1070,12 +1150,14 @@ int main(int argc, char** argv)
          !advancedBlendCase && !atomicAdvancedBlendCase &&
          !atomicColorBurnPairCase && !fullStreamCase && !msaaReferenceMode &&
          !intersectionGroupsCase) ||
-        (auxiliaryOutput != nullptr && !cuspCase && !directCuspCase &&
+        (auxiliaryOutput != nullptr && !cuspCase && !largeFeatherCase &&
+         !directCuspCase &&
          !atomicColorBurnPairCase && !fullStreamCase && !msaaReferenceMode &&
          !directStrokesRoundCase && !directRawTextCase) ||
         ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase ||
           fullStreamCase) &&
          auxiliaryOutput == nullptr) ||
+        (largeFeatherCase && auxiliaryOutput == nullptr) ||
         (secondaryOutput != nullptr && !atomicColorBurnPairCase &&
          !atomicSpotifyKidsAppIconFullCase && !msaaReferenceMode) ||
         ((atomicColorBurnPairCase || atomicSpotifyKidsAppIconFullCase) &&
@@ -1083,7 +1165,7 @@ int main(int argc, char** argv)
         (msaaReferenceMode &&
          (msaaReference == nullptr || secondaryOutput == nullptr)))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output-or-case-id] [secondary-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output-or-case-id] [secondary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1100,7 +1182,7 @@ int main(int argc, char** argv)
 
     WGPUAdapter adapterHandle = nullptr;
     WGPURequestAdapterOptions adapterOptions = {};
-    if (pinnedMetalCase)
+    if (metalBackendCase)
     {
         adapterOptions.backendType = WGPUBackendType_Metal;
     }
@@ -1110,7 +1192,7 @@ int main(int argc, char** argv)
     adapterCallback.userdata1 = &adapterHandle;
     await(instance.Get(),
           wgpuInstanceRequestAdapter(instance.Get(),
-                                     pinnedMetalCase
+                                     metalBackendCase
                                          ? &adapterOptions
                                          : nullptr,
                                      adapterCallback));
@@ -1161,6 +1243,8 @@ int main(int argc, char** argv)
     targetDesc.dimension = wgpu::TextureDimension::e2D;
     const uint32_t frameWidth = msaaReferenceMode
                                     ? msaaReference->width
+                                : largeFeatherCase
+                                    ? kLargeFeatherFrameWidth
                                 : directRawTextCase
                                     ? kDirectRawTextFrameWidth
                                 : directStrokesRoundCase
@@ -1179,6 +1263,8 @@ int main(int argc, char** argv)
                                                                : kFrameWidth);
     const uint32_t frameHeight = msaaReferenceMode
                                      ? msaaReference->height
+                                 : largeFeatherCase
+                                     ? kLargeFeatherFrameHeight
                                  : directRawTextCase
                                      ? kDirectRawTextFrameHeight
                                  : directStrokesRoundCase
@@ -1209,6 +1295,8 @@ int main(int argc, char** argv)
                          .loadAction = rive::gpu::LoadAction::clear,
                          .clearColor = msaaReferenceMode
                                            ? msaaReference->clearColor
+                                       : largeFeatherCase
+                                           ? 0xff000000
                                        : directStrokesRoundCase || directRawTextCase ||
                                                atomicDstReadShuffleCase
                                            ? 0xffffffff
@@ -1276,6 +1364,24 @@ int main(int argc, char** argv)
         path->moveTo(0, 100);
         path->moveTo(0, 100);
         path->cubicTo(133.635864f, 0, -33.6358566f, 0, 100, 100);
+    }
+    else if (largeFeatherCuspCase)
+    {
+        renderer.scale(kLargeFeatherScale, kLargeFeatherScale);
+        renderer.translate(450, 1250);
+        path->moveTo(0, 100);
+        path->moveTo(0, 100);
+        path->cubicTo(90, 0, 10, 0, 100, 100);
+    }
+    else if (largeFeatherShapesCuspCase)
+    {
+        renderer.scale(kLargeFeatherScale, kLargeFeatherScale);
+        renderer.translate(650, 1250);
+        path->moveTo(0, 0);
+        path->lineTo(100, 0);
+        path->cubicTo(0, 100, 0, 0, 100, 100);
+        path->lineTo(0, 100);
+        path->cubicTo(50, 67, -50, 33, 0, 0);
     }
     else if (directPolySharkCase)
     {
@@ -1370,8 +1476,8 @@ int main(int argc, char** argv)
         path->lineTo(kSquareMax, kSquareMax);
         path->lineTo(kSquareMin, kSquareMax);
     }
-    if (!directCase && !emptyStrokeCase && !atomicColorBurnPairCase &&
-        !fullStreamCase && !intersectionGroupsCase)
+    if (!directCase && !largeFeatherCase && !emptyStrokeCase &&
+        !atomicColorBurnPairCase && !fullStreamCase && !intersectionGroupsCase)
     {
         path->close();
     }
@@ -1390,7 +1496,9 @@ int main(int argc, char** argv)
                            directRawTextCase ||
                            intersectionGroupsCase
                        ? 0.f
-                       : (directCase ? 1.f : kFeather));
+                       : (directCase ? 1.f
+                          : largeFeatherCase ? kLargeFeatherRadius
+                                             : kFeather));
     paint->color(directRawTextCase
                      ? 0xff000000
                  : directStrokesRoundCase ? 0x7a52bdb0
@@ -2285,24 +2393,65 @@ int main(int argc, char** argv)
     {
         fail("final atlas-blit oracle must execute one fixed-function MSAA atlas batch");
     }
+    const uint32_t expectedContentWidth =
+        largeFeatherCase ? 35 : kExpectedLogicalAtlasSize;
+    const uint32_t expectedContentHeight =
+        largeFeatherCase ? 24 : kExpectedLogicalAtlasSize;
+    const float expectedTranslateX = largeFeatherShapesCuspCase
+                                         ? 1.2409563064575195f
+                                         : kAtlasPadding;
+    const float expectedTranslateY = largeFeatherCuspCase
+                                         ? -15.674875259399414f
+                                     : largeFeatherShapesCuspCase
+                                         ? -15.024266242980957f
+                                         : kAtlasPadding;
+    const float expectedScale =
+        largeFeatherCase ? 0.018072469159960747f : facts.pathScale;
+    const std::array<int32_t, 4> expectedVisibleBounds =
+        largeFeatherCuspCase
+            ? std::array<int32_t, 4>{0, 978, 1691, 2048}
+        : largeFeatherShapesCuspCase
+            ? std::array<int32_t, 4>{42, 942, 1756, 2048}
+            : clippedPathBounds(frameWidth, frameHeight, facts);
+    const std::array<int32_t, 4> actualVisibleBounds =
+        clippedPathBounds(frameWidth, frameHeight, facts);
     if (!skipAtlasDiagnosticsCase && !changingPathClippedCase &&
-        (facts.contentWidth != kExpectedLogicalAtlasSize ||
-        facts.contentHeight != kExpectedLogicalAtlasSize ||
-        !facts.pathTransformValid || facts.pathTranslateX != kAtlasPadding ||
-        facts.pathTranslateY != kAtlasPadding || facts.strokeBatchCount != 1 ||
+        (facts.contentWidth != expectedContentWidth ||
+        facts.contentHeight != expectedContentHeight ||
+        !facts.pathTransformValid || facts.pathTranslateX != expectedTranslateX ||
+        facts.pathTranslateY != expectedTranslateY ||
+        facts.pathScale != expectedScale ||
+        actualVisibleBounds != expectedVisibleBounds ||
+        facts.pathAtlasScissor.left != facts.strokeScissor.left ||
+        facts.pathAtlasScissor.top != facts.strokeScissor.top ||
+        facts.pathAtlasScissor.right != facts.strokeScissor.right ||
+        facts.pathAtlasScissor.bottom != facts.strokeScissor.bottom ||
+        facts.strokeBatchCount != 1 ||
         facts.atlasBatchIsStroke == fillCase ||
         facts.strokeScissor.left != 0 || facts.strokeScissor.top != 0 ||
-        facts.strokeScissor.right != kExpectedLogicalAtlasSize ||
-        facts.strokeScissor.bottom != kExpectedLogicalAtlasSize))
+        facts.strokeScissor.right != expectedContentWidth ||
+        facts.strokeScissor.bottom != expectedContentHeight))
     {
         std::fprintf(
             stderr,
-            "cpp-atlas-mask-oracle: production flush contract drift: content=%ux%u transformValid=%d translation=(%g,%g) strokeBatches=%zu scissor=[%u,%u,%u,%u]\n",
+            "cpp-atlas-mask-oracle: production flush contract drift: content=%ux%u transformValid=%d scale=%g/%08x translation=(%g/%08x,%g/%08x) expected=(%g/%08x,%g/%08x) bounds=[%d,%d,%d,%d] strokeBatches=%zu scissor=[%u,%u,%u,%u]\n",
             facts.contentWidth,
             facts.contentHeight,
             facts.pathTransformValid,
+            facts.pathScale,
+            floatBits(facts.pathScale),
             facts.pathTranslateX,
+            floatBits(facts.pathTranslateX),
             facts.pathTranslateY,
+            floatBits(facts.pathTranslateY),
+            expectedTranslateX,
+            floatBits(expectedTranslateX),
+            expectedTranslateY,
+            floatBits(expectedTranslateY),
+            actualVisibleBounds[0],
+            actualVisibleBounds[1],
+            actualVisibleBounds[2],
+            actualVisibleBounds[3],
             facts.strokeBatchCount,
             facts.strokeScissor.left,
             facts.strokeScissor.top,
@@ -2325,13 +2474,20 @@ int main(int argc, char** argv)
         atlasWidth = atlas.GetWidth();
         atlasHeight = atlas.GetHeight();
         const uint32_t expectedAtlasWidth =
-            changingPathClippedCase ? 97 : kExpectedPhysicalAtlasSize;
+            changingPathClippedCase ? 97
+            : largeFeatherCase ? 43
+                                           : kExpectedPhysicalAtlasSize;
+        const uint32_t expectedAtlasHeight =
+            largeFeatherCase ? 30 : kExpectedPhysicalAtlasSize;
         if (atlasWidth != expectedAtlasWidth ||
-            atlasHeight != kExpectedPhysicalAtlasSize)
+            atlasHeight != expectedAtlasHeight)
         {
             std::fprintf(stderr,
-                         "cpp-atlas-mask-oracle: expected physical=%ux48 frame=64x64, got physical=%ux%u\n",
+                         "cpp-atlas-mask-oracle: expected physical=%ux%u frame=%ux%u, got physical=%ux%u\n",
                          expectedAtlasWidth,
+                         expectedAtlasHeight,
+                         frameWidth,
+                         frameHeight,
                          atlasWidth,
                          atlasHeight);
             return 1;
@@ -2345,6 +2501,15 @@ int main(int argc, char** argv)
                       atlasHeight,
                       atlasBytes.data(),
                       atlasWidth * kBytesPerTexel);
+            if (largeFeatherCase)
+            {
+                writePlacement(auxiliaryOutput,
+                               frameWidth,
+                               frameHeight,
+                               atlasWidth,
+                               atlasHeight,
+                               facts);
+            }
         }
     }
 

@@ -173,6 +173,58 @@ pub(crate) fn compare_cpp_to_rust(
     Ok(())
 }
 
+pub(crate) fn compare_cpp_to_rust_signed(
+    cpp: &AtlasMask,
+    rust: &AtlasMask,
+    value_tolerance: f32,
+) -> Result<(), AtlasMaskComparisonError> {
+    if !value_tolerance.is_finite() || value_tolerance < 0.0 {
+        return Err(AtlasMaskComparisonError::InvalidTolerance {
+            name: "value",
+            value: value_tolerance,
+        });
+    }
+    if (cpp.width, cpp.height) != (rust.width, rust.height) {
+        return Err(AtlasMaskComparisonError::Dimensions {
+            cpp: (cpp.width, cpp.height),
+            rust: (rust.width, rust.height),
+        });
+    }
+    for (index, (&cpp_bits, &rust_bits)) in cpp.samples.iter().zip(&rust.samples).enumerate() {
+        let cpp_value = f16_bits_to_f32(cpp_bits);
+        let rust_value = f16_bits_to_f32(rust_bits);
+        let x = index % cpp.width as usize;
+        let y = index / cpp.width as usize;
+        if !cpp_value.is_finite() || !rust_value.is_finite() {
+            return Err(AtlasMaskComparisonError::NonFiniteValue {
+                x,
+                y,
+                cpp: cpp_value,
+                rust: rust_value,
+            });
+        }
+        if (cpp_value == 0.0) != (rust_value == 0.0) {
+            return Err(AtlasMaskComparisonError::Support {
+                x,
+                y,
+                cpp: cpp_value,
+                rust: rust_value,
+                tolerance: 0.0,
+            });
+        }
+        if (cpp_value - rust_value).abs() > value_tolerance {
+            return Err(AtlasMaskComparisonError::Value {
+                x,
+                y,
+                cpp: cpp_value,
+                rust: rust_value,
+                tolerance: value_tolerance,
+            });
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AtlasMaskError {
     TruncatedHeader {
@@ -466,6 +518,24 @@ mod tests {
         compare_cpp_to_rust(&at_boundary, &baseline, TOLERANCES).unwrap();
         assert!(matches!(
             compare_cpp_to_rust(&above_boundary, &baseline, TOLERANCES),
+            Err(AtlasMaskComparisonError::Value { .. })
+        ));
+    }
+
+    #[test]
+    fn signed_comparison_checks_negative_support_and_values() {
+        let negative = AtlasMask::new(1, 1, vec![0xb800]).unwrap();
+        let zero = AtlasMask::new(1, 1, vec![0x8000]).unwrap();
+        assert!(matches!(
+            compare_cpp_to_rust_signed(&negative, &zero, 1.0),
+            Err(AtlasMaskComparisonError::Support { .. })
+        ));
+
+        let at_boundary = AtlasMask::new(1, 1, vec![0xb804]).unwrap();
+        let above_boundary = AtlasMask::new(1, 1, vec![0xb805]).unwrap();
+        compare_cpp_to_rust_signed(&at_boundary, &negative, 1.0 / 512.0).unwrap();
+        assert!(matches!(
+            compare_cpp_to_rust_signed(&above_boundary, &negative, 1.0 / 512.0),
             Err(AtlasMaskComparisonError::Value { .. })
         ));
     }

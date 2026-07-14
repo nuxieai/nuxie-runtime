@@ -7,6 +7,8 @@ mod atlas_input_oracle;
 #[cfg(test)]
 mod atlas_mask_oracle;
 mod atlas_pipeline;
+#[cfg(test)]
+mod atlas_placement_oracle;
 mod atomic_pipeline;
 mod clockwise_atomic_pipeline;
 mod composite_pipeline;
@@ -3445,7 +3447,10 @@ fn feather_atlas_placement(
     const PADDING: f32 = 2.0;
     Some(AtlasPlacement {
         scale,
-        translate: [PADDING - left as f32 * scale, PADDING - top as f32 * scale],
+        translate: [
+            (-(left as f32)).mul_add(scale, PADDING),
+            (-(top as f32)).mul_add(scale, PADDING),
+        ],
         bounds: [left as f32, top as f32, right as f32, bottom as f32],
         origin: [0, 0],
         width: ((right - left) as f32 * scale).ceil() as u32 + 4,
@@ -4706,6 +4711,9 @@ mod tests {
     const ATLAS_ORACLE_STROKE_JOIN: StrokeJoin = StrokeJoin::Miter;
     const ATLAS_ORACLE_STROKE_CAP: StrokeCap = StrokeCap::Butt;
     const ATLAS_ORACLE_FEATHER: f32 = 20.0;
+    const LARGE_FEATHER_FRAME_SIZE: [u32; 2] = [1756, 2048];
+    const LARGE_FEATHER_SCALE: f32 = 1.46300006;
+    const LARGE_FEATHER_RADIUS: f32 = 403.428802;
     const STROKES_ROUND_ORACLE_FRAME_SIZE: u32 = 400;
     const STROKES_ROUND_ORACLE_THICKNESS: f32 = 4.5;
     const RAWTEXT_ORACLE_FRAME_WIDTH: u32 = 400;
@@ -6934,6 +6942,32 @@ mod tests {
     struct FixedFeatherAtlasOracle {
         mask: atlas_mask_oracle::AtlasMask,
         inputs: atlas_input_oracle::AtlasInputs,
+        placement: atlas_placement_oracle::AtlasPlacement,
+    }
+
+    fn feather_cusp_large_radius_path() -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 100.0);
+        path.move_to(0.0, 100.0);
+        path.cubic_to(90.0, 0.0, 10.0, 0.0, 100.0, 100.0);
+        path
+    }
+
+    fn feather_shapes_large_radius_cusp_path() -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(100.0, 0.0);
+        path.cubic_to(0.0, 100.0, 0.0, 0.0, 100.0, 100.0);
+        path.line_to(0.0, 100.0);
+        path.cubic_to(50.0, 67.0, -50.0, 33.0, 0.0, 0.0);
+        path
+    }
+
+    fn feather_grid_transform(x: f32, y: f32) -> Mat2D {
+        multiply(
+            Mat2D([LARGE_FEATHER_SCALE, 0.0, 0.0, LARGE_FEATHER_SCALE, 0.0, 0.0]),
+            Mat2D([1.0, 0.0, 0.0, 1.0, x * 200.0 + 50.0, y * 200.0 + 50.0]),
+        )
     }
 
     fn fixed_feather_atlas_oracle(join: StrokeJoin) -> FixedFeatherAtlasOracle {
@@ -7318,38 +7352,57 @@ mod tests {
         raw_path: RawPath,
         paint: WgpuPaint,
     ) -> FixedFeatherAtlasOracle {
+        let oracle = feather_atlas_oracle_for(
+            raw_path,
+            paint,
+            Mat2D::IDENTITY,
+            [ATLAS_ORACLE_FRAME_SIZE; 2],
+        );
+        assert_eq!(oracle.placement.bounds, [0, 0, 64, 64]);
+        assert_eq!(oracle.placement.content_size, [39, 39]);
+        assert_eq!(oracle.placement.physical_size, [48, 48]);
+        assert_eq!(oracle.placement.origin, [0, 0]);
+        assert_eq!(
+            oracle.placement.translate_bits,
+            ATLAS_ORACLE_PLACEMENT.map(f32::to_bits)
+        );
+        oracle
+    }
+
+    fn feather_atlas_oracle_for(
+        raw_path: RawPath,
+        paint: WgpuPaint,
+        transform: Mat2D,
+        frame_size: [u32; 2],
+    ) -> FixedFeatherAtlasOracle {
         let stroke = paint.effective_stroke();
-        let factory = WgpuFactory::new(ATLAS_ORACLE_FRAME_SIZE, ATLAS_ORACLE_FRAME_SIZE).unwrap();
+        let factory = WgpuFactory::new(frame_size[0], frame_size[1]).unwrap();
         let mut placement = feather_atlas_placement(
             &raw_path,
-            Mat2D::IDENTITY,
-            ATLAS_ORACLE_FEATHER,
+            transform,
+            paint.feather,
             stroke,
-            ATLAS_ORACLE_FRAME_SIZE,
-            ATLAS_ORACLE_FRAME_SIZE,
+            frame_size[0],
+            frame_size[1],
         )
         .unwrap();
-        assert_eq!(placement.bounds, [0.0, 0.0, 64.0, 64.0]);
-        assert_eq!([placement.width, placement.height], [39, 39]);
         let layout = pack_atlas_for_device(
-            ATLAS_ORACLE_FRAME_SIZE,
+            frame_size[0],
             factory.context.device.limits().max_texture_dimension_2d,
             &[(placement.width, placement.height)],
         )
         .unwrap();
-        assert_eq!(layout.extent(), [ATLAS_ORACLE_LOGICAL_SIZE; 2]);
         assert_eq!(layout.origins(), &[[0, 0]]);
         placement.origin = layout.origins()[0];
         placement.translate[0] += placement.origin[0] as f32;
         placement.translate[1] += placement.origin[1] as f32;
-        assert_eq!(placement.translate, ATLAS_ORACLE_PLACEMENT);
-        let mut tessellation = draw::build_feather_atlas_tessellation(
-            &raw_path,
-            Mat2D::IDENTITY,
-            ATLAS_ORACLE_FEATHER,
-            stroke,
-        )
-        .unwrap();
+        let physical_size = atlas_physical_size(
+            layout.extent(),
+            factory.context.device.limits().max_texture_dimension_2d,
+        );
+        let mut tessellation =
+            draw::build_feather_atlas_tessellation(&raw_path, transform, paint.feather, stroke)
+                .unwrap();
         tessellation.path.atlas_transform = gpu::AtlasTransform {
             scale_factor: placement.scale,
             translate_x: placement.translate[0],
@@ -7369,14 +7422,13 @@ mod tests {
         ];
         let paint_aux = [gpu::PaintAuxData::zeroed(); 2];
         let tessellation_height = draw::tessellation_texture_height(&tessellation.spans);
-        let mut uniforms = analytic_uniforms(
-            ATLAS_ORACLE_FRAME_SIZE,
-            ATLAS_ORACLE_FRAME_SIZE,
-            tessellation_height,
-        );
-        uniforms.atlas_texture_inverse_size = [1.0 / ATLAS_ORACLE_PHYSICAL_SIZE as f32; 2];
-        uniforms.atlas_content_inverse_viewport =
-            [2.0 / placement.width as f32, -2.0 / placement.height as f32];
+        let mut uniforms = analytic_uniforms(frame_size[0], frame_size[1], tessellation_height);
+        uniforms.atlas_texture_inverse_size =
+            [1.0 / physical_size[0] as f32, 1.0 / physical_size[1] as f32];
+        uniforms.atlas_content_inverse_viewport = [
+            2.0 / layout.extent()[0] as f32,
+            -2.0 / layout.extent()[1] as f32,
+        ];
         let mut encoder =
             factory
                 .context
@@ -7403,8 +7455,8 @@ mod tests {
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("nuxie-atlas-test-target"),
                 size: wgpu::Extent3d {
-                    width: ATLAS_ORACLE_PHYSICAL_SIZE,
-                    height: ATLAS_ORACLE_PHYSICAL_SIZE,
+                    width: physical_size[0],
+                    height: physical_size[1],
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -7432,7 +7484,7 @@ mod tests {
             tessellation.instance_count,
             paint.style == RenderPaintStyle::Stroke,
             true,
-            [ATLAS_ORACLE_LOGICAL_SIZE; 2],
+            layout.extent(),
             [
                 placement.origin[0],
                 placement.origin[1],
@@ -7440,13 +7492,13 @@ mod tests {
                 placement.height,
             ],
         );
-        let bytes_per_row = 256;
+        let bytes_per_row = (physical_size[0] * 2).div_ceil(256) * 256;
         let atlas_readback = factory
             .context
             .device
             .create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atlas-test-readback"),
-                size: u64::from(bytes_per_row * ATLAS_ORACLE_PHYSICAL_SIZE),
+                size: u64::from(bytes_per_row) * u64::from(physical_size[1]),
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             });
@@ -7457,7 +7509,7 @@ mod tests {
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(bytes_per_row),
-                    rows_per_image: Some(ATLAS_ORACLE_PHYSICAL_SIZE),
+                    rows_per_image: Some(physical_size[1]),
                 },
             },
             atlas.size(),
@@ -7503,10 +7555,11 @@ mod tests {
         atlas_receiver.recv().unwrap().unwrap();
         tessellation_receiver.recv().unwrap().unwrap();
         let mapped = atlas_slice.get_mapped_range().unwrap();
-        let size = ATLAS_ORACLE_PHYSICAL_SIZE as usize;
-        let mut pixels = Vec::with_capacity(size * size);
-        for y in 0..size {
-            let row = &mapped[y * bytes_per_row as usize..][..size * 2];
+        let width = physical_size[0] as usize;
+        let height = physical_size[1] as usize;
+        let mut pixels = Vec::with_capacity(width * height);
+        for y in 0..height {
+            let row = &mapped[y * bytes_per_row as usize..][..width * 2];
             pixels.extend(
                 row.chunks_exact(2)
                     .map(|sample| u16::from_le_bytes(sample.try_into().unwrap())),
@@ -7514,12 +7567,8 @@ mod tests {
         }
         drop(mapped);
         atlas_readback.unmap();
-        let mask = atlas_mask_oracle::AtlasMask::new(
-            ATLAS_ORACLE_PHYSICAL_SIZE,
-            ATLAS_ORACLE_PHYSICAL_SIZE,
-            pixels,
-        )
-        .unwrap();
+        let mask =
+            atlas_mask_oracle::AtlasMask::new(physical_size[0], physical_size[1], pixels).unwrap();
         let mapped = tessellation_slice.get_mapped_range().unwrap();
         let mut texels = Vec::with_capacity(
             tessellation_size.width as usize * tessellation_size.height as usize,
@@ -7554,7 +7603,83 @@ mod tests {
             texels,
         )
         .unwrap();
-        FixedFeatherAtlasOracle { mask, inputs }
+        let placement = atlas_placement_oracle::AtlasPlacement {
+            frame_size,
+            bounds: placement.bounds.map(|value| value as i32),
+            origin: placement.origin,
+            content_size: layout.extent(),
+            physical_size,
+            scale_bits: placement.scale.to_bits(),
+            translate_bits: placement.translate.map(f32::to_bits),
+            scissor: [
+                placement.origin[0],
+                placement.origin[1],
+                placement.origin[0] + placement.width,
+                placement.origin[1] + placement.height,
+            ],
+        };
+        FixedFeatherAtlasOracle {
+            mask,
+            inputs,
+            placement,
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum LargeFeatherAtlasCase {
+        Cusp,
+        ShapesCusp,
+    }
+
+    fn large_feather_atlas_spec(case: LargeFeatherAtlasCase) -> (RawPath, Mat2D) {
+        match case {
+            LargeFeatherAtlasCase::Cusp => (
+                feather_cusp_large_radius_path(),
+                feather_grid_transform(2.0, 6.0),
+            ),
+            LargeFeatherAtlasCase::ShapesCusp => (
+                feather_shapes_large_radius_cusp_path(),
+                feather_grid_transform(3.0, 6.0),
+            ),
+        }
+    }
+
+    fn large_feather_atlas_oracle(case: LargeFeatherAtlasCase) -> FixedFeatherAtlasOracle {
+        let (raw_path, transform) = large_feather_atlas_spec(case);
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            feather: LARGE_FEATHER_RADIUS,
+            ..WgpuPaint::default()
+        };
+        feather_atlas_oracle_for(raw_path, paint, transform, LARGE_FEATHER_FRAME_SIZE)
+    }
+
+    fn large_feather_atlas_blit(case: LargeFeatherAtlasCase) -> atlas_blit_oracle::AtlasBlit {
+        let (raw_path, transform) = large_feather_atlas_spec(case);
+        let path = WgpuPath {
+            raw_path,
+            fill_rule: FillRule::Clockwise,
+        };
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            feather: LARGE_FEATHER_RADIUS,
+            ..WgpuPaint::default()
+        };
+        let factory = WgpuFactory::new_with_mode(
+            LARGE_FEATHER_FRAME_SIZE[0],
+            LARGE_FEATHER_FRAME_SIZE[1],
+            RenderMode::Msaa,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.transform(transform);
+        frame.draw_path(&path, &paint);
+        atlas_blit_oracle::AtlasBlit::new(
+            LARGE_FEATHER_FRAME_SIZE[0],
+            LARGE_FEATHER_FRAME_SIZE[1],
+            frame.finish().unwrap(),
+        )
+        .unwrap()
     }
 
     fn fixed_feather_atlas_mask(join: StrokeJoin) -> atlas_mask_oracle::AtlasMask {
@@ -8570,6 +8695,97 @@ mod tests {
         assert_eq!(oracle.inputs.patch_count, 5);
         assert_eq!(oracle.inputs.contours.len(), 1);
         assert_eq!(oracle.mask.sample_bits(19, 19), 0x34f1);
+    }
+
+    #[test]
+    fn large_radius_feather_atlas_oracles_cover_the_two_residual_contours() {
+        for (case, expected_bounds, expected_translate_bits, expected_patches) in [
+            (
+                LargeFeatherAtlasCase::Cusp,
+                [0, 978, 1691, 2048],
+                [2.0f32.to_bits(), (-15.674875f32).to_bits()],
+                41,
+            ),
+            (
+                LargeFeatherAtlasCase::ShapesCusp,
+                [42, 942, 1756, 2048],
+                [1.2409563f32.to_bits(), 0xc170_6365],
+                59,
+            ),
+        ] {
+            let oracle = large_feather_atlas_oracle(case);
+            assert_eq!(oracle.placement.bounds, expected_bounds);
+            assert_eq!(oracle.placement.origin, [0, 0]);
+            assert_eq!(oracle.placement.content_size, [35, 24]);
+            assert_eq!(oracle.placement.physical_size, [43, 30]);
+            assert_eq!(oracle.placement.translate_bits, expected_translate_bits);
+            assert_eq!(oracle.placement.scissor, [0, 0, 35, 24]);
+            assert!((0..oracle.placement.physical_size[1] as usize).any(|y| {
+                (0..oracle.placement.physical_size[0] as usize)
+                    .any(|x| oracle.mask.sample_bits(x, y) != 0)
+            }));
+            assert!(!oracle.inputs.contours.is_empty());
+            assert_eq!(oracle.inputs.patch_count, expected_patches);
+        }
+    }
+
+    #[test]
+    #[ignore = "requires the paired RIVE_CPP_ATLAS_LARGE_FEATHER_* C++ WebGPU oracle artifacts"]
+    fn cpp_webgpu_large_radius_feather_atlas_stages_match_rust_when_configured() {
+        for (case, prefix) in [
+            (
+                LargeFeatherAtlasCase::Cusp,
+                "RIVE_CPP_ATLAS_LARGE_FEATHER_CUSP",
+            ),
+            (
+                LargeFeatherAtlasCase::ShapesCusp,
+                "RIVE_CPP_ATLAS_LARGE_FEATHER_SHAPES_CUSP",
+            ),
+        ] {
+            let artifact = |suffix: &str| {
+                let name = format!("{prefix}_{suffix}");
+                let path = PathBuf::from(
+                    std::env::var_os(&name)
+                        .unwrap_or_else(|| panic!("{name} is required for the ignored test")),
+                );
+                assert!(path.is_absolute(), "{name} must be an absolute path");
+                fs::read(&path).unwrap_or_else(|error| {
+                    panic!("failed to read {name} at {}: {error}", path.display())
+                })
+            };
+            let cpp_placement =
+                atlas_placement_oracle::AtlasPlacement::parse(&artifact("PLACEMENT")).unwrap();
+            let cpp_inputs = atlas_input_oracle::AtlasInputs::parse(&artifact("INPUTS")).unwrap();
+            let cpp_mask = atlas_mask_oracle::AtlasMask::parse(&artifact("MASK")).unwrap();
+            let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&artifact("BLIT")).unwrap();
+            let rust_oracle = large_feather_atlas_oracle(case);
+
+            assert_eq!(
+                cpp_placement, rust_oracle.placement,
+                "{prefix} placement diverged"
+            );
+            atlas_input_oracle::compare_cpp_to_rust_with_float_tolerances(
+                &cpp_inputs,
+                &rust_oracle.inputs,
+                4,
+                0.01,
+            )
+            .unwrap_or_else(|error| panic!("{prefix} tessellation inputs diverged: {error}"));
+            atlas_mask_oracle::compare_cpp_to_rust_signed(
+                &cpp_mask,
+                &rust_oracle.mask,
+                // 2^-10 rejects a real ShapesCusp sample; 2^-9 is the
+                // smallest tested power-of-two budget that accepts both masks.
+                1.0 / 512.0,
+            )
+            .unwrap_or_else(|error| panic!("{prefix} R16 atlas mask diverged: {error}"));
+
+            let rust_blit = large_feather_atlas_blit(case);
+            atlas_blit_oracle::compare_cpp_to_rust_with_pixel_tolerance(
+                &cpp_blit, &rust_blit, 2, 32,
+            )
+            .unwrap_or_else(|error| panic!("{prefix} final MSAA sampling diverged: {error}"));
+        }
     }
 
     #[test]

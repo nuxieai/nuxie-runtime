@@ -7,13 +7,15 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=684, diverges=0, gated=784, total=1,468.
+- Rust wgpu: exact=692, diverges=0, gated=776, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
   `batchedtriangulations`, `concavepaths`, `convex_lineonly_ths`,
   `convexpaths`, `oval`, `pathfill`, and the
   `poly_{clockwise,evenOdd,nonZero}` family,
+  plus `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
+  `bug5099`, `bug6083`, `bug615686`, and `bug6987`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
   `gm-path_skbug_11886-clockwise-atomic`,
   `gm-convex_lineonly_ths-clockwise-atomic`, and
@@ -651,12 +653,22 @@ Run `make renderer-golden`.
     group state;
     the translated stencil/depth subpasses make all five exact at zero pixels
     beyond the unchanged threshold.
-62. [ ] Add and capture the next ten strict source-order C++ Dawn MSAA cases,
+62. [x] Add and capture the next ten strict source-order C++ Dawn MSAA cases,
     then probe them under the unchanged `2/32` contract: `CubicStroke`,
     `OverStroke`, `bevel180strokes`, `beziers`, `bug339297`,
     `bug339297_as_clip`, `bug5099`, `bug6083`, `bug615686`, and `bug6987`.
-    The replay compiler accepts all ten; none currently has a Dawn MSAA
-    reference.
+    The expanded 20-case registry recaptures the original ten byte-identically.
+    Eight new cases pass and are promoted. `beziers` retains 5,385 pixels/max
+    152 under both grouped and serialized execution, proving a cubic-stroke
+    raster gap rather than a scheduling gap. `bug339297_as_clip` reaches the
+    existing explicit non-atlas MSAA path-clip boundary.
+63. [ ] Add and capture the next ten uncaptured strict source-order C++ Dawn
+    MSAA cases, then probe them under the unchanged `2/32` contract:
+    `bug7792`, `clippedcubic`, `clippedcubic2`, `cliprectintersections`,
+    `cliprects`, `crbug_996140`, `cubicclosepath`, `cubicpath`,
+    `dstreadshuffle`, and `emptyclear`. The strict compiler rejects the
+    intervening `degengrad` gradient-resource stream, so it remains outside
+    this path-only capture wave.
 
 ## R2 Completion Record
 
@@ -869,6 +881,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: The second ten strict C++ Dawn WebGPU-on-Metal MSAA references
+  extend the provenance-bound registry without changing the original ten
+  pixels. `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
+  `bug5099`, `bug6083`, `bug615686`, and `bug6987` pass the unchanged `2/32`
+  contract and advance the ratchet to exact=692/diverges=0/gated=776.
+  `beziers` stays gated as `msaa-cubic-stroke-raster-parity`: grouped and
+  serialized Rust renders are byte-identical at 5,385 pixels/max 152 against
+  C++ Dawn. `bug339297_as_clip` stays gated as
+  `non-atlas-msaa-path-clip`, matching the renderer's explicit unsupported
+  ingress. No tolerance changed.
 - 2026-07-13: Port C++'s MSAA midpoint-fan fill execution instead of routing
   complex fills through the bootstrap CPU triangulator. C++ uses borrowed,
   forward, and cleanup passes for nonzero/clockwise fills and stencil/cover
@@ -2649,3 +2671,12 @@ Run `make renderer-golden`.
   intersection-board depth groups. The three `poly_*` cases, `concavepaths`, and
   `pathfill` now pass their unchanged Dawn `2/32` contracts at zero pixels
   beyond threshold, advancing the ratchet to exact=684/diverges=0/gated=784.
+- 2026-07-13: Captured the second ten strict C++ Dawn MSAA references with the
+  20-case provenance registry; the original ten PNGs recapture byte-identically.
+  Eight new rows pass unchanged `2/32` contracts and move the ratchet to
+  exact=692/diverges=0/gated=776. `beziers` is isolated to cubic-stroke raster
+  parity rather than scheduling, and `bug339297_as_clip` reaches the named
+  non-atlas MSAA path-clip boundary. Queue item 63 names the next ten accepted
+  uncaptured source-order streams. The 34 oracle format tests, 11 capture
+  coordinator tests, full renderer ratchet, workspace suite, and both V2
+  golden floors pass.

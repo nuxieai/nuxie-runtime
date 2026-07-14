@@ -109,3 +109,113 @@ width = 480
 height = 480
 clear_color = "0xffffffff"
 counts = { drawPath = 4, makeEmptyRenderPath = 4, makeRenderPaint = 4, restore = 5, save = 5, transform = 8 }
+
+[[case]]
+id = "gm-CubicStroke-msaa"
+stream = "fixtures/renderer/streams/gm/CubicStroke.rive-stream"
+sha256 = "f6d2abac94d63710dba737ab89384ebdd4793805e8f4f574d7236087c17010e4"
+source = "gm:CubicStroke"
+scene = "CubicStroke"
+width = 384
+height = 384
+clear_color = "0xffffffff"
+counts = { drawPath = 3, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-OverStroke-msaa"
+stream = "fixtures/renderer/streams/gm/OverStroke.rive-stream"
+sha256 = "fa31973b81e22eac01b57d06cbd6e490a1764d391598b28c399a0fcc209b93f2"
+source = "gm:OverStroke"
+scene = "OverStroke"
+width = 500
+height = 500
+clear_color = "0xffffffff"
+counts = { drawPath = 12, makeEmptyRenderPath = 12, makeRenderPaint = 12, restore = 7, save = 7, transform = 21 }
+
+[[case]]
+id = "gm-bevel180strokes-msaa"
+stream = "fixtures/renderer/streams/gm/bevel180strokes.rive-stream"
+sha256 = "cc4fef0527ba8375a67db882e40419eea17dcdfcc3b39d9f391f3b26a9454870"
+source = "gm:bevel180strokes"
+scene = "bevel180strokes"
+width = 300
+height = 300
+clear_color = "0xff000000"
+counts = { drawPath = 20, makeEmptyRenderPath = 20, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-beziers-msaa"
+stream = "fixtures/renderer/streams/gm/beziers.rive-stream"
+sha256 = "e9bd8e055bcb868e82dd49c7ec09a6d66a13784b114a2fdc3a6130d1dcdd43fa"
+source = "gm:beziers"
+scene = "beziers"
+width = 400
+height = 800
+clear_color = "0xffffffff"
+counts = { drawPath = 20, makeEmptyRenderPath = 40, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-bug339297-msaa"
+stream = "fixtures/renderer/streams/gm/bug339297.rive-stream"
+sha256 = "fe9ccc9f38dd7bb46d607e87b5e19174a2ce998888add515c14ea350c3667973"
+source = "gm:bug339297"
+scene = "bug339297"
+width = 640
+height = 480
+clear_color = "0xffffffff"
+counts = { drawPath = 2, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-bug339297_as_clip-msaa"
+stream = "fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
+sha256 = "616bd2c72e37dea501db58c3f605a740e595ad268874504d597d3b6772892ebe"
+source = "gm:bug339297_as_clip"
+scene = "bug339297_as_clip"
+width = 640
+height = 480
+clear_color = "0xffffffff"
+counts = { clipPath = 1, drawPath = 2, makeEmptyRenderPath = 2, makeRenderPaint = 2, restore = 2, save = 2, transform = 1 }
+
+[[case]]
+id = "gm-bug5099-msaa"
+stream = "fixtures/renderer/streams/gm/bug5099.rive-stream"
+sha256 = "d7d359a6fc4e578c6e63a904751aaa506f29a7b6cca0496afea15c4a9a7d1290"
+source = "gm:bug5099"
+scene = "bug5099"
+width = 50
+height = 50
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-bug6083-msaa"
+stream = "fixtures/renderer/streams/gm/bug6083.rive-stream"
+sha256 = "b415dca93f39c73e886598973b23caeed00b859375a6a49996b48bb8cc853d46"
+source = "gm:bug6083"
+scene = "bug6083"
+width = 100
+height = 50
+clear_color = "0xffffffff"
+counts = { drawPath = 2, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-bug615686-msaa"
+stream = "fixtures/renderer/streams/gm/bug615686.rive-stream"
+sha256 = "5e0ae16cddf4fa148403c138bc96be3e49732ec05d13c0a9e42c4a66833ff725"
+source = "gm:bug615686"
+scene = "bug615686"
+width = 250
+height = 250
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-bug6987-msaa"
+stream = "fixtures/renderer/streams/gm/bug6987.rive-stream"
+sha256 = "058dfca75a294c5a2d85929da3bba1c86cf30f5d4672424c437d057a389df3e7"
+source = "gm:bug6987"
+scene = "bug6987"
+width = 75
+height = 75
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 2, save = 2, transform = 1 }

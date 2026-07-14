@@ -2345,8 +2345,8 @@ impl WgpuFrame {
                     .as_ref()
                     .map(|texture| texture.create_view(&Default::default()));
                 enum PreparedDraw {
-                    Analytic(path_pipeline::PreparedPathDraw),
-                    Fill(path_pipeline::PreparedPathDraw, FillRule),
+                    Analytic(path_pipeline::PreparedPathDraw, bool),
+                    Fill(path_pipeline::PreparedPathDraw, FillRule, bool),
                     OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     ClipReset(
@@ -2589,6 +2589,12 @@ impl WgpuFrame {
                         }
                     }
                     if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
+                        let has_clip_rect = draw.state.clip_rect.is_some();
+                        if has_clip_rect && !self.context.path_pipeline.supports_clip_rect() {
+                            return Err(RendererError::Unsupported(
+                                "clip rectangles on msaa direct path draws",
+                            ));
+                        }
                         let oriented_path = (draw.paint.style == RenderPaintStyle::Fill
                             && draw::msaa_fill_requires_reverse(
                                 &draw.path.raw_path,
@@ -2660,9 +2666,9 @@ impl WgpuFrame {
                                 tessellation.instance_count,
                             );
                             prepared_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
-                                PreparedDraw::Fill(prepared, draw.path.fill_rule)
+                                PreparedDraw::Fill(prepared, draw.path.fill_rule, has_clip_rect)
                             } else {
-                                PreparedDraw::Analytic(prepared)
+                                PreparedDraw::Analytic(prepared, has_clip_rect)
                             });
                             continue;
                         }
@@ -2828,9 +2834,12 @@ impl WgpuFrame {
                     pass.set_stencil_reference(0);
                     for prepared in &prepared_draws[segment_start..segment_end] {
                         match prepared {
-                            PreparedDraw::Analytic(draw) => {
+                            PreparedDraw::Analytic(draw, has_clip_rect) => {
                                 pass.set_stencil_reference(0);
-                                pass.set_pipeline(&self.context.path_pipeline.pipeline);
+                                pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
+                                    path_pipeline::DirectPathPipelineKind::Analytic,
+                                    *has_clip_rect,
+                                ));
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
                                 pass.set_bind_group(3, &draw.sampler_group, &[]);
@@ -2848,7 +2857,7 @@ impl WgpuFrame {
                                     draw.base_instance..draw.base_instance + draw.instance_count,
                                 );
                             }
-                            PreparedDraw::Fill(draw, fill_rule) => {
+                            PreparedDraw::Fill(draw, fill_rule, has_clip_rect) => {
                                 pass.set_stencil_reference(0x80);
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
@@ -2866,31 +2875,29 @@ impl WgpuFrame {
                                 for fill_pass in msaa_fill_passes(*fill_rule) {
                                     let pipeline = match fill_pass {
                                         MsaaFillPass::BorrowedCoverage => {
-                                            &self.context.path_pipeline.fill_borrowed_pipeline
+                                            path_pipeline::DirectPathPipelineKind::FillBorrowed
                                         }
                                         MsaaFillPass::Forward => {
-                                            &self.context.path_pipeline.fill_forward_pipeline
+                                            path_pipeline::DirectPathPipelineKind::FillForward
                                         }
                                         MsaaFillPass::Cleanup => {
-                                            &self.context.path_pipeline.fill_cleanup_pipeline
+                                            path_pipeline::DirectPathPipelineKind::FillCleanup
                                         }
                                         MsaaFillPass::ClockwiseCleanup => {
-                                            &self
-                                                .context
-                                                .path_pipeline
-                                                .clockwise_fill_cleanup_pipeline
+                                            path_pipeline::DirectPathPipelineKind::ClockwiseFillCleanup
                                         }
                                         MsaaFillPass::EvenOddStencil => {
-                                            &self
-                                                .context
-                                                .path_pipeline
-                                                .even_odd_fill_stencil_pipeline
+                                            path_pipeline::DirectPathPipelineKind::EvenOddFillStencil
                                         }
                                         MsaaFillPass::EvenOddCover => {
-                                            &self.context.path_pipeline.even_odd_fill_cover_pipeline
+                                            path_pipeline::DirectPathPipelineKind::EvenOddFillCover
                                         }
                                     };
-                                    pass.set_pipeline(pipeline);
+                                    pass.set_pipeline(
+                                        self.context
+                                            .path_pipeline
+                                            .direct_pipeline(pipeline, *has_clip_rect),
+                                    );
                                     pass.draw_indexed(
                                         indices.clone(),
                                         0,
@@ -5817,6 +5824,37 @@ mod tests {
         frame.clip_path(&clip);
         frame.draw_path(&fill, &paint);
         let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
+        assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
+        assert_eq!(pixel(56, 56), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_direct_fill_applies_clip_rect_with_generated_clip_distances() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let supports_clip_rect = factory.context.path_pipeline.supports_clip_rect();
+        let clip = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::NonZero);
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.clip_path(&clip);
+        frame.draw_path(&fill, &paint);
+        let result = frame.finish();
+        if !supports_clip_rect {
+            assert!(matches!(
+                result,
+                Err(RendererError::Unsupported(
+                    "clip rectangles on msaa direct path draws"
+                ))
+            ));
+            return;
+        }
+        let pixels = result.unwrap();
         let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
         assert_eq!(pixel(8, 8), [0, 0, 0, 255]);

@@ -4,13 +4,20 @@ use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVerte
 use wgpu::util::DeviceExt;
 
 pub(crate) struct PathPipeline {
-    pub pipeline: wgpu::RenderPipeline,
-    pub fill_borrowed_pipeline: wgpu::RenderPipeline,
-    pub fill_forward_pipeline: wgpu::RenderPipeline,
-    pub fill_cleanup_pipeline: wgpu::RenderPipeline,
-    pub clockwise_fill_cleanup_pipeline: wgpu::RenderPipeline,
-    pub even_odd_fill_stencil_pipeline: wgpu::RenderPipeline,
-    pub even_odd_fill_cover_pipeline: wgpu::RenderPipeline,
+    pipeline: wgpu::RenderPipeline,
+    clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    fill_borrowed_pipeline: wgpu::RenderPipeline,
+    fill_borrowed_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    fill_forward_pipeline: wgpu::RenderPipeline,
+    fill_forward_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    fill_cleanup_pipeline: wgpu::RenderPipeline,
+    fill_cleanup_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    clockwise_fill_cleanup_pipeline: wgpu::RenderPipeline,
+    clockwise_fill_cleanup_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    even_odd_fill_stencil_pipeline: wgpu::RenderPipeline,
+    even_odd_fill_stencil_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
+    even_odd_fill_cover_pipeline: wgpu::RenderPipeline,
+    even_odd_fill_cover_clip_rect_pipeline: Option<wgpu::RenderPipeline>,
     pub clip_borrowed_pipeline: wgpu::RenderPipeline,
     pub clip_update_pipeline: wgpu::RenderPipeline,
     pub clip_cleanup_pipeline: wgpu::RenderPipeline,
@@ -24,6 +31,17 @@ pub(crate) struct PathPipeline {
     sampler_layout: wgpu::BindGroupLayout,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum DirectPathPipelineKind {
+    Analytic,
+    FillBorrowed,
+    FillForward,
+    FillCleanup,
+    ClockwiseFillCleanup,
+    EvenOddFillStencil,
+    EvenOddFillCover,
+}
+
 pub(crate) struct PreparedPathDraw {
     pub flush_group: wgpu::BindGroup,
     pub image_group: wgpu::BindGroup,
@@ -34,12 +52,23 @@ pub(crate) struct PreparedPathDraw {
 
 impl PathPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let no_clip_vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-msaa-path-vertex"),
             source: wgpu::ShaderSource::Wgsl(
                 include_str!("generated/draw_msaa_path.webgpu_noclipdistance_vert.wgsl").into(),
             ),
         });
+        let clip_rect_vertex = device
+            .features()
+            .contains(wgpu::Features::CLIP_DISTANCES)
+            .then(|| {
+                device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("nuxie-msaa-path-clip-rect-vertex"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        include_str!("generated/draw_msaa_path.webgpu_vert.wgsl").into(),
+                    ),
+                })
+            });
         let fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-msaa-path-fragment"),
             source: wgpu::ShaderSource::Wgsl(
@@ -84,10 +113,6 @@ impl PathPipeline {
             ],
             immediate_size: 0,
         });
-        let vertex_options = wgpu::PipelineCompilationOptions {
-            constants: &[("0", 0.0), ("2", 0.0)],
-            ..Default::default()
-        };
         let fragment_options = wgpu::PipelineCompilationOptions {
             constants: &[("2", 0.0), ("7", 0.0)],
             ..Default::default()
@@ -106,52 +131,98 @@ impl PathPipeline {
             read_mask,
             write_mask,
         };
-        let create_pipeline =
-            |label, cull_mode, stencil, depth_compare, depth_write_enabled, color_write_mask| {
-                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some(label),
-                    layout: Some(&layout),
-                    vertex: wgpu::VertexState {
-                        module: &vertex,
-                        entry_point: Some("main"),
-                        compilation_options: vertex_options.clone(),
-                        buffers: &[Some(PatchVertex::layout())],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        front_face: wgpu::FrontFace::Cw,
-                        cull_mode,
+        let create_pipeline = |label,
+                               vertex: &wgpu::ShaderModule,
+                               clip_rect,
+                               cull_mode,
+                               stencil,
+                               depth_compare,
+                               depth_write_enabled,
+                               color_write_mask| {
+            let constants: &[(&str, f64)] = if clip_rect {
+                &[("0", 0.0), ("1", 1.0), ("2", 0.0)]
+            } else {
+                &[("0", 0.0), ("2", 0.0)]
+            };
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: vertex,
+                    entry_point: Some("main"),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants,
                         ..Default::default()
                     },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: wgpu::TextureFormat::Depth24PlusStencil8,
-                        depth_write_enabled: Some(depth_write_enabled),
-                        depth_compare: Some(depth_compare),
-                        stencil,
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 4,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &fragment,
-                        entry_point: Some("main"),
-                        compilation_options: fragment_options.clone(),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Rgba8Unorm,
-                            blend: (color_write_mask == wgpu::ColorWrites::ALL)
-                                .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                            write_mask: color_write_mask,
-                        })],
-                    }),
-                    multiview_mask: None,
-                    cache: None,
-                })
-            };
-        let pipeline = create_pipeline(
+                    buffers: &[Some(PatchVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24PlusStencil8,
+                    depth_write_enabled: Some(depth_write_enabled),
+                    depth_compare: Some(depth_compare),
+                    stencil,
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 4,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &fragment,
+                    entry_point: Some("main"),
+                    compilation_options: fragment_options.clone(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: (color_write_mask == wgpu::ColorWrites::ALL)
+                            .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: color_write_mask,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let create_direct_pipelines = |label,
+                                       clip_rect_label,
+                                       cull_mode,
+                                       stencil: wgpu::StencilState,
+                                       depth_compare,
+                                       depth_write_enabled,
+                                       color_write_mask| {
+            let pipeline = create_pipeline(
+                label,
+                &no_clip_vertex,
+                false,
+                cull_mode,
+                stencil.clone(),
+                depth_compare,
+                depth_write_enabled,
+                color_write_mask,
+            );
+            let clip_rect_pipeline = clip_rect_vertex.as_ref().map(|vertex| {
+                create_pipeline(
+                    clip_rect_label,
+                    vertex,
+                    true,
+                    cull_mode,
+                    stencil,
+                    depth_compare,
+                    depth_write_enabled,
+                    color_write_mask,
+                )
+            });
+            (pipeline, clip_rect_pipeline)
+        };
+        let (pipeline, clip_rect_pipeline) = create_direct_pipelines(
             "nuxie-msaa-path-pipeline",
+            "nuxie-msaa-path-clip-rect-pipeline",
             None,
             stencil_state(disabled_face, disabled_face, 0xff, 0xff),
             wgpu::CompareFunction::Always,
@@ -164,8 +235,9 @@ impl PathPipeline {
             keep,
             wgpu::StencilOperation::IncrementWrap,
         );
-        let fill_borrowed_pipeline = create_pipeline(
+        let (fill_borrowed_pipeline, fill_borrowed_clip_rect_pipeline) = create_direct_pipelines(
             "nuxie-msaa-fill-borrowed-pipeline",
+            "nuxie-msaa-fill-borrowed-clip-rect-pipeline",
             Some(wgpu::Face::Front),
             stencil_state(borrowed_face, borrowed_face, 0xff, 0x7f),
             wgpu::CompareFunction::Less,
@@ -183,30 +255,34 @@ impl PathPipeline {
             wgpu::StencilOperation::Zero,
         );
         let fill_stencil = stencil_state(fill_front, fill_back, 0x7f, 0x7f);
-        let fill_forward_pipeline = create_pipeline(
+        let (fill_forward_pipeline, fill_forward_clip_rect_pipeline) = create_direct_pipelines(
             "nuxie-msaa-fill-forward-pipeline",
+            "nuxie-msaa-fill-forward-clip-rect-pipeline",
             Some(wgpu::Face::Back),
             fill_stencil.clone(),
             wgpu::CompareFunction::Less,
             true,
             wgpu::ColorWrites::ALL,
         );
-        let fill_cleanup_pipeline = create_pipeline(
+        let (fill_cleanup_pipeline, fill_cleanup_clip_rect_pipeline) = create_direct_pipelines(
             "nuxie-msaa-fill-cleanup-pipeline",
+            "nuxie-msaa-fill-cleanup-clip-rect-pipeline",
             Some(wgpu::Face::Front),
             fill_stencil.clone(),
             wgpu::CompareFunction::Less,
             true,
             wgpu::ColorWrites::ALL,
         );
-        let clockwise_fill_cleanup_pipeline = create_pipeline(
-            "nuxie-msaa-clockwise-fill-cleanup-pipeline",
-            Some(wgpu::Face::Front),
-            fill_stencil,
-            wgpu::CompareFunction::Less,
-            false,
-            wgpu::ColorWrites::empty(),
-        );
+        let (clockwise_fill_cleanup_pipeline, clockwise_fill_cleanup_clip_rect_pipeline) =
+            create_direct_pipelines(
+                "nuxie-msaa-clockwise-fill-cleanup-pipeline",
+                "nuxie-msaa-clockwise-fill-cleanup-clip-rect-pipeline",
+                Some(wgpu::Face::Front),
+                fill_stencil,
+                wgpu::CompareFunction::Less,
+                false,
+                wgpu::ColorWrites::empty(),
+            );
         let even_odd_front = stencil_face(
             wgpu::CompareFunction::Always,
             keep,
@@ -217,27 +293,31 @@ impl PathPipeline {
             keep,
             wgpu::StencilOperation::IncrementWrap,
         );
-        let even_odd_fill_stencil_pipeline = create_pipeline(
-            "nuxie-msaa-even-odd-fill-stencil-pipeline",
-            None,
-            stencil_state(even_odd_front, even_odd_back, 0xff, 0x01),
-            wgpu::CompareFunction::Less,
-            false,
-            wgpu::ColorWrites::empty(),
-        );
+        let (even_odd_fill_stencil_pipeline, even_odd_fill_stencil_clip_rect_pipeline) =
+            create_direct_pipelines(
+                "nuxie-msaa-even-odd-fill-stencil-pipeline",
+                "nuxie-msaa-even-odd-fill-stencil-clip-rect-pipeline",
+                None,
+                stencil_state(even_odd_front, even_odd_back, 0xff, 0x01),
+                wgpu::CompareFunction::Less,
+                false,
+                wgpu::ColorWrites::empty(),
+            );
         let even_odd_cover_face = stencil_face(
             wgpu::CompareFunction::NotEqual,
             keep,
             wgpu::StencilOperation::Zero,
         );
-        let even_odd_fill_cover_pipeline = create_pipeline(
-            "nuxie-msaa-even-odd-fill-cover-pipeline",
-            None,
-            stencil_state(even_odd_cover_face, even_odd_cover_face, 0x7f, 0x01),
-            wgpu::CompareFunction::Less,
-            true,
-            wgpu::ColorWrites::ALL,
-        );
+        let (even_odd_fill_cover_pipeline, even_odd_fill_cover_clip_rect_pipeline) =
+            create_direct_pipelines(
+                "nuxie-msaa-even-odd-fill-cover-pipeline",
+                "nuxie-msaa-even-odd-fill-cover-clip-rect-pipeline",
+                None,
+                stencil_state(even_odd_cover_face, even_odd_cover_face, 0x7f, 0x01),
+                wgpu::CompareFunction::Less,
+                true,
+                wgpu::ColorWrites::ALL,
+            );
         let clip_borrowed_face = stencil_face(
             wgpu::CompareFunction::Always,
             keep,
@@ -245,6 +325,8 @@ impl PathPipeline {
         );
         let clip_borrowed_pipeline = create_pipeline(
             "nuxie-msaa-path-clip-borrowed-pipeline",
+            &no_clip_vertex,
+            false,
             Some(wgpu::Face::Front),
             stencil_state(clip_borrowed_face, clip_borrowed_face, 0xff, 0x7f),
             wgpu::CompareFunction::Less,
@@ -263,6 +345,8 @@ impl PathPipeline {
         );
         let clip_update_pipeline = create_pipeline(
             "nuxie-msaa-path-clip-update-pipeline",
+            &no_clip_vertex,
+            false,
             Some(wgpu::Face::Back),
             stencil_state(clip_front, clip_back, 0x7f, 0xff),
             wgpu::CompareFunction::Less,
@@ -271,6 +355,8 @@ impl PathPipeline {
         );
         let clip_cleanup_pipeline = create_pipeline(
             "nuxie-msaa-path-clip-cleanup-pipeline",
+            &no_clip_vertex,
+            false,
             Some(wgpu::Face::Front),
             stencil_state(clip_front, clip_back, 0x7f, 0xff),
             wgpu::CompareFunction::Less,
@@ -279,6 +365,8 @@ impl PathPipeline {
         );
         let clockwise_clip_cleanup_pipeline = create_pipeline(
             "nuxie-msaa-path-clockwise-clip-cleanup-pipeline",
+            &no_clip_vertex,
+            false,
             Some(wgpu::Face::Front),
             stencil_state(clip_front, clip_back, 0x7f, 0x7f),
             wgpu::CompareFunction::Less,
@@ -297,6 +385,8 @@ impl PathPipeline {
         );
         let even_odd_clip_stencil_pipeline = create_pipeline(
             "nuxie-msaa-path-even-odd-clip-stencil-pipeline",
+            &no_clip_vertex,
+            false,
             None,
             stencil_state(even_odd_clip_front, even_odd_clip_back, 0xff, 0x01),
             wgpu::CompareFunction::Less,
@@ -310,6 +400,8 @@ impl PathPipeline {
         );
         let even_odd_clip_cover_pipeline = create_pipeline(
             "nuxie-msaa-path-even-odd-clip-cover-pipeline",
+            &no_clip_vertex,
+            false,
             None,
             stencil_state(even_odd_cover_face, even_odd_cover_face, 0x7f, 0xff),
             wgpu::CompareFunction::Less,
@@ -328,6 +420,8 @@ impl PathPipeline {
         );
         let nested_clip_pipeline = create_pipeline(
             "nuxie-msaa-path-nested-clip-pipeline",
+            &no_clip_vertex,
+            false,
             None,
             stencil_state(nested_front, nested_back, 0xff, 0x7f),
             wgpu::CompareFunction::Less,
@@ -336,6 +430,8 @@ impl PathPipeline {
         );
         let nested_even_odd_clip_pipeline = create_pipeline(
             "nuxie-msaa-path-nested-even-odd-clip-pipeline",
+            &no_clip_vertex,
+            false,
             None,
             stencil_state(nested_front, nested_back, 0xff, 0x01),
             wgpu::CompareFunction::Less,
@@ -344,12 +440,19 @@ impl PathPipeline {
         );
         Self {
             pipeline,
+            clip_rect_pipeline,
             fill_borrowed_pipeline,
+            fill_borrowed_clip_rect_pipeline,
             fill_forward_pipeline,
+            fill_forward_clip_rect_pipeline,
             fill_cleanup_pipeline,
+            fill_cleanup_clip_rect_pipeline,
             clockwise_fill_cleanup_pipeline,
+            clockwise_fill_cleanup_clip_rect_pipeline,
             even_odd_fill_stencil_pipeline,
+            even_odd_fill_stencil_clip_rect_pipeline,
             even_odd_fill_cover_pipeline,
+            even_odd_fill_cover_clip_rect_pipeline,
             clip_borrowed_pipeline,
             clip_update_pipeline,
             clip_cleanup_pipeline,
@@ -361,6 +464,51 @@ impl PathPipeline {
             flush_layout,
             image_layout,
             sampler_layout,
+        }
+    }
+
+    pub(crate) fn supports_clip_rect(&self) -> bool {
+        self.clip_rect_pipeline.is_some()
+    }
+
+    pub(crate) fn direct_pipeline(
+        &self,
+        kind: DirectPathPipelineKind,
+        clip_rect: bool,
+    ) -> &wgpu::RenderPipeline {
+        let (pipeline, clip_rect_pipeline) = match kind {
+            DirectPathPipelineKind::Analytic => (&self.pipeline, &self.clip_rect_pipeline),
+            DirectPathPipelineKind::FillBorrowed => (
+                &self.fill_borrowed_pipeline,
+                &self.fill_borrowed_clip_rect_pipeline,
+            ),
+            DirectPathPipelineKind::FillForward => (
+                &self.fill_forward_pipeline,
+                &self.fill_forward_clip_rect_pipeline,
+            ),
+            DirectPathPipelineKind::FillCleanup => (
+                &self.fill_cleanup_pipeline,
+                &self.fill_cleanup_clip_rect_pipeline,
+            ),
+            DirectPathPipelineKind::ClockwiseFillCleanup => (
+                &self.clockwise_fill_cleanup_pipeline,
+                &self.clockwise_fill_cleanup_clip_rect_pipeline,
+            ),
+            DirectPathPipelineKind::EvenOddFillStencil => (
+                &self.even_odd_fill_stencil_pipeline,
+                &self.even_odd_fill_stencil_clip_rect_pipeline,
+            ),
+            DirectPathPipelineKind::EvenOddFillCover => (
+                &self.even_odd_fill_cover_pipeline,
+                &self.even_odd_fill_cover_clip_rect_pipeline,
+            ),
+        };
+        if clip_rect {
+            clip_rect_pipeline
+                .as_ref()
+                .expect("clip-rect path draw prepared without clip-distance pipeline")
+        } else {
+            pipeline
         }
     }
 

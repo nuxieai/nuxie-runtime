@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=698, diverges=0, gated=770, total=1,468.
+- Rust wgpu: exact=700, diverges=0, gated=768, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -50,6 +50,7 @@ Run `make renderer-golden`.
   `gm-parallelclips-clockwise-atomic`, and
   `gm-clippedcubic-clockwise-atomic`,
   `gm-clippedcubic2-clockwise-atomic`,
+  `gm-clippedcubic2-msaa`, and `gm-cliprects-msaa`,
   `gm-path_stroke_clip_crbug1070835-clockwise-atomic`,
   `riv-artboardclipping-frame-0-clockwise-atomic`,
   `riv-circle_clips-frame-{0..4}-clockwise-atomic`,
@@ -678,10 +679,16 @@ Run `make renderer-golden`.
     The registry now explicitly permits a no-draw replay only when the strict
     stream counts declare no `drawPath`, allowing `emptyclear` to capture
     without weakening accidental-empty replay detection.
-64. [ ] Port C++'s generated clip-distance MSAA direct-path vertex variant and
+64. [x] Port C++'s generated clip-distance MSAA direct-path vertex variant and
     select it for `PaintData::HAS_CLIP_RECT`, with a focused GPU regression.
     Reprobe `clippedcubic2`, `cliprectintersections`, and `cliprects` against
-    their captured C++ Dawn references before changing their gates.
+    their captured C++ Dawn references before changing their gates. The seven
+    direct draw states now select byte-exact upstream clipped/unclipped vertex
+    variants behind `CLIP_DISTANCES`; unsupported adapters fail closed.
+    `clippedcubic2` and `cliprects` pass at zero pixels beyond `2/32` and are
+    promoted. `cliprectintersections` retains 240 pixels/max 55 in sparse
+    one-pixel edge/corner components and stays gated as
+    `msaa-clip-intersection-edge-coverage` without a tolerance change.
 65. [ ] Port direct MSAA destination-read advanced blending for solid path
     draws, then reprobe the captured `dstreadshuffle` reference. Preserve the
     existing atlas destination-copy path and unchanged `2/32` contract.
@@ -897,6 +904,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Port C++ WebGPU's direct MSAA clip-distance shader selection at
+  the pipeline boundary. Rust's generated clipped and unclipped vertex modules
+  are byte-exact with upstream; all seven direct stroke/fill states now compile
+  both variants when the adapter exposes `CLIP_DISTANCES`, and preparation
+  fails closed otherwise. The focused GPU clip-plane regression passes.
+  `clippedcubic2` and `cliprects` pass their unchanged Dawn `2/32` contracts at
+  zero over-threshold pixels. `cliprectintersections` is no longer missing clip
+  planes but retains 240 pixels/max 55 in sparse one-pixel intersection-edge
+  components, so its gate narrows to `msaa-clip-intersection-edge-coverage`.
+  The ratchet advances to exact=700/diverges=0/gated=768. No tolerance changed.
 - 2026-07-13: The third ten strict C++ Dawn WebGPU-on-Metal MSAA references
   extend the provenance registry to 30 cases; the prior 20 PNGs recapture
   byte-identically. `bug7792`, `clippedcubic`, `crbug_996140`,
@@ -2720,3 +2737,10 @@ Run `make renderer-golden`.
   blending. Queue items 64-65 name those implementation slices. All 30
   provenance records, 34 oracle format tests, 11 capture coordinator tests,
   the workspace suite, renderer ratchet, and both V2 golden floors pass.
+- 2026-07-13: Ported the generated direct MSAA clip-distance pipeline variants
+  and selected them for clip-rect paint data. The focused GPU regression and
+  all 197 enabled renderer tests pass. Dawn reprobes promote `clippedcubic2`
+  and `cliprects` at zero over-threshold pixels; `cliprectintersections` keeps
+  the narrower `msaa-clip-intersection-edge-coverage` gate at 240 pixels/max
+  55. The full renderer ratchet is exact=700/diverges=0/gated=768 with no
+  tolerance change. Queue item 65 is next.

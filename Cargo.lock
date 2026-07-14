@@ -922,6 +922,11 @@ dependencies = [
 [[package]]
 name = "perf-compare"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "toml",
+]
 
 [[package]]
 name = "pin-project-lite"

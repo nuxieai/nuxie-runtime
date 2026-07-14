@@ -1,0 +1,40 @@
+schema = "rive-renderer-perf-scenes-v1"
+modes = ["clockwise-atomic", "msaa"]
+
+[defaults]
+width = 1024
+height = 1024
+frame = 0
+adapter = "default"
+
+[[scene]]
+id = "gm-CubicStroke"
+stream = "../../fixtures/renderer/streams/gm/CubicStroke.rive-stream"
+
+[[scene]]
+id = "gm-OverStroke"
+stream = "../../fixtures/renderer/streams/gm/OverStroke.rive-stream"
+
+[[scene]]
+id = "gm-batchedconvexpaths"
+stream = "../../fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream"
+
+[[scene]]
+id = "gm-batchedtriangulations"
+stream = "../../fixtures/renderer/streams/gm/batchedtriangulations.rive-stream"
+
+[[scene]]
+id = "gm-bevel180strokes"
+stream = "../../fixtures/renderer/streams/gm/bevel180strokes.rive-stream"
+
+[[scene]]
+id = "gm-bug339297"
+stream = "../../fixtures/renderer/streams/gm/bug339297.rive-stream"
+
+[[scene]]
+id = "gm-bug339297_as_clip"
+stream = "../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
+
+[[scene]]
+id = "gm-bug5099"
+stream = "../../fixtures/renderer/streams/gm/bug5099.rive-stream"

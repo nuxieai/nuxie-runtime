@@ -1295,13 +1295,12 @@ max_different_pixels = 32
 id = "gm-interleavedfillrule-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/interleavedfillrule.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/interleavedfillrule-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-interleavedfillrule-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1320,13 +1319,12 @@ max_different_pixels = 32
 id = "gm-labyrinth_butt-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/labyrinth_butt.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/labyrinth_butt-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-labyrinth_butt-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1345,13 +1343,12 @@ max_different_pixels = 32
 id = "gm-labyrinth_round-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/labyrinth_round.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/labyrinth_round-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-labyrinth_round-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1370,13 +1367,12 @@ max_different_pixels = 32
 id = "gm-labyrinth_square-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/labyrinth_square.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/labyrinth_square-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-labyrinth_square-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1395,13 +1391,13 @@ max_different_pixels = 640
 id = "gm-largeclippedpath_clockwise-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_clockwise-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_clockwise-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1420,13 +1416,13 @@ max_different_pixels = 640
 id = "gm-largeclippedpath_clockwise_nested-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_clockwise_nested-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_clockwise_nested-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1445,13 +1441,13 @@ max_different_pixels = 640
 id = "gm-largeclippedpath_evenodd-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_evenodd-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_evenodd-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1470,13 +1466,13 @@ max_different_pixels = 640
 id = "gm-largeclippedpath_evenodd_nested-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd_nested.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_evenodd_nested-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_evenodd_nested-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1495,13 +1491,13 @@ max_different_pixels = 640
 id = "gm-largeclippedpath_winding-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/largeclippedpath_winding.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_winding-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_winding-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]
@@ -1520,13 +1516,13 @@ max_different_pixels = 640
 id = "gm-largeclippedpath_winding_nested-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/largeclippedpath_winding_nested.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/largeclippedpath_winding_nested-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-largeclippedpath_winding_nested-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "non-atlas-msaa-path-clip"
 
 
 [[entry]]

@@ -1604,14 +1604,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 54>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 64>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                54,
+                64,
             )
             self.assertEqual(
                 len(
@@ -1620,11 +1620,14 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                54,
+                64,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
             self.assertIn('"gm-interleavedfeather-msaa"', generated)
+            self.assertIn('"gm-interleavedfillrule-msaa"', generated)
+            self.assertIn('"gm-labyrinth_square-msaa"', generated)
+            self.assertIn('"gm-largeclippedpath_winding_nested-msaa"', generated)
             self.assertIn("void replayMsaaReference46Chunk0(", generated)
             self.assertIn("void replayMsaaReference47Chunk0(", generated)
             self.assertIn("retainedPaths.reserve(32578);", generated)

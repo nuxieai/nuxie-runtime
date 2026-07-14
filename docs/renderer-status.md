@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=723, diverges=0, gated=745, total=1,468.
+- Rust wgpu: exact=727, diverges=0, gated=741, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -85,6 +85,8 @@ Run `make renderer-golden`.
   `gm-image_aa_border-clockwise-atomic`, plus
   `gm-image-msaa`, `gm-image_aa_border-msaa`,
   `gm-image_filter_options-msaa`, and `gm-image_lod-msaa`, and
+  `gm-interleavedfillrule-msaa` and the
+  `gm-labyrinth_{butt,round,square}-msaa` family, and
   `gm-mesh-clockwise-atomic`, and
   `gm-degengrad-clockwise-atomic`,
   `gm-rect_grad-clockwise-atomic`,
@@ -844,13 +846,30 @@ Run `make renderer-golden`.
     three max 2), so they are promoted without changing any contract. The
     renderer suite passes 210 enabled tests, and the full ratchet advances to
     exact=723/diverges=0/gated=745 while preserving all 719 prior exact rows.
-74. [ ] Capture and probe the next ten strict source-order C++ Dawn MSAA
+74. [x] Capture and probe the next ten strict source-order C++ Dawn MSAA
     entries after `interleavedfeather`: `interleavedfillrule`, the three
     `labyrinth_*` streams, and the six `largeclippedpath_*` variants. Preserve
     the existing 54-case registry byte-for-byte in serial and four-job modes,
     record strict-generator rejections as named harness gaps, and install only
     provenance-complete references. Probe accepted rows under their unchanged
     contracts before changing any `algorithm-core` gate, and preserve the 723
+    exact entries. All ten strict streams compile without a harness gap. The
+    64-case serial and four-job captures are byte-identical across all 192
+    PNG/RGBA/provenance artifacts, and all 54 retained reference PNGs remain
+    byte-identical. `interleavedfillrule` and all three `labyrinth_*` rows pass
+    unchanged `2/32` with zero over-threshold pixels and max delta 0/1, while
+    all six `largeclippedpath_*` rows reach the same explicit
+    `path clips on non-atlas msaa draws` rejection. The former promote and the
+    latter narrow to `non-atlas-msaa-path-clip`, advancing the ratchet to
+    exact=727/diverges=0/gated=741 without changing a tolerance. The full
+    workspace, normal 584-segment floor, and scripted 35-segment floor pass.
+75. [ ] Port C++ non-atlas MSAA path-clip execution through Rust's direct path
+    pipeline. Begin with `gm-bug339297_as_clip-msaa` and the six pinned
+    `gm-largeclippedpath_*` Dawn references, preserving the existing atlas
+    stencil path, clip-stack ID reuse, nested non-zero/even-odd/clockwise
+    semantics, clip rectangles, and unclipped draws. Replace the focused
+    explicit-boundary regression with GPU coverage for direct clipped draws,
+    probe all seven rows under their unchanged contracts, and preserve the 727
     exact entries.
 
 ## R2 Completion Record
@@ -1063,6 +1082,17 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Extend the strict C++ Dawn MSAA registry from 54 to 64 cases
+  with `interleavedfillrule`, the three labyrinth streams, and all six
+  `largeclippedpath_*` variants. Every stream passes the strict compiler; jobs
+  1 and 4 produce all 192 artifacts byte-for-byte, and the prior 54 reference
+  PNGs are unchanged. Four direct-path rows pass the existing `2/32` contract
+  with max delta at most 1 and promote. The six clipped rows all stop at
+  Rust's existing non-atlas MSAA path-clip boundary, so their generic gates
+  narrow without promotion or tolerance changes. The ratchet is
+  exact=727/diverges=0/gated=741; queue item 75 targets that shared seven-row
+  renderer boundary.
 
 - 2026-07-14: Extend the provenance-bound C++ Dawn MSAA registry from 50 to
   54 cases with strict `decodeImage` and `drawImage` replay. Generation rejects
@@ -3070,3 +3100,11 @@ Run `make renderer-golden`.
   remain green, the 245-test renderer suite passes, and workspace plus normal
   584-segment and scripted 35-segment V2 floors pass. Queue item 74 names the
   next strict source-order capture batch.
+- 2026-07-14: Captured ten more provenance-bound C++ Dawn MSAA references with
+  a 64-case registry. Serial and four-job runs match across all 192 artifacts,
+  and all 54 retained PNGs are unchanged. `interleavedfillrule` and the three
+  labyrinth rows promote under unchanged `2/32`; the six large clipped-path
+  rows narrow to the shared `non-atlas-msaa-path-clip` boundary. The renderer
+  ratchet advances to exact=727/diverges=0/gated=741 with all 723 prior exact
+  rows green; the workspace and normal 584-segment plus scripted 35-segment V2
+  floors pass. Queue item 75 ports direct MSAA path clipping.

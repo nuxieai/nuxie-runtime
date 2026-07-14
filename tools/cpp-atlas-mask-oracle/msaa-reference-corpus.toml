@@ -593,3 +593,113 @@ width = 978
 height = 919
 clear_color = "0xffffffff"
 counts = { decodeImage = 1, drawImage = 27, restore = 32, save = 32, transform = 82 }
+
+[[case]]
+id = "gm-interleavedfillrule-msaa"
+stream = "fixtures/renderer/streams/gm/interleavedfillrule.rive-stream"
+sha256 = "e9fbf09da5eee98fafe16d352f25606ec08bec9ed0eb61742d3552f00538fca9"
+source = "gm:interleavedfillrule"
+scene = "interleavedfillrule"
+width = 1700
+height = 1700
+clear_color = "0xff000000"
+counts = { drawPath = 49, makeEmptyRenderPath = 7, makeRenderPaint = 49, restore = 57, save = 57, transform = 179 }
+
+[[case]]
+id = "gm-labyrinth_butt-msaa"
+stream = "fixtures/renderer/streams/gm/labyrinth_butt.rive-stream"
+sha256 = "3a879b4934d7e58acad823ea9274b11b3a13c671f7cf0b429ea30635d1afef24"
+source = "gm:labyrinth_butt"
+scene = "labyrinth_butt"
+width = 500
+height = 420
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-labyrinth_round-msaa"
+stream = "fixtures/renderer/streams/gm/labyrinth_round.rive-stream"
+sha256 = "20e50e660e7d22309a451bb14f48811aa0a594cce0766de893b45e883f0f111f"
+source = "gm:labyrinth_round"
+scene = "labyrinth_round"
+width = 500
+height = 420
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-labyrinth_square-msaa"
+stream = "fixtures/renderer/streams/gm/labyrinth_square.rive-stream"
+sha256 = "c9af16066bdce52835f0e3ead5eb0e30d7d1040bf79b809e17337e1b5976318e"
+source = "gm:labyrinth_square"
+scene = "labyrinth_square"
+width = 500
+height = 420
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-largeclippedpath_clockwise-msaa"
+stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise.rive-stream"
+sha256 = "41d7152428dc7610dac940154541e8cbc00cd48b21f1b71e99c1eac91c334c96"
+source = "gm:largeclippedpath_clockwise"
+scene = "largeclippedpath_clockwise"
+width = 1000
+height = 1000
+clear_color = "0xff00ffff"
+counts = { clipPath = 1, drawPath = 1, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-largeclippedpath_clockwise_nested-msaa"
+stream = "fixtures/renderer/streams/gm/largeclippedpath_clockwise_nested.rive-stream"
+sha256 = "80e60d94cce96868823827d1f3dcdd586c2f3c0d1e0b6adced2c51d9dc7a02da"
+source = "gm:largeclippedpath_clockwise_nested"
+scene = "largeclippedpath_clockwise_nested"
+width = 1000
+height = 1000
+clear_color = "0xff00ffff"
+counts = { clipPath = 2, drawPath = 1, makeEmptyRenderPath = 5, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-largeclippedpath_evenodd-msaa"
+stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd.rive-stream"
+sha256 = "36afbce7bc8ee2d18321fb7adc7fddb1480a9affa673f751a844b146afcf78ce"
+source = "gm:largeclippedpath_evenodd"
+scene = "largeclippedpath_evenodd"
+width = 1000
+height = 1000
+clear_color = "0xff00ffff"
+counts = { clipPath = 1, drawPath = 1, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-largeclippedpath_evenodd_nested-msaa"
+stream = "fixtures/renderer/streams/gm/largeclippedpath_evenodd_nested.rive-stream"
+sha256 = "ccf877034b7f5819496cfaae16bf59421e92bd0a26efb873363c153e59581240"
+source = "gm:largeclippedpath_evenodd_nested"
+scene = "largeclippedpath_evenodd_nested"
+width = 1000
+height = 1000
+clear_color = "0xff00ffff"
+counts = { clipPath = 2, drawPath = 1, makeEmptyRenderPath = 5, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-largeclippedpath_winding-msaa"
+stream = "fixtures/renderer/streams/gm/largeclippedpath_winding.rive-stream"
+sha256 = "9f0889653873118d9e99b6e0e0c4ec5707b5ee7614228cc1bfd2bc7e076d8e05"
+source = "gm:largeclippedpath_winding"
+scene = "largeclippedpath_winding"
+width = 1000
+height = 1000
+clear_color = "0xff00ffff"
+counts = { clipPath = 1, drawPath = 1, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-largeclippedpath_winding_nested-msaa"
+stream = "fixtures/renderer/streams/gm/largeclippedpath_winding_nested.rive-stream"
+sha256 = "8bb183f5885423e67d2c832ca55222bf5b08eed99d9932743db8a139e260490c"
+source = "gm:largeclippedpath_winding_nested"
+scene = "largeclippedpath_winding_nested"
+width = 1000
+height = 1000
+clear_color = "0xff00ffff"
+counts = { clipPath = 2, drawPath = 1, makeEmptyRenderPath = 5, makeRenderPaint = 1, restore = 1, save = 1 }

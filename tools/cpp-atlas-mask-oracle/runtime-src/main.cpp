@@ -33,6 +33,7 @@ constexpr uint32_t kBlitHeaderBytes = 20;
 constexpr uint32_t kInputsHeaderBytes = 40;
 constexpr uint32_t kAtomicCoverageHeaderBytes = 24;
 constexpr uint32_t kAtomicColorHeaderBytes = 24;
+constexpr uint32_t kAtomicClipHeaderBytes = 24;
 constexpr uint32_t kTessSpanHeaderBytes = 28;
 constexpr uint32_t kDirectGridHeaderBytes = 64;
 constexpr uint32_t kBytesPerTexel = 2;
@@ -59,12 +60,17 @@ constexpr uint32_t kAtomicColorBurnPairFrameSize = 1024;
 constexpr uint32_t kAtomicInterleavedFeatherFullFrameSize = 1000;
 constexpr uint32_t kAtomicDstReadShuffleFullFrameWidth = 530;
 constexpr uint32_t kAtomicDstReadShuffleFullFrameHeight = 690;
+constexpr uint32_t kAtomicSpotifyKidsAppIconFullLogicalWidth = 1024;
+constexpr uint32_t kAtomicSpotifyKidsAppIconFullLogicalHeight = 1436;
+constexpr uint32_t kAtomicSpotifyKidsAppIconFullPhysicalWidth = 1024;
+constexpr uint32_t kAtomicSpotifyKidsAppIconFullPhysicalHeight = 1440;
 #include "generated_polyshark_path.inc"
 #include "generated_rawtext_path.inc"
 #include "generated_interleaved_colorburn_pair_path.inc"
 #include "generated_interleavedfeather_full.inc"
 #include "generated_dstreadshuffle_full.inc"
 #include "generated_dstreadshuffle_srcover_control.inc"
+#include "generated_spotify_kids_app_icon_full.inc"
 
 void fail(const char* message)
 {
@@ -315,6 +321,87 @@ void writeAtomicColor(const char* output,
     if (!file)
     {
         fail("could not write atomic color output file");
+    }
+}
+
+void writeAtomicClip(const char* output,
+                     uint32_t width,
+                     uint32_t height,
+                     const std::vector<uint32_t>& words)
+{
+    const uint64_t expectedWordCount = static_cast<uint64_t>(width) * height;
+    if (width == 0 || height == 0 || expectedWordCount > UINT32_MAX ||
+        words.size() != expectedWordCount)
+    {
+        fail("atomic clip readback dimensions or word count are invalid");
+    }
+    std::array<uint8_t, kAtomicClipHeaderBytes> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'C', 'L', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, width);
+    writeU32(header, 16, height);
+    writeU32(header, 20, static_cast<uint32_t>(words.size()));
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open atomic clip output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    // Preserve the production 32x32-tiled storage order; do not linearize it.
+    for (uint32_t word : words)
+    {
+        std::array<uint8_t, sizeof(word)> encodedWord{};
+        writeU32(encodedWord, 0, word);
+        file.write(reinterpret_cast<const char*>(encodedWord.data()),
+                   encodedWord.size());
+    }
+    if (!file)
+    {
+        fail("could not write atomic clip output file");
+    }
+}
+
+void writeFullStreamSchedule(
+    const char* output,
+    const rive::gpu::RenderContextWebGPUImpl::AtlasMaskOracleFacts& facts)
+{
+    std::array<uint8_t, 24> header{};
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'A', 'S', 'L', '\0'};
+    std::memcpy(header.data(), kMagic, sizeof(kMagic));
+    writeU32(header, 8, 1);
+    writeU32(header, 12, facts.interlockMode);
+    writeU32(header, 16, facts.fixedFunctionColorOutput ? 1 : 0);
+    writeU32(header, 20, static_cast<uint32_t>(facts.drawBatches.size()));
+
+    std::ofstream file(output, std::ios::binary | std::ios::trunc);
+    if (!file)
+    {
+        fail("could not open full-stream schedule output file");
+    }
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    for (const auto& batch : facts.drawBatches)
+    {
+        const std::array<uint32_t, 6> words = {
+            batch.drawType,
+            batch.shaderFeatures,
+            batch.shaderMiscFlags,
+            batch.drawContents,
+            batch.baseElement,
+            batch.elementCount,
+        };
+        for (uint32_t word : words)
+        {
+            std::array<uint8_t, sizeof(word)> encodedWord{};
+            writeU32(encodedWord, 0, word);
+            file.write(reinterpret_cast<const char*>(encodedWord.data()),
+                       encodedWord.size());
+        }
+    }
+    if (!file)
+    {
+        fail("could not write full-stream schedule output file");
     }
 }
 
@@ -921,10 +1008,14 @@ int main(int argc, char** argv)
     const bool atomicDstReadShuffleSrcOverCase =
         argc > 4 &&
         std::strcmp(argv[4], "atomic-dstreadshuffle-srcover-full") == 0;
+    const bool atomicSpotifyKidsAppIconFullCase =
+        argc > 4 &&
+        std::strcmp(argv[4], "atomic-spotify-kids-app-icon-full") == 0;
     const bool atomicDstReadShuffleCase =
         atomicDstReadShuffleFullCase || atomicDstReadShuffleSrcOverCase;
     const bool fullStreamCase =
-        atomicInterleavedFeatherFullCase || atomicDstReadShuffleCase;
+        atomicInterleavedFeatherFullCase || atomicDstReadShuffleCase ||
+        atomicSpotifyKidsAppIconFullCase;
     const bool intersectionGroupsCase =
         argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;
     const bool anyAdvancedBlendCase =
@@ -959,10 +1050,12 @@ int main(int argc, char** argv)
         ((directStrokesRoundCase || directRawTextCase || atomicColorBurnPairCase ||
           fullStreamCase) &&
          auxiliaryOutput == nullptr) ||
-        (secondaryOutput != nullptr && !atomicColorBurnPairCase) ||
-        (atomicColorBurnPairCase && secondaryOutput == nullptr))
+        (secondaryOutput != nullptr && !atomicColorBurnPairCase &&
+         !atomicSpotifyKidsAppIconFullCase) ||
+        ((atomicColorBurnPairCase || atomicSpotifyKidsAppIconFullCase) &&
+         secondaryOutput == nullptr))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext] [auxiliary-output] [secondary-output]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1045,6 +1138,8 @@ int main(int argc, char** argv)
                                     ? kAtomicColorBurnPairFrameSize
                                 : atomicInterleavedFeatherFullCase
                                     ? kAtomicInterleavedFeatherFullFrameSize
+                                : atomicSpotifyKidsAppIconFullCase
+                                    ? kAtomicSpotifyKidsAppIconFullLogicalWidth
                                 : atomicDstReadShuffleCase
                                     ? kAtomicDstReadShuffleFullFrameWidth
                                     : (directTriangulatedCase ? kDirectGridFrameSize
@@ -1059,6 +1154,8 @@ int main(int argc, char** argv)
                                  ? kAtomicColorBurnPairFrameSize
                                  : atomicInterleavedFeatherFullCase
                                  ? kAtomicInterleavedFeatherFullFrameSize
+                                 : atomicSpotifyKidsAppIconFullCase
+                                 ? kAtomicSpotifyKidsAppIconFullLogicalHeight
                                  : atomicDstReadShuffleCase
                                  ? kAtomicDstReadShuffleFullFrameHeight
                                  : (directTriangulatedCase ? kDirectGridFrameSize
@@ -1383,6 +1480,10 @@ int main(int argc, char** argv)
     {
         replayDstReadShuffleSrcOverControl(&renderer, context.get());
     }
+    else if (atomicSpotifyKidsAppIconFullCase)
+    {
+        replaySpotifyKidsAppIconFull(&renderer, context.get());
+    }
     else if (intersectionGroupsCase)
     {
         // Draw 0 is opaque MSAA fast-path coverage: prepassCount=3,
@@ -1485,6 +1586,47 @@ int main(int argc, char** argv)
                                        queue,
                                        coverageBuffer,
                                        coverageBufferBytes));
+    }
+    if (atomicSpotifyKidsAppIconFullCase)
+    {
+        const uint64_t expectedBackingBytes =
+            static_cast<uint64_t>(kAtomicSpotifyKidsAppIconFullPhysicalWidth) *
+            kAtomicSpotifyKidsAppIconFullPhysicalHeight * sizeof(uint32_t);
+        const uint64_t coverageBufferBytes =
+            webgpuContext->atomicPLSCoverageBufferSizeForOracle();
+        const wgpu::Buffer coverageBuffer =
+            webgpuContext->atomicPLSCoverageBufferForOracle();
+        if (coverageBuffer == nullptr || coverageBufferBytes != expectedBackingBytes)
+        {
+            fail("Spotify full-stream coverage backing must be exactly 1024x1440 u32 words");
+        }
+        const uint64_t clipBufferBytes =
+            webgpuContext->atomicPLSClipBufferSizeForOracle();
+        const wgpu::Buffer clipBuffer = webgpuContext->atomicPLSClipBufferForOracle();
+        if (clipBuffer == nullptr || clipBufferBytes != expectedBackingBytes)
+        {
+            fail("Spotify full-stream clip backing must be exactly 1024x1440 u32 words");
+        }
+        if (webgpuContext->atomicPLSColorBufferForOracle() != nullptr)
+        {
+            fail("Spotify full-stream must not allocate or consume packed atomic color backing");
+        }
+        writeAtomicCoverage(inputsOutput,
+                            kAtomicSpotifyKidsAppIconFullPhysicalWidth,
+                            kAtomicSpotifyKidsAppIconFullPhysicalHeight,
+                            readBuffer(instance,
+                                       device,
+                                       queue,
+                                       coverageBuffer,
+                                       coverageBufferBytes));
+        writeAtomicClip(secondaryOutput,
+                        kAtomicSpotifyKidsAppIconFullPhysicalWidth,
+                        kAtomicSpotifyKidsAppIconFullPhysicalHeight,
+                        readBuffer(instance,
+                                   device,
+                                   queue,
+                                   clipBuffer,
+                                   clipBufferBytes));
     }
 
     const auto& facts = webgpuContext->atlasMaskFactsForOracle();
@@ -1599,7 +1741,7 @@ int main(int argc, char** argv)
     else if (fullStreamCase)
     {
         const bool expectedFixedFunctionColorOutput =
-            atomicDstReadShuffleSrcOverCase;
+            atomicDstReadShuffleSrcOverCase || atomicSpotifyKidsAppIconFullCase;
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::atomics) ||
             facts.fixedFunctionColorOutput != expectedFixedFunctionColorOutput ||
@@ -1610,6 +1752,14 @@ int main(int argc, char** argv)
                                                     rive::gpu::DrawType::renderPassResolve))
         {
             fail("full path-stream oracle must execute the expected atomic color-output mode, initialize, draws, and resolve");
+        }
+        if (atomicSpotifyKidsAppIconFullCase)
+        {
+            if (facts.drawBatches.size() != 24)
+            {
+                fail("Spotify full-stream oracle must preserve its exact 24-batch atomic schedule");
+            }
+            writeFullStreamSchedule(output, facts);
         }
     }
     else if (atomicAdvancedBlendCase)

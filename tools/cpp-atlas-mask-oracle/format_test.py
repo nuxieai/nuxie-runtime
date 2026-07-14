@@ -60,6 +60,9 @@ INTERLEAVED_FEATHER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" /
 INTERLEAVED_FEATHER_SHA256 = "8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
 DSTREADSHUFFLE_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "dstreadshuffle.rive-stream"
 DSTREADSHUFFLE_SHA256 = "0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"
+SPOTIFY_KIDS_APP_ICON_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "spotify_kids_app_icon.rive-stream"
+SPOTIFY_KIDS_APP_ICON_SHA256 = "1c230de80579ddfc9953541ec3311c981e8f53d94c4d023c5429635186ebbd88"
+SPOTIFY_KIDS_APP_ICON_SOURCE_SUFFIX = "tests/unit_tests/assets/spotify_kids_app_icon.riv"
 POLYSHARK_GENERATOR = pathlib.Path(__file__).with_name("generate_polyshark_stream_path.py")
 RAWTEXT_GENERATOR = pathlib.Path(__file__).with_name("generate_rawtext_stream_path.py")
 COLORBURN_PAIR_GENERATOR = pathlib.Path(__file__).with_name(
@@ -1041,7 +1044,7 @@ class FormatTests(unittest.TestCase):
             full_stream_schedule,
         )
         self.assertIn(
-            "atomicDstReadShuffleSrcOverCase;",
+            "atomicDstReadShuffleSrcOverCase || atomicSpotifyKidsAppIconFullCase;",
             full_stream_schedule,
         )
         self.assertIn(
@@ -1633,6 +1636,126 @@ class FormatTests(unittest.TestCase):
                 )
                 control_setter_count += 1
             self.assertEqual(control_setter_count, 97)
+
+    def test_spotify_kids_app_icon_riv_replay_is_deterministic_and_clips_paths(self):
+        expected_counts = [
+            "drawPath=14",
+            "clipPath=6",
+            "transform=15",
+            "save=18",
+            "restore=18",
+            "makeEmptyRenderPath=20",
+            "makeRenderPaint=48",
+        ]
+
+        def command(stream, output=None, check=False):
+            result = [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--profile",
+                "riv",
+                "--stream",
+                str(stream),
+                "--expected-sha256",
+                hashlib.sha256(stream.read_bytes()).hexdigest(),
+                "--expected-source-suffix",
+                SPOTIFY_KIDS_APP_ICON_SOURCE_SUFFIX,
+                "--expected-artboard",
+                "artboard",
+                "--expected-scene",
+                "State Machine 1",
+                "--expected-width",
+                "1024",
+                "--expected-height",
+                "1436",
+                "--expected-sample-seconds",
+                "0",
+            ]
+            for count in expected_counts:
+                result.extend(["--expected-count", count])
+            result.extend(["--function", "replaySpotifyKidsAppIconFull"])
+            result.extend(["--check"] if check else ["--output", str(output)])
+            return result
+
+        self.assertEqual(
+            hashlib.sha256(SPOTIFY_KIDS_APP_ICON_STREAM.read_bytes()).hexdigest(),
+            SPOTIFY_KIDS_APP_ICON_SHA256,
+        )
+        subprocess.run(command(SPOTIFY_KIDS_APP_ICON_STREAM, check=True), check=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            first = temp_dir / "first.inc"
+            second = temp_dir / "second.inc"
+            subprocess.run(command(SPOTIFY_KIDS_APP_ICON_STREAM, first), check=True)
+            subprocess.run(command(SPOTIFY_KIDS_APP_ICON_STREAM, second), check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+            generated = first.read_text()
+            self.assertIn(
+                "void replaySpotifyKidsAppIconFull(rive::RiveRenderer* renderer, "
+                "rive::gpu::RenderContext* context)",
+                generated,
+            )
+            self.assertEqual(generated.count("renderer->drawPath("), 14)
+            self.assertEqual(generated.count("renderer->clipPath("), 6)
+            self.assertEqual(generated.count("renderer->save();"), 18)
+            self.assertEqual(generated.count("renderer->restore();"), 18)
+            self.assertIn("path1->lineTo(1024.f, 1436.f);", generated)
+            self.assertIn("renderer->clipPath(path1.get());", generated)
+
+            def assert_rejected(name, content, message):
+                drifted = temp_dir / f"{name}.rive-stream"
+                drifted.write_text(content)
+                result = subprocess.run(
+                    command(drifted, check=True),
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0, name)
+                self.assertIn(message, result.stderr, name)
+
+            original = SPOTIFY_KIDS_APP_ICON_STREAM.read_text()
+            assert_rejected(
+                "clear-color",
+                original.replace(
+                    "sample seconds=0\n",
+                    "sample seconds=0\nclearColor value=0x00000000\n",
+                    1,
+                ),
+                "RIV profile header contract drifted",
+            )
+            assert_rejected(
+                "undeclared-clip",
+                original.replace("clipPath path={id=1", "clipPath path={id=21", 1),
+                "path snapshot references an undeclared path",
+            )
+            first_draw = next(
+                line for line in original.splitlines() if line.startswith("drawPath path={id=2,")
+            )
+            assert_rejected(
+                "mutated-path",
+                original.replace(
+                    "\nframe\n",
+                    "\n" + first_draw.replace("(-512,-312)", "(-511,-312)", 1) + "\nframe\n",
+                    1,
+                ),
+                "mutates after its first snapshot",
+            )
+            assert_rejected(
+                "shader",
+                original.replace("shader=0", "shader=1", 1),
+                "does not support paint shaders",
+            )
+            assert_rejected(
+                "image",
+                original.replace("sample seconds=0\n", "sample seconds=0\nmakeRenderImage id=1\n", 1),
+                "unsupported path-only stream command",
+            )
+            assert_rejected(
+                "extra-frame",
+                original + "frame\n",
+                "exactly one terminal frame marker",
+            )
 
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()

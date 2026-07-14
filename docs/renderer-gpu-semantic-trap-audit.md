@@ -81,6 +81,29 @@ Disposition: retain exactly two
 denormal, or FMA gates without a discriminating oracle, and do not change the
 native references or `2/32` contract.
 
+### R3-ST-02a: Fixed-function backend color output
+
+**Verified residual, separate named gate.** `spotify_kids_app_icon` uses 14
+SrcOver paints and fixed-function color output; neither C++ Dawn nor Rust wgpu
+allocates a packed atomic color backing for this stream. A strict full-stream
+oracle pins the stream/replay/schedule identities, C++'s 24-batch atomic flush,
+the complete final target, and the physical coverage and clip backings. Rust
+partitions the work into two atomic runs, so raw coverage words carry different
+path IDs and are not a cross-schedule semantic format. The final clip backing
+is exact, and C++ Dawn and Rust pass the unchanged `2/32` contract against one
+another across repeated runs.
+
+Both WebGPU implementations retain nearly the same residual against the pinned
+native Metal PNG: 48,759 C++ pixels and 48,790 Rust pixels exceed delta 2, both
+with max delta 26, while their residual masks overlap above 99.9%. This supports
+isolating the fixed-function backend color-output boundary without claiming a
+specific hardware blending mechanism.
+
+Disposition: retain only `spotify_kids_app_icon` under
+`metal-webgpu-fixed-function-color-output`. Keep its native reference and
+`2/32` contract unchanged; do not fold it into the exactly two packed-color
+`metal-webgpu-atomic-intermediate-precision` gates.
+
 ### R3-ST-03: Sampled clockwise-atomic clip plane
 
 **Verified source fork, closed by production readout oracle.**

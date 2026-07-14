@@ -15583,7 +15583,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "metal-webgpu-fixed-function-color-output"
 
 [[entry]]
 id = "riv-spotify_kids_app_icon-frame-0-msaa"

@@ -70,6 +70,7 @@ pub(crate) struct AtomicPlaneReadback {
 
 pub(crate) struct AtomicPlaneReadbacks {
     pub coverage: Option<AtomicPlaneReadback>,
+    pub clip: Option<AtomicPlaneReadback>,
     pub color: Option<AtomicPlaneReadback>,
 }
 
@@ -968,8 +969,22 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-clips",
             &vec![0u32; pixel_count],
-            wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::STORAGE
+                | if capture_planes {
+                    wgpu::BufferUsages::COPY_SRC
+                } else {
+                    wgpu::BufferUsages::empty()
+                },
         );
+        let clip_readback = capture_planes.then(|| AtomicPlaneReadback {
+            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-atomic-clip-readback"),
+                size: clips.size(),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }),
+            word_count: pixel_count,
+        });
         let coverage = upload(
             device,
             "nuxie-atomic-coverage",
@@ -1006,7 +1021,7 @@ impl AtomicPipeline {
                     wgpu::BufferUsages::empty()
                 },
         );
-        let color_readback = capture_planes.then(|| AtomicPlaneReadback {
+        let color_readback = (capture_planes && advanced_blend).then(|| AtomicPlaneReadback {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atomic-color-readback"),
                 size: colors.size(),
@@ -1369,6 +1384,9 @@ impl AtomicPipeline {
         if let Some(readback) = &coverage_readback {
             encoder.copy_buffer_to_buffer(&coverage, 0, &readback.buffer, 0, coverage.size());
         }
+        if let Some(readback) = &clip_readback {
+            encoder.copy_buffer_to_buffer(&clips, 0, &readback.buffer, 0, clips.size());
+        }
         if let Some(readback) = &color_readback {
             encoder.copy_buffer_to_buffer(&colors, 0, &readback.buffer, 0, colors.size());
         }
@@ -1393,6 +1411,7 @@ impl AtomicPipeline {
         }
         AtomicPlaneReadbacks {
             coverage: coverage_readback,
+            clip: clip_readback,
             color: color_readback,
         }
     }

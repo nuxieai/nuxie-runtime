@@ -1308,7 +1308,7 @@ impl WgpuFrame {
 
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, true)
-            .map(|(pixels, _, _, _)| pixels)
+            .map(|(pixels, _, _, _, _)| pixels)
     }
 
     #[cfg(test)]
@@ -1316,27 +1316,27 @@ impl WgpuFrame {
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
         self.finish_internal(true, false, true)
-            .map(|(pixels, coverage, _, _)| (pixels, coverage))
+            .map(|(pixels, coverage, _, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
         self.finish_internal(false, true, true)
-            .map(|(pixels, _, coverage, _)| (pixels, coverage))
+            .map(|(pixels, _, coverage, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_planes(
         self,
-    ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
+    ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
         self.finish_internal(false, true, true)
-            .map(|(pixels, _, coverage, colors)| (pixels, coverage, colors))
+            .map(|(pixels, _, coverage, clips, colors)| (pixels, coverage, clips, colors))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, false)
-            .map(|(pixels, _, _, _)| pixels)
+            .map(|(pixels, _, _, _, _)| pixels)
     }
 
     fn finish_internal(
@@ -1348,6 +1348,7 @@ impl WgpuFrame {
         (
             Vec<u8>,
             Vec<ClockwiseAtomicCoverageSnapshot>,
+            Vec<Vec<u32>>,
             Vec<Vec<u32>>,
             Vec<Vec<u32>>,
         ),
@@ -1411,6 +1412,7 @@ impl WgpuFrame {
                 });
         let mut pending_coverage_readbacks = Vec::new();
         let mut pending_atomic_coverage_readbacks = Vec::new();
+        let mut pending_atomic_clip_readbacks = Vec::new();
         let mut pending_atomic_color_readbacks = Vec::new();
         let mut encode_atomic_run =
             |draws: &[SolidDraw],
@@ -2303,6 +2305,9 @@ impl WgpuFrame {
                     );
                     if let Some(readback) = readbacks.coverage {
                         pending_atomic_coverage_readbacks.push(readback);
+                    }
+                    if let Some(readback) = readbacks.clip {
+                        pending_atomic_clip_readbacks.push(readback);
                     }
                     if let Some(readback) = readbacks.color {
                         pending_atomic_color_readbacks.push(readback);
@@ -3228,6 +3233,10 @@ impl WgpuFrame {
             .iter()
             .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
             .collect::<Result<Vec<_>, _>>()?;
+        let atomic_clip_snapshots = pending_atomic_clip_readbacks
+            .iter()
+            .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
+            .collect::<Result<Vec<_>, _>>()?;
         let atomic_color_snapshots = pending_atomic_color_readbacks
             .iter()
             .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
@@ -3236,6 +3245,7 @@ impl WgpuFrame {
             pixels,
             coverage_snapshots,
             atomic_coverage_snapshots,
+            atomic_clip_snapshots,
             atomic_color_snapshots,
         ))
     }
@@ -4549,6 +4559,9 @@ mod tests {
     const ATOMIC_INTERLEAVED_FEATHER_FULL_FRAME_SIZE: u32 = 1000;
     const ATOMIC_DSTREADSHUFFLE_FULL_FRAME_WIDTH: u32 = 530;
     const ATOMIC_DSTREADSHUFFLE_FULL_FRAME_HEIGHT: u32 = 690;
+    const ATOMIC_SPOTIFY_FULL_FRAME_WIDTH: u32 = 1024;
+    const ATOMIC_SPOTIFY_FULL_FRAME_HEIGHT: u32 = 1436;
+    const ATOMIC_SPOTIFY_FULL_STORAGE_HEIGHT: u32 = 1440;
     const ATLAS_ORACLE_TOLERANCES: atlas_mask_oracle::MaskComparisonTolerances =
         atlas_mask_oracle::MaskComparisonTolerances {
             support: 1.0 / 1024.0,
@@ -7491,6 +7504,32 @@ mod tests {
         )
     }
 
+    fn spotify_kids_app_icon_full_frame() -> WgpuFrame {
+        let stream = nuxie_render_stream::RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/riv/spotify_kids_app_icon.rive-stream"
+        )))
+        .unwrap();
+        assert_eq!(
+            stream.frame_size,
+            Some((
+                ATOMIC_SPOTIFY_FULL_FRAME_WIDTH,
+                ATOMIC_SPOTIFY_FULL_FRAME_HEIGHT
+            ))
+        );
+        assert_eq!(stream.clear_color, None);
+        assert_eq!(stream.frames.len(), 1);
+        let mut factory = WgpuFactory::new_with_mode(
+            ATOMIC_SPOTIFY_FULL_FRAME_WIDTH,
+            ATOMIC_SPOTIFY_FULL_FRAME_HEIGHT,
+            RenderMode::ClockwiseAtomic,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(0);
+        stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+        frame
+    }
+
     fn fixed_feather_atlas_clipped_blit() -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         fixed_feather_atlas_blit_with_clip(Some([16.0, 8.0, 32.0, 56.0]))
     }
@@ -9288,10 +9327,12 @@ mod tests {
             }
         }
 
-        let (rust_pixels, rust_coverage, rust_colors) = interleaved_feather_colorburn_pair_frame()
-            .finish_with_atomic_planes()
-            .unwrap();
+        let (rust_pixels, rust_coverage, rust_clips, rust_colors) =
+            interleaved_feather_colorburn_pair_frame()
+                .finish_with_atomic_planes()
+                .unwrap();
         assert_eq!(rust_coverage.len(), 1);
+        assert_eq!(rust_clips.len(), 1);
         assert_eq!(rust_colors.len(), 1);
         let mut coverage_mismatch_count = 0usize;
         let mut coverage_max_delta = 0u32;
@@ -9469,6 +9510,268 @@ mod tests {
             .collect::<Vec<_>>();
         largest.sort_unstable_by(|left, right| right.cmp(left));
         largest
+    }
+
+    fn configured_cpp_atomic_plane(
+        artifact_env: &str,
+        provenance_env: &str,
+        expected_magic: &[u8; 8],
+        expected_width: u32,
+        expected_height: u32,
+        provenance_sha_key: &str,
+    ) -> Vec<u32> {
+        let path = PathBuf::from(std::env::var_os(artifact_env).unwrap_or_else(|| {
+            panic!("{artifact_env} is required for the ignored atomic-plane test")
+        }));
+        assert!(path.is_absolute(), "{artifact_env} must be absolute");
+        let bytes = fs::read(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        assert!(
+            bytes.len() >= 24,
+            "{} has a truncated header",
+            path.display()
+        );
+        assert_eq!(
+            &bytes[..8],
+            expected_magic,
+            "{} has wrong magic",
+            path.display()
+        );
+        let header_word =
+            |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+        assert_eq!(
+            header_word(8),
+            1,
+            "{} has unsupported version",
+            path.display()
+        );
+        assert_eq!(header_word(12), expected_width);
+        assert_eq!(header_word(16), expected_height);
+        let word_count = header_word(20) as usize;
+        assert_eq!(
+            word_count,
+            expected_width as usize * expected_height as usize
+        );
+        assert_eq!(bytes.len(), 24 + word_count * 4);
+
+        use sha2::Digest as _;
+        let sha256 = format!("{:x}", sha2::Sha256::digest(&bytes));
+        let provenance_path =
+            PathBuf::from(std::env::var_os(provenance_env).unwrap_or_else(|| {
+                panic!("{provenance_env} is required for the ignored atomic-plane test")
+            }));
+        assert!(provenance_path.is_absolute());
+        let provenance = fs::read_to_string(&provenance_path).unwrap_or_else(|error| {
+            panic!("failed to read {}: {error}", provenance_path.display())
+        });
+        let expected_sha = format!("{provenance_sha_key}={sha256}");
+        assert!(
+            provenance.lines().any(|line| line == expected_sha),
+            "{} does not match {}",
+            provenance_path.display(),
+            path.display()
+        );
+
+        bytes[24..]
+            .chunks_exact(4)
+            .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
+            .collect()
+    }
+
+    fn raw_rgba_png(path: &std::path::Path) -> atlas_blit_oracle::AtlasBlit {
+        let file = std::io::BufReader::new(fs::File::open(path).unwrap());
+        let mut decoder = png::Decoder::new(file);
+        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+        let mut reader = decoder.read_info().unwrap();
+        let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut pixels).unwrap();
+        pixels.truncate(info.buffer_size());
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        assert_eq!(info.bit_depth, png::BitDepth::Eight);
+        atlas_blit_oracle::AtlasBlit::new(info.width, info.height, pixels).unwrap()
+    }
+
+    fn pixels_over_delta(
+        left: &atlas_blit_oracle::AtlasBlit,
+        right: &atlas_blit_oracle::AtlasBlit,
+        threshold: u8,
+    ) -> Vec<bool> {
+        assert_eq!(left.pixels().len(), right.pixels().len());
+        left.pixels()
+            .chunks_exact(4)
+            .zip(right.pixels().chunks_exact(4))
+            .map(|(left, right)| {
+                left.iter()
+                    .zip(right)
+                    .any(|(&left, &right)| left.abs_diff(right) > threshold)
+            })
+            .collect()
+    }
+
+    #[test]
+    #[ignore = "requires the pinned C++ Dawn Spotify full-stream, coverage, clip, and provenance artifacts"]
+    fn cpp_webgpu_atomic_spotify_kids_app_icon_is_fixed_color_backend_residual() {
+        const STREAM_SHA256: &str =
+            "1c230de80579ddfc9953541ec3311c981e8f53d94c4d023c5429635186ebbd88";
+        const PROVENANCE_ENV: &str = "RIVE_CPP_ATOMIC_SPOTIFY_PROVENANCE";
+        let (cpp_path, cpp_blit) = configured_cpp_full_stream_artifact(
+            "RIVE_CPP_ATOMIC_SPOTIFY_FULL",
+            PROVENANCE_ENV,
+            STREAM_SHA256,
+            &[
+                "frame_width=1024",
+                "frame_height=1436",
+                "storage_width=1024",
+                "storage_height=1440",
+                "sample_seconds_bits=00000000",
+                "draw_batch_count=24",
+                "fixed_function_color_output=true",
+                "packed_color_backing=absent",
+                "replay_sha256=941d08d82b2059c9094017db4478cd2e3c48684c064b195278c0045d90751e38",
+                "draw_schedule_sha256=8adcf15e8277becc884a19c1fbbefa0abddb8b8e95bdc9c1faab41189807de2b",
+            ],
+        );
+        let cpp_coverage = configured_cpp_atomic_plane(
+            "RIVE_CPP_ATOMIC_SPOTIFY_COVERAGE",
+            PROVENANCE_ENV,
+            b"RIVEAPC\0",
+            ATOMIC_SPOTIFY_FULL_FRAME_WIDTH,
+            ATOMIC_SPOTIFY_FULL_STORAGE_HEIGHT,
+            "coverage_sha256",
+        );
+        let cpp_clips = configured_cpp_atomic_plane(
+            "RIVE_CPP_ATOMIC_SPOTIFY_CLIP",
+            PROVENANCE_ENV,
+            b"RIVEACL\0",
+            ATOMIC_SPOTIFY_FULL_FRAME_WIDTH,
+            ATOMIC_SPOTIFY_FULL_STORAGE_HEIGHT,
+            "clip_sha256",
+        );
+        let (rust_pixels, rust_coverage, rust_clips, rust_colors) =
+            spotify_kids_app_icon_full_frame()
+                .finish_with_atomic_planes()
+                .unwrap();
+        assert_eq!(rust_coverage.len(), 2, "Spotify run partition drifted");
+        assert_eq!(rust_clips.len(), 2, "Spotify run partition drifted");
+        assert!(
+            rust_colors.is_empty(),
+            "fixed-function SrcOver must not capture a packed color plane"
+        );
+        assert_ne!(
+            cpp_clips, rust_clips[0],
+            "the pre-clip Rust run unexpectedly contains the final clip state"
+        );
+        assert_eq!(cpp_clips, rust_clips[1], "final atomic clip plane diverged");
+
+        let word_index = |x: u32, y: u32| {
+            ((y >> 5) * (ATOMIC_SPOTIFY_FULL_FRAME_WIDTH << 5)
+                + (x >> 5) * 1024
+                + ((x & 28) << 5)
+                + ((y & 28) << 2)
+                + ((y & 3) << 2)
+                + (x & 3)) as usize
+        };
+        assert!(cpp_coverage.iter().any(|&word| word != 0));
+        assert!(rust_coverage
+            .iter()
+            .all(|run| run.iter().any(|&word| word != 0)));
+        // C++ retains one coverage backing across its 24-batch flush. Rust
+        // partitions generic and clockwise draws into two runs with fresh
+        // path IDs, so their raw words are not a cross-schedule semantic
+        // format. Final alpha below is the coverage comparison; these checks
+        // keep the captured backings honest without normalizing path state.
+        assert!(rust_coverage.iter().all(|run| run != &cpp_coverage));
+        for y in ATOMIC_SPOTIFY_FULL_FRAME_HEIGHT..ATOMIC_SPOTIFY_FULL_STORAGE_HEIGHT {
+            for x in 0..ATOMIC_SPOTIFY_FULL_FRAME_WIDTH {
+                let index = word_index(x, y);
+                assert_eq!(cpp_coverage[index], 0, "C++ padded coverage was touched");
+                for (run, coverage) in rust_coverage.iter().enumerate() {
+                    assert_eq!(
+                        coverage[index], 0,
+                        "Rust run {run} padded coverage was touched"
+                    );
+                }
+            }
+        }
+
+        let rust_blit = atlas_blit_oracle::AtlasBlit::new(
+            ATOMIC_SPOTIFY_FULL_FRAME_WIDTH,
+            ATOMIC_SPOTIFY_FULL_FRAME_HEIGHT,
+            rust_pixels,
+        )
+        .unwrap();
+        let cpp_rust_byte_pixels = cpp_blit
+            .pixels()
+            .chunks_exact(4)
+            .zip(rust_blit.pixels().chunks_exact(4))
+            .filter(|(cpp, rust)| cpp != rust)
+            .count();
+        let cpp_rust_alpha_pixels = cpp_blit
+            .pixels()
+            .chunks_exact(4)
+            .zip(rust_blit.pixels().chunks_exact(4))
+            .filter(|(cpp, rust)| cpp[3] != rust[3])
+            .count();
+        eprintln!(
+            "Spotify C++ Dawn vs Rust: byte-inexact={cpp_rust_byte_pixels} alpha-inexact={cpp_rust_alpha_pixels}"
+        );
+        atlas_blit_oracle::compare_cpp_to_rust_with_pixel_tolerance(&cpp_blit, &rust_blit, 2, 32)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "C++ Dawn and Rust exceed the unchanged 2/32 contract at {}: {error}",
+                    cpp_path.display()
+                )
+            });
+
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let native = raw_rgba_png(&repo_root.join(
+            "fixtures/renderer/reference/metal/riv/spotify_kids_app_icon-frame-0-clockwise-atomic.png",
+        ));
+        let cpp_native = pixels_over_delta(&cpp_blit, &native, 2);
+        let rust_native = pixels_over_delta(&rust_blit, &native, 2);
+        let cpp_native_count = cpp_native.iter().filter(|&&differs| differs).count();
+        let rust_native_count = rust_native.iter().filter(|&&differs| differs).count();
+        let max_delta = |left: &atlas_blit_oracle::AtlasBlit| {
+            left.pixels()
+                .iter()
+                .zip(native.pixels())
+                .map(|(&left, &right)| left.abs_diff(right))
+                .max()
+                .unwrap()
+        };
+        eprintln!(
+            "Spotify native Metal residual: C++ Dawn over-delta2={cpp_native_count} max-delta={} Rust over-delta2={rust_native_count} max-delta={}",
+            max_delta(&cpp_blit),
+            max_delta(&rust_blit)
+        );
+        assert!(
+            cpp_native_count > 32,
+            "C++ Dawn unexpectedly satisfies the native-Metal contract"
+        );
+        assert!(
+            rust_native_count > 32,
+            "Rust unexpectedly satisfies the native-Metal contract"
+        );
+        let shared_native_residual = cpp_native
+            .iter()
+            .zip(&rust_native)
+            .filter(|(cpp, rust)| **cpp && **rust)
+            .count();
+        let native_residual_union = cpp_native
+            .iter()
+            .zip(&rust_native)
+            .filter(|(cpp, rust)| **cpp || **rust)
+            .count();
+        let native_residual_symmetric_difference = cpp_native
+            .iter()
+            .zip(&rust_native)
+            .filter(|(cpp, rust)| cpp != rust)
+            .count();
+        assert!(
+            native_residual_symmetric_difference <= 64
+                && shared_native_residual * 1000 >= native_residual_union * 999,
+            "C++ Dawn and Rust no longer isolate the same native-Metal residual: shared={shared_native_residual} union={native_residual_union} symmetric-difference={native_residual_symmetric_difference}"
+        );
     }
 
     #[test]

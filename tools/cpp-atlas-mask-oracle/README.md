@@ -251,6 +251,28 @@ with max byte delta one; the resolved output may differ at no more than those
 same three deswizzled coordinates with max channel delta 15. The current exact
 fixture has two coupled words/pixels and max resolved delta seven.
 
+`atomic-spotify-kids-app-icon-full.{rgba,coverage,clip,provenance}` replays the
+complete pinned `.riv` stream through Dawn WebGPU on Metal. The strict RIV
+profile validates the stream digest, source/artboard/scene/sample metadata,
+14 draws, 6 clips, 15 transforms, 18 balanced saves/restores, 20 paths, 48
+paints, and every path/paint snapshot. `RIVEABL` contains the logical
+`1024 x 1436` final target. `RIVEAPC` and `RIVEACL` contain every word in the
+physical `1024 x 1440` tiled coverage and clip backings. The harness requires
+one 24-batch atomic flush, fixed-function color output, and no packed atomic
+color backing; provenance pins all artifact, schedule, replay, stream,
+runtime, Dawn, and adapter identities.
+
+Rust partitions the same stream into one generic and one clockwise atomic run,
+so raw coverage words retain different path IDs and stale per-run state and
+are not compared as a cross-schedule format. Both implementations must keep
+the padded coverage rows untouched, the final clip backing must match exactly,
+and final alpha participates in the unchanged `2/32` full-frame comparison.
+The configured test then shows both WebGPU implementations fail that unchanged
+contract against the same native-Metal PNG with nearly identical residual
+masks. This supports isolating the fixed-function backend color-output boundary
+from the packed-color intermediate-precision family without claiming a
+specific hardware blending mechanism.
+
 `msaa-intersection-groups` is a schedule-only runtime assertion; it emits no
 artifact. It authors three non-feathered MSAA fills with distinct captured
 `DrawContents` identities: opaque clockwise draw 0, translucent non-zero draw
@@ -378,6 +400,13 @@ RIVE_CPP_ATOMIC_COLORBURN_PAIR_BLIT="$PWD/tools/cpp-atlas-mask-oracle/out/atomic
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_atomic_colorburn_pair_has_only_coupled_quantization_when_configured \
   -- --exact --ignored --nocapture
+RIVE_CPP_ATOMIC_SPOTIFY_FULL="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-spotify-kids-app-icon-full.rgba" \
+RIVE_CPP_ATOMIC_SPOTIFY_COVERAGE="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-spotify-kids-app-icon-full.coverage" \
+RIVE_CPP_ATOMIC_SPOTIFY_CLIP="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-spotify-kids-app-icon-full.clip" \
+RIVE_CPP_ATOMIC_SPOTIFY_PROVENANCE="$PWD/tools/cpp-atlas-mask-oracle/out/atomic-spotify-kids-app-icon-full.provenance" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_webgpu_atomic_spotify_kids_app_icon_is_fixed_color_backend_residual \
+  -- --exact --ignored --nocapture
 ```
 
 The configured comparator is ignored by ordinary test suites and requires a
@@ -396,7 +425,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_ADVANCED_BLEND_BLIT`, or
 `RIVE_CPP_ATOMIC_ADVANCED_BLEND`, or the three
-`RIVE_CPP_ATOMIC_COLORBURN_PAIR_{COLOR,COVERAGE,BLIT}` paths;
+`RIVE_CPP_ATOMIC_COLORBURN_PAIR_{COLOR,COVERAGE,BLIT}` paths, or the four
+`RIVE_CPP_ATOMIC_SPOTIFY_{FULL,COVERAGE,CLIP,PROVENANCE}` paths;
 invoking a configured test without its variable is an error.
 
 `--preflight` proves that the temporary patch applies and reports each missing

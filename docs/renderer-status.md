@@ -623,10 +623,19 @@ Run `make renderer-golden`.
     clockwise-atomic `.riv` entries: `viewmodel_runtime_file` frames 0-4,
     `virtualize_blendmode`, `virtualized_artboard_databound_children`,
     `walle`, `word_joiner_test`, and `zero_width_space_line_break`.
-59. [ ] Build the pinned C++ Dawn full-stream and representative atomic
-    coverage/color-plane oracle for `spotify_kids_app_icon`. Use it to prove
-    or reject the candidate native-Metal-versus-WebGPU intermediate-color
-    residual without changing its reference or `2/32` contract.
+59. [x] Build the pinned C++ Dawn full-stream and representative atomic
+    coverage/color-plane oracle for `spotify_kids_app_icon`. The strict replay
+    and 24-batch C++ schedule are provenance-bound; C++ Dawn and Rust match the
+    final clip and pass `2/32` against one another, allocate no packed color
+    plane, and retain 48,759/48,790-pixel native-Metal residuals with more than
+    99.9% mask overlap. Sol approved the separate
+    `metal-webgpu-fixed-function-color-output` gate without changing the
+    reference or contract.
+60. [ ] Probe the first forty `algorithm-core` MSAA upstream GMs as four
+    disjoint ten-entry Terra batches: fill/topology, clip/stencil, stroke
+    geometry, and feather coverage. Main owns reference validation/capture and
+    final ratchet accounting; workers only report unchanged-contract results,
+    and Sol reviews any new residual classification.
 
 ## R2 Completion Record
 
@@ -839,6 +848,21 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Keep `spotify_kids_app_icon` gated under the new
+  `metal-webgpu-fixed-function-color-output` diagnostic. The pinned full-stream
+  C++ Dawn oracle executes one 24-batch fixed-function atomic flush while Rust
+  partitions the same stream into two runs. Their final clip backing is exact,
+  both keep padded coverage rows untouched, neither exposes packed color
+  storage, and they pass the unchanged `2/32` contract against each other.
+  Against the native Metal reference they retain nearly identical residuals
+  (48,759 C++ and 48,790 Rust pixels over delta 2, max 26; above 99.9% mask
+  overlap). Raw coverage words are not compared across the different schedules
+  because they retain schedule-local path IDs. Independent Sol review approved
+  this boundary classification, rejected a causal hardware-blend claim, and
+  required exact replay/schedule/absent-color provenance plus the mask-overlap
+  assertion. The native reference and tolerance remain unchanged, and the
+  exactly two packed-color `metal-webgpu-atomic-intermediate-precision` gates
+  remain unchanged.
 - 2026-07-13: Close the sampled clockwise-atomic clip-plane finding with a
   production-path readout rather than private Metal instrumentation. A large,
   pixel-aligned compound outer clip forces the global clockwise scheduler; an
@@ -2541,3 +2565,11 @@ Run `make renderer-golden`.
   remaining clockwise-atomic `.riv` `algorithm-core` gate is the previously
   probed `spotify_kids_app_icon` oracle hold. The wave advances the ratchet
   to exact=674/diverges=0/gated=794.
+- 2026-07-13: Closed the final clockwise-atomic `.riv` `algorithm-core` hold
+  with the pinned Spotify full-stream C++ Dawn oracle. The strict compiler
+  validates 14 draws, 6 clips, 15 transforms, 18 balanced saves/restores, 20
+  paths, 48 paints, and the exact stream/replay/schedule identities. C++ Dawn
+  and Rust agree under `2/32`, share the final clip plane exactly, and isolate
+  the same native-Metal residual without a packed atomic color plane. Sol's
+  three review findings were fixed before reclassification. The ratchet stays
+  exact=674/diverges=0/gated=794; only the named diagnostic changed.

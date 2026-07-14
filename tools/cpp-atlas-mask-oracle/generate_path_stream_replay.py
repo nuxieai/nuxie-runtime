@@ -22,6 +22,7 @@ PAINT_RE = re.compile(
     rf"thickness=({NUMBER}),join=(\d+),cap=(\d+),feather=({NUMBER}),"
     r"blendMode=(\d+),shader=(\d+)\}"
 )
+SOURCE_RE = re.compile(r'^source file="([^"]*)" artboard="([^"]*)" scene="([^"]*)"$')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -114,16 +115,23 @@ def parse_expected_counts(values: list[str]) -> dict[str, int]:
 
 def generate_include(
     stream: pathlib.Path,
+    profile: str,
     expected_sha256: str,
-    expected_source: str,
+    expected_source: str | None,
+    expected_source_suffix: str | None,
+    expected_artboard: str,
+    expected_scene: str,
     expected_width: int,
     expected_height: int,
-    expected_clear_color: str,
+    expected_clear_color: str | None,
+    expected_sample_seconds: str | None,
     expected_counts: dict[str, int],
     function_name: str,
     blend_mode_override: int | None,
 ) -> str:
-    if re.fullmatch(r"0x[0-9a-f]{8}", expected_clear_color) is None:
+    if expected_clear_color is not None and re.fullmatch(
+        r"0x[0-9a-f]{8}", expected_clear_color
+    ) is None:
         raise ValueError(
             f"expected clear color must be canonical 0xRRGGBBAA: {expected_clear_color!r}"
         )
@@ -135,15 +143,48 @@ def generate_include(
             f"expected {expected_sha256}, got {actual_sha256}"
         )
     lines = raw.decode("utf-8").splitlines()
-    expected_header = [
-        "rive-golden-stream-v1",
-        f'source file="{expected_source}" artboard="" scene="{expected_source.removeprefix("gm:")}"',
-        f"frameSize width={expected_width} height={expected_height}",
-        f"clearColor value={expected_clear_color}",
-    ]
-    if lines[:4] != expected_header:
+    if not lines or lines[0] != "rive-golden-stream-v1":
         raise ValueError("path-only stream header or clear-color contract drifted")
-    if not lines[4:] or lines[-1] != "frame" or "frame" in lines[4:-1]:
+    if profile == "gm":
+        assert expected_source is not None
+        assert expected_clear_color is not None
+        expected_header = [
+            "rive-golden-stream-v1",
+            f'source file="{expected_source}" artboard="" scene="{expected_scene}"',
+            f"frameSize width={expected_width} height={expected_height}",
+            f"clearColor value={expected_clear_color}",
+        ]
+        if lines[:4] != expected_header:
+            raise ValueError("path-only stream header or clear-color contract drifted")
+        command_lines = lines[4:-1]
+    elif profile == "riv":
+        metadata_index = 1
+        while metadata_index < len(lines) and (
+            lines[metadata_index].startswith("makeEmptyRenderPath ")
+            or lines[metadata_index].startswith("makeRenderPaint ")
+        ):
+            metadata_index += 1
+        if metadata_index + 2 >= len(lines):
+            raise ValueError("RIV profile header contract drifted")
+        source = SOURCE_RE.fullmatch(lines[metadata_index])
+        if source is None:
+            raise ValueError("RIV profile header contract drifted")
+        source_file, artboard, scene = source.groups()
+        if (
+            (expected_source is not None and source_file != expected_source)
+            or (expected_source_suffix is not None and not source_file.endswith(expected_source_suffix))
+            or artboard != expected_artboard
+            or scene != expected_scene
+            or lines[metadata_index + 1]
+            != f"frameSize width={expected_width} height={expected_height}"
+            or lines[metadata_index + 2] != f"sample seconds={expected_sample_seconds}"
+            or any(line.startswith("clearColor ") for line in lines)
+        ):
+            raise ValueError("RIV profile header contract drifted")
+        command_lines = lines[1:metadata_index] + lines[metadata_index + 3:-1]
+    else:
+        raise ValueError(f"unsupported stream profile: {profile}")
+    if not command_lines or lines[-1] != "frame" or "frame" in lines[:-1]:
         raise ValueError("path-only replay requires exactly one terminal frame marker")
 
     output = [
@@ -164,7 +205,31 @@ def generate_include(
     def count(name: str) -> None:
         counts[name] = counts.get(name, 0) + 1
 
-    for line in lines[4:-1]:
+    def materialize_path(path: PathSnapshot) -> None:
+        if path.object_id not in paths:
+            raise ValueError("path snapshot references an undeclared path")
+        if paths[path.object_id] is None:
+            methods = {
+                "move": "moveTo",
+                "line": "lineTo",
+                "quad": "quadTo",
+                "cubic": "cubicTo",
+            }
+            for verb, values in path.records:
+                if verb == "close":
+                    output.append(f"    path{path.object_id}->close();")
+                else:
+                    arguments = ", ".join(float_literal(value) for value in values)
+                    output.append(
+                        f"    path{path.object_id}->{methods[verb]}({arguments});"
+                    )
+            paths[path.object_id] = path
+        elif paths[path.object_id] != path:
+            raise ValueError(
+                f"path {path.object_id} mutates after its first snapshot; unsupported by this oracle"
+            )
+
+    for line in command_lines:
         if line == "save":
             save_depth += 1
             count("save")
@@ -195,9 +260,20 @@ def generate_include(
             snapshot = parse_paint(line.removeprefix("makeRenderPaint "))
             if snapshot.object_id in paints:
                 raise ValueError("makeRenderPaint must declare a unique paint")
+            if snapshot.shader != 0:
+                raise ValueError("path-only replay does not support paint shaders")
             paints.add(snapshot.object_id)
             count("makeRenderPaint")
             output.append(f"    auto paint{snapshot.object_id} = context->makeRenderPaint();")
+            continue
+        if line.startswith("clipPath path="):
+            path = parse_path(line.removeprefix("clipPath path="))
+            output.append(
+                f"    path{path.object_id}->fillRule(static_cast<rive::FillRule>({path.fill_rule}));"
+            )
+            materialize_path(path)
+            count("clipPath")
+            output.append(f"    renderer->clipPath(path{path.object_id}.get());")
             continue
         if line.startswith("drawPath path="):
             body = line.removeprefix("drawPath path=")
@@ -213,26 +289,7 @@ def generate_include(
             output.append(
                 f"    path{path.object_id}->fillRule(static_cast<rive::FillRule>({path.fill_rule}));"
             )
-            if paths[path.object_id] is None:
-                methods = {
-                    "move": "moveTo",
-                    "line": "lineTo",
-                    "quad": "quadTo",
-                    "cubic": "cubicTo",
-                }
-                for verb, values in path.records:
-                    if verb == "close":
-                        output.append(f"    path{path.object_id}->close();")
-                    else:
-                        arguments = ", ".join(float_literal(value) for value in values)
-                        output.append(
-                            f"    path{path.object_id}->{methods[verb]}({arguments});"
-                        )
-                paths[path.object_id] = path
-            elif paths[path.object_id].records != path.records:
-                raise ValueError(
-                    f"path {path.object_id} mutates after its first draw; unsupported by this oracle"
-                )
+            materialize_path(path)
             style = "fill" if paint.style == "fill" else "stroke"
             output.extend(
                 [
@@ -261,11 +318,17 @@ def generate_include(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--stream", type=pathlib.Path, required=True)
+    parser.add_argument("--profile", choices=("gm", "riv"), default="gm")
     parser.add_argument("--expected-sha256", required=True)
-    parser.add_argument("--expected-source", required=True)
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--expected-source")
+    source_group.add_argument("--expected-source-suffix")
+    parser.add_argument("--expected-artboard", default="")
+    parser.add_argument("--expected-scene")
     parser.add_argument("--expected-width", type=int, required=True)
     parser.add_argument("--expected-height", type=int, required=True)
-    parser.add_argument("--expected-clear-color", default="0x00000000")
+    parser.add_argument("--expected-clear-color")
+    parser.add_argument("--expected-sample-seconds")
     parser.add_argument("--expected-count", action="append", default=[])
     parser.add_argument("--override-blend-mode", type=int, choices=range(29))
     parser.add_argument("--function", required=True)
@@ -274,13 +337,32 @@ def main() -> None:
     args = parser.parse_args()
     if bool(args.output) == args.check:
         parser.error("specify exactly one of --output or --check")
+    if args.profile == "gm":
+        if args.expected_source is None:
+            parser.error("GM profile requires --expected-source")
+        expected_scene = args.expected_scene or args.expected_source.removeprefix("gm:")
+        expected_clear_color = args.expected_clear_color or "0x00000000"
+    else:
+        if args.expected_scene is None:
+            parser.error("RIV profile requires --expected-scene")
+        if args.expected_sample_seconds is None:
+            parser.error("RIV profile requires --expected-sample-seconds")
+        if args.expected_clear_color is not None:
+            parser.error("RIV profile has an implicit transparent clear color")
+        expected_scene = args.expected_scene
+        expected_clear_color = None
     generated = generate_include(
         args.stream,
+        args.profile,
         args.expected_sha256,
         args.expected_source,
+        args.expected_source_suffix,
+        args.expected_artboard,
+        expected_scene,
         args.expected_width,
         args.expected_height,
-        args.expected_clear_color,
+        expected_clear_color,
+        args.expected_sample_seconds,
         parse_expected_counts(args.expected_count),
         args.function,
         args.override_blend_mode,

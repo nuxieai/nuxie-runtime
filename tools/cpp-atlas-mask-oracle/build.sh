@@ -29,6 +29,11 @@ atomic_dstreadshuffle_full_output="${RIVE_ATOMIC_DSTREADSHUFFLE_FULL_OUTPUT:-$sc
 atomic_dstreadshuffle_full_provenance="${RIVE_ATOMIC_DSTREADSHUFFLE_FULL_PROVENANCE:-$script_dir/out/atomic-dstreadshuffle-full.provenance}"
 atomic_dstreadshuffle_srcover_output="${RIVE_ATOMIC_DSTREADSHUFFLE_SRCOVER_OUTPUT:-$script_dir/out/atomic-dstreadshuffle-srcover.rgba}"
 atomic_dstreadshuffle_srcover_provenance="${RIVE_ATOMIC_DSTREADSHUFFLE_SRCOVER_PROVENANCE:-$script_dir/out/atomic-dstreadshuffle-srcover.provenance}"
+atomic_spotify_kids_app_icon_full_output="${RIVE_ATOMIC_SPOTIFY_KIDS_APP_ICON_FULL_OUTPUT:-$script_dir/out/atomic-spotify-kids-app-icon-full.rgba}"
+atomic_spotify_kids_app_icon_full_coverage="${RIVE_ATOMIC_SPOTIFY_KIDS_APP_ICON_FULL_COVERAGE_OUTPUT:-$script_dir/out/atomic-spotify-kids-app-icon-full.coverage}"
+atomic_spotify_kids_app_icon_full_clip="${RIVE_ATOMIC_SPOTIFY_KIDS_APP_ICON_FULL_CLIP_OUTPUT:-$script_dir/out/atomic-spotify-kids-app-icon-full.clip}"
+atomic_spotify_kids_app_icon_full_provenance="${RIVE_ATOMIC_SPOTIFY_KIDS_APP_ICON_FULL_PROVENANCE:-$script_dir/out/atomic-spotify-kids-app-icon-full.provenance}"
+atomic_spotify_kids_app_icon_full_schedule=""
 fill_output="${RIVE_ATLAS_FILL_MASK_OUTPUT:-$script_dir/out/atlas-fill-mask.r16f}"
 fill_inputs_output="${RIVE_ATLAS_FILL_INPUT_OUTPUT:-$script_dir/out/atlas-fill-inputs.bin}"
 fill_blit_output="${RIVE_ATLAS_FILL_BLIT_OUTPUT:-$script_dir/out/atlas-fill-blit.rgba}"
@@ -58,6 +63,7 @@ colorburn_pair_stream="$script_dir/../../fixtures/renderer/streams/gm/interleave
 path_stream_generator="$script_dir/generate_path_stream_replay.py"
 interleavedfeather_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 dstreadshuffle_stream="$script_dir/../../fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
+spotify_kids_app_icon_stream="$script_dir/../../fixtures/renderer/streams/riv/spotify_kids_app_icon.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -69,6 +75,7 @@ naga_bin="${RIVE_ATLAS_MASK_NAGA:-$HOME/.cargo/bin/naga}"
 expected_naga_version="30.0.0"
 expected_interleavedfeather_sha256="8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
 expected_dstreadshuffle_sha256="0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"
+expected_spotify_kids_app_icon_sha256="1c230de80579ddfc9953541ec3311c981e8f53d94c4d023c5429635186ebbd88"
 expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 
@@ -78,6 +85,47 @@ xcode_major() {
 
 sha256_file() {
     python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$1"
+}
+
+validate_spotify_artifacts() {
+    python3 - "$atomic_spotify_kids_app_icon_full_output" \
+        "$atomic_spotify_kids_app_icon_full_coverage" \
+        "$atomic_spotify_kids_app_icon_full_clip" \
+        "$atomic_spotify_kids_app_icon_full_schedule" <<'PY'
+import pathlib
+import struct
+import sys
+
+rgba_path, coverage_path, clip_path, schedule_path = map(pathlib.Path, sys.argv[1:])
+
+def u32s(data, offset, count):
+    return struct.unpack_from(f"<{count}I", data, offset)
+
+rgba = rgba_path.read_bytes()
+if rgba[:8] != b"RIVEABL\0" or u32s(rgba, 8, 3) != (1, 1024, 1436):
+    raise SystemExit("Spotify RIVEABL header must be v1 1024x1436")
+if len(rgba) != 20 + 1024 * 1436 * 4:
+    raise SystemExit("Spotify RIVEABL payload size is not exact")
+
+for name, path, magic in (
+    ("coverage", coverage_path, b"RIVEAPC\0"),
+    ("clip", clip_path, b"RIVEACL\0"),
+):
+    data = path.read_bytes()
+    if data[:8] != magic or u32s(data, 8, 4) != (1, 1024, 1440, 1024 * 1440):
+        raise SystemExit(f"Spotify {name} header must be v1 1024x1440 with every native word")
+    if len(data) != 24 + 1024 * 1440 * 4:
+        raise SystemExit(f"Spotify {name} payload size is not exact")
+
+schedule = schedule_path.read_bytes()
+if schedule[:8] != b"RIVEASL\0" or len(schedule) < 24:
+    raise SystemExit("Spotify schedule artifact is missing its v1 header")
+version, interlock_mode, fixed_function_color_output, count = u32s(schedule, 8, 4)
+if version != 1 or interlock_mode != 1 or fixed_function_color_output != 1 or count != 24:
+    raise SystemExit("Spotify schedule must pin atomic interlock and fixed-function color output")
+if len(schedule) != 24 + count * 24:
+    raise SystemExit("Spotify schedule payload size is not exact")
+PY
 }
 
 needs_xcode26_patch() {
@@ -157,6 +205,19 @@ preflight() {
         --expected-count transform=900 --expected-count makeEmptyRenderPath=1 \
         --expected-count makeRenderPaint=1 --expected-count drawPath=451 \
         --function replayInterleavedFeatherFull --check
+    python3 "$path_stream_generator" \
+        --profile riv \
+        --stream "$spotify_kids_app_icon_stream" \
+        --expected-sha256 "$expected_spotify_kids_app_icon_sha256" \
+        --expected-source-suffix tests/unit_tests/assets/spotify_kids_app_icon.riv \
+        --expected-artboard artboard --expected-scene "State Machine 1" \
+        --expected-width 1024 --expected-height 1436 \
+        --expected-sample-seconds 0 \
+        --expected-count save=18 --expected-count restore=18 \
+        --expected-count transform=15 --expected-count makeEmptyRenderPath=20 \
+        --expected-count makeRenderPaint=48 --expected-count clipPath=6 \
+        --expected-count drawPath=14 \
+        --function replaySpotifyKidsAppIconFull --check
     for command in cmp git make mktemp premake5 python3; do
         if ! command -v "$command" >/dev/null; then
             echo "missing required tool: $command" >&2
@@ -317,6 +378,9 @@ cleanup() {
         fi
     fi
     rm -rf "$injected_dir"
+    if [[ -n "$atomic_spotify_kids_app_icon_full_schedule" ]]; then
+        rm -f "$atomic_spotify_kids_app_icon_full_schedule"
+    fi
     exit "$status"
 }
 trap cleanup EXIT
@@ -356,7 +420,11 @@ mkdir -p "$injected_dir" \
     "$(dirname "$atomic_dstreadshuffle_full_output")" \
     "$(dirname "$atomic_dstreadshuffle_full_provenance")" \
     "$(dirname "$atomic_dstreadshuffle_srcover_output")" \
-    "$(dirname "$atomic_dstreadshuffle_srcover_provenance")"
+    "$(dirname "$atomic_dstreadshuffle_srcover_provenance")" \
+    "$(dirname "$atomic_spotify_kids_app_icon_full_output")" \
+    "$(dirname "$atomic_spotify_kids_app_icon_full_coverage")" \
+    "$(dirname "$atomic_spotify_kids_app_icon_full_clip")" \
+    "$(dirname "$atomic_spotify_kids_app_icon_full_provenance")"
 cp "$script_dir/runtime-src/main.cpp" "$injected_dir/main.cpp"
 python3 "$polyshark_generator" --stream "$polyshark_stream" \
     --output "$injected_dir/generated_polyshark_path.inc"
@@ -398,6 +466,20 @@ python3 "$path_stream_generator" \
     --override-blend-mode 3 \
     --function replayDstReadShuffleSrcOverControl \
     --output "$injected_dir/generated_dstreadshuffle_srcover_control.inc"
+python3 "$path_stream_generator" \
+    --profile riv \
+    --stream "$spotify_kids_app_icon_stream" \
+    --expected-sha256 "$expected_spotify_kids_app_icon_sha256" \
+    --expected-source-suffix tests/unit_tests/assets/spotify_kids_app_icon.riv \
+    --expected-artboard artboard --expected-scene "State Machine 1" \
+    --expected-width 1024 --expected-height 1436 \
+    --expected-sample-seconds 0 \
+    --expected-count save=18 --expected-count restore=18 \
+    --expected-count transform=15 --expected-count makeEmptyRenderPath=20 \
+    --expected-count makeRenderPaint=48 --expected-count clipPath=6 \
+    --expected-count drawPath=14 \
+    --function replaySpotifyKidsAppIconFull \
+    --output "$injected_dir/generated_spotify_kids_app_icon_full.inc"
 git -C "$runtime" apply "$patch"
 applied=1
 if needs_xcode26_patch && dawn_patch_needed; then
@@ -422,7 +504,7 @@ configure_xcode26_dawn_args
     make -C "$build_out" -j"$jobs" rive_atlas_mask_oracle
 )
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -454,6 +536,23 @@ printf 'artifact_sha256=%s\nstream_sha256=%s\nruntime_revision=%s\ndawn_revision
     "$expected_dstreadshuffle_sha256" \
     "$expected_runtime_revision" \
     "$expected_dawn_revision" >> "$atomic_dstreadshuffle_srcover_provenance"
+atomic_spotify_kids_app_icon_full_schedule="$(mktemp "${TMPDIR:-/tmp}/cpp-atlas-mask-spotify-schedule.XXXXXX")"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$atomic_spotify_kids_app_icon_full_schedule" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_output" atomic-spotify-kids-app-icon-full "$atomic_spotify_kids_app_icon_full_provenance" "$atomic_spotify_kids_app_icon_full_clip"
+atomic_spotify_kids_app_icon_full_replay_sha256="$(sha256_file "$injected_dir/generated_spotify_kids_app_icon_full.inc")"
+atomic_spotify_kids_app_icon_full_sha256="$(sha256_file "$atomic_spotify_kids_app_icon_full_output")"
+atomic_spotify_kids_app_icon_full_coverage_sha256="$(sha256_file "$atomic_spotify_kids_app_icon_full_coverage")"
+atomic_spotify_kids_app_icon_full_clip_sha256="$(sha256_file "$atomic_spotify_kids_app_icon_full_clip")"
+atomic_spotify_kids_app_icon_full_schedule_sha256="$(sha256_file "$atomic_spotify_kids_app_icon_full_schedule")"
+printf 'replay_sha256=%s\nartifact_sha256=%s\ncoverage_sha256=%s\nclip_sha256=%s\ndraw_schedule_sha256=%s\nstream_sha256=%s\nruntime_revision=%s\ndawn_revision=%s\nframe_width=1024\nframe_height=1436\nstorage_width=1024\nstorage_height=1440\nsample_seconds_bits=00000000\ndraw_batch_count=24\nfixed_function_color_output=true\npacked_color_backing=absent\n' \
+    "$atomic_spotify_kids_app_icon_full_replay_sha256" \
+    "$atomic_spotify_kids_app_icon_full_sha256" \
+    "$atomic_spotify_kids_app_icon_full_coverage_sha256" \
+    "$atomic_spotify_kids_app_icon_full_clip_sha256" \
+    "$atomic_spotify_kids_app_icon_full_schedule_sha256" \
+    "$expected_spotify_kids_app_icon_sha256" \
+    "$expected_runtime_revision" \
+    "$expected_dawn_revision" >> "$atomic_spotify_kids_app_icon_full_provenance"
+validate_spotify_artifacts
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null /dev/null msaa-intersection-groups
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$fill_output" "$fill_inputs_output" "$fill_blit_output" fill
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" cusp "$softened_cusp_output"
@@ -557,6 +656,29 @@ for provenance in \
     "dawn_revision=$expected_dawn_revision"; do
     if ! grep -Fqx "$provenance" "$atomic_interleavedfeather_full_provenance"; then
         echo "atomic interleavedfeather provenance is missing $provenance: $atomic_interleavedfeather_full_provenance" >&2
+        exit 1
+    fi
+done
+for provenance in \
+    "backend=metal" \
+    "replay_sha256=$atomic_spotify_kids_app_icon_full_replay_sha256" \
+    "artifact_sha256=$atomic_spotify_kids_app_icon_full_sha256" \
+    "coverage_sha256=$atomic_spotify_kids_app_icon_full_coverage_sha256" \
+    "clip_sha256=$atomic_spotify_kids_app_icon_full_clip_sha256" \
+    "draw_schedule_sha256=$atomic_spotify_kids_app_icon_full_schedule_sha256" \
+    "stream_sha256=$expected_spotify_kids_app_icon_sha256" \
+    "runtime_revision=$expected_runtime_revision" \
+    "dawn_revision=$expected_dawn_revision" \
+    "frame_width=1024" \
+    "frame_height=1436" \
+    "storage_width=1024" \
+    "storage_height=1440" \
+    "sample_seconds_bits=00000000" \
+    "draw_batch_count=24" \
+    "fixed_function_color_output=true" \
+    "packed_color_backing=absent"; do
+    if ! grep -Fqx "$provenance" "$atomic_spotify_kids_app_icon_full_provenance"; then
+        echo "atomic Spotify provenance is missing $provenance: $atomic_spotify_kids_app_icon_full_provenance" >&2
         exit 1
     fi
 done
@@ -693,6 +815,10 @@ echo "atomic dstreadshuffle full output: $atomic_dstreadshuffle_full_output"
 echo "atomic dstreadshuffle full provenance: $atomic_dstreadshuffle_full_provenance"
 echo "atomic dstreadshuffle SrcOver output: $atomic_dstreadshuffle_srcover_output"
 echo "atomic dstreadshuffle SrcOver provenance: $atomic_dstreadshuffle_srcover_provenance"
+echo "atomic Spotify Kids app-icon full output: $atomic_spotify_kids_app_icon_full_output"
+echo "atomic Spotify Kids app-icon full coverage: $atomic_spotify_kids_app_icon_full_coverage"
+echo "atomic Spotify Kids app-icon full clip: $atomic_spotify_kids_app_icon_full_clip"
+echo "atomic Spotify Kids app-icon full provenance: $atomic_spotify_kids_app_icon_full_provenance"
 echo "atlas fill mask: $fill_output"
 echo "atlas fill inputs: $fill_inputs_output"
 echo "atlas fill blit: $fill_blit_output"

@@ -1104,10 +1104,9 @@ stream = "fixtures/renderer/streams/gm/hittest_evenOdd.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-hittest_evenOdd-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-large-draw-readback-map"
 
 
 [[entry]]
@@ -1129,10 +1128,9 @@ stream = "fixtures/renderer/streams/gm/hittest_nonZero.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-hittest_nonZero-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-large-draw-readback-map"
 
 
 [[entry]]

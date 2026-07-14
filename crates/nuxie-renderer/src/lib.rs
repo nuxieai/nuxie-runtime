@@ -83,6 +83,10 @@ impl fmt::Display for RendererError {
 impl Error for RendererError {}
 
 const MAX_ATOMIC_PATHS: usize = u16::MAX as usize;
+// A single Metal command buffer first fails at 2,044 direct MSAA draws with
+// the current per-draw tessellation resources. Keep twofold headroom while
+// the shared C++ logical-flush resource layout is still being translated.
+const MAX_MSAA_DRAWS_PER_SUBMISSION: usize = 1_024;
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
@@ -1412,6 +1416,20 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
+        let submit_and_wait = |encoder: &mut wgpu::CommandEncoder| {
+            let next_encoder =
+                self.context
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("nuxie-frame-encoder"),
+                    });
+            let submitted_encoder = std::mem::replace(encoder, next_encoder);
+            self.context.queue.submit(Some(submitted_encoder.finish()));
+            self.context
+                .device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .map_err(|error| RendererError::Map(error.to_string()))
+        };
         let mut pending_coverage_readbacks = Vec::new();
         let mut pending_atomic_coverage_readbacks = Vec::new();
         let mut pending_atomic_clip_readbacks = Vec::new();
@@ -3152,16 +3170,32 @@ impl WgpuFrame {
             encode_fallback_run(&self.draws, None, true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
             let scheduled_groups = disjoint_msaa_draw_groups(&self.draws, self.width, self.height);
-            let mut scheduled_draws = Vec::with_capacity(self.draws.len());
-            let mut draw_groups = Vec::with_capacity(self.draws.len());
-            for (group_index, group) in scheduled_groups.into_iter().enumerate() {
-                let z_index = u32::try_from(group_index + 1)
-                    .expect("MSAA draw group must fit the path-data contract");
-                draw_groups.extend(std::iter::repeat_n(z_index, group.len()));
-                scheduled_draws.extend(group);
+            if self.draws.len() > MAX_MSAA_DRAWS_PER_SUBMISSION
+                && msaa_draws_can_submit_independently(&self.draws)
+            {
+                let mut clear_target = true;
+                for (group_index, group) in scheduled_groups.iter().enumerate() {
+                    let z_index = u32::try_from(group_index + 1)
+                        .expect("MSAA draw group must fit the path-data contract");
+                    for chunk in group.chunks(MAX_MSAA_DRAWS_PER_SUBMISSION) {
+                        let draw_groups = vec![z_index; chunk.len()];
+                        encode_fallback_run(chunk, Some(&draw_groups), clear_target, &mut encoder)?;
+                        submit_and_wait(&mut encoder)?;
+                        clear_target = false;
+                    }
+                }
+            } else {
+                let mut scheduled_draws = Vec::with_capacity(self.draws.len());
+                let mut draw_groups = Vec::with_capacity(self.draws.len());
+                for (group_index, group) in scheduled_groups.into_iter().enumerate() {
+                    let z_index = u32::try_from(group_index + 1)
+                        .expect("MSAA draw group must fit the path-data contract");
+                    draw_groups.extend(std::iter::repeat_n(z_index, group.len()));
+                    scheduled_draws.extend(group);
+                }
+                debug_assert_eq!(scheduled_draws.len(), self.draws.len());
+                encode_fallback_run(&scheduled_draws, Some(&draw_groups), true, &mut encoder)?;
             }
-            debug_assert_eq!(scheduled_draws.len(), self.draws.len());
-            encode_fallback_run(&scheduled_draws, Some(&draw_groups), true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa {
             encode_fallback_run(&self.draws, None, true, &mut encoder)?;
         } else {
@@ -3257,17 +3291,7 @@ impl WgpuFrame {
                             self.height,
                         ) {
                             encode_atomic_run(&group, clear_target, false, None, &mut encoder)?;
-                            let next_encoder = self.context.device.create_command_encoder(
-                                &wgpu::CommandEncoderDescriptor {
-                                    label: Some("nuxie-frame-encoder"),
-                                },
-                            );
-                            let submitted_encoder = std::mem::replace(&mut encoder, next_encoder);
-                            self.context.queue.submit(Some(submitted_encoder.finish()));
-                            self.context
-                                .device
-                                .poll(wgpu::PollType::wait_indefinitely())
-                                .map_err(|error| RendererError::Map(error.to_string()))?;
+                            submit_and_wait(&mut encoder)?;
                             clear_target = false;
                         }
                     }
@@ -4390,6 +4414,14 @@ fn disjoint_msaa_draw_groups(
         .collect()
 }
 
+fn msaa_draws_can_submit_independently(draws: &[SolidDraw]) -> bool {
+    draws.iter().all(|draw| {
+        matches!(draw.role, DrawRole::Content { clip_id: 0 })
+            && draw.state.clip_stack_height == 0
+            && !draw_uses_advanced_blend(draw)
+    })
+}
+
 fn disjoint_atomic_draw_groups(
     draws: &[SolidDraw],
     viewport_width: u32,
@@ -5305,6 +5337,54 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(colors, vec![vec![1, 3], vec![2]]);
+    }
+
+    #[test]
+    fn msaa_large_draw_frame_submits_before_metal_resource_limit() {
+        const FIRST_FAILING_DRAW_COUNT: usize = 2_044;
+        const WIDTH: usize = 64;
+        const HEIGHT: usize = 64;
+
+        let factory =
+            WgpuFactory::new_with_mode(WIDTH as u32, HEIGHT as u32, RenderMode::Msaa).unwrap();
+        let paint = WgpuPaint {
+            color: 0xffff_ffff,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        for index in 0..FIRST_FAILING_DRAW_COUNT {
+            let x = (index % WIDTH) as f32;
+            let y = (index / WIDTH) as f32;
+            let path = rect_path([x, y, x + 1.0, y + 1.0], FillRule::NonZero);
+            frame.draw_path(&path, &paint);
+        }
+
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * WIDTH + x) * 4..(y * WIDTH + x + 1) * 4];
+        assert_eq!(pixel(0, 0), [255, 255, 255, 255]);
+        assert_eq!(pixel(63, 63), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_submission_splitting_requires_source_over_without_path_clips() {
+        let mut draw = SolidDraw {
+            path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        assert!(msaa_draws_can_submit_independently(std::slice::from_ref(
+            &draw
+        )));
+
+        draw.paint.blend_mode = BlendMode::Multiply;
+        assert!(!msaa_draws_can_submit_independently(std::slice::from_ref(
+            &draw
+        )));
+        draw.paint.blend_mode = BlendMode::SrcOver;
+        draw.role = DrawRole::Content { clip_id: 1 };
+        assert!(!msaa_draws_can_submit_independently(&[draw]));
     }
 
     #[test]

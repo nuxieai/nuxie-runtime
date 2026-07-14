@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=717, diverges=0, gated=751, total=1,468.
+- Rust wgpu: exact=719, diverges=0, gated=749, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -77,8 +77,8 @@ Run `make renderer-golden`.
   and the `gm-bug{5099,6083,615686,6987,7792}-clockwise-atomic` set, plus
   `gm-bug339297-clockwise-atomic` and
   `gm-bug339297_as_clip-clockwise-atomic`, plus
-  `gm-hittest_evenOdd-clockwise-atomic` and
-  `gm-hittest_nonZero-clockwise-atomic`, plus
+  `gm-hittest_evenOdd-{clockwise-atomic,msaa}` and
+  `gm-hittest_nonZero-{clockwise-atomic,msaa}`, plus
   `gm-image_filter_options-clockwise-atomic`,
   `gm-image_lod-clockwise-atomic`, and
   `gm-image-clockwise-atomic`,
@@ -793,13 +793,32 @@ Run `make renderer-golden`.
     byte-inexact pixels/max 68 and mirrored Roboto has 0/max 2. All five exact
     siblings remain green, promoting both gates and moving the ratchet to
     exact=717/diverges=0/gated=751.
-71. [ ] Port large-draw MSAA submission/readback parity for
+71. [x] Port large-draw MSAA submission/readback parity for
     `hittest_evenOdd` and `hittest_nonZero`. Reproduce the map failure around
     their 32k-path command streams, compare C++ logical-flush resource limits
     with Rust batching, submission, and readback lifetimes, and add a bounded
     stress oracle at the first failing draw count. The Rust path must complete
     without device loss or map failure before either gate changes. Preserve
-    the 717 exact entries and unchanged per-entry contracts.
+    the 717 exact entries and unchanged per-entry contracts. The first failing
+    Rust frame is exactly 2,044 direct draws: the per-draw tessellation
+    textures and bind resources exhaust one Metal command buffer long before
+    C++ reaches its shared logical-flush limits. Large clip-independent,
+    source-over MSAA schedules now preserve intersection-board order while
+    submitting at most 1,024 draws per encoder and waiting for each encoder's
+    resources to retire; clipped and destination-read schedules keep their
+    existing single-submit path until their cross-flush state can be replayed.
+    An enabled GPU regression renders the exact
+    2,044-draw boundary. Both complete 32k streams pass their pinned C++ Dawn
+    references with zero pixels beyond delta 2 and max delta 1, advancing the
+    ratchet to exact=719/diverges=0/gated=749 with no contract change.
+72. [ ] Port strict replay image decoding through the provenance-bound C++
+    Dawn MSAA reference path for `image`, `image_aa_border`,
+    `image_filter_options`, and `image_lod`. Preserve encoded payload identity,
+    decoded dimensions, sampler/mipmap behavior, and the fail-closed strict
+    compiler checks; serial and four-job capture must leave the existing 50
+    cases byte-identical. Capture the four valid Dawn references and probe
+    Rust under the unchanged `2/32` contracts before changing any
+    `strict-replay-decode-image` gate. Preserve the 719 exact entries.
 
 ## R2 Completion Record
 
@@ -1011,6 +1030,18 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Bound large clip-independent source-over MSAA schedules to 1,024
+  direct draws per wgpu submission and synchronously retire each encoder. The first
+  reproducible Metal failure is 2,044 draws, while C++ packs paths into shared
+  logical-flush resources and rolls over only at its path, contour,
+  tessellation, or signed draw-pass limits. The twofold headroom is therefore
+  an explicit invented-wgpu resource-lifetime guard, not a translated C++
+  path limit. Splits follow intersection-board order and only occur when no
+  stencil clip or destination-read state must survive; clipped and advanced-
+  blend schedules remain unchanged until their state can be replayed across
+  logical flushes. The exact-boundary GPU oracle and both full 32k C++ Dawn
+  comparisons pass.
 
 - 2026-07-14: Extend the provenance-bound C++ Dawn MSAA registry from 40 to
   50 cases. The two 32k-path hit-test streams exposed pathological monolithic
@@ -2966,3 +2997,13 @@ Run `make renderer-golden`.
   remain green, advancing the ratchet to exact=717/diverges=0/gated=751.
   Queue item 71 targets the two valid 32k-draw streams that currently fail
   Rust readback mapping.
+- 2026-07-14: Bounded large clip-independent source-over MSAA schedules to
+  1,024 draws per submitted encoder after minimizing the Metal map failure to
+  exactly 2,044 direct draws. The enabled boundary stress test and both
+  complete 32k hit-test streams now finish without device loss; each C++ Dawn
+  probe has zero pixels beyond delta 2 and max delta 1. The full renderer
+  corpus advances to exact=719/diverges=0/gated=749, all 717 prior exact
+  entries remain green, the 243-test renderer suite and workspace pass, and
+  the normal 584-segment
+  plus scripted 35-segment V2 floors remain green. Queue item 72 targets the
+  four-entry strict image-decode capture gate.

@@ -811,14 +811,31 @@ Run `make renderer-golden`.
     2,044-draw boundary. Both complete 32k streams pass their pinned C++ Dawn
     references with zero pixels beyond delta 2 and max delta 1, advancing the
     ratchet to exact=719/diverges=0/gated=749 with no contract change.
-72. [ ] Port strict replay image decoding through the provenance-bound C++
+72. [x] Port strict replay image decoding through the provenance-bound C++
     Dawn MSAA reference path for `image`, `image_aa_border`,
     `image_filter_options`, and `image_lod`. Preserve encoded payload identity,
     decoded dimensions, sampler/mipmap behavior, and the fail-closed strict
     compiler checks; serial and four-job capture must leave the existing 50
     cases byte-identical. Capture the four valid Dawn references and probe
     Rust under the unchanged `2/32` contracts before changing any
-    `strict-replay-decode-image` gate. Preserve the 719 exact entries.
+    `strict-replay-decode-image` gate. Preserve the 719 exact entries. The
+    strict compiler now validates and emits the exact encoded bytes, decoded
+    dimensions, image-resource identity, sampler fields/key, blend mode, and
+    opacity for all four streams. The 54-case serial and four-job captures
+    are byte-identical, as are all 100 retained PNG/RGBA artifacts from the
+    prior 50 cases. All four Rust probes reach the same explicit
+    `images in msaa mode` rejection before rendering, so their new Dawn
+    references are installed but the rows remain gated under the narrower
+    `rust-wgpu-msaa-image-rect` diagnostic. The ratchet remains
+    exact=719/diverges=0/gated=749 with no tolerance change.
+73. [ ] Port C++ `gpu::ImageRectDraw` scheduling and WebGPU draw execution for
+    rectangular images in Rust MSAA mode, beginning with
+    `image_filter_options` and then `image`, `image_aa_border`, and
+    `image_lod`. Preserve the existing clockwise-atomic image path, exact
+    sampler-key semantics, mip generation/LOD selection, image-edge AA,
+    opacity, and blend behavior. Add a focused GPU regression before removing
+    the shared rejection, then probe all four pinned Dawn references under
+    their unchanged `2/32` contracts. Preserve the 719 exact entries.
 
 ## R2 Completion Record
 
@@ -1030,6 +1047,18 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Extend the provenance-bound C++ Dawn MSAA registry from 50 to
+  54 cases with strict `decodeImage` and `drawImage` replay. Generation rejects
+  malformed or duplicate image resources, undeclared draws, invalid sampler
+  fields, inconsistent sampler keys, invalid blend modes, and decoded
+  dimension drift while embedding the original encoded payload bytes. Serial
+  and four-job capture produce byte-identical rendered artifacts, and all 100
+  prior PNG/RGBA files remain byte-identical to the retained 50-case baseline.
+  Rust rejects each new reference through the same explicit
+  `images in msaa mode` boundary, so the stale compiler gate narrows to
+  `rust-wgpu-msaa-image-rect`; no row promotes and no tolerance changes. Queue
+  item 73 targets the corresponding C++ `gpu::ImageRectDraw` path.
 
 - 2026-07-14: Bound large clip-independent source-over MSAA schedules to 1,024
   direct draws per wgpu submission and synchronously retire each encoder. The first
@@ -3007,3 +3036,12 @@ Run `make renderer-golden`.
   the normal 584-segment
   plus scripted 35-segment V2 floors remain green. Queue item 72 targets the
   four-entry strict image-decode capture gate.
+- 2026-07-14: Added strict image-resource replay to the C++ Dawn MSAA oracle
+  and captured `image`, `image_aa_border`, `image_filter_options`, and
+  `image_lod` deterministically in serial and four-job modes without changing
+  any prior rendered artifact. All four Rust probes stop at the shared MSAA
+  image-rectangle rejection, so their Dawn references are pinned and the
+  gate narrows to `rust-wgpu-msaa-image-rect` without promotion. The renderer
+  ratchet remains exact=719/diverges=0/gated=749; the workspace, normal
+  584-segment, and scripted 35-segment V2 floors pass. Queue item 73 ports the
+  image-rectangle path.

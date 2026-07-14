@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile a path-only golden stream into exact C++ renderer calls."""
+"""Compile a strict golden stream into exact C++ renderer calls."""
 
 import argparse
 import dataclasses
@@ -23,6 +23,13 @@ PAINT_RE = re.compile(
     r"blendMode=(\d+),shader=(\d+)\}"
 )
 SOURCE_RE = re.compile(r'^source file="([^"]*)" artboard="([^"]*)" scene="([^"]*)"$')
+DECODE_IMAGE_RE = re.compile(
+    r"decodeImage id=(\d+) width=(\d+) height=(\d+) data=([0-9a-f]+)"
+)
+DRAW_IMAGE_RE = re.compile(
+    rf"drawImage image=(\d+) sampler=\{{wrapX=(\d+),wrapY=(\d+),"
+    rf"filter=(\d+),key=(\d+)\}} blendMode=(\d+) opacity=({NUMBER})"
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -210,6 +217,7 @@ def generate_include(
         )
     paths: dict[int, PathSnapshot | None] = {}
     paints: set[int] = set()
+    images: set[int] = set()
     counts: dict[str, int] = {}
     save_depth = 0
 
@@ -276,6 +284,78 @@ def generate_include(
             paints.add(snapshot.object_id)
             count("makeRenderPaint")
             output.append(f"    auto paint{snapshot.object_id} = context->makeRenderPaint();")
+            continue
+        decode_image = DECODE_IMAGE_RE.fullmatch(line)
+        if decode_image is not None:
+            image_id_text, width_text, height_text, encoded_hex = decode_image.groups()
+            image_id = int(image_id_text)
+            width = int(width_text)
+            height = int(height_text)
+            if image_id in images:
+                raise ValueError(f"decodeImage redeclares image {image_id}")
+            if width <= 0 or height <= 0:
+                raise ValueError("decodeImage dimensions must be positive")
+            if len(encoded_hex) % 2 != 0:
+                raise ValueError("decodeImage data must contain complete bytes")
+            encoded = bytes.fromhex(encoded_hex)
+            if not encoded:
+                raise ValueError("decodeImage data must not be empty")
+            images.add(image_id)
+            count("decodeImage")
+            output.append(
+                f"    static constexpr std::array<uint8_t, {len(encoded)}> image{image_id}Encoded = {{{{"
+            )
+            for offset in range(0, len(encoded), 16):
+                values = ", ".join(
+                    f"0x{value:02x}" for value in encoded[offset : offset + 16]
+                )
+                output.append(f"        {values},")
+            output.extend(
+                [
+                    "    }};",
+                    f"    auto image{image_id} = context->decodeImage(rive::Span<const uint8_t>(image{image_id}Encoded.data(), image{image_id}Encoded.size()));",
+                    f"    if (image{image_id} == nullptr || image{image_id}->width() != {width} || image{image_id}->height() != {height})",
+                    "    {",
+                    f'        fail("MSAA reference image {image_id} decode or dimensions drifted");',
+                    "    }",
+                ]
+            )
+            continue
+        draw_image = DRAW_IMAGE_RE.fullmatch(line)
+        if draw_image is not None:
+            (
+                image_id_text,
+                wrap_x_text,
+                wrap_y_text,
+                filter_text,
+                sampler_key_text,
+                blend_mode_text,
+                opacity,
+            ) = draw_image.groups()
+            image_id = int(image_id_text)
+            wrap_x = int(wrap_x_text)
+            wrap_y = int(wrap_y_text)
+            image_filter = int(filter_text)
+            sampler_key = int(sampler_key_text)
+            blend_mode = int(blend_mode_text)
+            if image_id not in images:
+                raise ValueError(f"drawImage references undeclared image {image_id}")
+            if wrap_x not in range(3) or wrap_y not in range(3):
+                raise ValueError("drawImage sampler has an invalid wrap mode")
+            if image_filter not in range(2):
+                raise ValueError("drawImage sampler has an invalid filter mode")
+            expected_sampler_key = wrap_x + wrap_y * 3 + image_filter * 9
+            if sampler_key != expected_sampler_key:
+                raise ValueError(
+                    "drawImage sampler key is inconsistent with its fields: "
+                    f"expected {expected_sampler_key}, got {sampler_key}"
+                )
+            if blend_mode not in range(29):
+                raise ValueError("drawImage has an invalid blend mode")
+            count("drawImage")
+            output.append(
+                f"    renderer->drawImage(image{image_id}.get(), rive::ImageSampler::SamplerFromKey({sampler_key}), static_cast<rive::BlendMode>({blend_mode}), {float_literal(opacity)});"
+            )
             continue
         if line.startswith("clipPath path="):
             path = parse_path(line.removeprefix("clipPath path="))

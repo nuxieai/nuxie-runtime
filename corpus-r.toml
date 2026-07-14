@@ -1149,13 +1149,13 @@ max_different_pixels = 32
 id = "gm-image-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/image.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/image-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-decode-image"
+gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]
@@ -1174,13 +1174,13 @@ max_different_pixels = 32
 id = "gm-image_aa_border-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/image_aa_border.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/image_aa_border-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image_aa_border-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-decode-image"
+gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]
@@ -1199,13 +1199,13 @@ max_different_pixels = 32
 id = "gm-image_filter_options-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/image_filter_options.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/image_filter_options-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image_filter_options-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-decode-image"
+gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]
@@ -1224,13 +1224,13 @@ max_different_pixels = 32
 id = "gm-image_lod-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/image_lod.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/image_lod-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-image_lod-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-decode-image"
+gated = "rust-wgpu-msaa-image-rect"
 
 
 [[entry]]

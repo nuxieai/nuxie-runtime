@@ -187,9 +187,10 @@ def generate_registry(
         f"constexpr std::array<MsaaReferenceCase, {len(cases)}> kMsaaReferenceCases = {{{{"
     )
     for index, case in enumerate(cases):
-        expects_draw_batches = (
-            "true" if case["counts"].get("drawPath", 0) else "false"
-        )
+        expects_draw_batches = "true" if any(
+            case["counts"].get(command, 0)
+            for command in ("drawPath", "drawImage", "drawImageMesh")
+        ) else "false"
         body.append(
             f'    {{"{case["id"]}", "{case["sha256"]}", {case["width"]}, '
             f'{case["height"]}, {case["clear_color"]}, {expects_draw_batches}, '

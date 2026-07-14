@@ -70,6 +70,7 @@ constexpr uint32_t kAtomicSpotifyKidsAppIconFullLogicalWidth = 1024;
 constexpr uint32_t kAtomicSpotifyKidsAppIconFullLogicalHeight = 1436;
 constexpr uint32_t kAtomicSpotifyKidsAppIconFullPhysicalWidth = 1024;
 constexpr uint32_t kAtomicSpotifyKidsAppIconFullPhysicalHeight = 1440;
+void fail(const char* message);
 #include "generated_polyshark_path.inc"
 #include "generated_rawtext_path.inc"
 #include "generated_interleaved_colorburn_pair_path.inc"

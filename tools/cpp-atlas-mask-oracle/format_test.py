@@ -1604,14 +1604,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 50>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 54>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                50,
+                54,
             )
             self.assertEqual(
                 len(
@@ -1620,7 +1620,7 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                50,
+                54,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
@@ -1633,13 +1633,22 @@ class FormatTests(unittest.TestCase):
             self.assertNotIn("void replayMsaaReference46Chunk255(", generated)
             self.assertIn("void replayMsaaReference47Chunk268(", generated)
             self.assertNotIn("void replayMsaaReference47Chunk269(", generated)
-            for rejected_image_case in (
+            for image_case in (
                 "gm-image-msaa",
                 "gm-image_aa_border-msaa",
                 "gm-image_filter_options-msaa",
                 "gm-image_lod-msaa",
             ):
-                self.assertNotIn(f'"{rejected_image_case}"', generated)
+                self.assertIn(f'"{image_case}"', generated)
+            self.assertEqual(generated.count("context->decodeImage("), 5)
+            self.assertEqual(generated.count("renderer->drawImage("), 44)
+            self.assertIn("rive::ImageSampler::SamplerFromKey(9)", generated)
+            self.assertIn(
+                '"gm-image-msaa", '
+                '"e116261650f343b0c3e766bc50775784afc31eca4b15710bafc70e5955b0f254", '
+                "530, 310, 0xffffffff, true, replayMsaaReference50",
+                generated,
+            )
             self.assertIn("0xff00ff00, false, replayMsaaReference29", generated)
             registry_sha256 = subprocess.run(
                 command + ["--print-registry-sha256"],
@@ -1723,6 +1732,89 @@ class FormatTests(unittest.TestCase):
             'fail("poly MSAA reference must preserve the exact fill-rule draw schedule")',
         ):
             self.assertIn(fragment, exporter)
+
+    def test_image_replay_rejects_resource_and_sampler_drift(self):
+        original_path = (
+            ROOT / "fixtures" / "renderer" / "streams" / "gm"
+            / "image_filter_options.rive-stream"
+        )
+        original = original_path.read_text()
+        decode_line = next(
+            line for line in original.splitlines() if line.startswith("decodeImage ")
+        )
+
+        def command(stream):
+            return [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--stream",
+                str(stream),
+                "--expected-sha256",
+                hashlib.sha256(stream.read_bytes()).hexdigest(),
+                "--expected-source",
+                "gm:image_filter_options",
+                "--expected-scene",
+                "image_filter_options",
+                "--expected-width",
+                "1020",
+                "--expected-height",
+                "1020",
+                "--expected-clear-color",
+                "0xffffffff",
+                "--expected-count",
+                "decodeImage=1",
+                "--expected-count",
+                "drawImage=4",
+                "--expected-count",
+                "restore=9",
+                "--expected-count",
+                "save=9",
+                "--expected-count",
+                "transform=8",
+                "--function",
+                "replayImageFilterOptions",
+                "--check",
+            ]
+
+        def assert_rejected(temp_dir, name, content, message):
+            stream = temp_dir / f"{name}.rive-stream"
+            stream.write_text(content)
+            result = subprocess.run(command(stream), text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0, name)
+            self.assertIn(message, result.stderr, name)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            assert_rejected(
+                temp_dir,
+                "duplicate-image",
+                original.replace("save\ntransform matrix=[1,0,0,1,10,10]", decode_line, 1),
+                "decodeImage redeclares image 1",
+            )
+            assert_rejected(
+                temp_dir,
+                "undeclared-image",
+                original.replace("drawImage image=1", "drawImage image=2", 1),
+                "drawImage references undeclared image 2",
+            )
+            assert_rejected(
+                temp_dir,
+                "sampler-key",
+                original.replace("filter=1,key=9", "filter=1,key=8", 1),
+                "sampler key is inconsistent",
+            )
+            assert_rejected(
+                temp_dir,
+                "sampler-wrap",
+                original.replace("wrapX=0", "wrapX=3", 1),
+                "sampler has an invalid wrap mode",
+            )
+            assert_rejected(
+                temp_dir,
+                "odd-image-data",
+                original.replace(decode_line, decode_line[:-1], 1),
+                "decodeImage data must contain complete bytes",
+            )
 
     def test_dstreadshuffle_replay_is_deterministic_and_enforces_opaque_clear_color(self):
         expected_counts = [

@@ -689,9 +689,26 @@ Run `make renderer-golden`.
     promoted. `cliprectintersections` retains 240 pixels/max 55 in sparse
     one-pixel edge/corner components and stays gated as
     `msaa-clip-intersection-edge-coverage` without a tolerance change.
-65. [ ] Port direct MSAA destination-read advanced blending for solid path
+65. [x] Port direct MSAA destination-read advanced blending for solid path
     draws, then reprobe the captured `dstreadshuffle` reference. Preserve the
-    existing atlas destination-copy path and unchanged `2/32` contract.
+    existing atlas destination-copy path and unchanged `2/32` contract. The
+    direct path now uses upstream's generated advanced/HSL fragment variants,
+    destination binding 13, and per-draw resolve/copy/reload barriers with
+    bounded pixel-copy regions. Focused GPU regressions cover destination
+    reads, fixed-to-advanced and consecutive advanced/HSL ordering, analytic
+    strokes, fill-rule color passes, and empty copy bounds. All renderer tests
+    pass. With C++'s dither enabled, `dstreadshuffle`
+    improves from 24,130 pixels/max 49 to 2,231/max 43; alpha is exact and a
+    full-frame copy is byte-identical to the bounded copy. It remains gated as
+    `dawn-wgpu-msaa-advanced-blend-intermediate-precision` under unchanged
+    `2/32` rather than fitting a tolerance to the residual.
+66. [ ] Add and capture the next ten strict source-order C++ Dawn MSAA cases,
+    then probe them under the unchanged `2/32` contract: `emptyfeather`,
+    `emptystroke`, `emptystrokefeather`, `emptytransparentclear`,
+    `feather_corner`, `feather_cusp`, `feather_ellipse`,
+    `feather_polyshapes`, `feather_roundcorner`, and `feather_shapes`. The
+    strict compiler accepts all ten. Require the existing 30 references to
+    recapture byte-identically before classifying or promoting any new row.
 
 ## R2 Completion Record
 
@@ -904,6 +921,25 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Port C++ WebGPU's direct MSAA destination-read advanced blend
+  path at the pipeline and render-pass boundaries. Color-writing direct path
+  states now compile upstream's generated advanced and HSL fragment variants,
+  bind the destination texture at binding 13, and place resolve/copy/reload
+  barriers before each advanced draw group using clamped draw pixel bounds.
+  The existing atlas path is unchanged. A focused Multiply-over-green GPU
+  regression proves the shader reads destination pixels. Enabling C++'s
+  interleaved-gradient-noise dither reduces the captured `dstreadshuffle`
+  residual from 24,130 pixels/max 49 to 2,231/max 43. Its alpha plane is exact,
+  and full-frame versus bounded destination copies produce byte-identical
+  output, excluding copy coverage as the cause. Because the direct generated
+  WGSL is byte-exact with upstream and the remaining delta is RGB-only across
+  the Dawn/Tint and wgpu/Naga compiler stacks, narrow the gate to
+  `dawn-wgpu-msaa-advanced-blend-intermediate-precision`; do not change the
+  reference or `2/32` contract. The ratchet remains
+  exact=700/diverges=0/gated=768. Sol found no production defect and approved
+  the gate evidence, but required durable segmentation coverage before
+  landing; the added fixed-to-advanced, consecutive advanced/HSL, analytic
+  stroke, fill-rule, translucent-alpha, and empty-bounds GPU regression passes.
 - 2026-07-13: Port C++ WebGPU's direct MSAA clip-distance shader selection at
   the pipeline boundary. Rust's generated clipped and unclipped vertex modules
   are byte-exact with upstream; all seven direct stroke/fill states now compile
@@ -2744,3 +2780,16 @@ Run `make renderer-golden`.
   the narrower `msaa-clip-intersection-edge-coverage` gate at 240 pixels/max
   55. The full renderer ratchet is exact=700/diverges=0/gated=768 with no
   tolerance change. Queue item 65 is next.
+- 2026-07-13: Ported direct MSAA destination-read advanced blending with the
+  generated advanced/HSL shader variants, destination binding 13, and bounded
+  per-draw resolve/copy/reload barriers. The focused destination-read GPU
+  regressions and all 199 enabled renderer tests pass. Sol found no production
+  defect and approved the gate evidence after requiring the second regression
+  to cover fixed-to-advanced, consecutive advanced/HSL, analytic stroke,
+  fill-rule, translucent-alpha, and empty-bounds behavior. With C++'s dither,
+  `dstreadshuffle` improves to 2,231 pixels/max 43; alpha is exact and bounded
+  versus full-frame copies are byte-identical. It remains gated under the
+  narrower `dawn-wgpu-msaa-advanced-blend-intermediate-precision` diagnostic
+  with no reference or tolerance change. The renderer ratchet remains
+  exact=700/diverges=0/gated=768. Queue item 66 names the next ten strict
+  source-order C++ Dawn MSAA captures.

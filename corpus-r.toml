@@ -674,7 +674,7 @@ backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-direct-path-advanced-blend"
+gated = "dawn-wgpu-msaa-advanced-blend-intermediate-precision"
 
 
 [[entry]]

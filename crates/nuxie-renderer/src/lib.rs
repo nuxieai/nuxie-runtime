@@ -2321,16 +2321,14 @@ impl WgpuFrame {
              clear_target: bool,
              encoder: &mut wgpu::CommandEncoder| {
                 debug_assert!(draw_groups.is_none_or(|groups| groups.len() == draws.len()));
-                let has_advanced_atlas = draws.iter().any(|draw| {
-                    draw.paint.shader.is_none()
-                        && draw.paint.feather != 0.0
-                        && draw.paint.blend_mode != BlendMode::SrcOver
+                let has_advanced_msaa = draws.iter().any(|draw| {
+                    draw.paint.shader.is_none() && draw.paint.blend_mode != BlendMode::SrcOver
                 });
-                let destination_texture = has_advanced_atlas.then(|| {
+                let destination_texture = has_advanced_msaa.then(|| {
                     self.context
                         .device
                         .create_texture(&wgpu::TextureDescriptor {
-                            label: Some("nuxie-msaa-atlas-destination-copy"),
+                            label: Some("nuxie-msaa-destination-copy"),
                             size: texture.size(),
                             mip_level_count: 1,
                             sample_count: 1,
@@ -2344,9 +2342,16 @@ impl WgpuFrame {
                 let destination_view = destination_texture
                     .as_ref()
                     .map(|texture| texture.create_view(&Default::default()));
+                #[derive(Clone, Copy)]
+                struct DirectPathOptions {
+                    clip_rect: bool,
+                    advanced_blend: bool,
+                    hsl_blend: bool,
+                    destination_copy_bounds: [u32; 4],
+                }
                 enum PreparedDraw {
-                    Analytic(path_pipeline::PreparedPathDraw, bool),
-                    Fill(path_pipeline::PreparedPathDraw, FillRule, bool),
+                    Analytic(path_pipeline::PreparedPathDraw, DirectPathOptions),
+                    Fill(path_pipeline::PreparedPathDraw, FillRule, DirectPathOptions),
                     OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     ClipReset(
@@ -2415,6 +2420,7 @@ impl WgpuFrame {
                                 &self.context.device,
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
+                                None,
                                 &uniforms,
                                 &tessellation.path,
                                 &paint,
@@ -2590,6 +2596,17 @@ impl WgpuFrame {
                     }
                     if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
                         let has_clip_rect = draw.state.clip_rect.is_some();
+                        let advanced_blend = draw.paint.blend_mode != BlendMode::SrcOver;
+                        let options = DirectPathOptions {
+                            clip_rect: has_clip_rect,
+                            advanced_blend,
+                            hsl_blend: blend_mode_uses_hsl(draw.paint.blend_mode),
+                            destination_copy_bounds: msaa_destination_copy_bounds(
+                                draw,
+                                self.width,
+                                self.height,
+                            ),
+                        };
                         if has_clip_rect && !self.context.path_pipeline.supports_clip_rect() {
                             return Err(RendererError::Unsupported(
                                 "clip rectangles on msaa direct path draws",
@@ -2657,6 +2674,11 @@ impl WgpuFrame {
                                 &self.context.device,
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
+                                if advanced_blend {
+                                    destination_view.as_ref()
+                                } else {
+                                    None
+                                },
                                 &uniforms,
                                 &tessellation.path,
                                 &paint,
@@ -2666,9 +2688,9 @@ impl WgpuFrame {
                                 tessellation.instance_count,
                             );
                             prepared_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
-                                PreparedDraw::Fill(prepared, draw.path.fill_rule, has_clip_rect)
+                                PreparedDraw::Fill(prepared, draw.path.fill_rule, options)
                             } else {
-                                PreparedDraw::Analytic(prepared, has_clip_rect)
+                                PreparedDraw::Analytic(prepared, options)
                             });
                             continue;
                         }
@@ -2696,30 +2718,41 @@ impl WgpuFrame {
                         ));
                     }
                 }
-                let prepared_advanced_atlas_count = prepared_draws
+                let prepared_advanced_count = prepared_draws
                     .iter()
-                    .filter(|draw| {
-                        matches!(
-                            draw,
-                            PreparedDraw::Atlas(draw)
-                                if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(draw)
-                        )
+                    .filter(|draw| match draw {
+                        PreparedDraw::Analytic(_, options) | PreparedDraw::Fill(_, _, options) => {
+                            options.advanced_blend
+                        }
+                        PreparedDraw::Atlas(draw) => {
+                            msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(draw)
+                        }
+                        _ => false,
                     })
                     .count();
-                let requested_advanced_atlas_count = draws
+                let requested_advanced_count = draws
                     .iter()
                     .filter(|draw| {
-                        draw.paint.shader.is_none()
-                            && draw.paint.feather != 0.0
-                            && draw.paint.blend_mode != BlendMode::SrcOver
+                        draw.paint.shader.is_none() && draw.paint.blend_mode != BlendMode::SrcOver
                     })
                     .count();
-                if prepared_advanced_atlas_count != requested_advanced_atlas_count {
+                if prepared_advanced_count != requested_advanced_count {
                     return Err(RendererError::Unsupported(
-                        "advanced blending on unplaced msaa feather draws",
+                        "advanced blending on unprepared msaa draws",
                     ));
                 }
-                let fallback_texture = (!has_advanced_atlas).then(|| {
+                let destination_copy_bounds = |draw: &PreparedDraw| match draw {
+                    PreparedDraw::Analytic(_, options) | PreparedDraw::Fill(_, _, options)
+                        if options.advanced_blend =>
+                    {
+                        Some(options.destination_copy_bounds)
+                    }
+                    PreparedDraw::Atlas(draw) => {
+                        msaa_atlas_pipeline::MsaaAtlasPipeline::destination_copy_bounds(draw)
+                    }
+                    _ => None,
+                };
+                let fallback_texture = (!has_advanced_msaa).then(|| {
                     self.context
                         .device
                         .create_texture(&wgpu::TextureDescriptor {
@@ -2737,7 +2770,7 @@ impl WgpuFrame {
                 let fallback_view = fallback_texture
                     .as_ref()
                     .map(|texture| texture.create_view(&Default::default()));
-                if clear_target && !has_advanced_atlas {
+                if clear_target && !has_advanced_msaa {
                     let attachments = [Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         depth_slice: None,
@@ -2759,22 +2792,13 @@ impl WgpuFrame {
                 let mut segment_ends = prepared_draws
                     .iter()
                     .enumerate()
-                    .filter_map(|(index, draw)| match draw {
-                        PreparedDraw::Atlas(draw)
-                            if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(
-                                draw,
-                            ) =>
-                        {
-                            Some(index)
-                        }
-                        _ => None,
-                    })
+                    .filter_map(|(index, draw)| destination_copy_bounds(draw).map(|_| index))
                     .collect::<Vec<_>>();
                 segment_ends.push(prepared_draws.len());
                 let mut segment_start = 0;
                 for (segment_index, segment_end) in segment_ends.into_iter().enumerate() {
                     let first_segment = segment_index == 0;
-                    let resolve_target = if has_advanced_atlas {
+                    let resolve_target = if has_advanced_msaa {
                         &view
                     } else {
                         fallback_view
@@ -2789,7 +2813,7 @@ impl WgpuFrame {
                             resolve_target: Some(resolve_target),
                             ops: wgpu::Operations {
                                 load: if first_segment {
-                                    wgpu::LoadOp::Clear(if has_advanced_atlas {
+                                    wgpu::LoadOp::Clear(if has_advanced_msaa {
                                         color(self.clear_color)
                                     } else {
                                         wgpu::Color::TRANSPARENT
@@ -2808,7 +2832,7 @@ impl WgpuFrame {
                                 } else {
                                     wgpu::LoadOp::Load
                                 },
-                                store: if has_advanced_atlas {
+                                store: if has_advanced_msaa {
                                     wgpu::StoreOp::Store
                                 } else {
                                     wgpu::StoreOp::Discard
@@ -2820,7 +2844,7 @@ impl WgpuFrame {
                                 } else {
                                     wgpu::LoadOp::Load
                                 },
-                                store: if has_advanced_atlas {
+                                store: if has_advanced_msaa {
                                     wgpu::StoreOp::Store
                                 } else {
                                     wgpu::StoreOp::Discard
@@ -2834,11 +2858,13 @@ impl WgpuFrame {
                     pass.set_stencil_reference(0);
                     for prepared in &prepared_draws[segment_start..segment_end] {
                         match prepared {
-                            PreparedDraw::Analytic(draw, has_clip_rect) => {
+                            PreparedDraw::Analytic(draw, options) => {
                                 pass.set_stencil_reference(0);
                                 pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
                                     path_pipeline::DirectPathPipelineKind::Analytic,
-                                    *has_clip_rect,
+                                    options.clip_rect,
+                                    options.advanced_blend,
+                                    options.hsl_blend,
                                 ));
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
@@ -2857,7 +2883,7 @@ impl WgpuFrame {
                                     draw.base_instance..draw.base_instance + draw.instance_count,
                                 );
                             }
-                            PreparedDraw::Fill(draw, fill_rule, has_clip_rect) => {
+                            PreparedDraw::Fill(draw, fill_rule, options) => {
                                 pass.set_stencil_reference(0x80);
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
@@ -2893,11 +2919,12 @@ impl WgpuFrame {
                                             path_pipeline::DirectPathPipelineKind::EvenOddFillCover
                                         }
                                     };
-                                    pass.set_pipeline(
-                                        self.context
-                                            .path_pipeline
-                                            .direct_pipeline(pipeline, *has_clip_rect),
-                                    );
+                                    pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
+                                        pipeline,
+                                        options.clip_rect,
+                                        options.advanced_blend,
+                                        options.hsl_blend,
+                                    ));
                                     pass.draw_indexed(
                                         indices.clone(),
                                         0,
@@ -3063,18 +3090,13 @@ impl WgpuFrame {
                     }
                     drop(pass);
                     if segment_end < prepared_draws.len() {
-                        let bounds = match &prepared_draws[segment_end] {
-                            PreparedDraw::Atlas(draw) => {
-                                msaa_atlas_pipeline::MsaaAtlasPipeline::destination_copy_bounds(
-                                    draw,
-                                )
-                                .expect("MSAA barrier must precede an advanced atlas draw")
-                            }
-                            _ => {
-                                unreachable!("MSAA destination barrier must precede an atlas draw")
-                            }
-                        };
+                        let bounds = destination_copy_bounds(&prepared_draws[segment_end])
+                            .expect("MSAA destination barrier must precede an advanced draw");
                         let [left, top, right, bottom] = bounds;
+                        if left == right || top == bottom {
+                            segment_start = segment_end;
+                            continue;
+                        }
                         let origin = wgpu::Origin3d {
                             x: left,
                             y: top,
@@ -3082,7 +3104,7 @@ impl WgpuFrame {
                         };
                         let destination_texture = destination_texture
                             .as_ref()
-                            .expect("advanced atlas draw prepared without destination texture");
+                            .expect("advanced MSAA draw prepared without destination texture");
                         encoder.copy_texture_to_texture(
                             wgpu::TexelCopyTextureInfo {
                                 texture: &texture,
@@ -3105,7 +3127,7 @@ impl WgpuFrame {
                     }
                     segment_start = segment_end;
                 }
-                if !has_advanced_atlas {
+                if !has_advanced_msaa {
                     self.context.composite_pipeline.encode(
                         &self.context.device,
                         encoder,
@@ -3429,6 +3451,26 @@ fn feather_atlas_placement(
         width: ((right - left) as f32 * scale).ceil() as u32 + 4,
         height: ((bottom - top) as f32 * scale).ceil() as u32 + 4,
     })
+}
+
+fn msaa_destination_copy_bounds(draw: &SolidDraw, width: u32, height: u32) -> [u32; 4] {
+    let width_i32 = i32::try_from(width).unwrap_or(i32::MAX);
+    let height_i32 = i32::try_from(height).unwrap_or(i32::MAX);
+    let [left, top, right, bottom] = draw::feather_pixel_bounds(
+        &draw.path.raw_path,
+        draw.state.transform,
+        draw.paint.feather,
+        draw.paint.effective_stroke(),
+    )
+    .unwrap_or([0, 0, width_i32, height_i32]);
+    let left = left.clamp(0, width_i32);
+    let top = top.clamp(0, height_i32);
+    [
+        left as u32,
+        top as u32,
+        right.clamp(left, width_i32) as u32,
+        bottom.clamp(top, height_i32) as u32,
+    ]
 }
 
 fn analytic_uniforms(width: u32, height: u32, tessellation_height: u32) -> gpu::FlushUniforms {
@@ -5860,6 +5902,93 @@ mod tests {
         assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
         assert_eq!(pixel(32, 32), [255, 255, 255, 255]);
         assert_eq!(pixel(56, 56), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_direct_fill_reads_destination_for_advanced_blending() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let fill = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            color: 0xff00_00ff,
+            blend_mode: BlendMode::Multiply,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_ff00);
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert_eq!(pixel(8, 8), [0, 255, 0, 255]);
+        assert_eq!(pixel(32, 32), [0, 0, 0, 255]);
+        assert_eq!(pixel(56, 56), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_direct_advanced_blends_preserve_order_and_skip_empty_copies() {
+        let msaa_factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let atomic_factory =
+            WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let base = rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero);
+        let multiply = rect_path([12.0, 12.0, 52.0, 52.0], FillRule::EvenOdd);
+        let luminosity = rect_path([24.0, 24.0, 56.0, 56.0], FillRule::NonZero);
+        let offscreen = rect_path([80.0, 80.0, 96.0, 96.0], FillRule::Clockwise);
+        let mut stroke_path = RawPath::new();
+        stroke_path.move_to(8.0, 32.0);
+        stroke_path.line_to(56.0, 32.0);
+        let stroke = WgpuPath {
+            raw_path: stroke_path,
+            fill_rule: FillRule::NonZero,
+        };
+        let base_paint = WgpuPaint {
+            color: 0xff20_80c0,
+            ..WgpuPaint::default()
+        };
+        let multiply_paint = WgpuPaint {
+            color: 0x80c0_4020,
+            blend_mode: BlendMode::Multiply,
+            ..WgpuPaint::default()
+        };
+        let luminosity_paint = WgpuPaint {
+            color: 0xa040_c080,
+            blend_mode: BlendMode::Luminosity,
+            ..WgpuPaint::default()
+        };
+        let stroke_paint = WgpuPaint {
+            color: 0x80ff_2000,
+            style: RenderPaintStyle::Stroke,
+            thickness: 8.0,
+            blend_mode: BlendMode::Screen,
+            ..WgpuPaint::default()
+        };
+        let render = |factory: &WgpuFactory, include_offscreen| {
+            let mut frame = factory.begin_frame(0xff04_080c);
+            frame.draw_path(&base, &base_paint);
+            frame.draw_path(&multiply, &multiply_paint);
+            frame.draw_path(&luminosity, &luminosity_paint);
+            frame.draw_path(&stroke, &stroke_paint);
+            if include_offscreen {
+                frame.draw_path(&offscreen, &luminosity_paint);
+            }
+            frame.finish().unwrap()
+        };
+
+        let msaa = render(&msaa_factory, false);
+        let msaa_with_offscreen = render(&msaa_factory, true);
+        assert_eq!(msaa_with_offscreen, msaa);
+
+        let atomic = render(&atomic_factory, false);
+        for [x, y] in [[8, 8], [16, 16], [32, 32], [48, 48]] {
+            let offset = (y * 64 + x) * 4;
+            let msaa_pixel = &msaa[offset..offset + 4];
+            let atomic_pixel = &atomic[offset..offset + 4];
+            assert!(
+                msaa_pixel
+                    .iter()
+                    .zip(atomic_pixel)
+                    .all(|(left, right)| left.abs_diff(*right) <= 2),
+                "at ({x}, {y}): msaa={msaa_pixel:?} atomic={atomic_pixel:?}"
+            );
+        }
     }
 
     #[test]

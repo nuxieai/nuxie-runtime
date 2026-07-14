@@ -5,7 +5,7 @@ modes = ["clockwise-atomic", "msaa"]
 width = 1024
 height = 1024
 frame = 0
-adapter = "default"
+adapter_selection = "high-performance"
 
 [[scene]]
 id = "gm-CubicStroke"

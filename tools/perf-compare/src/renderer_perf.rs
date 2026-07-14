@@ -7,6 +7,13 @@ pub const MANIFEST_SCHEMA: &str = "rive-renderer-perf-scenes-v1";
 pub const RUNNER_PROTOCOL: &str = "rive-renderer-perf-runner-v1";
 pub const REPORT_SCHEMA: &str = "rive-renderer-perf-v1";
 pub const SAMPLE_COUNT: usize = 7;
+pub const WARMUP_FRAMES: u32 = 10;
+pub const MEASURED_FRAMES: u32 = 100;
+
+const REQUIRED_WIDTH: u32 = 1024;
+const REQUIRED_HEIGHT: u32 = 1024;
+const REQUIRED_FRAME: u32 = 0;
+const REQUIRED_ADAPTER_SELECTION: &str = "high-performance";
 
 const REQUIRED_SCENES: [(&str, &str); 8] = [
     (
@@ -67,7 +74,7 @@ pub struct Defaults {
     pub width: u32,
     pub height: u32,
     pub frame: u32,
-    pub adapter: String,
+    pub adapter_selection: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -88,7 +95,50 @@ pub struct RunRequest {
     pub mode: Mode,
     pub width: u32,
     pub height: u32,
-    pub adapter: String,
+    pub adapter_selection: String,
+    pub timing: TimingMethod,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimingScope {
+    SubmitToGpuComplete,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GpuCompletion {
+    WaitForCompletionEachFrame,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TimingMethod {
+    pub warmup_frames: u32,
+    pub measured_frames: u32,
+    pub scope: TimingScope,
+    pub gpu_completion: GpuCompletion,
+}
+
+impl TimingMethod {
+    fn required() -> Self {
+        Self {
+            warmup_frames: WARMUP_FRAMES,
+            measured_frames: MEASURED_FRAMES,
+            scope: TimingScope::SubmitToGpuComplete,
+            gpu_completion: GpuCompletion::WaitForCompletionEachFrame,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdapterIdentity {
+    pub backend: String,
+    pub name: String,
+    pub vendor: String,
+    pub device: String,
+    pub driver: String,
 }
 
 impl RunRequest {
@@ -103,12 +153,13 @@ impl RunRequest {
             mode,
             width: defaults.width,
             height: defaults.height,
-            adapter: defaults.adapter.clone(),
+            adapter_selection: defaults.adapter_selection.clone(),
+            timing: TimingMethod::required(),
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RunnerResponse {
     pub protocol: String,
@@ -120,22 +171,24 @@ pub struct RunnerResponse {
     pub mode: Mode,
     pub width: u32,
     pub height: u32,
-    pub adapter: String,
-    pub median_ns: u64,
-    pub flushes: u64,
+    pub adapter_selection: String,
+    pub selected_adapter: AdapterIdentity,
+    pub timing: TimingMethod,
+    pub measured_frame_median_ns: u64,
+    pub logical_flushes: u64,
     pub draws: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct StructuralMetrics {
-    pub flushes: u64,
+    pub logical_flushes: u64,
     pub draws: u64,
 }
 
 impl From<&RunnerResponse> for StructuralMetrics {
     fn from(response: &RunnerResponse) -> Self {
         Self {
-            flushes: response.flushes,
+            logical_flushes: response.logical_flushes,
             draws: response.draws,
         }
     }
@@ -215,11 +268,14 @@ pub fn validate_manifest(manifest: &Manifest, directory: &Path) -> Result<(), St
             manifest.schema
         ));
     }
-    if manifest.defaults.width == 0 || manifest.defaults.height == 0 {
-        return Err("manifest dimensions must be non-zero".to_owned());
-    }
-    if manifest.defaults.adapter.trim().is_empty() {
-        return Err("manifest adapter must be non-empty".to_owned());
+    if manifest.defaults.width != REQUIRED_WIDTH
+        || manifest.defaults.height != REQUIRED_HEIGHT
+        || manifest.defaults.frame != REQUIRED_FRAME
+        || manifest.defaults.adapter_selection != REQUIRED_ADAPTER_SELECTION
+    {
+        return Err(format!(
+            "manifest defaults must be {REQUIRED_WIDTH}x{REQUIRED_HEIGHT}, frame {REQUIRED_FRAME}, adapter_selection={REQUIRED_ADAPTER_SELECTION}"
+        ));
     }
     if manifest.scene.len() != REQUIRED_SCENES.len() {
         return Err(format!(
@@ -275,20 +331,36 @@ pub fn run_benchmark(
             let mut baseline_medians = Vec::with_capacity(SAMPLE_COUNT);
             let mut candidate_medians = Vec::with_capacity(SAMPLE_COUNT);
             let mut structural = None;
+            let mut selected_adapter = None;
 
             for sample in 0..SAMPLE_COUNT {
                 let baseline_response = baseline.run(&request)?;
                 validate_response("baseline", &id, sample, &request, &baseline_response)?;
+                validate_adapter(
+                    &id,
+                    "baseline",
+                    sample,
+                    selected_adapter.as_ref(),
+                    &baseline_response.selected_adapter,
+                )?;
+                selected_adapter = Some(baseline_response.selected_adapter.clone());
                 let baseline_structural = StructuralMetrics::from(&baseline_response);
                 validate_structural(&id, "baseline", sample, structural, baseline_structural)?;
                 structural = Some(baseline_structural);
-                baseline_medians.push(baseline_response.median_ns);
+                baseline_medians.push(baseline_response.measured_frame_median_ns);
 
                 let candidate_response = candidate.run(&request)?;
                 validate_response("candidate", &id, sample, &request, &candidate_response)?;
+                validate_adapter(
+                    &id,
+                    "candidate",
+                    sample,
+                    selected_adapter.as_ref(),
+                    &candidate_response.selected_adapter,
+                )?;
                 let candidate_structural = StructuralMetrics::from(&candidate_response);
                 validate_structural(&id, "candidate", sample, structural, candidate_structural)?;
-                candidate_medians.push(candidate_response.median_ns);
+                candidate_medians.push(candidate_response.measured_frame_median_ns);
             }
 
             let baseline = TimingSummary::from_samples(baseline_medians)?;
@@ -301,7 +373,10 @@ pub fn run_benchmark(
                 mode,
                 width: manifest.defaults.width,
                 height: manifest.defaults.height,
-                adapter: manifest.defaults.adapter.clone(),
+                adapter_selection: manifest.defaults.adapter_selection.clone(),
+                selected_adapter: selected_adapter
+                    .ok_or_else(|| format!("scene {id} did not report an adapter"))?,
+                timing: TimingMethod::required(),
                 baseline,
                 candidate,
                 structural: structural
@@ -341,7 +416,8 @@ fn validate_response(
         || response.mode != request.mode
         || response.width != request.width
         || response.height != request.height
-        || response.adapter != request.adapter;
+        || response.adapter_selection != request.adapter_selection
+        || response.timing != request.timing;
     if mismatch {
         return Err(format!(
             "scene {} sample {} {runner} response did not echo the fenced request",
@@ -349,12 +425,49 @@ fn validate_response(
             sample + 1
         ));
     }
-    if response.median_ns == 0 {
+    if response.measured_frame_median_ns == 0 {
         return Err(format!(
-            "scene {} sample {} {runner} reported zero median_ns",
+            "scene {} sample {} {runner} reported zero measured_frame_median_ns",
             scene_id,
             sample + 1
         ));
+    }
+    Ok(())
+}
+
+fn validate_adapter(
+    scene_id: &str,
+    runner: &str,
+    sample: usize,
+    expected: Option<&AdapterIdentity>,
+    actual: &AdapterIdentity,
+) -> Result<(), String> {
+    if [
+        &actual.backend,
+        &actual.name,
+        &actual.vendor,
+        &actual.device,
+        &actual.driver,
+    ]
+    .iter()
+    .any(|field| field.trim().is_empty())
+    {
+        return Err(format!(
+            "scene {} sample {} {runner} reported an incomplete selected_adapter",
+            scene_id,
+            sample + 1
+        ));
+    }
+    if let Some(expected) = expected {
+        if actual != expected {
+            return Err(format!(
+                "scene {} sample {} {runner} selected a different physical adapter: expected {:?}, got {:?}",
+                scene_id,
+                sample + 1,
+                expected,
+                actual
+            ));
+        }
     }
     Ok(())
 }
@@ -369,12 +482,12 @@ fn validate_structural(
     if let Some(expected) = expected {
         if actual != expected {
             return Err(format!(
-                "scene {} sample {} {runner} structural mismatch: expected flushes={} draws={}, got flushes={} draws={}",
+                "scene {} sample {} {runner} structural mismatch: expected logical_flushes={} draws={}, got logical_flushes={} draws={}",
                 scene_id,
                 sample + 1,
-                expected.flushes,
+                expected.logical_flushes,
                 expected.draws,
-                actual.flushes,
+                actual.logical_flushes,
                 actual.draws
             ));
         }
@@ -424,7 +537,9 @@ pub struct SceneReport {
     pub mode: Mode,
     pub width: u32,
     pub height: u32,
-    pub adapter: String,
+    pub adapter_selection: String,
+    pub selected_adapter: AdapterIdentity,
+    pub timing: TimingMethod,
     pub baseline: TimingSummary,
     pub candidate: TimingSummary,
     pub structural: StructuralMetrics,
@@ -489,7 +604,7 @@ pub fn render_json(report: &Report) -> Result<String, String> {
 
 pub fn render_markdown(report: &Report) -> String {
     let mut markdown = String::from(
-        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | baseline min ns | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate min ns | candidate p50 ns | candidate p95 ns | candidate spread ns | ratio | flushes | draws |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | baseline min ns | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate min ns | candidate p50 ns | candidate p95 ns | candidate spread ns | ratio | logical flushes | draws |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
     );
     for scene in &report.scenes {
         markdown.push_str(&format!(
@@ -505,7 +620,7 @@ pub fn render_markdown(report: &Report) -> String {
             scene.candidate.p95_ns,
             scene.candidate.spread_ns,
             scene.ratio,
-            scene.structural.flushes,
+            scene.structural.logical_flushes,
             scene.structural.draws,
         ));
     }
@@ -551,6 +666,8 @@ fn mode_name(mode: Mode) -> &'static str {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     struct FakeRunner {
         responses: VecDeque<RunnerResponse>,
@@ -580,10 +697,22 @@ mod tests {
             mode,
             width: defaults.width,
             height: defaults.height,
-            adapter: defaults.adapter.clone(),
-            median_ns,
-            flushes: 3,
+            adapter_selection: defaults.adapter_selection.clone(),
+            selected_adapter: adapter_identity(),
+            timing: TimingMethod::required(),
+            measured_frame_median_ns: median_ns,
+            logical_flushes: 3,
             draws: 11,
+        }
+    }
+
+    fn adapter_identity() -> AdapterIdentity {
+        AdapterIdentity {
+            backend: "metal".to_owned(),
+            name: "Test GPU".to_owned(),
+            vendor: "Test Vendor".to_owned(),
+            device: "Test Device".to_owned(),
+            driver: "1.0".to_owned(),
         }
     }
 
@@ -618,6 +747,34 @@ mod tests {
         let error = validate_response("candidate", &scene.id, 0, &request, &response)
             .expect_err("debug mismatch must fail");
         assert!(error.contains("fenced request"));
+    }
+
+    #[test]
+    fn timing_method_mismatch_is_rejected() {
+        let manifest = manifest();
+        let scene = &manifest.scene[0];
+        let request = RunRequest::for_scene(scene, &manifest.defaults, manifest.modes[0]);
+        let mut response = response(scene, &manifest.defaults, manifest.modes[0], 10);
+        response.timing.measured_frames -= 1;
+        let error = validate_response("candidate", &scene.id, 0, &request, &response)
+            .expect_err("timing method mismatch must fail");
+        assert!(error.contains("fenced request"));
+    }
+
+    #[test]
+    fn physical_adapter_mismatch_is_rejected() {
+        let manifest = manifest();
+        let mut baseline = FakeRunner {
+            responses: responses_for(&manifest, 10),
+        };
+        let mut candidate_responses = responses_for(&manifest, 12);
+        candidate_responses[0].selected_adapter.device = "Other Device".to_owned();
+        let mut candidate = FakeRunner {
+            responses: candidate_responses,
+        };
+        let error = run_benchmark(&manifest, &mut baseline, &mut candidate)
+            .expect_err("physical adapter mismatch must fail");
+        assert!(error.contains("different physical adapter"));
     }
 
     #[test]
@@ -685,5 +842,88 @@ mod tests {
         let error = validate_manifest(&manifest, Path::new(env!("CARGO_MANIFEST_DIR")))
             .expect_err("fixed scene list must not drift");
         assert!(error.contains("scene 1"));
+    }
+
+    #[test]
+    fn manifest_rejects_unpinned_defaults() {
+        let mut manifest = manifest();
+        manifest.defaults.width = 1;
+        let error = validate_manifest(&manifest, Path::new(env!("CARGO_MANIFEST_DIR")))
+            .expect_err("benchmark defaults must not drift");
+        assert!(error.contains("manifest defaults must be"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_runner_exercises_the_wire_contract() {
+        let manifest = manifest();
+        let scene = &manifest.scene[0];
+        let mode = manifest.modes[0];
+        let request = RunRequest::for_scene(scene, &manifest.defaults, mode);
+        let expected_response = response(scene, &manifest.defaults, mode, 1234);
+        let unique = format!(
+            "rive-renderer-perf-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let directory = std::env::temp_dir().join(unique);
+        std::fs::create_dir(&directory).unwrap();
+        let script = directory.join("runner.sh");
+        let request_capture = directory.join("request.json");
+        let response_json = serde_json::to_string(&expected_response).unwrap();
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nset -eu\ntest \"$1\" = \"--renderer-perf-protocol\"\ntest \"$2\" = \"{RUNNER_PROTOCOL}\"\nIFS= read -r request\nprintf '%s\\n' \"$request\" > '{}'\nprintf '%s\\n' '{}'\n",
+                request_capture.display(),
+                response_json
+            ),
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&script).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions).unwrap();
+
+        let mut runner = SubprocessRunner::new(script, directory.clone());
+        let actual_response = runner.run(&request).expect("subprocess wire round trip");
+        assert_eq!(actual_response.timing, TimingMethod::required());
+        assert_eq!(actual_response.selected_adapter, adapter_identity());
+        let captured: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(request_capture).unwrap()).unwrap();
+        assert_eq!(captured["protocol"], RUNNER_PROTOCOL);
+        assert_eq!(captured["timing"]["warmup_frames"], WARMUP_FRAMES);
+        assert_eq!(captured["timing"]["measured_frames"], MEASURED_FRAMES);
+        assert_eq!(
+            captured["timing"]["gpu_completion"],
+            "wait-for-completion-each-frame"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_runner_reports_failure_stderr() {
+        let manifest = manifest();
+        let request =
+            RunRequest::for_scene(&manifest.scene[0], &manifest.defaults, manifest.modes[0]);
+        let unique = format!("rive-renderer-perf-fail-{}", std::process::id());
+        let directory = std::env::temp_dir().join(unique);
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir(&directory).unwrap();
+        let script = directory.join("runner.sh");
+        std::fs::write(&script, "#!/bin/sh\necho deliberate-failure >&2\nexit 7\n").unwrap();
+        let mut permissions = std::fs::metadata(&script).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions).unwrap();
+
+        let mut runner = SubprocessRunner::new(script, directory.clone());
+        let error = runner
+            .run(&request)
+            .expect_err("runner failure must propagate");
+        assert!(error.contains("deliberate-failure"));
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

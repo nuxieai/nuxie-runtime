@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=412, diverges=0, gated=1,056, total=1,468.
+- Rust wgpu: exact=439, diverges=0, gated=1,029, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -212,7 +212,14 @@ Run `make renderer-golden`.
   `riv-nested_artboard_quantize_and_speed-frame-{0..4}-clockwise-atomic`,
   `riv-nested_event_test-frame-0-clockwise-atomic`,
   `riv-nested_events-frame-0-clockwise-atomic`, and
-  `riv-nested_needs_advance-frame-0-clockwise-atomic`.
+  `riv-nested_needs_advance-frame-0-clockwise-atomic`, plus
+  `riv-number_to_list_nested_children-frame-0-clockwise-atomic`,
+  `riv-oneshotblend-frame-{0..4}-clockwise-atomic`,
+  `riv-opaque_hit_test-frame-{0..7}-clockwise-atomic`,
+  `riv-path_effect_with_feathers-frame-0-clockwise-atomic`,
+  `riv-pause_nested_artboard-frame-0-clockwise-atomic`,
+  `riv-pointer_events-frame-{0..7}-clockwise-atomic`, and
+  `riv-pointer_events_nested_artboards_in_solos-frame-{0..2}-clockwise-atomic`.
 
 ## Milestones
 
@@ -386,9 +393,23 @@ Run `make renderer-golden`.
     `nested_needs_advance`, and `nested_solo` frames 0-1. Capture missing
     pinned Metal references and apply the unchanged contract and diagnostic
     rules.
-31. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+31. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `nested_solo` frames 2-4, `number_to_list_nested_children`,
     `oneshotblend` frames 0-4, and `opaque_hit_test`. Capture missing pinned
+    Metal references and apply the unchanged contract and diagnostic rules.
+32. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `opaque_hit_test` frames 1-7,
+    `path_effect_with_feathers`, `pause_nested_artboard`, and
+    `pointer_events` frame 0. Capture missing pinned Metal references and
+    apply the unchanged contract and diagnostic rules.
+33. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `pointer_events` frames 1-7 and
+    `pointer_events_nested_artboards_in_solos` frames 0-2. Capture missing
+    pinned Metal references and apply the unchanged contract and diagnostic
+    rules.
+34. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `pointer_events_nested_artboards_in_solos` frames 3-7,
+    `pointer_exit`, and `quantize_test` frames 0-3. Capture missing pinned
     Metal references and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
@@ -2233,3 +2254,15 @@ Run `make renderer-golden`.
   and Sol approved `metal-webgpu-subpixel-edge-coverage` without changing
   references or tolerances. The wave advances the ratchet to
   exact=412/diverges=0/gated=1,056.
+- 2026-07-13: Probed the thirtieth through thirty-second ten-entry
+  clockwise-atomic `.riv` batches as one parallel wave. Main captured all 30
+  native Metal references and three read-only Terra workers probed disjoint
+  batches. Twenty-seven entries pass the unchanged `2/32` contract. The
+  three remaining `nested_solo` frames each reproduce at 42/max 14; their
+  references and generated images are byte-identical across frames, their
+  alpha planes are exact, and every over-threshold pixel lies on one of three
+  transformed circle boundaries with clean interiors/backgrounds. Main
+  reproduced the harness counts, Terra attributed the residuals, and Sol
+  approved `metal-webgpu-subpixel-edge-coverage` without changing references
+  or tolerances. The wave advances the ratchet to
+  exact=439/diverges=0/gated=1,029.

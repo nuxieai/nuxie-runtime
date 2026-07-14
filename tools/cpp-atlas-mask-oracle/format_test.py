@@ -1687,6 +1687,10 @@ class FormatTests(unittest.TestCase):
             "kMsaaReferenceDawnRevision",
             "kMsaaReferenceRegistrySha256",
             "facts.drawBatches.empty()",
+            'std::strcmp(msaaReference->id, "gm-poly_clockwise-msaa") == 0',
+            "rive::gpu::DrawType::msaaMidpointFanPathsStencil",
+            "rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage",
+            'fail("poly MSAA reference must preserve the exact fill-rule draw schedule")',
         ):
             self.assertIn(fragment, exporter)
 

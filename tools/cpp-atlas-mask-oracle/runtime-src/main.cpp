@@ -1687,6 +1687,49 @@ int main(int argc, char** argv)
         {
             fail("MSAA reference replay must execute at least one MSAA draw batch");
         }
+        const bool polyClockwise =
+            std::strcmp(msaaReference->id, "gm-poly_clockwise-msaa") == 0;
+        const bool polyEvenOdd =
+            std::strcmp(msaaReference->id, "gm-poly_evenOdd-msaa") == 0;
+        const bool polyNonZero =
+            std::strcmp(msaaReference->id, "gm-poly_nonZero-msaa") == 0;
+        if (polyClockwise || polyEvenOdd || polyNonZero)
+        {
+            const uint32_t fillContents = static_cast<uint32_t>(
+                polyClockwise ? rive::gpu::DrawContents::clockwiseFill
+                : polyEvenOdd ? rive::gpu::DrawContents::evenOddFill
+                              : rive::gpu::DrawContents::nonZeroFill);
+            const std::array<uint32_t, 3> fastTypes = {
+                static_cast<uint32_t>(
+                    rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
+                static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+                static_cast<uint32_t>(
+                    rive::gpu::DrawType::msaaMidpointFanStencilReset),
+            };
+            const std::array<uint32_t, 2> evenOddTypes = {
+                static_cast<uint32_t>(
+                    rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                static_cast<uint32_t>(
+                    rive::gpu::DrawType::msaaMidpointFanPathsCover),
+            };
+            const size_t expectedCount = polyEvenOdd ? evenOddTypes.size()
+                                                     : fastTypes.size();
+            bool scheduleMatches = facts.drawBatches.size() == expectedCount;
+            for (size_t i = 0; scheduleMatches && i != expectedCount; ++i)
+            {
+                const auto& batch = facts.drawBatches[i];
+                const uint32_t expectedType =
+                    polyEvenOdd ? evenOddTypes[i] : fastTypes[i];
+                scheduleMatches = batch.drawType == expectedType &&
+                                  batch.drawContents == fillContents &&
+                                  batch.baseElement == 1 &&
+                                  batch.elementCount == 8;
+            }
+            if (!scheduleMatches)
+            {
+                fail("poly MSAA reference must preserve the exact fill-rule draw schedule");
+            }
+        }
     }
     else if (intersectionGroupsCase)
     {

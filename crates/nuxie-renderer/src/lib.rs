@@ -2316,7 +2316,11 @@ impl WgpuFrame {
                 Ok::<(), RendererError>(())
             };
         let encode_fallback_run =
-            |draws: &[SolidDraw], clear_target: bool, encoder: &mut wgpu::CommandEncoder| {
+            |draws: &[SolidDraw],
+             draw_groups: Option<&[u32]>,
+             clear_target: bool,
+             encoder: &mut wgpu::CommandEncoder| {
+                debug_assert!(draw_groups.is_none_or(|groups| groups.len() == draws.len()));
                 let has_advanced_atlas = draws.iter().any(|draw| {
                     draw.paint.shader.is_none()
                         && draw.paint.feather != 0.0
@@ -2342,6 +2346,7 @@ impl WgpuFrame {
                     .map(|texture| texture.create_view(&Default::default()));
                 enum PreparedDraw {
                     Analytic(path_pipeline::PreparedPathDraw),
+                    Fill(path_pipeline::PreparedPathDraw, FillRule),
                     OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     ClipReset(
@@ -2352,7 +2357,14 @@ impl WgpuFrame {
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
                 let mut prepared_draws = Vec::with_capacity(draws.len());
-                for draw in draws {
+                for (draw_index, draw) in draws.iter().enumerate() {
+                    let z_index = draw_groups.map_or_else(
+                        || {
+                            u32::try_from(draw_index + 1)
+                                .expect("MSAA draw index must fit the path-data contract")
+                        },
+                        |groups| groups[draw_index],
+                    );
                     if let DrawRole::ClipReset { bounds, action } = draw.role {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
                         prepared_draws.push(PreparedDraw::ClipReset(
@@ -2380,7 +2392,7 @@ impl WgpuFrame {
                         if let Some(mut tessellation) =
                             draw::build_fill_tessellation(raw_path, draw.state.transform)
                         {
-                            tessellation.path.z_index = 1;
+                            tessellation.path.z_index = z_index;
                             let tessellation_height =
                                 draw::tessellation_texture_height(&tessellation.spans);
                             let uniforms =
@@ -2577,11 +2589,22 @@ impl WgpuFrame {
                         }
                     }
                     if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
-                        let tessellation = match draw.paint.style {
-                            RenderPaintStyle::Fill => draw::build_fill_tessellation(
+                        let oriented_path = (draw.paint.style == RenderPaintStyle::Fill
+                            && draw::msaa_fill_requires_reverse(
                                 &draw.path.raw_path,
                                 draw.state.transform,
-                            ),
+                                draw.path.fill_rule,
+                            ))
+                        .then(|| {
+                            let mut path = RawPath::new();
+                            path.add_path_backwards(&draw.path.raw_path, Mat2D::IDENTITY);
+                            path
+                        });
+                        let raw_path = oriented_path.as_ref().unwrap_or(&draw.path.raw_path);
+                        let tessellation = match draw.paint.style {
+                            RenderPaintStyle::Fill => {
+                                draw::build_fill_tessellation(raw_path, draw.state.transform)
+                            }
                             RenderPaintStyle::Stroke => draw::build_stroke_tessellation(
                                 &draw.path.raw_path,
                                 draw.state.transform,
@@ -2590,60 +2613,58 @@ impl WgpuFrame {
                                 draw.paint.cap,
                             ),
                         };
-                        if let Some(tessellation) = tessellation {
-                            if draw.paint.style == RenderPaintStyle::Fill
-                                && tessellation.contours.len() != 1
-                            {
-                                // Compound fills require the upstream stencil-then-cover path.
+                        if let Some(mut tessellation) = tessellation {
+                            tessellation.path.z_index = z_index;
+                            let tessellation_height =
+                                draw::tessellation_texture_height(&tessellation.spans);
+                            let uniforms =
+                                analytic_uniforms(self.width, self.height, tessellation_height);
+                            let tessellation_texture = self.context.tessellator.encode(
+                                &self.context.device,
+                                encoder,
+                                &self.context.feather_lut.view,
+                                &tessellation.spans,
+                                &uniforms,
+                                std::slice::from_ref(&tessellation.path),
+                                &tessellation.contours,
+                                tessellation_height,
+                            );
+                            let tessellation_view = tessellation_texture
+                                .create_view(&wgpu::TextureViewDescriptor::default());
+                            let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                                gpu::PaintData::solid_stroke(
+                                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                    draw.paint.blend_mode,
+                                )
                             } else {
-                                let tessellation_height =
-                                    draw::tessellation_texture_height(&tessellation.spans);
-                                let uniforms =
-                                    analytic_uniforms(self.width, self.height, tessellation_height);
-                                let tessellation_texture = self.context.tessellator.encode(
-                                    &self.context.device,
-                                    encoder,
-                                    &self.context.feather_lut.view,
-                                    &tessellation.spans,
-                                    &uniforms,
-                                    std::slice::from_ref(&tessellation.path),
-                                    &tessellation.contours,
-                                    tessellation_height,
-                                );
-                                let tessellation_view = tessellation_texture
-                                    .create_view(&wgpu::TextureViewDescriptor::default());
-                                let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
-                                    gpu::PaintData::solid_stroke(
-                                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                        draw.paint.blend_mode,
-                                    )
-                                } else {
-                                    gpu::PaintData::solid(
-                                        modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                        draw.path.fill_rule,
-                                        draw.paint.blend_mode,
-                                    )
-                                };
-                                if draw.state.clip_rect.is_some() {
-                                    paint = paint.with_clip_rect();
-                                }
-                                let paint_aux = clip_rect_paint_aux(draw.state.clip_rect);
-                                prepared_draws.push(PreparedDraw::Analytic(
-                                    self.context.path_pipeline.prepare(
-                                        &self.context.device,
-                                        &tessellation_view,
-                                        &self.context.feather_lut.view,
-                                        &uniforms,
-                                        &tessellation.path,
-                                        &paint,
-                                        &paint_aux,
-                                        &tessellation.contours,
-                                        tessellation.base_instance,
-                                        tessellation.instance_count,
-                                    ),
-                                ));
-                                continue;
+                                gpu::PaintData::solid(
+                                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                                    draw.path.fill_rule,
+                                    draw.paint.blend_mode,
+                                )
+                            };
+                            if draw.state.clip_rect.is_some() {
+                                paint = paint.with_clip_rect();
                             }
+                            let paint_aux = clip_rect_paint_aux(draw.state.clip_rect);
+                            let prepared = self.context.path_pipeline.prepare(
+                                &self.context.device,
+                                &tessellation_view,
+                                &self.context.feather_lut.view,
+                                &uniforms,
+                                &tessellation.path,
+                                &paint,
+                                &paint_aux,
+                                &tessellation.contours,
+                                tessellation.base_instance,
+                                tessellation.instance_count,
+                            );
+                            prepared_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
+                                PreparedDraw::Fill(prepared, draw.path.fill_rule)
+                            } else {
+                                PreparedDraw::Analytic(prepared)
+                            });
+                            continue;
                         }
                     }
                     if let Some(path_vertices) = tessellate_solid(draw, self.width, self.height) {
@@ -2826,6 +2847,57 @@ impl WgpuFrame {
                                     0,
                                     draw.base_instance..draw.base_instance + draw.instance_count,
                                 );
+                            }
+                            PreparedDraw::Fill(draw, fill_rule) => {
+                                pass.set_stencil_reference(0x80);
+                                pass.set_bind_group(0, &draw.flush_group, &[]);
+                                pass.set_bind_group(1, &draw.image_group, &[]);
+                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                pass.set_vertex_buffer(
+                                    0,
+                                    self.context.patch_vertex_buffer.slice(..),
+                                );
+                                pass.set_index_buffer(
+                                    self.context.patch_index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint16,
+                                );
+                                let indices = gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT as u32
+                                    ..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32;
+                                for fill_pass in msaa_fill_passes(*fill_rule) {
+                                    let pipeline = match fill_pass {
+                                        MsaaFillPass::BorrowedCoverage => {
+                                            &self.context.path_pipeline.fill_borrowed_pipeline
+                                        }
+                                        MsaaFillPass::Forward => {
+                                            &self.context.path_pipeline.fill_forward_pipeline
+                                        }
+                                        MsaaFillPass::Cleanup => {
+                                            &self.context.path_pipeline.fill_cleanup_pipeline
+                                        }
+                                        MsaaFillPass::ClockwiseCleanup => {
+                                            &self
+                                                .context
+                                                .path_pipeline
+                                                .clockwise_fill_cleanup_pipeline
+                                        }
+                                        MsaaFillPass::EvenOddStencil => {
+                                            &self
+                                                .context
+                                                .path_pipeline
+                                                .even_odd_fill_stencil_pipeline
+                                        }
+                                        MsaaFillPass::EvenOddCover => {
+                                            &self.context.path_pipeline.even_odd_fill_cover_pipeline
+                                        }
+                                    };
+                                    pass.set_pipeline(pipeline);
+                                    pass.draw_indexed(
+                                        indices.clone(),
+                                        0,
+                                        draw.base_instance
+                                            ..draw.base_instance + draw.instance_count,
+                                    );
+                                }
                             }
                             PreparedDraw::OutermostClipUpdate(draw, fill_rule) => {
                                 pass.set_stencil_reference(0x80);
@@ -3039,16 +3111,21 @@ impl WgpuFrame {
                 Ok(())
             };
         if self.draws.is_empty() {
-            encode_fallback_run(&self.draws, true, &mut encoder)?;
+            encode_fallback_run(&self.draws, None, true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
-            let scheduled_draws = disjoint_msaa_draw_groups(&self.draws, self.width, self.height)
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>();
+            let scheduled_groups = disjoint_msaa_draw_groups(&self.draws, self.width, self.height);
+            let mut scheduled_draws = Vec::with_capacity(self.draws.len());
+            let mut draw_groups = Vec::with_capacity(self.draws.len());
+            for (group_index, group) in scheduled_groups.into_iter().enumerate() {
+                let z_index = u32::try_from(group_index + 1)
+                    .expect("MSAA draw group must fit the path-data contract");
+                draw_groups.extend(std::iter::repeat_n(z_index, group.len()));
+                scheduled_draws.extend(group);
+            }
             debug_assert_eq!(scheduled_draws.len(), self.draws.len());
-            encode_fallback_run(&scheduled_draws, true, &mut encoder)?;
+            encode_fallback_run(&scheduled_draws, Some(&draw_groups), true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa {
-            encode_fallback_run(&self.draws, true, &mut encoder)?;
+            encode_fallback_run(&self.draws, None, true, &mut encoder)?;
         } else {
             let mut start = 0;
             let mut clear_target = true;
@@ -3157,7 +3234,7 @@ impl WgpuFrame {
                         }
                     }
                 } else {
-                    encode_fallback_run(&self.draws[start..end], clear_target, &mut encoder)?;
+                    encode_fallback_run(&self.draws[start..end], None, clear_target, &mut encoder)?;
                 }
                 clear_target = false;
                 start = end;
@@ -4141,6 +4218,35 @@ fn blend_mode_uses_hsl(mode: BlendMode) -> bool {
         mode,
         BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity
     )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MsaaFillPass {
+    BorrowedCoverage,
+    Forward,
+    Cleanup,
+    ClockwiseCleanup,
+    EvenOddStencil,
+    EvenOddCover,
+}
+
+fn msaa_fill_passes(fill_rule: FillRule) -> &'static [MsaaFillPass] {
+    const NON_ZERO: &[MsaaFillPass] = &[
+        MsaaFillPass::BorrowedCoverage,
+        MsaaFillPass::Forward,
+        MsaaFillPass::Cleanup,
+    ];
+    const CLOCKWISE: &[MsaaFillPass] = &[
+        MsaaFillPass::BorrowedCoverage,
+        MsaaFillPass::Forward,
+        MsaaFillPass::ClockwiseCleanup,
+    ];
+    const EVEN_ODD: &[MsaaFillPass] = &[MsaaFillPass::EvenOddStencil, MsaaFillPass::EvenOddCover];
+    match fill_rule {
+        FillRule::NonZero => NON_ZERO,
+        FillRule::Clockwise => CLOCKWISE,
+        FillRule::EvenOdd => EVEN_ODD,
+    }
 }
 
 fn msaa_draw_layer_count(draw: &SolidDraw, all_subpasses_in_same_group: bool) -> i16 {
@@ -5159,6 +5265,30 @@ mod tests {
         };
         assert_eq!(msaa_draw_layer_count(&draw, false), 1);
         assert_eq!(msaa_draw_layer_count(&draw, true), 1);
+    }
+
+    #[test]
+    fn msaa_fill_pass_schedule_matches_cpp_draw_types() {
+        assert_eq!(
+            msaa_fill_passes(FillRule::NonZero),
+            &[
+                MsaaFillPass::BorrowedCoverage,
+                MsaaFillPass::Forward,
+                MsaaFillPass::Cleanup,
+            ]
+        );
+        assert_eq!(
+            msaa_fill_passes(FillRule::Clockwise),
+            &[
+                MsaaFillPass::BorrowedCoverage,
+                MsaaFillPass::Forward,
+                MsaaFillPass::ClockwiseCleanup,
+            ]
+        );
+        assert_eq!(
+            msaa_fill_passes(FillRule::EvenOdd),
+            &[MsaaFillPass::EvenOddStencil, MsaaFillPass::EvenOddCover]
+        );
     }
 
     #[test]

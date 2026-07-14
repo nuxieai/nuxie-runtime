@@ -513,10 +513,9 @@ stream = "fixtures/renderer/streams/gm/concavepaths.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-concavepaths-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-webgpu-metal-msaa-nonconvex-fill-divergence"
 
 
 [[entry]]
@@ -2062,10 +2061,9 @@ stream = "fixtures/renderer/streams/gm/pathfill.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-pathfill-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-webgpu-metal-msaa-nonconvex-fill-divergence"
 
 
 [[entry]]
@@ -2087,10 +2085,9 @@ stream = "fixtures/renderer/streams/gm/poly_clockwise.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-poly_clockwise-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-webgpu-metal-msaa-fill-rule-divergence"
 
 
 [[entry]]
@@ -2112,10 +2109,9 @@ stream = "fixtures/renderer/streams/gm/poly_evenOdd.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-poly_evenOdd-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-webgpu-metal-msaa-fill-rule-divergence"
 
 
 [[entry]]
@@ -2137,10 +2133,9 @@ stream = "fixtures/renderer/streams/gm/poly_nonZero.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-poly_nonZero-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-webgpu-metal-msaa-fill-rule-divergence"
 
 
 [[entry]]

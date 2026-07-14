@@ -7,11 +7,13 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=679, diverges=0, gated=789, total=1,468.
+- Rust wgpu: exact=684, diverges=0, gated=784, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
-  `batchedtriangulations`, `convex_lineonly_ths`, `convexpaths`, and `oval`,
+  `batchedtriangulations`, `concavepaths`, `convex_lineonly_ths`,
+  `convexpaths`, `oval`, `pathfill`, and the
+  `poly_{clockwise,evenOdd,nonZero}` family,
   `gm-batchedconvexpaths-clockwise-atomic`, and
   `gm-path_skbug_11886-clockwise-atomic`,
   `gm-convex_lineonly_ths-clockwise-atomic`, and
@@ -640,11 +642,21 @@ Run `make renderer-golden`.
     under a distinct Dawn-WebGPU-on-Metal identity rather than the native Metal
     root. The strict generator now accepts 39 of the first 40 candidate streams;
     `degengrad` remains the one gradient-resource compiler gap.
-61. [ ] Isolate the shared Dawn-versus-wgpu MSAA fill-rule divergence across
+61. [x] Isolate the shared Dawn-versus-wgpu MSAA fill-rule divergence across
     `poly_clockwise`, `poly_evenOdd`, and `poly_nonZero`. Start with the exact
     draw schedule and stencil/coverage intermediate rather than widening the
     unchanged `2/32` contract; use the result to determine whether
-    `concavepaths` and `pathfill` share the same failure class.
+    `concavepaths` and `pathfill` share the same failure class. All five shared
+    the missing C++ midpoint-fan fill schedule and intersection-board depth
+    group state;
+    the translated stencil/depth subpasses make all five exact at zero pixels
+    beyond the unchanged threshold.
+62. [ ] Add and capture the next ten strict source-order C++ Dawn MSAA cases,
+    then probe them under the unchanged `2/32` contract: `CubicStroke`,
+    `OverStroke`, `bevel180strokes`, `beziers`, `bug339297`,
+    `bug339297_as_clip`, `bug5099`, `bug6083`, `bug615686`, and `bug6987`.
+    The replay compiler accepts all ten; none currently has a Dawn MSAA
+    reference.
 
 ## R2 Completion Record
 
@@ -857,6 +869,15 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: Port C++'s MSAA midpoint-fan fill execution instead of routing
+  complex fills through the bootstrap CPU triangulator. C++ uses borrowed,
+  forward, and cleanup passes for nonzero/clockwise fills and stencil/cover
+  passes for even-odd fills, with each draw assigned its intersection-board
+  depth group.
+  Case-specific C++ guards pin the `8/9/10` and `11/12` schedules and inner-fan
+  range. The three `poly_*` cases plus `concavepaths` and `pathfill` now pass at
+  zero pixels beyond the existing `2/32` threshold; no reference or tolerance
+  changed. The full ratchet advances to exact=684/diverges=0/gated=784.
 - 2026-07-13: The first ten strict C++ Dawn WebGPU-on-Metal MSAA references
   are provenance-bound to the embedded replay-registry digest, C++ runtime,
   Dawn revision, stream digest, adapter, and final artifacts. Parallel and
@@ -2624,3 +2645,7 @@ Run `make renderer-golden`.
   Bounded corpus parallelism passed two Terra implementation rounds and Sol
   adversarial review; a 40-entry benchmark measured 2.54x wall-clock speedup
   at four jobs, while the full four-job ratchet finished green in 4m42.87s.
+- 2026-07-13: Ported C++'s fill-rule-specific MSAA midpoint-fan schedule and
+  intersection-board depth groups. The three `poly_*` cases, `concavepaths`, and
+  `pathfill` now pass their unchanged Dawn `2/32` contracts at zero pixels
+  beyond threshold, advancing the ratchet to exact=684/diverges=0/gated=784.

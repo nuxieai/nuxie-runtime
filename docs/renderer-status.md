@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,353, diverges=0, gated=115, total=1,468.
+- Rust wgpu: exact=1,354, diverges=0, gated=114, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -1074,12 +1074,17 @@ Run `make renderer-golden`.
     `strict-replay-render-buffer`. The complete 115-gate taxonomy now has zero
     generic or empty diagnostics, so R3 closes. See
     `docs/renderer-r3-exit-audit.md`.
-87. [ ] Open R3.1 by closing `incompatible-clip-rectangles` in
+87. [x] Open R3.1 by closing `incompatible-clip-rectangles` in
     `riv-bullet_man-frame-0-clockwise-atomic`. Isolate the first incompatible
     rectangle pair and port C++'s transformed clip-stack behavior instead of
     flattening non-axis-aligned rectangles into one scissor. Reprobe the pinned
     native Metal row under its unchanged `2/32` contract and preserve all exact
-    clip fixtures.
+    clip fixtures. The first real pair is an identity 500x500 clip followed by
+    a transformed 50x50 rectangle. Rust now retains the optimized outer clip
+    rect and pushes the incompatible inner rectangle through the ordinary clip
+    stack, matching C++. The focused regression, all 231 enabled renderer
+    tests, and the full corpus pass; Bullet Man is byte-exact and advances the
+    ratchet to exact=1,354/diverges=0/gated=114.
 88. [ ] Close `msaa-cubic-stroke-raster-parity` in `gm-beziers-msaa` using its
     pinned C++ Dawn reference and a single-stroke tessellation/raster oracle.
 89. [ ] Close `msaa-clip-intersection-edge-coverage` in
@@ -3509,3 +3514,10 @@ Run `make renderer-golden`.
   reviewed platform limitations parked. The uncommitted R4 candidate-runner
   experiment was discarded cleanly; queue item 87 starts with Bullet Man's
   incompatible transformed clip rectangles.
+- 2026-07-14: Closed R3.1 queue item 87 by porting C++'s transformed rectangle
+  clip fallback. The optimized outer clip rect remains active while each
+  incompatible rectangle enters the ordinary path-clip stack. Captured the
+  missing mode-specific native Metal reference and promoted
+  `riv-bullet_man-frame-0-clockwise-atomic` byte-exact under its unchanged
+  `2/32` contract. All 231 enabled renderer tests and the full 1,468-row corpus
+  pass at exact=1,354/diverges=0/gated=114; nine substantive R3.1 rows remain.

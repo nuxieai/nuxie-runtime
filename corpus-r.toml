@@ -3506,10 +3506,9 @@ reference = "fixtures/renderer/reference/metal/riv/bullet_man-frame-0-clockwise-
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "incompatible-clip-rectangles"
 
 [[entry]]
 id = "riv-bullet_man-frame-0-msaa"

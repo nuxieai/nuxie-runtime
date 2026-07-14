@@ -270,12 +270,14 @@ R3 proved that the corpus is honestly classified, but a named gate is not an
 owner or an end condition. Before performance work, burn down the actionable
 retained set:
 
-1. Close the ten substantive feature/parity rows: the seven
+1. Close the substantive feature/parity rows: the seven
    `native-clockwise-atomic-advanced-feather-parity` rows,
    `riv-bullet_man-frame-0-clockwise-atomic`,
    `gm-cliprectintersections-msaa`, and `gm-beziers-msaa`. Use same-backend
    evidence to distinguish a Rust defect from a platform boundary before
    reclassification.
+   `riv-bullet_man-frame-0-clockwise-atomic` is complete; nine substantive
+   rows remain.
 2. Implement strict replay for gradient paints and render buffers. Capture all
    46 rows those two harness capabilities unlock, then promote passes and turn
    every failure into a concrete parity task. A harness prerequisite needed to

@@ -1103,24 +1103,13 @@ impl Renderer for WgpuFrame {
             return;
         }
         let Some(rect) = path_aabb(&path.raw_path) else {
-            let height = self.state.clip_stack_height;
-            if self
-                .clips
-                .get(height)
-                .is_none_or(|clip| clip.matrix != self.state.transform || clip.path != *path)
-            {
-                self.clips.truncate(height);
-                self.clips.push(ClipElement {
-                    path: path.clone(),
-                    matrix: self.state.transform,
-                });
-            }
-            self.state.clip_stack_height = height + 1;
+            self.push_clip_path(path);
             return;
         };
         if !apply_clip_rect(&mut self.state, rect) {
-            self.unsupported
-                .get_or_insert("incompatible clip rectangles");
+            // C++ retains the existing optimized clip rect and falls back to
+            // the ordinary clip stack for a rect in an incompatible space.
+            self.push_clip_path(path);
         }
     }
 
@@ -1278,6 +1267,22 @@ impl Renderer for WgpuFrame {
 }
 
 impl WgpuFrame {
+    fn push_clip_path(&mut self, path: &WgpuPath) {
+        let height = self.state.clip_stack_height;
+        if self
+            .clips
+            .get(height)
+            .is_none_or(|clip| clip.matrix != self.state.transform || clip.path != *path)
+        {
+            self.clips.truncate(height);
+            self.clips.push(ClipElement {
+                path: path.clone(),
+                matrix: self.state.transform,
+            });
+        }
+        self.state.clip_stack_height = height + 1;
+    }
+
     fn prepare_scheduled_clip_updates(&mut self) -> Option<(Vec<SolidDraw>, u16)> {
         if self.mode != RenderMode::Msaa {
             return self.prepare_clip_updates();
@@ -6829,6 +6834,35 @@ mod tests {
         }
         frame.restore();
         assert!(frame.state.clip_rect.is_none());
+    }
+
+    #[test]
+    fn incompatible_transformed_clip_rect_falls_back_to_path_like_cpp() {
+        let factory = WgpuFactory::new_with_mode(500, 500, RenderMode::ClockwiseAtomic).unwrap();
+        let outer = rect_path([0.0, 0.0, 500.0, 500.0], FillRule::NonZero);
+        let inner = rect_path([0.0, 0.0, 50.0, 50.0], FillRule::NonZero);
+        let inner_matrix = Mat2D([
+            0.5135926,
+            4.121487e-9,
+            0.00041051814,
+            0.5135926,
+            92.882,
+            302.4731,
+        ]);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&outer);
+        frame.transform(inner_matrix);
+        frame.clip_path(&inner);
+
+        let clip_rect = frame.state.clip_rect.unwrap();
+        assert_eq!(clip_rect.rect, [0.0, 0.0, 500.0, 500.0]);
+        assert_eq!(clip_rect.matrix, Mat2D::IDENTITY);
+        assert_eq!(frame.state.clip_stack_height, 1);
+        assert_eq!(frame.clips.len(), 1);
+        assert_eq!(frame.clips[0].path, inner);
+        assert_eq!(frame.clips[0].matrix, inner_matrix);
+        assert!(frame.unsupported.is_none());
     }
 
     #[test]

@@ -1621,11 +1621,11 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(
             inventory["summary"],
             {
-                "accepted": 11,
+                "accepted": 0,
                 "capture_manifest_cases": 102,
-                "gated_msaa_rows": 647,
-                "missing_strict_provenance_rows": 642,
-                "strict_provenance_rows": 5,
+                "gated_msaa_rows": 638,
+                "missing_strict_provenance_rows": 631,
+                "strict_provenance_rows": 7,
                 "unsupported": 631,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,
@@ -1640,7 +1640,7 @@ class FormatTests(unittest.TestCase):
             for entry in inventory["entry"]
             if entry["result"] == "accepted"
         ]
-        self.assertEqual(len(accepted), 11)
+        self.assertEqual(len(accepted), 0)
         self.assertEqual(len(set(accepted)), len(accepted))
 
     def test_msaa_inventory_rejects_non_corpus_fixture_tampering(self):

@@ -2378,13 +2378,12 @@ max_different_pixels = 32
 id = "gm-strokes_zoomed-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokes_zoomed.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokes_zoomed-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokes_zoomed-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2403,13 +2402,12 @@ max_different_pixels = 32
 id = "gm-teenyStrokes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/teenyStrokes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/teenyStrokes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-teenyStrokes-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2428,13 +2426,12 @@ max_different_pixels = 32
 id = "gm-transparentclear-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/transparentclear.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/transparentclear-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-transparentclear-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2453,13 +2450,12 @@ max_different_pixels = 32
 id = "gm-transparentclear_blendmode-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/transparentclear_blendmode.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/transparentclear_blendmode-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-transparentclear_blendmode-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2478,13 +2474,13 @@ max_different_pixels = 32
 id = "gm-trickycubicstrokes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/trickycubicstrokes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/trickycubicstrokes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-trickycubicstrokes-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "msaa-degenerate-cubic-butt-miter-topology"
 
 
 [[entry]]
@@ -2503,13 +2499,12 @@ max_different_pixels = 32
 id = "gm-trickycubicstrokes_feather-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/trickycubicstrokes_feather.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/trickycubicstrokes_feather-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-trickycubicstrokes_feather-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2528,13 +2523,12 @@ max_different_pixels = 32
 id = "gm-trickycubicstrokes_roundcaps-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/trickycubicstrokes_roundcaps.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/trickycubicstrokes_roundcaps-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-trickycubicstrokes_roundcaps-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2578,13 +2572,13 @@ max_different_pixels = 32
 id = "gm-widebuttcaps-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/widebuttcaps.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/widebuttcaps-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-widebuttcaps-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "msaa-degenerate-cubic-butt-miter-topology"
 
 
 [[entry]]
@@ -2628,13 +2622,12 @@ max_different_pixels = 32
 id = "gm-zeroPath-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/zeroPath.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/zeroPath-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zeroPath-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2653,13 +2646,12 @@ max_different_pixels = 32
 id = "gm-zero_control_stroke-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/zero_control_stroke.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/zero_control_stroke-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zero_control_stroke-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2678,13 +2670,12 @@ max_different_pixels = 32
 id = "gm-zerolinestroke-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/zerolinestroke.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/zerolinestroke-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zerolinestroke-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

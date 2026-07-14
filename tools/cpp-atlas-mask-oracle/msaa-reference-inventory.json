@@ -49,179 +49,6 @@
       "stream": "fixtures/renderer/streams/gm/strokedlines.rive-stream"
     },
     {
-      "case": {
-        "clear_color": "0xffffffff",
-        "counts": {
-          "drawPath": 1,
-          "makeEmptyRenderPath": 2,
-          "makeRenderPaint": 1,
-          "restore": 1,
-          "save": 1,
-          "transform": 1
-        },
-        "height": 100,
-        "id": "gm-strokes_zoomed-msaa",
-        "scene": "strokes_zoomed",
-        "sha256": "6fd259dbe2dac28c8c10ced49ba91e6cb5e3c027fcd0ff436757144425c3fe0c",
-        "source": "gm:strokes_zoomed",
-        "stream": "fixtures/renderer/streams/gm/strokes_zoomed.rive-stream",
-        "width": 400
-      },
-      "id": "gm-strokes_zoomed-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/strokes_zoomed-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/strokes_zoomed.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xffffffff",
-        "counts": {
-          "drawPath": 10,
-          "makeEmptyRenderPath": 20,
-          "makeRenderPaint": 5,
-          "restore": 6,
-          "save": 6,
-          "transform": 10
-        },
-        "height": 200,
-        "id": "gm-teenyStrokes-msaa",
-        "scene": "teenyStrokes",
-        "sha256": "f3f54c588dee5bb25a79a7ded7b37bc0af14ed79356000ae6d2264bf5fd1e574",
-        "source": "gm:teenyStrokes",
-        "stream": "fixtures/renderer/streams/gm/teenyStrokes.rive-stream",
-        "width": 400
-      },
-      "id": "gm-teenyStrokes-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/teenyStrokes-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/teenyStrokes.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0x8000ffff",
-        "counts": {
-          "drawPath": 1,
-          "makeEmptyRenderPath": 2,
-          "makeRenderPaint": 1,
-          "restore": 1,
-          "save": 1
-        },
-        "height": 64,
-        "id": "gm-transparentclear-msaa",
-        "scene": "transparentclear",
-        "sha256": "347b509619b02149614536fb1310c4445a65addbd2f3a82ec6136421b22de5ca",
-        "source": "gm:transparentclear",
-        "stream": "fixtures/renderer/streams/gm/transparentclear.rive-stream",
-        "width": 64
-      },
-      "id": "gm-transparentclear-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/transparentclear-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/transparentclear.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0x8000ffff",
-        "counts": {
-          "drawPath": 1,
-          "makeEmptyRenderPath": 2,
-          "makeRenderPaint": 1,
-          "restore": 1,
-          "save": 1
-        },
-        "height": 64,
-        "id": "gm-transparentclear_blendmode-msaa",
-        "scene": "transparentclear_blendmode",
-        "sha256": "90f77bdbfe2544e4a2ba900e6ede0c26eb3b1b8ccf28c90a5e0c0a6594bbf891",
-        "source": "gm:transparentclear_blendmode",
-        "stream": "fixtures/renderer/streams/gm/transparentclear_blendmode.rive-stream",
-        "width": 64
-      },
-      "id": "gm-transparentclear_blendmode-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/transparentclear_blendmode-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/transparentclear_blendmode.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xff000000",
-        "counts": {
-          "drawPath": 22,
-          "makeEmptyRenderPath": 22,
-          "makeRenderPaint": 1,
-          "restore": 23,
-          "save": 23,
-          "transform": 22
-        },
-        "height": 1000,
-        "id": "gm-trickycubicstrokes-msaa",
-        "scene": "trickycubicstrokes",
-        "sha256": "317b92a4277bd43acdd3561fbc14c81fd24647c1fd096299e92f1f7cee0487af",
-        "source": "gm:trickycubicstrokes",
-        "stream": "fixtures/renderer/streams/gm/trickycubicstrokes.rive-stream",
-        "width": 1000
-      },
-      "id": "gm-trickycubicstrokes-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/trickycubicstrokes-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/trickycubicstrokes.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xff000000",
-        "counts": {
-          "drawPath": 22,
-          "makeEmptyRenderPath": 22,
-          "makeRenderPaint": 1,
-          "restore": 23,
-          "save": 23,
-          "transform": 22
-        },
-        "height": 1000,
-        "id": "gm-trickycubicstrokes_feather-msaa",
-        "scene": "trickycubicstrokes_feather",
-        "sha256": "91631506620e408e7b63e9cb14f07eab3380e4654fb0d438e66886b744acd688",
-        "source": "gm:trickycubicstrokes_feather",
-        "stream": "fixtures/renderer/streams/gm/trickycubicstrokes_feather.rive-stream",
-        "width": 1000
-      },
-      "id": "gm-trickycubicstrokes_feather-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/trickycubicstrokes_feather-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/trickycubicstrokes_feather.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xff000000",
-        "counts": {
-          "drawPath": 22,
-          "makeEmptyRenderPath": 22,
-          "makeRenderPaint": 1,
-          "restore": 23,
-          "save": 23,
-          "transform": 22
-        },
-        "height": 1000,
-        "id": "gm-trickycubicstrokes_roundcaps-msaa",
-        "scene": "trickycubicstrokes_roundcaps",
-        "sha256": "e68aa64a1c3626300bd7ee6e0654041e93ed070640cfa8a9350efeab4d02d413",
-        "source": "gm:trickycubicstrokes_roundcaps",
-        "stream": "fixtures/renderer/streams/gm/trickycubicstrokes_roundcaps.rive-stream",
-        "width": 1000
-      },
-      "id": "gm-trickycubicstrokes_roundcaps-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/trickycubicstrokes_roundcaps-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/trickycubicstrokes_roundcaps.rive-stream"
-    },
-    {
       "id": "gm-verycomplexgrad-msaa",
       "kind": "upstream-gm-stream",
       "reason": "strict-replay-gradient-paint",
@@ -230,110 +57,12 @@
       "stream": "fixtures/renderer/streams/gm/verycomplexgrad.rive-stream"
     },
     {
-      "case": {
-        "clear_color": "0xff000000",
-        "counts": {
-          "drawPath": 16,
-          "makeEmptyRenderPath": 8,
-          "makeRenderPaint": 4,
-          "restore": 6,
-          "save": 6,
-          "transform": 17
-        },
-        "height": 500,
-        "id": "gm-widebuttcaps-msaa",
-        "scene": "widebuttcaps",
-        "sha256": "4fb16e9a46bbf74f97c8d0e1439ca4be0b4d32644b0d0ff09b9d93d5d0e6be66",
-        "source": "gm:widebuttcaps",
-        "stream": "fixtures/renderer/streams/gm/widebuttcaps.rive-stream",
-        "width": 480
-      },
-      "id": "gm-widebuttcaps-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/widebuttcaps-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/widebuttcaps.rive-stream"
-    },
-    {
       "id": "gm-xfermodes2-msaa",
       "kind": "upstream-gm-stream",
       "reason": "strict-replay-gradient-paint",
       "reference": "fixtures/renderer/reference/metal/gm/xfermodes2-msaa.png",
       "result": "unsupported",
       "stream": "fixtures/renderer/streams/gm/xfermodes2.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xffffffff",
-        "counts": {
-          "drawPath": 27,
-          "makeEmptyRenderPath": 27,
-          "makeRenderPaint": 2,
-          "restore": 4,
-          "save": 4,
-          "transform": 27
-        },
-        "height": 300,
-        "id": "gm-zeroPath-msaa",
-        "scene": "zeroPath",
-        "sha256": "8559f4e2981f22bfc736ca7997e25184ca0ec9ffd194de3bee0ca7c0e27451c7",
-        "source": "gm:zeroPath",
-        "stream": "fixtures/renderer/streams/gm/zeroPath.rive-stream",
-        "width": 171
-      },
-      "id": "gm-zeroPath-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/zeroPath-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/zeroPath.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xffffffff",
-        "counts": {
-          "drawPath": 6,
-          "makeEmptyRenderPath": 7,
-          "makeRenderPaint": 1,
-          "restore": 1,
-          "save": 1
-        },
-        "height": 400,
-        "id": "gm-zero_control_stroke-msaa",
-        "scene": "zero_control_stroke",
-        "sha256": "d531a829ae47f513b12ae94dd66b7d0d5f4ecfb4c3dc598b9951b3d0b3c94040",
-        "source": "gm:zero_control_stroke",
-        "stream": "fixtures/renderer/streams/gm/zero_control_stroke.rive-stream",
-        "width": 400
-      },
-      "id": "gm-zero_control_stroke-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/zero_control_stroke-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/zero_control_stroke.rive-stream"
-    },
-    {
-      "case": {
-        "clear_color": "0xffffffff",
-        "counts": {
-          "drawPath": 3,
-          "makeEmptyRenderPath": 3,
-          "makeRenderPaint": 1,
-          "restore": 1,
-          "save": 1
-        },
-        "height": 120,
-        "id": "gm-zerolinestroke-msaa",
-        "scene": "zerolinestroke",
-        "sha256": "6410d8b6fa3fe66912afa442c9fd1ac5f7e8c09360dd0159c5f85447f4e67dfc",
-        "source": "gm:zerolinestroke",
-        "stream": "fixtures/renderer/streams/gm/zerolinestroke.rive-stream",
-        "width": 90
-      },
-      "id": "gm-zerolinestroke-msaa",
-      "kind": "upstream-gm-stream",
-      "reference": "fixtures/renderer/reference/metal/gm/zerolinestroke-msaa.png",
-      "result": "accepted",
-      "stream": "fixtures/renderer/streams/gm/zerolinestroke.rive-stream"
     },
     {
       "id": "riv-advance_blend_mode-frame-0-msaa",
@@ -5321,11 +5050,11 @@
     }
   ],
   "summary": {
-    "accepted": 11,
+    "accepted": 0,
     "capture_manifest_cases": 102,
-    "gated_msaa_rows": 647,
-    "missing_strict_provenance_rows": 642,
-    "strict_provenance_rows": 5,
+    "gated_msaa_rows": 638,
+    "missing_strict_provenance_rows": 631,
+    "strict_provenance_rows": 7,
     "unsupported": 631,
     "unsupported_by_reason": {
       "strict-replay-gm-header": 1,

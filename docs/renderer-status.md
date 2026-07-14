@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=760, diverges=0, gated=708, total=1,468.
+- Rust wgpu: exact=769, diverges=0, gated=699, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -100,7 +100,12 @@ Run `make renderer-golden`.
   `gm-path_stroke_clip_crbug1070835-msaa`, `gm-quadcap-msaa`, and
   `gm-rawtext-msaa`, plus `gm-rect-msaa`, `gm-rotatedcubicpath-msaa`,
   `gm-roundjoinstrokes-msaa`, `gm-skbug12244-msaa`, `gm-strokefill-msaa`,
-  `gm-strokes3-msaa`, and `gm-strokes_round-msaa`, and
+  `gm-strokes3-msaa`, and `gm-strokes_round-msaa`, plus
+  `gm-strokes_zoomed-msaa`, `gm-teenyStrokes-msaa`,
+  `gm-transparentclear{,_blendmode}-msaa`,
+  `gm-trickycubicstrokes_{feather,roundcaps}-msaa`, `gm-zeroPath-msaa`,
+  `gm-zero_control_stroke-msaa`, and
+  `gm-zerolinestroke-msaa`, and
   `gm-mesh-clockwise-atomic`, and
   `gm-degengrad-clockwise-atomic`,
   `gm-rect_grad-clockwise-atomic`,
@@ -984,14 +989,29 @@ Run `make renderer-golden`.
     run-level tessellation review findings were closed. The full renderer
     corpus remains exact=760/diverges=0/gated=708, all 223 enabled renderer
     tests and the workspace pass, and the five-case fuzz-replay gate is green.
-81. [ ] Integrate the independently reviewed strict Dawn reference campaign,
+81. [x] Integrate the independently reviewed strict Dawn reference campaign,
     then probe its eleven new MSAA rows under the unchanged `2/32` contract:
     `strokes_zoomed`, `teenyStrokes`, `transparentclear`,
     `transparentclear_blendmode`, `trickycubicstrokes`,
     `trickycubicstrokes_feather`, `trickycubicstrokes_roundcaps`,
     `widebuttcaps`, `zeroPath`, `zero_control_stroke`, and
     `zerolinestroke`. Promote passes and narrow failures to observed
-    diagnostics without changing references or tolerances.
+    diagnostics without changing references or tolerances. Sol accepted all
+    102 production-validator provenance bindings and the serial/four-job
+    byte-identity evidence. Nine new rows pass unchanged contracts:
+    `trickycubicstrokes_roundcaps` has three over-threshold pixels/max 62 and
+    the other eight have zero/max at most 2. `trickycubicstrokes` remains
+    gated at 279/max 217, with 276 pixels confined to its degenerate closed
+    butt/miter cubic; `widebuttcaps` remains gated at 5,750/max 254, confined
+    to the four cubic cells while all twelve polyline siblings agree. Both
+    have exact alpha and share the narrower
+    `msaa-degenerate-cubic-butt-miter-topology` diagnostic. The ratchet
+    advances to exact=769/diverges=0/gated=699 without changing a tolerance.
+82. [ ] Port C++'s MSAA degenerate-cubic butt/miter stroke topology using the
+    two pinned Dawn rows as the final-pixel oracle. First isolate the prepared
+    tessellation for `trickycubicstrokes` path 20 and the four
+    `widebuttcaps` cubic draws; then translate the shared C++ branch and
+    promote both rows under unchanged `2/32` contracts.
 
 ## R2 Completion Record
 
@@ -3335,3 +3355,14 @@ Run `make renderer-golden`.
   fuzz gate, all 223 enabled renderer tests, the workspace, normal 584-segment
   floor, and scripted 35-segment floor pass. Queue item 81 integrates and
   probes the independently captured Dawn references.
+- 2026-07-14: Integrated the Sol-accepted strict Dawn capture campaign after
+  all 102 fixture bindings reached the production provenance validator and
+  serial/four-job captures agreed byte-for-byte. Nine of eleven new MSAA rows
+  pass unchanged `2/32`; `trickycubicstrokes` and `widebuttcaps` retain the
+  shared, localized `msaa-degenerate-cubic-butt-miter-topology` gate with no
+  tolerance change. The capture inventory now has zero accepted rows waiting
+  for promotion, 638 gated MSAA rows, 7 provenance-bound rows, and 631
+  generator-unsupported rows. The renderer ratchet advances to
+  exact=769/diverges=0/gated=699; 40 format tests, 11 capture tests, inventory
+  drift check, workspace, normal 584-segment floor, and scripted 35-segment
+  floor pass. Queue item 82 targets the shared two-row topology gap.

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=439, diverges=0, gated=1,029, total=1,468.
+- Rust wgpu: exact=468, diverges=0, gated=1,000, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -219,7 +219,15 @@ Run `make renderer-golden`.
   `riv-path_effect_with_feathers-frame-0-clockwise-atomic`,
   `riv-pause_nested_artboard-frame-0-clockwise-atomic`,
   `riv-pointer_events-frame-{0..7}-clockwise-atomic`, and
-  `riv-pointer_events_nested_artboards_in_solos-frame-{0..2}-clockwise-atomic`.
+  `riv-pointer_events_nested_artboards_in_solos-frame-{0..7}-clockwise-atomic`,
+  plus `riv-quantize_test-frame-{0..4}-clockwise-atomic`,
+  `riv-rapid_pointer_events-frame-{0..7}-clockwise-atomic`,
+  `riv-rebind_with_nested_viewmodel-frame-0-clockwise-atomic`,
+  `riv-recursive_data_bind-frame-0-clockwise-atomic`,
+  `riv-relative_data_bind_path-frame-{0,1}-clockwise-atomic`,
+  `riv-relative_data_binding-frame-0-clockwise-atomic`,
+  `riv-remove_from_list-frame-{0..4}-clockwise-atomic`, and
+  `riv-replace_view_model-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -407,10 +415,25 @@ Run `make renderer-golden`.
     `pointer_events_nested_artboards_in_solos` frames 0-2. Capture missing
     pinned Metal references and apply the unchanged contract and diagnostic
     rules.
-34. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+34. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `pointer_events_nested_artboards_in_solos` frames 3-7,
     `pointer_exit`, and `quantize_test` frames 0-3. Capture missing pinned
     Metal references and apply the unchanged contract and diagnostic rules.
+35. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `quantize_test` frame 4, `rapid_pointer_events` frames 0-7,
+    and `rebind_with_nested_viewmodel`. Capture missing pinned Metal
+    references and apply the unchanged contract and diagnostic rules.
+36. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `recursive_data_bind`, `relative_data_bind_path` frames 0-1,
+    `relative_data_binding`, `remove_from_list` frames 0-4, and
+    `replace_view_model` frame 0. Capture missing pinned Metal references
+    and apply the unchanged contract and diagnostic rules.
+37. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `replace_view_model` frame 1, `replace_vm_instance`,
+    `reset_phase`, `reuse_path_in_effect`, `rotation_constraint`,
+    `runtime_nested_inputs` frames 0-1, `runtime_nested_text_runs`,
+    `saturation`, and `scale_constraint`. Capture missing pinned Metal
+    references and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2266,3 +2289,14 @@ Run `make renderer-golden`.
   approved `metal-webgpu-subpixel-edge-coverage` without changing references
   or tolerances. The wave advances the ratchet to
   exact=439/diverges=0/gated=1,029.
+- 2026-07-13: Probed the thirty-third through thirty-fifth ten-entry
+  clockwise-atomic `.riv` batches as one parallel wave. Main captured all 30
+  native Metal references and three read-only Terra workers probed disjoint
+  batches. Twenty-nine entries pass the unchanged `2/32` contract.
+  `pointer_exit` remains gated at 44/max 47: its alpha plane is exact and all
+  44 over-threshold pixels lie on the blue-dot, panel, or canvas boundaries
+  with clean interiors. Main reproduced the harness and alpha results, Terra
+  attributed the residual, and Sol approved
+  `metal-webgpu-subpixel-edge-coverage` without changing the reference or
+  tolerance. The wave advances the ratchet to
+  exact=468/diverges=0/gated=1,000.

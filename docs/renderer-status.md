@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=525, diverges=0, gated=943, total=1,468.
+- Rust wgpu: exact=583, diverges=0, gated=885, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -256,8 +256,27 @@ Run `make renderer-golden`.
   `riv-scripted_graph-frame-{0..4}-clockwise-atomic`,
   `riv-scripted_listener_action-frame-0-clockwise-atomic`,
   `riv-scripted_listener_context-frame-0-clockwise-atomic`,
-  `riv-scripted_memory_leak-frame-0-clockwise-atomic`, and
-  `riv-scripted_property_image-frame-0-clockwise-atomic`.
+  `riv-scripted_memory_leak-frame-0-clockwise-atomic`,
+  `riv-scripted_property_image-frame-0-clockwise-atomic`,
+  `riv-scripted_string-frame-{0..4}-clockwise-atomic`,
+  `riv-scripted_transition_condition-frame-0-clockwise-atomic`,
+  `riv-scripted_viewmodel_cache-frame-0-clockwise-atomic`,
+  `riv-scripting_linear_animation-frame-{0,1}-clockwise-atomic`,
+  `riv-scripting_root_viewmodel-frame-0-clockwise-atomic`,
+  `riv-settler-frame-{0..4}-clockwise-atomic`,
+  `riv-shapetest-frame-0-clockwise-atomic`,
+  `riv-shared_viewmodel_instance-frame-0-clockwise-atomic`,
+  `riv-smi_test-frame-0-clockwise-atomic`,
+  `riv-solid_affects_has_changed-frame-0-clockwise-atomic`,
+  `riv-solo_test-frame-{0..4}-clockwise-atomic`,
+  `riv-solos_collapse_tests-frame-{0..4}-clockwise-atomic`,
+  `riv-solos_with_nested_artboards-frame-{0..4}-clockwise-atomic`,
+  `riv-sorted_listeners-frame-0-clockwise-atomic`,
+  `riv-sound-frame-{0..8}-clockwise-atomic`,
+  `riv-sound2-frame-{0..4}-clockwise-atomic`,
+  `riv-spotify_kids_demo-frame-0-clockwise-atomic`,
+  `riv-stacked_path_effects-frame-{0..4}-clockwise-atomic`, and
+  `riv-state_machine_transition-frame-{0..2}-clockwise-atomic`.
 
 ## Milestones
 
@@ -493,12 +512,38 @@ Run `make renderer-golden`.
     `scripted_memory_leak`, and `scripted_property_image`. Capture missing
     pinned Metal references and apply the unchanged contract and diagnostic
     rules.
-43. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+43. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `scripted_string` frames 0-4,
     `scripted_transition_condition`, `scripted_viewmodel_cache`,
     `scripting_linear_animation` frames 0-1, and
     `scripting_root_viewmodel`. Capture missing pinned Metal references and
     apply the unchanged contract and diagnostic rules.
+44. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `scroll_snap`, `settler` frames 0-4, `shapetest`,
+    `shared_viewmodel_instance`, `smi_test`, and
+    `solid_affects_has_changed`. Capture missing pinned Metal references and
+    apply the unchanged contract and diagnostic rules.
+45. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `solo_test` frames 0-4 and `solos_collapse_tests` frames 0-4.
+    Capture missing pinned Metal references and apply the unchanged contract
+    and diagnostic rules.
+46. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `solos_with_nested_artboards` frames 0-4, `sorted_listeners`,
+    and `sound` frames 0-3. Capture missing pinned Metal references and apply
+    the unchanged contract and diagnostic rules.
+47. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `sound` frames 4-8 and `sound2` frames 0-4. Capture missing
+    pinned Metal references and apply the unchanged contract and diagnostic
+    rules.
+48. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `spotify_kids_app_icon`, `spotify_kids_demo`,
+    `stacked_path_effects` frames 0-4, and `state_machine_transition` frames
+    0-2. Capture missing pinned Metal references and apply the unchanged
+    contract and diagnostic rules.
+49. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `state_machine_transition` frames 3-7 and
+    `state_machine_triggers` frames 0-4. Capture missing pinned Metal
+    references and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2384,3 +2429,17 @@ Run `make renderer-golden`.
   batches. All 30 entries pass the unchanged `2/32` contract, so no
   diagnostic reclassification or tolerance decision was needed. The wave
   advances the ratchet to exact=525/diverges=0/gated=943.
+- 2026-07-13: Probed the forty-second through forty-seventh ten-entry
+  clockwise-atomic `.riv` batches as one six-worker parallel wave. Main
+  captured all 60 native Metal references and six read-only Terra workers
+  probed disjoint batches. Fifty-eight entries pass the unchanged `2/32`
+  contract. `scroll_snap` remains gated at 96/max 60: all over-threshold
+  pixels have exact alpha and lie in 38 tiny components on five fractionally
+  translated white text contours, while panel fills, strokes, interiors, and
+  background are clean. Terra attributed the residual and Sol approved
+  `metal-webgpu-subpixel-edge-coverage`. `spotify_kids_app_icon` remains
+  `algorithm-core` at 48,790/max 26: Sol rejected broadening the currently
+  two-entry `metal-webgpu-atomic-intermediate-precision` family without a
+  pinned C++ Dawn full-stream and representative coverage/color-plane oracle.
+  No existing reference or tolerance changed. The wave advances the ratchet to
+  exact=583/diverges=0/gated=885.

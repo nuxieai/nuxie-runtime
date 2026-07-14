@@ -72,6 +72,7 @@ def generate_registry(
         "    uint32_t width;",
         "    uint32_t height;",
         "    uint32_t clearColor;",
+        "    bool expectsDrawBatches;",
         "    void (*replay)(rive::RiveRenderer*, rive::gpu::RenderContext*);",
         "};",
         "",
@@ -100,9 +101,13 @@ def generate_registry(
         f"constexpr std::array<MsaaReferenceCase, {len(cases)}> kMsaaReferenceCases = {{{{"
     )
     for index, case in enumerate(cases):
+        expects_draw_batches = (
+            "true" if case["counts"].get("drawPath", 0) else "false"
+        )
         body.append(
             f'    {{"{case["id"]}", "{case["sha256"]}", {case["width"]}, '
-            f'{case["height"]}, {case["clear_color"]}, replayMsaaReference{index}}},'
+            f'{case["height"]}, {case["clear_color"]}, {expects_draw_batches}, '
+            f'replayMsaaReference{index}}},'
         )
     body.extend(
         [

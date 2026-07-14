@@ -219,3 +219,113 @@ width = 75
 height = 75
 clear_color = "0xffffffff"
 counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 2, save = 2, transform = 1 }
+
+[[case]]
+id = "gm-bug7792-msaa"
+stream = "fixtures/renderer/streams/gm/bug7792.rive-stream"
+sha256 = "8e7b08808798aa407ce44f6dc34c3569bc52996f00587f5e3bb17d9c0066411d"
+source = "gm:bug7792"
+scene = "bug7792"
+width = 800
+height = 800
+clear_color = "0xffffffff"
+counts = { drawPath = 16, makeEmptyRenderPath = 16, makeRenderPaint = 1, restore = 1, save = 1, transform = 15 }
+
+[[case]]
+id = "gm-clippedcubic-msaa"
+stream = "fixtures/renderer/streams/gm/clippedcubic.rive-stream"
+sha256 = "11e56f3a7bbc8e8ed205eb3cd8eb085ed024cc1a14903af76f3631ff340f293c"
+source = "gm:clippedcubic"
+scene = "clippedcubic"
+width = 600
+height = 500
+clear_color = "0xffffffff"
+counts = { clipPath = 9, drawPath = 9, makeEmptyRenderPath = 19, makeRenderPaint = 1, restore = 13, save = 13, transform = 22 }
+
+[[case]]
+id = "gm-clippedcubic2-msaa"
+stream = "fixtures/renderer/streams/gm/clippedcubic2.rive-stream"
+sha256 = "f70dc764d7c0863cd9730ba39994894af34b8130768999d6d02c7397d82cdc9a"
+source = "gm:clippedcubic2"
+scene = "clippedcubic2"
+width = 725
+height = 325
+clear_color = "0xffffffff"
+counts = { clipPath = 8, drawPath = 24, makeEmptyRenderPath = 34, makeRenderPaint = 16, restore = 11, save = 11, transform = 9 }
+
+[[case]]
+id = "gm-cliprectintersections-msaa"
+stream = "fixtures/renderer/streams/gm/cliprectintersections.rive-stream"
+sha256 = "622ecd8a6ef6f7fcffd6ede545858abc83304962b76890173a2d823e00426234"
+source = "gm:cliprectintersections"
+scene = "cliprectintersections"
+width = 510
+height = 685
+clear_color = "0xff000000"
+counts = { clipPath = 36, drawPath = 45, makeEmptyRenderPath = 2, makeRenderPaint = 6, restore = 43, save = 43, transform = 37 }
+
+[[case]]
+id = "gm-cliprects-msaa"
+stream = "fixtures/renderer/streams/gm/cliprects.rive-stream"
+sha256 = "30c6896f14c1ad499373a7657a77003a2d02224e41154528f3e84e212f0cd529"
+source = "gm:cliprects"
+scene = "cliprects"
+width = 600
+height = 600
+clear_color = "0xffffffff"
+counts = { clipPath = 9, drawPath = 18, makeEmptyRenderPath = 6, makeRenderPaint = 2, restore = 13, save = 13, transform = 26 }
+
+[[case]]
+id = "gm-crbug_996140-msaa"
+stream = "fixtures/renderer/streams/gm/crbug_996140.rive-stream"
+sha256 = "897633ebd501488b043b45e794fa97d157eefc9e763abcbf885c3bd324874f7a"
+source = "gm:crbug_996140"
+scene = "crbug_996140"
+width = 300
+height = 300
+clear_color = "0xffffffff"
+counts = { drawPath = 2, makeEmptyRenderPath = 1, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-cubicclosepath-msaa"
+stream = "fixtures/renderer/streams/gm/cubicclosepath.rive-stream"
+sha256 = "a5bea0e913700e1c112b00edc65ed839333bb368969b60ee92463c6af76676a2"
+source = "gm:cubicclosepath"
+scene = "cubicclosepath"
+width = 825
+height = 175
+clear_color = "0xffffffff"
+counts = { clipPath = 12, drawPath = 24, makeEmptyRenderPath = 49, makeRenderPaint = 24, restore = 24, save = 24, transform = 12 }
+
+[[case]]
+id = "gm-cubicpath-msaa"
+stream = "fixtures/renderer/streams/gm/cubicpath.rive-stream"
+sha256 = "32854cc1dcb09136501e4837d2cc56995e70d05b438bba8ba88b6ee2b60df658"
+source = "gm:cubicpath"
+scene = "cubicpath"
+width = 825
+height = 175
+clear_color = "0xffffffff"
+counts = { clipPath = 12, drawPath = 24, makeEmptyRenderPath = 49, makeRenderPaint = 24, restore = 24, save = 24, transform = 12 }
+
+[[case]]
+id = "gm-dstreadshuffle-msaa"
+stream = "fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
+sha256 = "0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"
+source = "gm:dstreadshuffle"
+scene = "dstreadshuffle"
+width = 530
+height = 690
+clear_color = "0xffffffff"
+counts = { drawPath = 97, makeEmptyRenderPath = 193, makeRenderPaint = 97, restore = 97, save = 97, transform = 96 }
+
+[[case]]
+id = "gm-emptyclear-msaa"
+stream = "fixtures/renderer/streams/gm/emptyclear.rive-stream"
+sha256 = "4f8c3198a1c8dd4a978403de4c526678c6a6f9965f49ff96c36f54cb473bfc1a"
+source = "gm:emptyclear"
+scene = "emptyclear"
+width = 64
+height = 64
+clear_color = "0xff00ff00"
+counts = { restore = 1, save = 1 }

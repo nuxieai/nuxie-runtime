@@ -1681,11 +1681,12 @@ int main(int argc, char** argv)
     }
     if (msaaReferenceMode)
     {
+        const bool hasDrawBatches = !facts.drawBatches.empty();
         if (facts.interlockMode !=
                 static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
-            facts.drawBatches.empty())
+            hasDrawBatches != msaaReference->expectsDrawBatches)
         {
-            fail("MSAA reference replay must execute at least one MSAA draw batch");
+            fail("MSAA reference replay draw-batch presence drifted from the registry");
         }
         const bool polyClockwise =
             std::strcmp(msaaReference->id, "gm-poly_clockwise-msaa") == 0;

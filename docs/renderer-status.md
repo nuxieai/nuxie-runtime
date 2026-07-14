@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=692, diverges=0, gated=776, total=1,468.
+- Rust wgpu: exact=698, diverges=0, gated=770, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -16,6 +16,8 @@ Run `make renderer-golden`.
   `poly_{clockwise,evenOdd,nonZero}` family,
   plus `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
   `bug5099`, `bug6083`, `bug615686`, and `bug6987`,
+  plus `bug7792`, `clippedcubic`, `crbug_996140`, `cubicclosepath`,
+  `cubicpath`, and `emptyclear`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
   `gm-path_skbug_11886-clockwise-atomic`,
   `gm-convex_lineonly_ths-clockwise-atomic`, and
@@ -662,13 +664,27 @@ Run `make renderer-golden`.
     152 under both grouped and serialized execution, proving a cubic-stroke
     raster gap rather than a scheduling gap. `bug339297_as_clip` reaches the
     existing explicit non-atlas MSAA path-clip boundary.
-63. [ ] Add and capture the next ten uncaptured strict source-order C++ Dawn
+63. [x] Add and capture the next ten uncaptured strict source-order C++ Dawn
     MSAA cases, then probe them under the unchanged `2/32` contract:
     `bug7792`, `clippedcubic`, `clippedcubic2`, `cliprectintersections`,
     `cliprects`, `crbug_996140`, `cubicclosepath`, `cubicpath`,
     `dstreadshuffle`, and `emptyclear`. The strict compiler rejects the
     intervening `degengrad` gradient-resource stream, so it remains outside
-    this path-only capture wave.
+    this path-only capture wave. The original 20 PNGs recapture
+    byte-identically. Six cases pass and are promoted. `clippedcubic2`,
+    `cliprectintersections`, and `cliprects` expose the direct MSAA path's
+    generated `noclipdistance` vertex variant; `dstreadshuffle` exposes the
+    direct fixed-color path's missing destination-read advanced blend path.
+    The registry now explicitly permits a no-draw replay only when the strict
+    stream counts declare no `drawPath`, allowing `emptyclear` to capture
+    without weakening accidental-empty replay detection.
+64. [ ] Port C++'s generated clip-distance MSAA direct-path vertex variant and
+    select it for `PaintData::HAS_CLIP_RECT`, with a focused GPU regression.
+    Reprobe `clippedcubic2`, `cliprectintersections`, and `cliprects` against
+    their captured C++ Dawn references before changing their gates.
+65. [ ] Port direct MSAA destination-read advanced blending for solid path
+    draws, then reprobe the captured `dstreadshuffle` reference. Preserve the
+    existing atlas destination-copy path and unchanged `2/32` contract.
 
 ## R2 Completion Record
 
@@ -881,6 +897,20 @@ Run `make renderer-golden`.
 
 ## Decisions
 
+- 2026-07-13: The third ten strict C++ Dawn WebGPU-on-Metal MSAA references
+  extend the provenance registry to 30 cases; the prior 20 PNGs recapture
+  byte-identically. `bug7792`, `clippedcubic`, `crbug_996140`,
+  `cubicclosepath`, `cubicpath`, and `emptyclear` pass unchanged `2/32`
+  contracts and advance the ratchet to exact=698/diverges=0/gated=770.
+  `clippedcubic2`, `cliprectintersections`, and `cliprects` stay gated as
+  `msaa-direct-path-clip-rect-distance`: the direct pipeline loads the
+  generated `noclipdistance` shader and their heatmaps show unclipped path
+  regions. `dstreadshuffle` stays gated as
+  `msaa-direct-path-advanced-blend`: all 97 destination-reading solid draws
+  currently execute through the fixed-color direct path. The capture registry
+  records whether draw batches are expected, permitting strict clear-only
+  streams while still rejecting accidental empty replays. No tolerance
+  changed.
 - 2026-07-13: The second ten strict C++ Dawn WebGPU-on-Metal MSAA references
   extend the provenance-bound registry without changing the original ten
   pixels. `CubicStroke`, `OverStroke`, `bevel180strokes`, `bug339297`,
@@ -2680,3 +2710,13 @@ Run `make renderer-golden`.
   uncaptured source-order streams. The 34 oracle format tests, 11 capture
   coordinator tests, full renderer ratchet, workspace suite, and both V2
   golden floors pass.
+- 2026-07-13: Captured the third ten strict C++ Dawn MSAA references with a
+  30-case provenance registry; the prior 20 PNGs recapture byte-identically.
+  The clear-only `emptyclear` stream drove a fail-closed expected-draw-batch
+  registry contract. Six rows pass unchanged `2/32` contracts, advancing the
+  ratchet to exact=698/diverges=0/gated=770. Three clip-rectangle failures are
+  isolated to the direct path's `noclipdistance` vertex variant, and
+  `dstreadshuffle` is isolated to missing direct-path destination-read
+  blending. Queue items 64-65 name those implementation slices. All 30
+  provenance records, 34 oracle format tests, 11 capture coordinator tests,
+  the workspace suite, renderer ratchet, and both V2 golden floors pass.

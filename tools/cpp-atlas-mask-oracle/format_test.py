@@ -1604,13 +1604,15 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 20>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 30>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
+            self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
-            self.assertEqual(generated.count("void replayMsaaReference"), 20)
+            self.assertEqual(generated.count("void replayMsaaReference"), 30)
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
+            self.assertIn("0xff00ff00, false, replayMsaaReference29", generated)
             registry_sha256 = subprocess.run(
                 command + ["--print-registry-sha256"],
                 check=True,

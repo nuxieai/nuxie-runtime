@@ -23,6 +23,8 @@ PAINT_RE = re.compile(
     r"blendMode=(\d+),shader=(\d+)\}"
 )
 SOURCE_RE = re.compile(r'^source file="([^"]*)" artboard="([^"]*)" scene="([^"]*)"$')
+FRAME_SIZE_RE = re.compile(r"^frameSize width=(\d+) height=(\d+)$")
+SAMPLE_RE = re.compile(rf"^sample seconds=({NUMBER})$")
 DECODE_IMAGE_RE = re.compile(
     r"decodeImage id=(\d+) width=(\d+) height=(\d+) data=([0-9a-f]+)"
 )
@@ -50,6 +52,102 @@ class PaintSnapshot:
     feather: str
     blend_mode: int
     shader: int
+
+
+@dataclasses.dataclass(frozen=True)
+class RivFrameSelection:
+    source_file: str
+    artboard: str
+    scene: str
+    width: int
+    height: int
+    sample_seconds: str
+    command_lines: tuple[str, ...]
+
+
+RETAINED_DECLARATION_PREFIXES = (
+    "makeEmptyRenderPath ",
+    "makeRenderPaint ",
+    "decodeImage ",
+    "makeLinearGradient ",
+    "makeRadialGradient ",
+    "makeRenderBuffer ",
+)
+
+
+def select_riv_frame(lines: list[str], frame_index: int) -> RivFrameSelection:
+    if frame_index < 0:
+        raise ValueError("RIV frame index must be nonnegative")
+    source_indices = [
+        index for index, line in enumerate(lines) if line.startswith("source file=")
+    ]
+    if len(source_indices) != 1:
+        raise ValueError("RIV profile header contract drifted")
+    source_index = source_indices[0]
+    source = SOURCE_RE.fullmatch(lines[source_index])
+    frame_size = (
+        FRAME_SIZE_RE.fullmatch(lines[source_index + 1])
+        if source_index + 1 < len(lines)
+        else None
+    )
+    if source is None or frame_size is None:
+        raise ValueError("RIV profile header contract drifted")
+    if any(line.startswith("clearColor ") for line in lines):
+        raise ValueError("RIV profile header contract drifted")
+
+    sample_indices = [
+        index for index, line in enumerate(lines) if SAMPLE_RE.fullmatch(line)
+    ]
+    frame_indices = [index for index, line in enumerate(lines) if line == "frame"]
+    if (
+        not sample_indices
+        or len(sample_indices) != len(frame_indices)
+        or frame_index >= len(sample_indices)
+        or frame_indices[-1] != len(lines) - 1
+    ):
+        raise ValueError("RIV frame-selection contract drifted")
+    for index, (sample_index, terminal_index) in enumerate(
+        zip(sample_indices, frame_indices)
+    ):
+        next_sample = (
+            sample_indices[index + 1]
+            if index + 1 < len(sample_indices)
+            else len(lines)
+        )
+        if not (source_index + 1 < sample_index < terminal_index < next_sample):
+            raise ValueError("RIV frame-selection contract drifted")
+        if index > 0:
+            previous_terminal = frame_indices[index - 1]
+            if any(
+                not line.startswith("input ")
+                for line in lines[previous_terminal + 1 : sample_index]
+            ):
+                raise ValueError("RIV frame-selection contract drifted")
+
+    first_sample = sample_indices[0]
+    prefix = lines[1:source_index] + lines[source_index + 2 : first_sample]
+    prior_declarations = []
+    for sample_index, terminal_index in zip(
+        sample_indices[:frame_index], frame_indices[:frame_index]
+    ):
+        prior_declarations.extend(
+            line
+            for line in lines[sample_index + 1 : terminal_index]
+            if line.startswith(RETAINED_DECLARATION_PREFIXES)
+        )
+    selected_sample = SAMPLE_RE.fullmatch(lines[sample_indices[frame_index]])
+    assert selected_sample is not None
+    selected_commands = lines[
+        sample_indices[frame_index] + 1 : frame_indices[frame_index]
+    ]
+    width, height = (int(value) for value in frame_size.groups())
+    return RivFrameSelection(
+        *source.groups(),
+        width,
+        height,
+        selected_sample.group(1),
+        tuple([*prefix, *prior_declarations, *selected_commands]),
+    )
 
 
 def parse_path(text: str) -> PathSnapshot:
@@ -136,6 +234,7 @@ def generate_include(
     function_name: str,
     blend_mode_override: int | None,
     function_attribute: str | None = None,
+    frame_index: int = 0,
 ) -> str:
     if expected_clear_color is not None and re.fullmatch(
         r"0x[0-9a-f]{8}", expected_clear_color
@@ -154,6 +253,8 @@ def generate_include(
     if not lines or lines[0] != "rive-golden-stream-v1":
         raise ValueError("path-only stream header or clear-color contract drifted")
     if profile == "gm":
+        if frame_index != 0:
+            raise ValueError("GM replay only supports frame index 0")
         assert expected_source is not None
         assert expected_clear_color is not None
         expected_header = [
@@ -170,35 +271,28 @@ def generate_include(
         if lines[metadata_index : metadata_index + 3] != expected_header:
             raise ValueError("path-only stream header or clear-color contract drifted")
         command_lines = lines[1:metadata_index] + lines[metadata_index + 3 : -1]
+        if lines[-1] != "frame" or "frame" in lines[:-1]:
+            raise ValueError("path-only replay requires exactly one terminal frame marker")
     elif profile == "riv":
-        metadata_index = 1
-        while metadata_index < len(lines) and (
-            lines[metadata_index].startswith("makeEmptyRenderPath ")
-            or lines[metadata_index].startswith("makeRenderPaint ")
-        ):
-            metadata_index += 1
-        if metadata_index + 2 >= len(lines):
-            raise ValueError("RIV profile header contract drifted")
-        source = SOURCE_RE.fullmatch(lines[metadata_index])
-        if source is None:
-            raise ValueError("RIV profile header contract drifted")
-        source_file, artboard, scene = source.groups()
+        selection = select_riv_frame(lines, frame_index)
         if (
-            (expected_source is not None and source_file != expected_source)
-            or (expected_source_suffix is not None and not source_file.endswith(expected_source_suffix))
-            or artboard != expected_artboard
-            or scene != expected_scene
-            or lines[metadata_index + 1]
-            != f"frameSize width={expected_width} height={expected_height}"
-            or lines[metadata_index + 2] != f"sample seconds={expected_sample_seconds}"
-            or any(line.startswith("clearColor ") for line in lines)
+            (expected_source is not None and selection.source_file != expected_source)
+            or (
+                expected_source_suffix is not None
+                and not selection.source_file.endswith(expected_source_suffix)
+            )
+            or selection.artboard != expected_artboard
+            or selection.scene != expected_scene
+            or selection.width != expected_width
+            or selection.height != expected_height
+            or selection.sample_seconds != expected_sample_seconds
         ):
             raise ValueError("RIV profile header contract drifted")
-        command_lines = lines[1:metadata_index] + lines[metadata_index + 3:-1]
+        command_lines = list(selection.command_lines)
     else:
         raise ValueError(f"unsupported stream profile: {profile}")
-    if not command_lines or lines[-1] != "frame" or "frame" in lines[:-1]:
-        raise ValueError("path-only replay requires exactly one terminal frame marker")
+    if not command_lines:
+        raise ValueError("path-only replay requires at least one command")
 
     function_declaration = (
         f"{function_attribute} void {function_name}"
@@ -420,6 +514,7 @@ def main() -> None:
     parser.add_argument("--expected-height", type=int, required=True)
     parser.add_argument("--expected-clear-color")
     parser.add_argument("--expected-sample-seconds")
+    parser.add_argument("--frame-index", type=int, default=0)
     parser.add_argument("--expected-count", action="append", default=[])
     parser.add_argument("--override-blend-mode", type=int, choices=range(29))
     parser.add_argument("--function", required=True)
@@ -457,6 +552,7 @@ def main() -> None:
         parse_expected_counts(args.expected_count),
         args.function,
         args.override_blend_mode,
+        frame_index=args.frame_index,
     )
     if args.output:
         args.output.write_text(generated)

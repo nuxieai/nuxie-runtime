@@ -13,6 +13,17 @@ The generic `msaa-reference` mode replays the strict cases in
 shared binary once, then run the independent captures with bounded
 parallelism:
 
+GM rows replay their single terminal frame. RIV rows pin `profile`, `frame`,
+the stable source suffix, `artboard`, and `sample_seconds`; the compiler
+retains declarations from prior frames but executes only the selected frame's
+draw commands on a fresh renderer. `inventory_msaa_references.py
+--sync-manifest` deterministically appends newly supported gated rows in corpus
+order.
+
+`--build-only` skips only the fixture-completeness test needed to bootstrap a
+new registry. Full preflight and the normal format suite still require every
+manifest PNG and provenance record to validate.
+
 ```sh
 tools/cpp-atlas-mask-oracle/build.sh --build-only
 cargo build -p pixel-compare --bin riveabl-to-png

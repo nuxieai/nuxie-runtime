@@ -292,6 +292,19 @@ class CaptureMsaaReferencesTest(unittest.TestCase):
             hashlib.sha256((output / "slow.png").read_bytes()).hexdigest(),
         )
 
+    def test_accepts_riv_profile_capture_metadata(self) -> None:
+        manifest = self.write_manifest([("riv-case", b"riv")])
+        manifest.write_text(
+            manifest.read_text().replace(
+                "counts = { drawPath = 1 }",
+                'profile = "riv"\nartboard = "Main"\n'
+                'sample_seconds = "0.5"\nframe = 2\n'
+                "counts = { drawPath = 1 }",
+            )
+        )
+        cases = capture.load_cases(manifest, self.repo.resolve())
+        self.assertEqual([case.case_id for case in cases], ["riv-case"])
+
     def test_failure_keeps_isolated_failed_directory_and_does_not_install(self) -> None:
         manifest = self.write_manifest([("first", b"first"), ("bad", b"bad")])
         output = self.root / "out"

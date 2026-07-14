@@ -91,6 +91,7 @@ MSAA_REFERENCE_INVENTORY_TOOL = pathlib.Path(__file__).with_name(
 MSAA_REFERENCE_FIXTURES = (
     ROOT / "fixtures" / "renderer" / "reference" / "dawn-webgpu-metal" / "gm"
 )
+MSAA_REFERENCE_ROOT = MSAA_REFERENCE_FIXTURES.parent
 MSAA_TEST_RUNTIME_REVISION = "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 MSAA_TEST_DAWN_REVISION = "211333b2e3e429c3508f25c81c547f602adf448c"
 RUNTIME = pathlib.Path(os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime"))
@@ -1678,16 +1679,15 @@ class FormatTests(unittest.TestCase):
             inventory["summary"],
             {
                 "accepted": 0,
-                "capture_manifest_cases": 102,
-                "gated_msaa_rows": 636,
-                "missing_strict_provenance_rows": 631,
-                "strict_provenance_rows": 5,
-                "unsupported": 631,
+                "capture_manifest_cases": 686,
+                "gated_msaa_rows": 55,
+                "missing_strict_provenance_rows": 47,
+                "strict_provenance_rows": 8,
+                "unsupported": 47,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,
-                    "strict-replay-gradient-paint": 5,
-                    "strict-replay-render-buffer": 1,
-                    "strict-replay-riv-frame-selection": 624,
+                    "strict-replay-gradient-paint": 43,
+                    "strict-replay-render-buffer": 3,
                 },
             },
         )
@@ -1698,6 +1698,48 @@ class FormatTests(unittest.TestCase):
         ]
         self.assertEqual(len(accepted), 0)
         self.assertEqual(len(set(accepted)), len(accepted))
+
+    def test_msaa_riv_case_round_trips_and_generates_strict_registry(self):
+        inventory = load_inventory_module()
+        generator = inventory.load_generator()
+        corpus = tomllib.loads((ROOT / "corpus-r.toml").read_text())["entry"]
+        entry = next(
+            row for row in corpus if row["id"] == "artboardclipping-frame-0-msaa"
+        )
+        case, rejection = inventory.inspect_riv(entry, generator)
+        self.assertIsNone(rejection)
+        self.assertIsNotNone(case)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            manifest = temp_dir / "riv-case.toml"
+            manifest.write_text(inventory.render_manifest([case]))
+            parsed = tomllib.loads(manifest.read_text())["case"]
+            self.assertEqual(parsed, [case])
+            self.assertEqual(inventory.render_manifest(parsed), manifest.read_text())
+
+            output = temp_dir / "registry.inc"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(MSAA_REFERENCE_GENERATOR),
+                    "--manifest",
+                    str(manifest),
+                    "--repo-root",
+                    str(ROOT),
+                    "--runtime-revision",
+                    MSAA_TEST_RUNTIME_REVISION,
+                    "--dawn-revision",
+                    MSAA_TEST_DAWN_REVISION,
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+            )
+            generated = output.read_text()
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 1>", generated)
+            self.assertIn(f'"{case["id"]}"', generated)
+            self.assertIn("renderer->clipPath", generated)
 
     def test_msaa_inventory_rejects_non_corpus_fixture_tampering(self):
         inventory = load_inventory_module()
@@ -1714,6 +1756,7 @@ class FormatTests(unittest.TestCase):
         source_png = MSAA_REFERENCE_FIXTURES / "gm-strokes_zoomed-msaa.png"
         source_provenance = source_png.with_suffix(".provenance")
         _, source_fields = capture.parse_provenance(source_provenance)
+        source_fields["registry_sha256"] = registry_sha256
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = pathlib.Path(temp_dir)
@@ -1816,6 +1859,10 @@ class FormatTests(unittest.TestCase):
                 discovered, {discovered["id"]: mismatched}
             )
 
+    @unittest.skipIf(
+        os.environ.get("RIVE_MSAA_REFERENCE_BOOTSTRAP") == "1",
+        "capture-completeness is established after the bootstrap build",
+    )
     def test_msaa_reference_manifest_has_strict_fixture_provenance(self):
         inventory = load_inventory_module()
         capture = inventory.load_capture_validator()
@@ -1826,7 +1873,8 @@ class FormatTests(unittest.TestCase):
         cases = tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
         for case in cases:
             with self.subTest(case_id=case["id"]):
-                png = MSAA_REFERENCE_FIXTURES / f"{case['id']}.png"
+                profile = case.get("profile", "gm")
+                png = MSAA_REFERENCE_ROOT / profile / f"{case['id']}.png"
                 self.assertTrue(png.is_file())
                 inventory.validate_strict_reference(
                     png, case, registry_sha256, capture
@@ -1854,14 +1902,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 102>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 686>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                102,
+                686,
             )
             self.assertEqual(
                 len(
@@ -1870,7 +1918,7 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                102,
+                686,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
@@ -1900,8 +1948,8 @@ class FormatTests(unittest.TestCase):
                 "gm-image_lod-msaa",
             ):
                 self.assertIn(f'"{image_case}"', generated)
-            self.assertEqual(generated.count("context->decodeImage("), 5)
-            self.assertEqual(generated.count("renderer->drawImage("), 44)
+            self.assertEqual(generated.count("context->decodeImage("), 50)
+            self.assertEqual(generated.count("renderer->drawImage("), 71)
             self.assertIn("rive::ImageSampler::SamplerFromKey(9)", generated)
             self.assertIn(
                 '"gm-image-msaa", '
@@ -2340,8 +2388,78 @@ class FormatTests(unittest.TestCase):
             assert_rejected(
                 "extra-frame",
                 original + "frame\n",
-                "exactly one terminal frame marker",
+                "RIV frame-selection contract drifted",
             )
+
+    def test_riv_replay_selects_one_frame_and_retains_prior_objects(self):
+        stream_text = """rive-golden-stream-v1
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+source file="/tmp/assets/frame_selection.riv" artboard="Board" scene="Machine"
+frameSize width=32 height=24
+sample seconds=0
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(1,2),(3,4)]}} paint={id=1,style=fill,color=0xff112233,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+frame
+input kind=pointerDown seconds=0.1 position=(4,5) pointerId=0
+sample seconds=0.25
+drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(6,7),(8,9)]}} paint={id=1,style=fill,color=0xff445566,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+frame
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            stream = temp_dir / "frame-selection.rive-stream"
+            output = temp_dir / "frame-selection.inc"
+            stream.write_text(stream_text)
+            command = [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--profile",
+                "riv",
+                "--stream",
+                str(stream),
+                "--expected-sha256",
+                hashlib.sha256(stream.read_bytes()).hexdigest(),
+                "--expected-source-suffix",
+                "assets/frame_selection.riv",
+                "--expected-artboard",
+                "Board",
+                "--expected-scene",
+                "Machine",
+                "--expected-width",
+                "32",
+                "--expected-height",
+                "24",
+                "--expected-sample-seconds",
+                "0.25",
+                "--frame-index",
+                "1",
+                "--expected-count",
+                "makeRenderPaint=1",
+                "--expected-count",
+                "makeEmptyRenderPath=1",
+                "--expected-count",
+                "drawPath=1",
+                "--function",
+                "replaySelectedFrame",
+                "--output",
+                str(output),
+            ]
+            subprocess.run(command, check=True)
+            generated = output.read_text()
+            self.assertIn("path1->moveTo(6.f, 7.f);", generated)
+            self.assertIn("path1->lineTo(8.f, 9.f);", generated)
+            self.assertIn("paint1->color(0xff445566);", generated)
+            self.assertNotIn("path1->moveTo(1.f, 2.f);", generated)
+            self.assertNotIn("paint1->color(0xff112233);", generated)
+
+            subprocess.run([*command[:-2], "--check"], check=True)
+
+            out_of_range = command.copy()
+            frame_value = out_of_range.index("--frame-index") + 1
+            out_of_range[frame_value] = "2"
+            result = subprocess.run(out_of_range, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("RIV frame-selection contract drifted", result.stderr)
 
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()

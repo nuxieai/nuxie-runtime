@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=771, diverges=0, gated=697, total=1,468.
+- Rust wgpu: exact=1,352, diverges=0, gated=116, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -356,7 +356,11 @@ Run `make renderer-golden`.
   `riv-virtualized_artboard_databound_children-frame-0-clockwise-atomic`,
   `riv-walle-frame-0-clockwise-atomic`,
   `riv-word_joiner_test-frame-0-clockwise-atomic`, and
-  `riv-zero_width_space_line_break-frame-0-clockwise-atomic`.
+  `riv-zero_width_space_line_break-frame-0-clockwise-atomic`, plus 581 of the
+  584 provenance-bound strict RIV MSAA rows. The three exceptions are
+  `riv-clipping_and_draw_order-frame-0-msaa`,
+  `riv-spotify_kids_demo-frame-0-msaa`, and
+  `riv-data_binding_images_test-frame-0-msaa`.
 
 ## Milestones
 
@@ -1021,12 +1025,24 @@ Run `make renderer-golden`.
     Rust had culling disabled. Enabling back-face culling makes both full Dawn
     probes byte-exact and advances the ratchet to
     exact=771/diverges=0/gated=697 without changing a tolerance.
-83. [ ] Extend strict Dawn reference generation for `.riv` frame selection,
+83. [x] Extend strict Dawn reference generation for `.riv` frame selection,
     beginning with the 624 rows classified
     `strict-replay-riv-frame-selection`. Once supported, run all newly eligible
     Dawn captures as one continuous background campaign while renderer
     implementation continues; validate provenance and deterministic recapture,
-    then promote passing rows in batches under their unchanged contracts.
+    then promote passing rows in batches under their unchanged contracts. The
+    strict compiler accepts 584 rows and keeps 40 behind exact gradient or
+    render-buffer gaps. Two four-worker 686-case campaigns agree across all
+    2,058 artifacts, every retained GM PNG is unchanged, and 581 RIV rows pass
+    unchanged `2/32` contracts. The ratchet advances to
+    exact=1,352/diverges=0/gated=116.
+84. [ ] Port non-atlas MSAA path clipping for
+    `riv-clipping_and_draw_order-frame-0-msaa`, then reprobe the missing
+    clipped facial draws in `riv-spotify_kids_demo-frame-0-msaa`. Both strict
+    Dawn references are pinned; the first reaches the explicit
+    `path clips on non-atlas msaa draws` rejection and the second differs at
+    3,788 pixels/max delta 230. Preserve the unchanged `2/32` contracts and
+    the existing direct-path clip behavior.
 
 ## R2 Completion Record
 
@@ -3390,3 +3406,17 @@ Run `make renderer-golden`.
   unsupported, including 624 `.riv` frame-selection rows, and five already
   have strict provenance. Queue item 83 extends `.riv` frame-selection
   generation and then launches continuous Dawn capture.
+- 2026-07-14: Added strict retained-declaration RIV frame selection and
+  mechanically compiled all 624 gated rows: 584 enter the 686-case capture
+  registry, while 38 gradient and two render-buffer rows remain unsupported.
+  Two continuous four-worker Dawn campaigns produce all 2,058 artifacts
+  byte-identically, and all 102 retained GM PNGs remain byte-identical. The
+  production provenance inventory validates 8 still-gated rows and leaves 47
+  generator-unsupported rows. Isolated Rust probes promote 581 of 584 RIV
+  rows under unchanged `2/32`; `clipping_and_draw_order` reaches the explicit
+  non-atlas MSAA path-clip rejection, Spotify Kids Demo misses clipped facial
+  draws, and `data_binding_images_test` retains its existing platform image
+  color-profile delta. The renderer ratchet advances to
+  exact=1,352/diverges=0/gated=116. The 43 oracle-format tests, 12 capture
+  tests, full renderer ratchet, workspace suite, normal 584-segment floor, and
+  scripted 35-segment floor pass. Queue item 84 ports the clipping boundary.

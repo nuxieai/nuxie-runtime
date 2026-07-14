@@ -25,7 +25,7 @@ from dataclasses import dataclass
 RIVEABL_MAGIC = b"RIVEABL\0"
 RIVEABL_HEADER_BYTES = 20
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-CASE_KEYS = frozenset(
+GM_CASE_KEYS = frozenset(
     {
         "id",
         "stream",
@@ -37,6 +37,9 @@ CASE_KEYS = frozenset(
         "clear_color",
         "counts",
     }
+)
+RIV_CASE_KEYS = GM_CASE_KEYS | frozenset(
+    {"profile", "artboard", "sample_seconds", "frame"}
 )
 CASE_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
@@ -129,7 +132,13 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[Case]:
     seen_ids: set[str] = set()
     output_basenames: dict[str, str] = {}
     for row in rows:
-        if not isinstance(row, dict) or set(row) != CASE_KEYS:
+        profile = row.get("profile", "gm") if isinstance(row, dict) else None
+        expected_keys = RIV_CASE_KEYS if profile == "riv" else GM_CASE_KEYS
+        if (
+            not isinstance(row, dict)
+            or profile not in ("gm", "riv")
+            or set(row) != expected_keys
+        ):
             case_id = row.get("id") if isinstance(row, dict) else None
             raise ValueError(f"MSAA reference case has unexpected fields: {case_id!r}")
         case_id = require_string(row, "id")
@@ -183,6 +192,13 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[Case]:
                 raise ValueError(f"MSAA reference case {case_id} has invalid command count name")
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError(f"MSAA reference case {case_id} has invalid command count")
+        if profile == "riv":
+            if not isinstance(row["artboard"], str):
+                raise ValueError(f"MSAA reference case {case_id} has invalid artboard")
+            require_string(row, "sample_seconds")
+            frame = row["frame"]
+            if isinstance(frame, bool) or not isinstance(frame, int) or frame < 0:
+                raise ValueError(f"MSAA reference case {case_id} has invalid frame")
         cases.append(Case(case_id, stream, stream_sha256, width, height))
     return cases
 

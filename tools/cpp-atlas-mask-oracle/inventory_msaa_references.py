@@ -115,6 +115,61 @@ def inspect_upstream_gm(entry: dict, generator) -> tuple[dict | None, str | None
     return case, None
 
 
+def inspect_riv(entry: dict, generator) -> tuple[dict | None, str | None]:
+    stream = ROOT / entry["stream"]
+    lines = stream.read_text(encoding="utf-8").splitlines()
+    frame_index = entry.get("frame", 0)
+    try:
+        selection = generator.select_riv_frame(lines, frame_index)
+        source_marker = "tests/unit_tests/assets/"
+        if source_marker not in selection.source_file:
+            raise ValueError("RIV source path has no stable asset suffix")
+        source_suffix = source_marker + selection.source_file.partition(source_marker)[2]
+        case = {
+            "id": entry["id"],
+            "stream": entry["stream"],
+            "sha256": hashlib.sha256(stream.read_bytes()).hexdigest(),
+            "source": source_suffix,
+            "scene": selection.scene,
+            "width": selection.width,
+            "height": selection.height,
+            "clear_color": "0x00000000",
+            "counts": command_counts(selection.command_lines),
+            "profile": "riv",
+            "artboard": selection.artboard,
+            "sample_seconds": selection.sample_seconds,
+            "frame": frame_index,
+        }
+        generator.generate_include(
+            stream=stream,
+            profile="riv",
+            expected_sha256=case["sha256"],
+            expected_source=None,
+            expected_source_suffix=case["source"],
+            expected_artboard=case["artboard"],
+            expected_scene=case["scene"],
+            expected_width=case["width"],
+            expected_height=case["height"],
+            expected_clear_color=None,
+            expected_sample_seconds=case["sample_seconds"],
+            expected_counts=case["counts"],
+            function_name="inventoryOnly",
+            blend_mode_override=None,
+            frame_index=frame_index,
+        )
+    except ValueError as error:
+        message = str(error)
+        if "makeLinearGradient" in message or "makeRadialGradient" in message:
+            return None, "strict-replay-gradient-paint"
+        if any(
+            command in message
+            for command in ("makeRenderBuffer", "bufferData", "drawImageMesh")
+        ):
+            return None, "strict-replay-render-buffer"
+        return None, f"strict-replay-compiler: {message}"
+    return case, None
+
+
 def registry_sha256(manifest_path: pathlib.Path, registry_generator) -> str:
     _, digest = registry_generator.generate_registry(
         manifest_path,
@@ -216,9 +271,7 @@ def has_strict_reference(
 def require_capture_case(discovered: dict, manifest_cases: dict[str, dict]) -> None:
     expected = manifest_cases.get(discovered["id"])
     if expected is None:
-        raise ValueError(
-            f"accepted strict case is missing from the capture manifest: {discovered['id']}"
-        )
+        return
     if discovered != expected:
         differing_fields = sorted(
             key
@@ -269,8 +322,14 @@ def build_inventory(corpus_path: pathlib.Path, manifest_path: pathlib.Path) -> d
                 row["result"] = "unsupported"
                 row["reason"] = rejection
         elif entry["kind"] == "riv-stream":
-            row["result"] = "unsupported"
-            row["reason"] = "strict-replay-riv-frame-selection"
+            case, rejection = inspect_riv(entry, generator)
+            if case is not None:
+                row["result"] = "accepted"
+                row["case"] = case
+                require_capture_case(case, manifest_cases_by_id)
+            else:
+                row["result"] = "unsupported"
+                row["reason"] = rejection
         else:
             row["result"] = "unsupported"
             row["reason"] = "strict-replay-gm-header"
@@ -294,6 +353,49 @@ def build_inventory(corpus_path: pathlib.Path, manifest_path: pathlib.Path) -> d
     }
 
 
+def render_manifest(cases: list[dict]) -> str:
+    lines = ["version = 1", ""]
+    base_fields = (
+        "id",
+        "stream",
+        "sha256",
+        "source",
+        "scene",
+        "width",
+        "height",
+        "clear_color",
+    )
+    riv_fields = ("profile", "artboard", "sample_seconds", "frame")
+    for case in cases:
+        lines.append("[[case]]")
+        for field in base_fields:
+            value = case[field]
+            rendered = json.dumps(value) if isinstance(value, str) else str(value)
+            lines.append(f"{field} = {rendered}")
+        if case.get("profile", "gm") == "riv":
+            for field in riv_fields:
+                value = case[field]
+                rendered = json.dumps(value) if isinstance(value, str) else str(value)
+                lines.append(f"{field} = {rendered}")
+        counts = ", ".join(
+            f"{command} = {count}"
+            for command, count in sorted(case["counts"].items())
+        )
+        lines.extend((f"counts = {{ {counts} }}", ""))
+    return "\n".join(lines)
+
+
+def sync_manifest(manifest_path: pathlib.Path, inventory: dict) -> None:
+    with manifest_path.open("rb") as source:
+        cases = tomllib.load(source)["case"]
+    known_ids = {case["id"] for case in cases}
+    for row in inventory["entry"]:
+        if row["result"] == "accepted" and row["id"] not in known_ids:
+            cases.append(row["case"])
+            known_ids.add(row["id"])
+    manifest_path.write_text(render_manifest(cases), encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", type=pathlib.Path, default=ROOT / "corpus-r.toml")
@@ -304,12 +406,15 @@ def main() -> int:
     )
     parser.add_argument("--output", type=pathlib.Path)
     parser.add_argument("--check", type=pathlib.Path)
+    parser.add_argument("--sync-manifest", action="store_true")
     args = parser.parse_args()
-    if bool(args.output) == bool(args.check):
-        parser.error("specify exactly one of --output or --check")
-    rendered = json.dumps(
-        build_inventory(args.corpus, args.manifest), indent=2, sort_keys=True
-    ) + "\n"
+    if sum((bool(args.output), bool(args.check), args.sync_manifest)) != 1:
+        parser.error("specify exactly one of --output, --check, or --sync-manifest")
+    inventory = build_inventory(args.corpus, args.manifest)
+    if args.sync_manifest:
+        sync_manifest(args.manifest, inventory)
+        return 0
+    rendered = json.dumps(inventory, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")
     else:

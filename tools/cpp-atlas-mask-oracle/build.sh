@@ -206,7 +206,11 @@ preflight() {
     local missing=0
     local naga_output
     local naga_version
-    python3 "$script_dir/format_test.py"
+    if [[ "${run_mode:-full}" == build-only ]]; then
+        RIVE_MSAA_REFERENCE_BOOTSTRAP=1 python3 "$script_dir/format_test.py"
+    else
+        python3 "$script_dir/format_test.py"
+    fi
     PYTHONDONTWRITEBYTECODE=1 python3 "$script_dir/test_capture_msaa_references.py"
     python3 "$polyshark_generator" --stream "$polyshark_stream" --check
     python3 "$rawtext_generator" --stream "$rawtext_stream" --check

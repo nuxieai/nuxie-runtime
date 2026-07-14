@@ -10,7 +10,7 @@ import tomllib
 from generate_path_stream_replay import generate_include
 
 
-CASE_KEYS = {
+GM_CASE_KEYS = {
     "id",
     "stream",
     "sha256",
@@ -21,6 +21,7 @@ CASE_KEYS = {
     "clear_color",
     "counts",
 }
+RIV_CASE_KEYS = GM_CASE_KEYS | {"profile", "artboard", "sample_seconds", "frame"}
 ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 REVISION_RE = re.compile(r"[0-9a-f]{40}")
 PATH_DECLARATION_RE = re.compile(r"    auto path(\d+) = context->makeEmptyRenderPath\(\);")
@@ -122,7 +123,9 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[dict]:
         raise ValueError("MSAA reference manifest must contain at least one case")
     seen = set()
     for case in cases:
-        if set(case) != CASE_KEYS:
+        profile = case.get("profile", "gm")
+        expected_keys = RIV_CASE_KEYS if profile == "riv" else GM_CASE_KEYS
+        if profile not in ("gm", "riv") or set(case) != expected_keys:
             raise ValueError(f"MSAA reference case has unexpected fields: {case.get('id')!r}")
         case_id = case["id"]
         if not isinstance(case_id, str) or ID_RE.fullmatch(case_id) is None:
@@ -137,6 +140,14 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[dict]:
         case["stream_path"] = repo_root / stream
         if not isinstance(case["counts"], dict) or not case["counts"]:
             raise ValueError(f"MSAA reference case {case_id} has no command counts")
+        if profile == "riv":
+            if not isinstance(case["artboard"], str):
+                raise ValueError(f"MSAA reference case {case_id} has invalid artboard")
+            if not isinstance(case["sample_seconds"], str) or not case["sample_seconds"]:
+                raise ValueError(f"MSAA reference case {case_id} has invalid sample_seconds")
+            frame = case["frame"]
+            if isinstance(frame, bool) or not isinstance(frame, int) or frame < 0:
+                raise ValueError(f"MSAA reference case {case_id} has invalid frame")
     return cases
 
 
@@ -162,22 +173,24 @@ def generate_registry(
         "",
     ]
     for index, case in enumerate(cases):
+        profile = case.get("profile", "gm")
         replay = generate_include(
             stream=case["stream_path"],
-            profile="gm",
+            profile=profile,
             expected_sha256=case["sha256"],
-            expected_source=case["source"],
-            expected_source_suffix=None,
-            expected_artboard="",
+            expected_source=case["source"] if profile == "gm" else None,
+            expected_source_suffix=case["source"] if profile == "riv" else None,
+            expected_artboard=case.get("artboard", ""),
             expected_scene=case["scene"],
             expected_width=case["width"],
             expected_height=case["height"],
-            expected_clear_color=case["clear_color"],
-            expected_sample_seconds=None,
+            expected_clear_color=case["clear_color"] if profile == "gm" else None,
+            expected_sample_seconds=case.get("sample_seconds"),
             expected_counts=case["counts"],
             function_name=f"replayMsaaReference{index}",
             blend_mode_override=None,
             function_attribute="__attribute__((optnone))",
+            frame_index=case.get("frame", 0),
         )
         if case["counts"].get("drawPath", 0) > 10_000:
             replay = chunk_large_path_replay(replay, f"replayMsaaReference{index}")

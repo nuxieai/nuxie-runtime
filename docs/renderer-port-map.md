@@ -129,7 +129,8 @@ Big-bang variant of the tickets: #R-0 unchanged (the oracle comes first
 either way) → translate ALL algorithm-layer files in parallel (PORTING.md
 idiom codex as the shared brief) → compiler-error work queue with
 implementer/reviewer/fixer pipelines across worktrees → first-triangle smoke
-→ GM-stream pixel convergence (#R-3) → perf (#R-4). Expected wall-clock:
+→ GM-stream pixel convergence (#R-3) → retained-gate burn-down (#R-3.1) →
+perf (#R-4). Expected wall-clock:
 days rather than weeks, at materially higher token cost. Choose at
 activation based on budget and appetite; the incremental R0–R5 path below
 remains the default.
@@ -261,9 +262,40 @@ Metric at 100% of non-gated `corpus-r.toml` entries on CI backends; each
 remaining gated entry has a named diagnostic (feature, mode, or documented
 vendor quirk).
 
-## #R-4: Performance Parity
+## #R-3.1: Retained Gate Burn-down
 
 Blocked by: #R-3
+
+R3 proved that the corpus is honestly classified, but a named gate is not an
+owner or an end condition. Before performance work, burn down the actionable
+retained set:
+
+1. Close the ten substantive feature/parity rows: the seven
+   `native-clockwise-atomic-advanced-feather-parity` rows,
+   `riv-bullet_man-frame-0-clockwise-atomic`,
+   `gm-cliprectintersections-msaa`, and `gm-beziers-msaa`. Use same-backend
+   evidence to distinguish a Rust defect from a platform boundary before
+   reclassification.
+2. Implement strict replay for gradient paints and render buffers. Capture all
+   46 rows those two harness capabilities unlock, then promote passes and turn
+   every failure into a concrete parity task. A harness prerequisite needed to
+   adjudicate one of the ten substantive rows may land during step 1, but the
+   complete 46-row campaign still follows the substantive burn-down.
+3. Keep the 59 reviewed platform limitations parked unless new same-backend
+   evidence identifies a Rust defect: 58 backend/decoder/precision rows plus
+   the native C++ Metal MSAA limitation.
+
+### Exit Criteria
+
+The ten substantive gates are closed by implementation or reclassified only
+after full-stream same-backend proof. Gradient-paint and render-buffer strict
+replay are complete, all 46 newly comparable rows have been run, and none
+remains behind a harness placeholder. The only retained gates are reviewed
+platform limitations or concrete parity findings with an executable queue.
+
+## #R-4: Performance Parity
+
+Blocked by: #R-3.1
 
 1. Port/adapt the `path_fiddle` benchmark scenes as the benchmark suite;
    measure frame time and flush counts, Rust-on-wgpu versus C++ on the same

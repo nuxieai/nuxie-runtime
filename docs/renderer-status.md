@@ -375,6 +375,7 @@ Run `make renderer-golden`.
   bootstrap coverage, one GM stream, and one real `.riv` stream are exact.
 - [x] R2: Algorithm core.
 - [x] R3: Corpus convergence.
+- [ ] R3.1: Retained gate burn-down.
 - [ ] R4: Performance parity.
 - [ ] R5: Native fast paths and extensions; demand-gated after R4.
 
@@ -1073,13 +1074,26 @@ Run `make renderer-golden`.
     `strict-replay-render-buffer`. The complete 115-gate taxonomy now has zero
     generic or empty diagnostics, so R3 closes. See
     `docs/renderer-r3-exit-audit.md`.
-87. [ ] Wire the live same-backend C++ Dawn and Rust wgpu runners to the
-    existing `rive-renderer-perf-runner-v1` protocol. Start with one pinned
-    scene in both modes, prove release builds, concrete adapter identity,
-    submit-to-GPU-complete timing, per-frame completion, and exact
-    draw/logical-flush counters, then run the fixed 8-scene x 2-mode manifest
-    without setting a performance threshold. Do not optimize from the result;
-    use the first report to rank R4 work.
+87. [ ] Open R3.1 by closing `incompatible-clip-rectangles` in
+    `riv-bullet_man-frame-0-clockwise-atomic`. Isolate the first incompatible
+    rectangle pair and port C++'s transformed clip-stack behavior instead of
+    flattening non-axis-aligned rectangles into one scissor. Reprobe the pinned
+    native Metal row under its unchanged `2/32` contract and preserve all exact
+    clip fixtures.
+88. [ ] Close `msaa-cubic-stroke-raster-parity` in `gm-beziers-msaa` using its
+    pinned C++ Dawn reference and a single-stroke tessellation/raster oracle.
+89. [ ] Close `msaa-clip-intersection-edge-coverage` in
+    `gm-cliprectintersections-msaa` from its pinned C++ Dawn reference without
+    broadening the 240-pixel residual into a tolerance.
+90. [ ] Adjudicate the seven
+    `native-clockwise-atomic-advanced-feather-parity` rows with full-stream C++
+    Dawn clockwise-atomic references. Port any same-backend Rust defect; only
+    reclassify a row after the full stream passes its unchanged contract. The
+    minimum strict-gradient replay work needed for this oracle is an allowed
+    R3.1 prerequisite.
+91. [ ] Complete strict gradient-paint and render-buffer replay, capture the 46
+    newly comparable rows, and promote or enqueue every result. R4 runner
+    wiring resumes only after the R3.1 exit criteria hold.
 
 ## R2 Completion Record
 
@@ -3487,3 +3501,11 @@ Run `make renderer-golden`.
   `algorithm-core` gates. Every non-gated row passes, both R3 entry gates are
   closed, and `docs/renderer-r3-exit-audit.md` records the complete taxonomy.
   Queue item 87 starts R4 by wiring live same-backend benchmark runners.
+- 2026-07-14: Corrected the R3 stop condition after reviewing what the 115
+  named gates actually represent. Forty-seven are harness gaps, 58 are
+  reviewed backend/decoder/precision boundaries, and ten remain substantive
+  feature or parity debt. Added R3.1 before R4: close the ten, implement the two
+  strict-replay capabilities that unlock 46 more rows, and leave only the 59
+  reviewed platform limitations parked. The uncommitted R4 candidate-runner
+  experiment was discarded cleanly; queue item 87 starts with Bullet Man's
+  incompatible transformed clip rectangles.

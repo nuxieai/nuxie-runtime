@@ -10,6 +10,10 @@ contract on the macOS Metal CI backend, and every retained gate has a specific
 feature, backend/compiler boundary, or harness diagnostic. No
 `algorithm-core` placeholder remains.
 
+This verdict establishes an honest corpus classification; it does not retire
+the actionable gates or authorize R4. R3.1 owns their burn-down before
+performance work.
+
 The corpus manifest has no renderer-selection field separate from its status:
 `status = "exact"` is the production Rust-renderer ratchet, while
 `status = "gated"` retains the documented boundary.
@@ -45,6 +49,18 @@ The corpus manifest has no renderer-selection field separate from its status:
 | 1 | `msaa-cubic-stroke-raster-parity` |
 | 1 | `reference-harness: C++ Metal does not implement MSAA flush` |
 | **115** | **Total** |
+
+Operationally, these rows collapse into three groups:
+
+| Rows | Disposition |
+| ---: | --- |
+| 47 | Reference/oracle harness gap |
+| 58 | Reviewed backend, decoder, or precision boundary |
+| 10 | Unsupported feature or remaining algorithm-parity boundary |
+
+The actionable set is 56 rows: the ten substantive boundaries plus 46 rows
+unlocked by gradient-paint and render-buffer strict replay. The other 59 rows
+remain parked unless same-backend evidence exposes a Rust defect.
 
 The final 43 generic placeholders were not runnable renderer failures: the
 checked-in strict Dawn inventory proves that 41 require gradient-paint replay

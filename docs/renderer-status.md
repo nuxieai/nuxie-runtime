@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=468, diverges=0, gated=1,000, total=1,468.
+- Rust wgpu: exact=495, diverges=0, gated=973, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -227,7 +227,24 @@ Run `make renderer-golden`.
   `riv-relative_data_bind_path-frame-{0,1}-clockwise-atomic`,
   `riv-relative_data_binding-frame-0-clockwise-atomic`,
   `riv-remove_from_list-frame-{0..4}-clockwise-atomic`, and
-  `riv-replace_view_model-frame-0-clockwise-atomic`.
+  `riv-replace_view_model-frame-{0,1}-clockwise-atomic`, plus
+  `riv-reset_phase-frame-0-clockwise-atomic`,
+  `riv-reuse_path_in_effect-frame-0-clockwise-atomic`,
+  `riv-rotation_constraint-frame-0-clockwise-atomic`,
+  `riv-runtime_nested_inputs-frame-{0,1}-clockwise-atomic`,
+  `riv-scale_constraint-frame-0-clockwise-atomic`,
+  `riv-script_affects_has_changed-frame-0-clockwise-atomic`,
+  `riv-script_artboard_{opacity_test,origin_test,test}-frame-0-clockwise-atomic`,
+  `riv-script_create_text_runs-frame-{0,1}-clockwise-atomic`,
+  `riv-script_create_viewmodel_instance-frame-0-clockwise-atomic`,
+  `riv-script_dependency_test-frame-0-clockwise-atomic`,
+  `riv-script_dependency_test2-frame-0-clockwise-atomic`,
+  `riv-script_dependency_test_using_library{,_v2}-frame-0-clockwise-atomic`,
+  `riv-script_inputs_test_1-frame-0-clockwise-atomic`,
+  `riv-script_layout_test-frame-0-clockwise-atomic`,
+  `riv-script_namespace_test-frame-0-clockwise-atomic`,
+  `riv-script_path_effects_test-frame-0-clockwise-atomic`, and
+  `riv-script_paths_opacity_test-frame-{0..4}-clockwise-atomic`.
 
 ## Milestones
 
@@ -428,12 +445,30 @@ Run `make renderer-golden`.
     `relative_data_binding`, `remove_from_list` frames 0-4, and
     `replace_view_model` frame 0. Capture missing pinned Metal references
     and apply the unchanged contract and diagnostic rules.
-37. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+37. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `replace_view_model` frame 1, `replace_vm_instance`,
     `reset_phase`, `reuse_path_in_effect`, `rotation_constraint`,
     `runtime_nested_inputs` frames 0-1, `runtime_nested_text_runs`,
     `saturation`, and `scale_constraint`. Capture missing pinned Metal
     references and apply the unchanged contract and diagnostic rules.
+38. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `script_affects_has_changed`, the three `script_artboard`
+    tests, `script_create_text_runs` frames 0-1,
+    `script_create_viewmodel_instance`, both local `script_dependency`
+    tests, and `script_dependency_test_using_library`. Capture missing
+    pinned Metal references and apply the unchanged contract and diagnostic
+    rules.
+39. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `script_dependency_test_using_library_v2`,
+    `script_inputs_test_1`, `script_layout_test`, `script_namespace_test`,
+    `script_path_effects_test`, and `script_paths_opacity_test` frames 0-4.
+    Capture missing pinned Metal references and apply the unchanged contract
+    and diagnostic rules.
+40. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `script_paths_test` frames 0-4,
+    `script_string_converter_test`, `scripted_as_path`, and
+    `scripted_boolean` frames 0-2. Capture missing pinned Metal references
+    and apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2300,3 +2335,16 @@ Run `make renderer-golden`.
   `metal-webgpu-subpixel-edge-coverage` without changing the reference or
   tolerance. The wave advances the ratchet to
   exact=468/diverges=0/gated=1,000.
+- 2026-07-13: Probed the thirty-sixth through thirty-eighth ten-entry
+  clockwise-atomic `.riv` batches as one parallel wave. Main captured all 30
+  native Metal references and three read-only Terra workers probed disjoint
+  batches. Twenty-seven entries pass the unchanged `2/32` contract.
+  `replace_vm_instance` remains gated at 71/max 57,
+  `runtime_nested_text_runs` at 352/max 91, and `saturation` at 37/max 66.
+  All three alpha planes are exact; their over-threshold components are
+  confined to text contours or one circle boundary with clean interiors and
+  backgrounds. Main reproduced the harness and alpha results, Terra
+  attributed the residuals, and Sol approved
+  `metal-webgpu-subpixel-edge-coverage` without changing references or
+  tolerances. The wave advances the ratchet to
+  exact=495/diverges=0/gated=973.

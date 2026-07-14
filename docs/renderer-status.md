@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=495, diverges=0, gated=973, total=1,468.
+- Rust wgpu: exact=525, diverges=0, gated=943, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   `gm-batchedconvexpaths-clockwise-atomic`, and
@@ -244,7 +244,20 @@ Run `make renderer-golden`.
   `riv-script_layout_test-frame-0-clockwise-atomic`,
   `riv-script_namespace_test-frame-0-clockwise-atomic`,
   `riv-script_path_effects_test-frame-0-clockwise-atomic`, and
-  `riv-script_paths_opacity_test-frame-{0..4}-clockwise-atomic`.
+  `riv-script_paths_opacity_test-frame-{0..4}-clockwise-atomic`, plus
+  `riv-script_paths_test-frame-{0..4}-clockwise-atomic`,
+  `riv-script_string_converter_test-frame-0-clockwise-atomic`,
+  `riv-scripted_as_path-frame-0-clockwise-atomic`,
+  `riv-scripted_boolean-frame-{0..4}-clockwise-atomic`,
+  `riv-scripted_color-frame-0-clockwise-atomic`,
+  `riv-scripted_data_context-frame-0-clockwise-atomic`,
+  `riv-scripted_data_converter_bound_input-frame-{0,1}-clockwise-atomic`,
+  `riv-scripted_enum-frame-{0..4}-clockwise-atomic`,
+  `riv-scripted_graph-frame-{0..4}-clockwise-atomic`,
+  `riv-scripted_listener_action-frame-0-clockwise-atomic`,
+  `riv-scripted_listener_context-frame-0-clockwise-atomic`,
+  `riv-scripted_memory_leak-frame-0-clockwise-atomic`, and
+  `riv-scripted_property_image-frame-0-clockwise-atomic`.
 
 ## Milestones
 
@@ -464,11 +477,28 @@ Run `make renderer-golden`.
     `script_path_effects_test`, and `script_paths_opacity_test` frames 0-4.
     Capture missing pinned Metal references and apply the unchanged contract
     and diagnostic rules.
-40. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+40. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
     entries: `script_paths_test` frames 0-4,
     `script_string_converter_test`, `scripted_as_path`, and
     `scripted_boolean` frames 0-2. Capture missing pinned Metal references
     and apply the unchanged contract and diagnostic rules.
+41. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `scripted_boolean` frames 3-4, `scripted_color`,
+    `scripted_data_context`, `scripted_data_converter_bound_input` frames
+    0-1, and `scripted_enum` frames 0-3. Capture missing pinned Metal
+    references and apply the unchanged contract and diagnostic rules.
+42. [x] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `scripted_enum` frame 4, `scripted_graph` frames 0-4,
+    `scripted_listener_action`, `scripted_listener_context`,
+    `scripted_memory_leak`, and `scripted_property_image`. Capture missing
+    pinned Metal references and apply the unchanged contract and diagnostic
+    rules.
+43. [ ] Probe the next ten `algorithm-core` gated clockwise-atomic `.riv`
+    entries: `scripted_string` frames 0-4,
+    `scripted_transition_condition`, `scripted_viewmodel_cache`,
+    `scripting_linear_animation` frames 0-1, and
+    `scripting_root_viewmodel`. Capture missing pinned Metal references and
+    apply the unchanged contract and diagnostic rules.
 
 ## R2 Completion Record
 
@@ -2348,3 +2378,9 @@ Run `make renderer-golden`.
   `metal-webgpu-subpixel-edge-coverage` without changing references or
   tolerances. The wave advances the ratchet to
   exact=495/diverges=0/gated=973.
+- 2026-07-13: Probed the thirty-ninth through forty-first ten-entry
+  clockwise-atomic `.riv` batches as one parallel wave. Main captured all 30
+  native Metal references and three read-only Terra workers probed disjoint
+  batches. All 30 entries pass the unchanged `2/32` contract, so no
+  diagnostic reclassification or tolerance decision was needed. The wave
+  advances the ratchet to exact=525/diverges=0/gated=943.

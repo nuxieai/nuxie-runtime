@@ -36,12 +36,25 @@ pub(crate) struct InteriorTessellation {
     pub instance_count: u32,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FeatherFillDirection {
     Forward,
     Reverse,
     ReverseThenForward,
     ForwardThenReverse,
+}
+
+pub(crate) fn feather_atlas_fill_direction(
+    transform: Mat2D,
+    fill_rule: FillRule,
+    is_stroke: bool,
+) -> FeatherFillDirection {
+    let [xx, yx, xy, yy, _, _] = transform.0;
+    if !is_stroke && fill_rule == FillRule::Clockwise && xx * yy - xy * yx < 0.0 {
+        FeatherFillDirection::Reverse
+    } else {
+        FeatherFillDirection::Forward
+    }
 }
 
 #[derive(Clone)]
@@ -91,6 +104,7 @@ pub(crate) fn build_feather_tessellation(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn build_feather_atlas_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -2544,6 +2558,19 @@ mod tests {
         path.line_to(32.0, 60.0);
         path.close();
         let transform = Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0]);
+
+        assert_eq!(
+            feather_atlas_fill_direction(transform, FillRule::Clockwise, false),
+            FeatherFillDirection::Reverse
+        );
+        assert_eq!(
+            feather_atlas_fill_direction(transform, FillRule::NonZero, false),
+            FeatherFillDirection::Forward
+        );
+        assert_eq!(
+            feather_atlas_fill_direction(transform, FillRule::Clockwise, true),
+            FeatherFillDirection::Forward
+        );
 
         let direct = build_feather_tessellation_with_direction(
             &path,

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=715, diverges=0, gated=753, total=1,468.
+- Rust wgpu: exact=717, diverges=0, gated=751, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -778,11 +778,28 @@ Run `make renderer-golden`.
     generator now splits those oversized hit-test replays into strictly
     validated 128-path helpers, and the oracle uses the runtime's supported
     no-LTO build so the 44 MB registry compiles repeatably.
-70. [ ] Port reflected atlas-feather transform parity, beginning with the
+70. [x] Port reflected atlas-feather transform parity, beginning with the
     `scaleX=-1` Montserrat stream. Compare C++ and Rust atlas path bounds,
     placement, contour orientation, and final sampling before changing either
     mirrored text gate. Preserve the five exact siblings from queue item 69
-    and the unchanged `2/32` contract.
+    and the unchanged `2/32` contract. Bounds, atlas placement, and final
+    sampling are determinant-neutral in both implementations; the first
+    mismatch was contour orientation. C++ reverses clockwise feather-atlas
+    fills under a negative transform determinant, while the Rust MSAA atlas
+    path always emitted the forward contour. A focused selector regression
+    now pins reverse clockwise fills, forward non-zero fills, and forward
+    strokes under reflection, and the production path uses that direction.
+    The Dawn reprobes pass unchanged `2/32`: mirrored Montserrat has 13
+    byte-inexact pixels/max 68 and mirrored Roboto has 0/max 2. All five exact
+    siblings remain green, promoting both gates and moving the ratchet to
+    exact=717/diverges=0/gated=751.
+71. [ ] Port large-draw MSAA submission/readback parity for
+    `hittest_evenOdd` and `hittest_nonZero`. Reproduce the map failure around
+    their 32k-path command streams, compare C++ logical-flush resource limits
+    with Rust batching, submission, and readback lifetimes, and add a bounded
+    stress oracle at the first failing draw count. The Rust path must complete
+    without device loss or map failure before either gate changes. Preserve
+    the 717 exact entries and unchanged per-entry contracts.
 
 ## R2 Completion Record
 
@@ -2941,3 +2958,11 @@ Run `make renderer-golden`.
   and four `strict-replay-decode-image` rejections have separate named gates.
   No tolerance changed. Queue item 70 targets reflected atlas-feather
   transforms.
+- 2026-07-14: Ported C++'s determinant-sensitive atlas contour direction into
+  the Rust MSAA feather path. The selector regression pins reflected
+  clockwise fills against non-zero fills and strokes; the full Dawn probes
+  promote mirrored Montserrat at 13/max 68 and mirrored Roboto at 0/max 2
+  under unchanged `2/32`. All five queue-item 69 siblings and the full corpus
+  remain green, advancing the ratchet to exact=717/diverges=0/gated=751.
+  Queue item 71 targets the two valid 32k-draw streams that currently fail
+  Rust readback mapping.

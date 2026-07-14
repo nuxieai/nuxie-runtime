@@ -2444,18 +2444,25 @@ impl WgpuFrame {
                         && (draw.state.clip_rect.is_none()
                             || self.context.msaa_atlas_pipeline.supports_clip_rect())
                     {
+                        let stroke = draw.paint.effective_stroke();
+                        let fill_direction = draw::feather_atlas_fill_direction(
+                            draw.state.transform,
+                            draw.path.fill_rule,
+                            stroke.is_some(),
+                        );
                         if let (Some(mut tessellation), Some(placement)) = (
-                            draw::build_feather_atlas_tessellation(
+                            draw::build_feather_tessellation_with_direction(
                                 &draw.path.raw_path,
                                 draw.state.transform,
                                 draw.paint.feather,
-                                draw.paint.effective_stroke(),
+                                stroke,
+                                fill_direction,
                             ),
                             feather_atlas_placement(
                                 &draw.path.raw_path,
                                 draw.state.transform,
                                 draw.paint.feather,
-                                draw.paint.effective_stroke(),
+                                stroke,
                                 self.width,
                                 self.height,
                             ),

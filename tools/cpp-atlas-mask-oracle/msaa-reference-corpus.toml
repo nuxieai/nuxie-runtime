@@ -1,6 +1,127 @@
 version = 1
 
 [[case]]
+id = "gm-strokes_zoomed-msaa"
+stream = "fixtures/renderer/streams/gm/strokes_zoomed.rive-stream"
+sha256 = "6fd259dbe2dac28c8c10ced49ba91e6cb5e3c027fcd0ff436757144425c3fe0c"
+source = "gm:strokes_zoomed"
+scene = "strokes_zoomed"
+width = 400
+height = 100
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-teenyStrokes-msaa"
+stream = "fixtures/renderer/streams/gm/teenyStrokes.rive-stream"
+sha256 = "f3f54c588dee5bb25a79a7ded7b37bc0af14ed79356000ae6d2264bf5fd1e574"
+source = "gm:teenyStrokes"
+scene = "teenyStrokes"
+width = 400
+height = 200
+clear_color = "0xffffffff"
+counts = { drawPath = 10, makeEmptyRenderPath = 20, makeRenderPaint = 5, restore = 6, save = 6, transform = 10 }
+
+[[case]]
+id = "gm-transparentclear-msaa"
+stream = "fixtures/renderer/streams/gm/transparentclear.rive-stream"
+sha256 = "347b509619b02149614536fb1310c4445a65addbd2f3a82ec6136421b22de5ca"
+source = "gm:transparentclear"
+scene = "transparentclear"
+width = 64
+height = 64
+clear_color = "0x8000ffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-transparentclear_blendmode-msaa"
+stream = "fixtures/renderer/streams/gm/transparentclear_blendmode.rive-stream"
+sha256 = "90f77bdbfe2544e4a2ba900e6ede0c26eb3b1b8ccf28c90a5e0c0a6594bbf891"
+source = "gm:transparentclear_blendmode"
+scene = "transparentclear_blendmode"
+width = 64
+height = 64
+clear_color = "0x8000ffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-trickycubicstrokes-msaa"
+stream = "fixtures/renderer/streams/gm/trickycubicstrokes.rive-stream"
+sha256 = "317b92a4277bd43acdd3561fbc14c81fd24647c1fd096299e92f1f7cee0487af"
+source = "gm:trickycubicstrokes"
+scene = "trickycubicstrokes"
+width = 1000
+height = 1000
+clear_color = "0xff000000"
+counts = { drawPath = 22, makeEmptyRenderPath = 22, makeRenderPaint = 1, restore = 23, save = 23, transform = 22 }
+
+[[case]]
+id = "gm-trickycubicstrokes_feather-msaa"
+stream = "fixtures/renderer/streams/gm/trickycubicstrokes_feather.rive-stream"
+sha256 = "91631506620e408e7b63e9cb14f07eab3380e4654fb0d438e66886b744acd688"
+source = "gm:trickycubicstrokes_feather"
+scene = "trickycubicstrokes_feather"
+width = 1000
+height = 1000
+clear_color = "0xff000000"
+counts = { drawPath = 22, makeEmptyRenderPath = 22, makeRenderPaint = 1, restore = 23, save = 23, transform = 22 }
+
+[[case]]
+id = "gm-trickycubicstrokes_roundcaps-msaa"
+stream = "fixtures/renderer/streams/gm/trickycubicstrokes_roundcaps.rive-stream"
+sha256 = "e68aa64a1c3626300bd7ee6e0654041e93ed070640cfa8a9350efeab4d02d413"
+source = "gm:trickycubicstrokes_roundcaps"
+scene = "trickycubicstrokes_roundcaps"
+width = 1000
+height = 1000
+clear_color = "0xff000000"
+counts = { drawPath = 22, makeEmptyRenderPath = 22, makeRenderPaint = 1, restore = 23, save = 23, transform = 22 }
+
+[[case]]
+id = "gm-widebuttcaps-msaa"
+stream = "fixtures/renderer/streams/gm/widebuttcaps.rive-stream"
+sha256 = "4fb16e9a46bbf74f97c8d0e1439ca4be0b4d32644b0d0ff09b9d93d5d0e6be66"
+source = "gm:widebuttcaps"
+scene = "widebuttcaps"
+width = 480
+height = 500
+clear_color = "0xff000000"
+counts = { drawPath = 16, makeEmptyRenderPath = 8, makeRenderPaint = 4, restore = 6, save = 6, transform = 17 }
+
+[[case]]
+id = "gm-zeroPath-msaa"
+stream = "fixtures/renderer/streams/gm/zeroPath.rive-stream"
+sha256 = "8559f4e2981f22bfc736ca7997e25184ca0ec9ffd194de3bee0ca7c0e27451c7"
+source = "gm:zeroPath"
+scene = "zeroPath"
+width = 171
+height = 300
+clear_color = "0xffffffff"
+counts = { drawPath = 27, makeEmptyRenderPath = 27, makeRenderPaint = 2, restore = 4, save = 4, transform = 27 }
+
+[[case]]
+id = "gm-zero_control_stroke-msaa"
+stream = "fixtures/renderer/streams/gm/zero_control_stroke.rive-stream"
+sha256 = "d531a829ae47f513b12ae94dd66b7d0d5f4ecfb4c3dc598b9951b3d0b3c94040"
+source = "gm:zero_control_stroke"
+scene = "zero_control_stroke"
+width = 400
+height = 400
+clear_color = "0xffffffff"
+counts = { drawPath = 6, makeEmptyRenderPath = 7, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-zerolinestroke-msaa"
+stream = "fixtures/renderer/streams/gm/zerolinestroke.rive-stream"
+sha256 = "6410d8b6fa3fe66912afa442c9fd1ac5f7e8c09360dd0159c5f85447f4e67dfc"
+source = "gm:zerolinestroke"
+scene = "zerolinestroke"
+width = 90
+height = 120
+clear_color = "0xffffffff"
+counts = { drawPath = 3, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
 id = "gm-batchedconvexpaths-msaa"
 stream = "fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream"
 sha256 = "ac03c58dba7b9e1ee8497989abad2c921a532462b257f8851d4847ef410a1d9f"

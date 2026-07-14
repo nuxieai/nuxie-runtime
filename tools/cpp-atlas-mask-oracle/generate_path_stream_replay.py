@@ -161,12 +161,12 @@ def generate_include(
             f"frameSize width={expected_width} height={expected_height}",
             f"clearColor value={expected_clear_color}",
         ]
-        metadata_index = 1
-        while metadata_index < len(lines) and (
-            lines[metadata_index].startswith("makeEmptyRenderPath ")
-            or lines[metadata_index].startswith("makeRenderPaint ")
-        ):
-            metadata_index += 1
+        source_indices = [
+            index for index, line in enumerate(lines) if line.startswith("source file=")
+        ]
+        if len(source_indices) != 1:
+            raise ValueError("path-only stream header or clear-color contract drifted")
+        metadata_index = source_indices[0]
         if lines[metadata_index : metadata_index + 3] != expected_header:
             raise ValueError("path-only stream header or clear-color contract drifted")
         command_lines = lines[1:metadata_index] + lines[metadata_index + 3 : -1]

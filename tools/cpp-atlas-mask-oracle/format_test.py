@@ -2,6 +2,7 @@
 """Cross-language contract tests for the atlas oracle formats."""
 
 import hashlib
+import json
 import os
 import pathlib
 import re
@@ -10,6 +11,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 
@@ -76,6 +78,15 @@ MSAA_REFERENCE_GENERATOR = pathlib.Path(__file__).with_name(
 )
 MSAA_REFERENCE_MANIFEST = pathlib.Path(__file__).with_name(
     "msaa-reference-corpus.toml"
+)
+MSAA_REFERENCE_INVENTORY = pathlib.Path(__file__).with_name(
+    "msaa-reference-inventory.json"
+)
+MSAA_REFERENCE_INVENTORY_TOOL = pathlib.Path(__file__).with_name(
+    "inventory_msaa_references.py"
+)
+MSAA_REFERENCE_FIXTURES = (
+    ROOT / "fixtures" / "renderer" / "reference" / "dawn-webgpu-metal" / "gm"
 )
 MSAA_TEST_RUNTIME_REVISION = "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 MSAA_TEST_DAWN_REVISION = "211333b2e3e429c3508f25c81c547f602adf448c"
@@ -1580,7 +1591,60 @@ class FormatTests(unittest.TestCase):
                 command(unsupported, check=True), text=True, capture_output=True
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("header or clear-color contract drifted", result.stderr)
+            self.assertIn("unsupported path-only stream command", result.stderr)
+
+    def test_msaa_reference_inventory_is_current_and_queryable(self):
+        subprocess.run(
+            [
+                sys.executable,
+                str(MSAA_REFERENCE_INVENTORY_TOOL),
+                "--check",
+                str(MSAA_REFERENCE_INVENTORY),
+            ],
+            check=True,
+        )
+        inventory = json.loads(MSAA_REFERENCE_INVENTORY.read_text())
+        self.assertEqual(inventory["version"], 1)
+        self.assertEqual(
+            inventory["summary"],
+            {
+                "accepted": 11,
+                "capture_manifest_cases": 102,
+                "gated_msaa_rows": 647,
+                "missing_strict_provenance_rows": 642,
+                "strict_provenance_rows": 5,
+                "unsupported": 631,
+                "unsupported_by_reason": {
+                    "strict-replay-gm-header": 1,
+                    "strict-replay-gradient-paint": 5,
+                    "strict-replay-render-buffer": 1,
+                    "strict-replay-riv-frame-selection": 624,
+                },
+            },
+        )
+        accepted = [
+            entry["id"]
+            for entry in inventory["entry"]
+            if entry["result"] == "accepted"
+        ]
+        self.assertEqual(len(accepted), 11)
+        self.assertEqual(len(set(accepted)), len(accepted))
+
+    def test_msaa_reference_manifest_has_complete_fixture_provenance(self):
+        cases = tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
+        for case in cases:
+            with self.subTest(case_id=case["id"]):
+                png = MSAA_REFERENCE_FIXTURES / f"{case['id']}.png"
+                provenance = png.with_suffix(".provenance")
+                self.assertTrue(png.is_file())
+                fields = dict(
+                    line.split("=", 1)
+                    for line in provenance.read_text().splitlines()
+                )
+                self.assertEqual(fields["backend"], "metal")
+                self.assertEqual(fields["renderer_implementation"], "cpp-dawn-webgpu")
+                self.assertEqual(fields["case_id"], case["id"])
+                self.assertEqual(fields["stream_sha256"], case["sha256"])
 
     def test_msaa_reference_registry_is_deterministic_and_strict(self):
         command = [
@@ -1604,14 +1668,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 91>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 102>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                91,
+                102,
             )
             self.assertEqual(
                 len(
@@ -1620,7 +1684,7 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                91,
+                102,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
@@ -1635,14 +1699,14 @@ class FormatTests(unittest.TestCase):
             self.assertIn('"gm-rawtext-msaa"', generated)
             self.assertIn('"gm-rect-msaa"', generated)
             self.assertIn('"gm-strokes_round-msaa"', generated)
-            self.assertIn("void replayMsaaReference46Chunk0(", generated)
-            self.assertIn("void replayMsaaReference47Chunk0(", generated)
+            self.assertIn("void replayMsaaReference57Chunk0(", generated)
+            self.assertIn("void replayMsaaReference58Chunk0(", generated)
             self.assertIn("retainedPaths.reserve(32578);", generated)
             self.assertIn("retainedPaths.reserve(34397);", generated)
-            self.assertIn("void replayMsaaReference46Chunk254(", generated)
-            self.assertNotIn("void replayMsaaReference46Chunk255(", generated)
-            self.assertIn("void replayMsaaReference47Chunk268(", generated)
-            self.assertNotIn("void replayMsaaReference47Chunk269(", generated)
+            self.assertIn("void replayMsaaReference57Chunk254(", generated)
+            self.assertNotIn("void replayMsaaReference57Chunk255(", generated)
+            self.assertIn("void replayMsaaReference58Chunk268(", generated)
+            self.assertNotIn("void replayMsaaReference58Chunk269(", generated)
             for image_case in (
                 "gm-image-msaa",
                 "gm-image_aa_border-msaa",
@@ -1656,10 +1720,10 @@ class FormatTests(unittest.TestCase):
             self.assertIn(
                 '"gm-image-msaa", '
                 '"e116261650f343b0c3e766bc50775784afc31eca4b15710bafc70e5955b0f254", '
-                "530, 310, 0xffffffff, true, replayMsaaReference50",
+                "530, 310, 0xffffffff, true, replayMsaaReference61",
                 generated,
             )
-            self.assertIn("0xff00ff00, false, replayMsaaReference29", generated)
+            self.assertIn("0xff00ff00, false, replayMsaaReference40", generated)
             registry_sha256 = subprocess.run(
                 command + ["--print-registry-sha256"],
                 check=True,

@@ -1604,14 +1604,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 73>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 83>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                73,
+                83,
             )
             self.assertEqual(
                 len(
@@ -1620,7 +1620,7 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                73,
+                83,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
@@ -1630,6 +1630,9 @@ class FormatTests(unittest.TestCase):
             self.assertIn('"gm-largeclippedpath_winding_nested-msaa"', generated)
             self.assertIn('"gm-negative_interior_triangles_as_clip-msaa"', generated)
             self.assertIn('"gm-overfill_opaque-msaa"', generated)
+            self.assertIn('"gm-parallelclips-msaa"', generated)
+            self.assertIn('"gm-path_stroke_clip_crbug1070835-msaa"', generated)
+            self.assertIn('"gm-rawtext-msaa"', generated)
             self.assertIn("void replayMsaaReference46Chunk0(", generated)
             self.assertIn("void replayMsaaReference47Chunk0(", generated)
             self.assertIn("retainedPaths.reserve(32578);", generated)

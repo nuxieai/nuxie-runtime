@@ -802,3 +802,113 @@ width = 200
 height = 200
 clear_color = "0xffffffff"
 counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-overfill_transparent-msaa"
+stream = "fixtures/renderer/streams/gm/overfill_transparent.rive-stream"
+sha256 = "6f75dcda2dacf7f923f5e137671c138c37684e3d63d488bb69d4bead8b23f268"
+source = "gm:overfill_transparent"
+scene = "overfill_transparent"
+width = 200
+height = 200
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-overstroke_blendmodes-msaa"
+stream = "fixtures/renderer/streams/gm/overstroke_blendmodes.rive-stream"
+sha256 = "17fb1605667aa3bef42f02af8e536919b5576e6a8a456efc108305493e67e3ba"
+source = "gm:overstroke_blendmodes"
+scene = "overstroke_blendmodes"
+width = 200
+height = 200
+clear_color = "0x20202020"
+counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-overstroke_opaque-msaa"
+stream = "fixtures/renderer/streams/gm/overstroke_opaque.rive-stream"
+sha256 = "78de3103ac4fbbb83e30672588111873875269c255106b2a9ee4f084c35c18f2"
+source = "gm:overstroke_opaque"
+scene = "overstroke_opaque"
+width = 200
+height = 200
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-overstroke_transparent-msaa"
+stream = "fixtures/renderer/streams/gm/overstroke_transparent.rive-stream"
+sha256 = "9305bb916547011d63a6b005b8f12705ce91df27f65f5fb454938d33506a9416"
+source = "gm:overstroke_transparent"
+scene = "overstroke_transparent"
+width = 200
+height = 200
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-parallelclips-msaa"
+stream = "fixtures/renderer/streams/gm/parallelclips.rive-stream"
+sha256 = "be0a6783c33c53cb9f28f20d94e9e2570326987a99c0d5309236e403a11d98a3"
+source = "gm:parallelclips"
+scene = "parallelclips"
+width = 850
+height = 850
+clear_color = "0xff000000"
+counts = { clipPath = 97, drawPath = 49, makeEmptyRenderPath = 292, makeRenderPaint = 49, restore = 57, save = 57, transform = 56 }
+
+[[case]]
+id = "gm-path_skbug_11859-msaa"
+stream = "fixtures/renderer/streams/gm/path_skbug_11859.rive-stream"
+sha256 = "d393397901c36294721451ddbb07b51bae1f9e1f0b3a799ebdcdec03d59078a9"
+source = "gm:path_skbug_11859"
+scene = "path_skbug_11859"
+width = 512
+height = 512
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-path_skbug_11886-msaa"
+stream = "fixtures/renderer/streams/gm/path_skbug_11886.rive-stream"
+sha256 = "2574a1219b9bc93b7ec76a1347fda9e234f21f8a1be10424875947f865d5b1eb"
+source = "gm:path_skbug_11886"
+scene = "path_skbug_11886"
+width = 128
+height = 256
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-path_stroke_clip_crbug1070835-msaa"
+stream = "fixtures/renderer/streams/gm/path_stroke_clip_crbug1070835.rive-stream"
+sha256 = "35066aeca85295a0adbcb0a453c016af4324831a0e4836dd6378cb42651e5bb9"
+source = "gm:path_stroke_clip_crbug1070835"
+scene = "path_stroke_clip_crbug1070835"
+width = 30
+height = 25
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-quadcap-msaa"
+stream = "fixtures/renderer/streams/gm/quadcap.rive-stream"
+sha256 = "afb696faa00a1b1e0e29506c1e75c23c88c1eaae24e9ba5574b43c6b77ac387b"
+source = "gm:quadcap"
+scene = "quadcap"
+width = 70
+height = 30
+clear_color = "0xffffffff"
+counts = { drawPath = 2, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-rawtext-msaa"
+stream = "fixtures/renderer/streams/gm/rawtext.rive-stream"
+sha256 = "9f9ab7cba6fb625f6f462250b76f2cc94e63c6b6c69154d74e30e5493de51b86"
+source = "gm:rawtext"
+scene = "rawtext"
+width = 400
+height = 335
+clear_color = "0xffffffff"
+counts = { drawPath = 2, makeEmptyRenderPath = 2, makeRenderPaint = 2, restore = 1, save = 1 }

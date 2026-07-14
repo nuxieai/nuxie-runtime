@@ -1,7 +1,7 @@
 # GPU Semantic-Trap Audit
 
 Date: 2026-07-13
-Status: In progress
+Status: Complete
 
 This audit is the first R3 entry gate required by
 `docs/renderer-port-map.md`. It reviews semantic differences introduced by the
@@ -211,8 +211,16 @@ An upstream UBSan test would improve the C++ oracle but does not gate this port.
   precision/compiler boundary.
 - [x] The renderer corpus remains at or above its committed ratchet with no
   `.riv` regression.
-- [ ] Every residual semantic difference has a named corpus or milestone gate;
+- [x] Every residual semantic difference has a named corpus or milestone gate;
   no generic `algorithm-core` diagnostic may hide a shader-stack issue.
+
+The 2026-07-14 closeout review rechecked WGSL uniformity, sampler semantics,
+float precision and denormals, matrix layout, integer wrap, MSAA resolve, and
+coordinate conventions against both renderer implementations. The remaining
+intermediate-precision rows retain their explicit backend gates; repeat/mirror
+sampler coverage and an executable C++ ABI byte sentinel are follow-up oracle
+hardening, not observed semantic differences. Generic `algorithm-core` rows
+remain algorithm/corpus work and do not conceal a known shader-stack finding.
 
 ## Verification
 

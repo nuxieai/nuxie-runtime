@@ -44,6 +44,13 @@ The first R3-FZ-03 run found a Rust debug-overflow panic while calculating
 stroke tessellation segments for `f32::MAX`. The fix clamps in floating-point
 space before converting to `u32`; a focused renderer unit test pins that path.
 
+A fresh bounded campaign on 2026-07-14 replayed both control baselines and all
+five hostile streams in 53.79 seconds. All 12 child processes completed within
+their 20-second deadlines and reproduced the table above exactly. A
+supplemental MSAA attempt stops on the control-only C++/Metal assertion that
+native Metal does not implement MSAA flush; it is not evidence against this
+clockwise-atomic gate and cannot serve as a dual-renderer MSAA oracle.
+
 ## CI And Provenance
 
 The `renderer-golden` macOS job checks out C++ runtime revision

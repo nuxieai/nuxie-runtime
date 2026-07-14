@@ -2135,13 +2135,12 @@ max_different_pixels = 32
 id = "gm-rect-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/rect.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/rect-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rect-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "reference-harness: C++ Metal does not implement MSAA flush"
 
 
 [[entry]]
@@ -2166,7 +2165,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 
 [[entry]]
@@ -2185,13 +2184,12 @@ max_different_pixels = 32
 id = "gm-rotatedcubicpath-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/rotatedcubicpath.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/rotatedcubicpath-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rotatedcubicpath-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2210,13 +2208,12 @@ max_different_pixels = 32
 id = "gm-roundjoinstrokes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/roundjoinstrokes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/roundjoinstrokes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-roundjoinstrokes-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2235,13 +2232,12 @@ max_different_pixels = 32
 id = "gm-skbug12244-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/skbug12244.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/skbug12244-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-skbug12244-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2266,7 +2262,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-gradient-paint"
 
 
 [[entry]]
@@ -2285,13 +2281,12 @@ max_different_pixels = 128
 id = "gm-strokefill-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokefill.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokefill-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokefill-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2310,13 +2305,12 @@ max_different_pixels = 32
 id = "gm-strokes3-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokes3.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokes3-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokes3-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -2335,13 +2329,13 @@ max_different_pixels = 128
 id = "gm-strokes_poly-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokes_poly.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokes_poly-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokes_poly-msaa.png"
 mode = "msaa"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "dawn-wgpu-msaa-stroke-edge-coverage"
 
 
 [[entry]]
@@ -2360,13 +2354,12 @@ max_different_pixels = 32
 id = "gm-strokes_round-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokes_round.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokes_round-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokes_round-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

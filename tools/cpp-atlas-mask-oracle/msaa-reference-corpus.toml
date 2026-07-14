@@ -912,3 +912,91 @@ width = 400
 height = 335
 clear_color = "0xffffffff"
 counts = { drawPath = 2, makeEmptyRenderPath = 2, makeRenderPaint = 2, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-rect-msaa"
+stream = "fixtures/renderer/streams/gm/rect.rive-stream"
+sha256 = "680ece01e3fb332b9230b36beb8a0fe199359b2a5a4ef6a6a4558fa53e696a1d"
+source = "gm:rect"
+scene = "rect"
+width = 240
+height = 240
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 4, makeRenderPaint = 1, restore = 5, save = 5, transform = 5 }
+
+[[case]]
+id = "gm-rotatedcubicpath-msaa"
+stream = "fixtures/renderer/streams/gm/rotatedcubicpath.rive-stream"
+sha256 = "583fb0fe41370f649da0700bdd33fe632081848c402bf9e53de4bd7379761943"
+source = "gm:rotatedcubicpath"
+scene = "rotatedcubicpath"
+width = 100
+height = 100
+clear_color = "0xffffffff"
+counts = { drawPath = 2, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 2 }
+
+[[case]]
+id = "gm-roundjoinstrokes-msaa"
+stream = "fixtures/renderer/streams/gm/roundjoinstrokes.rive-stream"
+sha256 = "581535d669c98c212804a55f1e0a0da47e70321cbb410717807610ad603069f0"
+source = "gm:roundjoinstrokes"
+scene = "roundjoinstrokes"
+width = 800
+height = 600
+clear_color = "0xff000000"
+counts = { drawPath = 9, makeEmptyRenderPath = 9, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-skbug12244-msaa"
+stream = "fixtures/renderer/streams/gm/skbug12244.rive-stream"
+sha256 = "3317d56cdc626c4421f788799ec30df3762c3b88fc99695adb5ca480a2ddf0de"
+source = "gm:skbug12244"
+scene = "skbug12244"
+width = 150
+height = 150
+clear_color = "0xffffffff"
+counts = { drawPath = 1, makeEmptyRenderPath = 1, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-strokefill-msaa"
+stream = "fixtures/renderer/streams/gm/strokefill.rive-stream"
+sha256 = "10e0d74963d56d48e59d89bcb66ea80af2ba9baffb1ce12a9f03d282670b8e9a"
+source = "gm:strokefill"
+scene = "strokefill"
+width = 640
+height = 480
+clear_color = "0xffffffff"
+counts = { drawPath = 14, makeEmptyRenderPath = 12, makeRenderPaint = 3, restore = 3, save = 3, transform = 2 }
+
+[[case]]
+id = "gm-strokes3-msaa"
+stream = "fixtures/renderer/streams/gm/strokes3.rive-stream"
+sha256 = "93ccd1e491fcd052ad5cb177a642a8e64f1f67dbcff9c03689e9daa5c809ea78"
+source = "gm:strokes3"
+scene = "strokes3"
+width = 1500
+height = 1500
+clear_color = "0xffffffff"
+counts = { drawPath = 156, makeEmptyRenderPath = 12, makeRenderPaint = 2, restore = 7, save = 7, transform = 85 }
+
+[[case]]
+id = "gm-strokes_poly-msaa"
+stream = "fixtures/renderer/streams/gm/strokes_poly.rive-stream"
+sha256 = "86cac684467db2b329fb13ac9b3088f844cd5e4e72447465c068774b09c94c33"
+source = "gm:strokes_poly"
+scene = "strokes_poly"
+width = 400
+height = 400
+clear_color = "0xffffffff"
+counts = { clipPath = 1, drawPath = 25, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 2, save = 2, transform = 75 }
+
+[[case]]
+id = "gm-strokes_round-msaa"
+stream = "fixtures/renderer/streams/gm/strokes_round.rive-stream"
+sha256 = "34faf8d074194a6581fae7866fea7d99fc76b13bef08b4cfe4829a0f12fc8298"
+source = "gm:strokes_round"
+scene = "strokes_round"
+width = 400
+height = 400
+clear_color = "0xffffffff"
+counts = { clipPath = 1, drawPath = 100, makeEmptyRenderPath = 202, makeRenderPaint = 1, restore = 2, save = 2 }

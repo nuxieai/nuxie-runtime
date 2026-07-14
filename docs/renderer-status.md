@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=753, diverges=0, gated=715, total=1,468.
+- Rust wgpu: exact=760, diverges=0, gated=708, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -98,7 +98,9 @@ Run `make renderer-golden`.
   `gm-overstroke_{blendmodes,opaque,transparent}-msaa`,
   `gm-parallelclips-msaa`, `gm-path_skbug_{11859,11886}-msaa`,
   `gm-path_stroke_clip_crbug1070835-msaa`, `gm-quadcap-msaa`, and
-  `gm-rawtext-msaa`, and
+  `gm-rawtext-msaa`, plus `gm-rect-msaa`, `gm-rotatedcubicpath-msaa`,
+  `gm-roundjoinstrokes-msaa`, `gm-skbug12244-msaa`, `gm-strokefill-msaa`,
+  `gm-strokes3-msaa`, and `gm-strokes_round-msaa`, and
   `gm-mesh-clockwise-atomic`, and
   `gm-degengrad-clockwise-atomic`,
   `gm-rect_grad-clockwise-atomic`,
@@ -943,7 +945,7 @@ Run `make renderer-golden`.
     exact=753/diverges=0/gated=715 while preserving all prior exact rows. The
     212-test renderer suite, workspace, normal 584-segment floor, scripted
     35-segment floor, and full renderer corpus pass.
-79. [ ] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
+79. [x] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
     entries after `rawtext`: `rect`, `rect_grad`, `rotatedcubicpath`,
     `roundjoinstrokes`, `skbug12244`, `strokedlines`, `strokefill`, `strokes3`,
     `strokes_poly`, and `strokes_round`. Extend the 83-case registry without
@@ -951,7 +953,25 @@ Run `make renderer-golden`.
     capture, replace the stale native-Metal `rect` harness reference only with
     complete Dawn provenance, probe accepted rows under unchanged contracts,
     and narrow every rejection to an observed diagnostic while preserving all
-    753 exact rows.
+    753 exact rows. `rect_grad` and `strokedlines` fail closed on
+    `makeLinearGradient` and narrow to `strict-replay-gradient-paint`; the
+    other eight streams extend the registry from 83 to 91 cases. Serial and
+    four-job captures are byte-identical across all 273 artifacts, and all 83
+    retained PNGs are unchanged. Seven probes pass their unchanged contracts:
+    `rect`, `rotatedcubicpath`, `skbug12244`, `strokefill`, and `strokes3`
+    have zero over-threshold pixels/max delta 1; `roundjoinstrokes` has two/max
+    48; `strokes_round` has ten/max 3. `strokes_poly` retains `2/32` and narrows
+    to `dawn-wgpu-msaa-stroke-edge-coverage`: its 60 over-threshold pixels/max
+    58 split into 59 components, none larger than two pixels. The ratchet is
+    exact=760/diverges=0/gated=708 with no tolerance change.
+80. [ ] Port C++ `render_context.cpp::LogicalFlush::{pushDraws,rewind}` resource
+    rollover into Rust for clip-dependent and destination-read schedules.
+    Translate the complete path, contour, tessellation, and signed draw-pass
+    budgets; preserve clip-stack, destination-copy, and intersection-board
+    ordering across submissions; and add focused boundary tests for every
+    rollover cause. This closes the remaining R3 resource-budget finding from
+    `docs/renderer-wgpu-adversarial-review.md` while the independent Dawn
+    reference campaign continues outside the main implementation queue.
 
 ## R2 Completion Record
 
@@ -1163,6 +1183,28 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Pre-stage R4 as a report/protocol scaffold only; live runner
+  wiring remains blocked on R3. The fixed 8-scene x 2-mode manifest pins
+  1024x1024 frame 0, high-performance adapter selection, seven outer samples,
+  ten warmup frames, 100 measured frames, submit-to-GPU-complete timing, and
+  per-frame completion. Baseline and candidate must report the same concrete
+  backend/device/driver identity and identical logical-flush/draw counts.
+  Subprocess and threshold-failing CLI integration tests fail closed around
+  those fences. Sol rejected the first scaffold contract and accepted this
+  hardened version after all four findings were covered.
+
+- 2026-07-14: Split Phase R into independent tracks: the main queue ports
+  renderer/runtime state, strict Dawn reference capture runs as an oracle-side
+  campaign, the semantic-trap audit and fuzz campaign report independently,
+  and the R4 report scaffold can advance without live-runner wiring. The first
+  expanded wave accepts eight of ten source-order streams, produces 273
+  byte-identical serial/four-job artifacts, and preserves all 83 prior PNGs.
+  Seven rows promote unchanged; `strokes_poly` remains gated as bounded
+  Dawn-versus-wgpu stroke-edge coverage, while both gradient streams retain a
+  strict replay-harness gate. The renderer metric is
+  exact=760/diverges=0/gated=708. Queue item 80 returns the main loop to C++
+  logical-flush rollover.
 
 - 2026-07-14: Translate C++ `gpu.cpp::get_depth_state(msaaStrokes)` directly:
   Rust's stroke-only direct-path pipeline now compares depth with `Less` and
@@ -1962,6 +2004,23 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-14: Added and hardened the R4 renderer performance report scaffold.
+  It validates the fixed 16 scene/mode variants, emits deterministic JSON and
+  Markdown reports, compares min-of-seven steady-state medians, enforces
+  concrete adapter and structural parity, and writes diagnostic artifacts
+  before a threshold failure. All 33 focused tests and manifest validation
+  pass; no live benchmark runner or performance claim is included yet.
+
+- 2026-07-14: Extended strict Dawn capture from 83 to 91 cases and promoted
+  seven MSAA rows without changing tolerances. The 273 serial/four-job
+  artifacts match, all 83 retained PNGs are unchanged, both gradient compiler
+  gaps and the isolated `strokes_poly` edge residual have named gates, and the
+  renderer ratchet reaches exact=760/diverges=0/gated=708. A fresh fuzz
+  campaign passes, the semantic-trap audit closes, and queue item 80 ports full
+  logical-flush rollover while reference capture continues independently. The
+  workspace, 212-test enabled renderer suite, normal 584-segment floor, and
+  scripted 35-segment floor all pass.
 
 - 2026-07-14: Ported the dedicated MSAA stroke depth state and promoted both
   depth-write-gated overstroke rows without changing tolerances. A focused

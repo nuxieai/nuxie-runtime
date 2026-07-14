@@ -703,3 +703,102 @@ width = 1000
 height = 1000
 clear_color = "0xff00ffff"
 counts = { clipPath = 2, drawPath = 1, makeEmptyRenderPath = 5, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-lots_of_tess_spans_stroke-msaa"
+stream = "fixtures/renderer/streams/gm/lots_of_tess_spans_stroke.rive-stream"
+sha256 = "28c07f36deccef1bbf530e25f493f140a46193f2e2d546559520c2c2568873e9"
+source = "gm:lots_of_tess_spans_stroke"
+scene = "lots_of_tess_spans_stroke"
+width = 1024
+height = 1024
+clear_color = "0xffffffff"
+counts = { drawPath = 22, makeEmptyRenderPath = 2, makeRenderPaint = 1, restore = 22, save = 22, transform = 21 }
+
+[[case]]
+id = "gm-mandoline-msaa"
+stream = "fixtures/renderer/streams/gm/mandoline.rive-stream"
+sha256 = "9dbb7dc7822de2e53e56de17cf1f4ef64ef44df0ac8dc621c2a196c9fe55de5a"
+source = "gm:mandoline"
+scene = "mandoline"
+width = 560
+height = 475
+clear_color = "0xff000000"
+counts = { drawPath = 4, makeEmptyRenderPath = 5, makeRenderPaint = 1, restore = 3, save = 3, transform = 4 }
+
+[[case]]
+id = "gm-mesh_ht_1-msaa"
+stream = "fixtures/renderer/streams/gm/mesh_ht_1.rive-stream"
+sha256 = "c58395004aebf69390757cfcc73a9a325593e9e35ff5666cd5d5c46a2d177bfa"
+source = "gm:mesh_ht_1"
+scene = "mesh_ht_1"
+width = 60
+height = 60
+clear_color = "0xffffffff"
+counts = { drawPath = 3600, makeEmptyRenderPath = 3600, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-mesh_ht_7-msaa"
+stream = "fixtures/renderer/streams/gm/mesh_ht_7.rive-stream"
+sha256 = "b6082a6545e0fe2ff33a0f74997f619c2f90640096d789d1052a17cfdbd5b456"
+source = "gm:mesh_ht_7"
+scene = "mesh_ht_7"
+width = 60
+height = 60
+clear_color = "0xffffffff"
+counts = { drawPath = 3600, makeEmptyRenderPath = 3600, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-mutating_fill_rule-msaa"
+stream = "fixtures/renderer/streams/gm/mutating_fill_rule.rive-stream"
+sha256 = "cc77ca12752f64aff99dd69c15c10c91abb072c821c06d50b5739e95d9dcbe78"
+source = "gm:mutating_fill_rule"
+scene = "mutating_fill_rule"
+width = 600
+height = 300
+clear_color = "0xffffffff"
+counts = { clipPath = 1, drawPath = 2, makeEmptyRenderPath = 3, makeRenderPaint = 1, restore = 1, save = 1, transform = 1 }
+
+[[case]]
+id = "gm-negative_interior_triangles-msaa"
+stream = "fixtures/renderer/streams/gm/negative_interior_triangles.rive-stream"
+sha256 = "b32a5f21781a2cfae839d6cae4bde260014af7a4f177a87cd9fd025ff905697d"
+source = "gm:negative_interior_triangles"
+scene = "negative_interior_triangles"
+width = 1600
+height = 1600
+clear_color = "0xff00ffff"
+counts = { clipPath = 1, drawPath = 2, makeEmptyRenderPath = 4, makeRenderPaint = 2, restore = 3, save = 3, transform = 3 }
+
+[[case]]
+id = "gm-negative_interior_triangles_as_clip-msaa"
+stream = "fixtures/renderer/streams/gm/negative_interior_triangles_as_clip.rive-stream"
+sha256 = "7b9cd325c959970b7bf595238851e6f38527fcd399343b6aa36854ece78f6bd2"
+source = "gm:negative_interior_triangles_as_clip"
+scene = "negative_interior_triangles_as_clip"
+width = 1600
+height = 1600
+clear_color = "0xff00ffff"
+counts = { clipPath = 3, drawPath = 2, makeEmptyRenderPath = 8, makeRenderPaint = 2, restore = 3, save = 3, transform = 3 }
+
+[[case]]
+id = "gm-overfill_blendmodes-msaa"
+stream = "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream"
+sha256 = "ca4430e7ce56d0cee45231551a91c005a6871ef2443282018bf0fdb074fb4cdc"
+source = "gm:overfill_blendmodes"
+scene = "overfill_blendmodes"
+width = 200
+height = 200
+clear_color = "0x20202020"
+counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }
+
+[[case]]
+id = "gm-overfill_opaque-msaa"
+stream = "fixtures/renderer/streams/gm/overfill_opaque.rive-stream"
+sha256 = "f19777d1e69af66349c4b5dbf1939914e9b92414e045537589a5f44cd8533f6a"
+source = "gm:overfill_opaque"
+scene = "overfill_opaque"
+width = 200
+height = 200
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 3, makeRenderPaint = 2, restore = 1, save = 1, transform = 3 }

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=734, diverges=0, gated=734, total=1,468.
+- Rust wgpu: exact=743, diverges=0, gated=725, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -90,6 +90,10 @@ Run `make renderer-golden`.
   `gm-image_filter_options-msaa`, and `gm-image_lod-msaa`, and
   `gm-interleavedfillrule-msaa` and the
   `gm-labyrinth_{butt,round,square}-msaa` family, and
+  `gm-lots_of_tess_spans_stroke-msaa`, `gm-mandoline-msaa`,
+  `gm-mesh_ht_{1,7}-msaa`, `gm-mutating_fill_rule-msaa`,
+  `gm-negative_interior_triangles{,_as_clip}-msaa`, and
+  `gm-overfill_{blendmodes,opaque}-msaa`, and
   `gm-mesh-clockwise-atomic`, and
   `gm-degengrad-clockwise-atomic`,
   `gm-rect_grad-clockwise-atomic`,
@@ -884,14 +888,30 @@ Run `make renderer-golden`.
     `2/32` contracts with zero over-threshold pixels and max delta 1, advancing
     the full ratchet to exact=734/diverges=0/gated=734. The renderer suite,
     workspace, normal 584-segment floor, and scripted 35-segment floor pass.
-76. [ ] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
+76. [x] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
     entries after `largeclippedpath_*`: `lots_of_tess_spans_stroke`,
     `mandoline`, `mesh`, `mesh_ht_{1,7}`, `mutating_fill_rule`,
     `negative_interior_triangles{,_as_clip}`, `overfill_blendmodes`, and
     `overfill_opaque`. Extend the 64-case registry without changing retained
     artifacts, require byte-identical serial/four-job capture, probe accepted
     rows under their unchanged `2/32` contracts, narrow every rejection to an
-    observed diagnostic, and preserve all 734 exact entries.
+    observed diagnostic, and preserve all 734 exact entries. Strict generation
+    accepts nine rows and rejects `mesh` at its first `makeRenderBuffer`, now
+    named `strict-replay-render-buffer`. A fresh serial capture and the
+    four-job capture match across all 219 artifacts, and all 64 retained PNGs
+    remain byte-identical. All nine accepted Rust probes have zero
+    over-threshold pixels and max delta at most 1, advancing the ratchet to
+    exact=743/diverges=0/gated=725 without changing a tolerance. The workspace,
+    211 enabled renderer tests, normal 584-segment floor, scripted 35-segment
+    floor, and full renderer corpus pass.
+77. [ ] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
+    entries after `overfill_opaque`: `overfill_transparent`,
+    `overstroke_{blendmodes,opaque,transparent}`, `parallelclips`,
+    `path_skbug_{11859,11886}`, `path_stroke_clip_crbug1070835`, `quadcap`,
+    and `rawtext`. Extend the accepted registry without changing retained
+    artifacts, require byte-identical serial/four-job capture, probe accepted
+    rows under unchanged contracts, and narrow every strict-generator or Rust
+    rejection to its observed boundary while preserving all 743 exact rows.
 
 ## R2 Completion Record
 
@@ -1103,6 +1123,18 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Extend the strict C++ Dawn MSAA registry from 64 to 73 cases.
+  `mesh` fails closed at its first `makeRenderBuffer` and remains outside the
+  registry under `strict-replay-render-buffer`; the other nine candidates
+  compile. The accepted serial and four-job captures match across all 219
+  PNG/RGBA/provenance artifacts, and all 64 retained PNGs are byte-identical.
+  An initial serial wave produced one transient `interleavedfeather` artifact;
+  four isolated reruns and a fresh full serial wave matched the four-job and
+  retained bytes, so only the matching complete wave is accepted. All nine
+  new Rust probes pass `2/32` with max delta at most 1. The ratchet advances to
+  exact=743/diverges=0/gated=725 with no tolerance change; queue item 77 names
+  the next ten strict source-order cases.
 
 - 2026-07-14: Extend the strict C++ Dawn MSAA registry from 54 to 64 cases
   with `interleavedfillrule`, the three labyrinth streams, and all six
@@ -3129,3 +3161,10 @@ Run `make renderer-golden`.
   ratchet advances to exact=727/diverges=0/gated=741 with all 723 prior exact
   rows green; the workspace and normal 584-segment plus scripted 35-segment V2
   floors pass. Queue item 75 ports direct MSAA path clipping.
+- 2026-07-14: Captured nine more provenance-bound C++ Dawn MSAA references
+  with a 73-case registry; `mesh` remains gated at strict render-buffer replay.
+  The accepted serial/four-job waves match across all 219 artifacts, all 64
+  retained PNGs are unchanged, and all nine Rust probes promote under the
+  unchanged `2/32` contract. The renderer ratchet advances to
+  exact=743/diverges=0/gated=725; workspace, renderer, and both V2 floors pass.
+  Queue item 77 names the next strict source-order capture batch.

@@ -1534,13 +1534,12 @@ max_different_pixels = 32
 id = "gm-lots_of_tess_spans_stroke-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/lots_of_tess_spans_stroke.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/lots_of_tess_spans_stroke-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-lots_of_tess_spans_stroke-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1559,13 +1558,12 @@ max_different_pixels = 32
 id = "gm-mandoline-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/mandoline.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/mandoline-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mandoline-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1590,7 +1588,7 @@ backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
+gated = "strict-replay-render-buffer"
 
 
 [[entry]]
@@ -1609,13 +1607,12 @@ max_different_pixels = 32
 id = "gm-mesh_ht_1-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/mesh_ht_1.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/mesh_ht_1-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mesh_ht_1-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1634,13 +1631,12 @@ max_different_pixels = 32
 id = "gm-mesh_ht_7-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/mesh_ht_7.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/mesh_ht_7-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mesh_ht_7-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1659,13 +1655,12 @@ max_different_pixels = 64
 id = "gm-mutating_fill_rule-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/mutating_fill_rule.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/mutating_fill_rule-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mutating_fill_rule-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1684,13 +1679,12 @@ max_different_pixels = 1152
 id = "gm-negative_interior_triangles-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/negative_interior_triangles.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/negative_interior_triangles-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-negative_interior_triangles-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1709,13 +1703,12 @@ max_different_pixels = 64
 id = "gm-negative_interior_triangles_as_clip-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/negative_interior_triangles_as_clip.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/negative_interior_triangles_as_clip-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-negative_interior_triangles_as_clip-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1758,13 +1751,12 @@ max_different_pixels = 32
 id = "gm-overfill_blendmodes-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/overfill_blendmodes-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-overfill_blendmodes-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]
@@ -1783,13 +1775,12 @@ max_different_pixels = 48
 id = "gm-overfill_opaque-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/overfill_opaque.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/overfill_opaque-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-overfill_opaque-msaa.png"
 mode = "msaa"
-backend = "metal"
-status = "gated"
+backend = "dawn-webgpu-metal"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "algorithm-core"
 
 
 [[entry]]

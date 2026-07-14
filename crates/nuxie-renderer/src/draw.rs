@@ -74,6 +74,7 @@ struct StrokeContour {
 struct PreparedStrokeCurve {
     cubic: [Vec2D; 4],
     tangents: [Vec2D; 2],
+    original_start_tangent: Vec2D,
     parametric_segments: u32,
     polar_segments: u32,
     ends_original_curve: bool,
@@ -382,6 +383,12 @@ fn build_stroke_or_feather_tessellation(
         } else {
             let mut prepared = Vec::new();
             for curve in &curves {
+                let original_tangents = if curve.is_line {
+                    let tangent = subtract(curve.cubic[3], curve.cubic[0]);
+                    [tangent, tangent]
+                } else {
+                    cubic_tangents(curve.cubic)
+                };
                 let chopped = if curve.is_line {
                     vec![curve.cubic]
                 } else {
@@ -420,6 +427,7 @@ fn build_stroke_or_feather_tessellation(
                     prepared.push(PreparedStrokeCurve {
                         cubic,
                         tangents,
+                        original_start_tangent: original_tangents[0],
                         parametric_segments,
                         polar_segments,
                         ends_original_curve: index + 1 == chopped_count,
@@ -439,18 +447,27 @@ fn build_stroke_or_feather_tessellation(
                     contour_id | cap_flags,
                 ));
             }
+            let original_end_tangent = if let Some(curve) = curves.last() {
+                if curve.is_line {
+                    subtract(curve.cubic[3], curve.cubic[0])
+                } else {
+                    cubic_tangents(curve.cubic)[1]
+                }
+            } else {
+                Vec2D::new(-1.0, 0.0)
+            };
+            let mut carried_join_tangent = Vec2D::new(0.0, 1.0);
             for (index, curve) in prepared.iter().copied().enumerate() {
                 let final_open = !contour.closed && index + 1 == prepared.len();
                 let (join_tangent, join_segments, flags) = if final_open {
-                    (
-                        negate(curve.tangents[1]),
-                        cap_segments,
-                        contour_id | cap_flags,
-                    )
+                    carried_join_tangent = negate(original_end_tangent);
+                    (carried_join_tangent, cap_segments, contour_id | cap_flags)
                 } else if !curve.ends_original_curve {
-                    (prepared[index + 1].tangents[0], 1, contour_id | join_flags)
+                    (carried_join_tangent, 1, contour_id | join_flags)
                 } else {
-                    let next_tangent = prepared[(index + 1) % prepared.len()].tangents[0];
+                    let next_tangent =
+                        prepared[(index + 1) % prepared.len()].original_start_tangent;
+                    carried_join_tangent = next_tangent;
                     let segment_count = if !is_stroke {
                         feather_join_segments
                     } else if join == StrokeJoin::Round {
@@ -462,7 +479,7 @@ fn build_stroke_or_feather_tessellation(
                     } else {
                         5
                     };
-                    (next_tangent, segment_count, contour_id | join_flags)
+                    (carried_join_tangent, segment_count, contour_id | join_flags)
                 };
                 pending.push((
                     curve.cubic,
@@ -846,15 +863,53 @@ fn chop_cubic_at_values(curve: [Vec2D; 4], roots: &[f32]) -> Vec<[Vec2D; 4]> {
     let mut result = Vec::with_capacity(roots.len() + 1);
     let mut remaining = curve;
     let mut last_t = 0.0;
-    for &root in roots {
+    let mut roots = roots.chunks_exact(2);
+    for pair in &mut roots {
+        let denominator = 1.0 - last_t;
+        let t0 = ((pair[0] - last_t) / denominator).clamp(0.0, 1.0);
+        let t1 = ((pair[1] - last_t) / denominator).clamp(0.0, 1.0);
+        let [first, middle, last] = split_cubic_at_two(remaining, t0, t1);
+        result.extend([first, middle]);
+        remaining = last;
+        last_t = pair[1];
+    }
+    if let Some(&root) = roots.remainder().first() {
         let local_t = ((root - last_t) / (1.0 - last_t)).clamp(0.0, 1.0);
         let (left, right) = split_cubic(remaining, local_t);
         result.push(left);
         remaining = right;
-        last_t = root;
     }
     result.push(remaining);
     result
+}
+
+fn split_cubic_at_two(curve: [Vec2D; 4], t0: f32, t1: f32) -> [[Vec2D; 4]; 3] {
+    debug_assert!((0.0..=t1).contains(&t0));
+    debug_assert!(t1 <= 1.0);
+    if t1 == 1.0 {
+        let (first, remaining) = split_cubic(curve, t0);
+        return [first, remaining, [curve[3]; 4]];
+    }
+
+    let ab0 = lerp(curve[0], curve[1], t0);
+    let bc0 = lerp(curve[1], curve[2], t0);
+    let cd0 = lerp(curve[2], curve[3], t0);
+    let abc0 = lerp(ab0, bc0, t0);
+    let bcd0 = lerp(bc0, cd0, t0);
+    let split0 = lerp(abc0, bcd0, t0);
+
+    let ab1 = lerp(curve[0], curve[1], t1);
+    let bc1 = lerp(curve[1], curve[2], t1);
+    let cd1 = lerp(curve[2], curve[3], t1);
+    let abc1 = lerp(ab1, bc1, t1);
+    let bcd1 = lerp(bc1, cd1, t1);
+    let split1 = lerp(abc1, bcd1, t1);
+
+    [
+        [curve[0], ab0, abc0, split0],
+        [split0, lerp(abc0, bcd0, t1), lerp(abc1, bcd1, t0), split1],
+        [split1, bcd1, cd1, curve[3]],
+    ]
 }
 
 fn chop_cubic_around_cusps(
@@ -2026,7 +2081,7 @@ fn eval_cubic(points: [Vec2D; 4], t: f32) -> Vec2D {
 }
 
 fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
-    Vec2D::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+    Vec2D::new((b.x - a.x).mul_add(t, a.x), (b.y - a.y).mul_add(t, a.y))
 }
 
 #[cfg(test)]
@@ -2825,6 +2880,64 @@ mod tests {
             .filter(|span| span.points[0] == span.points[3] && span.points[1] == span.points[2])
             .count();
         assert_eq!(pivots, 2);
+    }
+
+    #[test]
+    fn degenerate_cubic_chops_carry_cpp_join_tangents() {
+        let mut tricky = RawPath::new();
+        tricky.move_to(1.0, 1.0);
+        tricky.cubic_to(1.66666675, 1.0, 1.66666675, 1.0, 1.0, 1.0);
+        let tricky = build_stroke_tessellation(
+            &tricky,
+            Mat2D([3.32997298, 0.0, 0.0, 3.32997298, 0.0, 0.0]),
+            9.00908184,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        let tricky_geometry = geometry_spans(&tricky).collect::<Vec<_>>();
+        assert_eq!(tricky_geometry.len(), 4);
+        assert_eq!(tricky_geometry[1].join_tangent, [0.0, 1.0]);
+        assert_eq!(tricky_geometry[2].join_tangent, [0.0, 1.0]);
+        assert_eq!(tricky_geometry[3].join_tangent, [0.66666675, 0.0]);
+
+        let mut turnaround = RawPath::new();
+        turnaround.move_to(0.0, 0.0);
+        turnaround.cubic_to(0.0, -10.0, 0.0, -10.0, 0.0, 10.0);
+        let turnaround = build_stroke_tessellation(
+            &turnaround,
+            Mat2D::IDENTITY,
+            100.0,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        let turnaround_geometry = geometry_spans(&turnaround).collect::<Vec<_>>();
+        assert_eq!(turnaround_geometry.len(), 4);
+        assert_eq!(turnaround_geometry[1].join_tangent, [0.0, 1.0]);
+        assert_eq!(turnaround_geometry[2].join_tangent, [0.0, 1.0]);
+        assert_eq!(turnaround_geometry[3].join_tangent, [0.0, -20.0]);
+    }
+
+    #[test]
+    fn degenerate_cubic_single_chop_matches_cpp_mix_bits() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.cubic_to(0.0, -10.0, 10.0, 10.0, 0.0, 10.0);
+        let tessellation = build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            100.0,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry.len(), 3);
+        assert_eq!(geometry[0].points[0][1].to_bits(), 0x40a5ed0a);
+        assert_eq!(geometry[0].points[1][1].to_bits(), 0x350aaaab);
+        assert_eq!(geometry[1].points[2][1].to_bits(), 0x350aaaab);
+        assert_eq!(geometry[2].join_tangent, [10.0, 0.0]);
     }
 
     #[test]

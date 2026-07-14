@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=769, diverges=0, gated=699, total=1,468.
+- Rust wgpu: exact=771, diverges=0, gated=697, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -103,7 +103,8 @@ Run `make renderer-golden`.
   `gm-strokes3-msaa`, and `gm-strokes_round-msaa`, plus
   `gm-strokes_zoomed-msaa`, `gm-teenyStrokes-msaa`,
   `gm-transparentclear{,_blendmode}-msaa`,
-  `gm-trickycubicstrokes_{feather,roundcaps}-msaa`, `gm-zeroPath-msaa`,
+  `gm-trickycubicstrokes{,_feather,_roundcaps}-msaa`,
+  `gm-widebuttcaps-msaa`, `gm-zeroPath-msaa`,
   `gm-zero_control_stroke-msaa`, and
   `gm-zerolinestroke-msaa`, and
   `gm-mesh-clockwise-atomic`, and
@@ -1007,11 +1008,25 @@ Run `make renderer-golden`.
     have exact alpha and share the narrower
     `msaa-degenerate-cubic-butt-miter-topology` diagnostic. The ratchet
     advances to exact=769/diverges=0/gated=699 without changing a tolerance.
-82. [ ] Port C++'s MSAA degenerate-cubic butt/miter stroke topology using the
+82. [x] Port C++'s MSAA degenerate-cubic butt/miter stroke topology using the
     two pinned Dawn rows as the final-pixel oracle. First isolate the prepared
     tessellation for `trickycubicstrokes` path 20 and the four
     `widebuttcaps` cubic draws; then translate the shared C++ branch and
-    promote both rows under unchanged `2/32` contracts.
+    promote both rows under unchanged `2/32` contracts. Exact C++/Rust CPU
+    span, physical tessellation-texture, and five-selector final 4x MSAA pixel
+    oracles pin the implementation. Rust now preserves C++'s paired cubic-root
+    split, internal neutral join tangents, original terminal cap tangent, and
+    fused interpolation. The remaining final-pixel delta exposed a separate
+    pipeline mismatch: C++ culls counterclockwise MSAA stroke faces, while
+    Rust had culling disabled. Enabling back-face culling makes both full Dawn
+    probes byte-exact and advances the ratchet to
+    exact=771/diverges=0/gated=697 without changing a tolerance.
+83. [ ] Extend strict Dawn reference generation for `.riv` frame selection,
+    beginning with the 624 rows classified
+    `strict-replay-riv-frame-selection`. Once supported, run all newly eligible
+    Dawn captures as one continuous background campaign while renderer
+    implementation continues; validate provenance and deterministic recapture,
+    then promote passing rows in batches under their unchanged contracts.
 
 ## R2 Completion Record
 
@@ -3366,3 +3381,12 @@ Run `make renderer-golden`.
   exact=769/diverges=0/gated=699; 40 format tests, 11 capture tests, inventory
   drift check, workspace, normal 584-segment floor, and scripted 35-segment
   floor pass. Queue item 82 targets the shared two-row topology gap.
+- 2026-07-14: Closed the degenerate-cubic MSAA stroke gap with exact bounded
+  C++/Rust CPU-span, tessellation-texture, and final-pixel oracles. Paired-root
+  splitting, carried join/cap tangents, fused interpolation, and C++ back-face
+  culling make `gm-trickycubicstrokes-msaa` and `gm-widebuttcaps-msaa`
+  byte-exact. The corpus advances to exact=771/diverges=0/gated=697, and the
+  regenerated capture inventory has 636 gated MSAA rows: 631 are generator
+  unsupported, including 624 `.riv` frame-selection rows, and five already
+  have strict provenance. Queue item 83 extends `.riv` frame-selection
+  generation and then launches continuous Dawn capture.

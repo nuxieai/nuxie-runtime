@@ -357,7 +357,7 @@ impl PathPipeline {
                 "nuxie-msaa-stroke-advanced",
                 "nuxie-msaa-stroke-advanced-hsl",
             )),
-            None,
+            Some(wgpu::Face::Back),
             stencil_state(disabled_face, disabled_face, 0xff, 0xff),
             active_clip_stencil,
             wgpu::CompareFunction::Less,

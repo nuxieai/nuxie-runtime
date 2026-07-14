@@ -55,6 +55,8 @@ README = pathlib.Path(__file__).with_name("README.md")
 RUNTIME_PATCH = pathlib.Path(__file__).with_name("runtime.patch")
 RUST_RENDERER = ROOT / "crates" / "nuxie-renderer" / "src" / "lib.rs"
 STROKES_ROUND_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "strokes_round.rive-stream"
+TRICKY_CUBIC_STROKES_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "trickycubicstrokes.rive-stream"
+WIDE_BUTT_CAPS_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "widebuttcaps.rive-stream"
 RAWTEXT_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "rawtext.rive-stream"
 POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
@@ -765,8 +767,56 @@ class FormatTests(unittest.TestCase):
             "88.8961792f,",
             "4.37011719f,",
             "16.0329189f,",
-            "paint->thickness(directStrokesRoundCase ? kDirectStrokesRoundThickness",
+            "paint->thickness(directStrokesRoundCase",
+            "? kDirectStrokesRoundThickness",
             "? 0x7a52bdb0",
+        ):
+            self.assertIn(fragment, exporter)
+
+    def test_degenerate_cubic_oracle_literals_match_stream_draws(self):
+        tricky_stream = TRICKY_CUBIC_STROKES_STREAM.read_text()
+        self.assertIn(
+            "transform matrix=[3.32997298,0,0,3.32997298,896.569214,696.670044]",
+            tricky_stream,
+        )
+        self.assertIn(
+            "path={verbs=[move,cubic],points=[(1,1),(1.66666675,1),"
+            "(1.66666675,1),(1,1)]}",
+            tricky_stream,
+        )
+        self.assertIn("thickness=9.00908184,join=0,cap=0", tricky_stream)
+
+        wide_stream = WIDE_BUTT_CAPS_STREAM.read_text()
+        for points in (
+            "[(0,0),(10,0),(10,0),(10,10)]",
+            "[(0,0),(0,-10),(0,-10),(0,10)]",
+            "[(0,0),(0,-10),(10,10),(0,10)]",
+            "[(0,0),(0,-10),(10,0),(0,0)]",
+        ):
+            self.assertIn(
+                f"path={{verbs=[move,cubic],points={points}}}", wide_stream
+            )
+        self.assertEqual(wide_stream.count("thickness=100,join=0,cap=0"), 8)
+
+        exporter = EXPORTER.read_text()
+        for fragment in (
+            '"direct-degenerate-cubic"',
+            '"tricky-path20"',
+            '"wide-row0"',
+            '"wide-row1"',
+            '"wide-row2"',
+            '"wide-row3"',
+            "renderer.scale(3.32997298f, 3.32997298f);",
+            "path->cubicTo(1.66666675f, 1, 1.66666675f, 1, 1, 1);",
+            "path->cubicTo(10, 0, 10, 0, 10, 10);",
+            "path->cubicTo(0, -10, 0, -10, 0, 10);",
+            "path->cubicTo(0, -10, 10, 10, 0, 10);",
+            "path->cubicTo(0, -10, 10, 0, 0, 0);",
+            ": directDegenerateTrickyPath20 ? 9.00908184f",
+            ": directDegenerateCubicCase",
+            "? 100.f",
+            "directRawTextCase || directDegenerateCubicCase ||",
+            "writeTessVertexSpans(auxiliaryOutput, facts);",
         ):
             self.assertIn(fragment, exporter)
 
@@ -1014,11 +1064,17 @@ class FormatTests(unittest.TestCase):
             "paint->style(fillCase ? rive::RenderPaintStyle::fill",
             ": rive::RenderPaintStyle::stroke);",
             "path->cubicTo(kSquareMax,",
-            "paint->thickness(directStrokesRoundCase ? kDirectStrokesRoundThickness",
+            "paint->thickness(directStrokesRoundCase",
+            "? kDirectStrokesRoundThickness",
             "paint->join(rive::StrokeJoin::miter);",
             "paint->cap(rive::StrokeCap::butt);",
             "paint->feather(directTriangulatedCase || directStrokesRoundCase ||",
+            "directRawTextCase || directDegenerateCubicCase ||",
             ".msaaSampleCount = directOutputCase ? 0u : 4u",
+            "(directCase && !directDegenerateCubicCase)",
+            "rive::gpu::DrawType::msaaStrokes",
+            "directDegenerateCubicCase ? rive::gpu::InterlockMode::msaa",
+            "rive::gpu::DrawContents::opaquePaint",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
             "context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();",
@@ -1623,9 +1679,9 @@ class FormatTests(unittest.TestCase):
             {
                 "accepted": 0,
                 "capture_manifest_cases": 102,
-                "gated_msaa_rows": 638,
+                "gated_msaa_rows": 636,
                 "missing_strict_provenance_rows": 631,
-                "strict_provenance_rows": 7,
+                "strict_provenance_rows": 5,
                 "unsupported": 631,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,

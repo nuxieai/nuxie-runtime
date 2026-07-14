@@ -2477,10 +2477,9 @@ stream = "fixtures/renderer/streams/gm/trickycubicstrokes.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-trickycubicstrokes-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-degenerate-cubic-butt-miter-topology"
 
 
 [[entry]]
@@ -2575,10 +2574,9 @@ stream = "fixtures/renderer/streams/gm/widebuttcaps.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-widebuttcaps-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-degenerate-cubic-butt-miter-topology"
 
 
 [[entry]]

@@ -8130,6 +8130,108 @@ mod tests {
         tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
     }
 
+    fn fixed_degenerate_cubic_draw(selector: &str) -> (WgpuPath, Mat2D, WgpuPaint) {
+        let mut path = RawPath::new();
+        let (transform, thickness) = match selector {
+            "tricky-path20" => {
+                path.move_to(1.0, 1.0);
+                path.cubic_to(1.66666675, 1.0, 1.66666675, 1.0, 1.0, 1.0);
+                (
+                    Mat2D([3.32997298, 0.0, 0.0, 3.32997298, 0.0, 0.0]),
+                    9.00908184,
+                )
+            }
+            "wide-row0" => {
+                path.move_to(0.0, 0.0);
+                path.cubic_to(10.0, 0.0, 10.0, 0.0, 10.0, 10.0);
+                (Mat2D::IDENTITY, 100.0)
+            }
+            "wide-row1" => {
+                path.move_to(0.0, 0.0);
+                path.cubic_to(0.0, -10.0, 0.0, -10.0, 0.0, 10.0);
+                (Mat2D::IDENTITY, 100.0)
+            }
+            "wide-row2" => {
+                path.move_to(0.0, 0.0);
+                path.cubic_to(0.0, -10.0, 10.0, 10.0, 0.0, 10.0);
+                (Mat2D::IDENTITY, 100.0)
+            }
+            "wide-row3" => {
+                path.move_to(0.0, 0.0);
+                path.cubic_to(0.0, -10.0, 10.0, 0.0, 0.0, 0.0);
+                (Mat2D::IDENTITY, 100.0)
+            }
+            _ => panic!("unknown degenerate cubic selector {selector}"),
+        };
+        (
+            WgpuPath {
+                raw_path: path,
+                fill_rule: FillRule::Clockwise,
+            },
+            transform,
+            WgpuPaint {
+                color: 0xffff_ffff,
+                style: RenderPaintStyle::Stroke,
+                thickness,
+                join: StrokeJoin::Miter,
+                cap: StrokeCap::Butt,
+                feather: 0.0,
+                ..WgpuPaint::default()
+            },
+        )
+    }
+
+    fn fixed_degenerate_cubic_tessellation(selector: &str) -> draw::FillTessellation {
+        let (path, transform, paint) = fixed_degenerate_cubic_draw(selector);
+        draw::build_stroke_tessellation(
+            &path.raw_path,
+            transform,
+            paint.thickness,
+            paint.join,
+            paint.cap,
+        )
+        .unwrap()
+    }
+
+    fn fixed_degenerate_cubic_blit(selector: &str) -> atlas_blit_oracle::AtlasBlit {
+        let (path, transform, paint) = fixed_degenerate_cubic_draw(selector);
+        let factory = WgpuFactory::new_with_mode(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            RenderMode::Msaa,
+        )
+        .unwrap();
+        let mut frame = factory.begin_frame(0);
+        frame.transform(transform);
+        frame.draw_path(&path, &paint);
+        atlas_blit_oracle::AtlasBlit::new(
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+            frame.finish().unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn msaa_stroke_culls_counterclockwise_degenerate_join_triangles() {
+        let blit = fixed_degenerate_cubic_blit("wide-row1");
+        let pixel = (10 * ATLAS_ORACLE_FRAME_SIZE + 6) as usize * 4;
+        assert_eq!(&blit.pixels()[pixel..pixel + 4], &[191; 4]);
+    }
+
+    fn fixed_degenerate_cubic_spans(selector: &str) -> tess_span_oracle::TessSpanArtifact {
+        let tessellation = fixed_degenerate_cubic_tessellation(selector);
+        tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
+    }
+
+    fn fixed_degenerate_cubic_direct_inputs(selector: &str) -> atlas_input_oracle::AtlasInputs {
+        fixed_direct_inputs_from_tessellation(
+            fixed_degenerate_cubic_tessellation(selector),
+            ATLAS_ORACLE_FRAME_SIZE,
+            ATLAS_ORACLE_FRAME_SIZE,
+        )
+    }
+
     fn fixed_feather_atlas_oracle_for(
         raw_path: RawPath,
         paint: WgpuPaint,
@@ -10490,6 +10592,237 @@ mod tests {
                 path.display()
             )
         });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_DEGENERATE_SPANS_DIR from the C++ WebGPU oracle"]
+    fn cpp_direct_degenerate_cubic_cpu_spans_match_rust_record_for_record() {
+        fn summarize(artifact: &tess_span_oracle::TessSpanArtifact) -> String {
+            artifact
+                .records
+                .iter()
+                .enumerate()
+                .map(|(index, record)| {
+                    let x0 = record[12] as u16 as i16;
+                    let x1 = (record[12] >> 16) as u16 as i16;
+                    let parametric = record[14] & 0x3ff;
+                    let polar = record[14] >> 10 & 0x3ff;
+                    let join = record[14] >> 20 & 0x3ff;
+                    format!("{index}:x={x0}..{x1},segments={parametric}/{polar}/{join}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+
+        fn differing_words(
+            cpp: &tess_span_oracle::TessSpanArtifact,
+            rust: &tess_span_oracle::TessSpanArtifact,
+        ) -> String {
+            cpp.records
+                .iter()
+                .zip(&rust.records)
+                .enumerate()
+                .flat_map(|(record_index, (cpp_record, rust_record))| {
+                    cpp_record
+                        .iter()
+                        .zip(rust_record)
+                        .enumerate()
+                        .filter(|(_, (cpp_word, rust_word))| cpp_word != rust_word)
+                        .map(move |(word_index, (&cpp_word, &rust_word))| {
+                            format!(
+                                "{record_index}.{word_index}: {cpp_word:#010x}/{} vs {rust_word:#010x}/{}",
+                                f32::from_bits(cpp_word),
+                                f32::from_bits(rust_word)
+                            )
+                        })
+                })
+                .take(24)
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+
+        let directory = std::env::var_os("RIVE_CPP_DIRECT_DEGENERATE_SPANS_DIR").expect(
+            "RIVE_CPP_DIRECT_DEGENERATE_SPANS_DIR is required for the ignored degenerate-cubic span test",
+        );
+        assert!(
+            !directory.is_empty(),
+            "RIVE_CPP_DIRECT_DEGENERATE_SPANS_DIR is empty"
+        );
+        let directory = PathBuf::from(directory);
+        assert!(
+            directory.is_absolute(),
+            "RIVE_CPP_DIRECT_DEGENERATE_SPANS_DIR must be absolute"
+        );
+        let mut mismatches = Vec::new();
+        for selector in [
+            "tricky-path20",
+            "wide-row0",
+            "wide-row1",
+            "wide-row2",
+            "wide-row3",
+        ] {
+            let path = directory.join(format!("direct-degenerate-{selector}-spans.bin"));
+            let bytes = fs::read(&path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ {selector} spans at {}: {error}",
+                    path.display()
+                )
+            });
+            let cpp_spans =
+                tess_span_oracle::TessSpanArtifact::parse(&bytes).unwrap_or_else(|error| {
+                    panic!(
+                        "malformed C++ {selector} spans at {}: {error}",
+                        path.display()
+                    )
+                });
+            let rust_spans = fixed_degenerate_cubic_spans(selector);
+            if let Err(error) = tess_span_oracle::compare_exact(&cpp_spans, &rust_spans) {
+                mismatches.push(format!(
+                    "{selector}: {error}\n  C++ {}\n  Rust {}\n  Words {}",
+                    summarize(&cpp_spans),
+                    summarize(&rust_spans),
+                    differing_words(&cpp_spans, &rust_spans)
+                ));
+            }
+        }
+        assert!(
+            mismatches.is_empty(),
+            "C++ degenerate-cubic CPU span mismatches:\n{}",
+            mismatches.join("\n")
+        );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_DEGENERATE_INPUTS_DIR from the C++ WebGPU oracle"]
+    fn cpp_direct_degenerate_cubic_tessellation_texture_matches_rust() {
+        let directory = std::env::var_os("RIVE_CPP_DIRECT_DEGENERATE_INPUTS_DIR").expect(
+            "RIVE_CPP_DIRECT_DEGENERATE_INPUTS_DIR is required for the ignored degenerate-cubic tessellation test",
+        );
+        assert!(
+            !directory.is_empty(),
+            "RIVE_CPP_DIRECT_DEGENERATE_INPUTS_DIR is empty"
+        );
+        let directory = PathBuf::from(directory);
+        assert!(
+            directory.is_absolute(),
+            "RIVE_CPP_DIRECT_DEGENERATE_INPUTS_DIR must be absolute"
+        );
+        let mut mismatches = Vec::new();
+        for selector in [
+            "tricky-path20",
+            "wide-row0",
+            "wide-row1",
+            "wide-row2",
+            "wide-row3",
+        ] {
+            let path = directory.join(format!("direct-degenerate-{selector}-inputs.bin"));
+            let bytes = fs::read(&path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ {selector} tessellation inputs at {}: {error}",
+                    path.display()
+                )
+            });
+            let mut cpp_inputs =
+                atlas_input_oracle::AtlasInputs::parse(&bytes).unwrap_or_else(|error| {
+                    panic!(
+                        "malformed C++ {selector} tessellation inputs at {}: {error}",
+                        path.display()
+                    )
+                });
+            let rust_inputs = fixed_degenerate_cubic_direct_inputs(selector);
+            // The direct MSAA oracle does not expose an atlas-patch batch; the
+            // artifact is used here to compare its contour and tessellation
+            // texture payloads.
+            cpp_inputs.base_patch = rust_inputs.base_patch;
+            cpp_inputs.patch_count = rust_inputs.patch_count;
+            if let Err(error) = atlas_input_oracle::compare_cpp_to_rust(&cpp_inputs, &rust_inputs) {
+                mismatches.push(format!("{selector}: {error}"));
+            }
+        }
+        assert!(
+            mismatches.is_empty(),
+            "C++ degenerate-cubic tessellation mismatches:\n{}",
+            mismatches.join("\n")
+        );
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_DEGENERATE_BLITS_DIR from the C++ WebGPU oracle"]
+    fn cpp_direct_degenerate_cubic_msaa_blits_match_rust() {
+        fn difference_summary(
+            cpp: &atlas_blit_oracle::AtlasBlit,
+            rust: &atlas_blit_oracle::AtlasBlit,
+        ) -> String {
+            let mut bounds = [usize::MAX, usize::MAX, 0, 0];
+            let mut cpp_values = std::collections::BTreeMap::<[u8; 4], usize>::new();
+            let mut rust_values = std::collections::BTreeMap::<[u8; 4], usize>::new();
+            for (index, (cpp, rust)) in cpp
+                .pixels()
+                .chunks_exact(4)
+                .zip(rust.pixels().chunks_exact(4))
+                .enumerate()
+            {
+                if cpp == rust {
+                    continue;
+                }
+                let x = index % ATLAS_ORACLE_FRAME_SIZE as usize;
+                let y = index / ATLAS_ORACLE_FRAME_SIZE as usize;
+                bounds[0] = bounds[0].min(x);
+                bounds[1] = bounds[1].min(y);
+                bounds[2] = bounds[2].max(x);
+                bounds[3] = bounds[3].max(y);
+                *cpp_values.entry(cpp.try_into().unwrap()).or_default() += 1;
+                *rust_values.entry(rust.try_into().unwrap()).or_default() += 1;
+            }
+            format!("bounds={bounds:?} C++={cpp_values:?} Rust={rust_values:?}")
+        }
+
+        let directory = std::env::var_os("RIVE_CPP_DIRECT_DEGENERATE_BLITS_DIR").expect(
+            "RIVE_CPP_DIRECT_DEGENERATE_BLITS_DIR is required for the ignored degenerate-cubic MSAA blit test",
+        );
+        assert!(
+            !directory.is_empty(),
+            "RIVE_CPP_DIRECT_DEGENERATE_BLITS_DIR is empty"
+        );
+        let directory = PathBuf::from(directory);
+        assert!(
+            directory.is_absolute(),
+            "RIVE_CPP_DIRECT_DEGENERATE_BLITS_DIR must be absolute"
+        );
+        let mut mismatches = Vec::new();
+        for selector in [
+            "tricky-path20",
+            "wide-row0",
+            "wide-row1",
+            "wide-row2",
+            "wide-row3",
+        ] {
+            let path = directory.join(format!("direct-degenerate-{selector}-blit.rgba"));
+            let bytes = fs::read(&path).unwrap_or_else(|error| {
+                panic!(
+                    "failed to read C++ {selector} MSAA blit at {}: {error}",
+                    path.display()
+                )
+            });
+            let cpp_blit = atlas_blit_oracle::AtlasBlit::parse(&bytes).unwrap_or_else(|error| {
+                panic!(
+                    "malformed C++ {selector} MSAA blit at {}: {error}",
+                    path.display()
+                )
+            });
+            let rust_blit = fixed_degenerate_cubic_blit(selector);
+            if let Err(error) = atlas_blit_oracle::compare_cpp_to_rust(&cpp_blit, &rust_blit) {
+                mismatches.push(format!(
+                    "{selector}: {error}; {}",
+                    difference_summary(&cpp_blit, &rust_blit)
+                ));
+            }
+        }
+        assert!(
+            mismatches.is_empty(),
+            "C++ degenerate-cubic MSAA blit mismatches:\n{}",
+            mismatches.join("\n")
+        );
     }
 
     #[test]

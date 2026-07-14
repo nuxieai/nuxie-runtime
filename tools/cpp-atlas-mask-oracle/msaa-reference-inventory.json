@@ -5052,9 +5052,9 @@
   "summary": {
     "accepted": 0,
     "capture_manifest_cases": 102,
-    "gated_msaa_rows": 638,
+    "gated_msaa_rows": 636,
     "missing_strict_provenance_rows": 631,
-    "strict_provenance_rows": 7,
+    "strict_provenance_rows": 5,
     "unsupported": 631,
     "unsupported_by_reason": {
       "strict-replay-gm-header": 1,

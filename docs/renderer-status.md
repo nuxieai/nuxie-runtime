@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=751, diverges=0, gated=717, total=1,468.
+- Rust wgpu: exact=753, diverges=0, gated=715, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -94,7 +94,8 @@ Run `make renderer-golden`.
   `gm-mesh_ht_{1,7}-msaa`, `gm-mutating_fill_rule-msaa`,
   `gm-negative_interior_triangles{,_as_clip}-msaa`, and
   `gm-overfill_{blendmodes,opaque}-msaa`, and
-  `gm-overfill_transparent-msaa`, `gm-overstroke_opaque-msaa`,
+  `gm-overfill_transparent-msaa`,
+  `gm-overstroke_{blendmodes,opaque,transparent}-msaa`,
   `gm-parallelclips-msaa`, `gm-path_skbug_{11859,11886}-msaa`,
   `gm-path_stroke_clip_crbug1070835-msaa`, `gm-quadcap-msaa`, and
   `gm-rawtext-msaa`, and
@@ -927,11 +928,30 @@ Run `make renderer-golden`.
     exact=751/diverges=0/gated=717 without changing a tolerance. The workspace,
     36 oracle-format tests, 11 capture tests, normal 584-segment floor,
     scripted 35-segment floor, and full renderer corpus pass.
-78. [ ] Port C++ `gpu.cpp::get_depth_state(msaaStrokes)` as a dedicated Rust
+78. [x] Port C++ `gpu.cpp::get_depth_state(msaaStrokes)` as a dedicated Rust
     MSAA stroke pipeline with depth writes enabled, preserving generic
     analytic-fill state. Add a focused overlapping-stroke GPU regression,
     then promote `gm-overstroke_{blendmodes,transparent}-msaa` under their
-    unchanged `2/32` contracts while preserving all 751 exact rows.
+    unchanged `2/32` contracts while preserving all 751 exact rows. The
+    direct-path branch was stroke-only in Rust, so it is now named `Stroke`
+    and uses C++'s `Less` depth compare with writes enabled; all midpoint-fan
+    fill pipelines retain their existing depth/stencil states. The focused
+    transparent duplicate-contour regression failed from accumulated alpha
+    before the change and passes afterward. Both probes pass unchanged
+    contracts (`blendmodes` byte-exact; `transparent` zero over-threshold
+    pixels/max delta 2), and the full corpus advances to
+    exact=753/diverges=0/gated=715 while preserving all prior exact rows. The
+    212-test renderer suite, workspace, normal 584-segment floor, scripted
+    35-segment floor, and full renderer corpus pass.
+79. [ ] Capture and probe the next ten gated strict source-order C++ Dawn MSAA
+    entries after `rawtext`: `rect`, `rect_grad`, `rotatedcubicpath`,
+    `roundjoinstrokes`, `skbug12244`, `strokedlines`, `strokefill`, `strokes3`,
+    `strokes_poly`, and `strokes_round`. Extend the 83-case registry without
+    changing retained artifacts, require byte-identical serial/four-job
+    capture, replace the stale native-Metal `rect` harness reference only with
+    complete Dawn provenance, probe accepted rows under unchanged contracts,
+    and narrow every rejection to an observed diagnostic while preserving all
+    753 exact rows.
 
 ## R2 Completion Record
 
@@ -1143,6 +1163,16 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-14: Translate C++ `gpu.cpp::get_depth_state(msaaStrokes)` directly:
+  Rust's stroke-only direct-path pipeline now compares depth with `Less` and
+  writes depth, while the independent MSAA fill pipelines remain unchanged.
+  A red/green duplicate-contour GPU test pins the self-overdraw behavior.
+  `gm-overstroke_blendmodes-msaa` is byte-exact and
+  `gm-overstroke_transparent-msaa` has zero pixels beyond delta 2, so both
+  promote under unchanged `2/32` contracts. The renderer ratchet is
+  exact=753/diverges=0/gated=715. Queue item 79 continues strict source-order
+  Dawn capture through the remaining concentrated stroke rows.
 
 - 2026-07-14: Extend the strict C++ Dawn MSAA registry from 73 to 83 cases.
   Serial and four-job captures match across all 249 PNG/RGBA/provenance
@@ -1932,6 +1962,13 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-14: Ported the dedicated MSAA stroke depth state and promoted both
+  depth-write-gated overstroke rows without changing tolerances. A focused
+  red/green GPU regression, 212 enabled renderer tests, the workspace, the
+  1,468-row renderer corpus, and both V2 floors pass. The renderer metric is
+  exact=753/diverges=0/gated=715; queue item 79 captures the next ten strict
+  source-order Dawn references.
 
 - 2026-07-14: Captured ten more provenance-bound C++ Dawn MSAA references
   with an 83-case registry. Serial and four-job outputs match across all 249

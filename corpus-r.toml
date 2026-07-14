@@ -1826,10 +1826,9 @@ stream = "fixtures/renderer/streams/gm/overstroke_blendmodes.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-overstroke_blendmodes-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-stroke-depth-write"
 
 
 [[entry]]
@@ -1875,10 +1874,9 @@ stream = "fixtures/renderer/streams/gm/overstroke_transparent.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-overstroke_transparent-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-stroke-depth-write"
 
 
 [[entry]]

@@ -2369,7 +2369,7 @@ impl WgpuFrame {
                     destination_copy_bounds: [u32; 4],
                 }
                 enum PreparedDraw {
-                    Analytic(path_pipeline::PreparedPathDraw, DirectPathOptions),
+                    Stroke(path_pipeline::PreparedPathDraw, DirectPathOptions),
                     Fill(path_pipeline::PreparedPathDraw, FillRule, DirectPathOptions),
                     OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
@@ -2745,7 +2745,7 @@ impl WgpuFrame {
                             prepared_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
                                 PreparedDraw::Fill(prepared, draw.path.fill_rule, options)
                             } else {
-                                PreparedDraw::Analytic(prepared, options)
+                                PreparedDraw::Stroke(prepared, options)
                             });
                             continue;
                         }
@@ -2776,7 +2776,7 @@ impl WgpuFrame {
                 let prepared_advanced_count = prepared_draws
                     .iter()
                     .filter(|draw| match draw {
-                        PreparedDraw::Analytic(_, options) | PreparedDraw::Fill(_, _, options) => {
+                        PreparedDraw::Stroke(_, options) | PreparedDraw::Fill(_, _, options) => {
                             options.advanced_blend
                         }
                         PreparedDraw::Atlas(draw) => {
@@ -2797,7 +2797,7 @@ impl WgpuFrame {
                     ));
                 }
                 let destination_copy_bounds = |draw: &PreparedDraw| match draw {
-                    PreparedDraw::Analytic(_, options) | PreparedDraw::Fill(_, _, options)
+                    PreparedDraw::Stroke(_, options) | PreparedDraw::Fill(_, _, options)
                         if options.advanced_blend =>
                     {
                         Some(options.destination_copy_bounds)
@@ -2913,14 +2913,14 @@ impl WgpuFrame {
                     pass.set_stencil_reference(0);
                     for prepared in &prepared_draws[segment_start..segment_end] {
                         match prepared {
-                            PreparedDraw::Analytic(draw, options) => {
+                            PreparedDraw::Stroke(draw, options) => {
                                 pass.set_stencil_reference(if options.path_clip {
                                     0x80
                                 } else {
                                     0
                                 });
                                 pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
-                                    path_pipeline::DirectPathPipelineKind::Analytic,
+                                    path_pipeline::DirectPathPipelineKind::Stroke,
                                     options.path_clip,
                                     options.clip_rect,
                                     options.advanced_blend,
@@ -6133,6 +6133,37 @@ mod tests {
         assert_eq!(pixel(8, 8), [0, 255, 0, 255]);
         assert_eq!(pixel(32, 32), [0, 0, 0, 255]);
         assert_eq!(pixel(56, 56), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_stroke_depth_rejects_duplicate_contour_self_overdraw() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let make_path = |contour_count| {
+            let mut raw_path = RawPath::new();
+            for _ in 0..contour_count {
+                raw_path.move_to(8.0, 32.0);
+                raw_path.line_to(56.0, 32.0);
+            }
+            WgpuPath {
+                raw_path,
+                fill_rule: FillRule::NonZero,
+            }
+        };
+        let single = make_path(1);
+        let duplicate = make_path(2);
+        let paint = WgpuPaint {
+            color: 0x80ff_0000,
+            style: RenderPaintStyle::Stroke,
+            thickness: 16.0,
+            ..WgpuPaint::default()
+        };
+        let render = |path: &WgpuPath| {
+            let mut frame = factory.begin_frame(0xff00_0000);
+            frame.draw_path(path, &paint);
+            frame.finish().unwrap()
+        };
+
+        assert_eq!(render(&single), render(&duplicate));
     }
 
     #[test]

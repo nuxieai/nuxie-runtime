@@ -8,7 +8,7 @@ use nuxie_render_api::ImageSampler;
 use wgpu::util::DeviceExt;
 
 pub(crate) struct PathPipeline {
-    analytic: DirectPipelineSet,
+    stroke: DirectPipelineSet,
     fill_borrowed: DirectPipelineSet,
     fill_forward: DirectPipelineSet,
     fill_cleanup: DirectPipelineSet,
@@ -43,7 +43,7 @@ struct PipelineVariants {
 
 #[derive(Clone, Copy)]
 pub(crate) enum DirectPathPipelineKind {
-    Analytic,
+    Stroke,
     FillBorrowed,
     FillForward,
     FillCleanup,
@@ -349,14 +349,19 @@ impl PathPipeline {
         };
         let active_clip_face = stencil_face(wgpu::CompareFunction::Equal, keep, keep);
         let active_clip_stencil = stencil_state(active_clip_face, active_clip_face, 0xff, 0xff);
-        let analytic = create_direct_pipelines(
-            "nuxie-msaa-path",
-            Some(("nuxie-msaa-path-advanced", "nuxie-msaa-path-advanced-hsl")),
+        // renderer/src/gpu.cpp::get_depth_state(msaaStrokes): one depth hit per
+        // sample prevents a compound stroke from blending with itself.
+        let stroke = create_direct_pipelines(
+            "nuxie-msaa-stroke",
+            Some((
+                "nuxie-msaa-stroke-advanced",
+                "nuxie-msaa-stroke-advanced-hsl",
+            )),
             None,
             stencil_state(disabled_face, disabled_face, 0xff, 0xff),
             active_clip_stencil,
-            wgpu::CompareFunction::Always,
-            false,
+            wgpu::CompareFunction::Less,
+            true,
             wgpu::ColorWrites::ALL,
         );
         // renderer/src/gpu.cpp: MSAA midpoint-fan fill pipeline states.
@@ -621,7 +626,7 @@ impl PathPipeline {
             wgpu::ColorWrites::empty(),
         );
         Self {
-            analytic,
+            stroke,
             fill_borrowed,
             fill_forward,
             fill_cleanup,
@@ -643,7 +648,7 @@ impl PathPipeline {
     }
 
     pub(crate) fn supports_clip_rect(&self) -> bool {
-        self.analytic.fixed.unclipped_rect.is_some()
+        self.stroke.fixed.unclipped_rect.is_some()
     }
 
     pub(crate) fn direct_pipeline(
@@ -655,7 +660,7 @@ impl PathPipeline {
         hsl_blend: bool,
     ) -> &wgpu::RenderPipeline {
         let pipelines = match kind {
-            DirectPathPipelineKind::Analytic => &self.analytic,
+            DirectPathPipelineKind::Stroke => &self.stroke,
             DirectPathPipelineKind::FillBorrowed => &self.fill_borrowed,
             DirectPathPipelineKind::FillForward => &self.fill_forward,
             DirectPathPipelineKind::FillCleanup => &self.fill_cleanup,

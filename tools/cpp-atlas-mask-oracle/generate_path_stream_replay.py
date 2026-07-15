@@ -32,6 +32,17 @@ DRAW_IMAGE_RE = re.compile(
     rf"drawImage image=(\d+) sampler=\{{wrapX=(\d+),wrapY=(\d+),"
     rf"filter=(\d+),key=(\d+)\}} blendMode=(\d+) opacity=({NUMBER})"
 )
+MAKE_RENDER_BUFFER_RE = re.compile(
+    r"makeRenderBuffer id=(\d+) type=(\d+) flags=(\d+) size=(\d+)"
+)
+BUFFER_DATA_RE = re.compile(
+    r"bufferData id=(\d+) type=(\d+) size=(\d+) data=([0-9a-f]+)"
+)
+DRAW_IMAGE_MESH_RE = re.compile(
+    rf"drawImageMesh image=(\d+) sampler=\{{wrapX=(\d+),wrapY=(\d+),"
+    rf"filter=(\d+),key=(\d+)\}} vertices=(\d+) uvs=(\d+) indices=(\d+) "
+    rf"vertexCount=(\d+) indexCount=(\d+) blendMode=(\d+) opacity=({NUMBER})"
+)
 LINEAR_GRADIENT_RE = re.compile(
     rf"makeLinearGradient id=(\d+) start=\(({NUMBER}),({NUMBER})\) "
     rf"end=\(({NUMBER}),({NUMBER})\) stops=(\[.*\])"
@@ -72,6 +83,13 @@ class GradientStop:
 
 
 @dataclasses.dataclass(frozen=True)
+class RenderBufferSnapshot:
+    buffer_type: int
+    flags: int
+    size: int
+
+
+@dataclasses.dataclass(frozen=True)
 class RivFrameSelection:
     source_file: str
     artboard: str
@@ -89,6 +107,7 @@ RETAINED_DECLARATION_PREFIXES = (
     "makeLinearGradient ",
     "makeRadialGradient ",
     "makeRenderBuffer ",
+    "bufferData ",
 )
 
 
@@ -341,6 +360,8 @@ def generate_include(
     paint_shaders: dict[int, int] = {}
     shaders: set[int] = set()
     images: set[int] = set()
+    buffers: dict[int, RenderBufferSnapshot] = {}
+    buffer_uploads: dict[int, int] = {}
     counts: dict[str, int] = {}
     save_depth = 0
 
@@ -482,6 +503,87 @@ def generate_include(
                 ]
             )
             continue
+        make_render_buffer = MAKE_RENDER_BUFFER_RE.fullmatch(line)
+        if make_render_buffer is not None:
+            buffer_id_text, buffer_type_text, flags_text, size_text = (
+                make_render_buffer.groups()
+            )
+            buffer_id = int(buffer_id_text)
+            buffer_type = int(buffer_type_text)
+            flags = int(flags_text)
+            size = int(size_text)
+            if buffer_id in buffers:
+                raise ValueError(f"makeRenderBuffer redeclares buffer {buffer_id}")
+            if buffer_type not in range(2):
+                raise ValueError("makeRenderBuffer has an invalid buffer type")
+            if flags not in range(2):
+                raise ValueError("makeRenderBuffer has invalid flags")
+            if size <= 0:
+                raise ValueError("makeRenderBuffer size must be positive")
+            buffers[buffer_id] = RenderBufferSnapshot(buffer_type, flags, size)
+            buffer_uploads[buffer_id] = 0
+            count("makeRenderBuffer")
+            output.extend(
+                [
+                    f"    auto buffer{buffer_id} = context->makeRenderBuffer(static_cast<rive::RenderBufferType>({buffer_type}), static_cast<rive::RenderBufferFlags>({flags}), {size});",
+                    f"    if (buffer{buffer_id} == nullptr)",
+                    "    {",
+                    f'        fail("reference render buffer {buffer_id} creation drifted");',
+                    "    }",
+                ]
+            )
+            continue
+        buffer_data = BUFFER_DATA_RE.fullmatch(line)
+        if buffer_data is not None:
+            buffer_id_text, buffer_type_text, size_text, encoded_hex = (
+                buffer_data.groups()
+            )
+            buffer_id = int(buffer_id_text)
+            buffer_type = int(buffer_type_text)
+            size = int(size_text)
+            buffer = buffers.get(buffer_id)
+            if buffer is None:
+                raise ValueError(f"bufferData references undeclared buffer {buffer_id}")
+            if buffer_type != buffer.buffer_type:
+                raise ValueError(f"bufferData type disagrees with buffer {buffer_id}")
+            if size != buffer.size:
+                raise ValueError(f"bufferData size disagrees with buffer {buffer_id}")
+            if len(encoded_hex) % 2 != 0:
+                raise ValueError("bufferData must contain complete bytes")
+            encoded = bytes.fromhex(encoded_hex)
+            if len(encoded) != size:
+                raise ValueError(
+                    f"bufferData byte count disagrees with buffer {buffer_id}"
+                )
+            upload_index = buffer_uploads[buffer_id]
+            if buffer.flags == 1 and upload_index != 0:
+                raise ValueError(
+                    f"mapped-once buffer {buffer_id} has more than one upload"
+                )
+            buffer_uploads[buffer_id] += 1
+            count("bufferData")
+            data_name = f"buffer{buffer_id}Data{upload_index}"
+            output.append(
+                f"    static constexpr std::array<uint8_t, {size}> {data_name} = {{{{"
+            )
+            for offset in range(0, len(encoded), 16):
+                values = ", ".join(
+                    f"0x{value:02x}" for value in encoded[offset : offset + 16]
+                )
+                output.append(f"        {values},")
+            output.extend(
+                [
+                    "    }};",
+                    f"    void* buffer{buffer_id}Mapped{upload_index} = buffer{buffer_id}->map();",
+                    f"    if (buffer{buffer_id}Mapped{upload_index} == nullptr)",
+                    "    {",
+                    f'        fail("reference render buffer {buffer_id} map drifted");',
+                    "    }",
+                    f"    std::memcpy(buffer{buffer_id}Mapped{upload_index}, {data_name}.data(), {data_name}.size());",
+                    f"    buffer{buffer_id}->unmap();",
+                ]
+            )
+            continue
         draw_image = DRAW_IMAGE_RE.fullmatch(line)
         if draw_image is not None:
             (
@@ -516,6 +618,75 @@ def generate_include(
             count("drawImage")
             output.append(
                 f"    renderer->drawImage(image{image_id}.get(), rive::ImageSampler::SamplerFromKey({sampler_key}), static_cast<rive::BlendMode>({blend_mode}), {float_literal(opacity)});"
+            )
+            continue
+        draw_image_mesh = DRAW_IMAGE_MESH_RE.fullmatch(line)
+        if draw_image_mesh is not None:
+            (
+                image_id_text,
+                wrap_x_text,
+                wrap_y_text,
+                filter_text,
+                sampler_key_text,
+                vertices_id_text,
+                uvs_id_text,
+                indices_id_text,
+                vertex_count_text,
+                index_count_text,
+                blend_mode_text,
+                opacity,
+            ) = draw_image_mesh.groups()
+            image_id = int(image_id_text)
+            wrap_x = int(wrap_x_text)
+            wrap_y = int(wrap_y_text)
+            image_filter = int(filter_text)
+            sampler_key = int(sampler_key_text)
+            vertices_id = int(vertices_id_text)
+            uvs_id = int(uvs_id_text)
+            indices_id = int(indices_id_text)
+            vertex_count = int(vertex_count_text)
+            index_count = int(index_count_text)
+            blend_mode = int(blend_mode_text)
+            if image_id not in images:
+                raise ValueError(
+                    f"drawImageMesh references undeclared image {image_id}"
+                )
+            if wrap_x not in range(3) or wrap_y not in range(3):
+                raise ValueError("drawImageMesh sampler has an invalid wrap mode")
+            if image_filter not in range(2):
+                raise ValueError("drawImageMesh sampler has an invalid filter mode")
+            expected_sampler_key = wrap_x + wrap_y * 3 + image_filter * 9
+            if sampler_key != expected_sampler_key:
+                raise ValueError(
+                    "drawImageMesh sampler key is inconsistent with its fields: "
+                    f"expected {expected_sampler_key}, got {sampler_key}"
+                )
+            if blend_mode not in range(29):
+                raise ValueError("drawImageMesh has an invalid blend mode")
+            if vertex_count <= 0 or index_count <= 0:
+                raise ValueError("drawImageMesh counts must be positive")
+            typed_buffers = (
+                ("vertices", vertices_id, 1, vertex_count * 8),
+                ("uvs", uvs_id, 1, vertex_count * 8),
+                ("indices", indices_id, 0, index_count * 2),
+            )
+            for role, buffer_id, expected_type, required_size in typed_buffers:
+                buffer = buffers.get(buffer_id)
+                if buffer is None:
+                    raise ValueError(
+                        f"drawImageMesh references undeclared {role} buffer {buffer_id}"
+                    )
+                if buffer.buffer_type != expected_type:
+                    raise ValueError(f"drawImageMesh {role} buffer has the wrong type")
+                if buffer.size < required_size:
+                    raise ValueError(f"drawImageMesh {role} buffer is too small")
+                if buffer_uploads[buffer_id] == 0:
+                    raise ValueError(
+                        f"drawImageMesh references uninitialized {role} buffer {buffer_id}"
+                    )
+            count("drawImageMesh")
+            output.append(
+                f"    renderer->drawImageMesh(image{image_id}.get(), rive::ImageSampler::SamplerFromKey({sampler_key}), buffer{vertices_id}, buffer{uvs_id}, buffer{indices_id}, {vertex_count}, {index_count}, static_cast<rive::BlendMode>({blend_mode}), {float_literal(opacity)});"
             )
             continue
         if line.startswith("clipPath path="):

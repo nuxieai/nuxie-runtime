@@ -1678,15 +1678,14 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(
             inventory["summary"],
             {
-                "accepted": 43,
+                "accepted": 46,
                 "capture_manifest_cases": 686,
                 "gated_msaa_rows": 52,
                 "missing_strict_provenance_rows": 47,
                 "strict_provenance_rows": 5,
-                "unsupported": 4,
+                "unsupported": 1,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,
-                    "strict-replay-render-buffer": 3,
                 },
             },
         )
@@ -1695,7 +1694,7 @@ class FormatTests(unittest.TestCase):
             for entry in inventory["entry"]
             if entry["result"] == "accepted"
         ]
-        self.assertEqual(len(accepted), 43)
+        self.assertEqual(len(accepted), 46)
         self.assertEqual(len(set(accepted)), len(accepted))
 
     def test_msaa_riv_case_round_trips_and_generates_strict_registry(self):
@@ -2465,6 +2464,137 @@ frame
             self.assertIn("paint1->shader(shader2);", generated)
             self.assertIn("paint1->shader(nullptr);", generated)
 
+    def test_path_stream_generator_reconstructs_render_buffers(self):
+        stream_text = """rive-golden-stream-v1
+source file="gm:mesh-replay" artboard="" scene="mesh-replay"
+frameSize width=2 height=2
+clearColor value=0x00000000
+decodeImage id=1 width=1 height=1 data=00
+makeRenderBuffer id=1 type=1 flags=0 size=8
+bufferData id=1 type=1 size=8 data=0001020304050607
+makeRenderBuffer id=2 type=1 flags=1 size=8
+bufferData id=2 type=1 size=8 data=1011121314151617
+makeRenderBuffer id=3 type=0 flags=1 size=6
+bufferData id=3 type=0 size=6 data=000000000000
+drawImageMesh image=1 sampler={wrapX=0,wrapY=0,filter=0,key=0} vertices=1 uvs=2 indices=3 vertexCount=1 indexCount=3 blendMode=3 opacity=1
+bufferData id=1 type=1 size=8 data=2021222324252627
+drawImageMesh image=1 sampler={wrapX=0,wrapY=0,filter=0,key=0} vertices=1 uvs=2 indices=3 vertexCount=1 indexCount=3 blendMode=3 opacity=0.5
+frame
+"""
+
+        def command(stream, output=None, check=False):
+            result = [
+                sys.executable,
+                str(PATH_STREAM_GENERATOR),
+                "--stream",
+                str(stream),
+                "--expected-sha256",
+                hashlib.sha256(stream.read_bytes()).hexdigest(),
+                "--expected-source",
+                "gm:mesh-replay",
+                "--expected-scene",
+                "mesh-replay",
+                "--expected-width",
+                "2",
+                "--expected-height",
+                "2",
+                "--expected-count",
+                "decodeImage=1",
+                "--expected-count",
+                "makeRenderBuffer=3",
+                "--expected-count",
+                "bufferData=4",
+                "--expected-count",
+                "drawImageMesh=2",
+                "--function",
+                "replayMesh",
+            ]
+            result.extend(["--check"] if check else ["--output", str(output)])
+            return result
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = pathlib.Path(temp_dir)
+            stream = temp_dir / "mesh.rive-stream"
+            output = temp_dir / "mesh.inc"
+            stream.write_text(stream_text)
+            subprocess.run(command(stream, output), check=True)
+            generated = output.read_text()
+            self.assertEqual(generated.count("context->makeRenderBuffer("), 3)
+            self.assertEqual(generated.count("std::memcpy("), 4)
+            self.assertEqual(generated.count("renderer->drawImageMesh("), 2)
+            self.assertIn("buffer1Data0", generated)
+            self.assertIn("buffer1Data1", generated)
+            self.assertIn("buffer1, buffer2, buffer3, 1, 3", generated)
+
+            def assert_rejected(name, content, message):
+                drifted = temp_dir / f"{name}.rive-stream"
+                drifted.write_text(content)
+                result = subprocess.run(
+                    command(drifted, check=True), text=True, capture_output=True
+                )
+                self.assertNotEqual(result.returncode, 0, name)
+                self.assertIn(message, result.stderr, name)
+
+            assert_rejected(
+                "duplicate-buffer",
+                stream_text.replace(
+                    "makeRenderBuffer id=2 type=1 flags=1 size=8",
+                    "makeRenderBuffer id=1 type=1 flags=1 size=8",
+                    1,
+                ),
+                "redeclares buffer 1",
+            )
+            assert_rejected(
+                "upload-type",
+                stream_text.replace("bufferData id=2 type=1", "bufferData id=2 type=0", 1),
+                "type disagrees with buffer 2",
+            )
+            assert_rejected(
+                "upload-size",
+                stream_text.replace(
+                    "bufferData id=2 type=1 size=8",
+                    "bufferData id=2 type=1 size=7",
+                    1,
+                ),
+                "size disagrees with buffer 2",
+            )
+            assert_rejected(
+                "upload-bytes",
+                stream_text.replace("data=1011121314151617", "data=10111213", 1),
+                "byte count disagrees with buffer 2",
+            )
+            assert_rejected(
+                "mapped-once",
+                stream_text.replace(
+                    "bufferData id=1 type=1 size=8 data=2021222324252627",
+                    "bufferData id=2 type=1 size=8 data=2021222324252627",
+                    1,
+                ),
+                "mapped-once buffer 2 has more than one upload",
+            )
+            assert_rejected(
+                "wrong-mesh-type",
+                stream_text.replace("vertices=1 uvs=2", "vertices=3 uvs=2", 1),
+                "vertices buffer has the wrong type",
+            )
+            assert_rejected(
+                "undersized-mesh",
+                stream_text.replace("vertexCount=1", "vertexCount=2", 1),
+                "vertices buffer is too small",
+            )
+            assert_rejected(
+                "uninitialized-mesh",
+                stream_text.replace(
+                    "bufferData id=1 type=1 size=8 data=0001020304050607\n", "", 1
+                ),
+                "uninitialized vertices buffer 1",
+            )
+            assert_rejected(
+                "sampler-key",
+                stream_text.replace("filter=0,key=0", "filter=0,key=1", 1),
+                "sampler key is inconsistent",
+            )
+
     def test_riv_replay_selects_one_frame_and_retains_prior_objects(self):
         stream_text = """rive-golden-stream-v1
 makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
@@ -2534,6 +2664,31 @@ frame
             result = subprocess.run(out_of_range, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("RIV frame-selection contract drifted", result.stderr)
+
+    def test_riv_frame_selection_retains_prior_buffer_uploads(self):
+        generator = load_inventory_module().load_generator()
+        stream = """rive-golden-stream-v1
+source file="/tmp/assets/buffer_selection.riv" artboard="Board" scene="Machine"
+frameSize width=2 height=2
+sample seconds=0
+makeRenderBuffer id=1 type=1 flags=0 size=8
+bufferData id=1 type=1 size=8 data=0001020304050607
+frame
+sample seconds=0.25
+save
+restore
+frame
+"""
+        selection = generator.select_riv_frame(stream.splitlines(), 1)
+        self.assertEqual(
+            selection.command_lines,
+            (
+                "makeRenderBuffer id=1 type=1 flags=0 size=8",
+                "bufferData id=1 type=1 size=8 data=0001020304050607",
+                "save",
+                "restore",
+            ),
+        )
 
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()

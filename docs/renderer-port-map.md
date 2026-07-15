@@ -293,10 +293,10 @@ retained set:
    every failure into a concrete parity task. A harness prerequisite needed to
    adjudicate one of the ten substantive rows may land during step 1, but the
    complete 46-row campaign still follows the substantive burn-down. Gradient
-   reconstruction is complete and the strict inventory now exposes all 43
-   gradient rows as capture-ready while preserving the five gated rows that
-   already have valid strict provenance; render-buffer reconstruction and the
-   capture campaign remain.
+   and render-buffer reconstruction are complete. The strict inventory now
+   exposes all 46 rows as capture-ready while preserving the five gated rows
+   that already have valid strict provenance; only the capture and
+   adjudication campaign remains.
 3. Keep the 59 reviewed platform limitations parked unless new same-backend
    evidence identifies a Rust defect: 58 backend/decoder/precision rows plus
    the native C++ Metal MSAA limitation.

@@ -1134,10 +1134,12 @@ Run `make renderer-golden`.
     radial gradient reconstruction is complete: the compiler validates
     canonical stops and shader references, emits exact C++ resources, and
     changes each paint shader binding exactly when the stream does. The
-    regenerated inventory has 43 capture-ready gradient rows, preserves five
-    gated rows with valid strict provenance, and has only four unsupported
-    rows: three render-buffer cases plus the synthetic first-light harness
-    row. Reference capture and adjudication remain open.
+    render-buffer compiler now validates exact type, flags, byte size,
+    one-time mapping, initialization, mesh roles/capacities, and sampler state;
+    it also retains prior uploads for later RIV frames. The regenerated
+    inventory has all 46 rows capture-ready, preserves five gated rows with
+    valid strict provenance, and leaves only the synthetic first-light harness
+    row unsupported. Reference capture and adjudication remain open.
 
 ## R2 Completion Record
 
@@ -3616,3 +3618,13 @@ Run `make renderer-golden`.
   backend-boundary reclassification, so Hunter remains an advanced-feather
   parity gate. Renderer replay now supports a tested `--command-limit` for
   draw-prefix localization.
+- 2026-07-14: Completed strict render-buffer and image-mesh reconstruction in
+  the C++ Dawn stream compiler. Whole-buffer uploads enforce declaration type,
+  exact size/bytes, one-time initialization flags, repeatable dynamic updates,
+  and map/unmap lifetime; mesh draws enforce initialized typed capacities,
+  canonical samplers, counts, and blend modes. Later RIV frames retain prior
+  uploads. All three former render-buffer gates now compile from their real
+  streams, moving the inventory to 46 capture-ready rows and one synthetic
+  header-only unsupported row. The 46-test oracle format suite, 12 capture
+  tests, inventory drift check, and C++ Dawn build pass. Queue item 91 now
+  launches the single continuous 46-case capture and adjudication campaign.

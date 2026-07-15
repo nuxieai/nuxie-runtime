@@ -36,11 +36,33 @@
       "stream": "fixtures/renderer/streams/gm/degengrad.rive-stream"
     },
     {
+      "case": {
+        "clear_color": "0xffffffff",
+        "counts": {
+          "bufferData": 3,
+          "clipPath": 5,
+          "decodeImage": 1,
+          "drawImageMesh": 12,
+          "drawPath": 3,
+          "makeEmptyRenderPath": 11,
+          "makeRenderBuffer": 3,
+          "makeRenderPaint": 1,
+          "restore": 16,
+          "save": 16,
+          "transform": 52
+        },
+        "height": 600,
+        "id": "gm-mesh-msaa",
+        "scene": "mesh",
+        "sha256": "c50937fb89c1854a565488f3f4af9e84c7d14495ac752ea0cfec762e9071adb7",
+        "source": "gm:mesh",
+        "stream": "fixtures/renderer/streams/gm/mesh.rive-stream",
+        "width": 800
+      },
       "id": "gm-mesh-msaa",
       "kind": "upstream-gm-stream",
-      "reason": "strict-replay-render-buffer",
       "reference": "fixtures/renderer/reference/metal/gm/mesh-msaa.png",
-      "result": "unsupported",
+      "result": "accepted",
       "stream": "fixtures/renderer/streams/gm/mesh.rive-stream"
     },
     {
@@ -563,11 +585,40 @@
       "stream": "fixtures/renderer/streams/riv/interactive_scrolling.rive-stream"
     },
     {
+      "case": {
+        "artboard": "Jellyfish",
+        "clear_color": "0x00000000",
+        "counts": {
+          "bufferData": 59,
+          "clipPath": 1,
+          "decodeImage": 23,
+          "drawImage": 3,
+          "drawImageMesh": 19,
+          "drawPath": 3,
+          "makeEmptyRenderPath": 4,
+          "makeLinearGradient": 1,
+          "makeRadialGradient": 2,
+          "makeRenderBuffer": 79,
+          "makeRenderPaint": 21,
+          "restore": 26,
+          "save": 26,
+          "transform": 10
+        },
+        "frame": 0,
+        "height": 2080,
+        "id": "riv-jellyfish_test-frame-0-msaa",
+        "profile": "riv",
+        "sample_seconds": "0",
+        "scene": "Jellyfish",
+        "sha256": "6302e0cb35ec3a896198186cac0ce2c2f2167049865b3601c4764384e3793f3d",
+        "source": "tests/unit_tests/assets/jellyfish_test.riv",
+        "stream": "fixtures/renderer/streams/riv/jellyfish_test.rive-stream",
+        "width": 2080
+      },
       "id": "riv-jellyfish_test-frame-0-msaa",
       "kind": "riv-stream",
-      "reason": "strict-replay-render-buffer",
       "reference": "fixtures/renderer/reference/metal/riv/jellyfish_test-frame-0-msaa.png",
-      "result": "unsupported",
+      "result": "accepted",
       "stream": "fixtures/renderer/streams/riv/jellyfish_test.rive-stream"
     },
     {
@@ -1330,11 +1381,37 @@
       "stream": "fixtures/renderer/streams/riv/scroll_threshold.rive-stream"
     },
     {
+      "case": {
+        "artboard": "New Artboard",
+        "clear_color": "0x00000000",
+        "counts": {
+          "bufferData": 9,
+          "clipPath": 1,
+          "decodeImage": 3,
+          "drawImageMesh": 3,
+          "drawPath": 1,
+          "makeEmptyRenderPath": 2,
+          "makeRenderBuffer": 12,
+          "makeRenderPaint": 2,
+          "restore": 5,
+          "save": 5,
+          "transform": 2
+        },
+        "frame": 0,
+        "height": 500,
+        "id": "riv-tape-frame-0-msaa",
+        "profile": "riv",
+        "sample_seconds": "0",
+        "scene": "New Artboard",
+        "sha256": "31d104ac74cf62fe86dba757a9c863f4063eb423bf487e28c1303a1dc5b83252",
+        "source": "tests/unit_tests/assets/tape.riv",
+        "stream": "fixtures/renderer/streams/riv/tape.rive-stream",
+        "width": 500
+      },
       "id": "riv-tape-frame-0-msaa",
       "kind": "riv-stream",
-      "reason": "strict-replay-render-buffer",
       "reference": "fixtures/renderer/reference/metal/riv/tape-frame-0-msaa.png",
-      "result": "unsupported",
+      "result": "accepted",
       "stream": "fixtures/renderer/streams/riv/tape.rive-stream"
     },
     {
@@ -1371,15 +1448,14 @@
     }
   ],
   "summary": {
-    "accepted": 43,
+    "accepted": 46,
     "capture_manifest_cases": 686,
     "gated_msaa_rows": 52,
     "missing_strict_provenance_rows": 47,
     "strict_provenance_rows": 5,
-    "unsupported": 4,
+    "unsupported": 1,
     "unsupported_by_reason": {
-      "strict-replay-gm-header": 1,
-      "strict-replay-render-buffer": 3
+      "strict-replay-gm-header": 1
     }
   },
   "version": 1

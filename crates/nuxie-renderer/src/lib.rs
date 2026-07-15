@@ -1114,11 +1114,6 @@ impl Renderer for WgpuFrame {
         };
         let msaa_feather_atlas = self.mode == RenderMode::Msaa && paint.feather != 0.0;
         if self.mode == RenderMode::Msaa && paint.feather != 0.0 {
-            if paint.blend_mode != BlendMode::SrcOver && paint.shader.is_some() {
-                self.unsupported
-                    .get_or_insert("advanced blending with shaders on msaa feather atlas draws");
-                return;
-            }
             if self.state.clip_rect.is_some()
                 && !self.context.msaa_atlas_pipeline.supports_clip_rect()
             {
@@ -2775,8 +2770,7 @@ impl WgpuFrame {
                         ));
                         continue;
                     }
-                    if draw.paint.shader.is_none()
-                        && draw.paint.feather != 0.0
+                    if draw.paint.feather != 0.0
                         && (draw.state.clip_rect.is_none()
                             || self.context.msaa_atlas_pipeline.supports_clip_rect())
                     {
@@ -2813,7 +2807,23 @@ impl WgpuFrame {
                                 contour.path_id = 1;
                             }
                             let paths = [gpu::PathData::zeroed(), tessellation.path];
-                            let mut paint = if draw.paint.style == RenderPaintStyle::Stroke {
+                            let gradient = gradient_batch.draws[draw_index];
+                            let mut paint = if let Some(gradient) = gradient {
+                                if draw.paint.style == RenderPaintStyle::Stroke {
+                                    gpu::PaintData::gradient_stroke(
+                                        gradient.paint_type,
+                                        gradient.texture_y,
+                                        draw.paint.blend_mode,
+                                    )
+                                } else {
+                                    gpu::PaintData::gradient(
+                                        gradient.paint_type,
+                                        gradient.texture_y,
+                                        draw.path.fill_rule,
+                                        draw.paint.blend_mode,
+                                    )
+                                }
+                            } else if draw.paint.style == RenderPaintStyle::Stroke {
                                 gpu::PaintData::solid_stroke(
                                     modulate_color_alpha(draw.paint.color, draw.state.opacity),
                                     draw.paint.blend_mode,
@@ -2834,7 +2844,10 @@ impl WgpuFrame {
                             ];
                             let paint_aux = [
                                 gpu::PaintAuxData::zeroed(),
-                                clip_rect_paint_aux(draw.state.clip_rect),
+                                gradient.map_or_else(
+                                    || clip_rect_paint_aux(draw.state.clip_rect),
+                                    |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
+                                ),
                             ];
                             let tessellation_height =
                                 draw::tessellation_texture_height(&tessellation.spans);
@@ -2918,6 +2931,7 @@ impl WgpuFrame {
                                     &self.context.device,
                                     &tessellation_view,
                                     &self.context.feather_lut.view,
+                                    gradient_texture.as_ref().map(|texture| &texture.view),
                                     &atlas_view,
                                     &uniforms,
                                     &paths,
@@ -10080,7 +10094,7 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_advanced_gradient_remains_an_explicit_boundary() {
+    fn msaa_feather_atlas_advanced_gradient_samples_ramp_and_destination() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
         let paint = WgpuPaint {
@@ -10096,13 +10110,39 @@ mod tests {
         };
         let mut frame = factory.begin_frame(0xff20_80c0);
         frame.draw_path(&path, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
-        assert!(matches!(
-            frame.finish(),
-            Err(RendererError::Unsupported(
-                "advanced blending with shaders on msaa feather atlas draws"
-            ))
-        ));
+        assert_eq!(pixel(0, 0), [32, 128, 192, 255]);
+        assert!(pixel(12, 12)[0] > pixel(52, 52)[0]);
+        assert!(pixel(52, 52)[2] > pixel(12, 12)[2]);
+        assert!(pixel(32, 32)[3] > 0);
+    }
+
+    #[test]
+    fn msaa_feather_atlas_gradient_stroke_samples_ramp() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: 8.0,
+            feather: 4.0,
+            shader: Some(WgpuShader::Linear {
+                start: (8.0, 8.0),
+                end: (56.0, 56.0),
+                colors: vec![0xffff_0000, 0xff00_00ff],
+                stops: vec![0.0, 1.0],
+            }),
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(&path, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+
+        assert!(pixel(12, 12)[0] > pixel(12, 12)[2]);
+        assert!(pixel(52, 52)[2] > pixel(52, 52)[0]);
+        assert_eq!(pixel(32, 32), [0; 4]);
     }
 
     #[test]

@@ -297,6 +297,7 @@ impl MsaaAtlasPipeline {
         device: &wgpu::Device,
         tessellation: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
+        gradient: Option<&wgpu::TextureView>,
         atlas: &wgpu::TextureView,
         uniforms: &FlushUniforms,
         paths: &[PathData],
@@ -378,7 +379,10 @@ impl MsaaAtlasPipeline {
                 binding(5, paint_aux.as_entire_binding()),
                 binding(6, contours.as_entire_binding()),
                 binding(8, wgpu::BindingResource::TextureView(tessellation)),
-                binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(
+                    9,
+                    wgpu::BindingResource::TextureView(gradient.unwrap_or(&dummy_view)),
+                ),
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                 binding(11, wgpu::BindingResource::TextureView(atlas)),
                 binding(

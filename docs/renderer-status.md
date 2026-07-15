@@ -1136,10 +1136,17 @@ Run `make renderer-golden`.
     selected HSL-enabled feather and atlas shader variants from only the
     current draw. Selecting the feature from the combined logical batch removes
     the full-frame color loss and reduces Rewards from 357,444 pixels/max 53 to
-    1,677/max 33. Current probes are `car_widgets_v01` 65,522/96,
-    `data_viz_demo` 12,118/99, `echo_show_demo` 67,302/54,
-    `hunter_x_demo` 222/18, and `rewards_demo` 1,677/33; all five remain open
-    under the unchanged contract.
+    1,677/max 33. Hunter was subsequently reclassified to the reviewed
+    subpixel-edge boundary, while Echo narrowed to a separate actionable
+    clip-edge/composite diagnostic. Rewards command 16 then exposed a
+    1,024-unit packed winding contribution that collided with the clockwise
+    atomic coverage prefix. Unclipped positive interior weights now replay as
+    unit-weight instanced draws, with adjacent unit-weight triangles retained
+    as one batch. The command-16 C++ blit is 0/max 1 and the full frame improves
+    from 1,677/max 33 to 1,575/max 33. Current actionable probes are
+    `car_widgets_v01` 65,522/96, `data_viz_demo` 12,118/99,
+    `echo_show_demo` 67,301/54, and `rewards_demo` 1,575/33; all four remain
+    open under unchanged contracts.
 91. [x] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold. Strict linear and
@@ -1212,6 +1219,23 @@ Run `make renderer-golden`.
     unchanged `2/32` Dawn reference contract at 0/max 1, 0/max 1, and
     12/max 46 respectively. No reference or tolerance changed; the ratchet is
     exact=1,408/diverges=0/gated=60.
+101. [ ] Promote `first-light-rectangle-msaa` from its exact C++ Dawn
+    reference under the unchanged `2/0` contract after the provenance
+    migration transaction survives crash recovery, syscall-failure, CAS,
+    alias, and mode-preservation review.
+102. [ ] Close `car_widgets_v01` by porting advanced clockwise-atomic blend
+    storage with one-word color/validity publication, bounded frame storage,
+    and true complex-path full-frame Metal stress tests across all 15 modes.
+103. [ ] Close `data_viz_demo` from an exact pinned C++/Rust command-prefix
+    schedule and payload oracle. A receipt authenticating only a
+    self-consistent producer is insufficient.
+104. [ ] Capture paired native-Metal/Rust Echo color and clip state after
+    commands 16, 35, 39, and 104, then port only the defect identified by that
+    trace. Clip-plane format precision has already been disproved.
+105. [ ] Close Rewards' remaining command-21 clipped residual with a fresh
+    cross-language payload/plane oracle. Keep the rejected mixed artifact
+    harness out of production; the command-16 weighted-interior fix is already
+    isolated and green.
 
 ## R2 Completion Record
 
@@ -3795,3 +3819,15 @@ Run `make renderer-golden`.
   under the narrower actionable
   `native-clockwise-atomic-clip-edge-and-composite-parity` diagnostic. Counts
   remain exact=1,408/diverges=0/gated=60; three advanced-feather rows remain.
+- 2026-07-15: Split the accepted Rewards production fix from its rejected
+  command-21 artifact harness. C++ and Rust command-16 preparation agree, but
+  submitting a positive interior triangle's full 1,024 winding weight as one
+  packed clockwise-atomic delta loses that contribution at the reserved
+  coverage prefix. Rust now submits unclipped positive weights as bounded
+  unit-weight instances, coalescing ordinary unit-weight interiors into one
+  draw while leaving clipped and borrowed triangles unchanged. The configured
+  C++ command-16 blit is 0 pixels/max delta 1 and the full native-Metal frame
+  improves from 1,677/max 33 to 1,575/max 33. No status, reference, or
+  tolerance changed. The renderer remains exact=1,408/diverges=0/gated=60;
+  all 256 enabled renderer tests, the full workspace, normal 584-segment V2
+  floor, scripted 35-segment floor, and 1,468-row renderer corpus pass.

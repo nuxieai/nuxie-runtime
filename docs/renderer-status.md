@@ -1230,15 +1230,17 @@ Run `make renderer-golden`.
     identities, so adding one case requires no bulk provenance rewrite or
     filesystem transaction. Focused C++ Dawn/Rust wgpu comparison is byte-exact
     at 0/max 0; the ratchet advances to exact=1,409/diverges=0/gated=59.
-102. [ ] Close `car_widgets_v01` by porting advanced clockwise-atomic blend
-    storage with one-word color/validity publication, bounded frame storage,
-    and true complex-path full-frame Metal stress tests across all 15 modes.
-103. [ ] Close `data_viz_demo` from an exact pinned C++/Rust command-prefix
-    schedule and payload oracle. A receipt authenticating only a
-    self-consistent producer is insufficient.
-104. [ ] Capture paired native-Metal/Rust Echo color and clip state after
-    commands 16, 35, 39, and 104, then port only the defect identified by that
-    trace. Clip-plane format precision has already been disproved.
+102. [ ] Capture a full same-backend C++ Dawn/Rust wgpu Car Widgets frame after
+    the advanced-flush dither fix. If it passes, reclassify only the residual
+    native Metal/WebGPU pixels; otherwise isolate the first failing prefix.
+103. [ ] Capture Data Viz commands 16, 17, and 22 with the corrected dither
+    contract, then compare the first still-failing production schedule,
+    tessellation span, payload, and coverage field against an independent C++
+    oracle. Do not substitute or reorder production inputs.
+104. [ ] Extend the exact Echo C++ Dawn/Rust wgpu prefix comparison through the
+    full command stream. Commands 39 and 104 now pass at 0/max 1 after enabling
+    C++'s flush-wide atomic dither feature; only a later failing prefix may
+    justify more production code.
 105. [x] Close Rewards' remaining command-21 clipped residual with a fresh
     cross-language payload/plane oracle. An empty-directory recapture from the
     pinned C++ Dawn executable reproduced all nine artifact hashes. CPU spans
@@ -3893,3 +3895,14 @@ Run `make renderer-golden`.
   subsystem. The captured C++ Dawn and Rust wgpu 64x64 outputs are byte-exact
   under the unchanged `2/0` contract. The ratchet advances to
   exact=1,409/diverges=0/gated=59; Car Widgets is next.
+- 2026-07-15: Matched C++'s flush-wide `ENABLE_DITHER` feature for advanced
+  general-atomic draws. Rust previously disabled the branch on non-feather
+  paths, interiors, and images even though one advanced draw promotes the
+  entire C++ flush to the combined shader feature set. The corrected shared
+  pipeline contract moves same-backend Echo command 39 from 36/max 4 to
+  0/max 1 and command 104 from 9,577/max 5 to 0/max 1. Against native Metal,
+  the full residuals fall from 65,522 to 17,854 pixels for Car Widgets,
+  12,118 to 2,054 for Data Viz, and 67,300 to 10,016 for Echo Show; their max
+  deltas remain 96, 99, and 54. No reference, tolerance, status, or corpus
+  count changes yet. Queue items 102-104 now require full or first-failing
+  same-backend evidence before another renderer change.

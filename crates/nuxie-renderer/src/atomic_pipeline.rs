@@ -286,7 +286,8 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
-        let make_advanced_path = |label, cull_mode, feather, hsl, dither| {
+        let make_advanced_path = |label, cull_mode, feather, hsl| {
+            let constants = advanced_path_constants(feather, hsl);
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -305,15 +306,7 @@ impl AtomicPipeline {
                 fragment: Some(wgpu::FragmentState {
                     module: &advanced_path_fragment,
                     entry_point: Some("main"),
-                    compilation_options: options(&[
-                        ("0", 1.0),
-                        ("1", 1.0),
-                        ("2", 1.0),
-                        ("3", feather),
-                        ("4", 0.0),
-                        ("6", hsl),
-                        ("7", dither),
-                    ]),
+                    compilation_options: options(&constants),
                     targets: &[Some(disabled_color_target())],
                 }),
                 multiview_mask: None,
@@ -325,26 +318,22 @@ impl AtomicPipeline {
             Some(wgpu::Face::Front),
             0.0,
             1.0,
-            0.0,
         );
         let advanced_outer_path = make_advanced_path(
             "nuxie-atomic-advanced-outer-path-pipeline",
             Some(wgpu::Face::Back),
             0.0,
             1.0,
-            0.0,
         );
         let advanced_feather_path = make_advanced_path(
             "nuxie-atomic-advanced-feather-path-pipeline",
             Some(wgpu::Face::Front),
             1.0,
             0.0,
-            1.0,
         );
         let advanced_feather_hsl_path = make_advanced_path(
             "nuxie-atomic-advanced-feather-hsl-path-pipeline",
             Some(wgpu::Face::Front),
-            1.0,
             1.0,
             1.0,
         );
@@ -353,15 +342,14 @@ impl AtomicPipeline {
             Some(wgpu::Face::Front),
             1.0,
             0.0,
-            1.0,
         );
         let advanced_feather_hsl_stroke_path = make_advanced_path(
             "nuxie-atomic-advanced-feather-hsl-stroke-path-pipeline",
             Some(wgpu::Face::Front),
             1.0,
             1.0,
-            1.0,
         );
+        let advanced_hsl_fill_constants = advanced_fill_constants(1.0);
         let advanced_interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-advanced-interior-pipeline"),
             layout: Some(&layout),
@@ -377,14 +365,7 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &advanced_interior_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[
-                    ("0", 1.0),
-                    ("1", 1.0),
-                    ("2", 1.0),
-                    ("4", 0.0),
-                    ("6", 1.0),
-                    ("7", 0.0),
-                ]),
+                compilation_options: options(&advanced_hsl_fill_constants),
                 targets: &[Some(disabled_color_target())],
             }),
             multiview_mask: None,
@@ -408,14 +389,7 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &advanced_image_mesh_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[
-                    ("0", 1.0),
-                    ("1", 1.0),
-                    ("2", 1.0),
-                    ("4", 0.0),
-                    ("6", 1.0),
-                    ("7", 0.0),
-                ]),
+                compilation_options: options(&advanced_hsl_fill_constants),
                 targets: &[Some(disabled_color_target())],
             }),
             multiview_mask: None,
@@ -436,14 +410,7 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &advanced_image_rect_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[
-                    ("0", 1.0),
-                    ("1", 1.0),
-                    ("2", 1.0),
-                    ("4", 0.0),
-                    ("6", 1.0),
-                    ("7", 0.0),
-                ]),
+                compilation_options: options(&advanced_hsl_fill_constants),
                 targets: &[Some(disabled_color_target())],
             }),
             multiview_mask: None,
@@ -827,6 +794,7 @@ impl AtomicPipeline {
             cache: None,
         });
         let make_advanced_atlas_blit = |label, hsl| {
+            let constants = advanced_fill_constants(hsl);
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -845,14 +813,7 @@ impl AtomicPipeline {
                 fragment: Some(wgpu::FragmentState {
                     module: &advanced_atlas_blit_fragment,
                     entry_point: Some("main"),
-                    compilation_options: options(&[
-                        ("0", 1.0),
-                        ("1", 1.0),
-                        ("2", 1.0),
-                        ("4", 0.0),
-                        ("6", hsl),
-                        ("7", 1.0),
-                    ]),
+                    compilation_options: options(&constants),
                     targets: &[Some(disabled_color_target())],
                 }),
                 multiview_mask: None,
@@ -1448,6 +1409,34 @@ fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> w
         source: wgpu::ShaderSource::Wgsl(source.into()),
     })
 }
+
+// C++ combines ENABLE_DITHER across an advanced atomic flush, so every draw
+// pipeline in that flush must compile the dither branch.
+const ADVANCED_FLUSH_DITHER: f64 = 1.0;
+
+fn advanced_path_constants(feather: f64, hsl: f64) -> [(&'static str, f64); 7] {
+    [
+        ("0", 1.0),
+        ("1", 1.0),
+        ("2", 1.0),
+        ("3", feather),
+        ("4", 0.0),
+        ("6", hsl),
+        ("7", ADVANCED_FLUSH_DITHER),
+    ]
+}
+
+fn advanced_fill_constants(hsl: f64) -> [(&'static str, f64); 6] {
+    [
+        ("0", 1.0),
+        ("1", 1.0),
+        ("2", 1.0),
+        ("4", 0.0),
+        ("6", hsl),
+        ("7", ADVANCED_FLUSH_DITHER),
+    ]
+}
+
 fn options<'a>(constants: &'a [(&'a str, f64)]) -> wgpu::PipelineCompilationOptions<'a> {
     wgpu::PipelineCompilationOptions {
         constants,
@@ -1552,6 +1541,21 @@ pub(crate) fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'s
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn advanced_atomic_draws_enable_flush_wide_dither() {
+        for constants in [
+            advanced_path_constants(0.0, 0.0).as_slice(),
+            advanced_path_constants(1.0, 1.0).as_slice(),
+            advanced_fill_constants(0.0).as_slice(),
+            advanced_fill_constants(1.0).as_slice(),
+        ] {
+            assert_eq!(
+                constants.iter().find(|(id, _)| *id == "7"),
+                Some(&("7", 1.0))
+            );
+        }
+    }
 
     #[test]
     fn bilinear_image_filter_keeps_nearest_mip_selection() {

@@ -1,10 +1,10 @@
 use anyhow::Result;
 use nuxie::{
-    ArtboardId, ArtboardSpec, DashPathSpec, DashSpec, EditAbort, EditErrorKind, EditId, EditReason,
-    ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec, ObjectId, Parent,
-    PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec, ResolveError, Scene,
-    SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
-    StructureEpoch, props,
+    Aabb, ArtboardId, ArtboardSpec, DashPathSpec, DashSpec, EditAbort, EditErrorKind, EditId,
+    EditReason, ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec, ObjectId,
+    Parent, PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec, ResolveError,
+    Scene, SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor,
+    StrokeSpec, StructureEpoch, Vec2D, props,
 };
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
@@ -57,6 +57,382 @@ fn create_card(
         }),
     )?;
     Ok((artboard, rectangle, color))
+}
+
+fn create_hit_shape(
+    tx: &mut SceneTx<'_>,
+    artboard: ArtboardId,
+    name: &str,
+    x: f32,
+    with_stroke: bool,
+) -> std::result::Result<ObjectId, EditAbort> {
+    let shape = create_colored_hit_shape(tx, artboard, name, x, 0xff11_2233)?;
+    if with_stroke {
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: format!("{name} Stroke"),
+                thickness: 2.0,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(stroke),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: format!("{name} Stroke Color"),
+                color: 0xff44_5566,
+            }),
+        )?;
+    }
+    Ok(shape)
+}
+
+fn create_colored_hit_shape(
+    tx: &mut SceneTx<'_>,
+    artboard: ArtboardId,
+    name: &str,
+    x: f32,
+    color: u32,
+) -> std::result::Result<ObjectId, EditAbort> {
+    let shape = tx.create(
+        Parent::Artboard(artboard),
+        NodeSpec::Shape(ShapeSpec {
+            name: name.into(),
+            x,
+            y: 50.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        }),
+    )?;
+    tx.create(
+        Parent::Object(shape),
+        NodeSpec::Rectangle(RectangleSpec::new(format!("{name} Rectangle"), 40.0, 40.0)),
+    )?;
+    let fill = tx.create(
+        Parent::Object(shape),
+        NodeSpec::Fill(FillSpec {
+            name: format!("{name} Fill"),
+        }),
+    )?;
+    tx.create(
+        Parent::Object(fill),
+        NodeSpec::SolidColor(SolidColorSpec {
+            name: format!("{name} Fill Color"),
+            color,
+        }),
+    )?;
+    Ok(shape)
+}
+
+#[test]
+fn authored_shape_geometry_queries_follow_the_live_runtime_scene() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, rectangle), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Geometry".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 50.0,
+                y: 40.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let rectangle = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Card Rectangle", 20.0, 10.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Card Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Card Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        Ok((artboard, shape, rectangle))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    {
+        let mut frame = scene.frame();
+        assert_eq!(
+            frame.world_transform(instance, shape),
+            Some(nuxie::Mat2D([1.0, 0.0, 0.0, 1.0, 50.0, 40.0]))
+        );
+        assert_eq!(
+            frame.world_bounds(instance, shape),
+            Some(Aabb::new(40.0, 35.0, 60.0, 45.0))
+        );
+        assert_eq!(
+            frame.hit_test(instance, Vec2D::new(50.0, 40.0)),
+            vec![shape]
+        );
+    }
+
+    scene.edit(|tx| {
+        tx.set(rectangle, props::PATH_WIDTH, 30.0)?;
+        Ok(())
+    })?;
+    assert_eq!(
+        scene.frame().world_bounds(instance, shape),
+        Some(Aabb::new(35.0, 35.0, 65.0, 45.0)),
+        "geometry caches must follow the structurally remounted runtime"
+    );
+    Ok(())
+}
+
+#[test]
+fn hit_test_is_front_to_back_deduplicated_and_includes_the_path_boundary() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, front, back), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Hit Order".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let front = create_hit_shape(tx, artboard, "Front", 45.0, true)?;
+        let back = create_hit_shape(tx, artboard, "Back", 55.0, false)?;
+        Ok((artboard, front, back))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let mut frame = scene.frame();
+
+    assert_eq!(
+        frame.hit_test(instance, Vec2D::new(50.0, 50.0)),
+        vec![front, back]
+    );
+    assert_eq!(
+        frame.hit_test(instance, Vec2D::new(24.0, 50.0)),
+        vec![front],
+        "the outer edge of the front rectangle's two-pixel stroke is inclusive"
+    );
+    assert!(
+        frame.hit_test(instance, Vec2D::new(23.99, 50.0)).is_empty(),
+        "hit testing must not add editor selection slop"
+    );
+    Ok(())
+}
+
+#[test]
+fn hit_test_respects_the_artboard_clip() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Clipped".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = create_hit_shape(tx, artboard, "Off Artboard", 150.0, false)?;
+        Ok((artboard, shape))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let mut frame = scene.frame();
+
+    assert!(
+        frame.hit_test(instance, Vec2D::new(150.0, 50.0)).is_empty(),
+        "the visible shape geometry is outside the clipped 100x100 artboard"
+    );
+    assert_eq!(
+        frame.world_bounds(instance, shape),
+        Some(Aabb::new(130.0, 30.0, 170.0, 70.0)),
+        "clipping affects visibility, not the shape's logical world bounds"
+    );
+    Ok(())
+}
+
+#[test]
+fn hit_test_ignores_alpha_zero_paints_but_keeps_visible_siblings() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, transparent, visible), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Paint Visibility".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let transparent = create_colored_hit_shape(tx, artboard, "Transparent", 25.0, 0x0011_2233)?;
+        let visible = create_colored_hit_shape(tx, artboard, "Visible", 75.0, 0xff11_2233)?;
+        Ok((artboard, transparent, visible))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let mut frame = scene.frame();
+
+    assert!(
+        frame.hit_test(instance, Vec2D::new(25.0, 50.0)).is_empty(),
+        "an alpha-zero fill does not produce a visible hit region"
+    );
+    assert_eq!(
+        frame.hit_test(instance, Vec2D::new(75.0, 50.0)),
+        vec![visible]
+    );
+    assert_ne!(transparent, visible);
+    Ok(())
+}
+
+#[test]
+fn hit_test_uses_the_visible_stroke_region_instead_of_filling_a_stroke_only_shape() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Stroke Hit".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Outline".into(),
+                x: 50.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Outline Rectangle", 40.0, 40.0)),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Outline Stroke".into(),
+                thickness: 4.0,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(stroke),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Outline Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        Ok((artboard, shape))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let mut frame = scene.frame();
+
+    assert_eq!(
+        frame.hit_test(instance, Vec2D::new(30.0, 50.0)),
+        vec![shape],
+        "the stroke centerline is visible"
+    );
+    assert!(
+        frame.hit_test(instance, Vec2D::new(50.0, 50.0)).is_empty(),
+        "the unfilled interior of a stroke-only shape is not visible"
+    );
+    assert!(
+        frame.hit_test(instance, Vec2D::new(27.99, 50.0)).is_empty(),
+        "hit testing adds no selection slop outside the four-pixel stroke"
+    );
+    Ok(())
+}
+
+#[test]
+fn geometry_queries_flush_hot_writes_and_reject_wrong_instance_targets() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((first_artboard, first_shape, second_artboard, second_shape), _) = scene.edit(|tx| {
+        let first_artboard = tx.create_artboard(ArtboardSpec {
+            name: "First".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let first_shape = create_hit_shape(tx, first_artboard, "First Shape", 20.0, false)?;
+        let second_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Second".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let second_shape = create_hit_shape(tx, second_artboard, "Second Shape", 50.0, false)?;
+        Ok((first_artboard, first_shape, second_artboard, second_shape))
+    })?;
+    let first_instance = scene.instantiate(first_artboard)?;
+    let _second_instance = scene.instantiate(second_artboard)?;
+    let translate_x = scene.cursor(first_instance, first_shape, props::TRANSLATE_X)?;
+    let opacity = scene.cursor(first_instance, first_shape, props::WORLD_OPACITY)?;
+
+    {
+        let mut frame = scene.frame();
+        assert!(frame.set(translate_x, 70.0)?);
+        assert_eq!(
+            frame.world_transform(first_instance, first_shape),
+            Some(nuxie::Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 50.0]))
+        );
+        assert_eq!(
+            frame.world_bounds(first_instance, first_shape),
+            Some(Aabb::new(50.0, 30.0, 90.0, 70.0))
+        );
+        assert_eq!(
+            frame.hit_test(first_instance, Vec2D::new(70.0, 50.0)),
+            vec![first_shape]
+        );
+        assert!(
+            frame
+                .hit_test(first_instance, Vec2D::new(20.0, 50.0))
+                .is_empty()
+        );
+        assert_eq!(
+            frame.world_bounds(first_instance, second_shape),
+            None,
+            "an object from another artboard cannot be queried through this instance"
+        );
+        assert_eq!(
+            frame.world_transform(first_instance, second_shape),
+            None,
+            "an object from another artboard cannot resolve a transform through this instance"
+        );
+
+        assert!(frame.set(opacity, 0.0)?);
+        assert!(
+            frame
+                .hit_test(first_instance, Vec2D::new(70.0, 50.0))
+                .is_empty(),
+            "a hidden shape must not participate in hit testing"
+        );
+    }
+
+    let _ = scene.edit(|tx| tx.remove(first_shape))?;
+    {
+        let mut frame = scene.frame();
+        assert_eq!(frame.world_bounds(first_instance, first_shape), None);
+        assert_eq!(frame.world_transform(first_instance, first_shape), None);
+        assert!(
+            frame
+                .hit_test(first_instance, Vec2D::new(70.0, 50.0))
+                .is_empty()
+        );
+    }
+
+    scene.drop_instance(first_instance);
+    let mut frame = scene.frame();
+    assert!(
+        frame
+            .hit_test(first_instance, Vec2D::new(70.0, 50.0))
+            .is_empty()
+    );
+    assert_eq!(frame.world_bounds(first_instance, first_shape), None);
+    assert_eq!(frame.world_transform(first_instance, first_shape), None);
+    Ok(())
 }
 
 #[test]

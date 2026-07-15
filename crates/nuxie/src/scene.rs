@@ -438,6 +438,7 @@ struct RuntimeSlot {
 struct MaterializedArtboard {
     file: Arc<File>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
+    objects_by_local: Vec<Option<ObjectId>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1454,6 +1455,77 @@ impl Frame<'_> {
         ))
     }
 
+    /// Return authored shapes under `point`, ordered front to back and deduplicated.
+    pub fn hit_test(&mut self, instance: InstanceId, point: crate::Vec2D) -> Vec<ObjectId> {
+        let Some((artboard, local_hits)) = self
+            .scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+            .map(|live| (live.artboard, live.runtime.hit_test(point)))
+        else {
+            return Vec::new();
+        };
+        let Some(materialized) = self.scene.materialized.get(&artboard) else {
+            return Vec::new();
+        };
+        local_hits
+            .into_iter()
+            .filter_map(|local_id| {
+                materialized
+                    .objects_by_local
+                    .get(local_id)
+                    .copied()
+                    .flatten()
+            })
+            .collect()
+    }
+
+    /// Return exact logical world bounds for an authored object in this instance.
+    pub fn world_bounds(&mut self, instance: InstanceId, object: ObjectId) -> Option<crate::Aabb> {
+        let (artboard, local_id) = self.resolve_geometry_target(instance, object)?;
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)?
+            .runtime
+            .world_bounds(local_id)
+    }
+
+    /// Return the settled, layout-aware world transform for an authored object.
+    pub fn world_transform(
+        &mut self,
+        instance: InstanceId,
+        object: ObjectId,
+    ) -> Option<crate::Mat2D> {
+        let (artboard, local_id) = self.resolve_geometry_target(instance, object)?;
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)?
+            .runtime
+            .world_transform(local_id)
+    }
+
+    fn resolve_geometry_target(
+        &self,
+        instance: InstanceId,
+        object: ObjectId,
+    ) -> Option<(ArtboardId, usize)> {
+        let live = self
+            .scene
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)?;
+        let materialized = self.scene.materialized.get(&live.artboard)?;
+        let local_id = materialized.objects.get(&object)?.local_id;
+        Some((live.artboard, local_id))
+    }
+
     pub fn draw(
         &mut self,
         instance: InstanceId,
@@ -1512,6 +1584,7 @@ impl MaterializedArtboard {
         Ok(Self {
             file,
             objects: lowered.objects,
+            objects_by_local: lowered.objects_by_local,
         })
     }
 }
@@ -1519,6 +1592,7 @@ impl MaterializedArtboard {
 struct LoweredArtboard {
     records: Vec<ExportedRecord>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
+    objects_by_local: Vec<Option<ObjectId>>,
 }
 
 /// Lower exactly one durable artboard into one runtime-file record stream.
@@ -1553,6 +1627,7 @@ fn lower_artboard(
     }
 
     let mut objects = BTreeMap::new();
+    let mut objects_by_local = vec![None];
     for node in &artboard.nodes {
         validate_node_spec(&node.spec).map_err(|reason| {
             EditDiagnostic::new(
@@ -1605,10 +1680,25 @@ fn lower_artboard(
                 kind: node.spec.kind(),
             },
         );
+        if objects_by_local.len() <= local_id {
+            objects_by_local.resize(local_id.saturating_add(1), None);
+        }
+        let Some(slot) = objects_by_local.get_mut(local_id) else {
+            return Err(EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::InternalInvariant,
+            ));
+        };
+        *slot = Some(node.id);
     }
 
     canonicalize_exported_records(&mut records);
-    Ok(LoweredArtboard { records, objects })
+    Ok(LoweredArtboard {
+        records,
+        objects,
+        objects_by_local,
+    })
 }
 
 fn parent_edit_ids(parent: Parent) -> Vec<EditId> {

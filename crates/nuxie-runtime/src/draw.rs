@@ -8,11 +8,11 @@ use nuxie_graph::{
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
 use nuxie_render_api::{
-    BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
-    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap as RenderStrokeCap,
-    StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
+    Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
+    FillRule as RenderFillRule, ImageSampler as RenderImageSampler, Mat2D as RenderMat2D,
+    PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
+    StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -533,6 +533,210 @@ impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
         self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
+    }
+
+    /// Settle pending writes and return visible shape locals under `point`,
+    /// from front to back, using this instance's retained file/graph context.
+    pub fn geometry_hit_test(
+        &mut self,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<usize> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        self.geometry_hit_test_with_context(runtime, graph, point, cache)
+    }
+
+    fn geometry_hit_test_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<usize> {
+        // Geometry queries live in the artboard's unshifted world space. This
+        // is the same clip rectangle used by drawing when the public origin
+        // transform is not applied by the renderer-facing wrapper.
+        if self.clip {
+            let clip_left = -self.origin_x * self.width;
+            let clip_top = -self.origin_y * self.height;
+            let clip = RenderAabb::new(
+                clip_left,
+                clip_top,
+                clip_left + self.width,
+                clip_top + self.height,
+            );
+            if !clip.contains(point) {
+                return Vec::new();
+            }
+        }
+
+        cache.retain_instance(self);
+        let prepared = cache
+            .paths
+            .prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let mut active_clips = Vec::new();
+        let mut back_to_front_hits = Vec::new();
+        for command in prepared.commands.iter() {
+            match command.kind {
+                RuntimeDrawCommandKind::ClipStart => {
+                    let contains = command
+                        .clipping_shape_local
+                        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
+                        .map(|clipping_shape| {
+                            if !clipping_shape.is_visible {
+                                return true;
+                            }
+                            let commands = cache.paths.clipping_shape_path_commands(
+                                self,
+                                graph,
+                                clipping_shape,
+                                layout_bounds,
+                            );
+                            runtime_path_contains(
+                                commands.as_slice(),
+                                point,
+                                runtime_geometry_fill_rule(clipping_shape.fill_rule),
+                            )
+                        })
+                        .unwrap_or(true);
+                    active_clips.push(contains);
+                    continue;
+                }
+                RuntimeDrawCommandKind::ClipEnd => {
+                    let _ = active_clips.pop();
+                    continue;
+                }
+                RuntimeDrawCommandKind::Draw => {}
+            }
+
+            if command.object_kind == RuntimeDrawCommandObjectKind::DrawableProxy
+                && let Some(layout_local) = command.local_id
+                && self.runtime_layout_component_clip_enabled(layout_local)
+            {
+                let path = self.runtime_layout_component_clip_path_commands(
+                    layout_local,
+                    graph,
+                    layout_bounds,
+                );
+                active_clips.push(runtime_path_contains(
+                    &path,
+                    point,
+                    RuntimeGeometryFillRule::Clockwise,
+                ));
+                continue;
+            }
+            if command.object_kind == RuntimeDrawCommandObjectKind::LayoutComponent
+                && let Some(layout_local) = command.local_id
+                && self.runtime_layout_component_clip_enabled(layout_local)
+            {
+                let _ = active_clips.pop();
+                continue;
+            }
+            if command.type_name != "Shape"
+                || command.shape_paints.is_empty()
+                || active_clips.iter().any(|contains| !contains)
+            {
+                continue;
+            }
+            let Some(local_id) = command.local_id else {
+                continue;
+            };
+            let shape_world = command.world_transform.unwrap_or_else(|| {
+                cache.paths.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                )
+            });
+            if command.shape_paints.iter().any(|paint| {
+                runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
+            }) {
+                back_to_front_hits.push(local_id);
+            }
+        }
+
+        let mut seen = BTreeSet::new();
+        back_to_front_hits
+            .into_iter()
+            .rev()
+            .filter(|local_id| seen.insert(*local_id))
+            .collect()
+    }
+
+    /// Settle pending writes and resolve an object's layout-aware world
+    /// transform using this instance's retained file/graph context.
+    pub fn geometry_world_transform(
+        &mut self,
+        local_id: usize,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<RenderMat2D> {
+        self.update_pass();
+        let runtime = self.runtime_file()?;
+        let graph = self.runtime_graph()?;
+        self.geometry_world_transform_with_context(runtime, graph, local_id, cache)
+    }
+
+    fn geometry_world_transform_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<RenderMat2D> {
+        self.component(local_id)?;
+        cache.retain_instance(self);
+        let prepared = cache
+            .paths
+            .prepared_artboard_frame(self, graph, Some(runtime));
+        Some(runtime_render_mat(
+            cache.paths.component_world_transform_with_bounds(
+                self,
+                graph,
+                local_id,
+                prepared.layout_bounds.as_ref().as_ref(),
+            ),
+        ))
+    }
+
+    /// Settle pending writes and resolve exact logical path bounds in world
+    /// space using this instance's retained file/graph context.
+    pub fn geometry_world_bounds(
+        &mut self,
+        local_id: usize,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<RenderAabb> {
+        self.update_pass();
+        let runtime = self.runtime_file()?;
+        let graph = self.runtime_graph()?;
+        self.geometry_world_bounds_with_context(runtime, graph, local_id, cache)
+    }
+
+    fn geometry_world_bounds_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<RenderAabb> {
+        cache.retain_instance(self);
+        let prepared = cache
+            .paths
+            .prepared_artboard_frame(self, graph, Some(runtime));
+        let commands = self.runtime_object_world_path_commands(
+            local_id,
+            graph,
+            prepared.layout_bounds.as_ref().as_ref(),
+            &mut cache.paths,
+        )?;
+        runtime_exact_path_bounds(&commands)
     }
 
     fn draw_commands_with_layout_bounds(
@@ -3731,6 +3935,9 @@ impl ArtboardInstance {
             shape_local,
             path_epoch: self.path_epoch(),
             layout_epoch: self.layout_epoch(),
+            world_epoch: (path_kind == RuntimeShapePaintPathKind::World)
+                .then(|| self.prepared_epoch())
+                .unwrap_or_default(),
             path_kind,
         };
         if let Some(commands) =
@@ -3752,6 +3959,127 @@ impl ArtboardInstance {
             .shape_paint_paths
             .insert(graph.global_id, paint.local_id, key, commands.clone());
         commands.as_ref().clone()
+    }
+
+    fn runtime_shape_world_path_commands(
+        &self,
+        shape_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Option<Vec<RuntimePathCommand>> {
+        let path_lookup = path_cache.path_composer_lookup_frame(graph);
+        let composer = path_lookup.composer(graph, shape_local)?;
+        let shape_world = path_cache.component_world_transform_with_bounds(
+            self,
+            graph,
+            shape_local,
+            layout_bounds,
+        );
+        let inverse_shape_world = shape_world.invert_or_identity();
+        let nsliced_context =
+            runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds);
+        let mut commands = Vec::new();
+
+        for path_ref in &composer.paths {
+            if !self.runtime_path_counts_for_clip(path_ref) {
+                continue;
+            }
+            let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
+                continue;
+            };
+            let path_world = path_cache.component_world_transform_with_bounds(
+                self,
+                graph,
+                path.local_id,
+                layout_bounds,
+            );
+            let path_frame =
+                path_cache.path_geometry_commands_frame(self, graph, path, layout_bounds);
+            let path_transform = if path_frame.has_weighted_context {
+                Mat2D::IDENTITY
+            } else {
+                path_world
+            };
+            let mut path_commands = path_frame.commands.as_ref().clone();
+            transform_path_commands(&mut path_commands, path_transform);
+            if let Some(context) = nsliced_context.as_ref() {
+                runtime_deform_path_commands_with_nsliced_node(
+                    &mut path_commands,
+                    context,
+                    ShapePaintPathKind::World,
+                    shape_world,
+                    inverse_shape_world,
+                );
+            }
+            commands.extend(path_commands);
+        }
+
+        Some(commands)
+    }
+
+    fn runtime_object_world_path_commands(
+        &self,
+        local_id: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Option<Vec<RuntimePathCommand>> {
+        let component = self.component(local_id)?;
+        if component.type_name == "Shape" {
+            return self.runtime_shape_world_path_commands(
+                local_id,
+                graph,
+                layout_bounds,
+                path_cache,
+            );
+        }
+        if component.type_name == "LayoutComponent" {
+            let bounds =
+                self.runtime_layout_component_bounds_with_bounds(local_id, graph, layout_bounds);
+            let corners = self.runtime_layout_component_corners(local_id);
+            let mut commands = runtime_layout_rect_path_commands(bounds, corners);
+            let world = path_cache.component_world_transform_with_bounds(
+                self,
+                graph,
+                local_id,
+                layout_bounds,
+            );
+            transform_path_commands(&mut commands, world);
+            return Some(commands);
+        }
+        let path = graph.paths.iter().find(|path| path.local_id == local_id)?;
+        let path_frame = path_cache.path_geometry_commands_frame(self, graph, path, layout_bounds);
+        let path_world =
+            path_cache.component_world_transform_with_bounds(self, graph, local_id, layout_bounds);
+        let mut commands = path_frame.commands.as_ref().clone();
+        if !path_frame.has_weighted_context {
+            transform_path_commands(&mut commands, path_world);
+        }
+        if let Some(shape_local) = graph.path_composers.iter().find_map(|composer| {
+            composer
+                .paths
+                .iter()
+                .any(|path_ref| path_ref.local_id == local_id)
+                .then_some(composer.shape_local)
+        }) && let Some(context) =
+            runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds)
+        {
+            let shape_world = path_cache.component_world_transform_with_bounds(
+                self,
+                graph,
+                shape_local,
+                layout_bounds,
+            );
+            runtime_deform_path_commands_with_nsliced_node(
+                &mut commands,
+                &context,
+                ShapePaintPathKind::World,
+                shape_world,
+                shape_world.invert_or_identity(),
+            );
+        }
+        Some(commands)
     }
 
     pub(crate) fn runtime_shape_length_with_layout(
@@ -6296,6 +6624,39 @@ pub struct RuntimeRenderPathCache {
     world_transform_visiting: BTreeSet<usize>,
 }
 
+/// Retained geometry-query state backed by the same prepared paths and layout
+/// frames as drawing. Its contents are intentionally opaque to callers.
+#[derive(Default)]
+pub struct RuntimeGeometryCache {
+    key: Option<RuntimeGeometryCacheKey>,
+    paths: RuntimeRenderPathCache,
+}
+
+impl std::fmt::Debug for RuntimeGeometryCache {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeGeometryCache")
+            .finish_non_exhaustive()
+    }
+}
+
+impl RuntimeGeometryCache {
+    fn retain_instance(&mut self, instance: &ArtboardInstance) {
+        let key = RuntimeGeometryCacheKey {
+            instance_identity: instance.instance_identity(),
+        };
+        if self.key != Some(key) {
+            self.key = Some(key);
+            self.paths = RuntimeRenderPathCache::default();
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeGeometryCacheKey {
+    instance_identity: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimePreparedArtboardCacheKey {
     graph_global_id: u32,
@@ -6424,6 +6785,7 @@ struct RuntimeShapePaintPathCommandsCacheKey {
     shape_local: usize,
     path_epoch: u64,
     layout_epoch: u64,
+    world_epoch: u64,
     path_kind: RuntimeShapePaintPathKind,
 }
 
@@ -6481,6 +6843,7 @@ struct RuntimeCachedShapePaintPathCommands {
 struct RuntimeClippingShapeCommandsCacheKey {
     path_epoch: u64,
     layout_epoch: u64,
+    world_epoch: u64,
 }
 
 #[derive(Default)]
@@ -6718,8 +7081,15 @@ struct RuntimeGradientShaderCacheEntry {
 struct RuntimeCachedDrawPath {
     path: Box<dyn RenderPath>,
     raw_path: RawPath,
-    epoch: u64,
+    revision: RuntimeDrawPathRevision,
     fill_rule: RenderFillRule,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeDrawPathRevision {
+    path_epoch: u64,
+    layout_epoch: u64,
+    world_epoch: u64,
 }
 
 struct RuntimeRetainedRenderPath {
@@ -6733,6 +7103,7 @@ struct RuntimeRetainedRenderPathCacheKey {
     graph_global_id: u32,
     path_epoch: u64,
     layout_epoch: u64,
+    world_epoch: u64,
     fill_rule: RenderFillRule,
 }
 
@@ -7396,7 +7767,20 @@ impl RuntimeRenderPathCache {
             graph_global_id: graph.global_id,
             path_epoch: instance.path_epoch(),
             layout_epoch: instance.layout_epoch(),
+            world_epoch: 0,
             fill_rule,
+        }
+    }
+
+    fn retained_world_render_path_key(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        fill_rule: RenderFillRule,
+    ) -> RuntimeRetainedRenderPathCacheKey {
+        RuntimeRetainedRenderPathCacheKey {
+            world_epoch: instance.prepared_epoch(),
+            ..self.retained_render_path_key(instance, graph, fill_rule)
         }
     }
 
@@ -7410,6 +7794,7 @@ impl RuntimeRenderPathCache {
         let key = RuntimeClippingShapeCommandsCacheKey {
             path_epoch: instance.path_epoch(),
             layout_epoch: instance.layout_epoch(),
+            world_epoch: instance.prepared_epoch(),
         };
         if let Some(commands) =
             self.clipping_shape_commands
@@ -7487,18 +7872,18 @@ impl RuntimeRenderPathCache {
     fn draw_path(
         &mut self,
         key: RuntimeDrawPathCacheKey,
-        path_epoch: u64,
+        revision: RuntimeDrawPathRevision,
         factory: &mut dyn RenderFactory,
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
     ) -> &mut Box<dyn RenderPath> {
-        self.draw_path_with_optional_fill_rule(key, path_epoch, factory, commands, fill_rule, None)
+        self.draw_path_with_optional_fill_rule(key, revision, factory, commands, fill_rule, None)
     }
 
     fn draw_path_with_optional_fill_rule(
         &mut self,
         key: RuntimeDrawPathCacheKey,
-        path_epoch: u64,
+        revision: RuntimeDrawPathRevision,
         factory: &mut dyn RenderFactory,
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
@@ -7509,17 +7894,17 @@ impl RuntimeRenderPathCache {
             RuntimeCachedDrawPath {
                 path: runtime_make_path_from_raw_path(factory, &raw_path, fill_rule),
                 raw_path,
-                epoch: path_epoch,
+                revision,
                 fill_rule,
             }
         });
-        if cached.epoch != path_epoch {
+        if cached.revision != revision {
             runtime_rebuild_raw_path_from_commands(&mut cached.raw_path, commands);
             runtime_rebuild_path_from_raw_path_preserving_fill_rule(
                 cached.path.as_mut(),
                 &cached.raw_path,
             );
-            cached.epoch = path_epoch;
+            cached.revision = revision;
         }
         if let Some(replay_fill_rule) = replay_fill_rule
             && cached.fill_rule != replay_fill_rule
@@ -8340,7 +8725,7 @@ fn runtime_draw_background(
                     local_id: Some(runtime_paint.paint_local),
                     path_index: runtime_paint.path_slot_index,
                 },
-                instance.path_epoch(),
+                runtime_draw_path_revision(instance, runtime_paint.path_kind),
                 factory,
                 feather.inner_path_commands.as_slice(),
                 RenderFillRule::Clockwise,
@@ -8759,7 +9144,6 @@ fn runtime_draw_command(
         }
     }
     let mut text_temporary_paint_index = 0;
-    let draw_path_epoch = instance.path_epoch();
     let foreground_layout_path_cache_local =
         if command.object_kind == RuntimeDrawCommandObjectKind::ForegroundLayoutDrawable {
             command
@@ -8770,6 +9154,7 @@ fn runtime_draw_command(
         };
     for paint in shape_paints {
         let global_id = paint.paint_global_id;
+        let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
         let effect_or_shape_path_commands = if paint.has_effect_path {
             &paint.effect_path_commands
         } else {
@@ -8880,7 +9265,7 @@ fn runtime_draw_command(
                         local_id: draw_path_cache_local,
                         path_index: paint.clip_path_slot_index,
                     },
-                    draw_path_epoch,
+                    draw_path_revision,
                     factory,
                     effect_or_shape_path_commands,
                     RenderFillRule::Clockwise,
@@ -8908,7 +9293,7 @@ fn runtime_draw_command(
                 local_id: inner_feather_path_cache_local,
                 path_index: paint.path_slot_index,
             },
-            draw_path_epoch,
+            draw_path_revision,
             factory,
             draw_path_commands,
             RenderFillRule::Clockwise,
@@ -8990,6 +9375,21 @@ fn runtime_draw_path_cache_path_kind(
         RuntimeShapePaintPathKind::Local
     } else {
         paint.path_kind
+    }
+}
+
+fn runtime_draw_path_revision(
+    instance: &ArtboardInstance,
+    path_kind: RuntimeShapePaintPathKind,
+) -> RuntimeDrawPathRevision {
+    RuntimeDrawPathRevision {
+        path_epoch: instance.path_epoch(),
+        layout_epoch: instance.layout_epoch(),
+        world_epoch: if path_kind == RuntimeShapePaintPathKind::World {
+            instance.prepared_epoch()
+        } else {
+            0
+        },
     }
 }
 
@@ -10098,13 +10498,10 @@ fn runtime_draw_clip_start(
     }
     let path_commands =
         path_cache.clipping_shape_path_commands(instance, graph, clipping_shape, layout_bounds);
-    if path_commands.is_empty() {
-        return;
-    }
     // Ported from src/shapes/clipping_shape.cpp: each ClippingShape owns a
     // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
     let fill_rule = runtime_fill_rule_for_value(clipping_shape.fill_rule);
-    let key = path_cache.retained_render_path_key(instance, graph, fill_rule);
+    let key = path_cache.retained_world_render_path_key(instance, graph, fill_rule);
     let path = path_cache.clipping_shape_path(
         key,
         clipping_shape.local_id,
@@ -11505,6 +11902,1550 @@ fn runtime_feather_bool_property(
     runtime_draw_property_key_for_name(feather.type_name, property_name)
         .and_then(|key| artboard.bool_property(feather.local_id, key))
         .unwrap_or(default)
+}
+
+fn runtime_geometry_shape_paint_contains(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    paint: &RuntimeShapePaintCommand,
+    shape_world: Mat2D,
+    world_point: RenderVec2D,
+) -> bool {
+    if !runtime_geometry_shape_paint_is_effectively_visible(instance, paint) {
+        return false;
+    }
+
+    let effect_or_shape_commands = if paint.has_effect_path {
+        paint.effect_path_commands.as_slice()
+    } else {
+        paint.path_commands.as_slice()
+    };
+    let draw_commands = paint
+        .feather_state
+        .as_ref()
+        .filter(|feather| feather.inner)
+        .map(|feather| feather.inner_path_commands.as_slice())
+        .unwrap_or(effect_or_shape_commands);
+    if draw_commands.is_empty() {
+        return false;
+    }
+
+    let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
+    let Some(point) = runtime_geometry_paint_space_point(paint, paint_shape_world, world_point)
+    else {
+        return false;
+    };
+
+    // Inner feather draws are clipped to the retained effect/shape path before
+    // the inner path is painted. Keep that clip in the geometry result too.
+    if paint
+        .feather_state
+        .as_ref()
+        .is_some_and(|feather| feather.inner)
+        && !runtime_path_contains(
+            effect_or_shape_commands,
+            point,
+            RuntimeGeometryFillRule::Clockwise,
+        )
+    {
+        return false;
+    }
+
+    match paint.paint_type {
+        RuntimeShapePaintKind::Fill => runtime_path_contains(
+            draw_commands,
+            point,
+            runtime_geometry_fill_rule_from_render(paint.fill_rule),
+        ),
+        RuntimeShapePaintKind::Stroke => {
+            let Some(object) = runtime.object(paint.paint_global_id as usize) else {
+                return false;
+            };
+            let thickness = runtime_stroke_thickness(instance, object, paint.paint_local);
+            if !thickness.is_finite() || thickness <= 0.0 {
+                return false;
+            }
+            let Ok(cap) = runtime_stroke_cap(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "cap",
+                0,
+            )) else {
+                return false;
+            };
+            let Ok(join) = runtime_stroke_join(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "join",
+                0,
+            )) else {
+                return false;
+            };
+            runtime_stroked_path_contains(draw_commands, point, thickness, cap, join)
+        }
+        RuntimeShapePaintKind::Unknown => false,
+    }
+}
+
+fn runtime_geometry_shape_paint_is_effectively_visible(
+    instance: &ArtboardInstance,
+    paint: &RuntimeShapePaintCommand,
+) -> bool {
+    runtime_current_solid_render_color(instance, paint)
+        .map(|color| (color >> 24) != 0)
+        .unwrap_or_else(|| runtime_shape_paint_state_is_effectively_visible(&paint.paint_state))
+}
+
+fn runtime_geometry_paint_space_point(
+    paint: &RuntimeShapePaintCommand,
+    paint_shape_world: Mat2D,
+    world_point: RenderVec2D,
+) -> Option<RenderVec2D> {
+    let mut point = (world_point.x, world_point.y);
+    let outer_feather = paint
+        .feather_state
+        .as_ref()
+        .filter(|feather| !feather.inner && runtime_feather_has_offset(feather));
+
+    // World-space feather translation is concatenated before the shape world
+    // transform, so undo it while the query point is still in world space.
+    if let Some(feather) = outer_feather.filter(|feather| runtime_feather_uses_world_space(feather))
+    {
+        point.0 -= feather.offset_x;
+        point.1 -= feather.offset_y;
+    }
+
+    if matches!(
+        paint.path_kind,
+        RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+    ) {
+        let inverse = runtime_mat2d_invert(paint_shape_world)?;
+        point = inverse.map_point(point.0, point.1);
+    }
+
+    // Local feather translation is concatenated after the shape transform.
+    if let Some(feather) =
+        outer_feather.filter(|feather| !runtime_feather_uses_world_space(feather))
+    {
+        point.0 -= feather.offset_x;
+        point.1 -= feather.offset_y;
+    }
+
+    Some(RenderVec2D::new(point.0, point.1))
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeGeometryFillRule {
+    NonZero,
+    EvenOdd,
+    Clockwise,
+}
+
+fn runtime_geometry_fill_rule(value: u64) -> RuntimeGeometryFillRule {
+    match value {
+        1 => RuntimeGeometryFillRule::EvenOdd,
+        2 => RuntimeGeometryFillRule::Clockwise,
+        _ => RuntimeGeometryFillRule::NonZero,
+    }
+}
+
+fn runtime_geometry_fill_rule_from_render(fill_rule: RenderFillRule) -> RuntimeGeometryFillRule {
+    match fill_rule {
+        RenderFillRule::EvenOdd => RuntimeGeometryFillRule::EvenOdd,
+        RenderFillRule::Clockwise => RuntimeGeometryFillRule::Clockwise,
+        RenderFillRule::NonZero => RuntimeGeometryFillRule::NonZero,
+    }
+}
+
+#[derive(Debug)]
+struct RuntimeGeometryStrokeContour {
+    origin: (f64, f64),
+    segments: Vec<RuntimeGeometryStrokeSegment>,
+    closed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum RuntimeGeometryStrokeSegment {
+    Line {
+        start: (f64, f64),
+        end: (f64, f64),
+    },
+    Cubic {
+        start: (f64, f64),
+        control1: (f64, f64),
+        control2: (f64, f64),
+        end: (f64, f64),
+    },
+}
+
+impl RuntimeGeometryStrokeSegment {
+    fn start(self) -> (f64, f64) {
+        match self {
+            Self::Line { start, .. } | Self::Cubic { start, .. } => start,
+        }
+    }
+
+    fn end(self) -> (f64, f64) {
+        match self {
+            Self::Line { end, .. } | Self::Cubic { end, .. } => end,
+        }
+    }
+
+    fn start_adjacent(self) -> (f64, f64) {
+        match self {
+            Self::Line { end, .. } => end,
+            Self::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => {
+                if control1 != start {
+                    control1
+                } else if control2 != start {
+                    control2
+                } else {
+                    end
+                }
+            }
+        }
+    }
+
+    fn end_adjacent(self) -> (f64, f64) {
+        match self {
+            Self::Line { start, .. } => start,
+            Self::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => {
+                if control2 != end {
+                    control2
+                } else if control1 != end {
+                    control1
+                } else {
+                    start
+                }
+            }
+        }
+    }
+}
+
+const MAX_RUNTIME_GEOMETRY_CUBIC_STROKE_BISECTIONS: usize = 768;
+
+#[derive(Debug, Default)]
+struct RuntimeGeometryStrokeWork {
+    cubic_candidates: usize,
+    cubic_bisections: usize,
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_stroked_path_contains(
+    commands: &[RuntimePathCommand],
+    point: RenderVec2D,
+    thickness: f32,
+    cap: RenderStrokeCap,
+    join: RenderStrokeJoin,
+) -> bool {
+    runtime_stroked_path_contains_with_work(
+        commands,
+        point,
+        thickness,
+        cap,
+        join,
+        &mut RuntimeGeometryStrokeWork::default(),
+    )
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_stroked_path_contains_with_work(
+    commands: &[RuntimePathCommand],
+    point: RenderVec2D,
+    thickness: f32,
+    cap: RenderStrokeCap,
+    join: RenderStrokeJoin,
+    work: &mut RuntimeGeometryStrokeWork,
+) -> bool {
+    let point = (f64::from(point.x), f64::from(point.y));
+    let half_thickness = f64::from(thickness) * 0.5;
+    runtime_geometry_stroke_contours(commands)
+        .iter()
+        .any(|contour| {
+            runtime_geometry_stroke_contour_contains(
+                contour,
+                point,
+                half_thickness,
+                cap,
+                join,
+                work,
+            )
+        })
+}
+
+fn runtime_geometry_stroke_contours(
+    commands: &[RuntimePathCommand],
+) -> Vec<RuntimeGeometryStrokeContour> {
+    let mut contours = Vec::new();
+    let mut segments = Vec::new();
+    let mut current = None;
+    let mut contour_start = None;
+
+    let finish = |contours: &mut Vec<RuntimeGeometryStrokeContour>,
+                  segments: &mut Vec<RuntimeGeometryStrokeSegment>,
+                  origin: Option<(f64, f64)>,
+                  closed| {
+        if let Some(origin) = origin {
+            contours.push(RuntimeGeometryStrokeContour {
+                origin,
+                segments: std::mem::take(segments),
+                closed,
+            });
+        } else {
+            segments.clear();
+        }
+    };
+
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => {
+                finish(&mut contours, &mut segments, contour_start, false);
+                let point = (f64::from(x), f64::from(y));
+                current = Some(point);
+                contour_start = Some(point);
+            }
+            RuntimePathCommand::Line { x, y } => {
+                let end = (f64::from(x), f64::from(y));
+                let start = current.unwrap_or(end);
+                contour_start.get_or_insert(start);
+                if start != end {
+                    segments.push(RuntimeGeometryStrokeSegment::Line { start, end });
+                }
+                current = Some(end);
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                let start = current.unwrap_or((0.0, 0.0));
+                contour_start.get_or_insert(start);
+                let control1 = (f64::from(x1), f64::from(y1));
+                let control2 = (f64::from(x2), f64::from(y2));
+                let end = (f64::from(x3), f64::from(y3));
+                if start != control1 || control1 != control2 || control2 != end {
+                    segments.push(RuntimeGeometryStrokeSegment::Cubic {
+                        start,
+                        control1,
+                        control2,
+                        end,
+                    });
+                }
+                current = Some(end);
+            }
+            RuntimePathCommand::Close => {
+                if let (Some(start), Some(end)) = (current, contour_start)
+                    && start != end
+                {
+                    segments.push(RuntimeGeometryStrokeSegment::Line { start, end });
+                }
+                let closed_start = contour_start;
+                finish(&mut contours, &mut segments, contour_start, true);
+                current = closed_start;
+                contour_start = None;
+            }
+        }
+    }
+    finish(&mut contours, &mut segments, contour_start, false);
+    contours
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_cubic_stroke_body_contains(
+    point: (f64, f64),
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+    half_thickness: f64,
+    work: &mut RuntimeGeometryStrokeWork,
+) -> bool {
+    if !half_thickness.is_finite()
+        || half_thickness < 0.0
+        || ![point, p0, p1, p2, p3]
+            .into_iter()
+            .all(|candidate| candidate.0.is_finite() && candidate.1.is_finite())
+    {
+        return false;
+    }
+
+    let min_x = p0.0.min(p1.0).min(p2.0).min(p3.0) - half_thickness;
+    let max_x = p0.0.max(p1.0).max(p2.0).max(p3.0) + half_thickness;
+    let min_y = p0.1.min(p1.1).min(p2.1).min(p3.1) - half_thickness;
+    let max_y = p0.1.max(p1.1).max(p2.1).max(p3.1) + half_thickness;
+    if point.0 < min_x || point.0 > max_x || point.1 < min_y || point.1 > max_y {
+        return false;
+    }
+
+    work.cubic_candidates = work.cubic_candidates.saturating_add(1);
+    let a = (
+        -p0.0 + 3.0 * p1.0 - 3.0 * p2.0 + p3.0,
+        -p0.1 + 3.0 * p1.1 - 3.0 * p2.1 + p3.1,
+    );
+    let b = (
+        3.0 * p0.0 - 6.0 * p1.0 + 3.0 * p2.0,
+        3.0 * p0.1 - 6.0 * p1.1 + 3.0 * p2.1,
+    );
+    let c = (-3.0 * p0.0 + 3.0 * p1.0, -3.0 * p0.1 + 3.0 * p1.1);
+    let d = (p0.0 - point.0, p0.1 - point.1);
+    let coefficients = [
+        runtime_geometry_dot(c, d),
+        runtime_geometry_dot(c, c) + 2.0 * runtime_geometry_dot(b, d),
+        3.0 * runtime_geometry_dot(b, c) + 3.0 * runtime_geometry_dot(a, d),
+        4.0 * runtime_geometry_dot(a, c) + 2.0 * runtime_geometry_dot(b, b),
+        5.0 * runtime_geometry_dot(a, b),
+        3.0 * runtime_geometry_dot(a, a),
+    ];
+    let radius_squared = half_thickness * half_thickness;
+    let mut roots = Vec::with_capacity(5);
+    let bisections_before = work.cubic_bisections;
+    runtime_geometry_polynomial_roots_unit_interval(&coefficients, &mut roots, work);
+    debug_assert!(
+        work.cubic_bisections.saturating_sub(bisections_before)
+            <= MAX_RUNTIME_GEOMETRY_CUBIC_STROKE_BISECTIONS
+    );
+    if roots.into_iter().any(|parameter| {
+        let candidate = (
+            runtime_cubic_value_f64(p0.0, p1.0, p2.0, p3.0, parameter),
+            runtime_cubic_value_f64(p0.1, p1.1, p2.1, p3.1, parameter),
+        );
+        runtime_geometry_distance_squared(point, candidate) <= radius_squared
+    }) {
+        return true;
+    }
+
+    let start_tangent = runtime_geometry_cubic_start_tangent(p0, p1, p2, p3);
+    let start_relative = (point.0 - p0.0, point.1 - p0.1);
+    if runtime_geometry_distance_squared(point, p0) <= radius_squared
+        && runtime_geometry_dot(start_relative, start_tangent) >= 0.0
+    {
+        return true;
+    }
+    let end_tangent = runtime_geometry_cubic_end_tangent(p0, p1, p2, p3);
+    let end_relative = (point.0 - p3.0, point.1 - p3.1);
+    runtime_geometry_distance_squared(point, p3) <= radius_squared
+        && runtime_geometry_dot(end_relative, end_tangent) <= 0.0
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_polynomial_roots_unit_interval(
+    coefficients: &[f64],
+    roots: &mut Vec<f64>,
+    work: &mut RuntimeGeometryStrokeWork,
+) {
+    let Some(mut degree) = coefficients.len().checked_sub(1) else {
+        return;
+    };
+    while degree > 0 && coefficients.get(degree).copied() == Some(0.0) {
+        degree -= 1;
+    }
+    match degree {
+        0 => return,
+        1 => {
+            let Some(linear) = coefficients.get(1).copied() else {
+                return;
+            };
+            let Some(constant) = coefficients.first().copied() else {
+                return;
+            };
+            runtime_geometry_push_unit_root(roots, -constant / linear);
+            return;
+        }
+        2 => {
+            let Some(quadratic) = coefficients.get(2).copied() else {
+                return;
+            };
+            let Some(linear) = coefficients.get(1).copied() else {
+                return;
+            };
+            let Some(constant) = coefficients.first().copied() else {
+                return;
+            };
+            for root in runtime_quadratic_roots_f64(quadratic, linear, constant) {
+                runtime_geometry_push_unit_root(roots, root);
+            }
+            runtime_geometry_sort_deduplicate_unit_roots(roots);
+            return;
+        }
+        _ => {}
+    }
+
+    let derivative = coefficients
+        .iter()
+        .copied()
+        .enumerate()
+        .skip(1)
+        .take(degree)
+        .map(|(power, coefficient)| coefficient * power as f64)
+        .collect::<Vec<_>>();
+    let mut critical_points = Vec::with_capacity(degree.saturating_sub(1));
+    runtime_geometry_polynomial_roots_unit_interval(&derivative, &mut critical_points, work);
+    runtime_geometry_sort_deduplicate_unit_roots(&mut critical_points);
+
+    let active_coefficients = coefficients.get(..=degree).unwrap_or(coefficients);
+    let scale = active_coefficients
+        .iter()
+        .map(|coefficient| coefficient.abs())
+        .sum::<f64>()
+        .max(1.0);
+    let zero_tolerance = 64.0 * f64::EPSILON * scale;
+    for &critical_point in &critical_points {
+        if runtime_geometry_polynomial_value(active_coefficients, critical_point).abs()
+            <= zero_tolerance
+        {
+            runtime_geometry_push_unit_root(roots, critical_point);
+        }
+    }
+
+    let mut boundaries = Vec::with_capacity(critical_points.len().saturating_add(2));
+    boundaries.push(0.0);
+    boundaries.extend(critical_points);
+    boundaries.push(1.0);
+    for interval in boundaries.windows(2) {
+        let Some(&low) = interval.first() else {
+            continue;
+        };
+        let Some(&high) = interval.last() else {
+            continue;
+        };
+        let low_value = runtime_geometry_polynomial_value(active_coefficients, low);
+        let high_value = runtime_geometry_polynomial_value(active_coefficients, high);
+        if low_value == 0.0
+            || high_value == 0.0
+            || low_value.is_sign_positive() == high_value.is_sign_positive()
+        {
+            continue;
+        }
+        let root = runtime_geometry_bisect_polynomial_root(
+            active_coefficients,
+            low,
+            high,
+            low_value,
+            work,
+        );
+        runtime_geometry_push_unit_root(roots, root);
+    }
+    runtime_geometry_sort_deduplicate_unit_roots(roots);
+}
+
+fn runtime_geometry_push_unit_root(roots: &mut Vec<f64>, root: f64) {
+    if root.is_finite() && root > 0.0 && root < 1.0 {
+        roots.push(root);
+    }
+}
+
+fn runtime_geometry_sort_deduplicate_unit_roots(roots: &mut Vec<f64>) {
+    roots.sort_by(f64::total_cmp);
+    roots.dedup_by(|left, right| (*left - *right).abs() <= 1.0e-12);
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_polynomial_value(coefficients: &[f64], parameter: f64) -> f64 {
+    coefficients
+        .iter()
+        .rev()
+        .fold(0.0, |value, coefficient| value * parameter + coefficient)
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_bisect_polynomial_root(
+    coefficients: &[f64],
+    mut low: f64,
+    mut high: f64,
+    mut low_value: f64,
+    work: &mut RuntimeGeometryStrokeWork,
+) -> f64 {
+    for _ in 0..64 {
+        work.cubic_bisections = work.cubic_bisections.saturating_add(1);
+        let middle = (low + high) * 0.5;
+        let middle_value = runtime_geometry_polynomial_value(coefficients, middle);
+        if middle_value == 0.0 {
+            return middle;
+        }
+        if middle_value.is_sign_positive() == low_value.is_sign_positive() {
+            low = middle;
+            low_value = middle_value;
+        } else {
+            high = middle;
+        }
+    }
+    (low + high) * 0.5
+}
+
+fn runtime_geometry_cubic_start_tangent(
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+) -> (f64, f64) {
+    let adjacent = if p1 != p0 {
+        p1
+    } else if p2 != p0 {
+        p2
+    } else {
+        p3
+    };
+    (adjacent.0 - p0.0, adjacent.1 - p0.1)
+}
+
+fn runtime_geometry_cubic_end_tangent(
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+) -> (f64, f64) {
+    let adjacent = if p2 != p3 {
+        p2
+    } else if p1 != p3 {
+        p1
+    } else {
+        p0
+    };
+    (p3.0 - adjacent.0, p3.1 - adjacent.1)
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_dot(left: (f64, f64), right: (f64, f64)) -> f64 {
+    left.0.mul_add(right.0, left.1 * right.1)
+}
+
+// Every direct index below is guarded by a non-empty segment slice, a fixed-size
+// `windows` iterator, or modulo that same non-zero length.
+#[allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
+fn runtime_geometry_stroke_contour_contains(
+    contour: &RuntimeGeometryStrokeContour,
+    point: (f64, f64),
+    half_thickness: f64,
+    cap: RenderStrokeCap,
+    join: RenderStrokeJoin,
+    work: &mut RuntimeGeometryStrokeWork,
+) -> bool {
+    let segments = contour.segments.as_slice();
+    if segments.is_empty() {
+        return runtime_geometry_empty_stroke_cap(contour.closed, join, cap).is_some_and(
+            |empty_cap| {
+                runtime_geometry_stroke_cap_contains(
+                    point,
+                    contour.origin,
+                    contour.origin,
+                    half_thickness,
+                    empty_cap,
+                )
+            },
+        );
+    }
+
+    for segment in segments {
+        let contains = match *segment {
+            RuntimeGeometryStrokeSegment::Line { start, end } => {
+                runtime_geometry_segment_strip_contains(point, start, end, half_thickness)
+            }
+            RuntimeGeometryStrokeSegment::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => runtime_geometry_cubic_stroke_body_contains(
+                point,
+                start,
+                control1,
+                control2,
+                end,
+                half_thickness,
+                work,
+            ),
+        };
+        if contains {
+            return true;
+        }
+    }
+
+    if contour.closed {
+        for index in 0..segments.len() {
+            let previous = segments[(index + segments.len() - 1) % segments.len()];
+            let next = segments[index];
+            if runtime_geometry_stroke_join_contains(
+                point,
+                previous.end_adjacent(),
+                next.start(),
+                next.start_adjacent(),
+                half_thickness,
+                join,
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    for pair in segments.windows(2) {
+        if runtime_geometry_stroke_join_contains(
+            point,
+            pair[0].end_adjacent(),
+            pair[0].end(),
+            pair[1].start_adjacent(),
+            half_thickness,
+            join,
+        ) {
+            return true;
+        }
+    }
+    let first = segments[0];
+    let last = segments[segments.len() - 1];
+    runtime_geometry_stroke_cap_contains(
+        point,
+        first.start(),
+        first.start_adjacent(),
+        half_thickness,
+        cap,
+    ) || runtime_geometry_stroke_cap_contains(
+        point,
+        last.end(),
+        last.end_adjacent(),
+        half_thickness,
+        cap,
+    )
+}
+
+fn runtime_geometry_empty_stroke_cap(
+    closed: bool,
+    join: RenderStrokeJoin,
+    cap: RenderStrokeCap,
+) -> Option<RenderStrokeCap> {
+    if !closed {
+        return Some(cap);
+    }
+    match join {
+        RenderStrokeJoin::Round => Some(RenderStrokeCap::Round),
+        RenderStrokeJoin::Miter => Some(RenderStrokeCap::Square),
+        RenderStrokeJoin::Bevel => None,
+    }
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_segment_strip_contains(
+    point: (f64, f64),
+    start: (f64, f64),
+    end: (f64, f64),
+    half_thickness: f64,
+) -> bool {
+    let direction = (end.0 - start.0, end.1 - start.1);
+    let length_squared = direction.0.mul_add(direction.0, direction.1 * direction.1);
+    if length_squared == 0.0 {
+        return false;
+    }
+    let relative = (point.0 - start.0, point.1 - start.1);
+    let projection = relative.0.mul_add(direction.0, relative.1 * direction.1);
+    if projection < 0.0 || projection > length_squared {
+        return false;
+    }
+    let cross = relative.0 * direction.1 - relative.1 * direction.0;
+    cross * cross <= half_thickness * half_thickness * length_squared
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_stroke_cap_contains(
+    point: (f64, f64),
+    endpoint: (f64, f64),
+    adjacent: (f64, f64),
+    half_thickness: f64,
+    cap: RenderStrokeCap,
+) -> bool {
+    match cap {
+        RenderStrokeCap::Butt => false,
+        RenderStrokeCap::Round => {
+            runtime_geometry_distance_squared(point, endpoint) <= half_thickness * half_thickness
+        }
+        RenderStrokeCap::Square => {
+            let direction = (endpoint.0 - adjacent.0, endpoint.1 - adjacent.1);
+            let length = direction.0.hypot(direction.1);
+            if length == 0.0 {
+                return (point.0 - endpoint.0).abs() <= half_thickness
+                    && (point.1 - endpoint.1).abs() <= half_thickness;
+            }
+            let extended = (
+                endpoint.0 + direction.0 / length * half_thickness,
+                endpoint.1 + direction.1 / length * half_thickness,
+            );
+            runtime_geometry_segment_strip_contains(point, endpoint, extended, half_thickness)
+        }
+    }
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_stroke_join_contains(
+    point: (f64, f64),
+    previous: (f64, f64),
+    vertex: (f64, f64),
+    next: (f64, f64),
+    half_thickness: f64,
+    join: RenderStrokeJoin,
+) -> bool {
+    let incoming = runtime_geometry_normalized((vertex.0 - previous.0, vertex.1 - previous.1));
+    let outgoing = runtime_geometry_normalized((next.0 - vertex.0, next.1 - vertex.1));
+    let (Some(incoming), Some(outgoing)) = (incoming, outgoing) else {
+        return runtime_geometry_distance_squared(point, vertex) <= half_thickness * half_thickness;
+    };
+    let turn = runtime_geometry_cross(incoming, outgoing);
+    let dot = incoming.0.mul_add(outgoing.0, incoming.1 * outgoing.1);
+    if turn == 0.0 {
+        return dot < 0.0
+            && runtime_geometry_distance_squared(point, vertex) <= half_thickness * half_thickness;
+    }
+    if join == RenderStrokeJoin::Round {
+        return runtime_geometry_distance_squared(point, vertex) <= half_thickness * half_thickness;
+    }
+
+    let side = if turn > 0.0 { -1.0 } else { 1.0 };
+    let incoming_normal = (-incoming.1 * side, incoming.0 * side);
+    let outgoing_normal = (-outgoing.1 * side, outgoing.0 * side);
+    let outer_incoming = (
+        vertex.0 + incoming_normal.0 * half_thickness,
+        vertex.1 + incoming_normal.1 * half_thickness,
+    );
+    let outer_outgoing = (
+        vertex.0 + outgoing_normal.0 * half_thickness,
+        vertex.1 + outgoing_normal.1 * half_thickness,
+    );
+    if join == RenderStrokeJoin::Bevel {
+        return runtime_geometry_triangle_contains(point, vertex, outer_incoming, outer_outgoing);
+    }
+
+    let offset = (
+        outer_outgoing.0 - outer_incoming.0,
+        outer_outgoing.1 - outer_incoming.1,
+    );
+    let parameter = runtime_geometry_cross(offset, outgoing) / turn;
+    let miter = (
+        outer_incoming.0 + incoming.0 * parameter,
+        outer_incoming.1 + incoming.1 * parameter,
+    );
+    // Rive hard-codes a four-times-stroke-radius miter limit. A sharper
+    // corner falls back to the bevel region.
+    let within_miter_limit =
+        runtime_geometry_distance_squared(miter, vertex) <= 16.0 * half_thickness * half_thickness;
+    if !within_miter_limit {
+        return runtime_geometry_triangle_contains(point, vertex, outer_incoming, outer_outgoing);
+    }
+    runtime_geometry_triangle_contains(point, outer_incoming, miter, outer_outgoing)
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_normalized(vector: (f64, f64)) -> Option<(f64, f64)> {
+    let length = vector.0.hypot(vector.1);
+    (length != 0.0).then_some((vector.0 / length, vector.1 / length))
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_triangle_contains(
+    point: (f64, f64),
+    first: (f64, f64),
+    second: (f64, f64),
+    third: (f64, f64),
+) -> bool {
+    let side1 = runtime_geometry_cross(
+        (second.0 - first.0, second.1 - first.1),
+        (point.0 - first.0, point.1 - first.1),
+    );
+    let side2 = runtime_geometry_cross(
+        (third.0 - second.0, third.1 - second.1),
+        (point.0 - second.0, point.1 - second.1),
+    );
+    let side3 = runtime_geometry_cross(
+        (first.0 - third.0, first.1 - third.1),
+        (point.0 - third.0, point.1 - third.1),
+    );
+    (side1 >= 0.0 && side2 >= 0.0 && side3 >= 0.0) || (side1 <= 0.0 && side2 <= 0.0 && side3 <= 0.0)
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_cross(left: (f64, f64), right: (f64, f64)) -> f64 {
+    left.0 * right.1 - left.1 * right.0
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_distance_squared(left: (f64, f64), right: (f64, f64)) -> f64 {
+    let dx = left.0 - right.0;
+    let dy = left.1 - right.1;
+    dx.mul_add(dx, dy * dy)
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_exact_path_bounds(commands: &[RuntimePathCommand]) -> Option<RenderAabb> {
+    let mut bounds: Option<RenderAabb> = None;
+    let mut current: Option<(f32, f32)> = None;
+    let mut contour_start: Option<(f32, f32)> = None;
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => {
+                runtime_geometry_include_point(&mut bounds, (x, y));
+                current = Some((x, y));
+                contour_start = current;
+            }
+            RuntimePathCommand::Line { x, y } => {
+                runtime_geometry_include_point(&mut bounds, (x, y));
+                current = Some((x, y));
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                let start = current.unwrap_or((0.0, 0.0));
+                runtime_geometry_include_point(&mut bounds, start);
+                runtime_geometry_include_point(&mut bounds, (x3, y3));
+                for t in runtime_cubic_extrema(start.0, x1, x2, x3)
+                    .into_iter()
+                    .chain(runtime_cubic_extrema(start.1, y1, y2, y3))
+                {
+                    let x = runtime_cubic_value(start.0, x1, x2, x3, t);
+                    let y = runtime_cubic_value(start.1, y1, y2, y3, t);
+                    runtime_geometry_include_point(&mut bounds, (x, y));
+                }
+                current = Some((x3, y3));
+            }
+            RuntimePathCommand::Close => {
+                current = contour_start;
+            }
+        }
+    }
+    bounds
+}
+
+fn runtime_geometry_include_point(bounds: &mut Option<RenderAabb>, point: (f32, f32)) {
+    match bounds {
+        Some(bounds) => {
+            bounds.min_x = bounds.min_x.min(point.0);
+            bounds.min_y = bounds.min_y.min(point.1);
+            bounds.max_x = bounds.max_x.max(point.0);
+            bounds.max_y = bounds.max_y.max(point.1);
+        }
+        None => *bounds = Some(RenderAabb::new(point.0, point.1, point.0, point.1)),
+    }
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_cubic_extrema(p0: f32, p1: f32, p2: f32, p3: f32) -> Vec<f32> {
+    // The derivative divided by three is `a*t^2 + b*t + c`.
+    let a = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
+    let b = 2.0 * (p0 - 2.0 * p1 + p2);
+    let c = p1 - p0;
+    runtime_quadratic_roots(a, b, c)
+        .into_iter()
+        .filter(|t| *t > 0.0 && *t < 1.0)
+        .collect()
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_quadratic_roots(a: f32, b: f32, c: f32) -> Vec<f32> {
+    if a == 0.0 {
+        return if b == 0.0 { Vec::new() } else { vec![-c / b] };
+    }
+    let discriminant = b.mul_add(b, -4.0 * a * c);
+    if discriminant < 0.0 {
+        return Vec::new();
+    }
+    if discriminant == 0.0 {
+        return vec![-b / (2.0 * a)];
+    }
+    let root = discriminant.sqrt();
+    vec![(-b - root) / (2.0 * a), (-b + root) / (2.0 * a)]
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_cubic_value(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+    let one_minus_t = 1.0 - t;
+    one_minus_t.powi(3) * p0
+        + 3.0 * one_minus_t.powi(2) * t * p1
+        + 3.0 * one_minus_t * t * t * p2
+        + t.powi(3) * p3
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_path_contains(
+    commands: &[RuntimePathCommand],
+    point: RenderVec2D,
+    fill_rule: RuntimeGeometryFillRule,
+) -> bool {
+    let point = (f64::from(point.x), f64::from(point.y));
+    let mut winding = 0i32;
+    let contours = runtime_path_net_contours(commands, fill_rule);
+    for contour in &contours {
+        if runtime_path_contour_crossing(contour, point, &mut winding) {
+            return true;
+        }
+    }
+    match fill_rule {
+        RuntimeGeometryFillRule::EvenOdd | RuntimeGeometryFillRule::Clockwise => {
+            winding.unsigned_abs() % 2 == 1
+        }
+        RuntimeGeometryFillRule::NonZero => winding != 0,
+    }
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_path_segments_have_area(
+    segments: impl IntoIterator<Item = RuntimeGeometryContourSegment>,
+) -> bool {
+    let mut origin = None;
+    let mut direction = None;
+    for segment in segments {
+        let points: &[(f64, f64)] = match segment {
+            RuntimeGeometryContourSegment::Line { start, end } => &[start, end],
+            RuntimeGeometryContourSegment::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => &[start, control1, control2, end],
+        };
+        for &point in points {
+            let Some(first) = origin else {
+                origin = Some(point);
+                continue;
+            };
+            let Some(second) = direction else {
+                if point != first {
+                    direction = Some(point);
+                }
+                continue;
+            };
+            let cross = (second.0 - first.0) * (point.1 - first.1)
+                - (second.1 - first.1) * (point.0 - first.0);
+            if cross != 0.0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum RuntimeGeometryContourSegment {
+    Line {
+        start: (f64, f64),
+        end: (f64, f64),
+    },
+    Cubic {
+        start: (f64, f64),
+        control1: (f64, f64),
+        control2: (f64, f64),
+        end: (f64, f64),
+    },
+}
+
+impl RuntimeGeometryContourSegment {
+    fn is_point(self) -> bool {
+        match self {
+            Self::Line { start, end } => start == end,
+            Self::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => start == control1 && control1 == control2 && control2 == end,
+        }
+    }
+
+    fn net_key(self) -> Option<(RuntimeGeometrySegmentKey, RuntimeGeometrySegmentDirection)> {
+        match self {
+            Self::Line { start, end } => {
+                let forward = [
+                    runtime_geometry_point_key(start)?,
+                    runtime_geometry_point_key(end)?,
+                ];
+                let reverse = [forward[1], forward[0]];
+                let key = RuntimeGeometrySegmentKey::Line(forward.min(reverse));
+                Some((key, runtime_geometry_segment_direction(&forward, &reverse)))
+            }
+            Self::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => {
+                let forward = [
+                    runtime_geometry_point_key(start)?,
+                    runtime_geometry_point_key(control1)?,
+                    runtime_geometry_point_key(control2)?,
+                    runtime_geometry_point_key(end)?,
+                ];
+                let reverse = [forward[3], forward[2], forward[1], forward[0]];
+                let key = RuntimeGeometrySegmentKey::Cubic(forward.min(reverse));
+                Some((key, runtime_geometry_segment_direction(&forward, &reverse)))
+            }
+        }
+    }
+}
+
+fn runtime_geometry_segment_direction<T: Ord>(
+    forward: &[T],
+    reverse: &[T],
+) -> RuntimeGeometrySegmentDirection {
+    match forward.cmp(reverse) {
+        std::cmp::Ordering::Less => RuntimeGeometrySegmentDirection::Forward,
+        std::cmp::Ordering::Greater => RuntimeGeometrySegmentDirection::Reverse,
+        std::cmp::Ordering::Equal => RuntimeGeometrySegmentDirection::Neutral,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeGeometryPointKey(u64, u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RuntimeGeometrySegmentKey {
+    Line([RuntimeGeometryPointKey; 2]),
+    Cubic([RuntimeGeometryPointKey; 4]),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeGeometrySegmentDirection {
+    Forward,
+    Reverse,
+    Neutral,
+}
+
+#[derive(Default)]
+struct RuntimeGeometrySegmentNetBucket {
+    direction: Option<RuntimeGeometrySegmentDirection>,
+    locations: Vec<RuntimeGeometrySegmentLocation>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeGeometrySegmentLocation {
+    contour: usize,
+    segment: usize,
+}
+
+fn runtime_geometry_point_key(point: (f64, f64)) -> Option<RuntimeGeometryPointKey> {
+    fn coordinate(value: f64) -> Option<u64> {
+        value
+            .is_finite()
+            .then_some(if value == 0.0 { 0 } else { value.to_bits() })
+    }
+    Some(RuntimeGeometryPointKey(
+        coordinate(point.0)?,
+        coordinate(point.1)?,
+    ))
+}
+
+fn runtime_path_net_contours(
+    commands: &[RuntimePathCommand],
+    fill_rule: RuntimeGeometryFillRule,
+) -> Vec<Vec<RuntimeGeometryContourSegment>> {
+    let mut contours = Vec::new();
+    let mut contour_start = 0;
+    for (index, command) in commands.iter().enumerate().skip(1) {
+        if matches!(command, RuntimePathCommand::Move { .. }) {
+            let Some(contour_commands) = commands.get(contour_start..index) else {
+                return Vec::new();
+            };
+            contours.push(runtime_path_contour_segments(contour_commands));
+            contour_start = index;
+        }
+    }
+    let Some(contour_commands) = commands.get(contour_start..) else {
+        return Vec::new();
+    };
+    contours.push(runtime_path_contour_segments(contour_commands));
+    for contour in &mut contours {
+        if !runtime_path_segments_have_area(contour.iter().flatten().copied()) {
+            contour.fill(None);
+        }
+    }
+    runtime_path_net_segments(&mut contours, fill_rule);
+    contours
+        .into_iter()
+        .map(|contour| contour.into_iter().flatten().collect())
+        .collect()
+}
+
+fn runtime_path_contour_segments(
+    commands: &[RuntimePathCommand],
+) -> Vec<Option<RuntimeGeometryContourSegment>> {
+    let mut segments = Vec::<Option<RuntimeGeometryContourSegment>>::new();
+    let mut current = None;
+    let mut contour_start = None;
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => {
+                let point = (f64::from(x), f64::from(y));
+                current = Some(point);
+                contour_start = Some(point);
+            }
+            RuntimePathCommand::Line { x, y } => {
+                let end = (f64::from(x), f64::from(y));
+                let start = current.unwrap_or(end);
+                segments.push(Some(RuntimeGeometryContourSegment::Line { start, end }));
+                current = Some(end);
+                contour_start.get_or_insert(start);
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                let start = current.unwrap_or((0.0, 0.0));
+                let control1 = (f64::from(x1), f64::from(y1));
+                let control2 = (f64::from(x2), f64::from(y2));
+                let end = (f64::from(x3), f64::from(y3));
+                segments.push(Some(RuntimeGeometryContourSegment::Cubic {
+                    start,
+                    control1,
+                    control2,
+                    end,
+                }));
+                current = Some(end);
+                contour_start.get_or_insert(start);
+            }
+            RuntimePathCommand::Close => {
+                if let (Some(start), Some(end)) = (current, contour_start) {
+                    segments.push(Some(RuntimeGeometryContourSegment::Line { start, end }));
+                }
+                current = contour_start;
+                contour_start = None;
+            }
+        }
+    }
+    if let (Some(start), Some(end)) = (current, contour_start) {
+        segments.push(Some(RuntimeGeometryContourSegment::Line { start, end }));
+    }
+    segments
+}
+
+fn runtime_path_net_segments(
+    contours: &mut [Vec<Option<RuntimeGeometryContourSegment>>],
+    fill_rule: RuntimeGeometryFillRule,
+) {
+    let mut buckets = BTreeMap::<RuntimeGeometrySegmentKey, RuntimeGeometrySegmentNetBucket>::new();
+    for contour in 0..contours.len() {
+        let Some(segment_count) = contours.get(contour).map(Vec::len) else {
+            continue;
+        };
+        for segment in 0..segment_count {
+            let location = RuntimeGeometrySegmentLocation { contour, segment };
+            let Some(candidate) = runtime_path_segment_at(contours, location) else {
+                continue;
+            };
+            if candidate.is_point() {
+                runtime_path_remove_segment(contours, location);
+                continue;
+            }
+            let Some((key, direction)) = candidate.net_key() else {
+                continue;
+            };
+            if direction == RuntimeGeometrySegmentDirection::Neutral {
+                runtime_path_remove_segment(contours, location);
+                continue;
+            }
+            let bucket = buckets.entry(key).or_default();
+            if matches!(
+                fill_rule,
+                RuntimeGeometryFillRule::EvenOdd | RuntimeGeometryFillRule::Clockwise
+            ) {
+                if let Some(previous) = bucket.locations.pop() {
+                    runtime_path_remove_segment(contours, previous);
+                    runtime_path_remove_segment(contours, location);
+                } else {
+                    bucket.locations.push(location);
+                }
+                continue;
+            }
+            match bucket.direction {
+                Some(existing) if existing != direction => {
+                    let Some(previous) = bucket.locations.pop() else {
+                        bucket.direction = Some(direction);
+                        bucket.locations.push(location);
+                        continue;
+                    };
+                    runtime_path_remove_segment(contours, previous);
+                    runtime_path_remove_segment(contours, location);
+                    if bucket.locations.is_empty() {
+                        bucket.direction = None;
+                    }
+                }
+                Some(_) => bucket.locations.push(location),
+                None => {
+                    bucket.direction = Some(direction);
+                    bucket.locations.push(location);
+                }
+            }
+        }
+    }
+}
+
+fn runtime_path_segment_at(
+    contours: &[Vec<Option<RuntimeGeometryContourSegment>>],
+    location: RuntimeGeometrySegmentLocation,
+) -> Option<RuntimeGeometryContourSegment> {
+    contours
+        .get(location.contour)
+        .and_then(|contour| contour.get(location.segment))
+        .copied()
+        .flatten()
+}
+
+fn runtime_path_remove_segment(
+    contours: &mut [Vec<Option<RuntimeGeometryContourSegment>>],
+    location: RuntimeGeometrySegmentLocation,
+) {
+    if let Some(slot) = contours
+        .get_mut(location.contour)
+        .and_then(|contour| contour.get_mut(location.segment))
+    {
+        *slot = None;
+    }
+}
+
+fn runtime_path_contour_crossing(
+    segments: &[RuntimeGeometryContourSegment],
+    point: (f64, f64),
+    winding: &mut i32,
+) -> bool {
+    for segment in segments {
+        let contains = match *segment {
+            RuntimeGeometryContourSegment::Line { start, end } => {
+                runtime_geometry_line_crossing(point, start, end, winding)
+            }
+            RuntimeGeometryContourSegment::Cubic {
+                start,
+                control1,
+                control2,
+                end,
+            } => runtime_geometry_cubic_crossing(point, start, control1, control2, end, winding),
+        };
+        if contains {
+            return true;
+        }
+    }
+    false
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_line_crossing(
+    point: (f64, f64),
+    start: (f64, f64),
+    end: (f64, f64),
+    winding: &mut i32,
+) -> bool {
+    if runtime_geometry_point_on_line(point, start, end) {
+        return true;
+    }
+    let crosses_up = start.1 <= point.1 && end.1 > point.1;
+    let crosses_down = start.1 > point.1 && end.1 <= point.1;
+    if crosses_up || crosses_down {
+        let crossing_x = start.0 + (point.1 - start.1) * (end.0 - start.0) / (end.1 - start.1);
+        if crossing_x > point.0 {
+            *winding += if crosses_up { 1 } else { -1 };
+        }
+    }
+    false
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_cubic_crossing(
+    point: (f64, f64),
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+    winding: &mut i32,
+) -> bool {
+    if runtime_geometry_point_on_cubic(point, p0, p1, p2, p3) {
+        return true;
+    }
+    let mut knots = vec![0.0];
+    knots.extend(runtime_cubic_extrema_f64(p0.1, p1.1, p2.1, p3.1));
+    knots.push(1.0);
+    knots.sort_by(f64::total_cmp);
+    for interval in knots.windows(2) {
+        let Some(&start_t) = interval.first() else {
+            continue;
+        };
+        let Some(&end_t) = interval.last() else {
+            continue;
+        };
+        let start_y = runtime_cubic_value_f64(p0.1, p1.1, p2.1, p3.1, start_t);
+        let end_y = runtime_cubic_value_f64(p0.1, p1.1, p2.1, p3.1, end_t);
+        let crosses_up = start_y <= point.1 && point.1 < end_y;
+        let crosses_down = end_y <= point.1 && point.1 < start_y;
+        if !crosses_up && !crosses_down {
+            continue;
+        }
+        let t = runtime_monotonic_cubic_parameter(p0.1, p1.1, p2.1, p3.1, point.1, start_t, end_t);
+        let crossing_x = runtime_cubic_value_f64(p0.0, p1.0, p2.0, p3.0, t);
+        if crossing_x > point.0 {
+            *winding += if crosses_up { 1 } else { -1 };
+        }
+    }
+    false
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_point_on_line(point: (f64, f64), start: (f64, f64), end: (f64, f64)) -> bool {
+    const EPSILON: f64 = 1.0e-5;
+    let dx = end.0 - start.0;
+    let dy = end.1 - start.1;
+    let length_squared = dx.mul_add(dx, dy * dy);
+    if length_squared == 0.0 {
+        let point_dx = point.0 - start.0;
+        let point_dy = point.1 - start.1;
+        return point_dx.mul_add(point_dx, point_dy * point_dy) <= EPSILON * EPSILON;
+    }
+    let cross = (point.0 - start.0) * dy - (point.1 - start.1) * dx;
+    if cross * cross > EPSILON * EPSILON * length_squared {
+        return false;
+    }
+    let dot = (point.0 - start.0) * (point.0 - end.0) + (point.1 - start.1) * (point.1 - end.1);
+    dot <= EPSILON * EPSILON
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_geometry_point_on_cubic(
+    point: (f64, f64),
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+) -> bool {
+    const EPSILON: f64 = 1.0e-5;
+    let min_x = p0.0.min(p1.0).min(p2.0).min(p3.0) - EPSILON;
+    let max_x = p0.0.max(p1.0).max(p2.0).max(p3.0) + EPSILON;
+    let min_y = p0.1.min(p1.1).min(p2.1).min(p3.1) - EPSILON;
+    let max_y = p0.1.max(p1.1).max(p2.1).max(p3.1) + EPSILON;
+    if point.0 < min_x || point.0 > max_x || point.1 < min_y || point.1 > max_y {
+        return false;
+    }
+    let mut candidates = runtime_cubic_coordinate_parameters(p0.0, p1.0, p2.0, p3.0, point.0);
+    candidates.extend(runtime_cubic_coordinate_parameters(
+        p0.1, p1.1, p2.1, p3.1, point.1,
+    ));
+    candidates.into_iter().any(|t| {
+        let x = runtime_cubic_value_f64(p0.0, p1.0, p2.0, p3.0, t);
+        let y = runtime_cubic_value_f64(p0.1, p1.1, p2.1, p3.1, t);
+        (x - point.0).abs() <= EPSILON && (y - point.1).abs() <= EPSILON
+    })
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_cubic_coordinate_parameters(
+    p0: f64,
+    p1: f64,
+    p2: f64,
+    p3: f64,
+    target: f64,
+) -> Vec<f64> {
+    const EPSILON: f64 = 1.0e-5;
+    let mut knots = vec![0.0];
+    knots.extend(runtime_cubic_extrema_f64(p0, p1, p2, p3));
+    knots.push(1.0);
+    knots.sort_by(f64::total_cmp);
+    let mut parameters = Vec::new();
+    for interval in knots.windows(2) {
+        let Some(&start_t) = interval.first() else {
+            continue;
+        };
+        let Some(&end_t) = interval.last() else {
+            continue;
+        };
+        let start = runtime_cubic_value_f64(p0, p1, p2, p3, start_t);
+        let end = runtime_cubic_value_f64(p0, p1, p2, p3, end_t);
+        if target < start.min(end) - EPSILON || target > start.max(end) + EPSILON {
+            continue;
+        }
+        if (end - start).abs() <= EPSILON {
+            if (target - start).abs() <= EPSILON {
+                parameters.push(start_t);
+                parameters.push(end_t);
+            }
+            continue;
+        }
+        parameters.push(runtime_monotonic_cubic_parameter(
+            p0, p1, p2, p3, target, start_t, end_t,
+        ));
+    }
+    parameters
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_monotonic_cubic_parameter(
+    p0: f64,
+    p1: f64,
+    p2: f64,
+    p3: f64,
+    target: f64,
+    mut low: f64,
+    mut high: f64,
+) -> f64 {
+    let increasing = runtime_cubic_value_f64(p0, p1, p2, p3, high)
+        >= runtime_cubic_value_f64(p0, p1, p2, p3, low);
+    for _ in 0..64 {
+        let middle = (low + high) * 0.5;
+        let value = runtime_cubic_value_f64(p0, p1, p2, p3, middle);
+        if (value < target) == increasing {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    (low + high) * 0.5
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_cubic_extrema_f64(p0: f64, p1: f64, p2: f64, p3: f64) -> Vec<f64> {
+    let a = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
+    let b = 2.0 * (p0 - 2.0 * p1 + p2);
+    let c = p1 - p0;
+    runtime_quadratic_roots_f64(a, b, c)
+        .into_iter()
+        .filter(|t| *t > 0.0 && *t < 1.0)
+        .collect()
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_quadratic_roots_f64(a: f64, b: f64, c: f64) -> Vec<f64> {
+    if a == 0.0 {
+        return if b == 0.0 { Vec::new() } else { vec![-c / b] };
+    }
+    let discriminant = b.mul_add(b, -4.0 * a * c);
+    if discriminant < 0.0 {
+        return Vec::new();
+    }
+    if discriminant == 0.0 {
+        return vec![-b / (2.0 * a)];
+    }
+    let root = discriminant.sqrt();
+    vec![(-b - root) / (2.0 * a), (-b + root) / (2.0 * a)]
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_cubic_value_f64(p0: f64, p1: f64, p2: f64, p3: f64, t: f64) -> f64 {
+    let one_minus_t = 1.0 - t;
+    one_minus_t.powi(3) * p0
+        + 3.0 * one_minus_t.powi(2) * t * p1
+        + 3.0 * one_minus_t * t * t * p2
+        + t.powi(3) * p3
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -14988,6 +16929,1701 @@ mod tests {
     use super::*;
 
     #[test]
+    fn geometry_bounds_use_cubic_extrema_instead_of_the_control_hull() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 0.0,
+                y1: 100.0,
+                x2: 100.0,
+                y2: 100.0,
+                x3: 100.0,
+                y3: 0.0,
+            },
+        ];
+
+        assert_eq!(
+            runtime_exact_path_bounds(&commands),
+            Some(RenderAabb::new(0.0, 0.0, 100.0, 75.0))
+        );
+    }
+
+    #[test]
+    fn geometry_hit_test_includes_the_exact_cubic_boundary_without_hit_slop() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 0.0,
+                y1: 100.0,
+                x2: 100.0,
+                y2: 100.0,
+                x3: 100.0,
+                y3: 0.0,
+            },
+            RuntimePathCommand::Line { x: 100.0, y: -10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: -10.0 },
+            RuntimePathCommand::Close,
+        ];
+        let boundary = RenderVec2D::new(21.6, 63.0);
+
+        assert!(runtime_path_contains(
+            &commands,
+            boundary,
+            RuntimeGeometryFillRule::NonZero
+        ));
+        assert!(!runtime_path_contains(
+            &commands,
+            RenderVec2D::new(boundary.x, boundary.y + 0.01),
+            RuntimeGeometryFillRule::NonZero
+        ));
+    }
+
+    #[test]
+    fn geometry_cubic_stroke_includes_its_exact_centerline_at_subpixel_thickness() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 0.0,
+                y1: 100.0,
+                x2: 100.0,
+                y2: 100.0,
+                x3: 100.0,
+                y3: 0.0,
+            },
+        ];
+        let exact_centerline = RenderVec2D::new(21.6, 63.0);
+
+        for join in [
+            RenderStrokeJoin::Round,
+            RenderStrokeJoin::Bevel,
+            RenderStrokeJoin::Miter,
+        ] {
+            assert!(
+                runtime_stroked_path_contains(
+                    &commands,
+                    exact_centerline,
+                    1.0e-6,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                "an exact cubic centerline point must not miss for {join:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_cubic_stroke_join_style_applies_only_at_authored_vertices() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 0.0,
+                y1: 0.01,
+                x2: 0.01,
+                y2: 0.01,
+                x3: 0.01,
+                y3: 0.0,
+            },
+        ];
+        let inside_smooth_stroke = RenderVec2D::new(0.005, 0.01745);
+        let outside_smooth_stroke = RenderVec2D::new(0.005, 0.01755);
+
+        for join in [
+            RenderStrokeJoin::Round,
+            RenderStrokeJoin::Bevel,
+            RenderStrokeJoin::Miter,
+        ] {
+            assert!(
+                runtime_stroked_path_contains(
+                    &commands,
+                    inside_smooth_stroke,
+                    0.02,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                "{join:?} must not cut into a smooth cubic at a subdivision point"
+            );
+            assert!(
+                !runtime_stroked_path_contains(
+                    &commands,
+                    outside_smooth_stroke,
+                    0.02,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                "{join:?} must not protrude from a smooth cubic at a subdivision point"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_cubic_stroke_endpoints_follow_cap_semantics() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 3.0,
+                y1: 0.0,
+                x2: 7.0,
+                y2: 0.0,
+                x3: 10.0,
+                y3: 0.0,
+            },
+        ];
+
+        for (probe, cap, expected) in [
+            (RenderVec2D::new(-0.5, 0.0), RenderStrokeCap::Butt, false),
+            (RenderVec2D::new(-0.5, 0.0), RenderStrokeCap::Round, true),
+            (RenderVec2D::new(-0.5, 0.0), RenderStrokeCap::Square, true),
+            (RenderVec2D::new(-0.9, 0.9), RenderStrokeCap::Butt, false),
+            (RenderVec2D::new(-0.9, 0.9), RenderStrokeCap::Round, false),
+            (RenderVec2D::new(-0.9, 0.9), RenderStrokeCap::Square, true),
+        ] {
+            assert_eq!(
+                runtime_stroked_path_contains(&commands, probe, 2.0, cap, RenderStrokeJoin::Miter,),
+                expected,
+                "{cap:?} at {probe:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_cubic_stroke_work_is_hard_bounded_for_large_span_thin_strokes() {
+        let commands = [
+            RuntimePathCommand::Move {
+                x: -2.037_359_2e9,
+                y: -2.880_941_6e9,
+            },
+            RuntimePathCommand::Cubic {
+                x1: 1.666_208_9e9,
+                y1: 1.701_206_8e9,
+                x2: -2.778_039_9e9,
+                y2: -2.610_094_1e9,
+                x3: -0.691_209_4e9,
+                y3: -0.944_237_5e9,
+            },
+        ];
+        let contours = runtime_geometry_stroke_contours(&commands);
+        let retained_segments = contours
+            .iter()
+            .map(|contour| contour.segments.len())
+            .sum::<usize>();
+        let mut work = RuntimeGeometryStrokeWork::default();
+        let hit = runtime_stroked_path_contains_with_work(
+            &commands,
+            RenderVec2D::new(0.214_932_3e9, -2.377_867_7e9),
+            1.0e-9,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Miter,
+            &mut work,
+        );
+
+        assert!(!hit, "the off-curve probe must miss: {work:?}");
+        assert_eq!(retained_segments, 1, "retain only the authored cubic");
+        assert_eq!(work.cubic_candidates, 1);
+        assert!(
+            work.cubic_bisections > 0,
+            "the probe must exercise root isolation"
+        );
+        assert!(
+            work.cubic_bisections
+                <= work.cubic_candidates * MAX_RUNTIME_GEOMETRY_CUBIC_STROKE_BISECTIONS,
+            "one candidate used {} bisections",
+            work.cubic_bisections
+        );
+    }
+
+    #[test]
+    fn geometry_fill_hit_test_rejects_degenerate_contour_boundaries() {
+        let move_close = [
+            RuntimePathCommand::Move { x: 5.0, y: 5.0 },
+            RuntimePathCommand::Close,
+        ];
+        let zero_width_line = [
+            RuntimePathCommand::Move { x: 5.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 5.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 5.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+        let zero_area_rectangle = runtime_rect_commands(5.0, 0.0, 5.0, 10.0);
+        for commands in [
+            &move_close[..],
+            &zero_width_line[..],
+            &zero_area_rectangle[..],
+        ] {
+            assert!(
+                !runtime_path_contains(
+                    commands,
+                    RenderVec2D::new(5.0, 5.0),
+                    RuntimeGeometryFillRule::NonZero,
+                ),
+                "a fill contour with no area must not hit its coincident boundary: {commands:?}"
+            );
+        }
+
+        let real_rectangle = runtime_rect_commands(0.0, 0.0, 10.0, 10.0);
+        assert!(
+            runtime_path_contains(
+                &real_rectangle,
+                RenderVec2D::new(0.0, 5.0),
+                RuntimeGeometryFillRule::NonZero,
+            ),
+            "real filled contours keep inclusive boundary semantics"
+        );
+    }
+
+    #[test]
+    fn geometry_fill_hit_test_rejects_an_exactly_retraced_cubic_boundary() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 0.0,
+                y1: 100.0,
+                x2: 100.0,
+                y2: 100.0,
+                x3: 100.0,
+                y3: 0.0,
+            },
+            RuntimePathCommand::Cubic {
+                x1: 100.0,
+                y1: 100.0,
+                x2: 0.0,
+                y2: 100.0,
+                x3: 0.0,
+                y3: 0.0,
+            },
+            RuntimePathCommand::Close,
+        ];
+
+        assert!(
+            !runtime_path_contains(
+                &commands,
+                RenderVec2D::new(50.0, 75.0),
+                RuntimeGeometryFillRule::NonZero,
+            ),
+            "a cubic followed by its exact reverse encloses no fill at their coincident boundary"
+        );
+    }
+
+    #[test]
+    fn geometry_fill_ignores_a_retraced_line_excursion_on_a_real_contour() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 20.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+        ];
+
+        assert!(runtime_path_contains(
+            &commands,
+            RenderVec2D::new(2.0, 2.0),
+            RuntimeGeometryFillRule::NonZero,
+        ));
+        assert!(
+            !runtime_path_contains(
+                &commands,
+                RenderVec2D::new(15.0, 0.0),
+                RuntimeGeometryFillRule::NonZero,
+            ),
+            "a canceled line excursion contributes neither fill nor an inclusive boundary"
+        );
+    }
+
+    #[test]
+    fn geometry_clip_core_ignores_a_retraced_cubic_excursion_on_a_real_contour() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: 10.0,
+                y1: 10.0,
+                x2: 20.0,
+                y2: 10.0,
+                x3: 20.0,
+                y3: 0.0,
+            },
+            RuntimePathCommand::Cubic {
+                x1: 20.0,
+                y1: 10.0,
+                x2: 10.0,
+                y2: 10.0,
+                x3: 10.0,
+                y3: 0.0,
+            },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+        ];
+
+        assert!(runtime_path_contains(
+            &commands,
+            RenderVec2D::new(2.0, 2.0),
+            RuntimeGeometryFillRule::NonZero,
+        ));
+        assert!(
+            !runtime_path_contains(
+                &commands,
+                RenderVec2D::new(15.0, 7.5),
+                RuntimeGeometryFillRule::NonZero,
+            ),
+            "clip containment must ignore an exact forward/reverse cubic excursion"
+        );
+    }
+
+    #[test]
+    fn geometry_fill_nets_opposite_contours_before_testing_their_shared_boundary() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+        let shared_edge = RenderVec2D::new(5.0, 0.0);
+
+        for fill_rule in [
+            RuntimeGeometryFillRule::NonZero,
+            RuntimeGeometryFillRule::EvenOdd,
+            RuntimeGeometryFillRule::Clockwise,
+        ] {
+            assert!(
+                !runtime_path_contains(&commands, shared_edge, fill_rule),
+                "opposite coincident contours must cancel before {fill_rule:?} boundary testing"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_fill_applies_parity_to_same_orientation_contour_boundaries() {
+        let rectangle = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+        ];
+        let commands = rectangle.into_iter().chain(rectangle).collect::<Vec<_>>();
+        let shared_edge = RenderVec2D::new(5.0, 0.0);
+
+        assert!(
+            runtime_path_contains(&commands, shared_edge, RuntimeGeometryFillRule::NonZero,),
+            "signed NonZero multiplicity keeps two same-orientation contours"
+        );
+        for fill_rule in [
+            RuntimeGeometryFillRule::EvenOdd,
+            RuntimeGeometryFillRule::Clockwise,
+        ] {
+            assert!(
+                !runtime_path_contains(&commands, shared_edge, fill_rule),
+                "two same-orientation contours have even {fill_rule:?} multiplicity"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_fill_keeps_cross_contour_line_and_cubic_survivors_as_one_lens() {
+        let commands = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Cubic {
+                x1: -5.0,
+                y1: 0.0,
+                x2: -5.0,
+                y2: 10.0,
+                x3: 0.0,
+                y3: 10.0,
+            },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+
+        for fill_rule in [
+            RuntimeGeometryFillRule::NonZero,
+            RuntimeGeometryFillRule::EvenOdd,
+            RuntimeGeometryFillRule::Clockwise,
+        ] {
+            for probe in [RenderVec2D::new(0.0, 5.0), RenderVec2D::new(-1.0, 5.0)] {
+                assert!(
+                    runtime_path_contains(&commands, probe, fill_rule),
+                    "the globally surviving line/cubic lens must contain {probe:?} for {fill_rule:?}"
+                );
+            }
+        }
+        assert!(!runtime_path_contains(
+            &commands,
+            RenderVec2D::new(1.0, 5.0),
+            RuntimeGeometryFillRule::NonZero,
+        ));
+    }
+
+    #[test]
+    fn geometry_hit_test_rejects_visible_shape_geometry_outside_its_active_clip() {
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        let hits = instance.geometry_hit_test_with_context(
+            &file,
+            graph,
+            RenderVec2D::new(135.0, 603.5),
+            &mut cache,
+        );
+
+        assert!(
+            hits.is_empty(),
+            "the point is inside the red rectangle but left of its clip: {hits:?}"
+        );
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(150.0, 603.5),
+                    &mut cache,
+                )
+                .contains(&30),
+            "the same visible shape remains hittable inside its clip"
+        );
+    }
+
+    #[test]
+    fn geometry_hit_test_moves_world_space_strokes_after_transform_writes() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(5.0, 0.0),
+                &mut cache,
+            ),
+            vec![1],
+            "the original world-space stroke is hittable"
+        );
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 25.0));
+        instance.update_pass();
+
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(5.0, 0.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "the stale world-space stroke must not remain at its old transform"
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(30.0, 0.0),
+                &mut cache,
+            ),
+            vec![1],
+            "the retained geometry cache must follow the moved world-space stroke"
+        );
+    }
+
+    #[test]
+    fn world_shape_paint_render_path_cache_follows_transform_writes() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let mut renderer = PathGeometryRecordingRenderer::default();
+        let mut geometry_cache = RuntimeGeometryCache::default();
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first draw succeeds");
+        let baseline = renderer
+            .draw_paths
+            .last()
+            .cloned()
+            .expect("world-space stroke draws a path");
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(5.0, 0.0),
+                &mut geometry_cache,
+            ),
+            vec![1]
+        );
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 25.0));
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second draw succeeds");
+        let moved = renderer
+            .draw_paths
+            .last()
+            .expect("moved world-space stroke draws a path");
+
+        assert_path_points_translated(&baseline, moved, 25.0, 0.0);
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(5.0, 0.0),
+                    &mut geometry_cache,
+                )
+                .is_empty(),
+            "hit-test must leave the stale rendered position"
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(30.0, 0.0),
+                &mut geometry_cache,
+            ),
+            vec![1],
+            "render and hit-test must move in lockstep"
+        );
+    }
+
+    #[test]
+    fn geometry_public_queries_settle_and_use_the_instance_owned_context() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 25.0));
+        assert_eq!(
+            instance.geometry_hit_test(RenderVec2D::new(30.0, 0.0), &mut cache),
+            vec![1],
+            "the safe query settles pending writes without caller update_pass"
+        );
+        assert_eq!(
+            instance.geometry_world_transform(1, &mut cache),
+            Some(RenderMat2D([1.0, 0.0, 0.0, 1.0, 25.0, 0.0]))
+        );
+        assert!(instance.geometry_world_bounds(1, &mut cache).is_some());
+    }
+
+    #[test]
+    fn local_shape_paint_command_cache_survives_transform_only_writes() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic local-paint riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic local-paint graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(80.0, 50.0),
+                &mut cache,
+            ),
+            vec![1]
+        );
+        let key = RuntimeShapePaintPathCommandsCacheKey {
+            shape_local: 1,
+            path_epoch: instance.path_epoch(),
+            layout_epoch: instance.layout_epoch(),
+            world_epoch: 0,
+            path_kind: RuntimeShapePaintPathKind::Local,
+        };
+        let before = cache
+            .paths
+            .shape_paint_paths
+            .get(graph.global_id, 2, key)
+            .expect("the first query retains local paint commands");
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 60.0));
+        instance.update_pass();
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(90.0, 50.0),
+                &mut cache,
+            ),
+            vec![1]
+        );
+        let after = cache
+            .paths
+            .shape_paint_paths
+            .get(graph.global_id, 2, key)
+            .expect("transform-only writes retain local paint commands");
+        assert!(
+            Arc::ptr_eq(&before, &after),
+            "only world-baked paths should pay transform-epoch invalidation"
+        );
+    }
+
+    #[test]
+    fn geometry_cache_does_not_reuse_geometry_across_live_artboard_instances() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic world-paint riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic world-paint graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut first = ArtboardInstance::from_graph(&file, graph).expect("first instance builds");
+        let mut second =
+            ArtboardInstance::from_graph(&file, graph).expect("second instance builds");
+        first.update_pass();
+        second.update_pass();
+        assert!(first.set_transform_property(1, TransformProperty::X, 25.0));
+        assert!(second.set_transform_property(1, TransformProperty::X, 75.0));
+        first.update_pass();
+        second.update_pass();
+        assert_eq!(first.cache_epoch(), second.cache_epoch());
+        assert_eq!(first.prepared_epoch(), second.prepared_epoch());
+        assert_eq!(first.path_epoch(), second.path_epoch());
+        assert_eq!(first.layout_epoch(), second.layout_epoch());
+
+        assert_eq!(
+            first.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(30.0, 0.0),
+                &mut RuntimeGeometryCache::default(),
+            ),
+            vec![1]
+        );
+        assert_eq!(
+            second.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(80.0, 0.0),
+                &mut RuntimeGeometryCache::default(),
+            ),
+            vec![1]
+        );
+
+        let mut shared_cache = RuntimeGeometryCache::default();
+        assert_eq!(
+            first.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(30.0, 0.0),
+                &mut shared_cache,
+            ),
+            vec![1]
+        );
+        assert_eq!(
+            second.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(80.0, 0.0),
+                &mut shared_cache,
+            ),
+            vec![1],
+            "the shared cache must not mistake equal per-instance epochs for equal geometry"
+        );
+    }
+
+    #[test]
+    fn geometry_hit_test_moves_clipping_shapes_after_transform_writes() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_clip_geometry_riv(Some(20.0));
+        let file = read_runtime_file(&bytes).expect("synthetic moving-clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic moving-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(20.0, 50.0),
+                &mut cache,
+            ),
+            vec![4],
+            "the target is initially hittable inside its clip"
+        );
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(70.0, 50.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "the target is initially clipped outside the source shape"
+        );
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 70.0));
+        instance.update_pass();
+
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(20.0, 50.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "the old clip position must stop admitting hits"
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(70.0, 50.0),
+                &mut cache,
+            ),
+            vec![4],
+            "the retained clip cache must follow the source shape transform"
+        );
+    }
+
+    #[test]
+    fn clipping_render_path_cache_follows_transform_writes() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_clip_geometry_riv(Some(20.0));
+        let file = read_runtime_file(&bytes).expect("synthetic moving-clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic moving-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let mut renderer = PathGeometryRecordingRenderer::default();
+        let mut geometry_cache = RuntimeGeometryCache::default();
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first draw succeeds");
+        let baseline = renderer
+            .clip_paths
+            .last()
+            .cloned()
+            .expect("clipping shape installs a path");
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(20.0, 50.0),
+                &mut geometry_cache,
+            ),
+            vec![4]
+        );
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 70.0));
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second draw succeeds");
+        let moved = renderer
+            .clip_paths
+            .last()
+            .expect("moved clipping shape installs a path");
+
+        assert_path_points_translated(&baseline, moved, 50.0, 0.0);
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(20.0, 50.0),
+                    &mut geometry_cache,
+                )
+                .is_empty(),
+            "hit-test must leave the stale rendered clip position"
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(70.0, 50.0),
+                &mut geometry_cache,
+            ),
+            vec![4],
+            "rendered clip and hit-test clip must move in lockstep"
+        );
+    }
+
+    #[test]
+    fn layout_shape_paint_render_path_cache_follows_layout_epoch() {
+        let bytes = synthetic_painted_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic painted-layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic painted-layout graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let mut renderer = PathGeometryRecordingRenderer::default();
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first draw succeeds");
+        let baseline = renderer
+            .draw_paths
+            .last()
+            .cloned()
+            .expect("painted layout draws a path");
+        let path_epoch = instance.path_epoch();
+        let layout_epoch = instance.layout_epoch();
+
+        let width_key = runtime_layout_component_property_key_for_name("width")
+            .expect("LayoutComponent width key");
+        assert!(instance.set_double_property(1, width_key, 150.0));
+        assert_eq!(
+            instance.path_epoch(),
+            path_epoch,
+            "layout-only writes must not masquerade as path edits"
+        );
+        assert!(instance.layout_epoch() > layout_epoch);
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second draw succeeds");
+        let resized = renderer
+            .draw_paths
+            .last()
+            .expect("resized painted layout draws a path");
+
+        assert_ne!(resized, &baseline, "retained RawPath ignored layout_epoch");
+        let baseline_max_x = baseline
+            .iter()
+            .map(|point| point.0)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let resized_max_x = resized
+            .iter()
+            .map(|point| point.0)
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            resized_max_x > baseline_max_x,
+            "layout path width did not grow: {baseline_max_x} -> {resized_max_x}"
+        );
+    }
+
+    #[test]
+    fn empty_visible_clipping_shape_geometry_clips_draw_and_hit_test() {
+        let bytes = synthetic_clip_geometry_riv(None);
+        let file = read_runtime_file(&bytes).expect("synthetic empty-clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic empty-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(50.0, 50.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "an empty visible clipping shape clips all hit geometry"
+        );
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = RecordingRenderer {
+            ops: Rc::clone(&ops),
+        };
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("draw succeeds");
+        assert!(
+            ops.borrow().iter().any(|op| op == "clip_path"),
+            "draw must install the same empty clip instead of treating it as a no-op"
+        );
+    }
+
+    #[test]
+    fn exactly_retraced_cubic_clipping_shape_clips_all_hits() {
+        let bytes = synthetic_retraced_cubic_clip_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic retraced-cubic clip riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic retraced-cubic clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(50.0, 75.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "a visible clip that retraces one cubic in reverse encloses no area"
+        );
+    }
+
+    #[test]
+    fn zero_area_layout_clip_clips_draw_and_hit_test() {
+        let bytes = synthetic_empty_layout_clip_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic empty-layout-clip riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic empty-layout-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+        let prepared = cache
+            .paths
+            .prepared_artboard_frame(&instance, graph, Some(&file));
+        let clip_path = instance.runtime_layout_component_clip_path_commands(
+            3,
+            graph,
+            prepared.layout_bounds.as_ref().as_ref(),
+        );
+        assert!(
+            !clip_path.is_empty(),
+            "draw must retain zero-area layout clip geometry"
+        );
+        let bounds = instance
+            .geometry_world_bounds_with_context(&file, graph, 6, &mut cache)
+            .expect("the clipped child shape has geometry");
+        let center = RenderVec2D::new(
+            (bounds.min_x + bounds.max_x) * 0.5,
+            (bounds.min_y + bounds.max_y) * 0.5,
+        );
+
+        assert!(
+            instance
+                .geometry_hit_test_with_context(&file, graph, center, &mut cache)
+                .is_empty(),
+            "a zero-area layout clip clips all hit geometry"
+        );
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = RecordingRenderer {
+            ops: Rc::clone(&ops),
+        };
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("draw succeeds");
+        assert!(
+            ops.borrow().iter().any(|op| op == "clip_path"),
+            "draw and hit testing must install the same zero-area clip"
+        );
+    }
+
+    #[test]
+    fn geometry_queries_use_the_settled_layout_world_transform() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_eq!(
+            instance.geometry_world_transform_with_context(&file, graph, 5, &mut cache),
+            Some(RenderMat2D([1.0, 0.0, 0.0, 1.0, 110.0, 20.0]))
+        );
+        assert_eq!(
+            instance.geometry_world_bounds_with_context(&file, graph, 5, &mut cache),
+            Some(RenderAabb::new(60.0, -30.0, 160.0, 70.0)),
+            "the path is resized by the live 100x100 layout constraint"
+        );
+        assert_eq!(
+            instance.geometry_world_bounds_with_context(&file, graph, 3, &mut cache),
+            Some(RenderAabb::new(100.0, 0.0, 200.0, 100.0))
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(110.0, 20.0),
+                &mut cache,
+            ),
+            vec![5]
+        );
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(10.0, 20.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "the authored transform must not be used in place of the settled layout transform"
+        );
+    }
+
+    #[test]
+    fn direct_path_world_bounds_include_the_parent_shape_nsliced_deformation() {
+        let bytes = synthetic_nsliced_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic N-sliced riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic N-sliced graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        let shape_bounds = instance
+            .geometry_world_bounds_with_context(&file, graph, 6, &mut cache)
+            .expect("the deformed shape has bounds");
+        assert_eq!(shape_bounds, RenderAabb::new(70.0, 85.0, 130.0, 115.0));
+        assert_eq!(
+            instance.geometry_world_bounds_with_context(&file, graph, 9, &mut cache),
+            Some(shape_bounds),
+            "querying the Rectangle directly must not bypass its parent Shape's N-slice deformer"
+        );
+    }
+
+    #[test]
+    fn geometry_hit_test_uses_each_live_fill_rule() {
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic even-odd riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic even-odd riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(50.0, 50.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "two nested contours leave an EvenOdd hole at the center"
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(80.0, 50.0),
+                &mut cache,
+            ),
+            vec![1],
+            "the solid region between the nested contours remains hittable"
+        );
+    }
+
+    #[test]
+    fn geometry_clockwise_fill_rule_uses_rive_hit_tester_parity() {
+        let mut nested_clockwise = runtime_rect_commands(0.0, 0.0, 100.0, 100.0);
+        nested_clockwise.extend(runtime_rect_commands(25.0, 25.0, 75.0, 75.0));
+        let center = RenderVec2D::new(50.0, 50.0);
+
+        assert!(runtime_path_contains(
+            &nested_clockwise,
+            center,
+            RuntimeGeometryFillRule::NonZero,
+        ));
+        assert!(
+            !runtime_path_contains(
+                &nested_clockwise,
+                center,
+                RuntimeGeometryFillRule::Clockwise,
+            ),
+            "Rive HitTester applies the parity mask to Clockwise paths"
+        );
+    }
+
+    #[test]
+    fn geometry_hit_test_uses_the_origin_aware_artboard_clip() {
+        let bytes = synthetic_origin_clip_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic origin clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic origin clip riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(45.0, 0.0),
+                &mut cache,
+            ),
+            vec![1],
+            "the shape remains hittable inside the origin-shifted clip"
+        );
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(60.0, 0.0),
+                    &mut cache,
+                )
+                .is_empty(),
+            "a centered-origin 100x100 artboard clips at x=50, not x=100"
+        );
+    }
+
+    #[test]
+    fn geometry_stroke_hit_test_observes_live_cap_and_join_styles() {
+        let open_line = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+        ];
+        let outside_butt = RenderVec2D::new(-0.5, 0.0);
+        assert!(!runtime_stroked_path_contains(
+            &open_line,
+            outside_butt,
+            2.0,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Miter,
+        ));
+        assert!(runtime_stroked_path_contains(
+            &open_line,
+            outside_butt,
+            2.0,
+            RenderStrokeCap::Round,
+            RenderStrokeJoin::Miter,
+        ));
+        assert!(runtime_stroked_path_contains(
+            &open_line,
+            RenderVec2D::new(-0.9, 0.9),
+            2.0,
+            RenderStrokeCap::Square,
+            RenderStrokeJoin::Miter,
+        ));
+
+        let right_angle = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+        ];
+        let miter_only = RenderVec2D::new(10.75, -0.75);
+        assert!(!runtime_stroked_path_contains(
+            &right_angle,
+            miter_only,
+            2.0,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Round,
+        ));
+        assert!(!runtime_stroked_path_contains(
+            &right_angle,
+            miter_only,
+            2.0,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Bevel,
+        ));
+        assert!(runtime_stroked_path_contains(
+            &right_angle,
+            miter_only,
+            2.0,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Miter,
+        ));
+    }
+
+    #[test]
+    fn geometry_zero_length_strokes_follow_cap_semantics() {
+        let one_point = [RuntimePathCommand::Move { x: 5.0, y: 5.0 }];
+        let zero_length_segment = [
+            RuntimePathCommand::Move { x: 5.0, y: 5.0 },
+            RuntimePathCommand::Line { x: 5.0, y: 5.0 },
+        ];
+
+        for commands in [&one_point[..], &zero_length_segment[..]] {
+            assert!(
+                !runtime_stroked_path_contains(
+                    commands,
+                    RenderVec2D::new(5.0, 5.0),
+                    2.0,
+                    RenderStrokeCap::Butt,
+                    RenderStrokeJoin::Miter,
+                ),
+                "a butt-capped zero-length stroke renders no visible region"
+            );
+            assert!(runtime_stroked_path_contains(
+                commands,
+                RenderVec2D::new(5.9, 5.0),
+                2.0,
+                RenderStrokeCap::Round,
+                RenderStrokeJoin::Miter,
+            ));
+            assert!(
+                !runtime_stroked_path_contains(
+                    commands,
+                    RenderVec2D::new(5.9, 5.9),
+                    2.0,
+                    RenderStrokeCap::Round,
+                    RenderStrokeJoin::Miter,
+                ),
+                "a round cap remains circular"
+            );
+            assert!(runtime_stroked_path_contains(
+                commands,
+                RenderVec2D::new(5.9, 5.9),
+                2.0,
+                RenderStrokeCap::Square,
+                RenderStrokeJoin::Miter,
+            ));
+        }
+    }
+
+    #[test]
+    fn geometry_closed_zero_length_strokes_follow_join_semantics() {
+        let move_close = [
+            RuntimePathCommand::Move { x: 5.0, y: 5.0 },
+            RuntimePathCommand::Close,
+        ];
+        let collapsed_contour = [
+            RuntimePathCommand::Move { x: 5.0, y: 5.0 },
+            RuntimePathCommand::Line { x: 5.0, y: 5.0 },
+            RuntimePathCommand::Cubic {
+                x1: 5.0,
+                y1: 5.0,
+                x2: 5.0,
+                y2: 5.0,
+                x3: 5.0,
+                y3: 5.0,
+            },
+            RuntimePathCommand::Close,
+        ];
+
+        for commands in [&move_close[..], &collapsed_contour[..]] {
+            assert!(runtime_stroked_path_contains(
+                commands,
+                RenderVec2D::new(5.9, 5.0),
+                2.0,
+                RenderStrokeCap::Butt,
+                RenderStrokeJoin::Round,
+            ));
+            assert!(
+                !runtime_stroked_path_contains(
+                    commands,
+                    RenderVec2D::new(5.9, 5.9),
+                    2.0,
+                    RenderStrokeCap::Square,
+                    RenderStrokeJoin::Round,
+                ),
+                "a closed empty Round join maps to a round point"
+            );
+            assert!(runtime_stroked_path_contains(
+                commands,
+                RenderVec2D::new(5.9, 5.9),
+                2.0,
+                RenderStrokeCap::Round,
+                RenderStrokeJoin::Miter,
+            ));
+            assert!(
+                !runtime_stroked_path_contains(
+                    commands,
+                    RenderVec2D::new(5.0, 5.0),
+                    2.0,
+                    RenderStrokeCap::Round,
+                    RenderStrokeJoin::Bevel,
+                ),
+                "a closed empty Bevel join emits no stroke geometry"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_closed_strokes_normalize_duplicate_closing_points_before_join_tests() {
+        let canonical = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+        ];
+        let duplicate_closing_point = [
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+        let outer_miter_only = RenderVec2D::new(-0.75, -0.75);
+
+        assert!(runtime_stroked_path_contains(
+            &canonical,
+            outer_miter_only,
+            2.0,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Miter,
+        ));
+        assert!(!runtime_stroked_path_contains(
+            &canonical,
+            outer_miter_only,
+            2.0,
+            RenderStrokeCap::Butt,
+            RenderStrokeJoin::Bevel,
+        ));
+        for join in [RenderStrokeJoin::Bevel, RenderStrokeJoin::Miter] {
+            assert_eq!(
+                runtime_stroked_path_contains(
+                    &duplicate_closing_point,
+                    outer_miter_only,
+                    2.0,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                runtime_stroked_path_contains(
+                    &canonical,
+                    outer_miter_only,
+                    2.0,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                "an explicit closing vertex must not change the {join:?} seam"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_open_strokes_normalize_consecutive_duplicate_vertices_before_join_tests() {
+        let canonical = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+        ];
+        let with_duplicate = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+        ];
+        for (join, probe) in [
+            (RenderStrokeJoin::Bevel, RenderVec2D::new(10.75, -0.5)),
+            (RenderStrokeJoin::Miter, RenderVec2D::new(10.75, -0.75)),
+        ] {
+            assert_eq!(
+                runtime_stroked_path_contains(
+                    &with_duplicate,
+                    probe,
+                    2.0,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                runtime_stroked_path_contains(&canonical, probe, 2.0, RenderStrokeCap::Butt, join,),
+                "an interior duplicate vertex must not change the {join:?} join"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_closed_strokes_normalize_interior_duplicate_vertices_before_join_tests() {
+        let canonical = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+        ];
+        let with_duplicate = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+            RuntimePathCommand::Line { x: 0.0, y: 10.0 },
+            RuntimePathCommand::Close,
+        ];
+        for (join, probe) in [
+            (RenderStrokeJoin::Bevel, RenderVec2D::new(10.75, -0.5)),
+            (RenderStrokeJoin::Miter, RenderVec2D::new(10.75, -0.75)),
+        ] {
+            assert_eq!(
+                runtime_stroked_path_contains(
+                    &with_duplicate,
+                    probe,
+                    2.0,
+                    RenderStrokeCap::Butt,
+                    join,
+                ),
+                runtime_stroked_path_contains(&canonical, probe, 2.0, RenderStrokeCap::Butt, join,),
+                "an interior duplicate vertex must not change the closed {join:?} join"
+            );
+        }
+    }
+
+    #[test]
     fn nested_render_cache_key_includes_live_referenced_artboard() {
         let authored = nested_render_cache_key(Some(33), Some(14), 105, 0);
         let rebound = nested_render_cache_key(Some(33), Some(14), 147, 0);
@@ -15088,6 +18724,82 @@ mod tests {
 
     struct RecordingRenderer {
         ops: Rc<RefCell<Vec<String>>>,
+    }
+
+    #[derive(Default)]
+    struct PathGeometryRecordingRenderer {
+        draw_paths: Vec<Vec<(f32, f32)>>,
+        clip_paths: Vec<Vec<(f32, f32)>>,
+    }
+
+    impl PathGeometryRecordingRenderer {
+        fn path_points(path: &dyn RenderPath) -> Vec<(f32, f32)> {
+            path.as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting render path")
+                .raw_path
+                .points()
+                .iter()
+                .map(|point| (point.x, point.y))
+                .collect()
+        }
+    }
+
+    impl Renderer for PathGeometryRecordingRenderer {
+        fn save(&mut self) {}
+
+        fn restore(&mut self) {}
+
+        fn transform(&mut self, _transform: RenderMat2D) {}
+
+        fn draw_path(&mut self, path: &dyn RenderPath, _paint: &dyn RenderPaint) {
+            self.draw_paths.push(Self::path_points(path));
+        }
+
+        fn clip_path(&mut self, path: &dyn RenderPath) {
+            self.clip_paths.push(Self::path_points(path));
+        }
+
+        fn draw_image(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+        }
+
+        fn draw_image_mesh(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _vertices: Option<&dyn RenderBuffer>,
+            _uv_coords: Option<&dyn RenderBuffer>,
+            _indices: Option<&dyn RenderBuffer>,
+            _vertex_count: u32,
+            _index_count: u32,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+        }
+
+        fn modulate_opacity(&mut self, _opacity: f32) {}
+    }
+
+    fn assert_path_points_translated(
+        baseline: &[(f32, f32)],
+        moved: &[(f32, f32)],
+        translate_x: f32,
+        translate_y: f32,
+    ) {
+        assert_eq!(moved.len(), baseline.len(), "path point count changed");
+        for (baseline, moved) in baseline.iter().zip(moved) {
+            assert!(
+                (moved.0 - (baseline.0 + translate_x)).abs() <= 0.0001
+                    && (moved.1 - (baseline.1 + translate_y)).abs() <= 0.0001,
+                "path point did not move with its transform: {baseline:?} -> {moved:?}"
+            );
+        }
     }
 
     impl Renderer for RecordingRenderer {
@@ -15443,6 +19155,11 @@ mod tests {
             local_id: Some(7),
             path_index: 0,
         };
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
         let commands = vec![
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
             RuntimePathCommand::Line { x: 1.0, y: 1.0 },
@@ -15454,7 +19171,13 @@ mod tests {
         ];
 
         let first_id = {
-            let path = cache.draw_path(key, 10, &mut factory, &commands, RenderFillRule::Clockwise);
+            let path = cache.draw_path(
+                key,
+                revision,
+                &mut factory,
+                &commands,
+                RenderFillRule::Clockwise,
+            );
             path.as_any()
                 .downcast_ref::<CountingRenderPath>()
                 .expect("counting path")
@@ -15467,7 +19190,13 @@ mod tests {
         assert_eq!(stats.lines.get(), 0);
 
         let second_id = {
-            let path = cache.draw_path(key, 10, &mut factory, &commands, RenderFillRule::Clockwise);
+            let path = cache.draw_path(
+                key,
+                revision,
+                &mut factory,
+                &commands,
+                RenderFillRule::Clockwise,
+            );
             path.as_any()
                 .downcast_ref::<CountingRenderPath>()
                 .expect("counting path")
@@ -15483,7 +19212,10 @@ mod tests {
         let (third_id, third_verbs, third_points) = {
             let path = cache.draw_path(
                 key,
-                11,
+                RuntimeDrawPathRevision {
+                    path_epoch: 11,
+                    ..revision
+                },
                 &mut factory,
                 &changed_commands,
                 RenderFillRule::Clockwise,
@@ -15523,6 +19255,11 @@ mod tests {
             local_id: Some(7),
             path_index: 0,
         };
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
         let commands = vec![
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
             RuntimePathCommand::Line { x: 1.0, y: 1.0 },
@@ -15531,7 +19268,7 @@ mod tests {
         let first_id = {
             let path = cache.draw_path_with_optional_fill_rule(
                 key,
-                10,
+                revision,
                 &mut factory,
                 &commands,
                 RenderFillRule::Clockwise,
@@ -15548,7 +19285,7 @@ mod tests {
         let second_id = {
             let path = cache.draw_path_with_optional_fill_rule(
                 key,
-                10,
+                revision,
                 &mut factory,
                 &commands,
                 RenderFillRule::Clockwise,
@@ -15565,7 +19302,7 @@ mod tests {
 
         cache.draw_path_with_optional_fill_rule(
             key,
-            10,
+            revision,
             &mut factory,
             &commands,
             RenderFillRule::Clockwise,
@@ -15575,7 +19312,7 @@ mod tests {
 
         cache.draw_path_with_optional_fill_rule(
             key,
-            10,
+            revision,
             &mut factory,
             &commands,
             RenderFillRule::Clockwise,
@@ -15596,6 +19333,7 @@ mod tests {
             graph_global_id: 42,
             path_epoch: 10,
             layout_epoch: 20,
+            world_epoch: 0,
             fill_rule: RenderFillRule::Clockwise,
         };
         let commands = vec![
@@ -15732,6 +19470,377 @@ mod tests {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
 
+    // Two fixed-size layout children fill a row artboard. The queried shape is
+    // authored under the second child at x=10, so its settled world x is 110.
+    fn synthetic_layout_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "Node", "x", 10.0);
+            push_f32(bytes, "Node", "y", 20.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 5);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_painted_layout_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9658);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 50.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        bytes
+    }
+
+    fn synthetic_empty_layout_clip_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9655);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 0.0);
+            push_f32(bytes, "LayoutComponent", "height", 0.0);
+            push_bool(bytes, "LayoutComponent", "clip", true);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Node", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "Node", "x", 10.0);
+            push_f32(bytes, "Node", "y", 20.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 6);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_even_odd_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9652);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "x", 50.0);
+            push_f32(bytes, "Node", "y", 50.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_uint(bytes, "Fill", "fillRule", 1);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 80.0);
+            push_f32(bytes, "ParametricPath", "height", 80.0);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 40.0);
+            push_f32(bytes, "ParametricPath", "height", 40.0);
+        });
+        bytes
+    }
+
+    fn synthetic_nsliced_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9656);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 300.0);
+            push_f32(bytes, "LayoutComponent", "height", 300.0);
+        });
+        push_object(&mut bytes, "NSlicedNode", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "NSlicedNode", "initialWidth", 100.0);
+            push_f32(bytes, "NSlicedNode", "initialHeight", 100.0);
+            push_f32(bytes, "NSlicedNode", "width", 200.0);
+            push_f32(bytes, "NSlicedNode", "height", 200.0);
+        });
+        for offset in [25.0, 75.0] {
+            push_object(&mut bytes, "AxisX", |bytes| {
+                push_uint(bytes, "Component", "parentId", 1);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        for offset in [25.0, 75.0] {
+            push_object(&mut bytes, "AxisY", |bytes| {
+                push_uint(bytes, "Component", "parentId", 1);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "Node", "x", 50.0);
+            push_f32(bytes, "Node", "y", 50.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 6);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_origin_clip_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9653);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_f32(bytes, "Artboard", "originX", 0.5);
+            push_f32(bytes, "Artboard", "originY", 0.5);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "x", 60.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 40.0);
+            push_f32(bytes, "ParametricPath", "height", 40.0);
+        });
+        bytes
+    }
+
+    fn synthetic_clip_geometry_riv(source_width: Option<f32>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9654);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "x", 20.0);
+            push_f32(bytes, "Node", "y", 50.0);
+        });
+        if let Some(source_width) = source_width {
+            push_object(&mut bytes, "Rectangle", |bytes| {
+                push_uint(bytes, "Node", "parentId", 1);
+                push_f32(bytes, "ParametricPath", "width", source_width);
+                push_f32(bytes, "ParametricPath", "height", 20.0);
+            });
+        } else {
+            push_object(&mut bytes, "PointsPath", |bytes| {
+                push_uint(bytes, "Node", "parentId", 1);
+                push_bool(bytes, "PointsCommonPath", "isClosed", true);
+            });
+        }
+        push_object(&mut bytes, "Node", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "Node", "x", 50.0);
+            push_f32(bytes, "Node", "y", 50.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 5);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 4);
+            push_f32(bytes, "ParametricPath", "width", 100.0);
+            push_f32(bytes, "ParametricPath", "height", 40.0);
+        });
+        push_object(&mut bytes, "ClippingShape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_uint(bytes, "ClippingShape", "sourceId", 1);
+        });
+        bytes
+    }
+
+    fn synthetic_retraced_cubic_clip_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9657);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 200.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "PointsPath", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_bool(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        for x in [0.0, 100.0] {
+            push_object(&mut bytes, "CubicDetachedVertex", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Vertex", "x", x);
+                push_f32(
+                    bytes,
+                    "CubicDetachedVertex",
+                    "inRotation",
+                    std::f32::consts::FRAC_PI_2,
+                );
+                push_f32(bytes, "CubicDetachedVertex", "inDistance", 100.0);
+                push_f32(
+                    bytes,
+                    "CubicDetachedVertex",
+                    "outRotation",
+                    std::f32::consts::FRAC_PI_2,
+                );
+                push_f32(bytes, "CubicDetachedVertex", "outDistance", 100.0);
+            });
+        }
+        push_object(&mut bytes, "Node", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "Node", "x", 50.0);
+            push_f32(bytes, "Node", "y", 50.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 6);
+            push_f32(bytes, "ParametricPath", "width", 200.0);
+            push_f32(bytes, "ParametricPath", "height", 200.0);
+        });
+        push_object(&mut bytes, "ClippingShape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_uint(bytes, "ClippingShape", "sourceId", 1);
+        });
+        bytes
+    }
+
     // A shape with a world-space (transformAffectsStroke=false) gradient
     // stroke; the gradient shader bakes the shape's world transform into its
     // endpoints.
@@ -15743,7 +19852,10 @@ mod tests {
         push_var_uint(&mut bytes, 9631);
         push_var_uint(&mut bytes, 0);
         push_object(&mut bytes, "Backboard", |_| {});
-        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
         push_object(&mut bytes, "Shape", |bytes| {
             push_uint(bytes, "Node", "parentId", 0);
             push_f32(bytes, "Node", "x", 0.0);

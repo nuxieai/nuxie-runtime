@@ -29,7 +29,7 @@ pub(crate) use data_bind_graph::{
 };
 pub use draw::{
     RuntimeContourMeasure, RuntimeDrawCommand, RuntimeDrawCommandKind,
-    RuntimeDrawCommandObjectKind, RuntimeFeatherState, RuntimeGradientStop,
+    RuntimeDrawCommandObjectKind, RuntimeFeatherState, RuntimeGeometryCache, RuntimeGradientStop,
     RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimePathMeasure, RuntimePathSample,
     RuntimeRenderImages, RuntimeRenderPaintCache, RuntimeRenderPaints, RuntimeRenderPathCache,
     RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,

@@ -60,8 +60,26 @@ use crate::state_machine::{
 };
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 
+#[derive(Debug)]
+struct RuntimeArtboardInstanceIdentity(u64);
+
+impl RuntimeArtboardInstanceIdentity {
+    fn next() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+impl Clone for RuntimeArtboardInstanceIdentity {
+    fn clone(&self) -> Self {
+        Self::next()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
+    instance_identity: RuntimeArtboardInstanceIdentity,
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) origin_x: f32,
@@ -351,6 +369,7 @@ impl ArtboardInstance {
         let nested_artboard_locals = nested_artboards.keys().copied().collect::<Vec<_>>();
 
         let mut instance = Self {
+            instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: dimensions.width,
             height: dimensions.height,
             origin_x: dimensions.origin_x,
@@ -1560,6 +1579,10 @@ impl ArtboardInstance {
 
     pub(crate) fn cache_epoch(&self) -> u64 {
         self.cache_epoch
+    }
+
+    pub(crate) fn instance_identity(&self) -> u64 {
+        self.instance_identity.0
     }
 
     pub(crate) fn prepared_epoch(&self) -> u64 {
@@ -3630,6 +3653,7 @@ mod tests {
         let objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
 
         ArtboardInstance {
+            instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: 0.0,
             height: 0.0,
             origin_x: 0.0,

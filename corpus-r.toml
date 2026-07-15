@@ -638,13 +638,13 @@ max_different_pixels = 32
 id = "gm-degengrad-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/degengrad.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/degengrad-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-degengrad-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 
 [[entry]]
@@ -1579,13 +1579,13 @@ max_different_pixels = 32
 id = "gm-mesh-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/mesh.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/mesh-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mesh-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-render-buffer"
+gated = "rust-wgpu-msaa-image-mesh"
 
 
 [[entry]]
@@ -2156,13 +2156,13 @@ max_different_pixels = 32
 id = "gm-rect_grad-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/rect_grad.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/rect_grad-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rect_grad-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 
 [[entry]]
@@ -2253,13 +2253,13 @@ max_different_pixels = 32
 id = "gm-strokedlines-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokedlines.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokedlines-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokedlines-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 
 [[entry]]
@@ -2543,13 +2543,13 @@ max_different_pixels = 32
 id = "gm-verycomplexgrad-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/verycomplexgrad.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/verycomplexgrad-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-verycomplexgrad-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 
 [[entry]]
@@ -2592,13 +2592,13 @@ max_different_pixels = 32
 id = "gm-xfermodes2-msaa"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/xfermodes2.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/xfermodes2-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-xfermodes2-msaa.png"
 mode = "msaa"
 backend = "metal"
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 
 [[entry]]
@@ -2737,14 +2737,14 @@ max_different_pixels = 384
 id = "riv-ai_assitant-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/ai_assitant.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/ai_assitant-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-ai_assitant-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-align_target-frame-0-clockwise-atomic"
@@ -3076,14 +3076,14 @@ max_different_pixels = 4096
 id = "riv-bad_skin-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/bad_skin.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/bad_skin-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bad_skin-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-ball_test-frame-0-clockwise-atomic"
@@ -3125,14 +3125,14 @@ max_different_pixels = 32
 id = "riv-bankcard-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/bankcard.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/bankcard-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bankcard-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-bidirectional_precedence-frame-0-clockwise-atomic"
@@ -3511,14 +3511,14 @@ max_different_pixels = 32
 id = "riv-bullet_man-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/bullet_man.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/bullet_man-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bullet_man-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-clockwise-atomic"
@@ -3537,14 +3537,14 @@ gated = "native-clockwise-atomic-advanced-feather-parity"
 id = "riv-car_widgets_v01-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/car_widgets_v01.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/car_widgets_v01-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v01-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-circle_clips-frame-0-clockwise-atomic"
@@ -4140,14 +4140,14 @@ gated = "metal-webgpu-subpixel-edge-coverage"
 id = "riv-coin-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/coin.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/coin-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-coin-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-collapsable_data_binding-frame-0-clockwise-atomic"
@@ -5665,14 +5665,14 @@ gated = "native-clockwise-atomic-advanced-feather-parity"
 id = "riv-data_viz_demo-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/data_viz_demo.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/data_viz_demo-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_viz_demo-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-databind_artboard-frame-0-clockwise-atomic"
@@ -5836,14 +5836,14 @@ max_different_pixels = 1152
 id = "riv-db_health_tracker-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/db_health_tracker.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/db_health_tracker-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-db_health_tracker-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-death_knight-frame-0-clockwise-atomic"
@@ -5861,14 +5861,14 @@ max_different_pixels = 32
 id = "riv-death_knight-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/death_knight.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/death_knight-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-death_knight-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-dependency_test-frame-0-clockwise-atomic"
@@ -6006,14 +6006,14 @@ max_different_pixels = 32
 id = "riv-deterministic_mode-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/deterministic_mode.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/deterministic_mode-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-deterministic_mode-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-distance_constraint-frame-0-clockwise-atomic"
@@ -6273,14 +6273,14 @@ gated = "native-clockwise-atomic-advanced-feather-parity"
 id = "riv-echo_show_demo-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/echo_show_demo.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/echo_show_demo-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_demo-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-ellipsis-frame-0-clockwise-atomic"
@@ -7937,14 +7937,14 @@ gated = "native-clockwise-atomic-advanced-feather-parity"
 id = "riv-hunter_x_demo-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/hunter_x_demo.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/hunter_x_demo-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hunter_x_demo-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-image_binding_with_listener-frame-0-clockwise-atomic"
@@ -8106,14 +8106,13 @@ max_different_pixels = 32
 id = "riv-interactive_scrolling-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/interactive_scrolling.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/interactive_scrolling-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-interactive_scrolling-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
 
 [[entry]]
 id = "riv-interpolate_to_end-frame-0-clockwise-atomic"
@@ -8180,14 +8179,14 @@ max_different_pixels = 23000
 id = "riv-jellyfish_test-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/jellyfish_test.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/jellyfish_test-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-jellyfish_test-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-render-buffer"
+gated = "rust-wgpu-msaa-image-mesh"
 
 [[entry]]
 id = "riv-joel_signed-frame-0-clockwise-atomic"
@@ -8205,14 +8204,14 @@ max_different_pixels = 256
 id = "riv-joel_signed-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/joel_signed-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-joel_signed-frame-1-clockwise-atomic"
@@ -8230,14 +8229,14 @@ max_different_pixels = 256
 id = "riv-joel_signed-frame-1-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/joel_signed-frame-1-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-frame-1-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-joel_signed-frame-2-clockwise-atomic"
@@ -8255,14 +8254,14 @@ max_different_pixels = 256
 id = "riv-joel_signed-frame-2-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/joel_signed-frame-2-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-frame-2-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-joel_signed-frame-3-clockwise-atomic"
@@ -8280,14 +8279,14 @@ max_different_pixels = 256
 id = "riv-joel_signed-frame-3-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/joel_signed-frame-3-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-frame-3-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-joel_signed-frame-4-clockwise-atomic"
@@ -8305,14 +8304,14 @@ max_different_pixels = 256
 id = "riv-joel_signed-frame-4-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/joel_signed-frame-4-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-frame-4-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-joel_v3-frame-0-clockwise-atomic"
@@ -8594,14 +8593,14 @@ max_different_pixels = 256
 id = "riv-juice-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/juice.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/juice-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-juice-frame-1-clockwise-atomic"
@@ -8619,14 +8618,14 @@ max_different_pixels = 256
 id = "riv-juice-frame-1-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/juice.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/juice-frame-1-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-1-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-juice-frame-2-clockwise-atomic"
@@ -8644,14 +8643,14 @@ max_different_pixels = 256
 id = "riv-juice-frame-2-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/juice.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/juice-frame-2-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-2-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-juice-frame-3-clockwise-atomic"
@@ -8669,14 +8668,14 @@ max_different_pixels = 256
 id = "riv-juice-frame-3-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/juice.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/juice-frame-3-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-3-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-juice-frame-4-clockwise-atomic"
@@ -8694,14 +8693,14 @@ max_different_pixels = 256
 id = "riv-juice-frame-4-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/juice.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/juice-frame-4-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-4-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-keyboard_event_to_script-frame-0-clockwise-atomic"
@@ -10652,14 +10651,14 @@ max_different_pixels = 48
 id = "riv-new_text-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/new_text.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/new_text-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-new_text-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-number_to_list_nested_children-frame-0-clockwise-atomic"
@@ -10701,14 +10700,14 @@ max_different_pixels = 2048
 id = "riv-off_road_car-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/off_road_car-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-off_road_car-frame-1-clockwise-atomic"
@@ -10726,14 +10725,14 @@ max_different_pixels = 2048
 id = "riv-off_road_car-frame-1-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/off_road_car-frame-1-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-frame-1-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-off_road_car-frame-2-clockwise-atomic"
@@ -10751,14 +10750,14 @@ max_different_pixels = 2048
 id = "riv-off_road_car-frame-2-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/off_road_car-frame-2-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-frame-2-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-off_road_car-frame-3-clockwise-atomic"
@@ -10776,14 +10775,14 @@ max_different_pixels = 2048
 id = "riv-off_road_car-frame-3-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/off_road_car-frame-3-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-frame-3-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-off_road_car-frame-4-clockwise-atomic"
@@ -10801,14 +10800,14 @@ max_different_pixels = 2048
 id = "riv-off_road_car-frame-4-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/off_road_car-frame-4-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-frame-4-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-oneshotblend-frame-0-clockwise-atomic"
@@ -12269,14 +12268,14 @@ gated = "native-clockwise-atomic-advanced-feather-parity"
 id = "riv-rewards_demo-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/rewards_demo.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/rewards_demo-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rewards_demo-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-rocket-frame-0-clockwise-atomic"
@@ -12294,14 +12293,14 @@ max_different_pixels = 32
 id = "riv-rocket-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/rocket-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rocket-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-rocket-frame-1-clockwise-atomic"
@@ -12319,14 +12318,14 @@ max_different_pixels = 32
 id = "riv-rocket-frame-1-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/rocket-frame-1-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rocket-frame-1-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 1
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-rocket-frame-2-clockwise-atomic"
@@ -12344,14 +12343,14 @@ max_different_pixels = 32
 id = "riv-rocket-frame-2-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/rocket-frame-2-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rocket-frame-2-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 2
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-rocket-frame-3-clockwise-atomic"
@@ -12369,14 +12368,14 @@ max_different_pixels = 32
 id = "riv-rocket-frame-3-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/rocket-frame-3-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rocket-frame-3-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 3
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-rocket-frame-4-clockwise-atomic"
@@ -12394,14 +12393,14 @@ max_different_pixels = 32
 id = "riv-rocket-frame-4-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/rocket-frame-4-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rocket-frame-4-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 4
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-rotation_constraint-frame-0-clockwise-atomic"
@@ -14030,14 +14029,14 @@ max_different_pixels = 32
 id = "riv-scroll_test-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/scroll_test.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/scroll_test-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-scroll_test-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-scroll_threshold-frame-0-clockwise-atomic"
@@ -14055,14 +14054,14 @@ max_different_pixels = 32
 id = "riv-scroll_threshold-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/scroll_threshold.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/scroll_threshold-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-scroll_threshold-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"
 
 [[entry]]
 id = "riv-settler-frame-0-clockwise-atomic"
@@ -15977,14 +15976,14 @@ max_different_pixels = 64
 id = "riv-tape-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/tape.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/tape-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-tape-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-render-buffer"
+gated = "rust-wgpu-msaa-image-mesh"
 
 [[entry]]
 id = "riv-target_event-frame-0-clockwise-atomic"
@@ -17715,11 +17714,11 @@ max_different_pixels = 32
 id = "riv-zombie_skins-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/zombie_skins.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/zombie_skins-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-zombie_skins-frame-0-msaa.png"
 mode = "msaa"
 backend = "metal"
 frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "strict-replay-gradient-paint"
+gated = "rust-wgpu-msaa-gradient-path"

@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,357, diverges=0, gated=111, total=1,468.
+- Rust wgpu: exact=1,358, diverges=0, gated=110, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -358,11 +358,9 @@ Run `make renderer-golden`.
   `riv-virtualized_artboard_databound_children-frame-0-clockwise-atomic`,
   `riv-walle-frame-0-clockwise-atomic`,
   `riv-word_joiner_test-frame-0-clockwise-atomic`, and
-  `riv-zero_width_space_line_break-frame-0-clockwise-atomic`, plus 581 of the
-  584 provenance-bound strict RIV MSAA rows. The three exceptions are
-  `riv-clipping_and_draw_order-frame-0-msaa`,
-  `riv-spotify_kids_demo-frame-0-msaa`, and
-  `riv-data_binding_images_test-frame-0-msaa`.
+  `riv-zero_width_space_line_break-frame-0-clockwise-atomic`, plus 583 of the
+  624 provenance-bound strict RIV MSAA rows. The 41 retained rows are
+  queryable by their concrete diagnostics in `corpus-r.toml`.
 
 ## Milestones
 
@@ -1128,7 +1126,7 @@ Run `make renderer-golden`.
     preserving C++ batch order. Interleaving them reduces the row from
     1,485,510 pixels/max delta 20 to a passing 22/max 18 under the unchanged
     `2/32` contract. Bankcard is promoted and five substantive rows remain.
-91. [ ] Complete strict gradient-paint and render-buffer replay, capture the 46
+91. [x] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold. Strict linear and
     radial gradient reconstruction is complete: the compiler validates
@@ -1139,7 +1137,24 @@ Run `make renderer-golden`.
     it also retains prior uploads for later RIV frames. The regenerated
     inventory has all 46 rows capture-ready, preserves five gated rows with
     valid strict provenance, and leaves only the synthetic first-light harness
-    row unsupported. Reference capture and adjudication remain open.
+    row unsupported. A continuous 732-case Dawn campaign preserved all 686
+    prior PNGs byte-for-byte and added the 46 references. The Rust probe
+    promotes `riv-interactive_scrolling-frame-0-msaa` byte-exact, narrows 37
+    rows to `rust-wgpu-msaa-gradient-path`, three to
+    `rust-wgpu-msaa-image-mesh`, and five to
+    `rust-wgpu-msaa-feather-gradient-advanced-blend`.
+92. [ ] Port C++ MSAA gradient-painted path preparation, starting with the
+    gradient-only `gm-rect_grad-msaa` oracle, then sweep all 37
+    `rust-wgpu-msaa-gradient-path` rows under their unchanged contracts. Rust
+    currently prepares only shader-free direct/atlas MSAA draws, so gradient
+    paths fall through to the bootstrap solid-color path even though the
+    shared ramp texture and paint-data machinery already exists.
+93. [ ] Port C++ MSAA image-mesh draws for `gm-mesh-msaa`,
+    `riv-jellyfish_test-frame-0-msaa`, and `riv-tape-frame-0-msaa`; preserve
+    typed-buffer, sampler, clipping, blend, and draw-order semantics.
+94. [ ] Close the five `rust-wgpu-msaa-feather-gradient-advanced-blend` rows
+    after ordinary MSAA gradient paths pass. Reuse the existing destination
+    copy and atlas advanced-composite machinery without changing tolerances.
 
 ## R2 Completion Record
 
@@ -3628,3 +3643,11 @@ Run `make renderer-golden`.
   header-only unsupported row. The 46-test oracle format suite, 12 capture
   tests, inventory drift check, and C++ Dawn build pass. Queue item 91 now
   launches the single continuous 46-case capture and adjudication campaign.
+- 2026-07-14: Closed queue item 91 with one continuous 732-case Dawn capture.
+  All 686 prior PNGs are byte-identical; 46 new references carry the same
+  registry provenance. Isolated Rust probes promote
+  `riv-interactive_scrolling-frame-0-msaa` byte-exact and replace every old
+  strict-replay gate with one of three executable renderer queues: 37 ordinary
+  MSAA gradient paths, three MSAA image meshes, and five feathered-gradient
+  advanced blends. The ratchet advances to exact=1,358/diverges=0/gated=110
+  with no tolerance change; queue item 92 owns the 37-row gradient path.

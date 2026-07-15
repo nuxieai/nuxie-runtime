@@ -9881,3 +9881,669 @@ artboard = "main"
 sample_seconds = "0"
 frame = 0
 counts = { drawPath = 2, makeEmptyRenderPath = 2, makeRenderPaint = 6, restore = 4, save = 4, transform = 3 }
+
+[[case]]
+id = "gm-degengrad-msaa"
+stream = "fixtures/renderer/streams/gm/degengrad.rive-stream"
+sha256 = "9989362370cb672e4d23722f3aa802e1ffd2bb658cae97408bbbf6eb808ddfbf"
+source = "gm:degengrad"
+scene = "degengrad"
+width = 850
+height = 650
+clear_color = "0xffffffff"
+counts = { drawPath = 12, makeEmptyRenderPath = 1, makeLinearGradient = 6, makeRadialGradient = 6, makeRenderPaint = 1, restore = 4, save = 4, transform = 13 }
+
+[[case]]
+id = "gm-mesh-msaa"
+stream = "fixtures/renderer/streams/gm/mesh.rive-stream"
+sha256 = "c50937fb89c1854a565488f3f4af9e84c7d14495ac752ea0cfec762e9071adb7"
+source = "gm:mesh"
+scene = "mesh"
+width = 800
+height = 600
+clear_color = "0xffffffff"
+counts = { bufferData = 3, clipPath = 5, decodeImage = 1, drawImageMesh = 12, drawPath = 3, makeEmptyRenderPath = 11, makeRenderBuffer = 3, makeRenderPaint = 1, restore = 16, save = 16, transform = 52 }
+
+[[case]]
+id = "gm-rect_grad-msaa"
+stream = "fixtures/renderer/streams/gm/rect_grad.rive-stream"
+sha256 = "29010a2d784ab73af6620cb502323441776f7b294d51734278821ceb1165aa5d"
+source = "gm:rect_grad"
+scene = "rect_grad"
+width = 220
+height = 220
+clear_color = "0xffffffff"
+counts = { drawPath = 4, makeEmptyRenderPath = 4, makeLinearGradient = 4, makeRenderPaint = 1, restore = 5, save = 5, transform = 5 }
+
+[[case]]
+id = "gm-strokedlines-msaa"
+stream = "fixtures/renderer/streams/gm/strokedlines.rive-stream"
+sha256 = "559126e02eb8be7872bbd66b43636c3300475fee259d1202978ae8fb80abd84e"
+source = "gm:strokedlines"
+scene = "strokedlines"
+width = 270
+height = 450
+clear_color = "0xff1a65d7"
+counts = { clipPath = 15, drawPath = 225, makeEmptyRenderPath = 255, makeLinearGradient = 1, makeRenderPaint = 2, restore = 21, save = 21, transform = 41 }
+
+[[case]]
+id = "gm-verycomplexgrad-msaa"
+stream = "fixtures/renderer/streams/gm/verycomplexgrad.rive-stream"
+sha256 = "5c2249a7c3671734374701c4d37ff7a360dea51d2f66616a8993e7fb25d40f1d"
+source = "gm:verycomplexgrad"
+scene = "verycomplexgrad"
+width = 1000
+height = 400
+clear_color = "0xff000000"
+counts = { drawPath = 1, makeEmptyRenderPath = 2, makeLinearGradient = 1, makeRenderPaint = 1, restore = 1, save = 1 }
+
+[[case]]
+id = "gm-xfermodes2-msaa"
+stream = "fixtures/renderer/streams/gm/xfermodes2.rive-stream"
+sha256 = "034487bbb7fee8089c3ea1eeb6dd4045da326e06528520048f907cda01f048f9"
+source = "gm:xfermodes2"
+scene = "xfermodes2"
+width = 455
+height = 475
+clear_color = "0x00000000"
+counts = { drawPath = 48, makeEmptyRenderPath = 48, makeLinearGradient = 2, makeRenderPaint = 32, restore = 33, save = 33, transform = 33 }
+
+[[case]]
+id = "riv-ai_assitant-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/ai_assitant.rive-stream"
+sha256 = "0265dea749d7c927e598a596a9e251949744bc8e89f207e80772b92791f6b9b2"
+source = "tests/unit_tests/assets/ai_assitant.riv"
+scene = "State Machine 1"
+width = 550
+height = 550
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Artboard 3"
+sample_seconds = "0"
+frame = 0
+counts = { drawPath = 33, makeEmptyRenderPath = 33, makeLinearGradient = 32, makeRenderPaint = 40, restore = 18, save = 18, transform = 18 }
+
+[[case]]
+id = "riv-bad_skin-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/bad_skin.rive-stream"
+sha256 = "a286cf8334efbddab74a23283961f798dfb929a8680e57c4d9b9c717d1109888"
+source = "tests/unit_tests/assets/bad_skin.riv"
+scene = "State Machine 1"
+width = 999
+height = 720
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Illustration WOman.svg"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, decodeImage = 14, drawImage = 13, drawPath = 56, makeEmptyRenderPath = 57, makeLinearGradient = 7, makeRadialGradient = 6, makeRenderPaint = 256, restore = 70, save = 70, transform = 83 }
+
+[[case]]
+id = "riv-bankcard-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/bankcard.rive-stream"
+sha256 = "fd5752e593bf236ae7dd9ab0ca89665ee199eb8a2e6089f6f1a8a4e11b07267a"
+source = "tests/unit_tests/assets/bankcard.riv"
+scene = "State Machine 1"
+width = 2370
+height = 1680
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "main"
+sample_seconds = "0"
+frame = 0
+counts = { drawPath = 6, makeEmptyRenderPath = 5, makeLinearGradient = 3, makeRadialGradient = 40, makeRenderPaint = 123, restore = 11, save = 11, transform = 9 }
+
+[[case]]
+id = "riv-bullet_man-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/bullet_man.rive-stream"
+sha256 = "dde477a08dd2ca64272cc1485ad010d93210d181a2fb1b676ab244ad986ede42"
+source = "tests/unit_tests/assets/bullet_man.riv"
+scene = "Bullet Man"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Bullet Man"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 20, decodeImage = 2, drawPath = 79, makeEmptyRenderPath = 95, makeLinearGradient = 15, makeRadialGradient = 5, makeRenderPaint = 230, restore = 100, save = 100, transform = 90 }
+
+[[case]]
+id = "riv-car_widgets_v01-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/car_widgets_v01.rive-stream"
+sha256 = "86bb0c575f3127311b4a44c65181f0bdc86db3629a80125ee480f7e2a88095a9"
+source = "tests/unit_tests/assets/car_widgets_v01.riv"
+scene = "State Machine 1"
+width = 3558
+height = 1638
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Main_Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 44, decodeImage = 11, drawImage = 5, drawPath = 756, makeEmptyRenderPath = 775, makeLinearGradient = 34, makeRadialGradient = 44, makeRenderPaint = 1749, restore = 843, save = 843, transform = 797 }
+
+[[case]]
+id = "riv-coin-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/coin.rive-stream"
+sha256 = "37ad4befc09bfc3d0715ac477bbaee4d53f26fc08a071da7d0eb9f2f4939fff1"
+source = "tests/unit_tests/assets/coin.riv"
+scene = "State Machine 1"
+width = 92
+height = 92
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Coin"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 5, drawPath = 8, makeEmptyRenderPath = 12, makeLinearGradient = 2, makeRenderPaint = 16, restore = 9, save = 9, transform = 9 }
+
+[[case]]
+id = "riv-data_viz_demo-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/data_viz_demo.rive-stream"
+sha256 = "0d275c174edab278009db5c5ec76aaa0680a727f665bb5030b8e49957b9ac585"
+source = "tests/unit_tests/assets/data_viz_demo.riv"
+scene = "State Machine 1"
+width = 772
+height = 1058
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Main"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 38, drawPath = 199, makeEmptyRenderPath = 187, makeLinearGradient = 100, makeRadialGradient = 6, makeRenderPaint = 496, restore = 258, save = 258, transform = 214 }
+
+[[case]]
+id = "riv-db_health_tracker-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/db_health_tracker.rive-stream"
+sha256 = "30727750d869668f77ca51dbb4c17d0506667e47f7ccf4af94cf7e798f1fbe40"
+source = "tests/unit_tests/assets/db_health_tracker.riv"
+scene = "State Machine 1"
+width = 1080
+height = 1920
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 4, drawPath = 473, makeEmptyRenderPath = 473, makeLinearGradient = 2, makeRenderPaint = 1024, restore = 559, save = 559, transform = 484 }
+
+[[case]]
+id = "riv-death_knight-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/death_knight.rive-stream"
+sha256 = "cf2219c4c493c1bae674720f5f2984498467138e246d3ff98e8f6237f8ec167b"
+source = "tests/unit_tests/assets/death_knight.riv"
+scene = "State Machine 1"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "MC Main Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 39, makeEmptyRenderPath = 31, makeLinearGradient = 11, makeRadialGradient = 12, makeRenderPaint = 736, restore = 42, save = 42, transform = 42 }
+
+[[case]]
+id = "riv-deterministic_mode-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/deterministic_mode.rive-stream"
+sha256 = "d6b84665bef08c0b5715630675e5253247de9155ee83c0218d4969e2a11261aa"
+source = "tests/unit_tests/assets/deterministic_mode.riv"
+scene = "State Machine 1"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { drawPath = 3, makeEmptyRenderPath = 3, makeLinearGradient = 1, makeRenderPaint = 6, restore = 4, save = 4, transform = 4 }
+
+[[case]]
+id = "riv-echo_show_demo-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/echo_show_demo.rive-stream"
+sha256 = "14290faacc2526cc3cd0fa789abe61eee6b6f430a734cd16eeff11a0e54e8a80"
+source = "tests/unit_tests/assets/echo_show_demo.riv"
+scene = "State Machine 1"
+width = 1024
+height = 884
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Main_Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 44, decodeImage = 1, drawImage = 1, drawPath = 96, makeEmptyRenderPath = 123, makeLinearGradient = 81, makeRadialGradient = 26, makeRenderPaint = 978, restore = 126, save = 126, transform = 118 }
+
+[[case]]
+id = "riv-hunter_x_demo-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/hunter_x_demo.rive-stream"
+sha256 = "3544c61ac8a12790bc1b865074c5ea140caa05502a03f9bca7b5ca8e2f731b5f"
+source = "tests/unit_tests/assets/hunter_x_demo.riv"
+scene = "State Machine 1"
+width = 3387
+height = 1906
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Main Menu"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 130, drawPath = 318, makeEmptyRenderPath = 342, makeLinearGradient = 182, makeRadialGradient = 6, makeRenderPaint = 1529, restore = 356, save = 356, transform = 343 }
+
+[[case]]
+id = "riv-interactive_scrolling-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/interactive_scrolling.rive-stream"
+sha256 = "1a96741c279cd795e23922fec8fe615f24a8fc408a1c9f63e5235bd8b645b818"
+source = "tests/unit_tests/assets/interactive_scrolling.riv"
+scene = "State Machine 1"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "main"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 6, makeEmptyRenderPath = 7, makeLinearGradient = 1, makeRenderPaint = 12, restore = 9, save = 9, transform = 8 }
+
+[[case]]
+id = "riv-jellyfish_test-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/jellyfish_test.rive-stream"
+sha256 = "6302e0cb35ec3a896198186cac0ce2c2f2167049865b3601c4764384e3793f3d"
+source = "tests/unit_tests/assets/jellyfish_test.riv"
+scene = "Jellyfish"
+width = 2080
+height = 2080
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Jellyfish"
+sample_seconds = "0"
+frame = 0
+counts = { bufferData = 59, clipPath = 1, decodeImage = 23, drawImage = 3, drawImageMesh = 19, drawPath = 3, makeEmptyRenderPath = 4, makeLinearGradient = 1, makeRadialGradient = 2, makeRenderBuffer = 79, makeRenderPaint = 21, restore = 26, save = 26, transform = 10 }
+
+[[case]]
+id = "riv-joel_signed-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
+sha256 = "68b7de8cf1a9c04e8fa9fabed8014904b077e604279fe870f374f613ffb361ff"
+source = "tests/unit_tests/assets/joel_signed.riv"
+scene = "Tree"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Tree"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 12, makeEmptyRenderPath = 13, makeLinearGradient = 4, makeRadialGradient = 1, makeRenderPaint = 311, restore = 13, save = 13, transform = 13 }
+
+[[case]]
+id = "riv-joel_signed-frame-1-msaa"
+stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
+sha256 = "68b7de8cf1a9c04e8fa9fabed8014904b077e604279fe870f374f613ffb361ff"
+source = "tests/unit_tests/assets/joel_signed.riv"
+scene = "Tree"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Tree"
+sample_seconds = "0.25"
+frame = 1
+counts = { clipPath = 1, drawPath = 12, makeEmptyRenderPath = 13, makeLinearGradient = 4, makeRadialGradient = 1, makeRenderPaint = 311, restore = 13, save = 13, transform = 13 }
+
+[[case]]
+id = "riv-joel_signed-frame-2-msaa"
+stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
+sha256 = "68b7de8cf1a9c04e8fa9fabed8014904b077e604279fe870f374f613ffb361ff"
+source = "tests/unit_tests/assets/joel_signed.riv"
+scene = "Tree"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Tree"
+sample_seconds = "0.5"
+frame = 2
+counts = { clipPath = 1, drawPath = 12, makeEmptyRenderPath = 13, makeLinearGradient = 4, makeRadialGradient = 1, makeRenderPaint = 311, restore = 13, save = 13, transform = 13 }
+
+[[case]]
+id = "riv-joel_signed-frame-3-msaa"
+stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
+sha256 = "68b7de8cf1a9c04e8fa9fabed8014904b077e604279fe870f374f613ffb361ff"
+source = "tests/unit_tests/assets/joel_signed.riv"
+scene = "Tree"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Tree"
+sample_seconds = "0.75"
+frame = 3
+counts = { clipPath = 1, drawPath = 12, makeEmptyRenderPath = 13, makeLinearGradient = 4, makeRadialGradient = 1, makeRenderPaint = 311, restore = 13, save = 13, transform = 13 }
+
+[[case]]
+id = "riv-joel_signed-frame-4-msaa"
+stream = "fixtures/renderer/streams/riv/joel_signed.rive-stream"
+sha256 = "68b7de8cf1a9c04e8fa9fabed8014904b077e604279fe870f374f613ffb361ff"
+source = "tests/unit_tests/assets/joel_signed.riv"
+scene = "Tree"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Tree"
+sample_seconds = "1"
+frame = 4
+counts = { clipPath = 1, drawPath = 12, makeEmptyRenderPath = 13, makeLinearGradient = 4, makeRadialGradient = 1, makeRenderPaint = 311, restore = 13, save = 13, transform = 13 }
+
+[[case]]
+id = "riv-juice-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/juice.rive-stream"
+sha256 = "8ea2062b6d82464b2e027b99a2ddc4ee9cab693dcea38d31d25b9093613a127e"
+source = "tests/unit_tests/assets/juice.riv"
+scene = "New Artboard"
+width = 1080
+height = 1080
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 20, makeEmptyRenderPath = 19, makeLinearGradient = 4, makeRenderPaint = 40, restore = 21, save = 21, transform = 21 }
+
+[[case]]
+id = "riv-juice-frame-1-msaa"
+stream = "fixtures/renderer/streams/riv/juice.rive-stream"
+sha256 = "8ea2062b6d82464b2e027b99a2ddc4ee9cab693dcea38d31d25b9093613a127e"
+source = "tests/unit_tests/assets/juice.riv"
+scene = "New Artboard"
+width = 1080
+height = 1080
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.25"
+frame = 1
+counts = { clipPath = 1, drawPath = 20, makeEmptyRenderPath = 19, makeLinearGradient = 4, makeRenderPaint = 40, restore = 21, save = 21, transform = 21 }
+
+[[case]]
+id = "riv-juice-frame-2-msaa"
+stream = "fixtures/renderer/streams/riv/juice.rive-stream"
+sha256 = "8ea2062b6d82464b2e027b99a2ddc4ee9cab693dcea38d31d25b9093613a127e"
+source = "tests/unit_tests/assets/juice.riv"
+scene = "New Artboard"
+width = 1080
+height = 1080
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.5"
+frame = 2
+counts = { clipPath = 1, drawPath = 20, makeEmptyRenderPath = 19, makeLinearGradient = 4, makeRenderPaint = 40, restore = 21, save = 21, transform = 21 }
+
+[[case]]
+id = "riv-juice-frame-3-msaa"
+stream = "fixtures/renderer/streams/riv/juice.rive-stream"
+sha256 = "8ea2062b6d82464b2e027b99a2ddc4ee9cab693dcea38d31d25b9093613a127e"
+source = "tests/unit_tests/assets/juice.riv"
+scene = "New Artboard"
+width = 1080
+height = 1080
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.75"
+frame = 3
+counts = { clipPath = 1, drawPath = 20, makeEmptyRenderPath = 19, makeLinearGradient = 4, makeRenderPaint = 40, restore = 21, save = 21, transform = 21 }
+
+[[case]]
+id = "riv-juice-frame-4-msaa"
+stream = "fixtures/renderer/streams/riv/juice.rive-stream"
+sha256 = "8ea2062b6d82464b2e027b99a2ddc4ee9cab693dcea38d31d25b9093613a127e"
+source = "tests/unit_tests/assets/juice.riv"
+scene = "New Artboard"
+width = 1080
+height = 1080
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "1"
+frame = 4
+counts = { clipPath = 1, drawPath = 20, makeEmptyRenderPath = 19, makeLinearGradient = 4, makeRenderPaint = 40, restore = 21, save = 21, transform = 21 }
+
+[[case]]
+id = "riv-new_text-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/new_text.rive-stream"
+sha256 = "83d7fe1d4fa5c035eebb2948cfa2abcb88a2bef013c5d322083b131cd39ff492"
+source = "tests/unit_tests/assets/new_text.riv"
+scene = "State Machine 1"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 8, makeEmptyRenderPath = 6, makeLinearGradient = 2, makeRenderPaint = 19, restore = 13, save = 13, transform = 9 }
+
+[[case]]
+id = "riv-off_road_car-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
+sha256 = "0c2b23306a441639b0defd56bf23d6e0d8fdbdcab729bc85f83f110b328805a7"
+source = "tests/unit_tests/assets/off_road_car.riv"
+scene = "New Artboard"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 16, drawPath = 106, makeEmptyRenderPath = 108, makeLinearGradient = 24, makeRadialGradient = 4, makeRenderPaint = 212, restore = 108, save = 108, transform = 107 }
+
+[[case]]
+id = "riv-off_road_car-frame-1-msaa"
+stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
+sha256 = "0c2b23306a441639b0defd56bf23d6e0d8fdbdcab729bc85f83f110b328805a7"
+source = "tests/unit_tests/assets/off_road_car.riv"
+scene = "New Artboard"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.25"
+frame = 1
+counts = { clipPath = 16, drawPath = 106, makeEmptyRenderPath = 108, makeLinearGradient = 24, makeRadialGradient = 4, makeRenderPaint = 212, restore = 108, save = 108, transform = 107 }
+
+[[case]]
+id = "riv-off_road_car-frame-2-msaa"
+stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
+sha256 = "0c2b23306a441639b0defd56bf23d6e0d8fdbdcab729bc85f83f110b328805a7"
+source = "tests/unit_tests/assets/off_road_car.riv"
+scene = "New Artboard"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.5"
+frame = 2
+counts = { clipPath = 16, drawPath = 106, makeEmptyRenderPath = 108, makeLinearGradient = 24, makeRadialGradient = 4, makeRenderPaint = 212, restore = 108, save = 108, transform = 107 }
+
+[[case]]
+id = "riv-off_road_car-frame-3-msaa"
+stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
+sha256 = "0c2b23306a441639b0defd56bf23d6e0d8fdbdcab729bc85f83f110b328805a7"
+source = "tests/unit_tests/assets/off_road_car.riv"
+scene = "New Artboard"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.75"
+frame = 3
+counts = { clipPath = 16, drawPath = 106, makeEmptyRenderPath = 108, makeLinearGradient = 24, makeRadialGradient = 4, makeRenderPaint = 212, restore = 108, save = 108, transform = 107 }
+
+[[case]]
+id = "riv-off_road_car-frame-4-msaa"
+stream = "fixtures/renderer/streams/riv/off_road_car.rive-stream"
+sha256 = "0c2b23306a441639b0defd56bf23d6e0d8fdbdcab729bc85f83f110b328805a7"
+source = "tests/unit_tests/assets/off_road_car.riv"
+scene = "New Artboard"
+width = 1000
+height = 1000
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "1"
+frame = 4
+counts = { clipPath = 16, drawPath = 106, makeEmptyRenderPath = 108, makeLinearGradient = 24, makeRadialGradient = 4, makeRenderPaint = 212, restore = 108, save = 108, transform = 107 }
+
+[[case]]
+id = "riv-rewards_demo-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/rewards_demo.rive-stream"
+sha256 = "3c565fd9e0fe99a4a00c966e3d5ca1165339792e5403eba550b2bed0d5270140"
+source = "tests/unit_tests/assets/rewards_demo.riv"
+scene = "State Machine 1"
+width = 1739
+height = 2831
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Main"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 71, drawPath = 156, makeEmptyRenderPath = 191, makeLinearGradient = 49, makeRenderPaint = 392, restore = 178, save = 178, transform = 172 }
+
+[[case]]
+id = "riv-rocket-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
+sha256 = "7292e401be564c3b50c3892bcb72c890dfc6dc318e20982f96ad38bcdfdc43d1"
+source = "tests/unit_tests/assets/rocket.riv"
+scene = "New Artboard"
+width = 600
+height = 600
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 6, drawPath = 13, makeEmptyRenderPath = 19, makeLinearGradient = 2, makeRadialGradient = 1, makeRenderPaint = 26, restore = 14, save = 14, transform = 14 }
+
+[[case]]
+id = "riv-rocket-frame-1-msaa"
+stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
+sha256 = "7292e401be564c3b50c3892bcb72c890dfc6dc318e20982f96ad38bcdfdc43d1"
+source = "tests/unit_tests/assets/rocket.riv"
+scene = "New Artboard"
+width = 600
+height = 600
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.25"
+frame = 1
+counts = { clipPath = 6, drawPath = 13, makeEmptyRenderPath = 19, makeLinearGradient = 2, makeRadialGradient = 1, makeRenderPaint = 26, restore = 14, save = 14, transform = 14 }
+
+[[case]]
+id = "riv-rocket-frame-2-msaa"
+stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
+sha256 = "7292e401be564c3b50c3892bcb72c890dfc6dc318e20982f96ad38bcdfdc43d1"
+source = "tests/unit_tests/assets/rocket.riv"
+scene = "New Artboard"
+width = 600
+height = 600
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.5"
+frame = 2
+counts = { clipPath = 6, drawPath = 13, makeEmptyRenderPath = 19, makeLinearGradient = 2, makeRadialGradient = 1, makeRenderPaint = 26, restore = 14, save = 14, transform = 14 }
+
+[[case]]
+id = "riv-rocket-frame-3-msaa"
+stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
+sha256 = "7292e401be564c3b50c3892bcb72c890dfc6dc318e20982f96ad38bcdfdc43d1"
+source = "tests/unit_tests/assets/rocket.riv"
+scene = "New Artboard"
+width = 600
+height = 600
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0.75"
+frame = 3
+counts = { clipPath = 6, drawPath = 13, makeEmptyRenderPath = 19, makeLinearGradient = 2, makeRadialGradient = 1, makeRenderPaint = 26, restore = 14, save = 14, transform = 14 }
+
+[[case]]
+id = "riv-rocket-frame-4-msaa"
+stream = "fixtures/renderer/streams/riv/rocket.rive-stream"
+sha256 = "7292e401be564c3b50c3892bcb72c890dfc6dc318e20982f96ad38bcdfdc43d1"
+source = "tests/unit_tests/assets/rocket.riv"
+scene = "New Artboard"
+width = 600
+height = 600
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "1"
+frame = 4
+counts = { clipPath = 6, drawPath = 13, makeEmptyRenderPath = 19, makeLinearGradient = 2, makeRadialGradient = 1, makeRenderPaint = 26, restore = 14, save = 14, transform = 14 }
+
+[[case]]
+id = "riv-scroll_test-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/scroll_test.rive-stream"
+sha256 = "8b7d9de6af74d207cbefcec907d07da0dcd34e8ac7fb6a48abbe786ceac02a23"
+source = "tests/unit_tests/assets/scroll_test.riv"
+scene = "main"
+width = 360
+height = 700
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "main"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 7, makeEmptyRenderPath = 8, makeLinearGradient = 3, makeRenderPaint = 14, restore = 11, save = 11, transform = 11 }
+
+[[case]]
+id = "riv-scroll_threshold-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/scroll_threshold.rive-stream"
+sha256 = "bfe3b78039fa96457ad9ebd0495668ccc32151a040836c0182eba6367da3c00b"
+source = "tests/unit_tests/assets/scroll_threshold.riv"
+scene = "State Machine 1"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "vertical-scroll"
+sample_seconds = "0"
+frame = 0
+counts = { clipPath = 1, drawPath = 6, makeEmptyRenderPath = 7, makeLinearGradient = 1, makeRenderPaint = 23, restore = 9, save = 9, transform = 8 }
+
+[[case]]
+id = "riv-tape-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/tape.rive-stream"
+sha256 = "31d104ac74cf62fe86dba757a9c863f4063eb423bf487e28c1303a1dc5b83252"
+source = "tests/unit_tests/assets/tape.riv"
+scene = "New Artboard"
+width = 500
+height = 500
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "New Artboard"
+sample_seconds = "0"
+frame = 0
+counts = { bufferData = 9, clipPath = 1, decodeImage = 3, drawImageMesh = 3, drawPath = 1, makeEmptyRenderPath = 2, makeRenderBuffer = 12, makeRenderPaint = 2, restore = 5, save = 5, transform = 2 }
+
+[[case]]
+id = "riv-zombie_skins-frame-0-msaa"
+stream = "fixtures/renderer/streams/riv/zombie_skins.rive-stream"
+sha256 = "edde3930c312224f097e43f438a222c371b7da6719a29281cc7c17b0a8d82196"
+source = "tests/unit_tests/assets/zombie_skins.riv"
+scene = "Motion"
+width = 400
+height = 435
+clear_color = "0x00000000"
+profile = "riv"
+artboard = "Zombie_test 4"
+sample_seconds = "0"
+frame = 0
+counts = { decodeImage = 4, drawPath = 62, makeEmptyRenderPath = 51, makeLinearGradient = 25, makeRadialGradient = 4, makeRenderPaint = 693, restore = 67, save = 67, transform = 67 }

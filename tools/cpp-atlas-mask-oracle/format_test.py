@@ -1678,11 +1678,11 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(
             inventory["summary"],
             {
-                "accepted": 46,
-                "capture_manifest_cases": 686,
-                "gated_msaa_rows": 52,
-                "missing_strict_provenance_rows": 47,
-                "strict_provenance_rows": 5,
+                "accepted": 0,
+                "capture_manifest_cases": 732,
+                "gated_msaa_rows": 51,
+                "missing_strict_provenance_rows": 1,
+                "strict_provenance_rows": 50,
                 "unsupported": 1,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,
@@ -1694,7 +1694,7 @@ class FormatTests(unittest.TestCase):
             for entry in inventory["entry"]
             if entry["result"] == "accepted"
         ]
-        self.assertEqual(len(accepted), 46)
+        self.assertEqual(len(accepted), 0)
         self.assertEqual(len(set(accepted)), len(accepted))
 
     def test_msaa_riv_case_round_trips_and_generates_strict_registry(self):
@@ -1900,14 +1900,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 686>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 732>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                686,
+                732,
             )
             self.assertEqual(
                 len(
@@ -1916,7 +1916,7 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                686,
+                732,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
@@ -1946,8 +1946,11 @@ class FormatTests(unittest.TestCase):
                 "gm-image_lod-msaa",
             ):
                 self.assertIn(f'"{image_case}"', generated)
-            self.assertEqual(generated.count("context->decodeImage("), 50)
-            self.assertEqual(generated.count("renderer->drawImage("), 71)
+            self.assertEqual(generated.count("context->decodeImage("), 109)
+            self.assertEqual(generated.count("renderer->drawImage("), 93)
+            self.assertEqual(generated.count("context->makeRenderBuffer("), 94)
+            self.assertEqual(generated.count("std::memcpy("), 71)
+            self.assertEqual(generated.count("renderer->drawImageMesh("), 34)
             self.assertIn("rive::ImageSampler::SamplerFromKey(9)", generated)
             self.assertIn(
                 '"gm-image-msaa", '

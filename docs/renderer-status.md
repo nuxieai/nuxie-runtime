@@ -3861,3 +3861,9 @@ Run `make renderer-golden`.
   Rust defect. No status, reference, or tolerance changed; the ratchet stays
   exact=1,408/diverges=0/gated=60. Full results are in
   `docs/renderer-r3-exit-audit.md`.
+- 2026-07-15: Revalidated subpixel-edge cohort B's next 13 rows. Three Rust
+  wgpu/Metal rounds were mask-stable and all 13 native C++/Metal controls were
+  independently byte-exact. Twelve rows form an exact-alpha sparse-edge
+  cluster; Hunter X remains a distinct advanced-blend boundary with no proved
+  Rust defect. No status, reference, tolerance, or ratchet count changed.
+  Full evidence is in `docs/renderer-r3-1-subpixel-edge-cohort-b-audit.md`.

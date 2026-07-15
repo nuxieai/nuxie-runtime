@@ -2,6 +2,8 @@ use nuxie_renderer_ffi::decode_bitmap_rgba;
 use sha2::{Digest, Sha256};
 
 const JPEG_SHA256: &str = "62e087df734fa3a0f57524db98a4d5aa30a8628ede9a7d59ed67981cc71823de";
+const DATA_BINDING_JPEG_SHA256: &str =
+    "0566f3cc152ef1d44ab20fbd2258733cf41f14d6ba05c835a4e6dde2a9f96232";
 const ICC_PNG_SHA256: &str = "a72cd2314ae2cb861da62dfb9782e323337fc600e44200cd16bd150d7c15f2cb";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -53,20 +55,37 @@ fn assert_sha256(data: &[u8], expected: &str) {
 }
 
 fn reachable_jpeg() -> Vec<u8> {
-    let encoded =
-        include_str!("../../../fixtures/renderer/streams/riv/clipping_and_draw_order.rive-stream")
-            .lines()
-            .find_map(|line| line.strip_prefix("decodeImage "))
-            .and_then(|line| line.split_once("data="))
-            .map(|(_, hex)| {
-                hex.as_bytes()
-                    .chunks_exact(2)
-                    .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
-                    .collect::<Vec<_>>()
-            })
-            .expect("reachable JPEG fixture");
-    assert!(encoded.starts_with(&[0xff, 0xd8, 0xff]));
+    let encoded = jpeg_from_stream(
+        include_str!("../../../fixtures/renderer/streams/riv/clipping_and_draw_order.rive-stream"),
+        1,
+    );
     assert_sha256(&encoded, JPEG_SHA256);
+    encoded
+}
+
+fn data_binding_drawn_jpeg() -> Vec<u8> {
+    let encoded = jpeg_from_stream(
+        include_str!("../../../fixtures/renderer/streams/riv/data_binding_images_test.rive-stream"),
+        2,
+    );
+    assert_sha256(&encoded, DATA_BINDING_JPEG_SHA256);
+    encoded
+}
+
+fn jpeg_from_stream(stream: &str, image_id: usize) -> Vec<u8> {
+    let prefix = format!("decodeImage id={image_id} ");
+    let encoded = stream
+        .lines()
+        .find(|line| line.starts_with(&prefix))
+        .and_then(|line| line.split_once("data="))
+        .map(|(_, hex)| {
+            hex.as_bytes()
+                .chunks_exact(2)
+                .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+                .collect::<Vec<_>>()
+        })
+        .expect("JPEG fixture");
+    assert!(encoded.starts_with(&[0xff, 0xd8, 0xff]));
     encoded
 }
 
@@ -94,11 +113,25 @@ fn production_decode_contracts() {
     let jpeg = compare_decode(&reachable_jpeg(), (278, 278));
     eprintln!("reachable JPEG decode delta: {jpeg:?}");
     assert_eq!(jpeg.alpha_mismatches, 0);
-    assert!(jpeg.differing_pixels > 0);
-    assert!(jpeg.differing_pixels <= 40_000);
-    assert!(jpeg.pixels_over_delta_2 <= 40_000);
-    assert!(jpeg.differing_channels <= 90_000);
-    assert!(jpeg.max_delta <= 40);
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+        jpeg,
+        DecodeDelta {
+            differing_pixels: 0,
+            pixels_over_delta_2: 0,
+            differing_channels: 0,
+            max_delta: 0,
+            alpha_mismatches: 0,
+        }
+    );
+    #[cfg(not(target_os = "macos"))]
+    {
+        assert!(jpeg.differing_pixels > 0);
+        assert!(jpeg.differing_pixels <= 40_000);
+        assert!(jpeg.pixels_over_delta_2 <= 40_000);
+        assert!(jpeg.differing_channels <= 90_000);
+        assert!(jpeg.max_delta <= 40);
+    }
 
     let icc_png = compare_decode(&icc_png(), (319, 320));
     eprintln!("ICC PNG decode delta: {icc_png:?}");
@@ -109,6 +142,26 @@ fn production_decode_contracts() {
     assert!(icc_png.max_delta <= 2);
 
     assert!(decode_bitmap_rgba(b"not an image").is_none());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_jpeg_decoder_matches_cpp_for_reachable_profiled_images() {
+    for (encoded, dimensions) in [
+        (reachable_jpeg(), (278, 278)),
+        (data_binding_drawn_jpeg(), (184, 230)),
+    ] {
+        assert_eq!(
+            compare_decode(&encoded, dimensions),
+            DecodeDelta {
+                differing_pixels: 0,
+                pixels_over_delta_2: 0,
+                differing_channels: 0,
+                max_delta: 0,
+                alpha_mismatches: 0,
+            }
+        );
+    }
 }
 
 #[test]

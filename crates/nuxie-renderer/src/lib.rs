@@ -41,6 +41,8 @@ use nuxie_render_api::{
 };
 use std::any::Any;
 use std::error::Error;
+#[cfg(target_os = "macos")]
+use std::ffi::c_void;
 use std::fmt;
 use std::io::Cursor;
 use std::sync::{mpsc, Arc};
@@ -4676,6 +4678,153 @@ fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CoreGraphicsPoint {
+    x: f64,
+    y: f64,
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CoreGraphicsSize {
+    width: f64,
+    height: f64,
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CoreGraphicsRect {
+    origin: CoreGraphicsPoint,
+    size: CoreGraphicsSize,
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "CoreFoundation", kind = "framework")]
+#[link(name = "CoreGraphics", kind = "framework")]
+#[link(name = "ImageIO", kind = "framework")]
+unsafe extern "C" {
+    fn CFDataCreate(allocator: *const c_void, bytes: *const u8, length: isize) -> *const c_void;
+    fn CFRelease(cf: *const c_void);
+    fn CGImageSourceCreateWithData(data: *const c_void, options: *const c_void) -> *const c_void;
+    fn CGImageSourceCreateImageAtIndex(
+        source: *const c_void,
+        index: usize,
+        options: *const c_void,
+    ) -> *const c_void;
+    fn CGImageGetAlphaInfo(image: *const c_void) -> u32;
+    fn CGImageGetWidth(image: *const c_void) -> usize;
+    fn CGImageGetHeight(image: *const c_void) -> usize;
+    fn CGColorSpaceCreateDeviceRGB() -> *const c_void;
+    fn CGColorSpaceRelease(space: *const c_void);
+    fn CGBitmapContextCreate(
+        data: *mut c_void,
+        width: usize,
+        height: usize,
+        bits_per_component: usize,
+        bytes_per_row: usize,
+        space: *const c_void,
+        bitmap_info: u32,
+    ) -> *mut c_void;
+    fn CGContextSetBlendMode(context: *mut c_void, mode: i32);
+    fn CGContextDrawImage(context: *mut c_void, rect: CoreGraphicsRect, image: *const c_void);
+    fn CGContextRelease(context: *mut c_void);
+}
+
+#[cfg(target_os = "macos")]
+fn decode_macos_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    const ALPHA_PREMULTIPLIED_LAST: u32 = 1;
+    const ALPHA_NONE: u32 = 0;
+    const ALPHA_NONE_SKIP_LAST: u32 = 5;
+    const ALPHA_NONE_SKIP_FIRST: u32 = 6;
+    const BYTE_ORDER_32_BIG: u32 = 4 << 12;
+    const BLEND_MODE_COPY: i32 = 17;
+
+    let data_length = isize::try_from(data.len()).ok()?;
+    let encoded = unsafe { CFDataCreate(std::ptr::null(), data.as_ptr(), data_length) };
+    if encoded.is_null() {
+        return None;
+    }
+    let source = unsafe { CGImageSourceCreateWithData(encoded, std::ptr::null()) };
+    unsafe { CFRelease(encoded) };
+    if source.is_null() {
+        return None;
+    }
+    let image = unsafe { CGImageSourceCreateImageAtIndex(source, 0, std::ptr::null()) };
+    unsafe { CFRelease(source) };
+    if image.is_null() {
+        return None;
+    }
+
+    let image_width = unsafe { CGImageGetWidth(image) };
+    let image_height = unsafe { CGImageGetHeight(image) };
+    let Some(row_bytes) = image_width.checked_mul(4) else {
+        unsafe { CFRelease(image) };
+        return None;
+    };
+    let Some(byte_count) = row_bytes.checked_mul(image_height) else {
+        unsafe { CFRelease(image) };
+        return None;
+    };
+    let (Ok(width), Ok(height)) = (u32::try_from(image_width), u32::try_from(image_height)) else {
+        unsafe { CFRelease(image) };
+        return None;
+    };
+    let alpha_info = unsafe { CGImageGetAlphaInfo(image) };
+    let opaque = matches!(
+        alpha_info,
+        ALPHA_NONE | ALPHA_NONE_SKIP_LAST | ALPHA_NONE_SKIP_FIRST
+    );
+    let color_space = unsafe { CGColorSpaceCreateDeviceRGB() };
+    if color_space.is_null() {
+        unsafe { CFRelease(image) };
+        return None;
+    }
+    let mut pixels = vec![0; byte_count];
+    let bitmap_info = BYTE_ORDER_32_BIG
+        | if opaque {
+            ALPHA_NONE_SKIP_LAST
+        } else {
+            ALPHA_PREMULTIPLIED_LAST
+        };
+    let context = unsafe {
+        CGBitmapContextCreate(
+            pixels.as_mut_ptr().cast(),
+            image_width,
+            image_height,
+            8,
+            row_bytes,
+            color_space,
+            bitmap_info,
+        )
+    };
+    unsafe { CGColorSpaceRelease(color_space) };
+    if context.is_null() {
+        unsafe { CFRelease(image) };
+        return None;
+    }
+    unsafe {
+        CGContextSetBlendMode(context, BLEND_MODE_COPY);
+        CGContextDrawImage(
+            context,
+            CoreGraphicsRect {
+                origin: CoreGraphicsPoint { x: 0.0, y: 0.0 },
+                size: CoreGraphicsSize {
+                    width: f64::from(width),
+                    height: f64::from(height),
+                },
+            },
+            image,
+        );
+        CGContextRelease(context);
+        CFRelease(image);
+    }
+    Some((width, height, pixels))
+}
+
 #[cfg(feature = "decode-oracle")]
 #[doc(hidden)]
 pub struct DecodedImageRgba {
@@ -4765,6 +4914,12 @@ fn convert_icc_rgba_to_srgb(pixels: &mut [u8], width: u32, icc_profile: &[u8]) {
     pixels.copy_from_slice(&converted);
 }
 
+#[cfg(target_os = "macos")]
+fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    decode_macos_image_rgba(data)
+}
+
+#[cfg(not(target_os = "macos"))]
 fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
     let decoded = decoder.decode().ok()?;
@@ -6015,6 +6170,25 @@ mod tests {
         assert_eq!((width, height), (278, 278));
         assert_eq!(rgba.len(), 278 * 278 * 4);
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_jpeg_decode_fails_closed_when_imageio_rejects_input() {
+        let encoded = [
+            0xff, 0xd8, // SOI
+            0xff, 0xc4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // DHT
+            0xff, 0xc3, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x13,
+            0x00, // SOF3, invalid 1x3 sampling for a single grayscale component
+            0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x01, 0x00, 0x00, // SOS
+            0x7f, 0xff, 0xd9, // zero difference and EOI
+        ];
+
+        assert!(decode_macos_image_rgba(&encoded).is_none());
+        let mut portable = jpeg_decoder::Decoder::new(Cursor::new(encoded));
+        assert!(portable.decode().is_ok());
+        assert!(decode_image_rgba(&encoded).is_none());
     }
 
     #[test]

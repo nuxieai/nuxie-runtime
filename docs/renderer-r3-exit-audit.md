@@ -330,6 +330,86 @@ Artifacts are retained outside the repository at
 contains the independent native controls; `analysis/report.json` is the
 fail-closed decoded-pixel and stream-command report.
 
+### R3.1 Subpixel-Edge Cohort D Adjudication (2026-07-15)
+
+This cohort owns only the following twelve clockwise-atomic rows, all of which
+retain `metal-webgpu-subpixel-edge-coverage`:
+
+```text
+riv-runtime_nested_text_runs-frame-0-clockwise-atomic
+riv-saturation-frame-0-clockwise-atomic
+riv-scroll_snap-frame-0-clockwise-atomic
+riv-test_modifier_run-frame-0-clockwise-atomic
+riv-text_follow_path_shape_length-frame-0-clockwise-atomic
+riv-text_input-frame-0-clockwise-atomic
+riv-text_listener_simpler-frame-0-clockwise-atomic
+riv-text_vertical_trim_test-frame-0-clockwise-atomic
+riv-transition_actions-frame-0-clockwise-atomic
+riv-trigger_fires_single_change-frame-0-clockwise-atomic
+riv-vertical_align_ellipsis-frame-0-clockwise-atomic
+riv-viewmodel_access-frame-0-clockwise-atomic
+```
+
+The worktree was freshly created from `c5239050`. Three serial `rust-wgpu`
+Metal rounds used explicit fail-closed `corpus-r --probe-gated` selection with
+`--jobs 1`. The initial sandboxed probe failed before rendering because it
+could not enumerate a Metal adapter; the recorded rounds ran on the local
+Metal adapter and all completed. The native producer was authenticated by the
+decoder provenance guard: `/Users/levi/dev/oss/rive-runtime` was exactly
+`7c778d13c5d903b3b74eec1dd6bb68a811dea5f2`, its guarded decoder and render
+context inputs were clean, and its decoder archive was fresh. The native
+`ffi-metal` replay executable was newly built against that runtime, linked to
+`Metal.framework`, and replayed the frozen streams only to their committed
+references. It passed all 12 controls at decoded `0` different pixels and
+`0` maximum channel delta; an independent raw-RGBA decoder repeated `0/0` for
+every native PNG.
+
+The table reports pixels over delta 2 in rounds 1/2/3, round-1 maximum delta,
+and 4-neighbor component count/largest size. Alpha is exact in every row and
+every round.
+
+| Row | `>2` pixels R1/R2/R3 | Max | Components/largest |
+| --- | --- | --- | --- |
+| `runtime_nested_text_runs` | 351/352/352 | 91 | 147/7 |
+| `saturation` | 37/37/37 | 66 | 12/7 |
+| `scroll_snap` | 96/96/96 | 60 | 38/8 |
+| `test_modifier_run` | 158/158/158 | 92 | 67/8 |
+| `text_follow_path_shape_length` | 1,983/1,984/1,983 | 146 | 1,249/8 |
+| `text_input` | 354/354/354 | 64 | 169/8 |
+| `text_listener_simpler` | 126/126/126 | 52 | 53/6 |
+| `text_vertical_trim_test` | 321/321/321 | 85 | 166/7 |
+| `transition_actions` | 40/40/40 | 63 | 19/4 |
+| `trigger_fires_single_change` | 94/95/94 | 13 | 23/10 |
+| `vertical_align_ellipsis` | 1,346/1,346/1,347 | 114 | 544/9 |
+| `viewmodel_access` | 71/71/71 | 56 | 18/14 |
+
+Decoded round-to-round changes have maximum per-channel delta 2 and zero
+pixels over the contract threshold. The residual masks differ by at most one
+pixel across rounds. Together the first-round masks contain 4,977 pixels in
+2,505 sparse components, with no alpha difference and a largest component of
+14 pixels.
+
+The stream-command census finds 109 `drawPath` commands, two `clipPath`
+commands (the nested-text and modifier rows), no image or image-mesh draws,
+no `decodeImage`, and only blend mode `3` (`SrcOver`). Thus the same
+exact-alpha subpixel-contour signature crosses clipped and unclipped streams
+without a decoder, general clip-stack, image, or advanced-blend discriminator.
+No source mutation has a falsifiable prediction that improves this shared mask
+family while preserving the authenticated native controls. The 12 rows remain
+under their existing gate without a tolerance, reference, status, or renderer
+change.
+
+Artifacts, including all three actual/diff PNG sets, native controls,
+raw-RGBA component and stability summaries, command census, and hashes, are
+outside git at `/tmp/rive-rust-r31-subpixel-edge-cohort-d-artifacts/`.
+The admission package also contains a separately rerun three-round Rust
+campaign and native control plus fail-closed records for exact commands,
+working directories, stdout, stderr, exit statuses, repository identities,
+adapter, decoder archive, executable hashes, and Metal linkage. Its
+coverage-checking verifier authenticated all 328 `SHA256SUMS` entries; the
+detached manifest SHA-256 is
+`4edb41ee8225c4319f7ad7d7b21e91013d09091a1addfc9dadce677cb1d196e6`.
+
 ## Reproduction
 
 ```sh

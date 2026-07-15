@@ -3874,3 +3874,11 @@ Run `make renderer-golden`.
   Residuals are RGB-only sparse boundary components with no shared falsifiable
   Rust defect, so no status, reference, tolerance, or ratchet count changed.
   Full evidence is in `docs/renderer-r3-exit-audit.md`.
+- 2026-07-15: Revalidated subpixel-edge cohort D's 12 assigned text and
+  state-machine rows. Three serial Rust wgpu/Metal rounds remained below the
+  threshold between rounds, all native C++/Metal controls were decoded-exact,
+  and the exact-alpha residuals are sparse subpixel contours across both two
+  clipped and ten unclipped SrcOver-only streams. No shared falsifiable Rust
+  defect, tolerance, reference, status, or ratchet change; all 12 retain
+  `metal-webgpu-subpixel-edge-coverage`. Evidence is in
+  `docs/renderer-r3-exit-audit.md`.

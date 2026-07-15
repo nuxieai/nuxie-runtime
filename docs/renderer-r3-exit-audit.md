@@ -263,6 +263,73 @@ Artifacts are retained outside the repository at
 `round-2`, and `round-3` contain actual and heatmap PNGs; `cpp-native`
 contains the exact native-Metal controls.
 
+### R3.1 Subpixel-Edge Cohort C Adjudication (2026-07-15)
+
+This independent audit used a fresh clone at shared `HEAD` `90512824` and
+claims exactly the following rows:
+
+```text
+riv-listener_view_model-frame-0-clockwise-atomic
+riv-local_bounds-frame-0-clockwise-atomic
+riv-modifier_test-frame-0-clockwise-atomic
+riv-modifier_to_run-frame-0-clockwise-atomic
+riv-multi_listeners-frame-0-clockwise-atomic
+riv-nested_hug-frame-0-clockwise-atomic
+riv-nested_solo-frame-0-clockwise-atomic
+riv-nested_solo-frame-1-clockwise-atomic
+riv-nested_solo-frame-2-clockwise-atomic
+riv-nested_solo-frame-3-clockwise-atomic
+riv-nested_solo-frame-4-clockwise-atomic
+riv-pointer_exit-frame-0-clockwise-atomic
+riv-replace_vm_instance-frame-0-clockwise-atomic
+```
+
+Three fresh serial Rust wgpu/Metal rounds used the local producer
+`target/debug/renderer-replay`
+(`efb79a390dde09d44a7a8085e9aca310d995b42a62212795ab1a629150485e7c`).
+Each round has the same committed-reference result below. Decoded round-1 to
+round-2 and round-2 to round-3 pixels never exceed delta 1, so the result is
+stable at the unchanged `>2` contract even where PNG bytes differ.
+
+The independent C++/Metal FFI producer
+`target/renderer-ffi/debug/renderer-replay`
+(`a9fc7cfed3064529d29055fd5bad88504c6fc82c430714dcc3e53481daeb3e82`)
+replayed each immutable stream and was decoded-pixel exact (`0/0`) against its
+committed reference. The audit script fails closed on any nonzero native delta
+or any round-to-round Rust pixel above delta 2, identifying the producer hashes
+in its report. Parent review independently byte-compared all 13 native outputs
+to their committed references. This rules out reference promotion and a native
+producer mismatch as explanations for the Rust masks.
+
+| Row | Rust `>2` pixels/max | RGB components/area/largest | Alpha `>2` | Stream command census |
+| --- | --- | --- | ---: | --- |
+| `listener_view_model` | 118/81 | 45/118/7 | 0 | 0 clips, 0 images, 4 paths, SrcOver only. |
+| `local_bounds` | 144/56 | 55/144/8 | 0 | 0 clips, 1 decode + 1 image draw, 11 paths, SrcOver only. |
+| `modifier_test` | 151/89 | 67/151/7 | 0 | 1 clip, 0 images, 2 paths, SrcOver only. |
+| `modifier_to_run` | 563/91 | 230/563/8 | 0 | 1 clip, 0 images, 8 paths, SrcOver only. |
+| `multi_listeners` | 655/60 | 277/655/8 | 0 | 0 clips, 0 images, 12 paths, SrcOver only. |
+| `nested_hug` | 285/82 | 120/285/10 | 0 | 0 clips, 0 images, 12 paths, SrcOver only. |
+| `nested_solo` frames 0--4 | 42/14 each | 7/42/14 each | 0 each | 1 clip, 0 images, 4 paths, SrcOver only. |
+| `pointer_exit` | 44/47 | 40/44/5 | 0 | 0 clips, 0 images, 6 paths, SrcOver only. |
+| `replace_vm_instance` | 71/57 | 30/71/6 | 0 | 0 clips, 0 images, 2 paths, SrcOver only. |
+
+The one decoded-image stream, `local_bounds`, is covered by the native exact
+control and `make renderer-decoder-oracle`; its production decoder contracts
+pass, with no alpha residual. The mix of clipped and unclipped SrcOver-only
+path streams also excludes a shared general clip or blend defect. Across all
+13 rows, the residuals are RGB-only, sparse connected boundary components
+(largest 14 pixels), while the native producer and all decoded round-stability
+controls are exact or below threshold. No shared falsifiable Rust defect, and
+therefore no mutation-sensitive production fix, was demonstrated. All rows
+retain `metal-webgpu-subpixel-edge-coverage` with unchanged status, reference,
+and `2/32` contract.
+
+Artifacts are retained outside the repository at
+`/private/tmp/rive-rust-r31-subpixel-edge-cohort-c-artifacts`: `round-1`,
+`round-2`, and `round-3` contain Rust outputs and heatmaps; `cpp-native`
+contains the independent native controls; `analysis/report.json` is the
+fail-closed decoded-pixel and stream-command report.
+
 ## Reproduction
 
 ```sh

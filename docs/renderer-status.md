@@ -3867,3 +3867,10 @@ Run `make renderer-golden`.
   cluster; Hunter X remains a distinct advanced-blend boundary with no proved
   Rust defect. No status, reference, tolerance, or ratchet count changed.
   Full evidence is in `docs/renderer-r3-1-subpixel-edge-cohort-b-audit.md`.
+- 2026-07-15: Revalidated R3.1 subpixel-edge cohort C's next 13 rows. Three
+  fresh serial Rust wgpu/Metal rounds were stable below delta 2; all 13 native
+  C++/Metal FFI controls were independently byte-exact to their committed
+  references. The sole decoded-image stream also passes the decoder oracle.
+  Residuals are RGB-only sparse boundary components with no shared falsifiable
+  Rust defect, so no status, reference, tolerance, or ratchet count changed.
+  Full evidence is in `docs/renderer-r3-exit-audit.md`.

@@ -2319,6 +2319,16 @@ pub struct Frame<'a> {
     scene: &'a mut Scene,
 }
 
+/// One runtime-originated event reported by [`Frame::advance`].
+///
+/// The current authored-scene vocabulary has no machine or script event
+/// sources, so this type deliberately has no constructible variants yet.
+/// Keeping the platform event type opaque avoids exposing a lower-runtime
+/// event dialect before those Scene concepts exist.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum SceneEvent {}
+
 impl Frame<'_> {
     /// Reads the cursor's current value directly from its live runtime instance.
     /// Schema defaults are observable even when the materialized record was sparse.
@@ -2368,6 +2378,27 @@ impl Frame<'_> {
             cursor.property.key,
             value,
         ))
+    }
+
+    /// Advance one live instance and settle its runtime-driven visual state.
+    ///
+    /// `events` is caller-owned reusable storage. It is cleared before each
+    /// advance so it contains only events emitted by this call. The current
+    /// authored-scene slice has no event sources and therefore leaves it
+    /// empty. An unknown or dropped instance is an unchanged frame.
+    pub fn advance(
+        &mut self,
+        instance: InstanceId,
+        elapsed_seconds: f32,
+        events: &mut Vec<SceneEvent>,
+    ) -> bool {
+        events.clear();
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+            .is_some_and(|live| live.runtime.advance(elapsed_seconds))
     }
 
     /// Return authored shapes under `point`, ordered front to back and deduplicated.

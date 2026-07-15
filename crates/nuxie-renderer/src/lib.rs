@@ -697,7 +697,7 @@ impl RenderPaint for WgpuPaint {
     }
 
     fn feather(&mut self, value: f32) {
-        self.feather = value;
+        self.feather = value.abs();
     }
 
     fn blend_mode(&mut self, value: BlendMode) {
@@ -7314,6 +7314,16 @@ mod tests {
 
         RenderPaint::thickness(&mut paint, f32::NAN);
         assert!(paint.thickness.is_nan());
+    }
+
+    #[test]
+    fn paint_feather_matches_cpp_absolute_value_setter() {
+        let mut paint = WgpuPaint::default();
+        RenderPaint::feather(&mut paint, -8.0);
+        assert_eq!(paint.feather, 8.0);
+
+        RenderPaint::feather(&mut paint, f32::NAN);
+        assert!(paint.feather.is_nan());
     }
 
     #[test]

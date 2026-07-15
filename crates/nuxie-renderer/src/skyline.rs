@@ -64,14 +64,25 @@ pub(crate) fn pack_atlas_regions(
     max_dimension: u32,
     regions: &[(u32, u32)],
 ) -> Result<AtlasLayout, AtlasPackError> {
-    if width == 0 || max_dimension == 0 || width > max_dimension {
+    if width > max_dimension {
+        return Err(AtlasPackError::InvalidDimensions);
+    }
+    pack_atlas_regions_in_dimensions(width, max_dimension, regions)
+}
+
+/// Packs atlas regions within independent width and height capacities.
+pub(crate) fn pack_atlas_regions_in_dimensions(
+    width: u32,
+    height: u32,
+    regions: &[(u32, u32)],
+) -> Result<AtlasLayout, AtlasPackError> {
+    if width == 0 || height == 0 {
         return Err(AtlasPackError::InvalidDimensions);
     }
     let width = i32::try_from(width).map_err(|_| AtlasPackError::InvalidDimensions)?;
-    let max_dimension =
-        i32::try_from(max_dimension).map_err(|_| AtlasPackError::InvalidDimensions)?;
+    let height = i32::try_from(height).map_err(|_| AtlasPackError::InvalidDimensions)?;
 
-    let mut skyline = Skyline::new(width, max_dimension);
+    let mut skyline = Skyline::new(width, height);
     let mut origins = Vec::with_capacity(regions.len());
     let mut extent = [1, 1];
     for &(region_width, region_height) in regions {
@@ -92,7 +103,7 @@ pub(crate) fn pack_atlas_regions(
         let bottom = y
             .checked_add(region_height)
             .ok_or(AtlasPackError::InvalidDimensions)?;
-        if right > max_dimension as u32 || bottom > max_dimension as u32 {
+        if right > width as u32 || bottom > height as u32 {
             return Err(AtlasPackError::Full);
         }
         extent[0] = extent[0].max(right);

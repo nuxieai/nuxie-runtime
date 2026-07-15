@@ -7924,10 +7924,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hunter_x_demo
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-image_binding_with_listener-frame-0-clockwise-atomic"

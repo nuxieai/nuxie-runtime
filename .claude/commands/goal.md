@@ -26,7 +26,7 @@ explicit user activation; never start it on your own initiative.
 ## The one metric
 
 The project health number is the **pixel-exact entry count** from
-`make renderer-golden` over `corpus-r.toml` (currently 1,467 entries:
+`make renderer-golden` over `corpus-r.toml` (currently 1,468 entries:
 GM streams + `.riv` streams × modes). Every session must either raise this
 number, unblock the current R-ticket's exit criteria, or fix a regression.
 There is no fourth category of valid work.

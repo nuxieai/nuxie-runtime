@@ -1680,9 +1680,9 @@ class FormatTests(unittest.TestCase):
             {
                 "accepted": 0,
                 "capture_manifest_cases": 732,
-                "gated_msaa_rows": 8,
+                "gated_msaa_rows": 7,
                 "missing_strict_provenance_rows": 1,
-                "strict_provenance_rows": 7,
+                "strict_provenance_rows": 6,
                 "unsupported": 1,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,

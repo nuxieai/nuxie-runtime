@@ -1165,14 +1165,16 @@ Run `make renderer-golden`.
     image rectangles cumulatively introduce 3,691/max 3, 8,548/max 4, then
     11,988/max 5 pixels. That row is retained under the concrete
     `dawn-wgpu-msaa-image-rect-dither-accumulation` precision diagnostic.
-94. [ ] Port feathered MSAA gradient strokes, starting with
+94. [x] Port feathered MSAA gradient strokes, starting with
     `riv-ai_assitant-frame-0-msaa`, then close the five
     `rust-wgpu-msaa-feather-gradient-advanced-blend` rows. Reuse the existing
     ramp, destination-copy, and atlas-composite machinery without changing
     tolerances. AI Assistant is exact; Data Viz, Echo Show, and Rewards pass
     their unchanged contracts. Car Widgets now passes at 14 pixels/max delta
-    8 after matching C++'s absolute-value feather setter. Hunter X remains
-    under focused same-backend diagnosis.
+    8 after matching C++'s absolute-value feather setter. Hunter X now passes
+    with zero pixels beyond delta 2/max delta 1 after matching C++ WebGPU's
+    2048-pixel feather-atlas rollover and resolved-color MSAA reload between
+    logical flushes. The ratchet advances to exact=1,402/diverges=0/gated=66.
 95. [x] Fix repeated path-clipped MSAA strokes in
     `gm-strokedlines-msaa`. Strict replay now preserves gradient snapshots
     across all 15 sequential clip stacks; the corrected reference compares at
@@ -3708,3 +3710,17 @@ Run `make renderer-golden`.
   accumulate 3,691/max 3, 8,548/max 4, and 11,988/max 5. Jellyfish retains the
   concrete dither-accumulation precision gate, and the ratchet advances to
   exact=1,377/diverges=0/gated=91.
+- 2026-07-14: Closed queue item 94 after a paired C++ Dawn/Rust prefix oracle
+  found Hunter X's first real `2/32` failure at command 50. C++ rejects a
+  986x1751 padded feather draw in its occupied 2048x2048 skyline, starts a new
+  logical flush, resolves prior MSAA color, and reloads the resolved target
+  into all four samples before replaying clips. Rust now applies the same MSAA
+  atlas accounting and preserve draw. Command 50 falls from 1,257 pixels/max
+  delta 41 to 128/max 1, while both the full 1,486-command diagnostic and the
+  untouched Hunter corpus frame pass with zero over-threshold pixels/max 1.
+  All five feathered-gradient rows pass unchanged contracts; Sol approved the
+  patch with no findings. Full verification passes `make renderer-golden` at
+  exact=1,402/diverges=0/gated=66/total=1,468, `make golden-compare` at 263
+  exact files/584 exact segments, `make scripted-golden-compare` at 27 exact
+  files/35 exact segments, `cargo test --workspace`, all 46 oracle-format
+  tests, and the pinned 60-module/50-header shader reproducibility check.

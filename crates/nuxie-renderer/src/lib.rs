@@ -85,6 +85,11 @@ impl fmt::Display for RendererError {
 impl Error for RendererError {}
 
 const MAX_ATOMIC_PATHS: usize = logical_flush::MAX_PATH_COUNT;
+// RenderContextWebGPUImpl retains PlatformFeatures' default texture limit.
+const CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION: u32 = 2048;
+// RenderContext::atlasMaxSize applies an additional 4096 cap.
+const CPP_LOGICAL_ATLAS_MAX_DIMENSION: u32 = 4096;
+const FEATHER_ATLAS_PADDING: u32 = 2;
 // A single Metal command buffer first fails at 2,044 direct MSAA draws with
 // the current per-draw tessellation resources. Keep twofold headroom while
 // the shared C++ logical-flush resource layout is still being translated.
@@ -941,7 +946,7 @@ pub struct WgpuFrame {
 struct LogicalFlushAllocations {
     simple_gradient_count: usize,
     complex_gradient_count: usize,
-    atlas_regions: Vec<(u32, u32)>,
+    atlas_draw_sizes: Vec<(u32, u32)>,
     coverage_word_count: usize,
 }
 
@@ -1018,10 +1023,14 @@ impl LogicalFlushAllocations {
                     .ok_or("logical flush coverage count overflow")?;
             }
 
-            if frame.mode == RenderMode::ClockwiseAtomic
-                && draw.paint.feather != 0.0
-                && draw::feather_requires_atlas(draw.paint.feather, draw.state.transform, false)
-            {
+            let uses_feather_atlas = frame.mode == RenderMode::Msaa
+                || (frame.mode == RenderMode::ClockwiseAtomic
+                    && draw::feather_requires_atlas(
+                        draw.paint.feather,
+                        draw.state.transform,
+                        false,
+                    ));
+            if draw.paint.feather != 0.0 && uses_feather_atlas {
                 let placement = feather_atlas_placement(
                     &draw.path.raw_path,
                     draw.state.transform,
@@ -1031,7 +1040,11 @@ impl LogicalFlushAllocations {
                     frame.height,
                 )
                 .ok_or("draw has invalid feather atlas placement")?;
-                next.atlas_regions.push((placement.width, placement.height));
+                let draw_size = (
+                    placement.width - FEATHER_ATLAS_PADDING * 2,
+                    placement.height - FEATHER_ATLAS_PADDING * 2,
+                );
+                next.atlas_draw_sizes.push(draw_size);
             }
         }
 
@@ -1050,20 +1063,13 @@ impl LogicalFlushAllocations {
         if next.coverage_word_count > max_coverage_words {
             return Err("draw batch exceeds logical flush coverage buffer limit");
         }
-        if !next.atlas_regions.is_empty() {
-            let max_dimension = limits.max_texture_dimension_2d;
-            let max_region_width = next
-                .atlas_regions
-                .iter()
-                .map(|&(width, _)| width)
-                .max()
-                .unwrap_or(1);
-            pack_atlas_for_device(
-                frame.width.max(1).max(max_region_width),
-                max_dimension,
-                &next.atlas_regions,
-            )
-            .map_err(|_| "draw batch exceeds logical flush feather atlas texture limit")?;
+        if !next.atlas_draw_sizes.is_empty() {
+            let atlas_result = pack_logical_feather_atlas_for_cpp(
+                limits.max_texture_dimension_2d,
+                &next.atlas_draw_sizes,
+            );
+            atlas_result
+                .map_err(|_| "draw batch exceeds logical flush feather atlas texture limit")?;
         }
         Ok(next)
     }
@@ -1621,7 +1627,9 @@ impl WgpuFrame {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -3332,6 +3340,14 @@ impl WgpuFrame {
                             .as_ref()
                             .expect("fixed MSAA draw prepared without fallback target")
                     };
+                    if !first_segment && starts_logical_flush {
+                        self.context.composite_pipeline.encode_msaa_preserve(
+                            &self.context.device,
+                            encoder,
+                            &multisample_view,
+                            resolve_target,
+                        );
+                    }
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("nuxie-solid-pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -4044,6 +4060,38 @@ fn pack_atlas_for_device(
         .map_err(|error| RendererError::AtlasPacking(error.message()))
 }
 
+fn pack_logical_feather_atlas_for_cpp(
+    max_texture_dimension: u32,
+    draw_sizes: &[(u32, u32)],
+) -> Result<skyline::AtlasLayout, RendererError> {
+    let Some(&(first_width, first_height)) = draw_sizes.first() else {
+        return skyline::pack_atlas_regions_in_dimensions(1, 1, &[])
+            .map_err(|error| RendererError::AtlasPacking(error.message()));
+    };
+    let platform_max_texture_dimension =
+        max_texture_dimension.min(CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION);
+    let base_dimension = platform_max_texture_dimension.min(CPP_LOGICAL_ATLAS_MAX_DIMENSION);
+    let atlas_width = base_dimension.max(first_width);
+    let atlas_height = base_dimension.max(first_height);
+    if atlas_width > max_texture_dimension || atlas_height > max_texture_dimension {
+        return Err(RendererError::AtlasPacking(
+            "atlas dimensions exceed the device texture limit",
+        ));
+    }
+    let total_padding = FEATHER_ATLAS_PADDING * 2;
+    let padded_regions = draw_sizes
+        .iter()
+        .map(|&(width, height)| {
+            (
+                width.saturating_add(total_padding).min(atlas_width),
+                height.saturating_add(total_padding).min(atlas_height),
+            )
+        })
+        .collect::<Vec<_>>();
+    skyline::pack_atlas_regions_in_dimensions(atlas_width, atlas_height, &padded_regions)
+        .map_err(|error| RendererError::AtlasPacking(error.message()))
+}
+
 fn atlas_physical_size(content: [u32; 2], max_dimension: u32) -> [u32; 2] {
     content.map(|dimension| (dimension.saturating_mul(5) / 4).max(1).min(max_dimension))
 }
@@ -4062,17 +4110,17 @@ fn feather_atlas_placement(
     let top = top.clamp(0, frame_height as i32);
     let right = right.clamp(left, frame_width as i32);
     let bottom = bottom.clamp(top, frame_height as i32);
-    const PADDING: f32 = 2.0;
+    let padding = FEATHER_ATLAS_PADDING as f32;
     Some(AtlasPlacement {
         scale,
         translate: [
-            (-(left as f32)).mul_add(scale, PADDING),
-            (-(top as f32)).mul_add(scale, PADDING),
+            (-(left as f32)).mul_add(scale, padding),
+            (-(top as f32)).mul_add(scale, padding),
         ],
         bounds: [left as f32, top as f32, right as f32, bottom as f32],
         origin: [0, 0],
-        width: ((right - left) as f32 * scale).ceil() as u32 + 4,
-        height: ((bottom - top) as f32 * scale).ceil() as u32 + 4,
+        width: ((right - left) as f32 * scale).ceil() as u32 + FEATHER_ATLAS_PADDING * 2,
+        height: ((bottom - top) as f32 * scale).ceil() as u32 + FEATHER_ATLAS_PADDING * 2,
     })
 }
 
@@ -5835,6 +5883,24 @@ mod tests {
         let result = pack_atlas_for_device(1920, 2048, &[(1920, 100); 21]);
 
         assert!(matches!(result, Err(RendererError::AtlasPacking(_))));
+    }
+
+    #[test]
+    fn logical_feather_atlas_uses_cpp_capacity_and_padding() {
+        let exact =
+            pack_logical_feather_atlas_for_cpp(16_384, &[(1020, 2044), (1020, 2044)]).unwrap();
+        assert_eq!(exact.extent(), [2048, 2048]);
+
+        let overflow =
+            pack_logical_feather_atlas_for_cpp(16_384, &[(1020, 2044), (1020, 2044), (1, 1)]);
+        assert!(matches!(overflow, Err(RendererError::AtlasPacking(_))));
+    }
+
+    #[test]
+    fn logical_feather_atlas_enlarges_for_the_first_oversized_draw() {
+        let layout = pack_logical_feather_atlas_for_cpp(16_384, &[(5000, 32), (100, 32)]).unwrap();
+
+        assert_eq!(layout.extent(), [5000, 72]);
     }
 
     #[test]
@@ -10773,18 +10839,49 @@ mod tests {
             .unwrap();
         let uninterrupted = make_frame(false).finish().unwrap();
         assert_eq!(scheduled, serialized);
-        let differing = scheduled
-            .chunks_exact(4)
-            .zip(uninterrupted.chunks_exact(4))
-            .enumerate()
-            .filter(|(_, (left, right))| left != right)
-            .take(8)
-            .map(|(index, (left, right))| (index % 64, index / 64, left, right))
-            .collect::<Vec<_>>();
-        assert!(
-            differing.is_empty(),
-            "logical flush changed rendered pixels: {differing:?}"
-        );
+        assert_ne!(scheduled, uninterrupted);
+    }
+
+    #[test]
+    fn msaa_logical_flush_resolves_and_reloads_color_samples() {
+        let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::Msaa).unwrap();
+        let edge = rect_path([0.0, 0.0, 10.5, 32.0], FillRule::NonZero);
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let green = WgpuPaint {
+            color: 0xff00_ff00,
+            ..WgpuPaint::default()
+        };
+        let render = |force_rollover: bool| {
+            let mut frame = factory.begin_frame(0x0000_0000);
+            frame.draw_path(&edge, &red);
+            if force_rollover {
+                let used = frame.logical_flush.counters().path_count;
+                assert!(frame
+                    .logical_flush
+                    .push_draws(logical_flush::ResourceCounters {
+                        path_count: logical_flush::MAX_PATH_COUNT - used,
+                        ..Default::default()
+                    }));
+            }
+            frame.draw_path(&edge, &green);
+            if force_rollover {
+                assert_eq!(frame.logical_flush_starts, [0, 1]);
+            }
+            frame.finish().unwrap()
+        };
+
+        let uninterrupted = render(false);
+        let rolled = render(true);
+        let pixel = |pixels: &[u8], x: usize, y: usize| {
+            <[u8; 4]>::try_from(&pixels[(y * 32 + x) * 4..][..4]).unwrap()
+        };
+        assert_eq!(pixel(&uninterrupted, 4, 16), [0, 255, 0, 255]);
+        assert_eq!(pixel(&rolled, 4, 16), [0, 255, 0, 255]);
+        assert_eq!(pixel(&uninterrupted, 10, 16), [0, 128, 0, 128]);
+        assert_eq!(pixel(&rolled, 10, 16), [64, 128, 0, 192]);
     }
 
     #[test]
@@ -10845,34 +10942,36 @@ mod tests {
 
     #[test]
     fn logical_flush_allocations_roll_atlas_and_coverage_independently() {
-        let atlas_factory =
-            WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
-        let atlas_frame = atlas_factory.begin_frame(0);
-        let atlas_draw = SolidDraw {
-            path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
-            paint: WgpuPaint {
-                feather: 32.0,
-                ..WgpuPaint::default()
-            },
-            state: DrawState::default(),
-            role: DrawRole::Content { clip_id: 0 },
-            image: None,
-        };
-        let mut atlas = LogicalFlushAllocations::default();
-        let atlas_count = (1..10_000)
-            .find(|_| {
-                let Ok(next) = atlas.with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
-                else {
-                    return true;
-                };
-                atlas = next;
-                false
-            })
-            .expect("atlas allocation must reach the device texture limit");
-        assert!(atlas_count > 1);
-        assert!(LogicalFlushAllocations::default()
-            .with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
-            .is_ok());
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let atlas_factory = WgpuFactory::new_with_mode(64, 64, mode).unwrap();
+            let atlas_frame = atlas_factory.begin_frame(0);
+            let atlas_draw = SolidDraw {
+                path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
+                paint: WgpuPaint {
+                    feather: 32.0,
+                    ..WgpuPaint::default()
+                },
+                state: DrawState::default(),
+                role: DrawRole::Content { clip_id: 0 },
+                image: None,
+            };
+            let mut atlas = LogicalFlushAllocations::default();
+            let atlas_count = (1..10_000)
+                .find(|_| {
+                    let Ok(next) =
+                        atlas.with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+                    else {
+                        return true;
+                    };
+                    atlas = next;
+                    false
+                })
+                .expect("atlas allocation must reach the device texture limit");
+            assert!(atlas_count > 1, "{mode:?} rolled before one atlas draw");
+            assert!(LogicalFlushAllocations::default()
+                .with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+                .is_ok());
+        }
 
         let coverage_factory =
             WgpuFactory::new_with_mode(1024, 1024, RenderMode::ClockwiseAtomic).unwrap();

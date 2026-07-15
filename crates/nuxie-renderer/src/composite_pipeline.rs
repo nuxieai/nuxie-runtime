@@ -4,10 +4,12 @@ use wgpu::util::DeviceExt;
 
 pub(crate) struct CompositePipeline {
     pipeline: wgpu::RenderPipeline,
+    msaa_preserve_pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     advanced_pipeline: wgpu::RenderPipeline,
     advanced_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    msaa_preserve_sampler: wgpu::Sampler,
 }
 
 impl CompositePipeline {
@@ -67,6 +69,35 @@ impl CompositePipeline {
             multiview_mask: None,
             cache: None,
         });
+        let msaa_preserve_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("nuxie-msaa-preserve-pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vertex_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 4,
+                    ..Default::default()
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fragment_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
         let advanced_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-advanced-composite-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("advanced_composite.wgsl").into()),
@@ -125,12 +156,20 @@ impl CompositePipeline {
             min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+        let msaa_preserve_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("nuxie-msaa-preserve-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
         Self {
             pipeline,
+            msaa_preserve_pipeline,
             layout,
             advanced_pipeline,
             advanced_layout,
             sampler,
+            msaa_preserve_sampler,
         }
     }
 
@@ -173,6 +212,49 @@ impl CompositePipeline {
             multiview_mask: None,
         });
         pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
+    pub(crate) fn encode_msaa_preserve(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        source: &wgpu::TextureView,
+    ) {
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-msaa-preserve-group"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.msaa_preserve_sampler),
+                },
+            ],
+        });
+        let attachments = [Some(wgpu::RenderPassColorAttachment {
+            view: target,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                store: wgpu::StoreOp::Store,
+            },
+        })];
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("nuxie-msaa-preserve-pass"),
+            color_attachments: &attachments,
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.msaa_preserve_pipeline);
         pass.set_bind_group(0, &group, &[]);
         pass.draw(0..3, 0..1);
     }

@@ -3853,3 +3853,11 @@ Run `make renderer-golden`.
   reference, tolerance, or exact=1,408/diverges=0/gated=60. The rejected mixed
   artifact harness remains out of production; evidence is in
   `docs/renderer-rewards-command21-audit.md`.
+- 2026-07-15: Revalidated subpixel-edge cohort A, the first 13 lexical
+  `metal-webgpu-subpixel-edge-coverage` rows after excluding Rewards. Three
+  Rust wgpu/Metal rounds were contract-stable, all 13 native C++/Metal
+  controls were independently byte-exact to their committed references, and
+  the residuals remain sparse boundary components with no shared falsifiable
+  Rust defect. No status, reference, or tolerance changed; the ratchet stays
+  exact=1,408/diverges=0/gated=60. Full results are in
+  `docs/renderer-r3-exit-audit.md`.

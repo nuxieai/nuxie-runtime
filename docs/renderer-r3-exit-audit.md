@@ -183,6 +183,86 @@ tolerance change. The active taxonomy now has 52 subpixel-edge rows, two
 advanced-feather rows, and one clip-edge/composite parity row. Full evidence is
 in `docs/renderer-rewards-command21-audit.md`.
 
+### R3.1 Subpixel-Edge Cohort A Claim (2026-07-15)
+
+This cohort is claimed from shared `HEAD` `d244ac33abd76c9571998ad33f37d9bf9394cdcf`.
+It is the first 13 IDs in `LC_ALL=C` lexical order among `corpus-r.toml`
+entries whose gate reason is exactly `metal-webgpu-subpixel-edge-coverage`,
+excluding the already-adjudicated
+`riv-rewards_demo-frame-0-clockwise-atomic`. The immutable claim is:
+
+```text
+riv-align_target-frame-0-clockwise-atomic
+riv-audio_script-frame-0-clockwise-atomic
+riv-bindable_artboard_nesty-frame-0-clockwise-atomic
+riv-coin-frame-0-clockwise-atomic
+riv-collapse_data_binds-frame-0-clockwise-atomic
+riv-collapsing_elements-frame-0-clockwise-atomic
+riv-component_stateful-frame-0-clockwise-atomic
+riv-computed_values_test-frame-0-clockwise-atomic
+riv-data_bind_test_cmdq-frame-0-clockwise-atomic
+riv-data_binding_artboards_source_test-frame-0-clockwise-atomic
+riv-data_binding_artboards_test-frame-0-clockwise-atomic
+riv-data_binding_test-frame-0-clockwise-atomic
+riv-data_converter_to_number-frame-0-clockwise-atomic
+```
+
+### R3.1 Subpixel-Edge Cohort A Adjudication (2026-07-15)
+
+Three fresh serial Rust wgpu/Metal rounds used the read-only replay producer
+`/Users/levi/dev/rive-rust/target/debug/renderer-replay`
+(`61b8f965c422304ad60daa7868d6d90fe9153de317ba56622f113a87af317ded`).
+It was built immediately after `b918ad2a`; the renderer, stream parser,
+replay tool, comparator, and lockfile paths are unchanged from that revision
+through this cohort's claimed `d244ac33` revision. The sole manifest change is
+the excluded Rewards row's later gate reclassification. The producer ran on
+Apple M5 Max / macOS 26.4.1. PNG byte hashes vary on eleven rows, but decoded
+round-1/round-2 differences are only 1 channel at 1--67 pixels and never reach
+the contract's `>2` threshold. All three reference comparisons have the same
+results below.
+
+The native C++/Metal FFI producer
+`/Users/levi/dev/rive-rust/target/renderer-ffi/debug/renderer-replay`
+(`785d96fe6fa19afde22b8993bb0614786f354d3a2fe25a55eb26c438264c796c`)
+replayed every claimed stream to the immutable committed reference at exact
+`0/0`. Parent review independently byte-compared all 13 outputs with those
+references. This validates the reference producer and rules out an image
+decode or reference-promotion explanation for the Rust masks.
+
+| Row | Rust result (`>2` pixels/max delta) | `>2` RGB components/area/largest | Alpha `>2` area | Retained boundary |
+| --- | --- | --- | --- | --- |
+| `align_target` | 77/52 | 26/77/8 | 0 | Transformed glyph and circle edges; unclipped SrcOver. |
+| `audio_script` | 251/36 | 120/251/6 | 0 | Seven text-outline edge bands; unclipped SrcOver. |
+| `bindable_artboard_nesty` | 79/60 | 26/79/7 | 0 | One transformed glyph-outline edge; unclipped SrcOver. |
+| `coin` | 48/58 | 12/48/12 | 26 | Five clip commands plus Overlay; 12 sparse edge components, retained separately from the unclipped family. |
+| `collapse_data_binds` | 61/31 | 17/61/6 | 0 | Four glyph outlines plus two transformed rectangle edges; unclipped SrcOver. |
+| `collapsing_elements` | 37/31 | 37/37/1 | 0 | One-pixel fractional stripe edges; unclipped SrcOver. |
+| `component_stateful` | 35/52 | 17/35/6 | 0 | Two white glyph-outline draws; unclipped SrcOver. |
+| `computed_values_test` | 46/24 | 17/46/8 | 0 | Translated glyph-outline components; unclipped SrcOver. |
+| `data_bind_test_cmdq` | 793/95 | 300/793/10 | 0 | Many tiny text/vector boundary components; unclipped SrcOver. |
+| `data_binding_artboards_source_test` | 130/55 | 57/130/8 | 0 | Small glyph/vector boundary components; unclipped SrcOver. |
+| `data_binding_artboards_test` | 65/66 | 33/65/6 | 0 | Tiny text/vector boundary components; unclipped SrcOver. |
+| `data_binding_test` | 1,163/96 | 414/1,163/10 | 0 | Many tiny text/vector boundary components; unclipped SrcOver. |
+| `data_converter_to_number` | 424/65 | 156/424/9 | 0 | Six text-band boundary components; unclipped SrcOver. |
+
+The control census found no `decodeImage` or image commands in any claimed
+stream. Twelve rows have no `clipPath` commands and only `blendMode=3`
+(`SrcOver`); Coin is the sole exception, with five clips and `Overlay` in
+addition to SrcOver. Thus neither a decoder, a general clip implementation,
+nor a general blend/composite implementation can explain the twelve-row
+unclipped family. The masks are all sparse subpixel boundaries, but the only
+shared explanation left is the reviewed Metal/WebGPU raster coverage boundary,
+not a falsifiable Rust algorithm candidate. No source mutation can currently
+be paired with an oracle that would separate a production fix from a backend
+coverage shift, so this cohort retains
+`metal-webgpu-subpixel-edge-coverage` without changing tolerance, reference,
+or status.
+
+Artifacts are retained outside the repository at
+`/tmp/rive-rust-r31-subpixel-edge-cohort-a-artifacts`: Rust rounds `round-1`,
+`round-2`, and `round-3` contain actual and heatmap PNGs; `cpp-native`
+contains the exact native-Metal controls.
+
 ## Reproduction
 
 ```sh

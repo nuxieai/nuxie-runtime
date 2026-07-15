@@ -1680,9 +1680,9 @@ class FormatTests(unittest.TestCase):
             {
                 "accepted": 0,
                 "capture_manifest_cases": 732,
-                "gated_msaa_rows": 51,
+                "gated_msaa_rows": 32,
                 "missing_strict_provenance_rows": 1,
-                "strict_provenance_rows": 50,
+                "strict_provenance_rows": 31,
                 "unsupported": 1,
                 "unsupported_by_reason": {
                     "strict-replay-gm-header": 1,
@@ -2404,8 +2404,9 @@ makeLinearGradient id=1 start=(1,2.5) end=(30,20) stops=[{color=0xff112233,stop=
 makeRadialGradient id=2 center=(16,12) radius=8.25 stops=[{color=0xffabcdef,stop=0},{color=0x00123456,stop=0.75},{color=0xff010203,stop=1}]
 makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
 drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(1,2),(3,4)]}} paint={id=1,style=fill,color=0xff112233,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=1}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(1,2),(3,4)]}} paint={id=1,style=fill,color=0xff112233,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=1}
 drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(1,2),(3,4)]}} paint={id=1,style=fill,color=0xff112233,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=2}
-drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(1,2),(3,4)]}} paint={id=1,style=fill,color=0xff112233,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+drawPath path={id=1,fillRule=0,path={verbs=[move,line],points=[(1,2),(3,4)]}} paint={id=1,style=fill,color=0xffa1b2c3,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
 frame
 """
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2438,7 +2439,7 @@ frame
                     "--expected-count",
                     "makeEmptyRenderPath=1",
                     "--expected-count",
-                    "drawPath=3",
+                    "drawPath=4",
                     "--function",
                     "replayGradients",
                     "--output",
@@ -2463,9 +2464,24 @@ frame
                 "context->makeRadialGradient(16.f, 12.f, 8.25f,",
                 generated,
             )
-            self.assertIn("paint1->shader(shader1);", generated)
-            self.assertIn("paint1->shader(shader2);", generated)
-            self.assertIn("paint1->shader(nullptr);", generated)
+            self.assertEqual(generated.count("paint1->shader(shader1);"), 2)
+            self.assertEqual(generated.count("paint1->shader(shader2);"), 1)
+            self.assertNotIn("paint1->shader(nullptr);", generated)
+            self.assertEqual(
+                generated.count(
+                    "paint1->color(0xff112233);\n    paint1->shader(shader1);"
+                ),
+                2,
+            )
+            self.assertIn(
+                "paint1->color(0xff112233);\n    paint1->shader(shader2);",
+                generated,
+            )
+            solid_snapshot = generated.rsplit("paint1->color(0xffa1b2c3);", 1)[1]
+            self.assertNotIn("paint1->shader(", solid_snapshot)
+            self.assertIn(
+                "renderer->drawPath(path1.get(), paint1.get());", solid_snapshot
+            )
 
     def test_path_stream_generator_reconstructs_render_buffers(self):
         stream_text = """rive-golden-stream-v1

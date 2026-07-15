@@ -357,7 +357,6 @@ def generate_include(
         )
     paths: dict[int, PathSnapshot | None] = {}
     paints: set[int] = set()
-    paint_shaders: dict[int, int] = {}
     shaders: set[int] = set()
     images: set[int] = set()
     buffers: dict[int, RenderBufferSnapshot] = {}
@@ -424,7 +423,6 @@ def generate_include(
             if snapshot.object_id in paints:
                 raise ValueError("makeRenderPaint must declare a unique paint")
             paints.add(snapshot.object_id)
-            paint_shaders[snapshot.object_id] = 0
             count("makeRenderPaint")
             output.append(f"    auto paint{snapshot.object_id} = context->makeRenderPaint();")
             continue
@@ -714,25 +712,23 @@ def generate_include(
             )
             materialize_path(path)
             style = "fill" if paint.style == "fill" else "stroke"
-            shader_binding = []
-            if paint.shader != paint_shaders[paint.object_id]:
-                shader_value = (
-                    f"shader{paint.shader}" if paint.shader != 0 else "nullptr"
-                )
-                shader_binding.append(
-                    f"    paint{paint.object_id}->shader({shader_value});"
-                )
-                paint_shaders[paint.object_id] = paint.shader
+            # RiveRenderPaint::color() clears gradients: bind nonzero shaders immediately
+            # after color; shader=0 relies on color to keep the authored solid color.
+            shader_binding = (
+                [f"    paint{paint.object_id}->shader(shader{paint.shader});"]
+                if paint.shader != 0
+                else []
+            )
             output.extend(
                 [
                     f"    paint{paint.object_id}->style(rive::RenderPaintStyle::{style});",
                     f"    paint{paint.object_id}->color({paint.color});",
+                    *shader_binding,
                     f"    paint{paint.object_id}->thickness({float_literal(paint.thickness)});",
                     f"    paint{paint.object_id}->join(static_cast<rive::StrokeJoin>({paint.join}));",
                     f"    paint{paint.object_id}->cap(static_cast<rive::StrokeCap>({paint.cap}));",
                     f"    paint{paint.object_id}->feather({float_literal(paint.feather)});",
                     f"    paint{paint.object_id}->blendMode(static_cast<rive::BlendMode>({blend_mode_override if blend_mode_override is not None else paint.blend_mode}));",
-                    *shader_binding,
                     f"    renderer->drawPath(path{path.object_id}.get(), paint{paint.object_id}.get());",
                 ]
             )

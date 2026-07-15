@@ -3773,3 +3773,25 @@ Run `make renderer-golden`.
   All outputs are valid 8-bit RGBA non-interlaced PNGs and byte-stable across
   the fresh rounds. Existing stream/reference provenance and `2/32` contracts
   remain unchanged. The corpus is exact=1,408/diverges=0/gated=60.
+- 2026-07-15: Reclassified `riv-hunter_x_demo-frame-0-clockwise-atomic` after
+  paired native-Metal prefix and preparation oracles narrowed its unchanged
+  222-pixel/max-delta-18 residual to one-pixel feather edges. The first
+  residual is command 1,378, an Overlay atlas draw; C++ and Rust agree on the
+  atlas threshold, allocation, batch schedule, and CPU preparation semantics,
+  and component analysis found only one alpha outlier beyond delta 2. The row
+  therefore moves from the provisional advanced-feather diagnostic to the
+  existing `metal-webgpu-subpixel-edge-coverage` boundary without changing
+  status, reference, tolerance, or the exact=1,408/diverges=0/gated=60
+  ratchet. Four actionable advanced-feather rows remain.
+- 2026-07-15: Reclassified `riv-echo_show_demo-frame-0-clockwise-atomic`
+  after a 16-prefix native-Metal/Rust campaign and an independent fresh replay
+  disproved the advanced-feather-only diagnosis. The first contract failure is
+  command 16, a clipped opaque unfeathered NonZero SrcOver path at 34 pixels
+  over delta 2/max delta 5; all-SrcOver plus zero-feather controls still fail,
+  and later unfeathered Screen draws create the largest cliffs. Because no
+  same-backend C++ WebGPU clockwise-atomic artifact exists, clip-edge,
+  destination-color accumulation, and resolve scheduling remain live Rust
+  defect hypotheses. The row keeps its status, reference, and `2/32` contract
+  under the narrower actionable
+  `native-clockwise-atomic-clip-edge-and-composite-parity` diagnostic. Counts
+  remain exact=1,408/diverges=0/gated=60; three advanced-feather rows remain.

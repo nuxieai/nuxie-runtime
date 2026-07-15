@@ -6246,7 +6246,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "native-clockwise-atomic-advanced-feather-parity"
+gated = "native-clockwise-atomic-clip-edge-and-composite-parity"
 
 [[entry]]
 id = "riv-echo_show_demo-frame-0-msaa"
@@ -7909,7 +7909,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "native-clockwise-atomic-advanced-feather-parity"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-hunter_x_demo-frame-0-msaa"

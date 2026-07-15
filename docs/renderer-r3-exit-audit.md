@@ -141,6 +141,33 @@ dimensions, and unique reference ownership all remain valid. Exactly these
 three rows advance from gated to exact; the active ratchet is
 exact=1,408/diverges=0/gated=60.
 
+### Post-R3.1 Hunter X Adjudication (2026-07-15)
+
+Two native-Metal prefix and preparation investigations localize Hunter X's
+remaining 222-pixel/max-delta-18 clockwise-atomic residual to one-pixel
+feather edges beginning at command 1,378, an Overlay atlas draw. C++ and Rust
+agree on atlas selection, thresholding, batching, and CPU preparation, and
+only one alpha sample exceeds delta 2. The row is reclassified from
+`native-clockwise-atomic-advanced-feather-parity` to the existing
+`metal-webgpu-subpixel-edge-coverage` boundary. Status, reference, `2/32`
+contract, and aggregate counts are unchanged; the active taxonomy now has 51
+subpixel-edge rows and four advanced-feather rows.
+
+### Post-R3.1 Echo Show Adjudication (2026-07-15)
+
+Fresh native-Metal/Rust prefix replay confirms Echo Show first exceeds its
+contract at command 16 on a clipped opaque unfeathered SrcOver path
+(`34` pixels over delta 2/max delta 5). Advanced-feather draws can reduce the
+residual, while all-SrcOver and zero-feather controls still fail; the largest
+late cliffs begin on unfeathered Screen draws. This rejects the prior
+advanced-feather-only classification without proving a backend boundary. The
+row now carries the actionable
+`native-clockwise-atomic-clip-edge-and-composite-parity` diagnostic pending a
+same-backend atomic oracle or production fix. Status, reference, `2/32`
+contract, and aggregate counts are unchanged; the active taxonomy has 51
+subpixel-edge rows, three advanced-feather rows, and one clip-edge/composite
+parity row.
+
 ## Reproduction
 
 ```sh

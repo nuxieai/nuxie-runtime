@@ -794,10 +794,19 @@ struct ClipRectState {
     matrix: Mat2D,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 struct ClipElement {
     path: WgpuPath,
     matrix: Mat2D,
+    // Mirrors RiveRenderer::ClipElement::clipID. The MSAA stencil contains
+    // one specific stack element, not an arbitrary shared path prefix.
+    clip_id: u16,
+}
+
+impl ClipElement {
+    fn is_equivalent(&self, matrix: Mat2D, path: &WgpuPath) -> bool {
+        self.matrix == matrix && self.path == *path
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1141,15 +1150,21 @@ impl Renderer for WgpuFrame {
             self.state.clip_is_empty = true;
             return;
         }
-        let Some(rect) = path_aabb(&path.raw_path) else {
-            self.push_clip_path(path);
-            return;
-        };
-        if !apply_clip_rect(&mut self.state, rect) {
-            // C++ retains the existing optimized clip rect and falls back to
-            // the ordinary clip stack for a rect in an incompatible space.
-            self.push_clip_path(path);
+        // RenderContext::frameSupportsClipRects() only enables clip planes for
+        // MSAA when the C++ backend explicitly advertises them. The WebGPU
+        // backend leaves supportsClipPlanes false, so its MSAA clip stack must
+        // represent rectangles as stencil clips too. Clockwise atomics keep
+        // the generated clip-rectangle shader path.
+        if self.mode != RenderMode::Msaa {
+            if let Some(rect) = path_aabb(&path.raw_path) {
+                if apply_clip_rect(&mut self.state, rect) {
+                    return;
+                }
+                // C++ retains the existing optimized clip rect and falls back
+                // to the ordinary clip stack for an incompatible rectangle.
+            }
         }
+        self.push_clip_path(path);
     }
 
     fn draw_image(
@@ -1307,12 +1322,13 @@ impl WgpuFrame {
         if self
             .clips
             .get(height)
-            .is_none_or(|clip| clip.matrix != self.state.transform || clip.path != *path)
+            .is_none_or(|clip| !clip.is_equivalent(self.state.transform, path))
         {
             self.clips.truncate(height);
             self.clips.push(ClipElement {
                 path: path.clone(),
                 matrix: self.state.transform,
+                clip_id: 0,
             });
         }
         self.state.clip_stack_height = height + 1;
@@ -1323,52 +1339,52 @@ impl WgpuFrame {
             return self.prepare_clip_updates();
         }
 
-        let current_clips = self.clips[..self.state.clip_stack_height].to_vec();
-        let shared_prefix = self
-            .msaa_path_clips
-            .iter()
-            .zip(&current_clips)
-            .take_while(|(active, current)| active == current)
-            .count();
-        let reuses = !current_clips.is_empty()
-            && shared_prefix == current_clips.len()
-            && shared_prefix == self.msaa_path_clips.len();
-        let extends = !self.msaa_path_clips.is_empty()
-            && shared_prefix == self.msaa_path_clips.len()
-            && shared_prefix < current_clips.len();
-        let update_start = if extends { shared_prefix } else { 0 };
+        let height = self.state.clip_stack_height;
+        let current_clips = self.clips[..height].to_vec();
         let previous_active = self.msaa_path_clips.last().cloned();
-        let (updates, clip_id) = if reuses {
-            (Vec::new(), self.msaa_path_clip_id)
-        } else if extends {
-            self.prepare_clip_updates_from(update_start, self.msaa_path_clip_id)?
-        } else {
-            self.prepare_clip_updates()?
-        };
 
         if current_clips.is_empty() {
-            return Some((updates, clip_id));
+            return Some((Vec::new(), 0));
         }
-        let mut scheduled = Vec::with_capacity(updates.len() + current_clips.len());
-        if !reuses && !extends {
+
+        // This is RiveRenderer::applyClip's scan for the clip ID currently in
+        // the stencil buffer. A shared path prefix is not enough: if the
+        // resident leaf belongs to a different branch, MSAA must clear it and
+        // replay the current stack from its root.
+        let active_index = if self.msaa_path_clip_id == 0 {
+            None
+        } else {
+            self.clips[..height]
+                .iter()
+                .rposition(|clip| clip.clip_id == self.msaa_path_clip_id)
+        };
+        let parent_id = active_index
+            .map(|index| self.clips[index].clip_id)
+            .unwrap_or(0);
+        let update_start = active_index.map_or(0, |index| index + 1);
+        let (updates, clip_id) = if update_start == height {
+            (Vec::new(), parent_id)
+        } else {
+            self.prepare_clip_updates_from(update_start, parent_id)?
+        };
+
+        let mut scheduled = Vec::with_capacity(updates.len() * 2 + 1);
+        if self.msaa_path_clip_id != 0 && active_index.is_none() {
             if let Some(active) = previous_active.as_ref() {
                 scheduled
                     .push(self.msaa_clip_reset_draw(active, MsaaClipResetAction::ClearPrevious));
             }
         }
-        if !reuses {
-            for (offset, update) in updates.into_iter().enumerate() {
-                scheduled.push(update);
-                let clip_index = update_start + offset;
-                if clip_index != 0 {
-                    let action = match current_clips[clip_index].path.fill_rule {
-                        FillRule::NonZero => MsaaClipResetAction::IntersectPreviousNonZero,
-                        FillRule::EvenOdd => MsaaClipResetAction::IntersectPreviousEvenOdd,
-                        FillRule::Clockwise => MsaaClipResetAction::IntersectPreviousClockwise,
-                    };
-                    scheduled
-                        .push(self.msaa_clip_reset_draw(&current_clips[clip_index - 1], action));
-                }
+        for (offset, update) in updates.into_iter().enumerate() {
+            scheduled.push(update);
+            let clip_index = update_start + offset;
+            if clip_index != 0 {
+                let action = match current_clips[clip_index].path.fill_rule {
+                    FillRule::NonZero => MsaaClipResetAction::IntersectPreviousNonZero,
+                    FillRule::EvenOdd => MsaaClipResetAction::IntersectPreviousEvenOdd,
+                    FillRule::Clockwise => MsaaClipResetAction::IntersectPreviousClockwise,
+                };
+                scheduled.push(self.msaa_clip_reset_draw(&current_clips[clip_index - 1], action));
             }
         }
         self.msaa_path_clips = current_clips;
@@ -1493,7 +1509,7 @@ impl WgpuFrame {
         }
         let mut updates = Vec::with_capacity(height - start);
         let mut parent_id = initial_parent_id;
-        for (offset, clip) in self.clips[start..height].iter().enumerate() {
+        for (offset, clip) in self.clips[start..height].iter_mut().enumerate() {
             if self.mode == RenderMode::ClockwiseAtomic
                 && parent_id != 0
                 && invert_clockwise_path(
@@ -1508,6 +1524,7 @@ impl WgpuFrame {
                 return None;
             }
             let replacement_id = (self.next_clip_id + offset as u32) as u16;
+            clip.clip_id = replacement_id;
             updates.push(SolidDraw {
                 path: clip.path.clone(),
                 paint: WgpuPaint::default(),
@@ -7196,6 +7213,120 @@ mod tests {
     }
 
     #[test]
+    fn msaa_incompatible_transformed_clip_rects_use_the_stencil_clip_stack() {
+        let factory = WgpuFactory::new_with_mode(500, 500, RenderMode::Msaa).unwrap();
+        let outer = rect_path([0.0, 0.0, 500.0, 500.0], FillRule::NonZero);
+        let inner = rect_path([0.0, 0.0, 50.0, 50.0], FillRule::NonZero);
+        let inner_matrix = Mat2D([
+            0.5135926,
+            4.121487e-9,
+            0.00041051814,
+            0.5135926,
+            92.882,
+            302.4731,
+        ]);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&outer);
+        frame.transform(inner_matrix);
+        frame.clip_path(&inner);
+        let (scheduled, clip_id) = frame.prepare_scheduled_clip_updates().unwrap();
+
+        assert!(frame.state.clip_rect.is_none());
+        assert_eq!(frame.state.clip_stack_height, 2);
+        assert_eq!(frame.clips.len(), 2);
+        assert_eq!(frame.clips[0].path, outer);
+        assert_eq!(frame.clips[0].matrix, Mat2D::IDENTITY);
+        assert_eq!(frame.clips[1].path, inner);
+        assert_eq!(frame.clips[1].matrix, inner_matrix);
+        assert!(matches!(
+            scheduled[0].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 1,
+                parent_id: 0
+            }
+        ));
+        assert!(matches!(
+            scheduled[1].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 2,
+                parent_id: 1
+            }
+        ));
+        assert!(matches!(
+            scheduled[2].role,
+            DrawRole::ClipReset {
+                action: MsaaClipResetAction::IntersectPreviousNonZero,
+                ..
+            }
+        ));
+        assert_eq!(clip_id, 2);
+    }
+
+    #[test]
+    fn msaa_clip_stack_replays_from_root_when_the_resident_leaf_diverges() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let triangle = |points: [[f32; 2]; 3]| {
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(points[0][0], points[0][1]);
+            raw_path.line_to(points[1][0], points[1][1]);
+            raw_path.line_to(points[2][0], points[2][1]);
+            raw_path.close();
+            WgpuPath {
+                raw_path,
+                fill_rule: FillRule::NonZero,
+            }
+        };
+        let outer = triangle([[32.0, 4.0], [60.0, 60.0], [4.0, 60.0]]);
+        let old_leaf = triangle([[32.0, 12.0], [48.0, 48.0], [16.0, 48.0]]);
+        let new_leaf = triangle([[32.0, 18.0], [42.0, 42.0], [22.0, 42.0]]);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&outer);
+        frame.save();
+        frame.clip_path(&old_leaf);
+        let (_, initial_clip_id) = frame.prepare_scheduled_clip_updates().unwrap();
+        assert_eq!(initial_clip_id, 2);
+        frame.restore();
+
+        frame.clip_path(&new_leaf);
+        let (scheduled, clip_id) = frame.prepare_scheduled_clip_updates().unwrap();
+
+        assert_eq!(scheduled.len(), 4);
+        assert!(matches!(
+            scheduled[0].role,
+            DrawRole::ClipReset {
+                action: MsaaClipResetAction::ClearPrevious,
+                ..
+            }
+        ));
+        assert!(matches!(
+            scheduled[1].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 3,
+                parent_id: 0
+            }
+        ));
+        assert!(matches!(
+            scheduled[2].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 4,
+                parent_id: 3
+            }
+        ));
+        assert!(matches!(
+            scheduled[3].role,
+            DrawRole::ClipReset {
+                action: MsaaClipResetAction::IntersectPreviousNonZero,
+                ..
+            }
+        ));
+        assert_eq!(clip_id, 4);
+        assert_eq!(frame.clips[0].clip_id, 3);
+        assert_eq!(frame.clips[1].clip_id, 4);
+    }
+
+    #[test]
     fn axis_aligned_clip_path_limits_atomic_fill_pixels() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let clip = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::NonZero);
@@ -7216,9 +7347,8 @@ mod tests {
     }
 
     #[test]
-    fn msaa_direct_fill_applies_clip_rect_with_generated_clip_distances() {
+    fn msaa_axis_aligned_clip_path_uses_stencil_coverage() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let supports_clip_rect = factory.context.path_pipeline.supports_clip_rect();
         let clip = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::NonZero);
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
         let paint = WgpuPaint {
@@ -7228,17 +7358,9 @@ mod tests {
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
         frame.draw_path(&fill, &paint);
-        let result = frame.finish();
-        if !supports_clip_rect {
-            assert!(matches!(
-                result,
-                Err(RendererError::Unsupported(
-                    "clip rectangles on msaa direct path draws"
-                ))
-            ));
-            return;
-        }
-        let pixels = result.unwrap();
+        assert!(frame.state.clip_rect.is_none());
+        assert_eq!(frame.state.clip_stack_height, 1);
+        let pixels = frame.finish().unwrap();
         let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
         assert_eq!(pixel(8, 8), [0, 0, 0, 255]);
@@ -9810,20 +9932,8 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_blit_applies_clip_rect_with_clip_distances() {
-        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let supports_clip_rect = factory.context.msaa_atlas_pipeline.supports_clip_rect();
-        let result = fixed_feather_atlas_clipped_blit();
-        if !supports_clip_rect {
-            assert!(matches!(
-                result,
-                Err(RendererError::Unsupported(
-                    "clip rectangles on msaa feather atlas draws"
-                ))
-            ));
-            return;
-        }
-        let blit = result.unwrap();
+    fn msaa_feather_atlas_blit_applies_axis_aligned_stencil_clip() {
+        let blit = fixed_feather_atlas_clipped_blit().unwrap();
         let pixels = blit.pixels();
         let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
@@ -9877,20 +9987,9 @@ mod tests {
     }
 
     #[test]
-    fn msaa_feather_atlas_blit_combines_path_and_rectangle_clips() {
-        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let supports_clip_rect = factory.context.msaa_atlas_pipeline.supports_clip_rect();
-        let result = fixed_feather_atlas_blit_with_clips(Some([28.0, 0.0, 40.0, 64.0]), true);
-        if !supports_clip_rect {
-            assert!(matches!(
-                result,
-                Err(RendererError::Unsupported(
-                    "clip rectangles on msaa feather atlas draws"
-                ))
-            ));
-            return;
-        }
-        let blit = result.unwrap();
+    fn msaa_feather_atlas_blit_intersects_path_and_axis_aligned_stencil_clips() {
+        let blit =
+            fixed_feather_atlas_blit_with_clips(Some([28.0, 0.0, 40.0, 64.0]), true).unwrap();
         let pixels = blit.pixels();
         let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
@@ -10067,9 +10166,8 @@ mod tests {
     }
 
     #[test]
-    fn msaa_path_clip_combines_with_direct_clip_rect() {
+    fn msaa_path_clip_intersects_axis_aligned_stencil_clip() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let supports_clip_rect = factory.context.path_pipeline.supports_clip_rect();
         let mut raw_clip = RawPath::new();
         raw_clip.move_to(32.0, 8.0);
         raw_clip.line_to(56.0, 56.0);
@@ -10089,17 +10187,8 @@ mod tests {
         frame.clip_path(&path_clip);
         frame.clip_path(&clip_rect);
         frame.draw_path(&path, &paint);
-        let result = frame.finish();
-        if !supports_clip_rect {
-            assert!(matches!(
-                result,
-                Err(RendererError::Unsupported(
-                    "clip rectangles on msaa direct path draws"
-                ))
-            ));
-            return;
-        }
-        let pixels = result.unwrap();
+        assert!(frame.state.clip_rect.is_none());
+        let pixels = frame.finish().unwrap();
         let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
         assert_eq!(pixel(24, 40), [0; 4]);
@@ -10619,10 +10708,12 @@ mod tests {
             ClipElement {
                 path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
                 matrix: Mat2D::IDENTITY,
+                clip_id: 0,
             },
             ClipElement {
                 path: rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise),
                 matrix: Mat2D([0.0; 6]),
+                clip_id: 0,
             },
         ];
         frame.state.clip_stack_height = 2;

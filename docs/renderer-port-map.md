@@ -303,8 +303,8 @@ retained set:
    stroke, feather, advanced-blend, and edge-residual queues. The image-mesh
    port promotes two rows; same-backend prefix capture proves the third clears
    every mesh and retains only a later image-rectangle dither-precision gate.
-3. Keep the 59 reviewed platform limitations parked unless new same-backend
-   evidence identifies a Rust defect: 58 backend/decoder/precision rows plus
+3. Keep the 56 reviewed platform limitations parked unless new same-backend
+   evidence identifies a Rust defect: 55 backend/decoder/precision rows plus
    the native C++ Metal MSAA limitation.
 
 ### Exit Criteria

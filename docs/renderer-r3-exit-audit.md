@@ -116,6 +116,19 @@ image rectangles accumulate 3,691/max 3, 8,548/max 4, and 11,988/max 5.
 Jellyfish therefore retains a measured image-rectangle dither-accumulation
 precision gate rather than an image-mesh feature gate.
 
+### Post-R3.1 Decoder Update (2026-07-15)
+
+The production macOS CoreGraphics JPEG decoder closes the final three
+`platform-image-decode-color-profile` rows under their unchanged `2/32`
+contracts. Same-backend Metal comparisons against the committed references are
+zero/max 0 for `riv-clipping_and_draw_order-frame-0-msaa`, zero pixels over
+threshold/max 2 for `riv-data_binding_images_test-frame-0-clockwise-atomic`,
+and zero/max 0 for `riv-data_binding_images_test-frame-0-msaa`.
+`make renderer-decoder-oracle` independently reports zero decode delta for the
+reachable JPEG. The active ratchet is now exact=1,405/diverges=0/gated=63;
+the retained reviewed-boundary set falls from 61 to 58. The 91-row taxonomy
+above remains the historical R3 exit snapshot.
+
 ## Reproduction
 
 ```sh

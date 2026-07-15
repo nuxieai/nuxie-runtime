@@ -4107,10 +4107,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-clipping_and_
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "platform-image-decode-color-profile"
 
 [[entry]]
 id = "riv-coin-frame-0-clockwise-atomic"
@@ -5376,10 +5375,9 @@ reference = "fixtures/renderer/reference/metal/riv/data_binding_images_test-fram
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "platform-image-decode-color-profile"
 
 [[entry]]
 id = "riv-data_binding_images_test-frame-0-msaa"
@@ -5389,10 +5387,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "platform-image-decode-color-profile"
 
 [[entry]]
 id = "riv-data_binding_test-frame-0-clockwise-atomic"

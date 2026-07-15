@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,377, diverges=0, gated=91, total=1,468.
+- Rust wgpu: exact=1,405, diverges=0, gated=63, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -3746,3 +3746,11 @@ Run `make renderer-golden`.
   scripted V2 floors remain 584 and 35 exact segments. Queue item 90 next
   adjudicates Rewards' remaining thin-edge residual before moving to the next
   open advanced-feather row.
+- 2026-07-15: Integrated the production macOS CoreGraphics JPEG decoder and
+  promoted the three previously image-decode-gated rows without changing their
+  `2/32` contracts: `riv-clipping_and_draw_order-frame-0-msaa` is zero/max 0,
+  `riv-data_binding_images_test-frame-0-clockwise-atomic` is zero pixels over
+  threshold/max 2, and `riv-data_binding_images_test-frame-0-msaa` is zero/max
+  0. The same-backend Metal checks use the existing committed references, and
+  `make renderer-decoder-oracle` reports zero decode delta for the reachable
+  JPEG. The renderer ratchet advances to exact=1,405/diverges=0/gated=63.

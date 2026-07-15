@@ -7,6 +7,9 @@ use crate::{
 use nuxie_render_api::ImageSampler;
 use wgpu::util::DeviceExt;
 
+// C++ includes ENABLE_DITHER in fixed-color MSAA path batches.
+const FIXED_COLOR_FRAGMENT_CONSTANTS: [(&str, f64); 2] = [("2", 0.0), ("7", 1.0)];
+
 pub(crate) struct PathPipeline {
     stroke: DirectPipelineSet,
     fill_borrowed: DirectPipelineSet,
@@ -168,11 +171,10 @@ impl PathPipeline {
                 ("6", if hsl_blend { 1.0 } else { 0.0 }),
                 ("7", 1.0),
             ];
-            let fixed_fragment_constants = [("2", 0.0), ("7", 0.0)];
             let fragment_constants = if advanced_blend {
                 &advanced_fragment_constants[..]
             } else {
-                &fixed_fragment_constants[..]
+                &FIXED_COLOR_FRAGMENT_CONSTANTS[..]
             };
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
@@ -916,5 +918,15 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
         count: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FIXED_COLOR_FRAGMENT_CONSTANTS;
+
+    #[test]
+    fn fixed_color_paths_enable_cpp_dither_shader_feature() {
+        assert_eq!(FIXED_COLOR_FRAGMENT_CONSTANTS, [("2", 0.0), ("7", 1.0)]);
     }
 }

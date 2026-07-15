@@ -4,8 +4,8 @@ Date: 2026-07-14
 
 ## Verdict
 
-R3 corpus convergence is complete at `exact=1,358`, `diverges=0`,
-`gated=110`, `total=1,468`. Every non-gated entry passes its committed
+R3 corpus convergence is complete at `exact=1,375`, `diverges=0`,
+`gated=93`, `total=1,468`. Every non-gated entry passes its committed
 contract on the macOS Metal CI backend, and every retained gate has a specific
 feature, backend/compiler boundary, or harness diagnostic. No
 `algorithm-core` placeholder remains.
@@ -27,7 +27,7 @@ The corpus manifest has no renderer-selection field separate from its status:
   stream families, deadlines, findings, and CI smoke gate are recorded in
   `docs/renderer-fuzz-replay.md`.
 - The full renderer corpus and V2 regression floor pass: renderer
-  `1,358/0/110`, normal V2 `584` exact segments, scripted V2 `35` exact
+  `1,375/0/93`, normal V2 `584` exact segments, scripted V2 `35` exact
   segments, and `cargo test --workspace`.
 
 ## Retained Gate Taxonomy
@@ -35,9 +35,10 @@ The corpus manifest has no renderer-selection field separate from its status:
 | Count | Diagnostic |
 | ---: | --- |
 | 50 | `metal-webgpu-subpixel-edge-coverage` |
-| 37 | `rust-wgpu-msaa-gradient-path` |
+| 10 | `rust-wgpu-msaa-gradient-stroke-composite` |
 | 5 | `native-clockwise-atomic-advanced-feather-parity` |
 | 5 | `rust-wgpu-msaa-feather-gradient-advanced-blend` |
+| 5 | `rust-wgpu-msaa-gradient-edge-residual` |
 | 3 | `rust-wgpu-msaa-image-mesh` |
 | 3 | `platform-image-decode-color-profile` |
 | 2 | `metal-webgpu-atomic-intermediate-precision` |
@@ -46,7 +47,12 @@ The corpus manifest has no renderer-selection field separate from its status:
 | 1 | `dawn-wgpu-msaa-stroke-edge-coverage` |
 | 1 | `metal-webgpu-fixed-function-color-output` |
 | 1 | `reference-harness: C++ Metal does not implement MSAA flush` |
-| **110** | **Total** |
+| 1 | `rust-wgpu-msaa-feather-gradient-stroke` |
+| 1 | `rust-wgpu-msaa-gradient-advanced-blend` |
+| 1 | `rust-wgpu-msaa-gradient-path-clip` |
+| 1 | `rust-wgpu-msaa-incompatible-clip-rectangles` |
+| 1 | `rust-wgpu-msaa-repeated-path-clipped-strokes` |
+| **93** | **Total** |
 
 Operationally, these rows collapse into three groups:
 
@@ -54,10 +60,10 @@ Operationally, these rows collapse into three groups:
 | ---: | --- |
 | 0 | Reference/oracle harness gap |
 | 60 | Reviewed backend, decoder, or precision boundary |
-| 50 | Unsupported feature or remaining algorithm-parity boundary |
+| 33 | Unsupported feature or remaining algorithm-parity boundary |
 
-The actionable set is 50 rows: five prior clockwise-atomic feather boundaries
-plus 45 concrete renderer findings exposed by strict replay. The other 60 rows
+The actionable set is 33 rows: five prior clockwise-atomic feather boundaries
+plus 28 concrete renderer findings exposed by strict replay. The other 60 rows
 remain parked unless same-backend evidence exposes a Rust defect.
 
 R3.1 promoted `riv-bullet_man-frame-0-clockwise-atomic` after porting C++'s
@@ -87,9 +93,18 @@ Strict gradient and render-buffer replay now cover the complete 732-case Dawn
 registry. One continuous capture preserved all 686 prior PNGs byte-for-byte
 and added the 46 previously blocked references. Isolated Rust probes promoted
 `riv-interactive_scrolling-frame-0-msaa` byte-exact and converted the other 45
-rows into the three executable renderer diagnostics above. The manifest and
+rows into three executable renderer queues. The manifest and
 `tools/cpp-atlas-mask-oracle/msaa-reference-inventory.json` now contain no
 actionable strict-replay placeholder.
+
+The first ordinary MSAA gradient slice now renders and binds the shared C++
+color-ramp texture for direct path fills and strokes, including destination-read
+accounting and gradient auxiliary transforms. Seventeen of the 37 gradient
+rows promote under unchanged `2/32`. The remaining 20 are no longer grouped
+behind a generic gradient-path gate: they are queryable as repeated path-clipped
+strokes, gradient advanced blending, feathered gradient strokes, incompatible
+clip rectangles, a clipped gradient path, ten gradient stroke-composite rows,
+and five identical 45-pixel/max-delta-3 edge residuals.
 
 ## Reproduction
 
@@ -101,5 +116,5 @@ rg 'gated = "algorithm-core"' corpus-r.toml
 ```
 
 The final command must produce no output. Gate counts can be regenerated from
-the `[[entry]]` blocks in `corpus-r.toml`; they must total 110 and every gated
+the `[[entry]]` blocks in `corpus-r.toml`; they must total 93 and every gated
 block must contain a nonempty `gated` field.

@@ -2570,9 +2570,7 @@ impl WgpuFrame {
              encoder: &mut wgpu::CommandEncoder| {
                 debug_assert!(draw_groups.is_none_or(|groups| groups.len() == draws.len()));
                 debug_assert!(logical_flush_starts.first().is_none_or(|start| *start == 0));
-                let has_advanced_msaa = draws.iter().any(|draw| {
-                    draw.paint.shader.is_none() && draw.paint.blend_mode != BlendMode::SrcOver
-                });
+                let has_advanced_msaa = draws.iter().any(draw_uses_advanced_blend);
                 let destination_texture = has_advanced_msaa.then(|| {
                     self.context
                         .device
@@ -2612,6 +2610,18 @@ impl WgpuFrame {
                     Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
+                let gradient_batch = prepare_gradient_batch(draws);
+                let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
+                if gradient_batch.height != 0 {
+                    gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                }
+                let gradient_texture = self.context.gradient_pipeline.encode(
+                    &self.context.device,
+                    encoder,
+                    &gradient_uniforms,
+                    &gradient_batch.spans,
+                    gradient_batch.height,
+                );
                 let mut prepared_draws = Vec::with_capacity(draws.len());
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let z_index = draw_groups.map_or_else(
@@ -2673,6 +2683,7 @@ impl WgpuFrame {
                                 &self.context.device,
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
+                                None,
                                 None,
                                 None,
                                 &uniforms,
@@ -2855,7 +2866,7 @@ impl WgpuFrame {
                             continue;
                         }
                     }
-                    if draw.paint.shader.is_none() && draw.paint.feather == 0.0 {
+                    if draw.paint.feather == 0.0 {
                         let has_clip_rect = draw.state.clip_rect.is_some();
                         let advanced_blend = draw.paint.blend_mode != BlendMode::SrcOver;
                         let options = DirectPathOptions {
@@ -2928,7 +2939,23 @@ impl WgpuFrame {
                                     )
                                 }
                             });
-                            let mut paint = if let Some(image) = image {
+                            let gradient = gradient_batch.draws[draw_index];
+                            let mut paint = if let Some(gradient) = gradient {
+                                if draw.paint.style == RenderPaintStyle::Stroke {
+                                    gpu::PaintData::gradient_stroke(
+                                        gradient.paint_type,
+                                        gradient.texture_y,
+                                        draw.paint.blend_mode,
+                                    )
+                                } else {
+                                    gpu::PaintData::gradient(
+                                        gradient.paint_type,
+                                        gradient.texture_y,
+                                        draw.path.fill_rule,
+                                        draw.paint.blend_mode,
+                                    )
+                                }
+                            } else if let Some(image) = image {
                                 gpu::PaintData::image(
                                     image.opacity,
                                     draw.path.fill_rule,
@@ -2949,20 +2976,22 @@ impl WgpuFrame {
                             if draw.state.clip_rect.is_some() {
                                 paint = paint.with_clip_rect();
                             }
-                            let paint_aux = image.map_or_else(
-                                || clip_rect_paint_aux(draw.state.clip_rect),
-                                |image| {
-                                    image_paint_aux(
-                                        draw.state.clip_rect,
-                                        draw.state.transform,
-                                        image.texture.as_ref(),
-                                    )
-                                },
-                            );
+                            let paint_aux = if let Some(gradient) = gradient {
+                                gradient_paint_aux(draw.state.clip_rect, gradient)
+                            } else if let Some(image) = image {
+                                image_paint_aux(
+                                    draw.state.clip_rect,
+                                    draw.state.transform,
+                                    image.texture.as_ref(),
+                                )
+                            } else {
+                                clip_rect_paint_aux(draw.state.clip_rect)
+                            };
                             let prepared = self.context.path_pipeline.prepare(
                                 &self.context.device,
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
+                                gradient_texture.as_ref().map(|texture| &texture.view),
                                 if advanced_blend {
                                     destination_view.as_ref()
                                 } else {
@@ -3022,9 +3051,7 @@ impl WgpuFrame {
                     .count();
                 let requested_advanced_count = draws
                     .iter()
-                    .filter(|draw| {
-                        draw.paint.shader.is_none() && draw.paint.blend_mode != BlendMode::SrcOver
-                    })
+                    .filter(|draw| draw_uses_advanced_blend(draw))
                     .count();
                 if prepared_advanced_count != requested_advanced_count {
                     return Err(RendererError::Unsupported(
@@ -7051,6 +7078,38 @@ mod tests {
         assert_eq!(pixel(8, 8), [0, 255, 0, 255]);
         assert_eq!(pixel(32, 32), [0, 0, 0, 255]);
         assert_eq!(pixel(56, 56), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_direct_fill_samples_the_generated_gradient_ramp() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+        let paint = WgpuPaint {
+            shader: Some(WgpuShader::Linear {
+                start: (0.0, 0.0),
+                end: (64.0, 0.0),
+                colors: vec![0xffff_0000, 0xff00_00ff],
+                stops: vec![0.0, 1.0],
+            }),
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(&fill, &paint);
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
+        let left = pixel(8, 32);
+        let center = pixel(32, 32);
+        let right = pixel(56, 32);
+
+        assert_eq!(left[3], 255);
+        assert_eq!(center[3], 255);
+        assert_eq!(right[3], 255);
+        assert!(left[0] > left[2], "left gradient sample: {left:?}");
+        assert!(right[2] > right[0], "right gradient sample: {right:?}");
+        assert!(
+            center[0] > 64 && center[2] > 64,
+            "center sample: {center:?}"
+        );
     }
 
     #[test]

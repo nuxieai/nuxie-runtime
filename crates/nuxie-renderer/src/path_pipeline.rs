@@ -733,6 +733,7 @@ impl PathPipeline {
         device: &wgpu::Device,
         tessellation_view: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
+        gradient: Option<&wgpu::TextureView>,
         destination: Option<&wgpu::TextureView>,
         image: Option<(&wgpu::TextureView, ImageSampler)>,
         uniforms: &FlushUniforms,
@@ -813,7 +814,10 @@ impl PathPipeline {
                 binding(5, paint_aux_buffer.as_entire_binding()),
                 binding(6, contour_buffer.as_entire_binding()),
                 binding(8, wgpu::BindingResource::TextureView(tessellation_view)),
-                binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(
+                    9,
+                    wgpu::BindingResource::TextureView(gradient.unwrap_or(&dummy_view)),
+                ),
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                 binding(
                     13,

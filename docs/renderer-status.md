@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,358, diverges=0, gated=110, total=1,468.
+- Rust wgpu: exact=1,375, diverges=0, gated=93, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -359,7 +359,11 @@ Run `make renderer-golden`.
   `riv-walle-frame-0-clockwise-atomic`,
   `riv-word_joiner_test-frame-0-clockwise-atomic`, and
   `riv-zero_width_space_line_break-frame-0-clockwise-atomic`, plus 583 of the
-  624 provenance-bound strict RIV MSAA rows. The 41 retained rows are
+  624 provenance-bound strict RIV MSAA rows, plus 17 newly exact MSAA
+  gradient rows: `gm-{degengrad,rect_grad,verycomplexgrad}`;
+  `riv-{bad_skin,bankcard,coin,db_health_tracker,deterministic_mode,new_text}`;
+  all five `riv-rocket` frames; and `riv-{scroll_test,scroll_threshold,zombie_skins}`.
+  The retained rows are
   queryable by their concrete diagnostics in `corpus-r.toml`.
 
 ## Milestones
@@ -1143,18 +1147,38 @@ Run `make renderer-golden`.
     rows to `rust-wgpu-msaa-gradient-path`, three to
     `rust-wgpu-msaa-image-mesh`, and five to
     `rust-wgpu-msaa-feather-gradient-advanced-blend`.
-92. [ ] Port C++ MSAA gradient-painted path preparation, starting with the
+92. [x] Port C++ MSAA gradient-painted path preparation, starting with the
     gradient-only `gm-rect_grad-msaa` oracle, then sweep all 37
     `rust-wgpu-msaa-gradient-path` rows under their unchanged contracts. Rust
-    currently prepares only shader-free direct/atlas MSAA draws, so gradient
-    paths fall through to the bootstrap solid-color path even though the
-    shared ramp texture and paint-data machinery already exists.
+    now renders the shared gradient ramp before direct MSAA paths, binds it in
+    the per-flush group, emits gradient fill/stroke paint and auxiliary data,
+    and includes shader paints in destination-read accounting. Seventeen rows
+    promote under unchanged `2/32`; all 20 residuals were probed and split
+    into the concrete queues below.
 93. [ ] Port C++ MSAA image-mesh draws for `gm-mesh-msaa`,
     `riv-jellyfish_test-frame-0-msaa`, and `riv-tape-frame-0-msaa`; preserve
     typed-buffer, sampler, clipping, blend, and draw-order semantics.
-94. [ ] Close the five `rust-wgpu-msaa-feather-gradient-advanced-blend` rows
-    after ordinary MSAA gradient paths pass. Reuse the existing destination
-    copy and atlas advanced-composite machinery without changing tolerances.
+94. [ ] Port feathered MSAA gradient strokes, starting with
+    `riv-ai_assitant-frame-0-msaa`, then close the five
+    `rust-wgpu-msaa-feather-gradient-advanced-blend` rows. Reuse the existing
+    ramp, destination-copy, and atlas-composite machinery without changing
+    tolerances.
+95. [ ] Fix repeated path-clipped MSAA strokes in
+    `gm-strokedlines-msaa`. The strict reference retains complete snowflakes;
+    Rust drops different stroke segments across the 15 sequential clip stacks.
+96. [ ] Close gradient destination-read compositing in
+    `gm-xfermodes2-msaa`; 2,151 pixels/max 188 remain across the advanced
+    gradient blend grid.
+97. [ ] Port the MSAA form of incompatible transformed clip rectangles for
+    `riv-bullet_man-frame-0-msaa`, preserving the already exact
+    clockwise-atomic implementation.
+98. [ ] Attribute and close the clipped/stroked gradient residuals in
+    `riv-death_knight-frame-0-msaa`, all five `riv-juice` frames, and all
+    five `riv-off_road_car` frames. Their strict comparisons are executable
+    and grouped as path-clip or stroke-composite diagnostics.
+99. [ ] Adjudicate the five `riv-joel_signed` MSAA edge residuals. Every frame
+    has the same 45 differing pixels/max delta 3; use a draw prefix and
+    connected-component audit before implementation or reclassification.
 
 ## R2 Completion Record
 
@@ -3651,3 +3675,12 @@ Run `make renderer-golden`.
   MSAA gradient paths, three MSAA image meshes, and five feathered-gradient
   advanced blends. The ratchet advances to exact=1,358/diverges=0/gated=110
   with no tolerance change; queue item 92 owns the 37-row gradient path.
+- 2026-07-14: Ported C++ MSAA gradient-painted direct paths. Rust now renders
+  and binds the shared ramp texture, emits gradient fill/stroke paint and
+  auxiliary transforms, and accounts for shader destination reads. The
+  gradient-only oracle is byte-exact and the complete 37-row sweep promotes
+  17 entries under unchanged `2/32`, advancing the ratchet to
+  exact=1,375/diverges=0/gated=93. The 20 measured residuals are split into
+  repeated path clips, gradient destination reads, feathered gradient strokes,
+  transformed clip rectangles, clipped/stroked composites, and a five-frame
+  45-pixel edge residual. Queue item 93 ports the three image meshes next.

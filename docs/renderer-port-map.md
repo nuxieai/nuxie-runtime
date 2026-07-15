@@ -298,7 +298,9 @@ retained set:
    row promotes byte-exact; the remaining 45 are executable renderer work:
    37 ordinary MSAA gradient paths, three MSAA image meshes, and five MSAA
    feathered-gradient advanced blends. No row remains behind a harness
-   placeholder.
+   placeholder. Direct MSAA gradient preparation promotes 17 of the 37 under
+   unchanged contracts; the remaining 20 are split into executable clip,
+   stroke, feather, advanced-blend, and edge-residual queues.
 3. Keep the 59 reviewed platform limitations parked unless new same-backend
    evidence identifies a Rust defect: 58 backend/decoder/precision rows plus
    the native C++ Metal MSAA limitation.

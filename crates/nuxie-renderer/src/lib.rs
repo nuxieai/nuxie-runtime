@@ -1286,7 +1286,7 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("unmapped image mesh buffers");
             return;
         };
-        let Some((clip_updates, clip_id)) = self.prepare_clip_updates() else {
+        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
         let content = SolidDraw {
@@ -6279,6 +6279,110 @@ mod tests {
         assert_eq!(pixel(24, 32), [255, 0, 0, 255]);
         assert_eq!(pixel(32, 4), [0; 4]);
         assert_eq!(pixel(20, 40), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn msaa_image_mesh_resets_stencil_between_diverging_rectangular_clips() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+
+        let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let image = factory.decode_image(&encoded);
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [64.0, 0.0],
+            [0.0, 64.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+
+        let left = rect_path([0.0, 0.0, 32.0, 64.0], FillRule::NonZero);
+        let right = rect_path([32.0, 0.0, 64.0, 64.0], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0);
+        let draw_mesh = |frame: &mut WgpuFrame| {
+            frame.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                1.0,
+            );
+        };
+
+        frame.save();
+        frame.clip_path(&left);
+        draw_mesh(&mut frame);
+        frame.restore();
+        frame.clip_path(&right);
+        draw_mesh(&mut frame);
+
+        assert_eq!(frame.draws.len(), 5);
+        assert!(matches!(
+            frame.draws[0].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 1,
+                parent_id: 0
+            }
+        ));
+        assert!(matches!(
+            frame.draws[1].role,
+            DrawRole::Content { clip_id: 1 }
+        ));
+        assert!(matches!(
+            frame.draws[2].role,
+            DrawRole::ClipReset {
+                action: MsaaClipResetAction::ClearPrevious,
+                ..
+            }
+        ));
+        assert!(matches!(
+            frame.draws[3].role,
+            DrawRole::ClipUpdate {
+                replacement_id: 2,
+                parent_id: 0
+            }
+        ));
+        assert!(matches!(
+            frame.draws[4].role,
+            DrawRole::Content { clip_id: 2 }
+        ));
     }
 
     #[test]

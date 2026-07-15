@@ -38,8 +38,16 @@ pub(crate) struct ClockwiseAtomicDraw<'a> {
     pub patch_index_range: std::ops::Range<u32>,
     pub borrowed_triangles: &'a [TriangleVertex],
     pub main_triangles: &'a [TriangleVertex],
+    pub main_triangle_batches: &'a [ClockwiseAtomicTriangleBatch],
     pub kind: ClockwiseAtomicDrawKind,
     pub has_clip_rect: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ClockwiseAtomicTriangleBatch {
+    pub vertex_start: u32,
+    pub vertex_count: u32,
+    pub instance_count: u32,
 }
 
 pub(crate) struct ClockwiseAtomicCoverageReadback {
@@ -788,7 +796,12 @@ impl ClockwiseAtomicPipeline {
                             set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
                         }
                         pass.set_vertex_buffer(0, buffer.slice(..));
-                        pass.draw(0..draw.main_triangles.len() as u32, 0..1);
+                        for batch in draw.main_triangle_batches {
+                            pass.draw(
+                                batch.vertex_start..batch.vertex_start + batch.vertex_count,
+                                0..batch.instance_count,
+                            );
+                        }
                     }
                 }
                 ClockwiseAtomicDrawKind::OutermostClip | ClockwiseAtomicDrawKind::NestedClip => {
@@ -836,7 +849,12 @@ impl ClockwiseAtomicPipeline {
                         });
                         set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
                         pass.set_vertex_buffer(0, buffer.slice(..));
-                        pass.draw(0..draw.main_triangles.len() as u32, 0..1);
+                        for batch in draw.main_triangle_batches {
+                            pass.draw(
+                                batch.vertex_start..batch.vertex_start + batch.vertex_count,
+                                0..batch.instance_count,
+                            );
+                        }
                     }
                     if capture_coverage && nested {
                         let readback = device.create_buffer(&wgpu::BufferDescriptor {

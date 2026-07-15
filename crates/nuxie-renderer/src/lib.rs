@@ -2467,12 +2467,13 @@ impl WgpuFrame {
                         .collect::<Vec<_>>();
                     let main_triangles = prepared
                         .iter()
-                        .map(|draw| {
-                            draw.triangles
-                                .iter()
-                                .copied()
-                                .filter(|vertex| vertex.weight_path_id >> 16 > 0)
-                                .collect::<Vec<_>>()
+                        .zip(draws)
+                        .map(|(prepared, source)| {
+                            clockwise_atomic_main_triangles(
+                                &prepared.triangles,
+                                matches!(source.role, DrawRole::Content { clip_id: 0 })
+                                    && clockwise_atomic_clip_is_inactive(source),
+                            )
                         })
                         .collect::<Vec<_>>();
                     let clockwise_atomic_draws = prepared
@@ -2511,7 +2512,8 @@ impl WgpuFrame {
                                     instance_count,
                                     patch_index_range: prepared.patch_index_range.clone(),
                                     borrowed_triangles,
-                                    main_triangles,
+                                    main_triangles: &main_triangles.vertices,
+                                    main_triangle_batches: &main_triangles.batches,
                                     kind,
                                     has_clip_rect: source.state.clip_rect.is_some(),
                                 }
@@ -5864,6 +5866,79 @@ fn draw_requires_clockwise_atomic(
         .is_some()
 }
 
+struct ClockwiseAtomicMainTriangles {
+    vertices: Vec<gpu::TriangleVertex>,
+    batches: Vec<clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch>,
+}
+
+fn clockwise_atomic_main_triangles(
+    triangles: &[gpu::TriangleVertex],
+    expand_unclipped_winding: bool,
+) -> ClockwiseAtomicMainTriangles {
+    let mut vertices = Vec::new();
+    let mut batches = Vec::<clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch>::new();
+    for triangle in triangles.chunks_exact(3) {
+        let weight = triangle[0].weight_path_id >> 16;
+        debug_assert!(
+            triangle
+                .iter()
+                .all(|vertex| vertex.weight_path_id >> 16 == weight),
+            "interior triangle vertices must share a winding weight"
+        );
+        if weight > 0 {
+            let vertex_start = vertices.len() as u32;
+            if expand_unclipped_winding {
+                vertices.extend(triangle.iter().copied().map(|mut vertex| {
+                    vertex.weight_path_id = (1 << 16) | (vertex.weight_path_id & 0xffff);
+                    vertex
+                }));
+                let instance_count = weight as u32;
+                if let Some(batch) = batches.last_mut().filter(|batch| {
+                    instance_count == 1
+                        && batch.instance_count == 1
+                        && batch.vertex_start + batch.vertex_count == vertex_start
+                }) {
+                    batch.vertex_count += 3;
+                } else {
+                    batches.push(clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+                        vertex_start,
+                        vertex_count: 3,
+                        instance_count,
+                    });
+                }
+            } else {
+                vertices.extend_from_slice(triangle);
+            }
+        }
+    }
+    if !expand_unclipped_winding && !vertices.is_empty() {
+        batches.push(clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+            vertex_start: 0,
+            vertex_count: vertices.len() as u32,
+            instance_count: 1,
+        });
+    }
+    ClockwiseAtomicMainTriangles { vertices, batches }
+}
+
+fn clockwise_atomic_clip_is_inactive(draw: &SolidDraw) -> bool {
+    let Some(clip) = draw.state.clip_rect else {
+        return true;
+    };
+    let Some(clip_bounds) = transform_rect_to_new_space(clip.rect, clip.matrix, Mat2D::IDENTITY)
+    else {
+        return false;
+    };
+    let Some(path_bounds) = draw::path_pixel_bounds(&draw.path.raw_path, draw.state.transform)
+    else {
+        return false;
+    };
+    clip_bounds[0] <= path_bounds[0] as f32 - 1.0
+        && clip_bounds[1] <= path_bounds[1] as f32 - 1.0
+        && clip_bounds[2] >= path_bounds[2] as f32 + 1.0
+        && clip_bounds[3] >= path_bounds[3] as f32 + 1.0
+}
+
 fn path_has_complex_fill_topology(path: &RawPath) -> bool {
     let mut contours = Vec::<Vec<Vec2D>>::new();
     let mut contour = Vec::new();
@@ -7147,6 +7222,150 @@ mod tests {
             raw_path,
             fill_rule,
         }
+    }
+
+    #[test]
+    fn clockwise_atomic_main_triangles_uses_bounded_unit_weight_instances() {
+        let triangle = |weight, path_id, x| {
+            [
+                gpu::TriangleVertex::new([x, 0.0], weight, path_id),
+                gpu::TriangleVertex::new([x + 1.0, 0.0], weight, path_id),
+                gpu::TriangleVertex::new([x, 1.0], weight, path_id),
+            ]
+        };
+        let triangles = [
+            triangle(-1, 3, 0.0),
+            triangle(0, 5, 2.0),
+            triangle(2, 7, 4.0),
+            triangle(2, 9, 6.0),
+            triangle(1, 11, 8.0),
+        ]
+        .concat();
+
+        let inactive_clip = clockwise_atomic_main_triangles(&triangles, true);
+        assert_eq!(inactive_clip.vertices.len(), 9);
+        assert!(inactive_clip.vertices[..3]
+            .iter()
+            .all(|vertex| vertex.weight_path_id == ((1 << 16) | 7)));
+        assert!(inactive_clip.vertices[3..6]
+            .iter()
+            .all(|vertex| vertex.weight_path_id == ((1 << 16) | 9)));
+        assert!(inactive_clip.vertices[6..]
+            .iter()
+            .all(|vertex| vertex.weight_path_id == ((1 << 16) | 11)));
+        assert_eq!(
+            inactive_clip.batches,
+            [
+                clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+                    vertex_start: 0,
+                    vertex_count: 3,
+                    instance_count: 2,
+                },
+                clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+                    vertex_start: 3,
+                    vertex_count: 3,
+                    instance_count: 2,
+                },
+                clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+                    vertex_start: 6,
+                    vertex_count: 3,
+                    instance_count: 1,
+                },
+            ]
+        );
+
+        let active_clip = clockwise_atomic_main_triangles(&triangles, false);
+        assert_eq!(active_clip.vertices.len(), 9);
+        assert!(active_clip.vertices[..3]
+            .iter()
+            .all(|vertex| vertex.weight_path_id == ((2 << 16) | 7)));
+        assert_eq!(
+            active_clip.batches,
+            [clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+                vertex_start: 0,
+                vertex_count: 9,
+                instance_count: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn clockwise_atomic_main_triangles_stay_linear_for_rising_weights_and_clip_states() {
+        let triangle = |weight, path_id, x| {
+            [
+                gpu::TriangleVertex::new([x, 0.0], weight, path_id),
+                gpu::TriangleVertex::new([x + 1.0, 0.0], weight, path_id),
+                gpu::TriangleVertex::new([x, 1.0], weight, path_id),
+            ]
+        };
+        let triangles = (-1i16..=1024)
+            .flat_map(|weight| triangle(weight, 7, f32::from(weight) * 2.0))
+            .collect::<Vec<_>>();
+
+        let inactive_clip = clockwise_atomic_main_triangles(&triangles, true);
+        assert_eq!(inactive_clip.vertices.len(), 1024 * 3);
+        assert!(inactive_clip.vertices.capacity() <= triangles.len() * 2);
+        assert_eq!(inactive_clip.batches.len(), 1024);
+        assert!(inactive_clip
+            .vertices
+            .iter()
+            .all(|vertex| vertex.weight_path_id >> 16 == 1));
+        assert_eq!(inactive_clip.batches[0].instance_count, 1);
+        assert_eq!(inactive_clip.batches.last().unwrap().instance_count, 1024);
+
+        let active_clip = clockwise_atomic_main_triangles(&triangles, false);
+        assert_eq!(active_clip.vertices.len(), 1024 * 3);
+        assert_eq!(active_clip.batches.len(), 1);
+        assert_eq!(active_clip.vertices[0].weight_path_id >> 16, 1);
+        assert_eq!(
+            active_clip.vertices.last().unwrap().weight_path_id >> 16,
+            1024
+        );
+
+        let unit_triangles = (0..1024)
+            .flat_map(|index| triangle(1, 7, index as f32 * 2.0))
+            .collect::<Vec<_>>();
+        let unit = clockwise_atomic_main_triangles(&unit_triangles, true);
+        assert_eq!(unit.vertices.len(), 1024 * 3);
+        assert_eq!(
+            unit.batches,
+            [clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch {
+                vertex_start: 0,
+                vertex_count: 1024 * 3,
+                instance_count: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn clockwise_atomic_clip_is_inactive_only_with_full_pixel_margin() {
+        let make_draw = |clip_rect| SolidDraw {
+            path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::Clockwise),
+            paint: WgpuPaint::default(),
+            state: DrawState {
+                clip_rect,
+                ..DrawState::default()
+            },
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let clip = |rect| {
+            Some(ClipRectState {
+                rect,
+                matrix: Mat2D::IDENTITY,
+            })
+        };
+
+        assert!(clockwise_atomic_clip_is_inactive(&make_draw(None)));
+        assert!(clockwise_atomic_clip_is_inactive(&make_draw(clip([
+            9.0, 9.0, 21.0, 21.0
+        ]))));
+        assert!(!clockwise_atomic_clip_is_inactive(&make_draw(clip([
+            10.0, 10.0, 20.0, 20.0
+        ]))));
+        assert!(!clockwise_atomic_clip_is_inactive(&make_draw(clip([
+            9.0, 9.0, 19.0, 21.0
+        ]))));
     }
 
     fn append_oval(path: &mut RawPath, bounds: [f32; 4]) {

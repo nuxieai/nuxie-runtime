@@ -4,6 +4,7 @@
 // /Users/levi/dev/rive-rust/tools/golden-runner/recording_renderer.cpp
 use std::any::Any;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_double, c_int};
 use std::rc::Rc;
@@ -514,6 +515,7 @@ pub trait Factory {
 #[derive(Debug, Default)]
 struct RecordingStream {
     lines: String,
+    semantic_commands: Vec<SemanticRecordingCommand>,
 }
 
 impl RecordingStream {
@@ -527,9 +529,109 @@ impl RecordingStream {
         self.lines.push('\n');
     }
 
+    fn semantic_line(&mut self, value: impl Into<String>) {
+        let value = value.into();
+        self.line(&value);
+        self.semantic_commands
+            .push(SemanticRecordingCommand::Line(value));
+    }
+
+    fn semantic(&mut self, command: SemanticRecordingCommand) {
+        self.semantic_commands.push(command);
+    }
+
     fn clear(&mut self) {
         self.lines.clear();
+        self.semantic_commands.clear();
     }
+}
+
+#[derive(Debug, Clone)]
+enum SemanticRecordingCommand {
+    Line(String),
+    DrawPath {
+        path: RecordingPathSnapshot,
+        paint: RecordingPaintSnapshot,
+    },
+    ClipPath(RecordingPathSnapshot),
+    DrawImage {
+        image: Option<RecordingImageSnapshot>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+    },
+    DrawImageMesh {
+        image: Option<RecordingImageSnapshot>,
+        sampler: ImageSampler,
+        vertices: Option<RecordingBufferSnapshot>,
+        uv_coords: Option<RecordingBufferSnapshot>,
+        indices: Option<RecordingBufferSnapshot>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct RecordingPathSnapshot {
+    id: u64,
+    raw_path: RawPath,
+    fill_rule: FillRule,
+}
+
+#[derive(Debug, Clone)]
+struct RecordingPaintSnapshot {
+    id: u64,
+    style: RenderPaintStyle,
+    color: ColorInt,
+    thickness: f32,
+    join: StrokeJoin,
+    cap: StrokeCap,
+    feather: f32,
+    blend_mode: BlendMode,
+    shader: Option<RecordingShaderSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+struct RecordingShaderSnapshot {
+    id: u64,
+    gradient: RecordingGradientSnapshot,
+}
+
+#[derive(Debug, Clone)]
+enum RecordingGradientSnapshot {
+    Linear {
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: Vec<ColorInt>,
+        stops: Vec<f32>,
+    },
+    Radial {
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: Vec<ColorInt>,
+        stops: Vec<f32>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct RecordingImageSnapshot {
+    id: u64,
+    width: u32,
+    height: u32,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct RecordingBufferSnapshot {
+    id: u64,
+    buffer_type: RenderBufferType,
+    flags: RenderBufferFlags,
+    bytes: Vec<u8>,
 }
 
 pub struct RecordingRenderer {
@@ -549,6 +651,33 @@ pub struct RecordingFactory {
     next_path_id: u64,
     next_buffer_id: u64,
     next_shader_id: u64,
+}
+
+/// An allocator- and render-cache-independent semantic recording.
+///
+/// Resource identities are alpha-renamed independently for paths, paints,
+/// shaders, images, and buffers. References retain their relationships while
+/// incidental allocator numbers disappear from comparisons and fingerprints.
+/// Draw commands snapshot complete retained resource state, so the result does
+/// not depend on whether the raw golden stream included resource creation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalRecording {
+    stream: String,
+    fnv1a64: u64,
+}
+
+impl CanonicalRecording {
+    pub fn stream(&self) -> &str {
+        &self.stream
+    }
+
+    pub fn fnv1a64(&self) -> u64 {
+        self.fnv1a64
+    }
+
+    pub fn fnv1a64_hex(&self) -> String {
+        format!("{:016x}", self.fnv1a64)
+    }
 }
 
 pub struct NullRenderer;
@@ -597,7 +726,7 @@ impl RecordingFactory {
     }
 
     pub fn source(&mut self, file: &str, artboard: &str, scene: &str) {
-        self.stream.borrow_mut().line(format!(
+        self.stream.borrow_mut().semantic_line(format!(
             "source file={} artboard={} scene={}",
             quoted_string(file),
             quoted_string(artboard),
@@ -608,11 +737,11 @@ impl RecordingFactory {
     pub fn add_sample(&mut self, seconds: f32) {
         self.stream
             .borrow_mut()
-            .line(format!("sample seconds={}", float_to_string(seconds)));
+            .semantic_line(format!("sample seconds={}", float_to_string(seconds)));
     }
 
     pub fn add_input_event(&mut self, kind: &str, seconds: f32, x: f32, y: f32, pointer_id: i32) {
-        self.stream.borrow_mut().line(format!(
+        self.stream.borrow_mut().semantic_line(format!(
             "input kind={kind} seconds={} position=({},{}) pointerId={pointer_id}",
             float_to_string(seconds),
             float_to_string(x),
@@ -621,23 +750,29 @@ impl RecordingFactory {
     }
 
     pub fn add_frame(&mut self) {
-        self.stream.borrow_mut().line("frame");
+        self.stream.borrow_mut().semantic_line("frame");
     }
 
     pub fn frame_size(&mut self, width: u32, height: u32) {
         self.stream
             .borrow_mut()
-            .line(format!("frameSize width={width} height={height}"));
+            .semantic_line(format!("frameSize width={width} height={height}"));
     }
 
     pub fn clear_color(&mut self, color: ColorInt) {
         self.stream
             .borrow_mut()
-            .line(format!("clearColor value=0x{color:08x}"));
+            .semantic_line(format!("clearColor value=0x{color:08x}"));
     }
 
     pub fn stream(&self) -> String {
         self.stream.borrow().lines.clone()
+    }
+
+    pub fn canonical_recording(&self) -> CanonicalRecording {
+        let stream = canonicalize_recording_commands(&self.stream.borrow().semantic_commands);
+        let fnv1a64 = fnv1a64(stream.as_bytes());
+        CanonicalRecording { stream, fnv1a64 }
     }
 
     pub fn clear(&mut self) {
@@ -697,7 +832,17 @@ impl Factory for RecordingFactory {
         write_stops(&mut line, colors, stops);
         line.push(']');
         self.stream.borrow_mut().line(line);
-        Box::new(RecordingRenderShader { id })
+        Box::new(RecordingRenderShader {
+            id,
+            gradient: RecordingGradientSnapshot::Linear {
+                sx,
+                sy,
+                ex,
+                ey,
+                colors: colors.to_vec(),
+                stops: stops.to_vec(),
+            },
+        })
     }
 
     fn make_radial_gradient(
@@ -720,7 +865,16 @@ impl Factory for RecordingFactory {
         write_stops(&mut line, colors, stops);
         line.push(']');
         self.stream.borrow_mut().line(line);
-        Box::new(RecordingRenderShader { id })
+        Box::new(RecordingRenderShader {
+            id,
+            gradient: RecordingGradientSnapshot::Radial {
+                cx,
+                cy,
+                radius,
+                colors: colors.to_vec(),
+                stops: stops.to_vec(),
+            },
+        })
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
@@ -765,7 +919,7 @@ impl Factory for RecordingFactory {
             cap: StrokeCap::Butt,
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
-            shader_id: 0,
+            shader: None,
         };
         self.stream.borrow_mut().line_with(|line| {
             line.push_str("makeRenderPaint ");
@@ -782,7 +936,12 @@ impl Factory for RecordingFactory {
             "decodeImage id={id} width={width} height={height} data={}",
             hex_bytes(data)
         ));
-        Box::new(RecordingRenderImage { id, width, height })
+        Box::new(RecordingRenderImage {
+            id,
+            width,
+            height,
+            data: data.to_vec(),
+        })
     }
 }
 
@@ -1058,6 +1217,16 @@ fn null_path(path: &dyn RenderPath) -> &NullRenderPath {
 
 struct RecordingRenderShader {
     id: u64,
+    gradient: RecordingGradientSnapshot,
+}
+
+impl RecordingRenderShader {
+    fn snapshot(&self) -> RecordingShaderSnapshot {
+        RecordingShaderSnapshot {
+            id: self.id,
+            gradient: self.gradient.clone(),
+        }
+    }
 }
 
 impl RenderShader for RecordingRenderShader {
@@ -1070,6 +1239,18 @@ struct RecordingRenderImage {
     id: u64,
     width: u32,
     height: u32,
+    data: Vec<u8>,
+}
+
+impl RecordingRenderImage {
+    fn snapshot(&self) -> RecordingImageSnapshot {
+        RecordingImageSnapshot {
+            id: self.id,
+            width: self.width,
+            height: self.height,
+            data: self.data.clone(),
+        }
+    }
 }
 
 impl RenderImage for RecordingRenderImage {
@@ -1095,10 +1276,24 @@ struct RecordingRenderPaint {
     cap: StrokeCap,
     feather: f32,
     blend_mode: BlendMode,
-    shader_id: u64,
+    shader: Option<RecordingShaderSnapshot>,
 }
 
 impl RecordingRenderPaint {
+    fn snapshot(&self) -> RecordingPaintSnapshot {
+        RecordingPaintSnapshot {
+            id: self.id,
+            style: self.style,
+            color: self.color,
+            thickness: self.thickness,
+            join: self.join,
+            cap: self.cap,
+            feather: self.feather,
+            blend_mode: self.blend_mode,
+            shader: self.shader.clone(),
+        }
+    }
+
     fn write_snapshot(&self, out: &mut String) {
         write!(out, "{{id={},style=", self.id).expect("writing to a String cannot fail");
         out.push_str(match self.style {
@@ -1119,7 +1314,8 @@ impl RecordingRenderPaint {
         write!(
             out,
             ",blendMode={},shader={}}}",
-            self.blend_mode as u8, self.shader_id
+            self.blend_mode as u8,
+            self.shader.as_ref().map_or(0, |shader| shader.id)
         )
         .expect("writing to a String cannot fail");
     }
@@ -1159,10 +1355,9 @@ impl RenderPaint for RecordingRenderPaint {
     }
 
     fn shader(&mut self, shader: Option<&dyn RenderShader>) {
-        self.shader_id = shader
+        self.shader = shader
             .and_then(|shader| shader.as_any().downcast_ref::<RecordingRenderShader>())
-            .map(|shader| shader.id)
-            .unwrap_or(0);
+            .map(RecordingRenderShader::snapshot);
     }
 
     fn invalidate_stroke(&mut self) {}
@@ -1175,6 +1370,14 @@ struct RecordingRenderPath {
 }
 
 impl RecordingRenderPath {
+    fn snapshot(&self) -> RecordingPathSnapshot {
+        RecordingPathSnapshot {
+            id: self.id,
+            raw_path: self.raw_path.clone(),
+            fill_rule: self.fill_rule,
+        }
+    }
+
     fn write_snapshot(&self, out: &mut String) {
         write!(
             out,
@@ -1243,6 +1446,17 @@ struct RecordingRenderBuffer {
     bytes: Vec<u8>,
 }
 
+impl RecordingRenderBuffer {
+    fn snapshot(&self) -> RecordingBufferSnapshot {
+        RecordingBufferSnapshot {
+            id: self.id,
+            buffer_type: self.buffer_type,
+            flags: self.flags,
+            bytes: self.bytes.clone(),
+        }
+    }
+}
+
 impl RenderBuffer for RecordingRenderBuffer {
     fn as_any(&self) -> &dyn Any {
         self
@@ -1277,36 +1491,43 @@ impl RenderBuffer for RecordingRenderBuffer {
 
 impl Renderer for RecordingRenderer {
     fn save(&mut self) {
-        self.stream.borrow_mut().line("save");
+        self.stream.borrow_mut().semantic_line("save");
     }
 
     fn restore(&mut self) {
-        self.stream.borrow_mut().line("restore");
+        self.stream.borrow_mut().semantic_line("restore");
     }
 
     fn transform(&mut self, transform: Mat2D) {
         self.stream
             .borrow_mut()
-            .line(format!("transform matrix={}", mat_to_string(transform)));
+            .semantic_line(format!("transform matrix={}", mat_to_string(transform)));
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
         let path = recording_path(path);
         let paint = recording_paint(paint);
-        self.stream.borrow_mut().line_with(|line| {
+        let mut stream = self.stream.borrow_mut();
+        stream.line_with(|line| {
             line.push_str("drawPath path=");
             path.write_snapshot(line);
             line.push_str(" paint=");
             paint.write_snapshot(line);
         });
+        stream.semantic(SemanticRecordingCommand::DrawPath {
+            path: path.snapshot(),
+            paint: paint.snapshot(),
+        });
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
         let path = recording_path(path);
-        self.stream.borrow_mut().line_with(|line| {
+        let mut stream = self.stream.borrow_mut();
+        stream.line_with(|line| {
             line.push_str("clipPath path=");
             path.write_snapshot(line);
         });
+        stream.semantic(SemanticRecordingCommand::ClipPath(path.snapshot()));
     }
 
     fn draw_image(
@@ -1316,13 +1537,20 @@ impl Renderer for RecordingRenderer {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
-        self.stream.borrow_mut().line(format!(
+        let mut stream = self.stream.borrow_mut();
+        stream.line(format!(
             "drawImage image={} sampler={} blendMode={} opacity={}",
             image_id(image),
             sampler_to_string(sampler),
             blend_mode as u8,
             float_to_string(opacity)
         ));
+        stream.semantic(SemanticRecordingCommand::DrawImage {
+            image: image_snapshot(image),
+            sampler,
+            blend_mode,
+            opacity,
+        });
     }
 
     fn draw_image_mesh(
@@ -1337,7 +1565,8 @@ impl Renderer for RecordingRenderer {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
-        self.stream.borrow_mut().line(format!(
+        let mut stream = self.stream.borrow_mut();
+        stream.line(format!(
             "drawImageMesh image={} sampler={} vertices={} uvs={} indices={} vertexCount={} indexCount={} blendMode={} opacity={}",
             image_id(image),
             sampler_to_string(sampler),
@@ -1349,10 +1578,21 @@ impl Renderer for RecordingRenderer {
             blend_mode as u8,
             float_to_string(opacity)
         ));
+        stream.semantic(SemanticRecordingCommand::DrawImageMesh {
+            image: image_snapshot(image),
+            sampler,
+            vertices: buffer_snapshot(vertices),
+            uv_coords: buffer_snapshot(uv_coords),
+            indices: buffer_snapshot(indices),
+            vertex_count,
+            index_count,
+            blend_mode,
+            opacity,
+        });
     }
 
     fn modulate_opacity(&mut self, opacity: f32) {
-        self.stream.borrow_mut().line(format!(
+        self.stream.borrow_mut().semantic_line(format!(
             "modulateOpacity opacity={}",
             float_to_string(opacity)
         ));
@@ -1379,11 +1619,261 @@ fn image_id(image: Option<&dyn RenderImage>) -> u64 {
         .unwrap_or(0)
 }
 
+fn image_snapshot(image: Option<&dyn RenderImage>) -> Option<RecordingImageSnapshot> {
+    image
+        .and_then(|image| image.as_any().downcast_ref::<RecordingRenderImage>())
+        .map(RecordingRenderImage::snapshot)
+}
+
 fn buffer_id(buffer: Option<&dyn RenderBuffer>) -> u64 {
     buffer
         .and_then(|buffer| buffer.as_any().downcast_ref::<RecordingRenderBuffer>())
         .map(|buffer| buffer.id)
         .unwrap_or(0)
+}
+
+fn buffer_snapshot(buffer: Option<&dyn RenderBuffer>) -> Option<RecordingBufferSnapshot> {
+    buffer
+        .and_then(|buffer| buffer.as_any().downcast_ref::<RecordingRenderBuffer>())
+        .map(RecordingRenderBuffer::snapshot)
+}
+
+#[derive(Debug, Default)]
+struct CanonicalResourceIds {
+    raw_to_canonical: HashMap<u64, u64>,
+}
+
+impl CanonicalResourceIds {
+    fn canonicalize(&mut self, raw: u64) -> u64 {
+        if raw == 0 {
+            return 0;
+        }
+        if let Some(canonical) = self.raw_to_canonical.get(&raw) {
+            return *canonical;
+        }
+
+        let canonical = self.raw_to_canonical.len() as u64 + 1;
+        self.raw_to_canonical.insert(raw, canonical);
+        canonical
+    }
+}
+
+#[derive(Debug, Default)]
+struct CanonicalRecordingIds {
+    paths: CanonicalResourceIds,
+    paints: CanonicalResourceIds,
+    shaders: CanonicalResourceIds,
+    images: CanonicalResourceIds,
+    buffers: CanonicalResourceIds,
+}
+
+fn canonicalize_recording_commands(commands: &[SemanticRecordingCommand]) -> String {
+    let mut ids = CanonicalRecordingIds::default();
+    let mut canonical = String::from("nuxie-canonical-recording-v1\n");
+
+    for command in commands {
+        match command {
+            SemanticRecordingCommand::Line(line) => canonical.push_str(line),
+            SemanticRecordingCommand::DrawPath { path, paint } => {
+                canonical.push_str("drawPath path=");
+                write_canonical_path(&mut canonical, path, &mut ids.paths);
+                canonical.push_str(" paint=");
+                write_canonical_paint(&mut canonical, paint, &mut ids.paints, &mut ids.shaders);
+            }
+            SemanticRecordingCommand::ClipPath(path) => {
+                canonical.push_str("clipPath path=");
+                write_canonical_path(&mut canonical, path, &mut ids.paths);
+            }
+            SemanticRecordingCommand::DrawImage {
+                image,
+                sampler,
+                blend_mode,
+                opacity,
+            } => {
+                canonical.push_str("drawImage image=");
+                write_canonical_image(&mut canonical, image.as_ref(), &mut ids.images);
+                canonical.push_str(" sampler=");
+                canonical.push_str(&sampler_to_string(*sampler));
+                write!(canonical, " blendMode={} opacity=", *blend_mode as u8)
+                    .expect("writing to a String cannot fail");
+                write_float(&mut canonical, *opacity);
+            }
+            SemanticRecordingCommand::DrawImageMesh {
+                image,
+                sampler,
+                vertices,
+                uv_coords,
+                indices,
+                vertex_count,
+                index_count,
+                blend_mode,
+                opacity,
+            } => {
+                canonical.push_str("drawImageMesh image=");
+                write_canonical_image(&mut canonical, image.as_ref(), &mut ids.images);
+                canonical.push_str(" sampler=");
+                canonical.push_str(&sampler_to_string(*sampler));
+                canonical.push_str(" vertices=");
+                write_canonical_buffer(&mut canonical, vertices.as_ref(), &mut ids.buffers);
+                canonical.push_str(" uvs=");
+                write_canonical_buffer(&mut canonical, uv_coords.as_ref(), &mut ids.buffers);
+                canonical.push_str(" indices=");
+                write_canonical_buffer(&mut canonical, indices.as_ref(), &mut ids.buffers);
+                write!(
+                    canonical,
+                    " vertexCount={vertex_count} indexCount={index_count} blendMode={} opacity=",
+                    *blend_mode as u8
+                )
+                .expect("writing to a String cannot fail");
+                write_float(&mut canonical, *opacity);
+            }
+        }
+        canonical.push('\n');
+    }
+
+    canonical
+}
+
+fn write_canonical_path(
+    out: &mut String,
+    path: &RecordingPathSnapshot,
+    ids: &mut CanonicalResourceIds,
+) {
+    write!(
+        out,
+        "{{id={},fillRule={},path=",
+        ids.canonicalize(path.id),
+        path.fill_rule as u8
+    )
+    .expect("writing to a String cannot fail");
+    write_raw_path(out, &path.raw_path);
+    out.push('}');
+}
+
+fn write_canonical_paint(
+    out: &mut String,
+    paint: &RecordingPaintSnapshot,
+    paint_ids: &mut CanonicalResourceIds,
+    shader_ids: &mut CanonicalResourceIds,
+) {
+    write!(out, "{{id={},style=", paint_ids.canonicalize(paint.id))
+        .expect("writing to a String cannot fail");
+    out.push_str(match paint.style {
+        RenderPaintStyle::Stroke => "stroke",
+        RenderPaintStyle::Fill => "fill",
+    });
+    out.push_str(",color=");
+    write_color(out, paint.color);
+    out.push_str(",thickness=");
+    write_float(out, paint.thickness);
+    write!(
+        out,
+        ",join={},cap={},feather=",
+        paint.join as u32, paint.cap as u32
+    )
+    .expect("writing to a String cannot fail");
+    write_float(out, paint.feather);
+    write!(out, ",blendMode={},shader=", paint.blend_mode as u8)
+        .expect("writing to a String cannot fail");
+    write_canonical_shader(out, paint.shader.as_ref(), shader_ids);
+    out.push('}');
+}
+
+fn write_canonical_shader(
+    out: &mut String,
+    shader: Option<&RecordingShaderSnapshot>,
+    ids: &mut CanonicalResourceIds,
+) {
+    let Some(shader) = shader else {
+        out.push('0');
+        return;
+    };
+    write!(out, "{{id={},", ids.canonicalize(shader.id)).expect("writing to a String cannot fail");
+    match &shader.gradient {
+        RecordingGradientSnapshot::Linear {
+            sx,
+            sy,
+            ex,
+            ey,
+            colors,
+            stops,
+        } => {
+            out.push_str("kind=linear,start=(");
+            write_float(out, *sx);
+            out.push(',');
+            write_float(out, *sy);
+            out.push_str("),end=(");
+            write_float(out, *ex);
+            out.push(',');
+            write_float(out, *ey);
+            out.push_str("),stops=[");
+            write_stops(out, colors, stops);
+        }
+        RecordingGradientSnapshot::Radial {
+            cx,
+            cy,
+            radius,
+            colors,
+            stops,
+        } => {
+            out.push_str("kind=radial,center=(");
+            write_float(out, *cx);
+            out.push(',');
+            write_float(out, *cy);
+            out.push_str("),radius=");
+            write_float(out, *radius);
+            out.push_str(",stops=[");
+            write_stops(out, colors, stops);
+        }
+    }
+    out.push_str("]}");
+}
+
+fn write_canonical_image(
+    out: &mut String,
+    image: Option<&RecordingImageSnapshot>,
+    ids: &mut CanonicalResourceIds,
+) {
+    let Some(image) = image else {
+        out.push('0');
+        return;
+    };
+    write!(
+        out,
+        "{{id={},width={},height={},data={}}}",
+        ids.canonicalize(image.id),
+        image.width,
+        image.height,
+        hex_bytes(&image.data)
+    )
+    .expect("writing to a String cannot fail");
+}
+
+fn write_canonical_buffer(
+    out: &mut String,
+    buffer: Option<&RecordingBufferSnapshot>,
+    ids: &mut CanonicalResourceIds,
+) {
+    let Some(buffer) = buffer else {
+        out.push('0');
+        return;
+    };
+    write!(
+        out,
+        "{{id={},type={},flags={},size={},data={}}}",
+        ids.canonicalize(buffer.id),
+        buffer.buffer_type as u8,
+        buffer.flags as u8,
+        buffer.bytes.len(),
+        hex_bytes(&buffer.bytes)
+    )
+    .expect("writing to a String cannot fail");
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x100_0000_01b3)
+    })
 }
 
 fn write_stops(out: &mut String, colors: &[ColorInt], stops: &[f32]) {

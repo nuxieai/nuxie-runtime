@@ -60,6 +60,32 @@ use crate::state_machine::{
 };
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 
+/// Rejection from attaching host-supplied bytes to one external `FontAsset`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalFontAssetError {
+    UnknownAsset { asset_id: u32 },
+    WrongAssetKind { asset_id: u32, actual: &'static str },
+    InvalidFont { asset_id: u32 },
+}
+
+impl std::fmt::Display for ExternalFontAssetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownAsset { asset_id } => {
+                write!(formatter, "file has no asset with semantic id {asset_id}")
+            }
+            Self::WrongAssetKind { asset_id, actual } => {
+                write!(formatter, "asset {asset_id} is {actual}, not FontAsset")
+            }
+            Self::InvalidFont { asset_id } => {
+                write!(formatter, "asset {asset_id} bytes are not a valid font")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ExternalFontAssetError {}
+
 #[derive(Debug)]
 struct RuntimeArtboardInstanceIdentity(u64);
 
@@ -137,6 +163,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_context_source_values_scratch: Vec<RuntimeArtboardContextSourceValue>,
     pub(crate) artboard_nested_child_context_updates_scratch: Vec<RuntimeNestedChildContextUpdate>,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
+    external_font_assets: BTreeMap<u32, Arc<[u8]>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
@@ -425,6 +452,7 @@ impl ArtboardInstance {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
+            external_font_assets: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
@@ -443,6 +471,51 @@ impl ArtboardInstance {
         }
 
         Ok(instance)
+    }
+
+    /// Attach already-loaded bytes to a file-wide external `FontAsset` identity.
+    ///
+    /// This performs no I/O. `asset_id` is the serialized `FileAsset.assetId`,
+    /// not the asset's ordinal in [`RuntimeFile::file_assets`]. Validation is
+    /// complete before the instance-local map changes, and embedded contents
+    /// remain authoritative when the file contains them. The attachment is
+    /// local to this artboard instance in the current E2 subset; nested
+    /// artboard instances do not inherit it.
+    pub fn attach_external_font_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Arc<[u8]>,
+    ) -> std::result::Result<(), ExternalFontAssetError> {
+        let Some(actual) = self.runtime_file().and_then(|runtime| {
+            runtime
+                .file_assets()
+                .into_iter()
+                .find(|asset| asset.uint_property("assetId") == Some(u64::from(asset_id)))
+                .map(|asset| asset.type_name)
+        }) else {
+            return Err(ExternalFontAssetError::UnknownAsset { asset_id });
+        };
+        if actual != "FontAsset" {
+            return Err(ExternalFontAssetError::WrongAssetKind { asset_id, actual });
+        }
+        if !crate::text::embedded_font_is_parseable(&bytes) {
+            return Err(ExternalFontAssetError::InvalidFont { asset_id });
+        }
+        if self
+            .external_font_assets
+            .get(&asset_id)
+            .is_some_and(|current| current.as_ref() == bytes.as_ref())
+        {
+            return Ok(());
+        }
+        self.external_font_assets.insert(asset_id, bytes);
+        self.mark_path_changed();
+        self.mark_layout_changed();
+        Ok(())
+    }
+
+    pub(crate) fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
+        self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
     }
 
     pub fn component(&self, local_id: usize) -> Option<&RuntimeComponent> {
@@ -3712,6 +3785,7 @@ mod tests {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
+            external_font_assets: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
@@ -3723,6 +3797,21 @@ mod tests {
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
         }
+    }
+
+    #[test]
+    fn artboard_clone_preserves_instance_local_external_font_attachment() {
+        let mut original = synthetic_instance(Vec::new(), Vec::new());
+        let bytes = Arc::<[u8]>::from(vec![1, 2, 3]);
+        original.external_font_assets.insert(7, Arc::clone(&bytes));
+
+        let cloned = original.clone();
+        let cloned_bytes = cloned
+            .external_font_assets
+            .get(&7)
+            .expect("cloned artboard retains external font asset");
+
+        assert!(Arc::ptr_eq(&bytes, cloned_bytes));
     }
 
     #[test]

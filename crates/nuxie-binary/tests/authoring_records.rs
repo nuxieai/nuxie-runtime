@@ -134,6 +134,102 @@ fn authoring_records_build_an_importable_runtime_file() {
 }
 
 #[test]
+fn artboard_geometry_preserves_local_order_and_shape_ownership() {
+    let file = RuntimeFile::from_authoring_records(vec![
+        AuthoringRecord {
+            type_key: 23,
+            properties: vec![],
+        },
+        AuthoringRecord {
+            type_key: 1,
+            properties: vec![],
+        },
+        AuthoringRecord {
+            type_key: 3,
+            properties: vec![uint(5, 0)],
+        },
+        AuthoringRecord {
+            type_key: 7,
+            properties: vec![uint(5, 1)],
+        },
+        AuthoringRecord {
+            type_key: 20,
+            properties: vec![uint(5, 1)],
+        },
+        AuthoringRecord {
+            type_key: 18,
+            properties: vec![uint(5, 3)],
+        },
+        AuthoringRecord {
+            type_key: 3,
+            properties: vec![uint(5, 0)],
+        },
+        AuthoringRecord {
+            type_key: 4,
+            properties: vec![uint(5, 5)],
+        },
+        AuthoringRecord {
+            type_key: 24,
+            properties: vec![uint(5, 5)],
+        },
+        AuthoringRecord {
+            type_key: 18,
+            properties: vec![uint(5, 7)],
+        },
+    ])
+    .expect("valid authored shapes should build a runtime file");
+
+    let geometry = file
+        .artboard_geometry(0)
+        .expect("the authored artboard should have indexed geometry");
+
+    assert_eq!(
+        geometry
+            .paths
+            .iter()
+            .map(|path| path.local_id)
+            .collect::<Vec<_>>(),
+        vec![2, 6]
+    );
+    assert_eq!(
+        geometry
+            .shapes
+            .iter()
+            .map(|shape| shape.local_id)
+            .collect::<Vec<_>>(),
+        vec![1, 5]
+    );
+    assert_eq!(
+        geometry
+            .shapes
+            .iter()
+            .map(|shape| {
+                shape
+                    .paths
+                    .iter()
+                    .map(|path| path.local_id)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>(),
+        vec![vec![2], vec![6]]
+    );
+    assert_eq!(
+        geometry
+            .shapes
+            .iter()
+            .map(|shape| {
+                shape
+                    .paints
+                    .iter()
+                    .map(|paint| (paint.local_id, paint.mutator_local_id))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>(),
+        vec![vec![(3, Some(4))], vec![(7, Some(8))]]
+    );
+}
+
+#[test]
 fn authoring_records_use_the_wire_canonical_property_order() {
     let file = RuntimeFile::from_authoring_records(vec![
         AuthoringRecord {

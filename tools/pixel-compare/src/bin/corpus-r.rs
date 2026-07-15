@@ -21,8 +21,10 @@ struct Manifest {
 #[derive(Debug, Deserialize)]
 struct Entry {
     id: String,
+    kind: String,
     stream: PathBuf,
     reference: PathBuf,
+    backend: String,
     status: String,
     #[serde(default)]
     frame: usize,
@@ -35,8 +37,9 @@ struct Entry {
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
+    let reference_base = std::env::current_dir()?;
     validate_entry_ids(&manifest.entry)?;
-    validate_reference_identity(&std::env::current_dir()?, &manifest.entry)?;
+    validate_reference_identity(&reference_base, &manifest.entry)?;
     let entries = selected_entries(&manifest.entry, &options.probe_gated)?;
     fs::create_dir_all(&options.output_dir)?;
     let mut counts = Counts::default();
@@ -47,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     run_bounded(
         &entries,
         options.jobs,
-        |entry| run_entry(*entry, &options),
+        |entry| run_entry(*entry, &options, &reference_base),
         |execution| execution.outcome.is_err(),
         |index, execution| {
             emit_entry(
@@ -124,7 +127,7 @@ struct Counts {
     gated: usize,
 }
 
-fn run_entry(entry: &Entry, options: &Options) -> EntryExecution {
+fn run_entry(entry: &Entry, options: &Options, reference_base: &Path) -> EntryExecution {
     if entry.status == "gated" && options.probe_gated.is_empty() {
         return EntryExecution {
             diagnostics: ChildDiagnostics::default(),
@@ -133,6 +136,10 @@ fn run_entry(entry: &Entry, options: &Options) -> EntryExecution {
             }),
         };
     }
+    let reference = match resolve_reference(reference_base, entry) {
+        Ok(reference) => reference,
+        Err(error) => return EntryExecution::failed(error),
+    };
     let actual = options.output_dir.join(format!("{}.png", entry.id));
     let stream = match path_str(&entry.stream) {
         Ok(stream) => stream,
@@ -157,7 +164,13 @@ fn run_entry(entry: &Entry, options: &Options) -> EntryExecution {
         stdout: output.stdout,
         stderr: output.stderr,
     };
-    let outcome = compare_entry(entry, &actual, &options.output_dir, output.status.success());
+    let outcome = compare_entry(
+        entry,
+        &reference,
+        &actual,
+        &options.output_dir,
+        output.status.success(),
+    );
     EntryExecution {
         diagnostics,
         outcome,
@@ -175,6 +188,7 @@ impl EntryExecution {
 
 fn compare_entry(
     entry: &Entry,
+    reference: &Path,
     actual: &Path,
     output_dir: &Path,
     replay_succeeded: bool,
@@ -182,7 +196,7 @@ fn compare_entry(
     if !replay_succeeded {
         return Err(format!("renderer replay failed for {}", entry.id));
     }
-    let expected = RgbaImage::read_png(&entry.reference).map_err(|error| error.to_string())?;
+    let expected = RgbaImage::read_png(reference).map_err(|error| error.to_string())?;
     let actual_image = RgbaImage::read_png(actual).map_err(|error| error.to_string())?;
     let report = compare(
         &expected,
@@ -200,6 +214,100 @@ fn compare_entry(
             .map_err(|error| error.to_string())?;
     }
     Ok(EntryOutcome::Compared { report })
+}
+
+struct ReferenceRewrite {
+    id: &'static str,
+    kind: &'static str,
+    stream: &'static str,
+    source: &'static str,
+    target: &'static str,
+    mode: &'static str,
+    backend: &'static str,
+}
+
+const REFERENCE_REWRITES: [ReferenceRewrite; 2] = [
+    ReferenceRewrite {
+        id: "gm-dstreadshuffle-clockwise-atomic",
+        kind: "upstream-gm-stream",
+        stream: "fixtures/renderer/streams/gm/dstreadshuffle.rive-stream",
+        source: "fixtures/renderer/reference/metal/gm/dstreadshuffle-clockwise-atomic.png",
+        target: "fixtures/renderer/reference/metal/gm/dstreadshuffle.png",
+        mode: "clockwise-atomic",
+        backend: "metal",
+    },
+    ReferenceRewrite {
+        id: "gm-interleavedfeather-clockwise-atomic",
+        kind: "upstream-gm-stream",
+        stream: "fixtures/renderer/streams/gm/interleavedfeather.rive-stream",
+        source: "fixtures/renderer/reference/metal/gm/interleavedfeather-clockwise-atomic.png",
+        target: "fixtures/renderer/reference/metal/gm/interleavedfeather.png",
+        mode: "clockwise-atomic",
+        backend: "metal",
+    },
+];
+
+fn resolved_reference_target(entry: &Entry) -> Result<PathBuf, String> {
+    let Some(rewrite) = REFERENCE_REWRITES
+        .iter()
+        .find(|rewrite| entry.id == rewrite.id)
+        .or_else(|| {
+            REFERENCE_REWRITES
+                .iter()
+                .find(|rewrite| entry.reference.as_os_str() == std::ffi::OsStr::new(rewrite.source))
+        })
+    else {
+        return Ok(entry.reference.clone());
+    };
+
+    let mismatch = if entry.id != rewrite.id {
+        Some(("entry id", entry.id.as_str(), rewrite.id))
+    } else if entry.kind != rewrite.kind {
+        Some(("source kind", entry.kind.as_str(), rewrite.kind))
+    } else if entry.stream.as_os_str() != std::ffi::OsStr::new(rewrite.stream) {
+        Some((
+            "stream",
+            entry.stream.to_str().unwrap_or("<non-UTF-8>"),
+            rewrite.stream,
+        ))
+    } else if entry.reference.as_os_str() != std::ffi::OsStr::new(rewrite.source) {
+        Some((
+            "reference",
+            entry.reference.to_str().unwrap_or("<non-UTF-8>"),
+            rewrite.source,
+        ))
+    } else if entry.mode != rewrite.mode {
+        Some(("mode", entry.mode.as_str(), rewrite.mode))
+    } else if entry.backend != rewrite.backend {
+        Some(("backend", entry.backend.as_str(), rewrite.backend))
+    } else {
+        None
+    };
+    if let Some((field, actual, expected)) = mismatch {
+        return Err(format!(
+            "reference rewrite identity mismatch for {}: {field} is `{actual}`, expected `{expected}`",
+            entry.reference.display()
+        ));
+    }
+
+    Ok(PathBuf::from(rewrite.target))
+}
+
+fn resolve_reference(base: &Path, entry: &Entry) -> Result<PathBuf, String> {
+    let target = resolved_reference_target(entry)?;
+    let physical = if target.is_absolute() {
+        target
+    } else {
+        base.join(target)
+    };
+    if physical.is_file() {
+        Ok(physical)
+    } else {
+        Err(format!(
+            "renderer reference `{}` is missing and has no existing approved target",
+            entry.reference.display()
+        ))
+    }
 }
 
 fn emit_child_diagnostics(
@@ -490,15 +598,45 @@ fn validate_entry_ids(entries: &[Entry]) -> Result<(), String> {
 }
 
 fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), String> {
+    let resolved = entries
+        .iter()
+        .map(resolved_reference_target)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut owners = HashMap::<PathBuf, (&str, &Path)>::new();
+    for (entry, reference) in entries.iter().zip(&resolved) {
+        let physical = if reference.is_absolute() {
+            reference.clone()
+        } else {
+            base.join(reference)
+        };
+        let physical = physical.canonicalize().unwrap_or(physical);
+        if let Some((previous_id, previous_reference)) =
+            owners.insert(physical.clone(), (&entry.id, &entry.reference))
+        {
+            if previous_reference != entry.reference {
+                return Err(format!(
+                    "manifest entries {previous_id} ({}) and {} ({}) resolve to the same physical reference {}; path rewrites must remain unique",
+                    previous_reference.display(),
+                    entry.id,
+                    entry.reference.display(),
+                    physical.display(),
+                ));
+            }
+        }
+    }
+
     validate_reference_identities(
         base,
-        entries.iter().map(|entry| ReferenceIdentity {
-            id: &entry.id,
-            stream: &entry.stream,
-            frame: entry.frame,
-            mode: &entry.mode,
-            reference: &entry.reference,
-        }),
+        entries
+            .iter()
+            .zip(&resolved)
+            .map(|(entry, reference)| ReferenceIdentity {
+                id: &entry.id,
+                stream: &entry.stream,
+                frame: entry.frame,
+                mode: &entry.mode,
+                reference,
+            }),
     )
 }
 
@@ -578,8 +716,10 @@ mod tests {
     fn entry(id: &str, mode: &str, reference: &str) -> Entry {
         Entry {
             id: id.to_owned(),
+            kind: "upstream-gm-stream".to_owned(),
             stream: PathBuf::from("fixture.rive-stream"),
             reference: PathBuf::from(reference),
+            backend: "metal".to_owned(),
             status: "gated".to_owned(),
             frame: 0,
             max_channel_delta: 2,
@@ -587,6 +727,26 @@ mod tests {
             gated: Some("algorithm-core".to_owned()),
             mode: mode.to_owned(),
         }
+    }
+
+    fn dstreadshuffle_alias_entry() -> Entry {
+        let mut entry = entry(
+            "gm-dstreadshuffle-clockwise-atomic",
+            "clockwise-atomic",
+            "fixtures/renderer/reference/metal/gm/dstreadshuffle-clockwise-atomic.png",
+        );
+        entry.stream = PathBuf::from("fixtures/renderer/streams/gm/dstreadshuffle.rive-stream");
+        entry
+    }
+
+    fn interleavedfeather_alias_entry() -> Entry {
+        let mut entry = entry(
+            "gm-interleavedfeather-clockwise-atomic",
+            "clockwise-atomic",
+            "fixtures/renderer/reference/metal/gm/interleavedfeather-clockwise-atomic.png",
+        );
+        entry.stream = PathBuf::from("fixtures/renderer/streams/gm/interleavedfeather.rive-stream");
+        entry
     }
 
     #[test]
@@ -606,6 +766,127 @@ mod tests {
             entry("msaa", "msaa", "msaa.png"),
         ];
         validate_reference_identity(Path::new("/repo"), &entries).unwrap();
+    }
+
+    #[test]
+    fn resolves_exactly_the_two_approved_manifest_reference_paths() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        for (entry, target) in [
+            (
+                dstreadshuffle_alias_entry(),
+                "fixtures/renderer/reference/metal/gm/dstreadshuffle.png",
+            ),
+            (
+                interleavedfeather_alias_entry(),
+                "fixtures/renderer/reference/metal/gm/interleavedfeather.png",
+            ),
+        ] {
+            assert_eq!(
+                resolve_reference(&repo_root, &entry).unwrap(),
+                repo_root.join(target)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_rewrite_for_wrong_entry_id() {
+        let mut entry = dstreadshuffle_alias_entry();
+        entry.id = "gm-not-dstreadshuffle-clockwise-atomic".to_owned();
+        let error = resolved_reference_target(&entry).unwrap_err();
+        assert!(error.contains("entry id"));
+    }
+
+    #[test]
+    fn rejects_rewrite_for_wrong_corpus_source_kind() {
+        let mut entry = dstreadshuffle_alias_entry();
+        entry.kind = "riv-stream".to_owned();
+        let error = resolved_reference_target(&entry).unwrap_err();
+        assert!(error.contains("source kind"));
+    }
+
+    #[test]
+    fn rejects_rewrite_for_wrong_stream() {
+        let mut entry = dstreadshuffle_alias_entry();
+        entry.stream = PathBuf::from("fixtures/renderer/streams/gm/interleavedfeather.rive-stream");
+        let error = resolved_reference_target(&entry).unwrap_err();
+        assert!(error.contains("stream"));
+    }
+
+    #[test]
+    fn rejects_rewrite_for_wrong_mode() {
+        let mut entry = dstreadshuffle_alias_entry();
+        entry.mode = "msaa".to_owned();
+        let error = resolved_reference_target(&entry).unwrap_err();
+        assert!(error.contains("mode"));
+    }
+
+    #[test]
+    fn rejects_rewrite_for_wrong_backend() {
+        let mut entry = dstreadshuffle_alias_entry();
+        entry.backend = "dawn-webgpu-metal".to_owned();
+        let error = resolved_reference_target(&entry).unwrap_err();
+        assert!(error.contains("backend"));
+    }
+
+    #[test]
+    fn approved_alias_id_with_direct_reference_fails_before_replay() {
+        let mut entry = dstreadshuffle_alias_entry();
+        entry.reference = PathBuf::from("fixtures/renderer/reference/metal/gm/dstreadshuffle.png");
+        let options = Options {
+            manifest: PathBuf::from("unused.toml"),
+            replay: PathBuf::from("replay-must-not-run"),
+            backend: "rust-wgpu".to_owned(),
+            output_dir: PathBuf::from("unused-output"),
+            jobs: 1,
+            expect_all_fail: false,
+            probe_gated: vec![entry.id.clone()],
+        };
+
+        let execution = run_entry(&entry, &options, Path::new("/repo"));
+        let error = execution.outcome.unwrap_err();
+        assert!(error.contains("reference rewrite identity mismatch"));
+        assert!(error.contains("reference"));
+        assert!(execution.diagnostics.stdout.is_empty());
+        assert!(execution.diagnostics.stderr.is_empty());
+    }
+
+    #[test]
+    fn rejects_an_unapproved_missing_clockwise_atomic_reference() {
+        static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "corpus-r-reference-test-{}-{}",
+            std::process::id(),
+            NEXT_DIR.fetch_add(1, Ordering::Relaxed)
+        ));
+        let source = "fixtures/renderer/reference/metal/gm/unapproved-clockwise-atomic.png";
+        let broad_fallback = root.join("fixtures/renderer/reference/metal/gm/unapproved.png");
+        fs::create_dir_all(broad_fallback.parent().unwrap()).unwrap();
+        fs::write(&broad_fallback, b"not an approved oracle").unwrap();
+
+        let entry = entry("unapproved", "clockwise-atomic", source);
+        let error = resolve_reference(&root, &entry).unwrap_err();
+        assert!(error.contains("missing and has no existing approved target"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_collisions_after_reference_path_resolution() {
+        let entries = [
+            dstreadshuffle_alias_entry(),
+            entry(
+                "direct",
+                "clockwise-atomic",
+                "fixtures/renderer/reference/metal/gm/dstreadshuffle.png",
+            ),
+        ];
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let error = validate_reference_identity(&repo_root, &entries).unwrap_err();
+        assert!(error.contains("resolve to the same physical reference"));
+        assert!(error.contains("gm-dstreadshuffle-clockwise-atomic"));
+        assert!(error.contains("direct"));
     }
 
     #[test]

@@ -37,6 +37,14 @@ const NAME: FieldSpec = FieldSpec {
     inherited: true,
 };
 
+const ASSET_NAME: FieldSpec = FieldSpec {
+    rust_name: "name",
+    schema_name: "name",
+    declared_owner: "Asset",
+    kind: FieldKind::String,
+    inherited: true,
+};
+
 const OBJECTS: &[ObjectSpec] = &[
     ObjectSpec {
         rust_name: "Artboard",
@@ -268,6 +276,162 @@ const OBJECTS: &[ObjectSpec] = &[
         ],
         is_node: true,
     },
+    ObjectSpec {
+        rust_name: "Text",
+        schema_name: "Text",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "WorldTransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "rotation",
+                schema_name: "rotation",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_x",
+                schema_name: "scaleX",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_y",
+                schema_name: "scaleY",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "sizing",
+                schema_name: "sizingValue",
+                declared_owner: "Text",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "width",
+                schema_name: "width",
+                declared_owner: "Text",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "height",
+                schema_name: "height",
+                declared_owner: "Text",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "align",
+                schema_name: "alignValue",
+                declared_owner: "Text",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "wrap",
+                schema_name: "wrapValue",
+                declared_owner: "Text",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "overflow",
+                schema_name: "overflowValue",
+                declared_owner: "Text",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "TextValueRun",
+        schema_name: "TextValueRun",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "text",
+                schema_name: "text",
+                declared_owner: "TextValueRun",
+                kind: FieldKind::String,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "style",
+                schema_name: "styleId",
+                declared_owner: "TextValueRun",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "TextStylePaint",
+        schema_name: "TextStylePaint",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "font_size",
+                schema_name: "fontSize",
+                declared_owner: "TextStyle",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "line_height",
+                schema_name: "lineHeight",
+                declared_owner: "TextStyle",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "letter_spacing",
+                schema_name: "letterSpacing",
+                declared_owner: "TextStyle",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "font",
+                schema_name: "fontAssetId",
+                declared_owner: "TextStyle",
+                kind: FieldKind::Uint,
+                inherited: true,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "FontAsset",
+        schema_name: "FontAsset",
+        fields: &[ASSET_NAME],
+        is_node: false,
+    },
 ];
 
 // The first cursor surface is deliberately narrower than the structural
@@ -338,6 +502,7 @@ fn main() {
 
 fn render_scene_schema() -> String {
     let backboard = concrete_definition("Backboard");
+    let file_asset_contents = concrete_definition("FileAssetContents");
     let mut output =
         String::from("// @generated by crates/nuxie/build.rs from nuxie-schema; do not edit.\n\n");
 
@@ -345,6 +510,12 @@ fn render_scene_schema() -> String {
         output,
         "pub(super) const TYPE_BACKBOARD: u16 = {};",
         backboard.type_key.int
+    )
+    .expect("write generated source");
+    writeln!(
+        output,
+        "pub(super) const TYPE_FILE_ASSET_CONTENTS: u16 = {};",
+        file_asset_contents.type_key.int
     )
     .expect("write generated source");
 
@@ -497,6 +668,64 @@ fn render_scene_schema() -> String {
     let dash_length = resolve_named_property("Dash", "length", "Dash", FieldKind::Double, false);
     let dash_length_is_percentage =
         resolve_named_property("Dash", "lengthIsPercentage", "Dash", FieldKind::Bool, false);
+    let asset_name = resolve_named_property("FontAsset", "name", "Asset", FieldKind::String, true);
+    let file_asset_id =
+        resolve_named_property("FontAsset", "assetId", "FileAsset", FieldKind::Uint, true);
+    let file_asset_contents_bytes = resolve_encoded_property(
+        "FileAssetContents",
+        "bytes",
+        "FileAssetContents",
+        FieldKind::Bytes,
+    );
+    let text_sizing = resolve_named_property("Text", "sizingValue", "Text", FieldKind::Uint, false);
+    let text_align = resolve_named_property("Text", "alignValue", "Text", FieldKind::Uint, false);
+    let text_width = resolve_named_property("Text", "width", "Text", FieldKind::Double, false);
+    let text_height = resolve_named_property("Text", "height", "Text", FieldKind::Double, false);
+    let text_wrap = resolve_named_property("Text", "wrapValue", "Text", FieldKind::Uint, false);
+    let text_overflow =
+        resolve_named_property("Text", "overflowValue", "Text", FieldKind::Uint, false);
+    let text_value_run_text = resolve_named_property(
+        "TextValueRun",
+        "text",
+        "TextValueRun",
+        FieldKind::String,
+        false,
+    );
+    let text_value_run_style_id = resolve_named_property(
+        "TextValueRun",
+        "styleId",
+        "TextValueRun",
+        FieldKind::Uint,
+        false,
+    );
+    let text_style_font_size = resolve_named_property(
+        "TextStylePaint",
+        "fontSize",
+        "TextStyle",
+        FieldKind::Double,
+        true,
+    );
+    let text_style_line_height = resolve_named_property(
+        "TextStylePaint",
+        "lineHeight",
+        "TextStyle",
+        FieldKind::Double,
+        true,
+    );
+    let text_style_letter_spacing = resolve_named_property(
+        "TextStylePaint",
+        "letterSpacing",
+        "TextStyle",
+        FieldKind::Double,
+        true,
+    );
+    let text_style_font_asset_id = resolve_named_property(
+        "TextStylePaint",
+        "fontAssetId",
+        "TextStyle",
+        FieldKind::Uint,
+        true,
+    );
     for (name, property) in [
         ("COMPONENT_NAME", component_name),
         ("PARENT_ID", parent_id),
@@ -528,6 +757,21 @@ fn render_scene_schema() -> String {
         ("DASH_OFFSET_IS_PERCENTAGE", dash_offset_is_percentage),
         ("DASH_LENGTH", dash_length),
         ("DASH_LENGTH_IS_PERCENTAGE", dash_length_is_percentage),
+        ("ASSET_NAME", asset_name),
+        ("FILE_ASSET_ID", file_asset_id),
+        ("FILE_ASSET_CONTENTS_BYTES", file_asset_contents_bytes),
+        ("TEXT_SIZING", text_sizing),
+        ("TEXT_ALIGN", text_align),
+        ("TEXT_WIDTH", text_width),
+        ("TEXT_HEIGHT", text_height),
+        ("TEXT_WRAP", text_wrap),
+        ("TEXT_OVERFLOW", text_overflow),
+        ("TEXT_VALUE_RUN_TEXT", text_value_run_text),
+        ("TEXT_VALUE_RUN_STYLE_ID", text_value_run_style_id),
+        ("TEXT_STYLE_FONT_SIZE", text_style_font_size),
+        ("TEXT_STYLE_LINE_HEIGHT", text_style_line_height),
+        ("TEXT_STYLE_LETTER_SPACING", text_style_letter_spacing),
+        ("TEXT_STYLE_FONT_ASSET_ID", text_style_font_asset_id),
     ] {
         writeln!(
             output,
@@ -545,6 +789,64 @@ fn render_scene_schema() -> String {
              pub bottom_right: f32,\n\
              pub bottom_left: f32,\n\
              pub linked: bool,\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneTextSizing {\n\
+             Fixed,\n\
+         }\n\n\
+         impl SceneTextSizing {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::Fixed => 2,\n\
+                 }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneTextAlign {\n\
+             Left,\n\
+             Right,\n\
+             Center,\n\
+         }\n\n\
+         impl SceneTextAlign {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::Left => 0,\n\
+                     Self::Right => 1,\n\
+                     Self::Center => 2,\n\
+                 }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneTextWrap {\n\
+             Wrap,\n\
+             NoWrap,\n\
+         }\n\n\
+         impl SceneTextWrap {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::Wrap => 0,\n\
+                     Self::NoWrap => 1,\n\
+                 }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneTextOverflow {\n\
+             Visible,\n\
+             Hidden,\n\
+             Clipped,\n\
+             Ellipsis,\n\
+             Fit,\n\
+         }\n\n\
+         impl SceneTextOverflow {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::Visible => 0,\n\
+                     Self::Hidden => 1,\n\
+                     Self::Clipped => 2,\n\
+                     Self::Ellipsis => 3,\n\
+                     Self::Fit => 4,\n\
+                 }\n\
+             }\n\
          }\n\n\
          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
          pub enum SceneStrokeCap {\n\
@@ -595,6 +897,9 @@ fn render_scene_schema() -> String {
         }
         if object.rust_name == "Rectangle" {
             output.push_str("    pub corner_radii: Option<RectangleCornerRadii>,\n");
+        }
+        if object.rust_name == "FontAsset" {
+            output.push_str("    pub bytes: Vec<u8>,\n");
         }
         output.push_str("}\n\n");
     }
@@ -809,6 +1114,42 @@ fn resolve_named_property(
     property
 }
 
+fn resolve_encoded_property(
+    target: &str,
+    name: &str,
+    declared_owner: &str,
+    expected_kind: FieldKind,
+) -> &'static Property {
+    let target_definition = definition_by_name(target)
+        .unwrap_or_else(|| panic!("authoring target schema definition {target} must exist"));
+    let owner_definition = definition_by_name(declared_owner).unwrap_or_else(|| {
+        panic!("authoring property owner schema definition {declared_owner} must exist")
+    });
+    let property = owner_definition
+        .properties
+        .iter()
+        .find(|property| property.name == name)
+        .unwrap_or_else(|| {
+            panic!("authoring property {declared_owner}.{name} must remain directly declared")
+        });
+    assert_eq!(
+        property.runtime_type, expected_kind,
+        "authoring property {declared_owner}.{name} changed runtime value kind"
+    );
+    assert!(
+        property.stores_data && property.deserializes && property.encoded,
+        "authoring property {declared_owner}.{name} is no longer encoded stored data"
+    );
+    let (actual_owner, supported_property) =
+        property_by_key_in_hierarchy(target_definition.type_key.int, property.key.int)
+            .unwrap_or_else(|| {
+                panic!("authoring target {target} no longer supports {declared_owner}.{name}")
+            });
+    assert_eq!(actual_owner, declared_owner);
+    assert_eq!(supported_property.runtime_type, expected_kind);
+    property
+}
+
 fn resolve_declared_property(prop: &PropSpec) -> &'static Property {
     let owner = definition_by_name(prop.declared_owner).unwrap_or_else(|| {
         panic!(
@@ -900,6 +1241,12 @@ fn public_field_rust_type(
     match (object.rust_name, field.rust_name) {
         ("Stroke", "cap") => "SceneStrokeCap",
         ("Stroke", "join") => "SceneStrokeJoin",
+        ("Text", "sizing") => "SceneTextSizing",
+        ("Text", "align") => "SceneTextAlign",
+        ("Text", "wrap") => "SceneTextWrap",
+        ("Text", "overflow") => "SceneTextOverflow",
+        ("TextValueRun", "style") => "ObjectId",
+        ("TextStylePaint", "font") => "FontAssetId",
         _ => rust_type(runtime_type),
     }
 }

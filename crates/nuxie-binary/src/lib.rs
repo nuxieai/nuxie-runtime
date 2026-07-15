@@ -908,6 +908,17 @@ impl RuntimeFile {
         self.cpp_artboard_meshes(artboard_index)
     }
 
+    pub fn artboard_geometry(&self, artboard_index: usize) -> Option<RuntimeArtboardGeometry<'_>> {
+        let index = self.cpp_artboard_index(artboard_index)?;
+        Some(RuntimeArtboardGeometry {
+            meshes: index.meshes(),
+            paths: index.paths(),
+            shapes: index.shapes(),
+            shape_paint_containers: index.shape_paint_containers(),
+            n_slicer_details: index.n_slicer_details(),
+        })
+    }
+
     pub fn artboard_mesh(
         &self,
         artboard_index: usize,
@@ -4476,6 +4487,15 @@ impl RuntimeFile {
         Some((start, end))
     }
 
+    fn cpp_artboard_index(&self, artboard_index: usize) -> Option<RuntimeArtboardIndex<'_>> {
+        let range = self.cpp_artboard_range(artboard_index)?;
+        Some(RuntimeArtboardIndex::new(
+            &self.objects,
+            &self.import_statuses,
+            range,
+        ))
+    }
+
     fn cpp_artboard_local_context_for_object(
         &self,
         object: &RuntimeObject,
@@ -5083,148 +5103,39 @@ impl RuntimeFile {
     }
 
     fn cpp_artboard_meshes(&self, artboard_index: usize) -> Vec<RuntimeMesh<'_>> {
-        let Some(range) = self.cpp_artboard_range(artboard_index) else {
-            return Vec::new();
-        };
-        let mut local_slots =
-            runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
-        validate_cpp_artboard_local_slots(&mut local_slots, &self.objects);
-
-        local_slots
-            .iter()
-            .enumerate()
-            .filter_map(|(local_id, slot)| {
-                let object = slot.and_then(|file_index| self.objects[file_index].as_ref())?;
-                if object.type_name != "Mesh" {
-                    return None;
-                }
-
-                Some(RuntimeMesh {
-                    local_id,
-                    object,
-                    vertices: cpp_mesh_vertices(local_id, &local_slots, &self.objects),
-                })
-            })
-            .collect()
+        self.cpp_artboard_index(artboard_index)
+            .map(|index| index.meshes())
+            .unwrap_or_default()
     }
 
     fn cpp_artboard_paths(&self, artboard_index: usize) -> Vec<RuntimePath<'_>> {
-        let Some(range) = self.cpp_artboard_range(artboard_index) else {
-            return Vec::new();
-        };
-        let mut local_slots =
-            runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
-        validate_cpp_artboard_local_slots(&mut local_slots, &self.objects);
-
-        local_slots
-            .iter()
-            .enumerate()
-            .filter_map(|(local_id, slot)| {
-                let object = slot.and_then(|file_index| self.objects[file_index].as_ref())?;
-                if !runtime_object_is_cpp_path(object) {
-                    return None;
-                }
-
-                Some(RuntimePath {
-                    local_id,
-                    object,
-                    vertices: cpp_path_vertices(local_id, &local_slots, &self.objects),
-                })
-            })
-            .collect()
+        self.cpp_artboard_index(artboard_index)
+            .map(|index| index.paths())
+            .unwrap_or_default()
     }
 
     fn cpp_artboard_shapes(&self, artboard_index: usize) -> Vec<RuntimeShape<'_>> {
-        let Some(range) = self.cpp_artboard_range(artboard_index) else {
-            return Vec::new();
-        };
-        let mut local_slots =
-            runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
-        validate_cpp_artboard_local_slots(&mut local_slots, &self.objects);
-
-        local_slots
-            .iter()
-            .enumerate()
-            .filter_map(|(local_id, slot)| {
-                let object = slot.and_then(|file_index| self.objects[file_index].as_ref())?;
-                if !runtime_object_is_cpp_shape(object) {
-                    return None;
-                }
-
-                Some(RuntimeShape {
-                    local_id,
-                    object,
-                    paths: cpp_shape_paths(local_id, &local_slots, &self.objects),
-                    paints: cpp_shape_paints(local_id, &local_slots, &self.objects),
-                })
-            })
-            .collect()
+        self.cpp_artboard_index(artboard_index)
+            .map(|index| index.shapes())
+            .unwrap_or_default()
     }
 
     fn cpp_artboard_shape_paint_containers(
         &self,
         artboard_index: usize,
     ) -> Vec<RuntimeShapePaintContainer<'_>> {
-        let Some(range) = self.cpp_artboard_range(artboard_index) else {
-            return Vec::new();
-        };
-        let mut local_slots =
-            runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
-        validate_cpp_artboard_local_slots(&mut local_slots, &self.objects);
-
-        local_slots
-            .iter()
-            .enumerate()
-            .filter_map(|(local_id, slot)| {
-                let object = slot.and_then(|file_index| self.objects[file_index].as_ref())?;
-                if !runtime_object_is_cpp_shape_paint_container(object) {
-                    return None;
-                }
-
-                let paints =
-                    cpp_shape_paint_container_paints(local_id, &local_slots, &self.objects);
-                if paints.is_empty() {
-                    return None;
-                }
-
-                Some(RuntimeShapePaintContainer {
-                    local_id,
-                    object,
-                    paints,
-                })
-            })
-            .collect()
+        self.cpp_artboard_index(artboard_index)
+            .map(|index| index.shape_paint_containers())
+            .unwrap_or_default()
     }
 
     fn cpp_artboard_n_slicer_details(
         &self,
         artboard_index: usize,
     ) -> Vec<RuntimeNSlicerDetails<'_>> {
-        let Some(range) = self.cpp_artboard_range(artboard_index) else {
-            return Vec::new();
-        };
-        let mut local_slots =
-            runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
-        validate_cpp_artboard_local_slots(&mut local_slots, &self.objects);
-
-        local_slots
-            .iter()
-            .enumerate()
-            .filter_map(|(local_id, slot)| {
-                let object = slot.and_then(|file_index| self.objects[file_index].as_ref())?;
-                if !runtime_object_is_cpp_n_slicer_details(object) {
-                    return None;
-                }
-
-                Some(RuntimeNSlicerDetails {
-                    local_id,
-                    object,
-                    x_axes: cpp_n_slicer_axes(local_id, "AxisX", &local_slots, &self.objects),
-                    y_axes: cpp_n_slicer_axes(local_id, "AxisY", &local_slots, &self.objects),
-                    tile_modes: cpp_n_slicer_tile_modes(local_id, &local_slots, &self.objects),
-                })
-            })
-            .collect()
+        self.cpp_artboard_index(artboard_index)
+            .map(|index| index.n_slicer_details())
+            .unwrap_or_default()
     }
 
     fn cpp_data_bind_targets(&self) -> Vec<Option<CppDataBindTarget<'_>>> {
@@ -7759,6 +7670,15 @@ pub struct RuntimeShape<'a> {
     pub object: &'a RuntimeObject,
     pub paths: Vec<RuntimePath<'a>>,
     pub paints: Vec<RuntimeShapePaint<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeArtboardGeometry<'a> {
+    pub meshes: Vec<RuntimeMesh<'a>>,
+    pub paths: Vec<RuntimePath<'a>>,
+    pub shapes: Vec<RuntimeShape<'a>>,
+    pub shape_paint_containers: Vec<RuntimeShapePaintContainer<'a>>,
+    pub n_slicer_details: Vec<RuntimeNSlicerDetails<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -11626,23 +11546,182 @@ fn cpp_skin_tendons<'a>(
         .collect()
 }
 
+struct RuntimeArtboardIndex<'a> {
+    runtime_objects: &'a [Option<RuntimeObject>],
+    local_slots: Vec<Option<usize>>,
+    children_by_parent: Vec<Vec<usize>>,
+    paths_by_shape: Vec<Vec<usize>>,
+}
+
+impl<'a> RuntimeArtboardIndex<'a> {
+    fn new(
+        runtime_objects: &'a [Option<RuntimeObject>],
+        import_statuses: &[RuntimeImportStatus],
+        range: (usize, usize),
+    ) -> Self {
+        let mut local_slots = runtime_artboard_local_slots(runtime_objects, import_statuses, range);
+        validate_cpp_artboard_local_slots(&mut local_slots, runtime_objects);
+
+        let mut children_by_parent = vec![Vec::new(); local_slots.len()];
+        for (local_id, slot) in local_slots.iter().enumerate() {
+            let Some(object) = slot.and_then(|file_index| runtime_objects[file_index].as_ref())
+            else {
+                continue;
+            };
+            let Some(parent) = object
+                .uint_property("parentId")
+                .and_then(|parent| usize::try_from(parent).ok())
+                .filter(|parent| *parent < local_slots.len())
+            else {
+                continue;
+            };
+            children_by_parent[parent].push(local_id);
+        }
+
+        let mut index = Self {
+            runtime_objects,
+            paths_by_shape: vec![Vec::new(); local_slots.len()],
+            local_slots,
+            children_by_parent,
+        };
+        let path_owners = index
+            .local_objects()
+            .filter(|(_, object)| runtime_object_is_cpp_path(object))
+            .filter_map(|(local_id, _)| {
+                index
+                    .path_owner_shape_local(local_id)
+                    .map(|shape_local_id| (shape_local_id, local_id))
+            })
+            .collect::<Vec<_>>();
+        for (shape_local_id, local_id) in path_owners {
+            index.paths_by_shape[shape_local_id].push(local_id);
+        }
+        index
+    }
+
+    fn object(&self, local_id: usize) -> Option<&'a RuntimeObject> {
+        let file_index = self.local_slots.get(local_id).copied().flatten()?;
+        self.runtime_objects.get(file_index)?.as_ref()
+    }
+
+    fn local_objects(&self) -> impl Iterator<Item = (usize, &'a RuntimeObject)> + '_ {
+        self.local_slots
+            .iter()
+            .enumerate()
+            .filter_map(|(local_id, _)| self.object(local_id).map(|object| (local_id, object)))
+    }
+
+    fn children(
+        &self,
+        parent_local_id: usize,
+    ) -> impl Iterator<Item = (usize, &'a RuntimeObject)> + '_ {
+        self.children_by_parent
+            .get(parent_local_id)
+            .into_iter()
+            .flatten()
+            .filter_map(|local_id| self.object(*local_id).map(|object| (*local_id, object)))
+    }
+
+    fn path_owner_shape_local(&self, path_local_id: usize) -> Option<usize> {
+        let mut current_local_id =
+            usize::try_from(self.object(path_local_id)?.uint_property("parentId")?).ok()?;
+
+        for _ in 0..100 {
+            let object = self.object(current_local_id)?;
+            if runtime_object_is_cpp_shape(object) {
+                return Some(current_local_id);
+            }
+
+            let next_local_id = usize::try_from(object.uint_property("parentId")?).ok()?;
+            if next_local_id == current_local_id {
+                return None;
+            }
+            current_local_id = next_local_id;
+        }
+
+        None
+    }
+
+    fn meshes(&self) -> Vec<RuntimeMesh<'a>> {
+        self.local_objects()
+            .filter_map(|(local_id, object)| {
+                (object.type_name == "Mesh").then(|| RuntimeMesh {
+                    local_id,
+                    object,
+                    vertices: cpp_mesh_vertices(local_id, self),
+                })
+            })
+            .collect()
+    }
+
+    fn paths(&self) -> Vec<RuntimePath<'a>> {
+        self.local_objects()
+            .filter_map(|(local_id, object)| {
+                runtime_object_is_cpp_path(object).then(|| RuntimePath {
+                    local_id,
+                    object,
+                    vertices: cpp_path_vertices(local_id, self),
+                })
+            })
+            .collect()
+    }
+
+    fn shapes(&self) -> Vec<RuntimeShape<'a>> {
+        self.local_objects()
+            .filter_map(|(local_id, object)| {
+                runtime_object_is_cpp_shape(object).then(|| RuntimeShape {
+                    local_id,
+                    object,
+                    paths: cpp_shape_paths(local_id, self),
+                    paints: cpp_shape_paints(local_id, self),
+                })
+            })
+            .collect()
+    }
+
+    fn shape_paint_containers(&self) -> Vec<RuntimeShapePaintContainer<'a>> {
+        self.local_objects()
+            .filter_map(|(local_id, object)| {
+                if !runtime_object_is_cpp_shape_paint_container(object) {
+                    return None;
+                }
+                let paints = cpp_shape_paint_container_paints(local_id, self);
+                (!paints.is_empty()).then_some(RuntimeShapePaintContainer {
+                    local_id,
+                    object,
+                    paints,
+                })
+            })
+            .collect()
+    }
+
+    fn n_slicer_details(&self) -> Vec<RuntimeNSlicerDetails<'a>> {
+        self.local_objects()
+            .filter_map(|(local_id, object)| {
+                runtime_object_is_cpp_n_slicer_details(object).then(|| RuntimeNSlicerDetails {
+                    local_id,
+                    object,
+                    x_axes: cpp_n_slicer_axes(local_id, "AxisX", self),
+                    y_axes: cpp_n_slicer_axes(local_id, "AxisY", self),
+                    tile_modes: cpp_n_slicer_tile_modes(local_id, self),
+                })
+            })
+            .collect()
+    }
+}
+
 fn cpp_mesh_vertices<'a>(
     mesh_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeMeshVertex<'a>> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if !runtime_object_is_cpp_mesh_vertex(object)
-                || object.uint_property("parentId") != Some(mesh_local_id as u64)
-            {
+    index
+        .children(mesh_local_id)
+        .filter_map(|(local_id, object)| {
+            if !runtime_object_is_cpp_mesh_vertex(object) {
                 return None;
             }
 
-            let (weight_local_id, weight) = cpp_vertex_weight(local_id, slots, objects)
+            let (weight_local_id, weight) = cpp_vertex_weight(local_id, index)
                 .map(|(local, weight)| (Some(local), Some(weight)))
                 .unwrap_or((None, None));
 
@@ -11658,21 +11737,16 @@ fn cpp_mesh_vertices<'a>(
 
 fn cpp_path_vertices<'a>(
     path_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimePathVertex<'a>> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if !runtime_object_is_cpp_path_vertex(object)
-                || object.uint_property("parentId") != Some(path_local_id as u64)
-            {
+    index
+        .children(path_local_id)
+        .filter_map(|(local_id, object)| {
+            if !runtime_object_is_cpp_path_vertex(object) {
                 return None;
             }
 
-            let (weight_local_id, weight) = cpp_vertex_weight(local_id, slots, objects)
+            let (weight_local_id, weight) = cpp_vertex_weight(local_id, index)
                 .map(|(local, weight)| (Some(local), Some(weight)))
                 .unwrap_or((None, None));
 
@@ -11689,17 +11763,12 @@ fn cpp_path_vertices<'a>(
 fn cpp_n_slicer_axes<'a>(
     details_local_id: usize,
     axis_type_name: &'static str,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeNSlicerAxis<'a>> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if object.type_name != axis_type_name
-                || object.uint_property("parentId") != Some(details_local_id as u64)
-            {
+    index
+        .children(details_local_id)
+        .filter_map(|(local_id, object)| {
+            if object.type_name != axis_type_name {
                 return None;
             }
 
@@ -11710,18 +11779,12 @@ fn cpp_n_slicer_axes<'a>(
 
 fn cpp_n_slicer_tile_modes<'a>(
     details_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeNSlicerTileMode<'a>> {
     let mut tile_modes = BTreeMap::<u64, RuntimeNSlicerTileMode<'a>>::new();
 
-    for (local_id, slot) in slots.iter().enumerate() {
-        let Some(object) = slot.and_then(|file_index| objects[file_index].as_ref()) else {
-            continue;
-        };
-        if object.type_name != "NSlicerTileMode"
-            || object.uint_property("parentId") != Some(details_local_id as u64)
-        {
+    for (local_id, object) in index.children(details_local_id) {
+        if object.type_name != "NSlicerTileMode" {
             continue;
         }
 
@@ -11742,24 +11805,20 @@ fn cpp_n_slicer_tile_modes<'a>(
 
 fn cpp_shape_paths<'a>(
     shape_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimePath<'a>> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if !runtime_object_is_cpp_path(object)
-                || cpp_path_owner_shape_local(local_id, slots, objects) != Some(shape_local_id)
-            {
-                return None;
-            }
+    index
+        .paths_by_shape
+        .get(shape_local_id)
+        .into_iter()
+        .flatten()
+        .filter_map(|local_id| {
+            let object = index.object(*local_id)?;
 
             Some(RuntimePath {
-                local_id,
+                local_id: *local_id,
                 object,
-                vertices: cpp_path_vertices(local_id, slots, objects),
+                vertices: cpp_path_vertices(*local_id, index),
             })
         })
         .collect()
@@ -11767,33 +11826,27 @@ fn cpp_shape_paths<'a>(
 
 fn cpp_shape_paints<'a>(
     shape_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeShapePaint<'a>> {
-    cpp_shape_paint_container_paints(shape_local_id, slots, objects)
+    cpp_shape_paint_container_paints(shape_local_id, index)
 }
 
 fn cpp_shape_paint_container_paints<'a>(
     container_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeShapePaint<'a>> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if !runtime_object_is_cpp_shape_paint(object)
-                || object.uint_property("parentId") != Some(container_local_id as u64)
-            {
+    index
+        .children(container_local_id)
+        .filter_map(|(local_id, object)| {
+            if !runtime_object_is_cpp_shape_paint(object) {
                 return None;
             }
 
-            let (mutator_local_id, mutator) = cpp_shape_paint_mutator(local_id, slots, objects)
+            let (mutator_local_id, mutator) = cpp_shape_paint_mutator(local_id, index)
                 .map(|(local, mutator)| (Some(local), Some(mutator)))
                 .unwrap_or((None, None));
             let mutator_local = mutator_local_id?;
-            let (feather_local_id, feather) = cpp_shape_paint_feather(local_id, slots, objects)
+            let (feather_local_id, feather) = cpp_shape_paint_feather(local_id, index)
                 .map(|(local, feather)| (Some(local), Some(feather)))
                 .unwrap_or((None, None));
 
@@ -11802,10 +11855,10 @@ fn cpp_shape_paint_container_paints<'a>(
                 object,
                 mutator_local_id,
                 mutator,
-                gradient_stops: cpp_gradient_stops(mutator_local, slots, objects),
+                gradient_stops: cpp_gradient_stops(mutator_local, index),
                 feather_local_id,
                 feather,
-                effects: cpp_shape_paint_effects(local_id, slots, objects),
+                effects: cpp_shape_paint_effects(local_id, index),
             })
         })
         .collect()
@@ -11813,67 +11866,36 @@ fn cpp_shape_paint_container_paints<'a>(
 
 fn cpp_shape_paint_mutator<'a>(
     shape_paint_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Option<(usize, &'a RuntimeObject)> {
-    slots.iter().enumerate().find_map(|(local_id, slot)| {
-        let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-        if runtime_object_is_cpp_shape_paint_mutator(object)
-            && object.uint_property("parentId") == Some(shape_paint_local_id as u64)
-        {
-            Some((local_id, object))
-        } else {
-            None
-        }
-    })
+    index
+        .children(shape_paint_local_id)
+        .find(|(_, object)| runtime_object_is_cpp_shape_paint_mutator(object))
 }
 
 fn cpp_shape_paint_feather<'a>(
     shape_paint_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Option<(usize, &'a RuntimeObject)> {
-    slots
-        .iter()
-        .enumerate()
-        .fold(None, |feather, (local_id, slot)| {
-            let Some(object) = slot.and_then(|file_index| objects[file_index].as_ref()) else {
-                return feather;
-            };
-            if runtime_object_is_cpp_feather(object)
-                && object.uint_property("parentId") == Some(shape_paint_local_id as u64)
-            {
-                Some((local_id, object))
-            } else {
-                feather
-            }
-        })
+    index
+        .children(shape_paint_local_id)
+        .filter(|(_, object)| runtime_object_is_cpp_feather(object))
+        .last()
 }
 
 fn cpp_shape_paint_effects<'a>(
     shape_paint_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeStrokeEffect<'a>> {
     let mut group_stack = BTreeSet::new();
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if !runtime_object_is_cpp_registered_stroke_effect(object)
-                || object.uint_property("parentId") != Some(shape_paint_local_id as u64)
-            {
+    index
+        .children(shape_paint_local_id)
+        .filter_map(|(local_id, object)| {
+            if !runtime_object_is_cpp_registered_stroke_effect(object) {
                 return None;
             }
 
-            Some(cpp_stroke_effect(
-                local_id,
-                object,
-                slots,
-                objects,
-                &mut group_stack,
-            ))
+            Some(cpp_stroke_effect(local_id, object, index, &mut group_stack))
         })
         .collect()
 }
@@ -11881,15 +11903,14 @@ fn cpp_shape_paint_effects<'a>(
 fn cpp_stroke_effect<'a>(
     local_id: usize,
     object: &'a RuntimeObject,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
     group_stack: &mut BTreeSet<usize>,
 ) -> RuntimeStrokeEffect<'a> {
-    let target = cpp_target_effect_group_effect(object, slots, objects);
+    let target = cpp_target_effect_group_effect(object, index);
     let group_effects = target
         .filter(|(group_local, _)| group_stack.insert(*group_local))
         .map(|(group_local, _)| {
-            let effects = cpp_group_effects(group_local, slots, objects, group_stack);
+            let effects = cpp_group_effects(group_local, index, group_stack);
             group_stack.remove(&group_local);
             effects
         })
@@ -11906,56 +11927,46 @@ fn cpp_stroke_effect<'a>(
 
 fn cpp_group_effects<'a>(
     group_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
     group_stack: &mut BTreeSet<usize>,
 ) -> Vec<RuntimeStrokeEffect<'a>> {
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            (runtime_object_is_cpp_registered_stroke_effect(object)
-                && object.uint_property("parentId") == Some(group_local_id as u64))
-            .then(|| cpp_stroke_effect(local_id, object, slots, objects, group_stack))
+    index
+        .children(group_local_id)
+        .filter_map(|(local_id, object)| {
+            runtime_object_is_cpp_registered_stroke_effect(object)
+                .then(|| cpp_stroke_effect(local_id, object, index, group_stack))
         })
         .collect()
 }
 
 fn cpp_target_effect_group_effect<'a>(
     effect: &RuntimeObject,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Option<(usize, &'a RuntimeObject)> {
     if effect.type_name != "TargetEffect" {
         return None;
     }
 
-    local_object_reference_with_local_index(slots, objects, effect.uint_property("targetId"))
-        .filter(|(_, target)| runtime_object_is_cpp_group_effect(target))
+    let local_id = usize::try_from(effect.uint_property("targetId")?).ok()?;
+    let target = index.object(local_id)?;
+    runtime_object_is_cpp_group_effect(target).then_some((local_id, target))
 }
 
 fn cpp_gradient_stops<'a>(
     gradient_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Vec<RuntimeGradientStop<'a>> {
-    let Some(gradient) = local_object_reference(slots, objects, Some(gradient_local_id as u64))
-    else {
+    let Some(gradient) = index.object(gradient_local_id) else {
         return Vec::new();
     };
     if !runtime_object_is_cpp_linear_gradient(gradient) {
         return Vec::new();
     }
 
-    slots
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, slot)| {
-            let object = slot.and_then(|file_index| objects[file_index].as_ref())?;
-            if !runtime_object_is_cpp_gradient_stop(object)
-                || object.uint_property("parentId") != Some(gradient_local_id as u64)
-            {
+    index
+        .children(gradient_local_id)
+        .filter_map(|(local_id, object)| {
+            if !runtime_object_is_cpp_gradient_stop(object) {
                 return None;
             }
 
@@ -11964,53 +11975,14 @@ fn cpp_gradient_stops<'a>(
         .collect()
 }
 
-fn cpp_path_owner_shape_local(
-    path_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &[Option<RuntimeObject>],
-) -> Option<usize> {
-    let mut current_local_id = usize::try_from(
-        local_object_reference(slots, objects, Some(path_local_id as u64))?
-            .uint_property("parentId")?,
-    )
-    .ok()?;
-
-    for _ in 0..100 {
-        let object = local_object_reference(slots, objects, Some(current_local_id as u64))?;
-        if runtime_object_is_cpp_shape(object) {
-            return Some(current_local_id);
-        }
-
-        let next_local_id = usize::try_from(object.uint_property("parentId")?).ok()?;
-        if next_local_id == current_local_id {
-            return None;
-        }
-        current_local_id = next_local_id;
-    }
-
-    None
-}
-
 fn cpp_vertex_weight<'a>(
     vertex_local_id: usize,
-    slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
+    index: &RuntimeArtboardIndex<'a>,
 ) -> Option<(usize, &'a RuntimeObject)> {
-    slots
-        .iter()
-        .enumerate()
-        .fold(None, |weight, (local_id, slot)| {
-            let Some(object) = slot.and_then(|file_index| objects[file_index].as_ref()) else {
-                return weight;
-            };
-            if runtime_object_is_cpp_weight(object)
-                && object.uint_property("parentId") == Some(vertex_local_id as u64)
-            {
-                Some((local_id, object))
-            } else {
-                weight
-            }
-        })
+    index
+        .children(vertex_local_id)
+        .filter(|(_, object)| runtime_object_is_cpp_weight(object))
+        .last()
 }
 
 fn cpp_mesh_vertex_count(

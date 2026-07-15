@@ -11,7 +11,7 @@ use std::{
 
 use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
 use nuxie_render_api::{Factory, Renderer};
-use nuxie_runtime::ArtboardInstance as RuntimeArtboardInstance;
+use nuxie_runtime::{ArtboardInstance as RuntimeArtboardInstance, embedded_font_is_parseable};
 
 use crate::{ArtboardRenderCache, File, OwnedArtboardInstance};
 
@@ -22,6 +22,10 @@ pub struct ArtboardId(u64);
 /// Stable identity of an authored object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ObjectId(u64);
+
+/// Stable identity of an embedded font owned by the authored scene.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FontAssetId(u64);
 
 /// Stable identity of a live artboard instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,6 +67,7 @@ pub enum ChildIndex {
 pub enum EditId {
     Artboard(ArtboardId),
     Object(ObjectId),
+    FontAsset(FontAssetId),
     Instance(InstanceId),
 }
 
@@ -77,11 +82,19 @@ pub enum EditReason {
     OperationLimitExceeded,
     UnknownArtboard,
     UnknownObject,
+    UnknownFontAsset,
+    EmptyFontAsset,
+    InvalidFontAsset,
     CycleDetected,
     ChildIndexOutOfRange,
+    ChildSetMismatch,
     InvalidParent {
         parent: Option<NodeKind>,
         child: NodeKind,
+    },
+    InvalidReference {
+        expected: NodeKind,
+        actual: Option<NodeKind>,
     },
     PropertyOwnerMismatch {
         property: &'static str,
@@ -388,6 +401,7 @@ pub struct EditReceipt {
 
 #[derive(Debug, Clone, Default)]
 struct Definitions {
+    font_assets: Vec<FontAssetDefinition>,
     artboards: Vec<ArtboardDefinition>,
 }
 
@@ -451,6 +465,7 @@ struct IndexedObject {
 /// never rescan the growing authored graph.
 #[derive(Default)]
 struct DefinitionIndex {
+    font_assets: BTreeMap<FontAssetId, usize>,
     artboards: BTreeMap<ArtboardId, usize>,
     objects: BTreeMap<ObjectId, IndexedObject>,
     children: BTreeMap<Parent, Vec<ObjectId>>,
@@ -469,6 +484,9 @@ impl DefinitionIndex {
                 });
         });
         let mut index = Self::default();
+        for (font_index, font) in definitions.font_assets.iter().enumerate() {
+            index.font_assets.insert(font.id, font_index);
+        }
         for (artboard_index, artboard) in definitions.artboards.iter().enumerate() {
             index.artboards.insert(artboard.id, artboard_index);
             index
@@ -504,7 +522,7 @@ impl DefinitionIndex {
     ) -> std::result::Result<ArtboardId, EditAbort> {
         match parent {
             Parent::Artboard(artboard) => {
-                if child != NodeKind::Shape {
+                if !matches!(child, NodeKind::Shape | NodeKind::Text) {
                     return Err(EditAbort::new(
                         operation_index,
                         vec![EditId::Artboard(artboard)],
@@ -551,11 +569,17 @@ impl DefinitionIndex {
 
 #[derive(Default)]
 struct SpecOrigins {
+    font_assets: BTreeMap<FontAssetId, usize>,
     artboard_specs: BTreeMap<ArtboardId, usize>,
     nodes: BTreeMap<ObjectId, usize>,
+    relationships: BTreeMap<ObjectId, usize>,
 }
 
 impl SpecOrigins {
+    fn font_asset(&self, id: FontAssetId, fallback: usize) -> usize {
+        self.font_assets.get(&id).copied().unwrap_or(fallback)
+    }
+
     fn artboard(&self, id: ArtboardId, fallback: usize) -> usize {
         self.artboard_specs.get(&id).copied().unwrap_or(fallback)
     }
@@ -563,6 +587,26 @@ impl SpecOrigins {
     fn object(&self, id: ObjectId, fallback: usize) -> usize {
         self.nodes.get(&id).copied().unwrap_or(fallback)
     }
+
+    fn relationship(&self, first: ObjectId, second: ObjectId, fallback: usize) -> usize {
+        [first, second]
+            .into_iter()
+            .flat_map(|id| {
+                [
+                    self.nodes.get(&id).copied(),
+                    self.relationships.get(&id).copied(),
+                ]
+            })
+            .flatten()
+            .max()
+            .unwrap_or(fallback)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FontAssetDefinition {
+    id: FontAssetId,
+    spec: FontAssetSpec,
 }
 
 #[derive(Debug, Clone)]
@@ -581,9 +625,9 @@ struct NodeDefinition {
 
 /// Deep private seam for every authored hierarchy invariant. A transaction
 /// keeps one indexed candidate; each method completely preflights one operation
-/// before mutating it, and commit validates and flattens canonical preorder
-/// once. This module owns sibling order, subtree movement, cycle and parent
-/// validation, and iterative canonical preorder.
+/// before mutating it, and commit validates and stabilizes parent-before-child
+/// record order once. This module owns sibling order, subtree movement, cycle
+/// and parent validation, and stable topological ordering.
 struct Hierarchy<'a> {
     definitions: &'a mut Definitions,
     index: &'a DefinitionIndex,
@@ -763,6 +807,148 @@ impl Hierarchy<'_> {
         Ok(source)
     }
 
+    fn set_child_order(
+        &mut self,
+        parent: Parent,
+        ordered_children: &[ObjectId],
+    ) -> std::result::Result<ArtboardId, EditAbort> {
+        let (artboard_id, artboard_index) = match parent {
+            Parent::Artboard(artboard) => {
+                let artboard_index =
+                    self.index
+                        .artboards
+                        .get(&artboard)
+                        .copied()
+                        .ok_or_else(|| {
+                            self.abort(
+                                vec![EditId::Artboard(artboard)],
+                                EditReason::UnknownArtboard,
+                            )
+                        })?;
+                (artboard, artboard_index)
+            }
+            Parent::Object(object) => {
+                let indexed = self.indexed_object(object).ok_or_else(|| {
+                    self.abort(vec![EditId::Object(object)], EditReason::UnknownObject)
+                })?;
+                (indexed.artboard, indexed.artboard_index)
+            }
+        };
+        let expected_children = self
+            .index
+            .children
+            .get(&parent)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let mut requested = BTreeSet::new();
+        for child in ordered_children {
+            let indexed = self.indexed_object(*child).ok_or_else(|| {
+                self.abort(vec![EditId::Object(*child)], EditReason::UnknownObject)
+            })?;
+            let actual_parent = self
+                .definitions
+                .artboards
+                .get(indexed.artboard_index)
+                .and_then(|artboard| artboard.nodes.get(indexed.node_index))
+                .map(|node| node.parent)
+                .ok_or_else(|| {
+                    self.abort(vec![EditId::Object(*child)], EditReason::InternalInvariant)
+                })?;
+            if indexed.artboard != artboard_id || actual_parent != parent {
+                let mut involved = parent_edit_ids(parent);
+                involved.push(EditId::Object(*child));
+                return Err(self.abort(involved, EditReason::ChildSetMismatch));
+            }
+            if !requested.insert(*child) {
+                return Err(self.abort(vec![EditId::Object(*child)], EditReason::ChildSetMismatch));
+            }
+        }
+        if requested.len() != expected_children.len()
+            || expected_children
+                .iter()
+                .any(|child| !requested.contains(child))
+        {
+            let mut involved = parent_edit_ids(parent);
+            involved.extend(
+                expected_children
+                    .iter()
+                    .filter(|child| !requested.contains(child))
+                    .copied()
+                    .map(EditId::Object),
+            );
+            return Err(self.abort(involved, EditReason::ChildSetMismatch));
+        }
+
+        let mut subtree_owner = BTreeMap::new();
+        let mut frontier = expected_children
+            .iter()
+            .copied()
+            .map(|child| (child, child))
+            .collect::<Vec<_>>();
+        while let Some((object, owner)) = frontier.pop() {
+            if subtree_owner.insert(object, owner).is_some() {
+                return Err(self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant));
+            }
+            if let Some(children) = self.index.children.get(&Parent::Object(object)) {
+                frontier.extend(children.iter().copied().map(|child| (child, owner)));
+            }
+        }
+
+        let artboard = self
+            .definitions
+            .artboards
+            .get(artboard_index)
+            .ok_or_else(|| self.abort(parent_edit_ids(parent), EditReason::InternalInvariant))?;
+        let grouped_node_count = artboard
+            .nodes
+            .iter()
+            .filter(|node| subtree_owner.contains_key(&node.id))
+            .count();
+        if grouped_node_count != subtree_owner.len() {
+            return Err(self.abort(parent_edit_ids(parent), EditReason::InternalInvariant));
+        }
+
+        // Everything below is infallible. Each direct child's complete subtree
+        // becomes one stable block, and those blocks are spliced at the first
+        // existing child position in the caller's exact order.
+        let rank_by_root = ordered_children
+            .iter()
+            .enumerate()
+            .map(|(rank, root)| (*root, rank))
+            .collect::<BTreeMap<_, _>>();
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .expect("preflighted child-order artboard exists");
+        let nodes = std::mem::take(&mut artboard.nodes);
+        let mut remaining = Vec::with_capacity(nodes.len().saturating_sub(grouped_node_count));
+        let mut groups = (0..ordered_children.len())
+            .map(|_| Vec::new())
+            .collect::<Vec<Vec<NodeDefinition>>>();
+        let mut insertion_index = None;
+        for node in nodes {
+            if let Some(owner) = subtree_owner.get(&node.id) {
+                insertion_index.get_or_insert(remaining.len());
+                let rank = rank_by_root
+                    .get(owner)
+                    .copied()
+                    .expect("preflighted subtree owner has an exact rank");
+                groups
+                    .get_mut(rank)
+                    .expect("preflighted subtree rank has a group")
+                    .push(node);
+            } else {
+                remaining.push(node);
+            }
+        }
+        let ordered_nodes = groups.into_iter().flatten().collect::<Vec<_>>();
+        let insertion_index = insertion_index.unwrap_or(remaining.len());
+        remaining.splice(insertion_index..insertion_index, ordered_nodes);
+        artboard.nodes = remaining;
+        Ok(artboard_id)
+    }
+
     fn reparent(
         &mut self,
         object: ObjectId,
@@ -830,7 +1016,7 @@ impl Hierarchy<'_> {
         }
 
         let parent_is_valid = match parent_kind {
-            None => child_kind == NodeKind::Shape,
+            None => matches!(child_kind, NodeKind::Shape | NodeKind::Text),
             Some(parent) => valid_object_parent(parent, child_kind),
         };
         if !parent_is_valid {
@@ -1073,7 +1259,7 @@ impl Hierarchy<'_> {
                 }
             };
             let valid = match parent_kind {
-                None => child == NodeKind::Shape,
+                None => matches!(child, NodeKind::Shape | NodeKind::Text),
                 Some(parent) => valid_object_parent(parent, child),
             };
             if !valid {
@@ -1273,7 +1459,7 @@ impl Hierarchy<'_> {
                     Parent::Object(parent) => objects.get(&parent).map(|(_, kind)| *kind),
                 };
                 let valid = match parent_kind {
-                    None => child == NodeKind::Shape,
+                    None => matches!(child, NodeKind::Shape | NodeKind::Text),
                     Some(parent) => valid_object_parent(parent, child),
                 };
                 if !valid {
@@ -1290,17 +1476,44 @@ impl Hierarchy<'_> {
 
         for artboard in &mut definitions.artboards {
             let nodes = std::mem::take(&mut artboard.nodes);
-            let mut roots = Vec::new();
+            let positions = nodes
+                .iter()
+                .enumerate()
+                .map(|(index, node)| (node.id, index))
+                .collect::<BTreeMap<_, _>>();
+            let already_parent_before_child =
+                nodes
+                    .iter()
+                    .enumerate()
+                    .all(|(index, node)| match node.parent {
+                        Parent::Artboard(_) => true,
+                        Parent::Object(parent) => positions
+                            .get(&parent)
+                            .is_some_and(|parent_index| *parent_index < index),
+                    });
+            if already_parent_before_child {
+                artboard.nodes = nodes;
+                continue;
+            }
+
+            // Preserve authored record order whenever it is already valid. If
+            // a reparent makes a parent appear after its child, use the
+            // original record index as Kahn's ready-queue priority. This is the
+            // smallest stable repair: parent references become importable
+            // without turning the record stream into hierarchy preorder or
+            // changing the order of same-parent siblings.
+            let mut ready = BTreeSet::new();
             let mut children: BTreeMap<ObjectId, Vec<usize>> = BTreeMap::new();
             for (index, node) in nodes.iter().enumerate() {
                 match node.parent {
-                    Parent::Artboard(_) => roots.push(index),
+                    Parent::Artboard(_) => {
+                        ready.insert(index);
+                    }
                     Parent::Object(parent) => children.entry(parent).or_default().push(index),
                 }
             }
-            let mut stack = roots.into_iter().rev().collect::<Vec<_>>();
-            let mut canonical = Vec::with_capacity(nodes.len());
-            while let Some(index) = stack.pop() {
+            let mut stable = Vec::with_capacity(nodes.len());
+            while let Some(index) = ready.pop_first() {
                 let Some(node) = nodes.get(index).cloned() else {
                     return Err(EditAbort::new(
                         operation_index,
@@ -1309,18 +1522,18 @@ impl Hierarchy<'_> {
                     ));
                 };
                 if let Some(child_indices) = children.get(&node.id) {
-                    stack.extend(child_indices.iter().rev().copied());
+                    ready.extend(child_indices.iter().copied());
                 }
-                canonical.push(node);
+                stable.push(node);
             }
-            if canonical.len() != nodes.len() {
+            if stable.len() != nodes.len() {
                 return Err(EditAbort::new(
                     operation_index,
                     vec![EditId::Artboard(artboard.id)],
                     EditReason::InternalInvariant,
                 ));
             }
-            artboard.nodes = canonical;
+            artboard.nodes = stable;
         }
         Ok(())
     }
@@ -1434,6 +1647,7 @@ struct SceneIdentity {
 static NEXT_SCENE_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_ARTBOARD_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_OBJECT_ID: AtomicU64 = AtomicU64::new(0);
+static NEXT_FONT_ASSET_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Render resources retained for one mount of one live authored instance.
@@ -1456,6 +1670,8 @@ pub struct SceneRenderCache {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportedObjectKind {
     Backboard,
+    FontAsset,
+    FileAssetContents,
     Artboard,
     Shape,
     Rectangle,
@@ -1464,6 +1680,9 @@ pub enum ExportedObjectKind {
     Stroke,
     DashPath,
     Dash,
+    Text,
+    TextValueRun,
+    TextStylePaint,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1475,6 +1694,9 @@ pub enum ExportedFillRule {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExportedProperty {
     ComponentName(String),
+    AssetName(String),
+    FileAssetId(u32),
+    FileAssetContentsBytes(Vec<u8>),
     ParentId(u32),
     LayoutWidth(f32),
     LayoutHeight(f32),
@@ -1501,12 +1723,27 @@ pub enum ExportedProperty {
     DashOffsetIsPercentage(bool),
     DashLength(f32),
     DashLengthIsPercentage(bool),
+    TextSizing(SceneTextSizing),
+    TextAlign(SceneTextAlign),
+    TextWidth(f32),
+    TextHeight(f32),
+    TextWrap(SceneTextWrap),
+    TextOverflow(SceneTextOverflow),
+    TextValueRunText(String),
+    TextValueRunStyleId(u32),
+    TextStyleFontSize(f32),
+    TextStyleLineHeight(f32),
+    TextStyleLetterSpacing(f32),
+    TextStyleFontAssetId(u32),
 }
 
 impl ExportedProperty {
     fn schema_key(&self) -> u16 {
         match self {
             Self::ComponentName(_) => PROPERTY_COMPONENT_NAME,
+            Self::AssetName(_) => PROPERTY_ASSET_NAME,
+            Self::FileAssetId(_) => PROPERTY_FILE_ASSET_ID,
+            Self::FileAssetContentsBytes(_) => PROPERTY_FILE_ASSET_CONTENTS_BYTES,
             Self::ParentId(_) => PROPERTY_PARENT_ID,
             Self::LayoutWidth(_) => PROPERTY_LAYOUT_WIDTH,
             Self::LayoutHeight(_) => PROPERTY_LAYOUT_HEIGHT,
@@ -1533,15 +1770,37 @@ impl ExportedProperty {
             Self::DashOffsetIsPercentage(_) => PROPERTY_DASH_OFFSET_IS_PERCENTAGE,
             Self::DashLength(_) => PROPERTY_DASH_LENGTH,
             Self::DashLengthIsPercentage(_) => PROPERTY_DASH_LENGTH_IS_PERCENTAGE,
+            Self::TextSizing(_) => PROPERTY_TEXT_SIZING,
+            Self::TextAlign(_) => PROPERTY_TEXT_ALIGN,
+            Self::TextWidth(_) => PROPERTY_TEXT_WIDTH,
+            Self::TextHeight(_) => PROPERTY_TEXT_HEIGHT,
+            Self::TextWrap(_) => PROPERTY_TEXT_WRAP,
+            Self::TextOverflow(_) => PROPERTY_TEXT_OVERFLOW,
+            Self::TextValueRunText(_) => PROPERTY_TEXT_VALUE_RUN_TEXT,
+            Self::TextValueRunStyleId(_) => PROPERTY_TEXT_VALUE_RUN_STYLE_ID,
+            Self::TextStyleFontSize(_) => PROPERTY_TEXT_STYLE_FONT_SIZE,
+            Self::TextStyleLineHeight(_) => PROPERTY_TEXT_STYLE_LINE_HEIGHT,
+            Self::TextStyleLetterSpacing(_) => PROPERTY_TEXT_STYLE_LETTER_SPACING,
+            Self::TextStyleFontAssetId(_) => PROPERTY_TEXT_STYLE_FONT_ASSET_ID,
         }
     }
 
     fn into_authoring_property(self) -> AuthoringProperty {
         let key = self.schema_key();
         let value = match self {
-            Self::ComponentName(value) => AuthoringValue::String(value),
-            Self::ParentId(value) => AuthoringValue::Uint(u64::from(value)),
+            Self::ComponentName(value) | Self::AssetName(value) | Self::TextValueRunText(value) => {
+                AuthoringValue::String(value)
+            }
+            Self::FileAssetContentsBytes(value) => AuthoringValue::Bytes(value),
+            Self::ParentId(value)
+            | Self::FileAssetId(value)
+            | Self::TextValueRunStyleId(value)
+            | Self::TextStyleFontAssetId(value) => AuthoringValue::Uint(u64::from(value)),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
+            Self::TextSizing(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
+            Self::TextAlign(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
+            Self::TextWrap(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
+            Self::TextOverflow(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::StrokeCap(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::StrokeJoin(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::LayoutWidth(value)
@@ -1560,7 +1819,12 @@ impl ExportedProperty {
             | Self::RectangleCornerRadiusBottomLeft(value)
             | Self::StrokeThickness(value)
             | Self::DashOffset(value)
-            | Self::DashLength(value) => AuthoringValue::Double(value),
+            | Self::DashLength(value)
+            | Self::TextWidth(value)
+            | Self::TextHeight(value)
+            | Self::TextStyleFontSize(value)
+            | Self::TextStyleLineHeight(value)
+            | Self::TextStyleLetterSpacing(value) => AuthoringValue::Double(value),
             Self::RectangleLinkCornerRadius(value)
             | Self::StrokeTransformAffectsStroke(value)
             | Self::DashOffsetIsPercentage(value)
@@ -1582,6 +1846,8 @@ impl ExportedRecord {
     fn into_authoring_record(self) -> AuthoringRecord {
         let type_key = match self.kind {
             ExportedObjectKind::Backboard => TYPE_BACKBOARD,
+            ExportedObjectKind::FontAsset => TYPE_FONT_ASSET,
+            ExportedObjectKind::FileAssetContents => TYPE_FILE_ASSET_CONTENTS,
             ExportedObjectKind::Artboard => TYPE_ARTBOARD,
             ExportedObjectKind::Shape => TYPE_SHAPE,
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
@@ -1590,6 +1856,9 @@ impl ExportedRecord {
             ExportedObjectKind::Stroke => TYPE_STROKE,
             ExportedObjectKind::DashPath => TYPE_DASH_PATH,
             ExportedObjectKind::Dash => TYPE_DASH,
+            ExportedObjectKind::Text => TYPE_TEXT,
+            ExportedObjectKind::TextValueRun => TYPE_TEXT_VALUE_RUN,
+            ExportedObjectKind::TextStylePaint => TYPE_TEXT_STYLE_PAINT,
         };
         AuthoringRecord {
             type_key,
@@ -1715,6 +1984,12 @@ impl Scene {
         definitions
             .canonicalize_and_validate(commit_operation_index)
             .map_err(|abort| EditError::commit(abort.diagnostic))?;
+        validate_font_assets(
+            &definitions.font_assets,
+            commit_operation_index,
+            &spec_origins,
+        )
+        .map_err(EditError::commit)?;
 
         let final_artboards = definitions
             .artboards
@@ -1746,6 +2021,7 @@ impl Scene {
                 .copied()
                 .unwrap_or(commit_operation_index);
             let materialized = MaterializedArtboard::build(
+                &definitions.font_assets,
                 artboard,
                 commit_operation_index,
                 &spec_origins,
@@ -1983,11 +2259,23 @@ impl Scene {
     ///
     /// Export reads authored definitions, not ephemeral instance values written through
     /// [`Frame::set`]. Clients replay those values after a structural remount when needed.
+    /// Persistent font identities are projected to only the currently referenced assets in
+    /// semantic first-use order, with dense record-local asset ids.
     pub fn export_records(&self) -> ExportedDocument {
         let mut records = vec![backboard_record()];
         let origins = SpecOrigins::default();
+        let (font_records, font_asset_indices) = match ReferencedFontAssets::collect(
+            &self.definitions.font_assets,
+            &self.definitions.artboards,
+        )
+        .lower(0, &origins)
+        {
+            Ok(lowered) => lowered,
+            Err(_) => std::process::abort(),
+        };
+        records.extend(font_records);
         for artboard in &self.definitions.artboards {
-            let lowered = match lower_artboard(artboard, 0, &origins) {
+            let lowered = match lower_artboard(artboard, &font_asset_indices, 0, &origins) {
                 Ok(lowered) => lowered,
                 Err(_) => {
                     // Committed definitions have already passed this exact lowering path.
@@ -1995,7 +2283,7 @@ impl Scene {
                     std::process::abort();
                 }
             };
-            records.extend(lowered.records.into_iter().skip(1));
+            records.extend(lowered.records);
         }
         ExportedDocument { records }
     }
@@ -2012,6 +2300,36 @@ pub struct SceneTx<'a> {
 }
 
 impl SceneTx<'_> {
+    /// Add one embedded font to the scene and return its stable semantic identity.
+    ///
+    /// Each call creates a distinct asset. Callers retain and reuse the returned
+    /// identity when multiple text styles share one font. The asset remains part
+    /// of the scene's durable definitions across later edits, even while no style
+    /// references it. Runtime files and export records omit it until it is referenced.
+    ///
+    /// Adding the durable definition alone does not touch any artboard: runtime
+    /// files project only fonts referenced by that artboard's current text
+    /// styles. The structural edit that first creates such a reference touches
+    /// and remounts its owning artboard through the ordinary node path.
+    pub fn create_font_asset(
+        &mut self,
+        spec: FontAssetSpec,
+    ) -> std::result::Result<FontAssetId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let id = FontAssetId(
+            allocate_global_identity(&NEXT_FONT_ASSET_ID).ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?,
+        );
+        let font_index = self.definitions.font_assets.len();
+        self.definitions
+            .font_assets
+            .push(FontAssetDefinition { id, spec });
+        self.definition_index.font_assets.insert(id, font_index);
+        self.spec_origins.font_assets.insert(id, operation_index);
+        Ok(id)
+    }
+
     pub fn create_artboard(
         &mut self,
         spec: ArtboardSpec,
@@ -2191,6 +2509,28 @@ impl SceneTx<'_> {
         Ok(())
     }
 
+    /// Set the exact final order of every direct child owned by one parent.
+    ///
+    /// The order must contain the parent's complete current child set exactly
+    /// once. Validation is atomic, complete child subtrees move as stable
+    /// blocks, and the transaction index is rebuilt once after mutation.
+    pub fn set_child_order(
+        &mut self,
+        parent: Parent,
+        ordered_children: &[ObjectId],
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_id = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .set_child_order(parent, ordered_children)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(artboard_id, operation_index);
+        Ok(())
+    }
+
     /// Move an authored object subtree under a new parent at an exact final
     /// sibling position. Stable object identities are retained.
     pub fn reparent(
@@ -2207,6 +2547,9 @@ impl SceneTx<'_> {
         }
         .reparent(object, new_parent, index)?;
         self.refresh_definition_index();
+        self.spec_origins
+            .relationships
+            .insert(object, operation_index);
         self.touched_artboards.insert(source, operation_index);
         self.touched_artboards.insert(target, operation_index);
         Ok(())
@@ -2225,6 +2568,11 @@ impl SceneTx<'_> {
         }
         .detach_subtree(object)?;
         self.refresh_definition_index();
+        for removed_node in &removed.nodes {
+            self.spec_origins
+                .relationships
+                .insert(removed_node.definition.id, operation_index);
+        }
         self.touched_artboards
             .insert(removed.artboard, operation_index);
         Ok(removed)
@@ -2311,6 +2659,11 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
         ) | (NodeKind::Fill, NodeKind::SolidColor)
             | (NodeKind::Stroke, NodeKind::SolidColor | NodeKind::DashPath)
             | (NodeKind::DashPath, NodeKind::Dash)
+            | (
+                NodeKind::Text,
+                NodeKind::TextValueRun | NodeKind::TextStylePaint
+            )
+            | (NodeKind::TextStylePaint, NodeKind::Fill | NodeKind::Stroke)
     )
 }
 
@@ -2503,16 +2856,25 @@ impl Frame<'_> {
 
 impl MaterializedArtboard {
     fn build(
+        font_assets: &[FontAssetDefinition],
         definition: &ArtboardDefinition,
         fallback_operation_index: usize,
         origins: &SpecOrigins,
         touched_operation_index: usize,
     ) -> std::result::Result<Self, EditDiagnostic> {
-        let lowered = lower_artboard(definition, fallback_operation_index, origins)?;
-        let authoring_records = ExportedDocument {
-            records: lowered.records,
-        }
-        .into_authoring_records();
+        let (font_records, font_asset_indices) =
+            ReferencedFontAssets::collect(font_assets, std::slice::from_ref(definition))
+                .lower(fallback_operation_index, origins)?;
+        let lowered = lower_artboard(
+            definition,
+            &font_asset_indices,
+            fallback_operation_index,
+            origins,
+        )?;
+        let mut records = vec![backboard_record()];
+        records.extend(font_records);
+        records.extend(lowered.records);
+        let authoring_records = ExportedDocument { records }.into_authoring_records();
         let runtime = RuntimeFile::from_authoring_records(authoring_records).map_err(|_| {
             EditDiagnostic::new(
                 touched_operation_index,
@@ -2541,6 +2903,143 @@ struct LoweredArtboard {
     objects_by_local: Vec<Option<ObjectId>>,
 }
 
+/// Canonical record-time view of the persistent font catalog.
+///
+/// `FontAssetId` definitions remain stable and append-only so typed handles are
+/// never invalidated. Runtime files and export records instead include only
+/// assets referenced by current TextStylePaint definitions, ordered by their
+/// first occurrence in canonical artboard/node order. This one seam owns stale
+/// exclusion and the dense local `assetId` remap used by every consumer.
+struct ReferencedFontAssets<'a> {
+    ordered: Vec<&'a FontAssetDefinition>,
+}
+
+impl<'a> ReferencedFontAssets<'a> {
+    fn collect(font_assets: &'a [FontAssetDefinition], artboards: &[ArtboardDefinition]) -> Self {
+        let definitions = font_assets
+            .iter()
+            .map(|font| (font.id, font))
+            .collect::<BTreeMap<_, _>>();
+        let mut seen = BTreeSet::new();
+        let mut ordered = Vec::new();
+        for artboard in artboards {
+            for node in &artboard.nodes {
+                let NodeSpec::TextStylePaint(style) = &node.spec else {
+                    continue;
+                };
+                if seen.insert(style.font) {
+                    // Unknown semantic identities remain absent from this
+                    // projection so lower_artboard can report the owning style
+                    // and font together with its established diagnostic.
+                    if let Some(font) = definitions.get(&style.font).copied() {
+                        ordered.push(font);
+                    }
+                }
+            }
+        }
+        Self { ordered }
+    }
+
+    fn lower(
+        self,
+        fallback_operation_index: usize,
+        origins: &SpecOrigins,
+    ) -> std::result::Result<(Vec<ExportedRecord>, BTreeMap<FontAssetId, u32>), EditDiagnostic>
+    {
+        let record_capacity = self.ordered.len().checked_mul(2).ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                Vec::new(),
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        let mut records = Vec::with_capacity(record_capacity);
+        let mut indices = BTreeMap::new();
+        for (index, font) in self.ordered.into_iter().enumerate() {
+            validate_font_asset(font, fallback_operation_index, origins)?;
+            let operation_index = origins.font_asset(font.id, fallback_operation_index);
+            let file_asset_id = u32::try_from(index).map_err(|_| {
+                EditDiagnostic::new(
+                    operation_index,
+                    vec![EditId::FontAsset(font.id)],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            if indices.insert(font.id, file_asset_id).is_some() {
+                return Err(EditDiagnostic::new(
+                    operation_index,
+                    vec![EditId::FontAsset(font.id)],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::FontAsset,
+                properties: vec![
+                    ExportedProperty::AssetName(font.spec.name.clone()),
+                    ExportedProperty::FileAssetId(file_asset_id),
+                ],
+            });
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::FileAssetContents,
+                properties: vec![ExportedProperty::FileAssetContentsBytes(
+                    font.spec.bytes.clone(),
+                )],
+            });
+        }
+        Ok((records, indices))
+    }
+}
+
+fn validate_font_assets(
+    font_assets: &[FontAssetDefinition],
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    let mut identities = BTreeSet::new();
+    for (index, font) in font_assets.iter().enumerate() {
+        validate_font_asset(font, fallback_operation_index, origins)?;
+        let operation_index = origins.font_asset(font.id, fallback_operation_index);
+        u32::try_from(index).map_err(|_| {
+            EditDiagnostic::new(
+                operation_index,
+                vec![EditId::FontAsset(font.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        if !identities.insert(font.id) {
+            return Err(EditDiagnostic::new(
+                operation_index,
+                vec![EditId::FontAsset(font.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_font_asset(
+    font: &FontAssetDefinition,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    let operation_index = origins.font_asset(font.id, fallback_operation_index);
+    if font.spec.bytes.is_empty() {
+        return Err(EditDiagnostic::new(
+            operation_index,
+            vec![EditId::FontAsset(font.id)],
+            EditReason::EmptyFontAsset,
+        ));
+    }
+    if !embedded_font_is_parseable(&font.spec.bytes) {
+        return Err(EditDiagnostic::new(
+            operation_index,
+            vec![EditId::FontAsset(font.id)],
+            EditReason::InvalidFontAsset,
+        ));
+    }
+    Ok(())
+}
+
 /// Lower exactly one durable artboard into one runtime-file record stream.
 ///
 /// Preview materialization uses this function today; deterministic export can reuse the same
@@ -2548,6 +3047,7 @@ struct LoweredArtboard {
 /// to the artboard, which hard-gates the current vocabulary against cross-artboard references.
 fn lower_artboard(
     artboard: &ArtboardDefinition,
+    font_asset_indices: &BTreeMap<FontAssetId, u32>,
     fallback_operation_index: usize,
     origins: &SpecOrigins,
 ) -> std::result::Result<LoweredArtboard, EditDiagnostic> {
@@ -2559,9 +3059,11 @@ fn lower_artboard(
         )
     })?;
 
-    let mut records = vec![backboard_record(), artboard_record(&artboard.spec)];
+    let mut records = vec![artboard_record(&artboard.spec)];
     let mut all_kinds = BTreeMap::new();
-    for node in &artboard.nodes {
+    let mut all_parents = BTreeMap::new();
+    let mut all_local_ids = BTreeMap::new();
+    for (node_index, node) in artboard.nodes.iter().enumerate() {
         if all_kinds.insert(node.id, node.spec.kind()).is_some() {
             return Err(EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -2569,6 +3071,15 @@ fn lower_artboard(
                 EditReason::IdentityCollision,
             ));
         }
+        all_parents.insert(node.id, node.parent);
+        let local_id = node_index.checked_add(1).ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        all_local_ids.insert(node.id, local_id);
     }
 
     let mut local_ids = BTreeMap::new();
@@ -2589,9 +3100,41 @@ fn lower_artboard(
                 reason,
             )
         })?;
+        match &node.spec {
+            NodeSpec::TextValueRun(spec) => {
+                let actual = all_kinds.get(&spec.style).copied();
+                if actual != Some(NodeKind::TextStylePaint)
+                    || all_parents.get(&spec.style).copied() != Some(node.parent)
+                {
+                    return Err(EditDiagnostic::new(
+                        origins.relationship(node.id, spec.style, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::Object(spec.style)],
+                        if actual.is_none() {
+                            EditReason::UnknownObject
+                        } else {
+                            EditReason::InvalidReference {
+                                expected: NodeKind::TextStylePaint,
+                                actual,
+                            }
+                        },
+                    ));
+                }
+            }
+            NodeSpec::TextStylePaint(spec) => {
+                if !font_asset_indices.contains_key(&spec.font) {
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::FontAsset(spec.font)],
+                        EditReason::UnknownFontAsset,
+                    ));
+                }
+            }
+            _ => {}
+        }
         let parent_id = match node.parent {
             Parent::Artboard(parent)
-                if parent == artboard.id && node.spec.kind() == NodeKind::Shape =>
+                if parent == artboard.id
+                    && matches!(node.spec.kind(), NodeKind::Shape | NodeKind::Text) =>
             {
                 0
             }
@@ -2651,13 +3194,15 @@ fn lower_artboard(
                 parent_id
             }
         };
-        records.push(node_record(node, parent_id).map_err(|reason| {
-            EditDiagnostic::new(
-                origins.object(node.id, fallback_operation_index),
-                vec![EditId::Object(node.id)],
-                reason,
-            )
-        })?);
+        records.push(
+            node_record(node, parent_id, &all_local_ids, font_asset_indices).map_err(|reason| {
+                EditDiagnostic::new(
+                    origins.object(node.id, fallback_operation_index),
+                    vec![EditId::Object(node.id)],
+                    reason,
+                )
+            })?,
+        );
         if local_ids.insert(node.id, local_id).is_some()
             || objects
                 .insert(
@@ -2685,7 +3230,7 @@ fn lower_artboard(
         objects_by_local.push(Some(node.id));
     }
 
-    let exact_record_count = artboard.nodes.len().checked_add(2).ok_or_else(|| {
+    let exact_record_count = artboard.nodes.len().checked_add(1).ok_or_else(|| {
         EditDiagnostic::new(
             fallback_operation_index,
             vec![EditId::Artboard(artboard.id)],
@@ -2815,7 +3360,34 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 return Err(EditReason::NonFiniteProperty { property: "length" });
             }
         }
-        NodeSpec::Fill(_) | NodeSpec::SolidColor(_) => {}
+        NodeSpec::Text(spec) => {
+            for (property, value) in [
+                ("x", spec.x),
+                ("y", spec.y),
+                ("opacity", spec.opacity),
+                ("rotation", spec.rotation),
+                ("scale_x", spec.scale_x),
+                ("scale_y", spec.scale_y),
+                ("width", spec.width),
+                ("height", spec.height),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
+        NodeSpec::TextStylePaint(spec) => {
+            for (property, value) in [
+                ("font_size", spec.font_size),
+                ("line_height", spec.line_height),
+                ("letter_spacing", spec.letter_spacing),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
+        NodeSpec::Fill(_) | NodeSpec::SolidColor(_) | NodeSpec::TextValueRun(_) => {}
     }
     Ok(())
 }
@@ -2841,6 +3413,8 @@ fn artboard_record(spec: &ArtboardSpec) -> ExportedRecord {
 fn node_record(
     node: &NodeDefinition,
     parent_id: usize,
+    local_ids: &BTreeMap<ObjectId, usize>,
+    font_asset_indices: &BTreeMap<FontAssetId, u32>,
 ) -> std::result::Result<ExportedRecord, EditReason> {
     let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
     let mut properties = Vec::new();
@@ -2927,6 +3501,55 @@ fn node_record(
             ));
             ExportedObjectKind::Dash
         }
+        NodeSpec::Text(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::TranslateX(spec.x));
+            properties.push(ExportedProperty::TranslateY(spec.y));
+            if spec.opacity != 1.0 {
+                properties.push(ExportedProperty::WorldOpacity(spec.opacity));
+            }
+            if spec.rotation != 0.0 {
+                properties.push(ExportedProperty::Rotation(spec.rotation));
+            }
+            if spec.scale_x != 1.0 {
+                properties.push(ExportedProperty::ScaleX(spec.scale_x));
+            }
+            if spec.scale_y != 1.0 {
+                properties.push(ExportedProperty::ScaleY(spec.scale_y));
+            }
+            properties.push(ExportedProperty::TextSizing(spec.sizing));
+            properties.push(ExportedProperty::TextAlign(spec.align));
+            properties.push(ExportedProperty::TextWidth(spec.width));
+            properties.push(ExportedProperty::TextHeight(spec.height));
+            properties.push(ExportedProperty::TextWrap(spec.wrap));
+            properties.push(ExportedProperty::TextOverflow(spec.overflow));
+            ExportedObjectKind::Text
+        }
+        NodeSpec::TextValueRun(spec) => {
+            let style_id = local_ids
+                .get(&spec.style)
+                .copied()
+                .ok_or(EditReason::UnknownObject)?;
+            let style_id = u32::try_from(style_id).map_err(|_| EditReason::CapacityExceeded)?;
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::TextValueRunText(spec.text.clone()));
+            properties.push(ExportedProperty::TextValueRunStyleId(style_id));
+            ExportedObjectKind::TextValueRun
+        }
+        NodeSpec::TextStylePaint(spec) => {
+            let font_asset_id = font_asset_indices
+                .get(&spec.font)
+                .copied()
+                .ok_or(EditReason::UnknownFontAsset)?;
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::TextStyleFontSize(spec.font_size));
+            properties.push(ExportedProperty::TextStyleLineHeight(spec.line_height));
+            properties.push(ExportedProperty::TextStyleLetterSpacing(
+                spec.letter_spacing,
+            ));
+            properties.push(ExportedProperty::TextStyleFontAssetId(font_asset_id));
+            ExportedObjectKind::TextStylePaint
+        }
     };
     Ok(ExportedRecord { kind, properties })
 }
@@ -2949,6 +3572,251 @@ mod tests {
 
     fn parse_single_frame(stream: &str) -> Result<RenderStream> {
         Ok(RenderStream::parse(&format!("{stream}frame\n"))?)
+    }
+
+    #[allow(clippy::arithmetic_side_effects)]
+    fn fixture_font_bytes() -> Vec<u8> {
+        let mut accumulator = 0u32;
+        let mut bit_count = 0u8;
+        let mut decoded = Vec::new();
+        for byte in include_bytes!("../tests/fixtures/roboto-a.ttf.base64")
+            .iter()
+            .copied()
+            .filter(|byte| !byte.is_ascii_whitespace())
+        {
+            if byte == b'=' {
+                break;
+            }
+            let value = match byte {
+                b'A'..=b'Z' => byte - b'A',
+                b'a'..=b'z' => byte - b'a' + 26,
+                b'0'..=b'9' => byte - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => panic!("invalid base64 font fixture"),
+            };
+            accumulator = (accumulator << 6) | u32::from(value);
+            bit_count += 6;
+            if bit_count >= 8 {
+                bit_count -= 8;
+                decoded.push((accumulator >> bit_count) as u8);
+                accumulator &= (1u32 << bit_count) - 1;
+            }
+        }
+        decoded
+    }
+
+    fn owned_font_text_fixture(include_embedded_contents: bool) -> Result<OwnedArtboardInstance> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "External font text".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Title".into(),
+                    x: 10.0,
+                    y: 20.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 120.0,
+                    height: 40.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::Wrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Title Style".into(),
+                    font_size: 24.0,
+                    line_height: 30.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            let fill = tx.create(
+                Parent::Object(style),
+                NodeSpec::Fill(FillSpec {
+                    name: "Title Fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Title Color".into(),
+                    color: 0xff11_2233,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Title Run".into(),
+                    text: "external font".into(),
+                    style,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        let mut records = scene.export_records().into_authoring_records();
+        if !include_embedded_contents {
+            records.retain(|record| record.type_key != TYPE_FILE_ASSET_CONTENTS);
+        }
+        let runtime = RuntimeFile::from_authoring_records(records)?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        Ok(OwnedArtboardInstance::instantiate(file, 0)?)
+    }
+
+    fn owned_draw_stream(instance: &mut OwnedArtboardInstance) -> Result<String> {
+        let mut factory = RecordingFactory::new();
+        let mut cache = instance.new_render_cache(&mut factory);
+        let mut renderer = factory.make_renderer();
+        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        Ok(factory.stream())
+    }
+
+    fn stream_draws_path(stream: &str) -> bool {
+        stream.lines().any(|line| line.starts_with("drawPath "))
+    }
+
+    fn owned_wrong_kind_asset_fixture(asset_id: u32) -> Result<OwnedArtboardInstance> {
+        let image_asset_type = nuxie_schema::definition_by_name("ImageAsset")
+            .ok_or_else(|| anyhow::anyhow!("ImageAsset schema definition is missing"))?
+            .type_key
+            .int;
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: TYPE_BACKBOARD,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: image_asset_type,
+                properties: vec![AuthoringProperty {
+                    key: PROPERTY_FILE_ASSET_ID,
+                    value: AuthoringValue::Uint(u64::from(asset_id)),
+                }],
+            },
+            AuthoringRecord {
+                type_key: TYPE_ARTBOARD,
+                properties: vec![
+                    AuthoringProperty {
+                        key: PROPERTY_LAYOUT_WIDTH,
+                        value: AuthoringValue::Double(100.0),
+                    },
+                    AuthoringProperty {
+                        key: PROPERTY_LAYOUT_HEIGHT,
+                        value: AuthoringValue::Double(100.0),
+                    },
+                ],
+            },
+        ])?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        Ok(OwnedArtboardInstance::instantiate(file, 0)?)
+    }
+
+    #[test]
+    fn owned_instance_external_font_attachment_matches_embedded_text() -> Result<()> {
+        let mut embedded = owned_font_text_fixture(true)?;
+        let mut external = owned_font_text_fixture(false)?;
+
+        let embedded_stream = owned_draw_stream(&mut embedded)?;
+        assert!(
+            stream_draws_path(&embedded_stream),
+            "the embedded oracle must draw at least one real glyph path"
+        );
+
+        let mut retained_factory = RecordingFactory::new();
+        let mut retained_cache = external.new_render_cache(&mut retained_factory);
+        let mut retained_renderer = retained_factory.make_renderer();
+        external.draw_with_render_cache(
+            &mut retained_factory,
+            &mut retained_renderer,
+            &mut retained_cache,
+        )?;
+        assert!(
+            !stream_draws_path(&retained_factory.stream()),
+            "the unresolved external font must initially draw no glyph paths"
+        );
+
+        external.attach_font_asset_bytes(0, fixture_font_bytes())?;
+        retained_factory.clear();
+        external.draw_with_render_cache(
+            &mut retained_factory,
+            &mut retained_renderer,
+            &mut retained_cache,
+        )?;
+        assert!(
+            stream_draws_path(&retained_factory.stream()),
+            "attachment must invalidate the retained cache and draw glyph paths"
+        );
+
+        assert_eq!(external.world_bounds(1), embedded.world_bounds(1));
+        assert_eq!(owned_draw_stream(&mut external)?, embedded_stream);
+        Ok(())
+    }
+
+    #[test]
+    fn owned_instance_without_external_font_bytes_fails_closed() -> Result<()> {
+        let mut external = owned_font_text_fixture(false)?;
+
+        assert_eq!(
+            external.world_bounds(1),
+            Some(crate::Aabb::new(10.0, 20.0, 130.0, 60.0)),
+            "fixed Text retains its logical bounds while its font is unavailable"
+        );
+        assert!(
+            !stream_draws_path(&owned_draw_stream(&mut external)?),
+            "an unresolved external font must not draw fallback or corrupt glyph paths"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rejected_external_font_replacement_is_atomic() -> Result<()> {
+        let mut external = owned_font_text_fixture(false)?;
+        external.attach_font_asset_bytes(0, fixture_font_bytes())?;
+        let bounds_before = external.world_bounds(1);
+        let stream_before = owned_draw_stream(&mut external)?;
+
+        assert_eq!(
+            external.attach_font_asset_bytes(0, b"not a font".to_vec()),
+            Err(crate::ExternalFontAssetError::InvalidFont { asset_id: 0 })
+        );
+
+        assert_eq!(external.world_bounds(1), bounds_before);
+        assert_eq!(owned_draw_stream(&mut external)?, stream_before);
+        Ok(())
+    }
+
+    #[test]
+    fn external_font_attachment_reports_distinct_identity_and_kind_errors() -> Result<()> {
+        let mut external = owned_font_text_fixture(false)?;
+        assert_eq!(
+            external.attach_font_asset_bytes(99, fixture_font_bytes()),
+            Err(crate::ExternalFontAssetError::UnknownAsset { asset_id: 99 })
+        );
+
+        let mut wrong_kind = owned_wrong_kind_asset_fixture(7)?;
+        assert_eq!(
+            wrong_kind.attach_font_asset_bytes(7, fixture_font_bytes()),
+            Err(crate::ExternalFontAssetError::WrongAssetKind {
+                asset_id: 7,
+                actual: "ImageAsset",
+            })
+        );
+        Ok(())
     }
 
     #[test]
@@ -2978,6 +3846,93 @@ mod tests {
         assert_eq!(allocate_global_identity(&next), None);
         assert_eq!(next.load(Ordering::Relaxed), u64::MAX);
         assert_eq!(allocate_global_identity(&next), None);
+    }
+
+    #[test]
+    fn publishing_a_font_for_one_artboard_preserves_other_live_mounts() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((first, second), _) = scene.edit(|tx| {
+            let first = tx.create_artboard(ArtboardSpec {
+                name: "First".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            let second = tx.create_artboard(ArtboardSpec {
+                name: "Second".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            Ok((first, second))
+        })?;
+        let first_instance = scene.instantiate(first)?;
+        let second_instance = scene.instantiate(second)?;
+        let mount = |scene: &Scene, instance: InstanceId| {
+            scene
+                .instances
+                .iter()
+                .filter_map(Option::as_ref)
+                .find(|live| live.id == instance)
+                .map(|live| live.mount)
+                .expect("live instance has a mount")
+        };
+        let first_mount = mount(&scene, first_instance);
+        let second_mount = mount(&scene, second_instance);
+
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let text = tx.create(
+                Parent::Artboard(first),
+                NodeSpec::Text(TextSpec {
+                    name: "First label".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 120.0,
+                    height: 40.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "First label style".into(),
+                    font_size: 20.0,
+                    line_height: 24.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "First label run".into(),
+                    text: "a".into(),
+                    style,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        assert_ne!(
+            mount(&scene, first_instance),
+            first_mount,
+            "the artboard that first references the new font must remount"
+        );
+        assert_eq!(
+            mount(&scene, second_instance),
+            second_mount,
+            "an unreferenced durable font definition must not remount another artboard"
+        );
+        Ok(())
     }
 
     #[test]
@@ -3080,6 +4035,286 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn text_export_remaps_semantic_references_and_reimports_with_identical_draw_and_bounds()
+    -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, text), _) = scene.edit(|tx| {
+            let first_font = tx.create_font_asset(FontAssetSpec {
+                name: "First".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let second_font = tx.create_font_asset(FontAssetSpec {
+                name: "Second".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Text".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Title".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 120.0,
+                    height: 40.0,
+                    align: SceneTextAlign::Center,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: SceneTextOverflow::Ellipsis,
+                }),
+            )?;
+            let first_style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "First Style".into(),
+                    font_size: 12.0,
+                    line_height: 14.0,
+                    letter_spacing: 0.0,
+                    font: first_font,
+                }),
+            )?;
+            let second_style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Second Style".into(),
+                    font_size: 24.0,
+                    line_height: 30.0,
+                    letter_spacing: 0.0,
+                    font: second_font,
+                }),
+            )?;
+            let first_fill = tx.create(
+                Parent::Object(first_style),
+                NodeSpec::Fill(FillSpec {
+                    name: "First Fill".into(),
+                }),
+            )?;
+            let second_fill = tx.create(
+                Parent::Object(second_style),
+                NodeSpec::Fill(FillSpec {
+                    name: "Second Fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(first_fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "First Color".into(),
+                    color: 0xff11_2233,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(second_fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Second Color".into(),
+                    color: 0xff44_5566,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "First Run".into(),
+                    text: "a".into(),
+                    style: first_style,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Second Run".into(),
+                    text: "a".into(),
+                    style: second_style,
+                }),
+            )?;
+            Ok((artboard, text))
+        })?;
+        let instance = scene.instantiate(artboard)?;
+        let mut live_factory = RecordingFactory::new();
+        let mut live_cache = scene.new_render_cache(instance, &mut live_factory)?;
+        let mut live_renderer = live_factory.make_renderer();
+        scene.frame().draw(
+            instance,
+            &mut live_factory,
+            &mut live_renderer,
+            &mut live_cache,
+        )?;
+        assert_eq!(
+            scene.frame().world_bounds(instance, text),
+            Some(crate::Aabb::new(0.0, 0.0, 120.0, 40.0))
+        );
+
+        let exported = scene.export_records();
+        let font_records = exported
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::FontAsset)
+            .map(|record| record.properties.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            font_records,
+            vec![
+                vec![
+                    ExportedProperty::AssetName("First".into()),
+                    ExportedProperty::FileAssetId(0),
+                ],
+                vec![
+                    ExportedProperty::AssetName("Second".into()),
+                    ExportedProperty::FileAssetId(1),
+                ],
+            ]
+        );
+        let text_record = exported
+            .records()
+            .iter()
+            .find(|record| record.kind == ExportedObjectKind::Text)
+            .expect("the text frame is exported");
+        assert_eq!(
+            text_record.properties,
+            vec![
+                ExportedProperty::ComponentName("Title".into()),
+                ExportedProperty::TranslateX(0.0),
+                ExportedProperty::TranslateY(0.0),
+                ExportedProperty::TextAlign(SceneTextAlign::Center),
+                ExportedProperty::TextSizing(SceneTextSizing::Fixed),
+                ExportedProperty::TextWidth(120.0),
+                ExportedProperty::TextHeight(40.0),
+                ExportedProperty::TextOverflow(SceneTextOverflow::Ellipsis),
+                ExportedProperty::TextWrap(SceneTextWrap::NoWrap),
+            ]
+        );
+
+        let ordered_nodes = exported
+            .records()
+            .iter()
+            .filter_map(|record| {
+                matches!(
+                    record.kind,
+                    ExportedObjectKind::Text
+                        | ExportedObjectKind::TextStylePaint
+                        | ExportedObjectKind::Fill
+                        | ExportedObjectKind::SolidColor
+                        | ExportedObjectKind::TextValueRun
+                )
+                .then(|| {
+                    let name = record
+                        .properties
+                        .iter()
+                        .find_map(|property| match property {
+                            ExportedProperty::ComponentName(name) => Some(name.clone()),
+                            _ => None,
+                        })?;
+                    let parent = record
+                        .properties
+                        .iter()
+                        .find_map(|property| match property {
+                            ExportedProperty::ParentId(parent) => Some(*parent),
+                            _ => None,
+                        });
+                    Some((record.kind, name, parent))
+                })?
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ordered_nodes,
+            vec![
+                (ExportedObjectKind::Text, "Title".into(), None),
+                (
+                    ExportedObjectKind::TextStylePaint,
+                    "First Style".into(),
+                    Some(1),
+                ),
+                (
+                    ExportedObjectKind::TextStylePaint,
+                    "Second Style".into(),
+                    Some(1),
+                ),
+                (ExportedObjectKind::Fill, "First Fill".into(), Some(2)),
+                (ExportedObjectKind::Fill, "Second Fill".into(), Some(3)),
+                (
+                    ExportedObjectKind::SolidColor,
+                    "First Color".into(),
+                    Some(4),
+                ),
+                (
+                    ExportedObjectKind::SolidColor,
+                    "Second Color".into(),
+                    Some(5),
+                ),
+                (
+                    ExportedObjectKind::TextValueRun,
+                    "First Run".into(),
+                    Some(1),
+                ),
+                (
+                    ExportedObjectKind::TextValueRun,
+                    "Second Run".into(),
+                    Some(1),
+                ),
+            ]
+        );
+        for (name, expected_font) in [("First Style", 0), ("Second Style", 1)] {
+            let style = exported
+                .records()
+                .iter()
+                .find(|record| {
+                    record.kind == ExportedObjectKind::TextStylePaint
+                        && record
+                            .properties
+                            .contains(&ExportedProperty::ComponentName(name.into()))
+                })
+                .expect("named text style record");
+            assert!(
+                style
+                    .properties
+                    .contains(&ExportedProperty::TextStyleFontAssetId(expected_font))
+            );
+        }
+        for (name, expected_style) in [("First Run", 2), ("Second Run", 3)] {
+            let run = exported
+                .records()
+                .iter()
+                .find(|record| {
+                    record.kind == ExportedObjectKind::TextValueRun
+                        && record
+                            .properties
+                            .contains(&ExportedProperty::ComponentName(name.into()))
+                })
+                .expect("named text run record");
+            assert!(
+                run.properties
+                    .contains(&ExportedProperty::TextValueRunStyleId(expected_style))
+            );
+        }
+
+        let runtime = RuntimeFile::from_authoring_records(exported.into_authoring_records())?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        let mut imported = OwnedArtboardInstance::instantiate(file, 0)?;
+        let mut imported_factory = RecordingFactory::new();
+        let mut imported_cache = imported.new_render_cache(&mut imported_factory);
+        let mut imported_renderer = imported_factory.make_renderer();
+        imported.draw_with_render_cache(
+            &mut imported_factory,
+            &mut imported_renderer,
+            &mut imported_cache,
+        )?;
+
+        assert_eq!(
+            imported.world_bounds(1),
+            Some(crate::Aabb::new(0.0, 0.0, 120.0, 40.0))
+        );
+        let imported_frame = parse_single_frame(&imported_factory.stream())?;
+        let live_frame = parse_single_frame(&live_factory.stream())?;
+        assert_eq!(imported_frame.frames, live_frame.frames);
+        Ok(())
+    }
+
     fn work_test_shape(name: &str) -> NodeSpec {
         NodeSpec::Shape(ShapeSpec {
             name: name.to_owned(),
@@ -3090,6 +4325,93 @@ mod tests {
             scale_x: 1.0,
             scale_y: 1.0,
         })
+    }
+
+    fn child_order_scene(names: &[&str]) -> Result<(Scene, ArtboardId, Vec<ObjectId>)> {
+        let mut scene = Scene::new();
+        let ((artboard, roots), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let roots = names
+                .iter()
+                .map(|name| tx.create(Parent::Artboard(artboard), work_test_shape(name)))
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok((artboard, roots))
+        })?;
+        Ok((scene, artboard, roots))
+    }
+
+    #[test]
+    fn exact_child_order_refreshes_the_index_once_and_matches_a_fresh_scene() -> Result<()> {
+        let (mut scene, artboard, roots) = child_order_scene(&["First", "Second", "Third"])?;
+        let (fresh, _, _) = child_order_scene(&["Third", "First", "Second"])?;
+
+        reset_scene_work();
+        scene.edit(|tx| {
+            tx.set_child_order(Parent::Artboard(artboard), &[roots[2], roots[0], roots[1]])
+        })?;
+
+        assert_eq!(
+            scene_work(),
+            SceneWork {
+                definition_index_builds: 2,
+                definition_index_node_visits: 6,
+                receipt_membership_checks: 0,
+            }
+        );
+        assert_eq!(
+            scene.export_records().records(),
+            fresh.export_records().records()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_child_order_rejects_malformed_sets_without_mutating() -> Result<()> {
+        let (mut scene, artboard, roots) = child_order_scene(&["First", "Second", "Third"])?;
+        let (foreign_artboard, foreign) = scene
+            .edit(|tx| {
+                let foreign_artboard = tx.create_artboard(ArtboardSpec {
+                    name: "Foreign".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                let foreign = tx.create(
+                    Parent::Artboard(foreign_artboard),
+                    work_test_shape("Foreign"),
+                )?;
+                Ok((foreign_artboard, foreign))
+            })?
+            .0;
+        let before = scene.export_records().records().to_vec();
+        let cases = [
+            (
+                vec![roots[0], roots[0], roots[2]],
+                EditReason::ChildSetMismatch,
+            ),
+            (
+                vec![roots[0], roots[1], ObjectId(u64::MAX)],
+                EditReason::UnknownObject,
+            ),
+            (
+                vec![roots[0], roots[1], foreign],
+                EditReason::ChildSetMismatch,
+            ),
+            (vec![roots[0], roots[1]], EditReason::ChildSetMismatch),
+        ];
+
+        for (order, expected_reason) in cases {
+            let error = scene
+                .edit(|tx| tx.set_child_order(Parent::Artboard(artboard), &order))
+                .expect_err("a malformed exact child set must reject");
+            assert_eq!(error.diagnostic().reason, expected_reason);
+            assert_eq!(scene.export_records().records(), before);
+        }
+        assert_ne!(foreign_artboard, artboard);
+        Ok(())
     }
 
     fn rejected_bulk_create_work(node_count: usize) -> Result<SceneWork> {

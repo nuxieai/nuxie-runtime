@@ -31,8 +31,8 @@ use crate::properties::{
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
-    RuntimeTextLayoutConstraint, runtime_text_input_shape_paint_commands,
-    runtime_text_shape_paint_commands, static_text_constraint_bounds,
+    RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
+    runtime_text_shape_paint_commands, static_text_clip_bounds, static_text_constraint_bounds,
     static_text_layout_measure_bounds, text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D};
@@ -730,10 +730,27 @@ impl ArtboardInstance {
         let prepared = cache
             .paths
             .prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        if self.component(local_id)?.type_name == "Text" {
+            let layout_constraint = self.runtime_text_layout_constraint(local_id, layout_bounds);
+            let bounds = match layout_constraint {
+                Some(constraint) => {
+                    static_text_layout_measure_bounds(runtime, graph, self, local_id, constraint)?
+                }
+                None => static_text_constraint_bounds(runtime, graph, self, local_id)?,
+            };
+            let world = cache.paths.component_world_transform_with_bounds(
+                self,
+                graph,
+                local_id,
+                layout_bounds,
+            );
+            return Some(runtime_transformed_rect_bounds(bounds, world));
+        }
         let commands = self.runtime_object_world_path_commands(
             local_id,
             graph,
-            prepared.layout_bounds.as_ref().as_ref(),
+            layout_bounds,
             &mut cache.paths,
         )?;
         runtime_exact_path_bounds(&commands)
@@ -6606,6 +6623,7 @@ pub struct RuntimeRenderPathCache {
     background_paths: RuntimeRetainedRenderPathSlots,
     clip_paths: RuntimeRetainedRenderPathSlots,
     layout_clip_paths: RuntimeRetainedRenderPathSlots,
+    text_clip_paths: RuntimeRetainedRenderPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
     shape_paint_paths: RuntimeShapePaintPathCommandSlots,
@@ -7853,6 +7871,17 @@ impl RuntimeRenderPathCache {
         let slot = self
             .layout_clip_paths
             .slot_mut(key.graph_global_id, local_id);
+        runtime_cached_retained_render_path(slot, key, factory, commands)
+    }
+
+    fn text_clip_path(
+        &mut self,
+        key: RuntimeRetainedRenderPathCacheKey,
+        local_id: usize,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+    ) -> &mut Box<dyn RenderPath> {
+        let slot = self.text_clip_paths.slot_mut(key.graph_global_id, local_id);
         runtime_cached_retained_render_path(slot, key, factory, commands)
     }
 
@@ -9105,6 +9134,14 @@ fn runtime_draw_command(
             .unwrap_or(Mat2D::IDENTITY)
     });
     let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
+    let text_local = draws_text.then_some(command.local_id).flatten();
+    let text_clip_path_commands = if let Some(text_local) = text_local {
+        let layout_constraint = instance.runtime_text_layout_constraint(text_local, layout_bounds);
+        static_text_clip_bounds(runtime, graph, instance, text_local, layout_constraint)?
+            .map(|bounds| runtime_text_clip_path_commands(bounds, shape_world))
+    } else {
+        None
+    };
     let text_shape_paints = if draws_text {
         Some(path_cache.text_shape_paint_commands(
             runtime,
@@ -9124,8 +9161,18 @@ fn runtime_draw_command(
     } else {
         command.shape_paints.as_slice()
     };
-    if draws_text && command.needs_save_operation {
+    let text_needs_save_operation =
+        draws_text && (command.needs_save_operation || text_clip_path_commands.is_some());
+    if text_needs_save_operation {
         renderer.save();
+    }
+    if let (Some(text_local), Some(path_commands)) =
+        (text_local, text_clip_path_commands.as_deref())
+    {
+        let key =
+            path_cache.retained_world_render_path_key(instance, graph, RenderFillRule::NonZero);
+        let clip_path = path_cache.text_clip_path(key, text_local, factory, path_commands);
+        renderer.clip_path(clip_path.as_ref());
     }
 
     let mut text_temporary_paints = Vec::new();
@@ -9322,7 +9369,7 @@ fn runtime_draw_command(
             let _ = factory.make_render_paint();
         }
     }
-    if draws_text && command.needs_save_operation {
+    if text_needs_save_operation {
         renderer.restore();
     }
 
@@ -11361,6 +11408,17 @@ fn runtime_rect_commands(left: f32, top: f32, right: f32, bottom: f32) -> Vec<Ru
     ]
 }
 
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_text_clip_path_commands(
+    clip: StaticTextClipBounds,
+    text_world: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let (left, top, width, height) = clip.bounds;
+    let mut commands = runtime_rect_commands(left, top, left + width, top + height);
+    transform_path_commands(&mut commands, text_world.multiply(clip.local_transform));
+    commands
+}
+
 fn runtime_render_mat(mat: Mat2D) -> RenderMat2D {
     RenderMat2D(mat.0)
 }
@@ -12840,6 +12898,21 @@ fn runtime_geometry_include_point(bounds: &mut Option<RenderAabb>, point: (f32, 
         }
         None => *bounds = Some(RenderAabb::new(point.0, point.1, point.0, point.1)),
     }
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_transformed_rect_bounds(bounds: (f32, f32, f32, f32), world: Mat2D) -> RenderAabb {
+    let (x, y, width, height) = bounds;
+    let mut transformed = None;
+    for point in [
+        world.transform_point(x, y),
+        world.transform_point(x + width, y),
+        world.transform_point(x + width, y + height),
+        world.transform_point(x, y + height),
+    ] {
+        runtime_geometry_include_point(&mut transformed, point);
+    }
+    transformed.unwrap_or(RenderAabb::new(0.0, 0.0, 0.0, 0.0))
 }
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -18231,6 +18304,23 @@ mod tests {
     }
 
     #[test]
+    fn controlled_auto_text_without_shape_uses_exact_layout_bounds_and_authored_origin() {
+        let bytes = synthetic_layout_text_bounds_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout Text riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_eq!(
+            instance.geometry_world_bounds_with_context(&file, graph, 3, &mut cache),
+            Some(RenderAabb::new(-25.0, -25.0, 75.0, 25.0)),
+            "non-hug layout control makes authored-auto Text effectively fixed at the exact 100x50 constraint while preserving its normalized origin"
+        );
+    }
+
+    #[test]
     fn direct_path_world_bounds_include_the_parent_shape_nsliced_deformation() {
         let bytes = synthetic_nsliced_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic N-sliced riv imports");
@@ -19514,6 +19604,36 @@ mod tests {
             push_uint(bytes, "Node", "parentId", 5);
             push_f32(bytes, "ParametricPath", "width", 20.0);
             push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_layout_text_bounds_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9659);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 50.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Text", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_uint(bytes, "Text", "sizingValue", 0);
+            push_f32(bytes, "Text", "width", 20.0);
+            push_f32(bytes, "Text", "height", 10.0);
+            push_f32(bytes, "Text", "originX", 0.25);
+            push_f32(bytes, "Text", "originY", 0.5);
         });
         bytes
     }

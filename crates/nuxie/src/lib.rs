@@ -25,10 +25,10 @@ pub use nuxie_render_api::{
     StrokeJoin, Vec2D,
 };
 pub use nuxie_runtime::{
-    LinearAnimationInstance, NoopScriptHost, RuntimeLayerState, RuntimeStateMachineInput,
-    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure,
-    ScriptValue, ScriptingVm, StateMachineInputInstance, StateMachineInputKind,
-    StateMachineInstance, StateMachineReportedEvent,
+    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
+    RuntimeStateMachineInput, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
+    ScriptModuleFailure, ScriptValue, ScriptingVm, StateMachineInputInstance,
+    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
 };
 
 #[cfg(feature = "scripting")]
@@ -433,6 +433,23 @@ impl OwnedArtboardInstance {
 
     pub fn raw_mut(&mut self) -> &mut RuntimeArtboardInstance {
         &mut self.raw
+    }
+
+    /// Attach host-supplied bytes to an external `FontAsset` in this instance.
+    ///
+    /// This performs no I/O. `asset_id` is the published, file-wide
+    /// `FileAsset.assetId`, not the asset-list ordinal. The runtime validates
+    /// the identity, asset kind, and both font parsing backends before changing
+    /// the instance. Embedded font contents remain authoritative. In the
+    /// current E2 subset the attachment is local to this instance; nested
+    /// artboard instances do not inherit it.
+    pub fn attach_font_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalFontAssetError> {
+        self.raw
+            .attach_external_font_asset_bytes(asset_id, Arc::<[u8]>::from(bytes))
     }
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {

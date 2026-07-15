@@ -1,11 +1,45 @@
 use anyhow::Result;
 use nuxie::{
     Aabb, ArtboardId, ArtboardSpec, ChildIndex, DashPathSpec, DashSpec, EditAbort, EditErrorKind,
-    EditId, EditReason, ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec,
-    ObjectId, Parent, PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec,
-    ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec,
-    SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, Vec2D, props,
+    EditId, EditReason, ExportedObjectKind, ExportedProperty, FillSpec, FontAssetId, FontAssetSpec,
+    NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RecordingFactory, RectangleCornerRadii,
+    RectangleSpec, ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin,
+    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ShapeSpec,
+    SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec, TextStylePaintSpec,
+    TextValueRunSpec, Vec2D, props,
 };
+
+#[allow(clippy::arithmetic_side_effects)]
+fn fixture_font_bytes() -> Vec<u8> {
+    let mut accumulator = 0u32;
+    let mut bit_count = 0u8;
+    let mut decoded = Vec::new();
+    for byte in include_bytes!("fixtures/roboto-a.ttf.base64")
+        .iter()
+        .copied()
+        .filter(|byte| !byte.is_ascii_whitespace())
+    {
+        if byte == b'=' {
+            break;
+        }
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => panic!("invalid base64 font fixture"),
+        };
+        accumulator = (accumulator << 6) | u32::from(value);
+        bit_count += 6;
+        if bit_count >= 8 {
+            bit_count -= 8;
+            decoded.push((accumulator >> bit_count) as u8);
+            accumulator &= (1u32 << bit_count) - 1;
+        }
+    }
+    decoded
+}
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
     let mut factory = RecordingFactory::new();
@@ -15,6 +49,1008 @@ fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String>
         .frame()
         .draw(instance, &mut factory, &mut renderer, &mut cache)?;
     Ok(factory.stream())
+}
+
+fn canonical_draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
+    let mut factory = RecordingFactory::new();
+    let mut cache = scene.new_render_cache(instance, &mut factory)?;
+    let mut renderer = factory.make_renderer();
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+    Ok(factory.canonical_recording().stream().to_owned())
+}
+
+fn drawn_move_count(stream: &str) -> usize {
+    stream
+        .lines()
+        .filter(|line| line.starts_with("drawPath "))
+        .map(|line| line.matches("move").count())
+        .sum()
+}
+
+fn drawn_path_points(stream: &str) -> Vec<(f32, f32)> {
+    stream
+        .lines()
+        .filter(|line| line.starts_with("drawPath "))
+        .flat_map(|line| {
+            let points = line
+                .split_once("points=[")
+                .and_then(|(_, rest)| rest.split_once("]}"))
+                .map(|(points, _)| points)
+                .unwrap_or_default();
+            points
+                .split("),(")
+                .filter_map(|point| {
+                    let point = point.trim_matches(['(', ')']);
+                    let (x, y) = point.split_once(',')?;
+                    Some((x.parse().ok()?, y.parse().ok()?))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn smallest_positive_transform_scale(stream: &str) -> Option<f32> {
+    stream
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix("transform matrix=[")?
+                .split(',')
+                .next()?
+                .parse::<f32>()
+                .ok()
+                .filter(|scale| *scale > 0.0)
+        })
+        .min_by(f32::total_cmp)
+}
+
+fn overflow_text_scene(
+    overflow: SceneTextOverflow,
+    width: f32,
+    height: f32,
+    content: &str,
+) -> Result<(Scene, ArtboardId, ObjectId)> {
+    overflow_text_scene_with_line_height(overflow, width, height, content, 20.0)
+}
+
+fn overflow_text_scene_with_line_height(
+    overflow: SceneTextOverflow,
+    width: f32,
+    height: f32,
+    content: &str,
+    line_height: f32,
+) -> Result<(Scene, ArtboardId, ObjectId)> {
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Overflow".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Overflow Text".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width,
+                height,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Overflow Style".into(),
+                font_size: 20.0,
+                line_height,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(style),
+            NodeSpec::Fill(FillSpec {
+                name: "Overflow Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Overflow Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Overflow Run".into(),
+                text: content.into(),
+                style,
+            }),
+        )?;
+        Ok((artboard, text))
+    })?;
+    Ok((scene, artboard, text))
+}
+
+#[test]
+fn authored_line_height_sets_each_later_glyph_baseline_without_moving_the_first_baseline()
+-> Result<()> {
+    let (mut scene, artboard, _) = overflow_text_scene_with_line_height(
+        SceneTextOverflow::Visible,
+        80.0,
+        100.0,
+        "a\na",
+        40.0,
+    )?;
+    let instance = scene.instantiate(artboard)?;
+    let points = drawn_path_points(&canonical_draw_stream(&mut scene, instance)?);
+    assert_eq!(points.len() % 2, 0, "the two identical glyphs split evenly");
+    let (first_line, second_line) = points.split_at(points.len() / 2);
+    assert_eq!(first_line.len(), second_line.len());
+    for (first, second) in first_line.iter().zip(second_line) {
+        assert_eq!(second.0, first.0, "line height must not move glyphs on x");
+        assert!(
+            (second.1 - first.1 - 40.0).abs() <= 0.001,
+            "the second glyph must be exactly one authored 40px line-height below the first: {first:?} -> {second:?}"
+        );
+    }
+    Ok(())
+}
+
+fn text_box(name: &str, x: f32) -> NodeSpec {
+    NodeSpec::Text(TextSpec {
+        name: name.into(),
+        x,
+        y: 10.0,
+        opacity: 1.0,
+        rotation: 0.0,
+        scale_x: 1.0,
+        scale_y: 1.0,
+        sizing: SceneTextSizing::Fixed,
+        width: 80.0,
+        height: 30.0,
+        align: SceneTextAlign::Left,
+        wrap: SceneTextWrap::Wrap,
+        overflow: SceneTextOverflow::Visible,
+    })
+}
+
+fn create_referenced_text_style(
+    tx: &mut SceneTx<'_>,
+) -> std::result::Result<(ObjectId, ObjectId, ObjectId), EditAbort> {
+    let font = tx.create_font_asset(FontAssetSpec {
+        name: "Roboto A".into(),
+        bytes: fixture_font_bytes(),
+    })?;
+    let artboard = tx.create_artboard(ArtboardSpec {
+        name: "Text".into(),
+        width: 200.0,
+        height: 100.0,
+    })?;
+    let first = tx.create(Parent::Artboard(artboard), text_box("First", 10.0))?;
+    let style = tx.create(
+        Parent::Object(first),
+        NodeSpec::TextStylePaint(TextStylePaintSpec {
+            name: "First Style".into(),
+            font_size: 18.0,
+            line_height: 22.0,
+            letter_spacing: 0.0,
+            font,
+        }),
+    )?;
+    let run = tx.create(
+        Parent::Object(first),
+        NodeSpec::TextValueRun(TextValueRunSpec {
+            name: "First Run".into(),
+            text: "a".into(),
+            style,
+        }),
+    )?;
+    let second = tx.create(Parent::Artboard(artboard), text_box("Second", 100.0))?;
+    Ok((second, style, run))
+}
+
+fn create_font_test_text(
+    tx: &mut SceneTx<'_>,
+    artboard: ArtboardId,
+    styles: &[(&str, FontAssetId)],
+) -> std::result::Result<(), EditAbort> {
+    let text = tx.create(Parent::Artboard(artboard), text_box("Font Test", 10.0))?;
+    for (name, font) in styles.iter().copied() {
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: format!("{name} Style"),
+                font_size: 18.0,
+                line_height: 22.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: format!("{name} Run"),
+                text: "a".into(),
+                style,
+            }),
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn embedded_font_text_draws_and_has_fixed_world_bounds_through_semantic_references() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Text".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Title".into(),
+                x: 10.0,
+                y: 20.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 120.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Title Style".into(),
+                font_size: 24.0,
+                line_height: 30.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(style),
+            NodeSpec::Fill(FillSpec {
+                name: "Title Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Title Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Title Run".into(),
+                text: "a".into(),
+                style,
+            }),
+        )?;
+        Ok((artboard, text))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    let stream = draw_stream(&mut scene, instance)?;
+    assert_eq!(
+        scene.frame().world_bounds(instance, text),
+        Some(Aabb::new(10.0, 20.0, 130.0, 60.0))
+    );
+    assert!(
+        stream.contains("drawPath"),
+        "text must draw real glyph paths"
+    );
+    assert!(
+        stream.contains("ff112233"),
+        "text paint must reach the draw"
+    );
+    for (property, expected) in [
+        (props::TRANSLATE_X, 10.0),
+        (props::TRANSLATE_Y, 20.0),
+        (props::WORLD_OPACITY, 1.0),
+        (props::ROTATION, 0.0),
+        (props::SCALE_X, 1.0),
+        (props::SCALE_Y, 1.0),
+    ] {
+        let cursor = scene.cursor(instance, text, property)?;
+        assert_eq!(scene.frame().get(cursor)?, expected);
+    }
+    let x = scene.cursor(instance, text, props::TRANSLATE_X)?;
+    assert!(scene.frame().set(x, 30.0)?);
+    assert_eq!(
+        scene.frame().world_bounds(instance, text),
+        Some(Aabb::new(30.0, 20.0, 150.0, 60.0))
+    );
+    Ok(())
+}
+
+#[test]
+fn hidden_text_omits_lines_that_do_not_fully_fit_the_fixed_height() -> Result<()> {
+    let (mut visible, visible_artboard, _) =
+        overflow_text_scene(SceneTextOverflow::Visible, 40.0, 25.0, "a\na")?;
+    let visible_instance = visible.instantiate(visible_artboard)?;
+    let visible_stream = canonical_draw_stream(&mut visible, visible_instance)?;
+
+    let (mut hidden, hidden_artboard, hidden_text) =
+        overflow_text_scene(SceneTextOverflow::Hidden, 40.0, 25.0, "a\na")?;
+    let hidden_instance = hidden.instantiate(hidden_artboard)?;
+    let hidden_stream = canonical_draw_stream(&mut hidden, hidden_instance)?;
+
+    assert_eq!(
+        drawn_move_count(&visible_stream),
+        drawn_move_count(&hidden_stream) * 2,
+        "hidden overflow must retain the first full line and omit the partial second line"
+    );
+    assert_eq!(
+        hidden_stream.matches("clipPath").count(),
+        visible_stream.matches("clipPath").count(),
+        "hidden overflow must not add a text clip"
+    );
+    assert_eq!(
+        hidden.frame().world_bounds(hidden_instance, hidden_text),
+        Some(Aabb::new(10.0, 10.0, 50.0, 35.0)),
+        "overflow changes drawing, not the fixed text box"
+    );
+    Ok(())
+}
+
+#[test]
+fn clipped_text_draws_partial_lines_through_the_fixed_text_box_clip() -> Result<()> {
+    let (mut visible, visible_artboard, _) =
+        overflow_text_scene(SceneTextOverflow::Visible, 40.0, 25.0, "a\na")?;
+    let visible_instance = visible.instantiate(visible_artboard)?;
+    let visible_stream = canonical_draw_stream(&mut visible, visible_instance)?;
+
+    let (mut clipped, clipped_artboard, clipped_text) =
+        overflow_text_scene(SceneTextOverflow::Clipped, 40.0, 25.0, "a\na")?;
+    let clipped_instance = clipped.instantiate(clipped_artboard)?;
+    let clipped_stream = canonical_draw_stream(&mut clipped, clipped_instance)?;
+
+    assert_eq!(
+        drawn_move_count(&clipped_stream),
+        drawn_move_count(&visible_stream),
+        "clipped overflow keeps a partially visible line in the glyph path"
+    );
+    assert_eq!(
+        clipped_stream.matches("clipPath").count(),
+        visible_stream.matches("clipPath").count() + 1,
+        "clipped overflow must add a text-box render clip"
+    );
+    assert!(
+        clipped_stream.lines().any(|line| {
+            line.starts_with("clipPath ")
+                && line.contains("points=[(10,10),(50,10),(50,35),(10,35)]")
+        }),
+        "the text clip must be the transformed 40x25 logical box"
+    );
+    assert_eq!(
+        clipped.frame().world_bounds(clipped_instance, clipped_text),
+        Some(Aabb::new(10.0, 10.0, 50.0, 35.0))
+    );
+    Ok(())
+}
+
+#[test]
+fn fit_text_uniformly_scales_overwide_glyphs_inside_fixed_logical_bounds() -> Result<()> {
+    let (mut visible, visible_artboard, _) =
+        overflow_text_scene(SceneTextOverflow::Visible, 30.0, 40.0, "aaaaaaaa")?;
+    let visible_instance = visible.instantiate(visible_artboard)?;
+    let visible_stream = canonical_draw_stream(&mut visible, visible_instance)?;
+
+    let (mut fit, fit_artboard, fit_text) =
+        overflow_text_scene(SceneTextOverflow::Fit, 30.0, 40.0, "aaaaaaaa")?;
+    let fit_instance = fit.instantiate(fit_artboard)?;
+    let fit_stream = canonical_draw_stream(&mut fit, fit_instance)?;
+
+    assert_eq!(
+        smallest_positive_transform_scale(&visible_stream),
+        Some(1.0)
+    );
+    let fit_scale =
+        smallest_positive_transform_scale(&fit_stream).expect("fit text emits its glyph transform");
+    assert_eq!(
+        drawn_move_count(&fit_stream),
+        drawn_move_count(&visible_stream)
+    );
+    assert!(
+        fit_scale > 0.0 && fit_scale < 1.0,
+        "fit overflow must scale the glyph paths down, got {fit_scale}"
+    );
+    assert_eq!(
+        fit.frame().world_bounds(fit_instance, fit_text),
+        Some(Aabb::new(10.0, 10.0, 40.0, 50.0)),
+        "fit scales render content while retaining the fixed logical box"
+    );
+    Ok(())
+}
+
+#[test]
+fn fixed_empty_text_keeps_its_logical_bounds_without_a_font_or_run() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Empty Text".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(Parent::Artboard(artboard), text_box("Empty", 10.0))?;
+        Ok((artboard, text))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    assert_eq!(
+        scene.frame().world_bounds(instance, text),
+        Some(Aabb::new(10.0, 10.0, 90.0, 40.0))
+    );
+    Ok(())
+}
+
+#[test]
+fn empty_font_asset_rejects_atomically_without_an_artboard() -> Result<()> {
+    let mut scene = Scene::new();
+    let mut created_font = None;
+
+    let error = scene
+        .edit(|tx| {
+            created_font = Some(tx.create_font_asset(FontAssetSpec {
+                name: "Empty".into(),
+                bytes: Vec::new(),
+            })?);
+            Ok(())
+        })
+        .expect_err("an empty embedded font must reject the edit");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 0);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::FontAsset(
+            created_font.expect("the transaction allocated the font identity")
+        )]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::EmptyFontAsset);
+    assert_eq!(scene.epoch(), StructureEpoch::INITIAL);
+    Ok(())
+}
+
+#[test]
+fn malformed_font_asset_rejects_before_it_can_invalidate_a_live_scene() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Existing".into(),
+            width: 100.0,
+            height: 100.0,
+        })
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+    let draw_before = draw_stream(&mut scene, instance)?;
+    let mut created_font = None;
+
+    let error = scene
+        .edit(|tx| {
+            created_font = Some(tx.create_font_asset(FontAssetSpec {
+                name: "Malformed".into(),
+                bytes: b"not a font".to_vec(),
+            })?);
+            Ok(())
+        })
+        .expect_err("font bytes must parse before the edit commits");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 0);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::FontAsset(
+            created_font.expect("the transaction allocated the font identity")
+        )]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::InvalidFontAsset);
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    assert_eq!(draw_stream(&mut scene, instance)?, draw_before);
+    Ok(())
+}
+
+#[test]
+fn font_assets_are_explicit_distinct_durable_scene_definitions() -> Result<()> {
+    let mut scene = Scene::new();
+    let (first, _) = scene.edit(|tx| {
+        tx.create_font_asset(FontAssetSpec {
+            name: "Shared".into(),
+            bytes: fixture_font_bytes(),
+        })
+    })?;
+    let (second, _) = scene.edit(|tx| {
+        tx.create_font_asset(FontAssetSpec {
+            name: "Shared".into(),
+            bytes: fixture_font_bytes(),
+        })
+    })?;
+
+    assert_ne!(
+        first, second,
+        "font creation does not implicitly deduplicate"
+    );
+    let (artboard, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Later Edit".into(),
+            width: 100.0,
+            height: 100.0,
+        })
+    })?;
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::FontAsset)
+            .count(),
+        0,
+        "record export omits persistent fonts until the authored graph references them"
+    );
+    scene
+        .edit(|tx| create_font_test_text(tx, artboard, &[("First", first), ("Second", second)]))?;
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::FontAsset)
+            .count(),
+        2,
+        "stable font identities remain usable after unrelated edits"
+    );
+    Ok(())
+}
+
+#[test]
+fn switching_fonts_exports_only_the_current_reference_like_a_fresh_scene() -> Result<()> {
+    let mut incremental = Scene::new();
+    let ((artboard, _roboto), _) = incremental.edit(|tx| {
+        let roboto = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Text".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_font_test_text(tx, artboard, &[("Roboto", roboto)])?;
+        Ok((artboard, roboto))
+    })?;
+    incremental.edit(|tx| {
+        let inter = tx.create_font_asset(FontAssetSpec {
+            name: "Inter".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        tx.clear_artboard(artboard)?;
+        create_font_test_text(tx, artboard, &[("Inter", inter)])
+    })?;
+
+    let mut fresh = Scene::new();
+    fresh.edit(|tx| {
+        let inter = tx.create_font_asset(FontAssetSpec {
+            name: "Inter".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Text".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_font_test_text(tx, artboard, &[("Inter", inter)])
+    })?;
+
+    let incremental_records = incremental.export_records();
+    assert_eq!(incremental_records, fresh.export_records());
+    assert_eq!(
+        incremental_records
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::FontAsset)
+            .count(),
+        1
+    );
+    assert_eq!(
+        incremental_records
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::FileAssetContents)
+            .count(),
+        1
+    );
+    let style = incremental_records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::TextStylePaint)
+        .expect("current text style is exported");
+    assert!(
+        style
+            .properties
+            .contains(&ExportedProperty::TextStyleFontAssetId(0))
+    );
+    Ok(())
+}
+
+#[test]
+fn font_export_order_and_asset_ids_follow_current_first_use_not_add_history() -> Result<()> {
+    let mut historical = Scene::new();
+    let (inter, _) = historical.edit(|tx| {
+        tx.create_font_asset(FontAssetSpec {
+            name: "Inter".into(),
+            bytes: fixture_font_bytes(),
+        })
+    })?;
+    let (roboto, _) = historical.edit(|tx| {
+        tx.create_font_asset(FontAssetSpec {
+            name: "Roboto".into(),
+            bytes: fixture_font_bytes(),
+        })
+    })?;
+    historical.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Text".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_font_test_text(tx, artboard, &[("Roboto", roboto), ("Inter", inter)])
+    })?;
+
+    let mut fresh = Scene::new();
+    fresh.edit(|tx| {
+        let roboto = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let inter = tx.create_font_asset(FontAssetSpec {
+            name: "Inter".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Text".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_font_test_text(tx, artboard, &[("Roboto", roboto), ("Inter", inter)])
+    })?;
+
+    let historical_records = historical.export_records();
+    assert_eq!(historical_records, fresh.export_records());
+    assert_eq!(
+        historical_records
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::FontAsset)
+            .map(|record| record.properties.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            vec![
+                ExportedProperty::AssetName("Roboto".into()),
+                ExportedProperty::FileAssetId(0),
+            ],
+            vec![
+                ExportedProperty::AssetName("Inter".into()),
+                ExportedProperty::FileAssetId(1),
+            ],
+        ]
+    );
+    let style_asset_ids = historical_records
+        .records()
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::TextStylePaint)
+        .map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::TextStyleFontAssetId(id) => Some(*id),
+                    _ => None,
+                })
+                .expect("every exported text style references a local font asset")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(style_asset_ids, vec![0, 1]);
+    Ok(())
+}
+
+#[test]
+fn text_style_rejects_a_font_identity_owned_by_another_scene_atomically() -> Result<()> {
+    let mut source = Scene::new();
+    let (foreign_font, _) = source.edit(|tx| {
+        tx.create_font_asset(FontAssetSpec {
+            name: "Foreign".into(),
+            bytes: fixture_font_bytes(),
+        })
+    })?;
+    let mut target = Scene::new();
+    let mut style = None;
+
+    let error = target
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Target".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Text".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 80.0,
+                    height: 30.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::Wrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            style = Some(tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Foreign Style".into(),
+                    font_size: 18.0,
+                    line_height: 22.0,
+                    letter_spacing: 0.0,
+                    font: foreign_font,
+                }),
+            )?);
+            Ok(())
+        })
+        .expect_err("a font identity is meaningful only in its owning scene");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 2);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Object(style.expect("the transaction allocated the style")),
+            EditId::FontAsset(foreign_font),
+        ]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownFontAsset);
+    assert_eq!(target.epoch(), StructureEpoch::INITIAL);
+    Ok(())
+}
+
+#[test]
+fn text_run_rejects_a_style_owned_by_another_text() -> Result<()> {
+    let mut scene = Scene::new();
+    let mut run = None;
+    let mut foreign_style = None;
+
+    let error = scene
+        .edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Text".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            let text_spec = |name: &str| {
+                NodeSpec::Text(TextSpec {
+                    name: name.into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 80.0,
+                    height: 30.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::Wrap,
+                    overflow: SceneTextOverflow::Visible,
+                })
+            };
+            let first_text = tx.create(Parent::Artboard(artboard), text_spec("First"))?;
+            foreign_style = Some(tx.create(
+                Parent::Object(first_text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "First Style".into(),
+                    font_size: 18.0,
+                    line_height: 22.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?);
+            let second_text = tx.create(Parent::Artboard(artboard), text_spec("Second"))?;
+            run = Some(tx.create(
+                Parent::Object(second_text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Invalid Run".into(),
+                    text: "a".into(),
+                    style: foreign_style.expect("the style was created"),
+                }),
+            )?);
+            Ok(())
+        })
+        .expect_err("a text run cannot borrow a sibling text's style");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 5);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Object(run.expect("the transaction allocated the run")),
+            EditId::Object(foreign_style.expect("the transaction allocated the style")),
+        ]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::InvalidReference {
+            expected: NodeKind::TextStylePaint,
+            actual: Some(NodeKind::TextStylePaint),
+        }
+    );
+    assert_eq!(scene.epoch(), StructureEpoch::INITIAL);
+    Ok(())
+}
+
+#[test]
+fn root_text_can_reorder_within_its_artboard() -> Result<()> {
+    let mut scene = Scene::new();
+    let (second, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        tx.create(Parent::Artboard(artboard), text_box("First", 10.0))?;
+        tx.create(Parent::Artboard(artboard), text_box("Second", 100.0))
+    })?;
+
+    scene.edit(|tx| tx.reorder(second, ChildIndex::First))?;
+
+    assert_eq!(
+        exported_component_names(&scene),
+        ["Main", "Second", "First"]
+    );
+    Ok(())
+}
+
+#[test]
+fn root_text_remove_and_restore_preserves_identity_and_records() -> Result<()> {
+    let mut scene = Scene::new();
+    let (text, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        tx.create(Parent::Artboard(artboard), text_box("Title", 10.0))
+    })?;
+    let records_before = scene.export_records();
+
+    let (removed, _) = scene.edit(|tx| tx.remove(text))?;
+    let (restored, _) = scene.edit(|tx| tx.restore(removed))?;
+
+    assert_eq!(restored, text);
+    assert_eq!(scene.export_records(), records_before);
+    Ok(())
+}
+
+#[test]
+fn root_text_can_reparent_across_artboards() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((text, target), _) = scene.edit(|tx| {
+        let source = tx.create_artboard(ArtboardSpec {
+            name: "Source".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let target = tx.create_artboard(ArtboardSpec {
+            name: "Target".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(Parent::Artboard(source), text_box("Moved", 10.0))?;
+        Ok((text, target))
+    })?;
+
+    scene.edit(|tx| tx.reparent(text, Parent::Artboard(target), ChildIndex::First))?;
+
+    assert_eq!(
+        exported_component_names(&scene),
+        ["Source", "Target", "Moved"]
+    );
+    Ok(())
+}
+
+#[test]
+fn reparenting_a_referenced_style_reports_the_reparent_operation() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((second, style, run), _) = scene.edit(create_referenced_text_style)?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| tx.reparent(style, Parent::Object(second), ChildIndex::First))
+        .expect_err("moving a referenced style away from its run must reject commit");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 0);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Object(run), EditId::Object(style)]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::InvalidReference {
+            expected: NodeKind::TextStylePaint,
+            actual: Some(NodeKind::TextStylePaint),
+        }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    Ok(())
+}
+
+#[test]
+fn removing_a_referenced_style_reports_the_remove_operation() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((_, style, run), _) = scene.edit(create_referenced_text_style)?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            tx.remove(style)?;
+            Ok(())
+        })
+        .expect_err("removing a referenced style must reject commit");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 0);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Object(run), EditId::Object(style)]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownObject);
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    Ok(())
 }
 
 #[test]
@@ -999,6 +2035,47 @@ fn shape_export_omits_exact_zero_axes_but_retains_nonzero_axes() -> Result<()> {
 }
 
 #[test]
+fn text_export_retains_exact_zero_axes_required_by_publish() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Text Axes".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Zero".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 80.0,
+                height: 30.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    let text = exported
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::Text)
+        .expect("zero-axis Text record");
+    assert!(text.properties.contains(&ExportedProperty::TranslateX(0.0)));
+    assert!(text.properties.contains(&ExportedProperty::TranslateY(0.0)));
+    Ok(())
+}
+
+#[test]
 fn authored_shape_geometry_queries_follow_the_live_runtime_scene() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, shape, rectangle), _) = scene.edit(|tx| {
@@ -1377,7 +2454,7 @@ fn a_removed_subtree_restores_the_same_objects_records_and_draw_in_a_later_edit(
 }
 
 #[test]
-fn restore_preserves_canonical_preorder_after_interleaved_creation() -> Result<()> {
+fn restore_preserves_parent_before_child_order_after_interleaved_creation() -> Result<()> {
     let mut scene = Scene::new();
     let ((shape_a, _shape_b, _rectangle_a, _rectangle_b), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
@@ -1414,8 +2491,8 @@ fn restore_preserves_canonical_preorder_after_interleaved_creation() -> Result<(
     let records_before = scene.export_records();
     assert_eq!(
         exported_component_names(&scene),
-        vec!["Main", "A", "A Rectangle", "B", "B Rectangle"],
-        "creation order is canonicalized into iterative hierarchy preorder"
+        vec!["Main", "A", "B", "A Rectangle", "B Rectangle"],
+        "valid parent-before-child creation order is retained instead of rewritten as preorder"
     );
 
     let (removed, _) = scene.edit(|tx| tx.remove(shape_a))?;
@@ -2070,6 +3147,7 @@ fn materialization_failure_is_a_structured_edit_error_without_internal_details()
 #[test]
 fn generated_authoring_vocabulary_tracks_schema_owners_value_kinds_and_surface_availability() {
     assert_eq!(NodeKind::Rectangle.schema_name(), "Rectangle");
+    assert_eq!(NodeKind::Text.schema_name(), "Text");
 
     assert_eq!(props::PATH_WIDTH.schema_name(), "width");
     assert!(props::PATH_WIDTH.is_available_on(NodeKind::Rectangle));
@@ -2083,6 +3161,7 @@ fn generated_authoring_vocabulary_tracks_schema_owners_value_kinds_and_surface_a
 
     assert_eq!(props::WORLD_OPACITY.schema_name(), "opacity");
     assert!(props::WORLD_OPACITY.is_available_on(NodeKind::Shape));
+    assert!(props::WORLD_OPACITY.is_available_on(NodeKind::Text));
     assert_eq!(props::WORLD_OPACITY.value_kind(), PropValueKind::Double);
     assert_eq!(
         props::WORLD_OPACITY.declared_owner(),
@@ -2091,12 +3170,14 @@ fn generated_authoring_vocabulary_tracks_schema_owners_value_kinds_and_surface_a
 
     for property in [props::TRANSLATE_X, props::TRANSLATE_Y] {
         assert!(property.is_available_on(NodeKind::Shape));
+        assert!(property.is_available_on(NodeKind::Text));
         assert_eq!(property.value_kind(), PropValueKind::Double);
         assert_eq!(property.declared_owner(), "Node");
     }
 
     for property in [props::ROTATION, props::SCALE_X, props::SCALE_Y] {
         assert!(property.is_available_on(NodeKind::Shape));
+        assert!(property.is_available_on(NodeKind::Text));
         assert_eq!(property.value_kind(), PropValueKind::Double);
         assert_eq!(property.declared_owner(), "TransformComponent");
     }

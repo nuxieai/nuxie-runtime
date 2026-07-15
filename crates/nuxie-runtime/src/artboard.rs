@@ -60,8 +60,26 @@ use crate::state_machine::{
 };
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 
+#[derive(Debug)]
+struct RuntimeArtboardInstanceIdentity(u64);
+
+impl RuntimeArtboardInstanceIdentity {
+    fn next() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+impl Clone for RuntimeArtboardInstanceIdentity {
+    fn clone(&self) -> Self {
+        Self::next()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
+    instance_identity: RuntimeArtboardInstanceIdentity,
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) origin_x: f32,
@@ -351,6 +369,7 @@ impl ArtboardInstance {
         let nested_artboard_locals = nested_artboards.keys().copied().collect::<Vec<_>>();
 
         let mut instance = Self {
+            instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: dimensions.width,
             height: dimensions.height,
             origin_x: dimensions.origin_x,
@@ -743,7 +762,13 @@ impl ArtboardInstance {
         }
     }
 
-    pub(crate) fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
+    /// Reads one typed color property from the live object arena.
+    ///
+    /// Returns `None` when either the local object or a color property with
+    /// this key does not exist. Schema defaults are already materialized in
+    /// the object arena, so a matching property returns its current value
+    /// even when the source record omitted that default.
+    pub fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
         self.objects.color_property(local_id, property_key)
     }
 
@@ -850,7 +875,13 @@ impl ArtboardInstance {
         true
     }
 
-    pub(crate) fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
+    /// Reads one typed double property from the live object arena.
+    ///
+    /// Returns `None` when either the local object or a double property with
+    /// this key does not exist. Schema defaults are already materialized in
+    /// the object arena, so a matching property returns its current value
+    /// even when the source record omitted that default.
+    pub fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
         self.objects.double_property(local_id, property_key)
     }
 
@@ -1548,6 +1579,10 @@ impl ArtboardInstance {
 
     pub(crate) fn cache_epoch(&self) -> u64 {
         self.cache_epoch
+    }
+
+    pub(crate) fn instance_identity(&self) -> u64 {
+        self.instance_identity.0
     }
 
     pub(crate) fn prepared_epoch(&self) -> u64 {
@@ -3507,7 +3542,10 @@ fn apply_authored_nested_input_values(
 mod tests {
     use super::*;
     use crate::Mat2D;
-    use crate::components::{RuntimeComponentCapabilities, TransformRuntimeState};
+    use crate::components::{
+        RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
+        reset_solo_mapping_work, solo_mapping_work,
+    };
     use crate::data_bind_graph::{
         RuntimeDataBindGraphConverter, runtime_data_bind_graph_reverse_convert_value,
     };
@@ -3618,6 +3656,7 @@ mod tests {
         let objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
 
         ArtboardInstance {
+            instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: 0.0,
             height: 0.0,
             origin_x: 0.0,
@@ -4532,6 +4571,23 @@ mod tests {
     }
 
     #[test]
+    fn artboard_typed_property_reads_surface_defaults_and_reject_wrong_value_kinds() {
+        let opacity_key = property_key_for_name("Shape", "opacity").expect("Shape.opacity");
+        let color_key =
+            property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(0, "Shape", Vec::new())),
+            Some(synthetic_runtime_object(1, "SolidColor", Vec::new())),
+        ]);
+
+        assert_eq!(instance.double_property(0, opacity_key), Some(1.0));
+        assert_eq!(instance.color_property(1, color_key), Some(0xff74_7474));
+        assert_eq!(instance.color_property(0, opacity_key), None);
+        assert_eq!(instance.double_property(1, color_key), None);
+    }
+
+    #[test]
     fn update_transform_reads_generated_instance_storage() {
         let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
         let node_scale_x_key = property_key_for_name("Node", "scaleX").expect("Node.scaleX key");
@@ -4825,6 +4881,141 @@ mod tests {
             collapsed,
             "component {local_id} collapse mismatch"
         );
+    }
+
+    #[test]
+    fn instantiating_an_artboard_without_solos_skips_solo_mapping_analysis() {
+        let bytes = synthetic_riv(9600, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 1)]);
+        });
+
+        reset_solo_mapping_work();
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 1, false);
+        assert_collapsed(&instance, 2, false);
+        assert_eq!(solo_mapping_work(), SoloMappingWork::default());
+    }
+
+    #[test]
+    fn imported_solo_mapping_preserves_a_null_slot_before_the_active_child() {
+        let bytes = synthetic_riv(9604, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1: abstract runtime objects become indexed null slots in
+            // C++ Artboard::objects(). They must not compact later local ids.
+            push_synthetic_object(bytes, "BindableProperty", &[]);
+            // Local 2: solo; local 4 is active across the null slot.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 4)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 2)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 2)]);
+        });
+
+        reset_solo_mapping_work();
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 3, true);
+        assert_collapsed(&instance, 4, false);
+        let mapping = &instance.solos[0].runtime_local_by_cpp_local;
+        assert_eq!(mapping.len(), 4);
+        assert_eq!(mapping.get(&0), Some(&0));
+        assert!(!mapping.contains_key(&1));
+        assert_eq!(mapping.get(&2), Some(&2));
+        assert_eq!(mapping.get(&3), Some(&3));
+        assert_eq!(mapping.get(&4), Some(&4));
+        assert_eq!(
+            solo_mapping_work(),
+            SoloMappingWork {
+                analyses: 1,
+                batch_queries: 1,
+                visited_slots: 5,
+            }
+        );
+    }
+
+    fn imported_solo_mapping_work(child_count: usize) -> SoloMappingWork {
+        let bytes = synthetic_riv(9605 + child_count as u64, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
+            for _ in 0..child_count {
+                push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            }
+        });
+
+        reset_solo_mapping_work();
+        let instance = instance_from_riv(&bytes);
+        assert_eq!(instance.solos.len(), 1);
+        solo_mapping_work()
+    }
+
+    #[test]
+    fn solo_mapping_analysis_is_one_batched_linear_pass() {
+        let small_child_count = 8;
+        let large_child_count = 64;
+
+        let small = imported_solo_mapping_work(small_child_count);
+        let large = imported_solo_mapping_work(large_child_count);
+
+        assert_eq!(small.analyses, 1);
+        assert_eq!(large.analyses, 1);
+        assert_eq!(small.batch_queries, 1);
+        assert_eq!(large.batch_queries, 1);
+        assert_eq!(small.visited_slots, small_child_count + 2);
+        assert_eq!(large.visited_slots, large_child_count + 2);
+    }
+
+    #[test]
+    fn imported_solos_share_one_mapping_without_behavior_drift() {
+        let bytes = synthetic_riv(9670, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1 with active/inactive children 2 and 3.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            // Local 4 with active/inactive children 5 and 6.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 5)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+        });
+
+        reset_solo_mapping_work();
+        let mut instance = instance_from_riv(&bytes);
+
+        assert_eq!(instance.solos.len(), 2);
+        assert!(std::sync::Arc::ptr_eq(
+            &instance.solos[0].runtime_local_by_cpp_local,
+            &instance.solos[1].runtime_local_by_cpp_local,
+        ));
+        assert_eq!(
+            solo_mapping_work(),
+            SoloMappingWork {
+                analyses: 1,
+                batch_queries: 1,
+                visited_slots: 7,
+            }
+        );
+
+        assert_collapsed(&instance, 2, false);
+        assert_collapsed(&instance, 3, true);
+        assert_collapsed(&instance, 5, false);
+        assert_collapsed(&instance, 6, true);
+
+        assert!(instance.set_solo_active_child_by_index(1, 1.0));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, false);
+        assert_collapsed(&instance, 5, false);
+        assert_collapsed(&instance, 6, true);
+
+        assert!(instance.set_solo_active_child_by_index(4, 1.0));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, false);
+        assert_collapsed(&instance, 5, true);
+        assert_collapsed(&instance, 6, false);
     }
 
     // Regression for the M8 audit finding: apply_initial_solo_collapses only

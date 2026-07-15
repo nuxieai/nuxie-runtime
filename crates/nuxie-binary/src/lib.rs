@@ -413,7 +413,54 @@ pub struct RuntimeFile {
     pub import_statuses: Vec<RuntimeImportStatus>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AuthoringRecord {
+    pub type_key: u16,
+    pub properties: Vec<AuthoringProperty>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AuthoringProperty {
+    pub key: u16,
+    pub value: AuthoringValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
+pub enum AuthoringValue {
+    Bool(bool),
+    Bytes(Vec<u8>),
+    Color(u32),
+    Double(f32),
+    String(String),
+    Uint(u64),
+}
+
 impl RuntimeFile {
+    pub fn from_authoring_records(records: Vec<AuthoringRecord>) -> Result<Self> {
+        let mut property_field_ids = BTreeMap::new();
+        let objects = records
+            .into_iter()
+            .enumerate()
+            .map(|(id, record)| {
+                authoring_record_to_runtime_object(id, record, &mut property_field_ids).map(Some)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let file = finalize_runtime_file(
+            RuntimeHeader {
+                major_version: SUPPORTED_MAJOR_VERSION,
+                minor_version: SUPPORTED_MINOR_VERSION,
+                file_id: 0,
+                property_field_ids,
+            },
+            objects,
+        )?;
+        validate_authoring_import_statuses(&file)?;
+        validate_authoring_artboard_local_objects(&file)?;
+        Ok(file)
+    }
+
     pub fn object_count(&self) -> usize {
         self.objects.len()
     }
@@ -453,11 +500,30 @@ impl RuntimeFile {
         artboard_index: usize,
         local_index: usize,
     ) -> Option<&RuntimeObject> {
+        self.artboard_local_object_slots(artboard_index)?
+            .get(local_index)
+            .copied()
+            .flatten()
+    }
+
+    /// Returns the validated C++ artboard-local object table in one pass.
+    ///
+    /// The vector index is the C++ artboard-local id. `None` entries are
+    /// significant: C++ keeps null slots for abstract, unknown, dropped, or
+    /// invalid local objects, so callers must not compact the result.
+    pub fn artboard_local_object_slots(
+        &self,
+        artboard_index: usize,
+    ) -> Option<Vec<Option<&RuntimeObject>>> {
         let range = self.cpp_artboard_range(artboard_index)?;
         let mut slots = runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
         validate_cpp_artboard_local_slots(&mut slots, &self.objects);
-        let file_index = slots.get(local_index).and_then(|slot| *slot)?;
-        self.object(file_index)
+        Some(
+            slots
+                .into_iter()
+                .map(|file_index| file_index.and_then(|file_index| self.object(file_index)))
+                .collect(),
+        )
     }
 
     pub fn default_artboard(&self) -> Option<&RuntimeObject> {
@@ -8345,9 +8411,186 @@ pub fn read_runtime_file_with_error_kind(
         objects.push(object);
     }
 
+    finalize_runtime_file(header, objects).map_err(RuntimeReadError::malformed)
+}
+
+fn authoring_record_to_runtime_object(
+    id: usize,
+    record: AuthoringRecord,
+    property_field_ids: &mut BTreeMap<u32, HeaderFieldKind>,
+) -> Result<RuntimeObject> {
+    let definition = definition_by_type_key(record.type_key)
+        .with_context(|| format!("unknown authoring object type key {}", record.type_key))?;
+    if definition.abstract_ {
+        bail!(
+            "authoring object type key {} ({}) is abstract",
+            record.type_key,
+            definition.name
+        );
+    }
+
+    let object_id = u32::try_from(id).context("authoring object id does not fit in u32")?;
+    let mut seen_property_keys = BTreeSet::new();
+    let mut properties = Vec::with_capacity(record.properties.len());
+    let mut authored_properties = record.properties;
+    authored_properties.sort_by_key(|property| property.key);
+    for authored_property in authored_properties {
+        if !seen_property_keys.insert(authored_property.key) {
+            bail!(
+                "duplicate authoring property key {} on object {} ({})",
+                authored_property.key,
+                object_id,
+                definition.name
+            );
+        }
+
+        let (owner, property) =
+            property_by_primary_key_in_hierarchy(definition, authored_property.key).with_context(
+                || {
+                    format!(
+                        "authoring property key {} is not allowed on object {} ({})",
+                        authored_property.key, object_id, definition.name
+                    )
+                },
+            )?;
+        if !property.deserializes {
+            bail!(
+                "authoring property key {} on object {} ({}) is not deserializable",
+                authored_property.key,
+                object_id,
+                definition.name
+            );
+        }
+        if !authored_property
+            .value
+            .matches_field_kind(property.runtime_type)
+        {
+            bail!(
+                "authoring property key {} on object {} ({}) expects {:?}, got {}",
+                authored_property.key,
+                object_id,
+                definition.name,
+                property.runtime_type,
+                authored_property.value.kind_name()
+            );
+        }
+        if let AuthoringValue::Uint(value) = &authored_property.value
+            && u32::try_from(*value).is_err()
+        {
+            bail!(
+                "authoring property key {} on object {} ({}) uint value {} does not fit in C++ unsigned int",
+                authored_property.key,
+                object_id,
+                definition.name,
+                value
+            );
+        }
+
+        if let Some(header_kind) = header_field_kind_for_property(authored_property.key, property)?
+        {
+            let property_key = u32::from(authored_property.key);
+            if let Some(existing) = property_field_ids.insert(property_key, header_kind)
+                && existing != header_kind
+            {
+                bail!(
+                    "authoring property key {} has conflicting runtime field kinds",
+                    authored_property.key
+                );
+            }
+        }
+
+        properties.push(RuntimeProperty {
+            key: authored_property.key,
+            name: property.name,
+            owner,
+            value: authored_property.value.into_field_value(),
+        });
+    }
+
+    Ok(RuntimeObject {
+        id: object_id,
+        type_key: record.type_key,
+        type_name: definition.name,
+        rust_variant: definition.rust_variant,
+        properties,
+        skipped_properties: Vec::new(),
+    })
+}
+
+impl AuthoringValue {
+    fn matches_field_kind(&self, kind: FieldKind) -> bool {
+        matches!(
+            (self, kind),
+            (Self::Bool(_), FieldKind::Bool)
+                | (Self::Bytes(_), FieldKind::Bytes)
+                | (Self::Color(_), FieldKind::Color)
+                | (Self::Double(_), FieldKind::Double)
+                | (Self::String(_), FieldKind::String)
+                | (Self::Uint(_), FieldKind::Uint)
+        )
+    }
+
+    fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Bool(_) => "bool",
+            Self::Bytes(_) => "bytes",
+            Self::Color(_) => "color",
+            Self::Double(_) => "double",
+            Self::String(_) => "string",
+            Self::Uint(_) => "uint",
+        }
+    }
+
+    fn into_field_value(self) -> FieldValue {
+        match self {
+            Self::Bool(value) => FieldValue::Bool(value),
+            Self::Bytes(value) => FieldValue::Bytes(BytesValue::new(value)),
+            Self::Color(value) => FieldValue::Color(value),
+            Self::Double(value) => FieldValue::Double(value),
+            Self::String(value) => {
+                let raw = value.as_bytes().to_vec();
+                FieldValue::String(StringValue {
+                    value: Some(value),
+                    raw,
+                })
+            }
+            Self::Uint(value) => FieldValue::Uint(value),
+        }
+    }
+}
+
+fn header_field_kind_for_property(
+    key: u16,
+    property: &Property,
+) -> Result<Option<HeaderFieldKind>> {
+    let Some(core_kind) = core_registry_field_kind_by_property_key(key) else {
+        return Ok(None);
+    };
+
+    let header_kind = match (property.runtime_type, core_kind) {
+        (FieldKind::Uint, CoreRegistryFieldKind::Uint) => Some(HeaderFieldKind::Uint),
+        (FieldKind::String, CoreRegistryFieldKind::StringOrBytes) => {
+            Some(HeaderFieldKind::StringOrBytes)
+        }
+        (FieldKind::Double, CoreRegistryFieldKind::Double) => Some(HeaderFieldKind::Double),
+        (FieldKind::Color, CoreRegistryFieldKind::Color) => Some(HeaderFieldKind::Color),
+        (FieldKind::Bytes, CoreRegistryFieldKind::StringOrBytes)
+        | (FieldKind::Bool, CoreRegistryFieldKind::Bool) => None,
+        (runtime_kind, registry_kind) => {
+            bail!(
+                "authoring property key {key} has conflicting schema field kind {runtime_kind:?} and core-registry field kind {registry_kind:?}"
+            )
+        }
+    };
+    Ok(header_kind)
+}
+
+fn finalize_runtime_file(
+    header: RuntimeHeader,
+    mut objects: Vec<Option<RuntimeObject>>,
+) -> Result<RuntimeFile> {
     let import_statuses = compute_import_statuses(&objects);
-    validate_cpp_import_resolution(&objects, &import_statuses)
-        .map_err(RuntimeReadError::malformed)?;
+    validate_cpp_import_resolution(&objects, &import_statuses)?;
     apply_cpp_import_mutations(&mut objects, &import_statuses);
 
     Ok(RuntimeFile {
@@ -8355,6 +8598,69 @@ pub fn read_runtime_file_with_error_kind(
         objects,
         import_statuses,
     })
+}
+
+fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
+    for (id, (object, status)) in file
+        .objects
+        .iter()
+        .zip(file.import_statuses.iter())
+        .enumerate()
+    {
+        match status {
+            RuntimeImportStatus::Imported => {}
+            RuntimeImportStatus::NullObject => {
+                bail!("authored object {id} would import as a null object")
+            }
+            RuntimeImportStatus::Dropped { reason } => {
+                let type_name = object
+                    .as_ref()
+                    .map(|object| object.type_name)
+                    .unwrap_or("unknown");
+                bail!(
+                    "authored object {id} ({type_name}) would be dropped during import: {reason:?}"
+                );
+            }
+        }
+    }
+
+    if file.objects.len() != file.import_statuses.len() {
+        bail!("authored object/import-status counts do not match");
+    }
+
+    Ok(())
+}
+
+fn validate_authoring_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
+    for range in runtime_artboard_ranges(&file.objects) {
+        let original_slots =
+            runtime_artboard_local_slots(&file.objects, &file.import_statuses, range);
+        let mut validated_slots = original_slots.clone();
+        validate_cpp_artboard_local_slots(&mut validated_slots, &file.objects);
+
+        for (local_id, (original, validated)) in original_slots
+            .iter()
+            .zip(validated_slots.iter())
+            .enumerate()
+        {
+            let Some(file_id) = *original else {
+                continue;
+            };
+            if validated.is_some() {
+                continue;
+            }
+
+            let type_name = file
+                .object(file_id)
+                .map(|object| object.type_name)
+                .unwrap_or("unknown");
+            bail!(
+                "authored object {file_id} ({type_name}) is an invalid artboard-local object at local id {local_id}"
+            );
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Default)]

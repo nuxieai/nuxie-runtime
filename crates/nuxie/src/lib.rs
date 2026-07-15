@@ -9,16 +9,20 @@ use anyhow::{Context, Result};
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeOwnedViewModelInstance,
-    RuntimeRenderPaintCache, RuntimeRenderPathCache,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache,
+    RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
     preallocate_render_paint_cache_for_artboard_tree,
 };
 
+mod scene;
+
+pub use scene::*;
+
 pub use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb,
-    RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
-    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
-    Vec2D,
+    Aabb, BlendMode, ColorInt, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D,
+    PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
+    StrokeJoin, Vec2D,
 };
 pub use nuxie_runtime::{
     LinearAnimationInstance, NoopScriptHost, RuntimeLayerState, RuntimeStateMachineInput,
@@ -41,6 +45,10 @@ impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
     pub fn import(bytes: &[u8]) -> Result<Self> {
         let runtime = read_runtime_file(bytes).context("failed to import Rive file")?;
+        Self::from_runtime(runtime)
+    }
+
+    pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         Ok(Self { runtime, graph })
     }
@@ -142,6 +150,7 @@ impl<'a> Artboard<'a> {
             file: self.file,
             artboard_index: self.index,
             raw,
+            geometry: RuntimeGeometryCache::default(),
         })
     }
 }
@@ -152,6 +161,7 @@ pub struct ArtboardInstance<'a> {
     file: &'a File,
     artboard_index: usize,
     raw: RuntimeArtboardInstance,
+    geometry: RuntimeGeometryCache,
 }
 
 /// Render resources retained across draws of one [`ArtboardInstance`].
@@ -191,6 +201,22 @@ impl<'a> ArtboardInstance<'a> {
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
         changed
+    }
+
+    /// Return visible runtime shape locals under `point`, front to back.
+    pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
+        self.raw.geometry_hit_test(point, &mut self.geometry)
+    }
+
+    /// Return exact logical world bounds for one runtime-local object.
+    pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        self.raw.geometry_world_bounds(local_id, &mut self.geometry)
+    }
+
+    /// Return the settled, layout-aware world transform for one runtime-local object.
+    pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .geometry_world_transform(local_id, &mut self.geometry)
     }
 
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
@@ -351,6 +377,7 @@ pub struct OwnedArtboardInstance {
     file: Arc<File>,
     artboard_index: usize,
     raw: RuntimeArtboardInstance,
+    geometry: RuntimeGeometryCache,
 }
 
 impl OwnedArtboardInstance {
@@ -376,6 +403,7 @@ impl OwnedArtboardInstance {
             file,
             artboard_index,
             raw,
+            geometry: RuntimeGeometryCache::default(),
         })
     }
 
@@ -418,6 +446,22 @@ impl OwnedArtboardInstance {
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
         changed
+    }
+
+    /// Return visible runtime shape locals under `point`, front to back.
+    pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
+        self.raw.geometry_hit_test(point, &mut self.geometry)
+    }
+
+    /// Return exact logical world bounds for one runtime-local object.
+    pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        self.raw.geometry_world_bounds(local_id, &mut self.geometry)
+    }
+
+    /// Return the settled, layout-aware world transform for one runtime-local object.
+    pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .geometry_world_transform(local_id, &mut self.geometry)
     }
 
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
@@ -647,6 +691,27 @@ mod owned_instance_tests {
             OwnedArtboardInstance::instantiate_default(file).expect("instantiate")
         };
         assert!(!instance.advance(0.016) || instance.raw().components().len() > 0);
+    }
+
+    #[test]
+    fn borrowed_and_owned_instances_expose_the_same_geometry_queries() {
+        let borrowed_file = File::import(FIXTURE).expect("import borrowed fixture");
+        let mut borrowed = borrowed_file
+            .default_artboard()
+            .expect("default artboard")
+            .instantiate()
+            .expect("instantiate borrowed artboard");
+        let mut owned = OwnedArtboardInstance::instantiate_default(Arc::new(
+            File::import(FIXTURE).expect("import owned fixture"),
+        ))
+        .expect("instantiate owned artboard");
+
+        assert_eq!(
+            borrowed.hit_test(Vec2D::new(0.0, 0.0)),
+            owned.hit_test(Vec2D::new(0.0, 0.0))
+        );
+        assert_eq!(borrowed.world_bounds(0), owned.world_bounds(0));
+        assert_eq!(borrowed.world_transform(0), owned.world_transform(0));
     }
 
     #[test]

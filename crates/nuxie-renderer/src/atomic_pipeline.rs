@@ -1193,30 +1193,7 @@ impl AtomicPipeline {
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
         }
-        for (draw_index, draw) in draws.iter().enumerate() {
-            if draw.atlas.is_none() {
-                continue;
-            }
-            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                "nuxie-atomic-atlas-blit-pass",
-                &attachments,
-            ));
-            pass.set_pipeline(if advanced_blend && draw.hsl_blend {
-                &self.advanced_hsl_atlas_blit
-            } else if advanced_blend {
-                &self.advanced_atlas_blit
-            } else {
-                &self.atlas_blit
-            });
-            pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
-            pass.set_bind_group(1, image_group(draw_index), &[]);
-            pass.set_bind_group(2, &atomics, &[]);
-            pass.set_bind_group(3, &samplers, &[]);
-            pass.set_vertex_buffer(0, triangle_buffers[draw_index].as_ref().unwrap().slice(..));
-            pass.draw(0..draw.atlas_blit_vertices.len() as u32, 0..1);
-        }
-        if shared_flush_group && draws.iter().any(|draw| draw.atlas.is_none()) {
+        if shared_flush_group && draws.iter().all(|draw| draw.atlas.is_none()) {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-path-pass",
@@ -1273,6 +1250,27 @@ impl AtomicPipeline {
         } else {
             for (draw_index, draw) in draws.iter().enumerate() {
                 if draw.atlas.is_some() {
+                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        "nuxie-atomic-atlas-blit-pass",
+                        &attachments,
+                    ));
+                    pass.set_pipeline(if advanced_blend && draw.hsl_blend {
+                        &self.advanced_hsl_atlas_blit
+                    } else if advanced_blend {
+                        &self.advanced_atlas_blit
+                    } else {
+                        &self.atlas_blit
+                    });
+                    pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                    pass.set_bind_group(1, image_group(draw_index), &[]);
+                    pass.set_bind_group(2, &atomics, &[]);
+                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_vertex_buffer(
+                        0,
+                        triangle_buffers[draw_index].as_ref().unwrap().slice(..),
+                    );
+                    pass.draw(0..draw.atlas_blit_vertices.len() as u32, 0..1);
                     continue;
                 }
                 if let Some(mesh) = draw.image_mesh {

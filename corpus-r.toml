@@ -3117,10 +3117,9 @@ reference = "fixtures/renderer/reference/metal/riv/bankcard-frame-0-clockwise-at
 mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "native-clockwise-atomic-advanced-feather-parity"
 
 [[entry]]
 id = "riv-bankcard-frame-0-msaa"

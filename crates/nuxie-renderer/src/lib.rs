@@ -9997,6 +9997,37 @@ mod tests {
     }
 
     #[test]
+    fn atomic_mixed_path_and_atlas_draws_preserve_order() {
+        let factory = WgpuFactory::new_with_mode(256, 192, RenderMode::ClockwiseAtomic).unwrap();
+        let path = rect_path([72.0, 16.0, 184.0, 176.0], FillRule::Clockwise);
+        let background = 0xff64_6464;
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(
+            &rect_path([0.0, 0.0, 256.0, 192.0], FillRule::NonZero),
+            &WgpuPaint {
+                color: background,
+                ..WgpuPaint::default()
+            },
+        );
+        frame.draw_path(
+            &path,
+            &WgpuPaint {
+                color: 0x8053_5353,
+                feather: 53.0,
+                blend_mode: BlendMode::ColorDodge,
+                ..WgpuPaint::default()
+            },
+        );
+        let pixels = frame.finish().unwrap();
+        let center = &pixels[(96 * 256 + 128) * 4..][..4];
+
+        assert!(center[0] > 100, "atlas draw did not affect {center:?}");
+        assert_eq!(center[0], center[1]);
+        assert_eq!(center[1], center[2]);
+        assert_eq!(center[3], 255);
+    }
+
+    #[test]
     fn msaa_advanced_atlas_blends_preserve_path_clip_across_destination_copies() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let content = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);

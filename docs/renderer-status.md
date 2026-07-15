@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,356, diverges=0, gated=112, total=1,468.
+- Rust wgpu: exact=1,357, diverges=0, gated=111, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -155,6 +155,7 @@ Run `make renderer-golden`.
   `riv-artboard_width_test-frame-0-clockwise-atomic`,
   `riv-background_measure-frame-0-clockwise-atomic`,
   `riv-ball_test-frame-0-clockwise-atomic`,
+  `riv-bankcard-frame-0-clockwise-atomic`,
   `riv-bidirectional_precedence-frame-0-clockwise-atomic`, and
   `riv-bindable_artboard_child-frame-{0..7}-clockwise-atomic`, plus
   `riv-blend_test-frame-{0..4}-clockwise-atomic`, plus
@@ -1122,7 +1123,11 @@ Run `make renderer-golden`.
     excess appears on its second clipped, non-feathered ring; the final 48
     outliers form 13 one-pixel-wide path/clip-edge components, largest 12.
     Reclassified it to the existing Metal/WebGPU subpixel-edge boundary with
-    no tolerance change; six substantive rows remain and none is promoted yet.
+    no tolerance change. `bankcard` then exposed mixed atomic draw-type
+    reordering: Rust hoisted all atlas blits ahead of ordinary paths instead of
+    preserving C++ batch order. Interleaving them reduces the row from
+    1,485,510 pixels/max delta 20 to a passing 22/max 18 under the unchanged
+    `2/32` contract. Bankcard is promoted and five substantive rows remain.
 91. [ ] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold.
@@ -3578,3 +3583,13 @@ Run `make renderer-golden`.
   region. Reclassified the row from advanced-feather parity to the existing
   `metal-webgpu-subpixel-edge-coverage` boundary. The corpus remains
   exact=1,356/diverges=0/gated=112 with six substantive R3.1 rows left.
+- 2026-07-14: Promoted `bankcard` after draw-prefix replay localized its
+  1,485,510-pixel advanced-feather failure to mixed atomic draw ordering.
+  Rust emitted every atlas blit before ordinary paths, changing the authored
+  `path, path, atlas` sequence into `atlas, path, path`; the later full-frame
+  paths therefore erased the feather contribution. Atomic mixed batches now
+  preserve authored order while all-path batches retain their grouped pass.
+  A focused path-to-atlas regression fails before the fix and passes after it.
+  The native-Metal comparison falls to 22 pixels/max delta 18 and passes the
+  unchanged `2/32` contract. The ratchet advances to
+  exact=1,357/diverges=0/gated=111 with five substantive R3.1 rows left.

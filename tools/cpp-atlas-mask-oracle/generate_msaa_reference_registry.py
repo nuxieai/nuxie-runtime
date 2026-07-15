@@ -21,6 +21,16 @@ GM_CASE_KEYS = {
     "clear_color",
     "counts",
 }
+FIRST_LIGHT_CASE_KEYS = {
+    "id",
+    "stream",
+    "sha256",
+    "profile",
+    "width",
+    "height",
+    "clear_color",
+    "counts",
+}
 RIV_CASE_KEYS = GM_CASE_KEYS | {"profile", "artboard", "sample_seconds", "frame"}
 ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 REVISION_RE = re.compile(r"[0-9a-f]{40}")
@@ -124,8 +134,16 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[dict]:
     seen = set()
     for case in cases:
         profile = case.get("profile", "gm")
-        expected_keys = RIV_CASE_KEYS if profile == "riv" else GM_CASE_KEYS
-        if profile not in ("gm", "riv") or set(case) != expected_keys:
+        if profile == "riv":
+            expected_keys = RIV_CASE_KEYS
+        elif profile == "first-light":
+            expected_keys = FIRST_LIGHT_CASE_KEYS
+        else:
+            expected_keys = GM_CASE_KEYS
+        if (
+            profile not in ("gm", "first-light", "riv")
+            or set(case) != expected_keys
+        ):
             raise ValueError(f"MSAA reference case has unexpected fields: {case.get('id')!r}")
         case_id = case["id"]
         if not isinstance(case_id, str) or ID_RE.fullmatch(case_id) is None:
@@ -148,6 +166,10 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[dict]:
             frame = case["frame"]
             if isinstance(frame, bool) or not isinstance(frame, int) or frame < 0:
                 raise ValueError(f"MSAA reference case {case_id} has invalid frame")
+        elif profile == "first-light" and case["clear_color"] != "0x00000000":
+            raise ValueError(
+                f"MSAA first-light reference case must use transparent clear: {case_id}"
+            )
     return cases
 
 
@@ -181,10 +203,14 @@ def generate_registry(
             expected_source=case["source"] if profile == "gm" else None,
             expected_source_suffix=case["source"] if profile == "riv" else None,
             expected_artboard=case.get("artboard", ""),
-            expected_scene=case["scene"],
+            expected_scene=case.get("scene", ""),
             expected_width=case["width"],
             expected_height=case["height"],
-            expected_clear_color=case["clear_color"] if profile == "gm" else None,
+            expected_clear_color=(
+                case["clear_color"]
+                if profile in ("gm", "first-light")
+                else None
+            ),
             expected_sample_seconds=case.get("sample_seconds"),
             expected_counts=case["counts"],
             function_name=f"replayMsaaReference{index}",

@@ -10547,3 +10547,13 @@ artboard = "Zombie_test 4"
 sample_seconds = "0"
 frame = 0
 counts = { decodeImage = 4, drawPath = 62, makeEmptyRenderPath = 51, makeLinearGradient = 25, makeRadialGradient = 4, makeRenderPaint = 693, restore = 67, save = 67, transform = 67 }
+
+[[case]]
+id = "first-light-rectangle-msaa"
+stream = "fixtures/renderer/streams/first-light-rectangle.rive-stream"
+sha256 = "bcbd5f7dd60748ddefe57186b8460a6d31673c8ef23c9eb80784fcf5f35116a7"
+profile = "first-light"
+width = 64
+height = 64
+clear_color = "0x00000000"
+counts = { drawPath = 1 }

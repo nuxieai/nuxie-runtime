@@ -1,24 +1,13 @@
 {
-  "entry": [
-    {
-      "id": "first-light-rectangle-msaa",
-      "kind": "gm-stream",
-      "reason": "strict-replay-gm-header",
-      "reference": "fixtures/renderer/reference/metal/first-light-rectangle-msaa.png",
-      "result": "unsupported",
-      "stream": "fixtures/renderer/streams/first-light-rectangle.rive-stream"
-    }
-  ],
+  "entry": [],
   "summary": {
     "accepted": 0,
-    "capture_manifest_cases": 732,
-    "gated_msaa_rows": 7,
-    "missing_strict_provenance_rows": 1,
-    "strict_provenance_rows": 6,
-    "unsupported": 1,
-    "unsupported_by_reason": {
-      "strict-replay-gm-header": 1
-    }
+    "capture_manifest_cases": 733,
+    "gated_msaa_rows": 1,
+    "missing_strict_provenance_rows": 0,
+    "strict_provenance_rows": 1,
+    "unsupported": 0,
+    "unsupported_by_reason": {}
   },
   "version": 1
 }

@@ -100,6 +100,13 @@ class RivFrameSelection:
     command_lines: tuple[str, ...]
 
 
+@dataclasses.dataclass(frozen=True)
+class FirstLightFrameSelection:
+    width: int
+    height: int
+    command_lines: tuple[str, ...]
+
+
 RETAINED_DECLARATION_PREFIXES = (
     "makeEmptyRenderPath ",
     "makeRenderPaint ",
@@ -109,6 +116,24 @@ RETAINED_DECLARATION_PREFIXES = (
     "makeRenderBuffer ",
     "bufferData ",
 )
+
+
+def select_first_light_frame(lines: list[str]) -> FirstLightFrameSelection:
+    if len(lines) < 3 or lines[0] != "rive-golden-stream-v1":
+        raise ValueError("first-light profile header contract drifted")
+    frame_size = FRAME_SIZE_RE.fullmatch(lines[1])
+    if (
+        frame_size is None
+        or lines[-1] != "frame"
+        or "frame" in lines[:-1]
+        or any(
+            line.startswith(("source file=", "clearColor "))
+            for line in lines[2:-1]
+        )
+    ):
+        raise ValueError("first-light profile header contract drifted")
+    width, height = (int(value) for value in frame_size.groups())
+    return FirstLightFrameSelection(width, height, tuple(lines[2:-1]))
 
 
 def select_riv_frame(lines: list[str], frame_index: int) -> RivFrameSelection:
@@ -319,6 +344,19 @@ def generate_include(
         command_lines = lines[1:metadata_index] + lines[metadata_index + 3 : -1]
         if lines[-1] != "frame" or "frame" in lines[:-1]:
             raise ValueError("path-only replay requires exactly one terminal frame marker")
+    elif profile == "first-light":
+        if (
+            expected_source is not None
+            or expected_source_suffix is not None
+            or expected_scene
+        ):
+            raise ValueError("first-light profile does not support source metadata")
+        if expected_clear_color != "0x00000000":
+            raise ValueError("first-light profile requires a transparent clear color")
+        selection = select_first_light_frame(lines)
+        if selection.width != expected_width or selection.height != expected_height:
+            raise ValueError("first-light profile header contract drifted")
+        command_lines = list(selection.command_lines)
     elif profile == "riv":
         selection = select_riv_frame(lines, frame_index)
         if (
@@ -703,6 +741,19 @@ def generate_include(
                 raise ValueError("drawPath is missing its paint snapshot")
             path = parse_path(path_text)
             paint = parse_paint(paint_text)
+            if profile == "first-light":
+                if path.object_id not in paths:
+                    paths[path.object_id] = None
+                    output.append(
+                        f"    auto path{path.object_id} = "
+                        "context->makeEmptyRenderPath();"
+                    )
+                if paint.object_id not in paints:
+                    paints.add(paint.object_id)
+                    output.append(
+                        f"    auto paint{paint.object_id} = "
+                        "context->makeRenderPaint();"
+                    )
             if path.object_id not in paths or paint.object_id not in paints:
                 raise ValueError("drawPath references an undeclared path or paint")
             if paint.shader != 0 and paint.shader not in shaders:
@@ -747,9 +798,11 @@ def generate_include(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--stream", type=pathlib.Path, required=True)
-    parser.add_argument("--profile", choices=("gm", "riv"), default="gm")
+    parser.add_argument(
+        "--profile", choices=("gm", "first-light", "riv"), default="gm"
+    )
     parser.add_argument("--expected-sha256", required=True)
-    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group = parser.add_mutually_exclusive_group()
     source_group.add_argument("--expected-source")
     source_group.add_argument("--expected-source-suffix")
     parser.add_argument("--expected-artboard", default="")
@@ -772,7 +825,7 @@ def main() -> None:
             parser.error("GM profile requires --expected-source")
         expected_scene = args.expected_scene or args.expected_source.removeprefix("gm:")
         expected_clear_color = args.expected_clear_color or "0x00000000"
-    else:
+    elif args.profile == "riv":
         if args.expected_scene is None:
             parser.error("RIV profile requires --expected-scene")
         if args.expected_sample_seconds is None:
@@ -781,6 +834,13 @@ def main() -> None:
             parser.error("RIV profile has an implicit transparent clear color")
         expected_scene = args.expected_scene
         expected_clear_color = None
+    else:
+        if args.expected_source is not None or args.expected_source_suffix is not None:
+            parser.error("first-light profile does not accept source metadata")
+        if args.expected_scene is not None or args.expected_sample_seconds is not None:
+            parser.error("first-light profile does not accept source or sample metadata")
+        expected_scene = ""
+        expected_clear_color = args.expected_clear_color or "0x00000000"
     generated = generate_include(
         args.stream,
         args.profile,

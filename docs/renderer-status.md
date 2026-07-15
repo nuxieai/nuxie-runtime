@@ -7,9 +7,10 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,408, diverges=0, gated=60, total=1,468.
+- Rust wgpu: exact=1,409, diverges=0, gated=59, total=1,468.
 - Stub baseline: exact=0 for every active entry.
-- Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
+- Exact: `first-light-rectangle-msaa`,
+  `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
   `batchedtriangulations`, `concavepaths`, `convex_lineonly_ths`,
   `convexpaths`, `oval`, `pathfill`, and the
@@ -1222,10 +1223,13 @@ Run `make renderer-golden`.
     unchanged `2/32` Dawn reference contract at 0/max 1, 0/max 1, and
     12/max 46 respectively. No reference or tolerance changed; the ratchet is
     exact=1,408/diverges=0/gated=60.
-101. [ ] Promote `first-light-rectangle-msaa` from its exact C++ Dawn
-    reference under the unchanged `2/0` contract after the provenance
-    migration transaction survives crash recovery, syscall-failure, CAS,
-    alias, and mode-preservation review.
+101. [x] Promote `first-light-rectangle-msaa` from its exact C++ Dawn
+    reference under the unchanged `2/0` contract. The header-only stream now
+    has a strict first-light replay profile and a case-local provenance
+    identity. Existing captures retain their immutable legacy registry
+    identities, so adding one case requires no bulk provenance rewrite or
+    filesystem transaction. Focused C++ Dawn/Rust wgpu comparison is byte-exact
+    at 0/max 0; the ratchet advances to exact=1,409/diverges=0/gated=59.
 102. [ ] Close `car_widgets_v01` by porting advanced clockwise-atomic blend
     storage with one-word color/validity publication, bounded frame storage,
     and true complex-path full-frame Metal stress tests across all 15 modes.
@@ -3882,3 +3886,10 @@ Run `make renderer-golden`.
   defect, tolerance, reference, status, or ratchet change; all 12 retain
   `metal-webgpu-subpixel-edge-coverage`. Evidence is in
   `docs/renderer-r3-exit-audit.md`.
+- 2026-07-15: Closed queue item 101 with a strict header-only First Light Dawn
+  replay and mixed-schema read-only provenance validation. The 732 existing
+  captures keep their pinned legacy registry identity; new captures publish a
+  case-local identity, avoiding a bulk migration and its unrelated transaction
+  subsystem. The captured C++ Dawn and Rust wgpu 64x64 outputs are byte-exact
+  under the unchanged `2/0` contract. The ratchet advances to
+  exact=1,409/diverges=0/gated=59; Car Widgets is next.

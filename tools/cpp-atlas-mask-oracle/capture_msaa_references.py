@@ -21,6 +21,12 @@ import uuid
 import zlib
 from dataclasses import dataclass
 
+from msaa_reference_identity import (
+    PROVENANCE_VERSION,
+    case_identity_sha256,
+    require_unique_case_identities,
+)
+
 
 RIVEABL_MAGIC = b"RIVEABL\0"
 RIVEABL_HEADER_BYTES = 20
@@ -32,6 +38,18 @@ GM_CASE_KEYS = frozenset(
         "sha256",
         "source",
         "scene",
+        "width",
+        "height",
+        "clear_color",
+        "counts",
+    }
+)
+FIRST_LIGHT_CASE_KEYS = frozenset(
+    {
+        "id",
+        "stream",
+        "sha256",
+        "profile",
         "width",
         "height",
         "clear_color",
@@ -54,6 +72,7 @@ COORDINATOR_PROVENANCE_KEYS = (
     "frame_height",
     "sample_count",
 )
+PER_CASE_PROVENANCE_KEYS = ("provenance_version", "case_identity_sha256")
 UPSTREAM_PROVENANCE_KEYS = frozenset(
     {
         "backend",
@@ -81,6 +100,7 @@ class Case:
     stream_sha256: str
     width: int
     height: int
+    identity_case: dict
 
 
 @dataclass(frozen=True)
@@ -133,10 +153,15 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[Case]:
     output_basenames: dict[str, str] = {}
     for row in rows:
         profile = row.get("profile", "gm") if isinstance(row, dict) else None
-        expected_keys = RIV_CASE_KEYS if profile == "riv" else GM_CASE_KEYS
+        if profile == "riv":
+            expected_keys = RIV_CASE_KEYS
+        elif profile == "first-light":
+            expected_keys = FIRST_LIGHT_CASE_KEYS
+        else:
+            expected_keys = GM_CASE_KEYS
         if (
             not isinstance(row, dict)
-            or profile not in ("gm", "riv")
+            or profile not in ("gm", "first-light", "riv")
             or set(row) != expected_keys
         ):
             case_id = row.get("id") if isinstance(row, dict) else None
@@ -177,8 +202,9 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[Case]:
                 f"expected {stream_sha256}, got {actual_stream_sha256}"
             )
 
-        require_string(row, "source")
-        require_string(row, "scene")
+        if profile != "first-light":
+            require_string(row, "source")
+            require_string(row, "scene")
         width = require_positive_int(row, "width")
         height = require_positive_int(row, "height")
         clear_color = require_string(row, "clear_color")
@@ -199,7 +225,13 @@ def load_cases(manifest: pathlib.Path, repo_root: pathlib.Path) -> list[Case]:
             frame = row["frame"]
             if isinstance(frame, bool) or not isinstance(frame, int) or frame < 0:
                 raise ValueError(f"MSAA reference case {case_id} has invalid frame")
-        cases.append(Case(case_id, stream, stream_sha256, width, height))
+        elif profile == "first-light" and clear_color != "0x00000000":
+            raise ValueError(
+                f"MSAA first-light reference case must use transparent clear: {case_id}"
+            )
+        cases.append(
+            Case(case_id, stream, stream_sha256, width, height, dict(row))
+        )
     return cases
 
 
@@ -357,7 +389,7 @@ def validate_and_append_provenance(
     dawn_revision: str,
     registry_sha256: str,
 ) -> None:
-    existing, upstream = parse_provenance(path)
+    _, upstream = parse_provenance(path)
     expected_upstream = {
         "backend": "metal",
         "renderer_implementation": "cpp-dawn-webgpu",
@@ -394,11 +426,20 @@ def validate_and_append_provenance(
         "frame_height": str(height),
         "sample_count": "4",
     }
-    separator = "" if existing.endswith("\n") else "\n"
-    suffix = "".join(f"{key}={appended[key]}\n" for key in COORDINATOR_PROVENANCE_KEYS)
-    path.write_text(existing + separator + suffix, encoding="utf-8")
+    final = {
+        key: value for key, value in upstream.items() if key != "registry_sha256"
+    }
+    final.update(appended)
+    final["provenance_version"] = PROVENANCE_VERSION
+    final["case_identity_sha256"] = case_identity_sha256(
+        case.identity_case, final
+    )
+    path.write_text(
+        "".join(f"{key}={final[key]}\n" for key in sorted(final)),
+        encoding="utf-8",
+    )
     _, final_fields = parse_provenance(path)
-    if any(final_fields.get(key) != value for key, value in appended.items()):
+    if any(final_fields.get(key) != value for key, value in final.items()):
         raise ValueError("could not validate augmented provenance")
 
 
@@ -454,6 +495,21 @@ def run_case(
     except (OSError, CaseCommandError, ValueError, UnicodeDecodeError) as error:
         return CaseResult(case.case_id, str(error))
     return CaseResult(case.case_id, None)
+
+
+def validate_stage_identities(cases: list[Case], stage_dir: pathlib.Path) -> None:
+    records = []
+    for case in cases:
+        _, fields = parse_provenance(stage_dir / f"{case.case_id}.provenance")
+        if fields.get("provenance_version") != PROVENANCE_VERSION:
+            raise ValueError(f"per-case provenance version mismatch: {case.case_id}")
+        identity = fields.get("case_identity_sha256")
+        if identity is None:
+            raise ValueError(f"missing per-case identity: {case.case_id}")
+        if identity != case_identity_sha256(case.identity_case, fields):
+            raise ValueError(f"per-case identity mismatch: {case.case_id}")
+        records.append((case.case_id, identity))
+    require_unique_case_identities(records)
 
 
 def run_checked_command(command: list[str], label: str, timeout_seconds: float) -> None:
@@ -630,6 +686,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"FAIL {case.case_id}: {result.error}")
         if failed:
             failed_dir = preserve_failed_stage(stage_dir, output_dir)
+            print(f"FAILED OUTPUTS: {failed_dir}", file=sys.stderr)
+            return 1
+        try:
+            validate_stage_identities(cases, stage_dir)
+        except ValueError as error:
+            failed_dir = preserve_failed_stage(stage_dir, output_dir)
+            print(f"FAIL provenance: {error}")
             print(f"FAILED OUTPUTS: {failed_dir}", file=sys.stderr)
             return 1
         try:

@@ -141,6 +141,16 @@ dimensions, and unique reference ownership all remain valid. Exactly these
 three rows advance from gated to exact; the active ratchet is
 exact=1,408/diverges=0/gated=60.
 
+### First Light MSAA Promotion (2026-07-15)
+
+`first-light-rectangle-msaa` now compiles through a strict header-only replay
+profile and carries a case-local C++ Dawn provenance identity. The existing
+732 captures remain bound to their immutable legacy registry identity, so the
+new case does not require rewriting historical evidence. Focused C++ Dawn and
+Rust wgpu outputs are byte-exact at 0 differing pixels/max delta 0 under the
+unchanged `2/0` contract. The active ratchet is
+exact=1,409/diverges=0/gated=59.
+
 ### Post-R3.1 Hunter X Adjudication (2026-07-15)
 
 Two native-Metal prefix and preparation investigations localize Hunter X's

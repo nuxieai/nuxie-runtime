@@ -1679,14 +1679,12 @@ class FormatTests(unittest.TestCase):
             inventory["summary"],
             {
                 "accepted": 0,
-                "capture_manifest_cases": 732,
-                "gated_msaa_rows": 7,
-                "missing_strict_provenance_rows": 1,
-                "strict_provenance_rows": 6,
-                "unsupported": 1,
-                "unsupported_by_reason": {
-                    "strict-replay-gm-header": 1,
-                },
+                "capture_manifest_cases": 733,
+                "gated_msaa_rows": 1,
+                "missing_strict_provenance_rows": 0,
+                "strict_provenance_rows": 1,
+                "unsupported": 0,
+                "unsupported_by_reason": {},
             },
         )
         accepted = [
@@ -1742,10 +1740,6 @@ class FormatTests(unittest.TestCase):
     def test_msaa_inventory_rejects_non_corpus_fixture_tampering(self):
         inventory = load_inventory_module()
         capture = inventory.load_capture_validator()
-        registry_generator = inventory.load_registry_generator()
-        registry_sha256 = inventory.registry_sha256(
-            MSAA_REFERENCE_MANIFEST, registry_generator
-        )
         cases = {
             case["id"]: case
             for case in tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
@@ -1754,7 +1748,6 @@ class FormatTests(unittest.TestCase):
         source_png = MSAA_REFERENCE_FIXTURES / "gm-strokes_zoomed-msaa.png"
         source_provenance = source_png.with_suffix(".provenance")
         _, source_fields = capture.parse_provenance(source_provenance)
-        source_fields["registry_sha256"] = registry_sha256
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = pathlib.Path(temp_dir)
@@ -1781,9 +1774,7 @@ class FormatTests(unittest.TestCase):
             try:
                 write_provenance(source_fields)
                 self.assertTrue(
-                    inventory.has_strict_reference(
-                        entry, cases, registry_sha256, capture
-                    )
+                    inventory.has_strict_reference(entry, cases, capture)
                 )
 
                 false_values = {
@@ -1808,9 +1799,7 @@ class FormatTests(unittest.TestCase):
                         fields[key] = value
                         write_provenance(fields)
                         self.assertFalse(
-                            inventory.has_strict_reference(
-                                entry, cases, registry_sha256, capture
-                            )
+                            inventory.has_strict_reference(entry, cases, capture)
                         )
 
                 for key in source_fields:
@@ -1819,9 +1808,7 @@ class FormatTests(unittest.TestCase):
                         del fields[key]
                         write_provenance(fields)
                         self.assertFalse(
-                            inventory.has_strict_reference(
-                                entry, cases, registry_sha256, capture
-                            )
+                            inventory.has_strict_reference(entry, cases, capture)
                         )
 
                 write_provenance(source_fields)
@@ -1829,9 +1816,7 @@ class FormatTests(unittest.TestCase):
                 tampered_png[-1] ^= 1
                 png.write_bytes(tampered_png)
                 self.assertFalse(
-                    inventory.has_strict_reference(
-                        entry, cases, registry_sha256, capture
-                    )
+                    inventory.has_strict_reference(entry, cases, capture)
                 )
             finally:
                 inventory.ROOT = original_root
@@ -1864,19 +1849,13 @@ class FormatTests(unittest.TestCase):
     def test_msaa_reference_manifest_has_strict_fixture_provenance(self):
         inventory = load_inventory_module()
         capture = inventory.load_capture_validator()
-        registry_generator = inventory.load_registry_generator()
-        registry_sha256 = inventory.registry_sha256(
-            MSAA_REFERENCE_MANIFEST, registry_generator
-        )
         cases = tomllib.loads(MSAA_REFERENCE_MANIFEST.read_text())["case"]
         for case in cases:
             with self.subTest(case_id=case["id"]):
                 profile = case.get("profile", "gm")
                 png = MSAA_REFERENCE_ROOT / profile / f"{case['id']}.png"
                 self.assertTrue(png.is_file())
-                inventory.validate_strict_reference(
-                    png, case, registry_sha256, capture
-                )
+                inventory.validate_strict_reference(png, case, capture)
 
     def test_msaa_reference_registry_is_deterministic_and_strict(self):
         command = [
@@ -1900,14 +1879,14 @@ class FormatTests(unittest.TestCase):
             subprocess.run(command + ["--output", str(second)], check=True)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             generated = first.read_text()
-            self.assertIn("constexpr std::array<MsaaReferenceCase, 732>", generated)
+            self.assertIn("constexpr std::array<MsaaReferenceCase, 733>", generated)
             self.assertIn("kMsaaReferenceRegistrySha256", generated)
             self.assertIn("bool expectsDrawBatches;", generated)
             self.assertIn(MSAA_TEST_RUNTIME_REVISION, generated)
             self.assertIn(MSAA_TEST_DAWN_REVISION, generated)
             self.assertEqual(
                 len(re.findall(r"void replayMsaaReference\d+\(", generated)),
-                732,
+                733,
             )
             self.assertEqual(
                 len(
@@ -1916,9 +1895,10 @@ class FormatTests(unittest.TestCase):
                         generated,
                     )
                 ),
-                732,
+                733,
             )
             self.assertIn('"gm-batchedconvexpaths-msaa"', generated)
+            self.assertIn('"first-light-rectangle-msaa"', generated)
             self.assertIn('"gm-poly_nonZero-msaa"', generated)
             self.assertIn('"gm-interleavedfeather-msaa"', generated)
             self.assertIn('"gm-interleavedfillrule-msaa"', generated)

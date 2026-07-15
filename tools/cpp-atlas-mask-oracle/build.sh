@@ -214,6 +214,7 @@ preflight() {
         python3 "$script_dir/format_test.py"
     fi
     PYTHONDONTWRITEBYTECODE=1 python3 "$script_dir/test_capture_msaa_references.py"
+    PYTHONDONTWRITEBYTECODE=1 python3 "$script_dir/test_first_light_msaa.py"
     python3 "$polyshark_generator" --stream "$polyshark_stream" --check
     python3 "$rawtext_generator" --stream "$rawtext_stream" --check
     python3 "$colorburn_pair_generator" --stream "$colorburn_pair_stream" --check

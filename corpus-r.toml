@@ -5,13 +5,12 @@
 id = "first-light-rectangle-msaa"
 kind = "gm-stream"
 stream = "fixtures/renderer/streams/first-light-rectangle.rive-stream"
-reference = "fixtures/renderer/reference/metal/first-light-rectangle-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/first-light/first-light-rectangle-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 0
-gated = "reference-harness: C++ Metal does not implement MSAA flush"
 
 [[entry]]
 id = "first-light-triangle-clockwise-atomic"

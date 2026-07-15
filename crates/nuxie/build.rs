@@ -129,6 +129,41 @@ const OBJECTS: &[ObjectSpec] = &[
                 kind: FieldKind::Double,
                 inherited: true,
             },
+            FieldSpec {
+                rust_name: "corner_radius_tl",
+                schema_name: "cornerRadiusTL",
+                declared_owner: "Rectangle",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "corner_radius_tr",
+                schema_name: "cornerRadiusTR",
+                declared_owner: "Rectangle",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "corner_radius_br",
+                schema_name: "cornerRadiusBR",
+                declared_owner: "Rectangle",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "corner_radius_bl",
+                schema_name: "cornerRadiusBL",
+                declared_owner: "Rectangle",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "link_corner_radius",
+                schema_name: "linkCornerRadius",
+                declared_owner: "Rectangle",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
         ],
         is_node: true,
     },
@@ -153,8 +188,94 @@ const OBJECTS: &[ObjectSpec] = &[
         ],
         is_node: true,
     },
+    ObjectSpec {
+        rust_name: "Stroke",
+        schema_name: "Stroke",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "thickness",
+                schema_name: "thickness",
+                declared_owner: "Stroke",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "cap",
+                schema_name: "cap",
+                declared_owner: "Stroke",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "join",
+                schema_name: "join",
+                declared_owner: "Stroke",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "transform_affects_stroke",
+                schema_name: "transformAffectsStroke",
+                declared_owner: "Stroke",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "DashPath",
+        schema_name: "DashPath",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "offset",
+                schema_name: "offset",
+                declared_owner: "DashPath",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "offset_is_percentage",
+                schema_name: "offsetIsPercentage",
+                declared_owner: "DashPath",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "Dash",
+        schema_name: "Dash",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "length",
+                schema_name: "length",
+                declared_owner: "Dash",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "length_is_percentage",
+                schema_name: "lengthIsPercentage",
+                declared_owner: "Dash",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
 ];
 
+// The first cursor surface is deliberately narrower than the structural
+// NodeSpec vocabulary. Border topology (including the optional all-radii
+// block and dash children) is structural in E2 and is replaced in one scene
+// edit; it must not gain per-field Prop tokens until a presence/update policy
+// for that aggregate is pinned. Transforms, opacity, rectangle width, and
+// solid color are the current hot-write surface.
 const PROPS: &[PropSpec] = &[
     PropSpec {
         rust_name: "PATH_WIDTH",
@@ -318,6 +439,64 @@ fn render_scene_schema() -> String {
         FieldKind::Color,
         false,
     );
+    let rectangle_corner_radius_tl = resolve_named_property(
+        "Rectangle",
+        "cornerRadiusTL",
+        "Rectangle",
+        FieldKind::Double,
+        false,
+    );
+    let rectangle_corner_radius_tr = resolve_named_property(
+        "Rectangle",
+        "cornerRadiusTR",
+        "Rectangle",
+        FieldKind::Double,
+        false,
+    );
+    let rectangle_corner_radius_br = resolve_named_property(
+        "Rectangle",
+        "cornerRadiusBR",
+        "Rectangle",
+        FieldKind::Double,
+        false,
+    );
+    let rectangle_corner_radius_bl = resolve_named_property(
+        "Rectangle",
+        "cornerRadiusBL",
+        "Rectangle",
+        FieldKind::Double,
+        false,
+    );
+    let rectangle_link_corner_radius = resolve_named_property(
+        "Rectangle",
+        "linkCornerRadius",
+        "Rectangle",
+        FieldKind::Bool,
+        false,
+    );
+    let stroke_thickness =
+        resolve_named_property("Stroke", "thickness", "Stroke", FieldKind::Double, false);
+    let stroke_cap = resolve_named_property("Stroke", "cap", "Stroke", FieldKind::Uint, false);
+    let stroke_join = resolve_named_property("Stroke", "join", "Stroke", FieldKind::Uint, false);
+    let stroke_transform_affects_stroke = resolve_named_property(
+        "Stroke",
+        "transformAffectsStroke",
+        "Stroke",
+        FieldKind::Bool,
+        false,
+    );
+    let dash_offset =
+        resolve_named_property("DashPath", "offset", "DashPath", FieldKind::Double, false);
+    let dash_offset_is_percentage = resolve_named_property(
+        "DashPath",
+        "offsetIsPercentage",
+        "DashPath",
+        FieldKind::Bool,
+        false,
+    );
+    let dash_length = resolve_named_property("Dash", "length", "Dash", FieldKind::Double, false);
+    let dash_length_is_percentage =
+        resolve_named_property("Dash", "lengthIsPercentage", "Dash", FieldKind::Bool, false);
     for (name, property) in [
         ("COMPONENT_NAME", component_name),
         ("PARENT_ID", parent_id),
@@ -333,6 +512,22 @@ fn render_scene_schema() -> String {
         ("PATH_HEIGHT", path_height),
         ("FILL_RULE", fill_rule),
         ("COLOR_VALUE", color_value),
+        ("RECTANGLE_CORNER_RADIUS_TL", rectangle_corner_radius_tl),
+        ("RECTANGLE_CORNER_RADIUS_TR", rectangle_corner_radius_tr),
+        ("RECTANGLE_CORNER_RADIUS_BR", rectangle_corner_radius_br),
+        ("RECTANGLE_CORNER_RADIUS_BL", rectangle_corner_radius_bl),
+        ("RECTANGLE_LINK_CORNER_RADIUS", rectangle_link_corner_radius),
+        ("STROKE_THICKNESS", stroke_thickness),
+        ("STROKE_CAP", stroke_cap),
+        ("STROKE_JOIN", stroke_join),
+        (
+            "STROKE_TRANSFORM_AFFECTS_STROKE",
+            stroke_transform_affects_stroke,
+        ),
+        ("DASH_OFFSET", dash_offset),
+        ("DASH_OFFSET_IS_PERCENTAGE", dash_offset_is_percentage),
+        ("DASH_LENGTH", dash_length),
+        ("DASH_LENGTH_IS_PERCENTAGE", dash_length_is_percentage),
     ] {
         writeln!(
             output,
@@ -342,22 +537,79 @@ fn render_scene_schema() -> String {
         .expect("write generated source");
     }
 
-    output.push('\n');
+    output.push_str(
+        "\n#[derive(Debug, Clone, Copy, PartialEq)]\n\
+         pub struct RectangleCornerRadii {\n\
+             pub top_left: f32,\n\
+             pub top_right: f32,\n\
+             pub bottom_right: f32,\n\
+             pub bottom_left: f32,\n\
+             pub linked: bool,\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneStrokeCap {\n\
+             Butt,\n\
+             Round,\n\
+             Square,\n\
+         }\n\n\
+         impl SceneStrokeCap {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::Butt => 0,\n\
+                     Self::Round => 1,\n\
+                     Self::Square => 2,\n\
+                 }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneStrokeJoin {\n\
+             Miter,\n\
+             Round,\n\
+             Bevel,\n\
+         }\n\n\
+         impl SceneStrokeJoin {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::Miter => 0,\n\
+                     Self::Round => 1,\n\
+                     Self::Bevel => 2,\n\
+                 }\n\
+             }\n\
+         }\n\n",
+    );
     for object in OBJECTS {
         writeln!(output, "#[derive(Debug, Clone, PartialEq)]").expect("write generated source");
         writeln!(output, "pub struct {}Spec {{", object.rust_name).expect("write generated source");
         for field in object.fields {
             let property = resolve_property(object.schema_name, *field);
+            if is_rectangle_corner_radius_field(object, field) {
+                continue;
+            }
             writeln!(
                 output,
                 "    pub {}: {},",
                 field.rust_name,
-                rust_type(property.runtime_type)
+                public_field_rust_type(object, field, property.runtime_type)
             )
             .expect("write generated source");
         }
+        if object.rust_name == "Rectangle" {
+            output.push_str("    pub corner_radii: Option<RectangleCornerRadii>,\n");
+        }
         output.push_str("}\n\n");
     }
+    output.push_str(
+        "impl RectangleSpec {\n\
+             pub fn new(name: impl Into<String>, width: f32, height: f32) -> Self {\n\
+                 Self {\n\
+                     name: name.into(),\n\
+                     width,\n\
+                     height,\n\
+                     corner_radii: None,\n\
+                 }\n\
+             }\n\
+         }\n\n",
+    );
 
     output.push_str(
         "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
@@ -622,7 +874,33 @@ fn rust_type(kind: FieldKind) -> &'static str {
         FieldKind::String => "String",
         FieldKind::Double => "f32",
         FieldKind::Color => "u32",
+        FieldKind::Uint => "u32",
+        FieldKind::Bool => "bool",
         other => panic!("unsupported public Scene spec field kind {other:?}"),
+    }
+}
+
+fn is_rectangle_corner_radius_field(object: &ObjectSpec, field: &FieldSpec) -> bool {
+    object.rust_name == "Rectangle"
+        && matches!(
+            field.rust_name,
+            "corner_radius_tl"
+                | "corner_radius_tr"
+                | "corner_radius_br"
+                | "corner_radius_bl"
+                | "link_corner_radius"
+        )
+}
+
+fn public_field_rust_type(
+    object: &ObjectSpec,
+    field: &FieldSpec,
+    runtime_type: FieldKind,
+) -> &'static str {
+    match (object.rust_name, field.rust_name) {
+        ("Stroke", "cap") => "SceneStrokeCap",
+        ("Stroke", "join") => "SceneStrokeJoin",
+        _ => rust_type(runtime_type),
     }
 }
 

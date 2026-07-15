@@ -10732,6 +10732,36 @@ mod tests {
     }
 
     #[test]
+    fn atomic_atlas_draw_resolves_pending_hsl_path_with_combined_features() {
+        let factory = WgpuFactory::new_with_mode(256, 192, RenderMode::ClockwiseAtomic).unwrap();
+        let mut frame = factory.begin_frame(0xff29_2929);
+        frame.draw_path(
+            &rect_path([0.0, 0.0, 256.0, 192.0], FillRule::Clockwise),
+            &WgpuPaint {
+                color: 0xff00_0000,
+                blend_mode: BlendMode::Hue,
+                ..WgpuPaint::default()
+            },
+        );
+        frame.draw_path(
+            &rect_path([32.0, 48.0, 224.0, 144.0], FillRule::Clockwise),
+            &WgpuPaint {
+                color: 0x8010_070e,
+                feather: 50.0,
+                ..WgpuPaint::default()
+            },
+        );
+        let pixels = frame.finish().unwrap();
+        let center = &pixels[(96 * 256 + 128) * 4..][..4];
+
+        assert!(
+            center[0] > 20 && center[1] > 20 && center[2] > 20,
+            "atlas draw resolved the pending HSL path without its shader feature: {center:?}"
+        );
+        assert_eq!(center[3], 255);
+    }
+
+    #[test]
     fn msaa_advanced_atlas_blends_preserve_path_clip_across_destination_copies() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let content = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);

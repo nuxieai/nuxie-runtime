@@ -930,6 +930,10 @@ impl AtomicPipeline {
                 draw.image_uniforms
                     .is_some_and(|uniforms| uniforms.blend_mode != 0)
             });
+        // Each draw first resolves coverage left by the previous draw. Shader
+        // features therefore describe the whole batch, not only the geometry
+        // currently being emitted.
+        let hsl_blend = draws.iter().any(|draw| draw.hsl_blend);
         let uniform = upload(
             device,
             "nuxie-atomic-uniforms",
@@ -1209,11 +1213,11 @@ impl AtomicPipeline {
                     continue;
                 }
                 pass.set_pipeline(
-                    if advanced_blend && draw.is_feather && draw.is_stroke && draw.hsl_blend {
+                    if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
                         &self.advanced_feather_hsl_stroke_path
                     } else if advanced_blend && draw.is_feather && draw.is_stroke {
                         &self.advanced_feather_stroke_path
-                    } else if advanced_blend && draw.is_feather && draw.hsl_blend {
+                    } else if advanced_blend && draw.is_feather && hsl_blend {
                         &self.advanced_feather_hsl_path
                     } else if advanced_blend && draw.is_feather {
                         &self.advanced_feather_path
@@ -1255,7 +1259,7 @@ impl AtomicPipeline {
                         "nuxie-atomic-atlas-blit-pass",
                         &attachments,
                     ));
-                    pass.set_pipeline(if advanced_blend && draw.hsl_blend {
+                    pass.set_pipeline(if advanced_blend && hsl_blend {
                         &self.advanced_hsl_atlas_blit
                     } else if advanced_blend {
                         &self.advanced_atlas_blit
@@ -1323,11 +1327,11 @@ impl AtomicPipeline {
                     &attachments,
                 ));
                 pass.set_pipeline(
-                    if advanced_blend && draw.is_feather && draw.is_stroke && draw.hsl_blend {
+                    if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
                         &self.advanced_feather_hsl_stroke_path
                     } else if advanced_blend && draw.is_feather && draw.is_stroke {
                         &self.advanced_feather_stroke_path
-                    } else if advanced_blend && draw.is_feather && draw.hsl_blend {
+                    } else if advanced_blend && draw.is_feather && hsl_blend {
                         &self.advanced_feather_hsl_path
                     } else if advanced_blend && draw.is_feather {
                         &self.advanced_feather_path

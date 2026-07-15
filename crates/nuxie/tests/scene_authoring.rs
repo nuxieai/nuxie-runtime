@@ -1,10 +1,10 @@
 use anyhow::Result;
 use nuxie::{
-    Aabb, ArtboardId, ArtboardSpec, DashPathSpec, DashSpec, EditAbort, EditErrorKind, EditId,
-    EditReason, ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec, ObjectId,
-    Parent, PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec, ResolveError,
-    Scene, SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor,
-    StrokeSpec, StructureEpoch, Vec2D, props,
+    Aabb, ArtboardId, ArtboardSpec, ChildIndex, DashPathSpec, DashSpec, EditAbort, EditErrorKind,
+    EditId, EditReason, ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec,
+    ObjectId, Parent, PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec,
+    ResolveError, Scene, SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec, SolidColorSpec,
+    StaleCursor, StrokeSpec, StructureEpoch, Vec2D, props,
 };
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
@@ -126,6 +126,838 @@ fn create_colored_hit_shape(
         }),
     )?;
     Ok(shape)
+}
+
+fn exported_component_names(scene: &Scene) -> Vec<String> {
+    scene
+        .export_records()
+        .records()
+        .iter()
+        .filter_map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::ComponentName(name) => Some(name.clone()),
+                    _ => None,
+                })
+        })
+        .collect()
+}
+
+#[test]
+fn same_parent_reorder_sets_exact_preorder_and_front_to_back_hit_order() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, first, second), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let first = create_colored_hit_shape(tx, artboard, "First", 50.0, 0xff11_2233)?;
+        let second = create_colored_hit_shape(tx, artboard, "Second", 50.0, 0xff44_5566)?;
+        Ok((artboard, first, second))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    assert_eq!(
+        scene.frame().hit_test(instance, Vec2D::new(50.0, 50.0)),
+        vec![first, second]
+    );
+
+    scene.edit(|tx| tx.reorder(second, ChildIndex::First))?;
+
+    assert_eq!(
+        exported_component_names(&scene),
+        vec![
+            "Main",
+            "Second",
+            "Second Rectangle",
+            "Second Fill",
+            "Second Fill Color",
+            "First",
+            "First Rectangle",
+            "First Fill",
+            "First Fill Color",
+        ]
+    );
+    assert_eq!(
+        scene.frame().hit_test(instance, Vec2D::new(50.0, 50.0)),
+        vec![second, first]
+    );
+
+    scene.edit(|tx| tx.reorder(second, ChildIndex::Last))?;
+    assert_eq!(
+        scene.frame().hit_test(instance, Vec2D::new(50.0, 50.0)),
+        vec![first, second]
+    );
+    scene.edit(|tx| tx.reorder(second, ChildIndex::At(0)))?;
+    assert_eq!(
+        scene.frame().hit_test(instance, Vec2D::new(50.0, 50.0)),
+        vec![second, first]
+    );
+    Ok(())
+}
+
+#[test]
+fn same_artboard_reparent_preserves_subtree_ids_parent_ids_preorder_and_fresh_render() -> Result<()>
+{
+    let mut scene = Scene::new();
+    let ((artboard, shape_b, fill_a, color_a), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape_a = create_colored_hit_shape(tx, artboard, "A", 25.0, 0xff11_2233)?;
+        let shape_b = create_colored_hit_shape(tx, artboard, "B", 75.0, 0xff44_5566)?;
+        let fill_a = tx.create(
+            Parent::Object(shape_a),
+            NodeSpec::Fill(FillSpec {
+                name: "Moved Fill".into(),
+            }),
+        )?;
+        let color_a = tx.create(
+            Parent::Object(fill_a),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Moved Color".into(),
+                color: 0xff77_8899,
+            }),
+        )?;
+        Ok((artboard, shape_b, fill_a, color_a))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let stale_color = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
+    let mut held_factory = RecordingFactory::new();
+    let mut held_cache = scene.new_render_cache(instance, &mut held_factory)?;
+    let mut held_renderer = held_factory.make_renderer();
+    scene.frame().draw(
+        instance,
+        &mut held_factory,
+        &mut held_renderer,
+        &mut held_cache,
+    )?;
+
+    scene.edit(|tx| tx.reparent(fill_a, Parent::Object(shape_b), ChildIndex::First))?;
+
+    assert_eq!(scene.frame().get(stale_color), Err(StaleCursor));
+    let fresh_color = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(fresh_color)?, 0xff77_8899);
+    let records = scene.export_records();
+    let named_records = records
+        .records()
+        .iter()
+        .filter_map(|record| {
+            let name = record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::ComponentName(name) => Some(name.as_str()),
+                    _ => None,
+                })?;
+            let parent = record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::ParentId(parent) => Some(*parent),
+                    _ => None,
+                });
+            Some((name, parent))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        named_records,
+        vec![
+            ("Main", None),
+            ("A", None),
+            ("A Rectangle", Some(1)),
+            ("A Fill", Some(1)),
+            ("A Fill Color", Some(3)),
+            ("B", None),
+            ("Moved Fill", Some(5)),
+            ("Moved Color", Some(6)),
+            ("B Rectangle", Some(5)),
+            ("B Fill", Some(5)),
+            ("B Fill Color", Some(9)),
+        ]
+    );
+
+    let mut refreshed_factory = RecordingFactory::new();
+    let mut refreshed_renderer = refreshed_factory.make_renderer();
+    scene.frame().draw(
+        instance,
+        &mut refreshed_factory,
+        &mut refreshed_renderer,
+        &mut held_cache,
+    )?;
+    assert_eq!(
+        refreshed_factory.stream(),
+        draw_stream(&mut scene, instance)?
+    );
+    Ok(())
+}
+
+#[test]
+fn cross_artboard_reparent_moves_one_stable_subtree_and_refreshes_both_draws() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((source, target, moved_shape, moved_color, target_shape), _) = scene.edit(|tx| {
+        let source = tx.create_artboard(ArtboardSpec {
+            name: "Source".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let moved_shape = create_colored_hit_shape(tx, source, "Moved", 50.0, 0xff11_2233)?;
+        let moved_color = tx.create(
+            Parent::Object(moved_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Stable Fill".into(),
+            }),
+        )?;
+        let moved_color = tx.create(
+            Parent::Object(moved_color),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Stable Color".into(),
+                color: 0xff77_8899,
+            }),
+        )?;
+        let target = tx.create_artboard(ArtboardSpec {
+            name: "Target".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let target_shape = create_colored_hit_shape(tx, target, "Existing", 50.0, 0xff44_5566)?;
+        Ok((source, target, moved_shape, moved_color, target_shape))
+    })?;
+    let source_instance = scene.instantiate(source)?;
+    let target_instance = scene.instantiate(target)?;
+    let source_before = draw_stream(&mut scene, source_instance)?;
+    let target_before = draw_stream(&mut scene, target_instance)?;
+
+    scene.edit(|tx| tx.reparent(moved_shape, Parent::Artboard(target), ChildIndex::At(1)))?;
+
+    assert!(matches!(
+        scene.cursor(source_instance, moved_color, props::COLOR_VALUE),
+        Err(ResolveError::DifferentArtboard)
+    ));
+    assert!(
+        matches!(
+            scene.cursor(source_instance, target_shape, props::WORLD_OPACITY),
+            Err(ResolveError::DifferentArtboard)
+        ),
+        "the target object must remain unavailable through the source instance"
+    );
+    let moved_cursor = scene.cursor(target_instance, moved_color, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(moved_cursor)?, 0xff77_8899);
+    assert_eq!(
+        exported_component_names(&scene),
+        vec![
+            "Source",
+            "Target",
+            "Existing",
+            "Existing Rectangle",
+            "Existing Fill",
+            "Existing Fill Color",
+            "Moved",
+            "Moved Rectangle",
+            "Moved Fill",
+            "Moved Fill Color",
+            "Stable Fill",
+            "Stable Color",
+        ]
+    );
+    assert_ne!(draw_stream(&mut scene, source_instance)?, source_before);
+    assert_ne!(draw_stream(&mut scene, target_instance)?, target_before);
+    assert!(draw_stream(&mut scene, target_instance)?.contains("ff778899"));
+    Ok(())
+}
+
+#[test]
+fn rejected_structural_moves_are_strict_typed_and_preserve_all_live_state() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape_a, rectangle_a, fill_a, color_a, shape_b, removed_id), _) =
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape_a = create_colored_hit_shape(tx, artboard, "A", 25.0, 0xff11_2233)?;
+            let rectangle_a = tx.create(
+                Parent::Object(shape_a),
+                NodeSpec::Rectangle(RectangleSpec::new("Extra Rectangle", 10.0, 10.0)),
+            )?;
+            let fill_a = tx.create(
+                Parent::Object(shape_a),
+                NodeSpec::Fill(FillSpec {
+                    name: "Extra Fill".into(),
+                }),
+            )?;
+            let color_a = tx.create(
+                Parent::Object(fill_a),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Extra Color".into(),
+                    color: 0xff44_5566,
+                }),
+            )?;
+            let shape_b = create_colored_hit_shape(tx, artboard, "B", 75.0, 0xff77_8899)?;
+            let removed = tx.create(
+                Parent::Object(shape_b),
+                NodeSpec::Rectangle(RectangleSpec::new("Removed", 5.0, 5.0)),
+            )?;
+            tx.remove(removed)?;
+            let removed_id = removed;
+            Ok((
+                artboard,
+                shape_a,
+                rectangle_a,
+                fill_a,
+                color_a,
+                shape_b,
+                removed_id,
+            ))
+        })?;
+    let instance = scene.instantiate(artboard)?;
+    let color_cursor = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(color_cursor, 0xffaa_bbcc)?);
+    let mut factory = RecordingFactory::new();
+    let mut cache = scene.new_render_cache(instance, &mut factory)?;
+    let mut renderer = factory.make_renderer();
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+    factory.clear();
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+    let draw_before = factory.stream();
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let cases = [
+        scene
+            .edit(|tx| tx.reorder(removed_id, ChildIndex::First))
+            .expect_err("a removed object is unknown"),
+        scene
+            .edit(|tx| tx.reparent(shape_a, Parent::Object(rectangle_a), ChildIndex::First))
+            .expect_err("a descendant parent creates a cycle before its kind is considered"),
+        scene
+            .edit(|tx| tx.reparent(rectangle_a, Parent::Object(fill_a), ChildIndex::First))
+            .expect_err("a Fill cannot parent a Rectangle"),
+        scene
+            .edit(|tx| tx.reorder(shape_b, ChildIndex::At(2)))
+            .expect_err("two root siblings have final indices zero and one"),
+    ];
+    assert_eq!(
+        cases.map(|error| error.diagnostic().reason.clone()),
+        [
+            EditReason::UnknownObject,
+            EditReason::CycleDetected,
+            EditReason::InvalidParent {
+                parent: Some(NodeKind::Fill),
+                child: NodeKind::Rectangle,
+            },
+            EditReason::ChildIndexOutOfRange,
+        ]
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    assert_eq!(scene.frame().get(color_cursor)?, 0xffaa_bbcc);
+    factory.clear();
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+    assert_eq!(factory.stream(), draw_before);
+    Ok(())
+}
+
+#[test]
+fn a_caught_method_abort_leaks_no_partial_hierarchy_into_a_successful_edit() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((shape_a, fill_a, shape_b, rectangle_b), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape_a = create_colored_hit_shape(tx, artboard, "A", 25.0, 0xff11_2233)?;
+        let fill_a = tx.create(
+            Parent::Object(shape_a),
+            NodeSpec::Fill(FillSpec {
+                name: "Must Stay Under A".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill_a),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Stable Descendant".into(),
+                color: 0xff44_5566,
+            }),
+        )?;
+        let shape_b = create_colored_hit_shape(tx, artboard, "B", 75.0, 0xff77_8899)?;
+        let rectangle_b = tx.create(
+            Parent::Object(shape_b),
+            NodeSpec::Rectangle(RectangleSpec::new("Valid Edit", 10.0, 10.0)),
+        )?;
+        Ok((shape_a, fill_a, shape_b, rectangle_b))
+    })?;
+    let names_before = exported_component_names(&scene);
+
+    let (caught_reason, _) = scene.edit(|tx| {
+        let caught = tx
+            .reparent(fill_a, Parent::Object(shape_b), ChildIndex::At(99))
+            .expect_err("the target shape has a finite strict child range");
+        tx.set(rectangle_b, props::PATH_WIDTH, 42.0)?;
+        Ok(caught.diagnostic().reason.clone())
+    })?;
+
+    assert_eq!(caught_reason, EditReason::ChildIndexOutOfRange);
+    assert_eq!(exported_component_names(&scene), names_before);
+    let records = scene.export_records();
+    let stable_fill = records
+        .records()
+        .iter()
+        .find(|record| {
+            record
+                .properties
+                .contains(&ExportedProperty::ComponentName("Must Stay Under A".into()))
+        })
+        .expect("stable fill record");
+    assert!(
+        stable_fill
+            .properties
+            .contains(&ExportedProperty::ParentId(1))
+    );
+    let edited_rectangle = records
+        .records()
+        .iter()
+        .find(|record| {
+            record
+                .properties
+                .contains(&ExportedProperty::ComponentName("Valid Edit".into()))
+        })
+        .expect("valid edit record");
+    assert!(
+        edited_rectangle
+            .properties
+            .contains(&ExportedProperty::PathWidth(42.0))
+    );
+    let _ = shape_a;
+    Ok(())
+}
+
+#[test]
+fn set_artboard_remounts_only_the_touched_artboard_and_retains_instance_identity() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard_a, _, color_a, artboard_b, _, color_b), _) = scene.edit(|tx| {
+        let a = create_card(tx, "A", 0xff11_2233)?;
+        let b = create_card(tx, "B", 0xff44_5566)?;
+        Ok((a.0, a.1, a.2, b.0, b.1, b.2))
+    })?;
+    let instance_a = scene.instantiate(artboard_a)?;
+    let instance_b = scene.instantiate(artboard_b)?;
+    let cursor_a = scene.cursor(instance_a, color_a, props::COLOR_VALUE)?;
+    let cursor_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(cursor_a, 0xffaa_bbcc)?);
+    assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
+
+    let mut factory_a = RecordingFactory::new();
+    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut renderer_a = factory_a.make_renderer();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    let mut factory_b = RecordingFactory::new();
+    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut renderer_b = factory_b.make_renderer();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    let b_before = factory_b.stream();
+    let epoch_before = scene.epoch();
+
+    scene.edit(|tx| {
+        tx.set_artboard(
+            artboard_a,
+            ArtboardSpec {
+                name: "A Resized".into(),
+                width: 80.0,
+                height: 90.0,
+            },
+        )
+    })?;
+
+    assert_eq!(scene.epoch().get(), epoch_before.get() + 1);
+    assert_eq!(scene.frame().get(cursor_a), Err(StaleCursor));
+    assert_eq!(scene.frame().get(cursor_b), Err(StaleCursor));
+    let fresh_a = scene.cursor(instance_a, color_a, props::COLOR_VALUE)?;
+    let fresh_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(fresh_a)?, 0xff11_2233);
+    assert_eq!(scene.frame().get(fresh_b)?, 0xff77_8899);
+    assert_eq!(
+        exported_component_names(&scene)
+            .into_iter()
+            .filter(|name| name == "A Resized")
+            .count(),
+        1
+    );
+
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    assert_eq!(factory_b.stream(), b_before);
+
+    let mut refreshed_factory = RecordingFactory::new();
+    let mut refreshed_renderer = refreshed_factory.make_renderer();
+    scene.frame().draw(
+        instance_a,
+        &mut refreshed_factory,
+        &mut refreshed_renderer,
+        &mut cache_a,
+    )?;
+    assert_eq!(
+        refreshed_factory.stream(),
+        draw_stream(&mut scene, instance_a)?
+    );
+    Ok(())
+}
+
+#[test]
+fn reorder_artboards_changes_export_order_without_remounting_instances_or_caches() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard_a, _, color_a, artboard_b, _, color_b), _) = scene.edit(|tx| {
+        let a = create_card(tx, "A", 0xff11_2233)?;
+        let b = create_card(tx, "B", 0xff44_5566)?;
+        Ok((a.0, a.1, a.2, b.0, b.1, b.2))
+    })?;
+    let instance_a = scene.instantiate(artboard_a)?;
+    let instance_b = scene.instantiate(artboard_b)?;
+    let cursor_a = scene.cursor(instance_a, color_a, props::COLOR_VALUE)?;
+    let cursor_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(cursor_a, 0xffaa_bbcc)?);
+    assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
+
+    let mut factory_a = RecordingFactory::new();
+    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut renderer_a = factory_a.make_renderer();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    factory_a.clear();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    let a_before = factory_a.stream();
+    let mut factory_b = RecordingFactory::new();
+    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut renderer_b = factory_b.make_renderer();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    let b_before = factory_b.stream();
+    let epoch_before = scene.epoch();
+
+    scene.edit(|tx| tx.reorder_artboard(artboard_b, ChildIndex::First))?;
+
+    assert_eq!(scene.epoch().get(), epoch_before.get() + 1);
+    assert_eq!(scene.frame().get(cursor_a), Err(StaleCursor));
+    assert_eq!(scene.frame().get(cursor_b), Err(StaleCursor));
+    assert_eq!(
+        exported_component_names(&scene),
+        vec![
+            "B",
+            "B Card",
+            "B Rectangle",
+            "B Fill",
+            "B Color",
+            "A",
+            "A Card",
+            "A Rectangle",
+            "A Fill",
+            "A Color",
+        ]
+    );
+    let fresh_a = scene.cursor(instance_a, color_a, props::COLOR_VALUE)?;
+    let fresh_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(fresh_a)?, 0xffaa_bbcc);
+    assert_eq!(scene.frame().get(fresh_b)?, 0xff77_8899);
+    factory_a.clear();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    assert_eq!(factory_a.stream(), a_before);
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    assert_eq!(factory_b.stream(), b_before);
+    Ok(())
+}
+
+#[test]
+fn remove_artboard_drops_only_its_materialization_and_instances() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard_a, _, color_a, artboard_b, _, color_b), _) = scene.edit(|tx| {
+        let a = create_card(tx, "A", 0xff11_2233)?;
+        let b = create_card(tx, "B", 0xff44_5566)?;
+        Ok((a.0, a.1, a.2, b.0, b.1, b.2))
+    })?;
+    let instance_a = scene.instantiate(artboard_a)?;
+    let instance_b = scene.instantiate(artboard_b)?;
+    let cursor_a = scene.cursor(instance_a, color_a, props::COLOR_VALUE)?;
+    let cursor_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
+
+    let mut factory_a = RecordingFactory::new();
+    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut renderer_a = factory_a.make_renderer();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    let mut factory_b = RecordingFactory::new();
+    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut renderer_b = factory_b.make_renderer();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    let b_before = factory_b.stream();
+
+    scene.edit(|tx| tx.remove_artboard(artboard_a))?;
+
+    assert_eq!(scene.frame().get(cursor_a), Err(StaleCursor));
+    assert_eq!(scene.frame().get(cursor_b), Err(StaleCursor));
+    assert!(matches!(
+        scene.cursor(instance_a, color_a, props::COLOR_VALUE),
+        Err(ResolveError::UnknownInstance)
+    ));
+    assert!(matches!(
+        scene.instantiate(artboard_a),
+        Err(nuxie::InstanceError::UnknownArtboard)
+    ));
+    assert!(matches!(
+        scene
+            .frame()
+            .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a),
+        Err(nuxie::DrawError::UnknownInstance)
+    ));
+    assert_eq!(
+        exported_component_names(&scene),
+        vec!["B", "B Card", "B Rectangle", "B Fill", "B Color",]
+    );
+    let fresh_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(fresh_b)?, 0xff77_8899);
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    assert_eq!(factory_b.stream(), b_before);
+    Ok(())
+}
+
+#[test]
+fn deleting_the_last_artboard_exports_only_backboard_and_allows_recreation() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((removed_artboard, _, removed_color), _) =
+        scene.edit(|tx| create_card(tx, "Only", 0xff11_2233))?;
+    let removed_instance = scene.instantiate(removed_artboard)?;
+    let removed_cursor = scene.cursor(removed_instance, removed_color, props::COLOR_VALUE)?;
+
+    scene.edit(|tx| tx.remove_artboard(removed_artboard))?;
+
+    assert_eq!(scene.frame().get(removed_cursor), Err(StaleCursor));
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![ExportedObjectKind::Backboard]
+    );
+    assert!(matches!(
+        scene.new_render_cache(removed_instance, &mut RecordingFactory::new()),
+        Err(ResolveError::UnknownInstance)
+    ));
+
+    let (recreated, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Recreated".into(),
+            width: 120.0,
+            height: 80.0,
+        })
+    })?;
+    assert_ne!(recreated, removed_artboard);
+    assert!(scene.instantiate(recreated).is_ok());
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![ExportedObjectKind::Backboard, ExportedObjectKind::Artboard,]
+    );
+    Ok(())
+}
+
+#[test]
+fn removing_one_artboard_with_an_invalid_retained_candidate_publishes_nothing() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard_a, _, color_a, artboard_b, _, color_b), _) = scene.edit(|tx| {
+        let a = create_card(tx, "A", 0xff11_2233)?;
+        let b = create_card(tx, "B", 0xff44_5566)?;
+        Ok((a.0, a.1, a.2, b.0, b.1, b.2))
+    })?;
+    let instance_a = scene.instantiate(artboard_a)?;
+    let instance_b = scene.instantiate(artboard_b)?;
+    let cursor_a = scene.cursor(instance_a, color_a, props::COLOR_VALUE)?;
+    let cursor_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(cursor_a, 0xffaa_bbcc)?);
+    assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
+    let mut factory_a = RecordingFactory::new();
+    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut renderer_a = factory_a.make_renderer();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    factory_a.clear();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    let a_before = factory_a.stream();
+    let mut factory_b = RecordingFactory::new();
+    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut renderer_b = factory_b.make_renderer();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    let b_before = factory_b.stream();
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            tx.remove_artboard(artboard_a)?;
+            tx.set_artboard(
+                artboard_b,
+                ArtboardSpec {
+                    name: "Invalid B".into(),
+                    width: f32::NAN,
+                    height: 100.0,
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("all retained candidates must preflight before deletion publishes");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 1);
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::NonFiniteProperty { property: "width" }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    assert_eq!(scene.frame().get(cursor_a)?, 0xffaa_bbcc);
+    assert_eq!(scene.frame().get(cursor_b)?, 0xff77_8899);
+    factory_a.clear();
+    scene
+        .frame()
+        .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
+    assert_eq!(factory_a.stream(), a_before);
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    assert_eq!(factory_b.stream(), b_before);
+    Ok(())
+}
+
+#[test]
+fn shape_export_omits_exact_zero_axes_but_retains_nonzero_axes() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Axes".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Zero".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Nonzero".into(),
+                x: 12.0,
+                y: -7.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        Ok(())
+    })?;
+    let records = scene.export_records();
+    let zero = records
+        .records()
+        .iter()
+        .find(|record| {
+            record
+                .properties
+                .contains(&ExportedProperty::ComponentName("Zero".into()))
+        })
+        .expect("zero-axis shape");
+    assert_eq!(
+        zero.properties,
+        vec![ExportedProperty::ComponentName("Zero".into())]
+    );
+    let nonzero = records
+        .records()
+        .iter()
+        .find(|record| {
+            record
+                .properties
+                .contains(&ExportedProperty::ComponentName("Nonzero".into()))
+        })
+        .expect("nonzero-axis shape");
+    assert!(
+        nonzero
+            .properties
+            .contains(&ExportedProperty::TranslateX(12.0))
+    );
+    assert!(
+        nonzero
+            .properties
+            .contains(&ExportedProperty::TranslateY(-7.0))
+    );
+    Ok(())
 }
 
 #[test]
@@ -507,7 +1339,7 @@ fn a_removed_subtree_restores_the_same_objects_records_and_draw_in_a_later_edit(
 }
 
 #[test]
-fn restore_reinserts_interleaved_descendants_at_their_original_record_positions() -> Result<()> {
+fn restore_preserves_canonical_preorder_after_interleaved_creation() -> Result<()> {
     let mut scene = Scene::new();
     let ((shape_a, _shape_b, _rectangle_a, _rectangle_b), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
@@ -542,6 +1374,11 @@ fn restore_reinserts_interleaved_descendants_at_their_original_record_positions(
         Ok((shape_a, shape_b, rectangle_a, rectangle_b))
     })?;
     let records_before = scene.export_records();
+    assert_eq!(
+        exported_component_names(&scene),
+        vec!["Main", "A", "A Rectangle", "B", "B Rectangle"],
+        "creation order is canonicalized into iterative hierarchy preorder"
+    );
 
     let (removed, _) = scene.edit(|tx| tx.remove(shape_a))?;
     scene.edit(|tx| tx.restore(removed))?;
@@ -1367,14 +2204,12 @@ fn sparse_export_omits_only_exact_schema_defaults_across_remounts() -> Result<()
         records.records()[2].properties,
         vec![
             ExportedProperty::ComponentName("Near defaults".into()),
-            ExportedProperty::TranslateX(0.0),
-            ExportedProperty::TranslateY(0.0),
             ExportedProperty::Rotation(tiny_rotation),
             ExportedProperty::ScaleX(next_below_one),
             ExportedProperty::ScaleY(next_below_one),
             ExportedProperty::WorldOpacity(next_below_one),
         ],
-        "representable values adjacent to schema defaults must not be elided"
+        "exact defaults are omitted while adjacent representable values remain"
     );
 
     let instance = scene.instantiate(artboard)?;
@@ -1649,6 +2484,174 @@ fn explicit_all_zero_rectangle_radii_remain_present_in_typed_export() -> Result<
             ExportedProperty::RectangleCornerRadiusBottomRight(0.0),
             ExportedProperty::RectangleLinkCornerRadius(false),
         ]
+    );
+    Ok(())
+}
+
+#[test]
+fn invalid_create_keeps_its_diagnostic_origin_across_later_hierarchy_and_value_edits() -> Result<()>
+{
+    let mut scene = Scene::new();
+
+    let error = scene
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Stable sibling".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let invalid = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Invalid at creation".into(),
+                    x: f32::NAN,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            tx.reorder(invalid, ChildIndex::First)?;
+            tx.reparent(invalid, Parent::Artboard(artboard), ChildIndex::Last)?;
+            tx.set(invalid, props::ROTATION, 0.25)?;
+            Ok(())
+        })
+        .expect_err("the non-finite create must fail commit");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        error.diagnostic().operation_index,
+        2,
+        "hierarchy touches and a later valid property write must not steal the invalid spec's origin"
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::NonFiniteProperty { property: "x" }
+    );
+    Ok(())
+}
+
+#[test]
+fn restoring_an_uncommitted_invalid_subtree_attributes_the_spec_to_restore() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, removed), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let invalid = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Invalid token".into(),
+                x: f32::NAN,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let removed = tx.remove(invalid)?;
+        Ok((artboard, removed))
+    })?;
+
+    let error = scene
+        .edit(|tx| {
+            tx.set_artboard(
+                artboard,
+                ArtboardSpec {
+                    name: "Still Main".into(),
+                    width: 100.0,
+                    height: 100.0,
+                },
+            )?;
+            tx.restore(removed)?;
+            Ok(())
+        })
+        .expect_err("restoring the invalid opaque token must reject commit");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 1);
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::NonFiniteProperty { property: "x" }
+    );
+    Ok(())
+}
+
+#[test]
+fn clear_artboard_is_one_atomic_typed_replacement_operation() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, removed), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let mut roots = Vec::new();
+        for name in ["Old A", "Old B", "Old C"] {
+            roots.push(tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: name.into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?);
+        }
+        Ok((artboard, roots))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    let (replacement, receipt) = scene.edit(|tx| {
+        tx.clear_artboard(artboard)?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Replacement".into(),
+                x: 10.0,
+                y: 20.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )
+    })?;
+
+    assert_eq!(receipt.created, vec![replacement]);
+    assert_eq!(
+        exported_component_names(&scene),
+        vec!["Main", "Replacement"]
+    );
+    for object in removed {
+        assert!(matches!(
+            scene.cursor(instance, object, props::WORLD_OPACITY),
+            Err(ResolveError::UnknownObject)
+        ));
+    }
+    assert!(
+        scene
+            .cursor(instance, replacement, props::WORLD_OPACITY)
+            .is_ok()
     );
     Ok(())
 }

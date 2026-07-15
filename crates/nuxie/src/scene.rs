@@ -44,10 +44,18 @@ impl StructureEpoch {
 }
 
 /// Parent selected when creating an authored object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Parent {
     Artboard(ArtboardId),
     Object(ObjectId),
+}
+
+/// Final position among the direct children of one authored parent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildIndex {
+    First,
+    Last,
+    At(usize),
 }
 
 /// Stable identities involved in a failed edit operation.
@@ -69,6 +77,8 @@ pub enum EditReason {
     OperationLimitExceeded,
     UnknownArtboard,
     UnknownObject,
+    CycleDetected,
+    ChildIndexOutOfRange,
     InvalidParent {
         parent: Option<NodeKind>,
         child: NodeKind,
@@ -381,13 +391,171 @@ struct Definitions {
     artboards: Vec<ArtboardDefinition>,
 }
 
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct SceneWork {
+    definition_index_builds: usize,
+    definition_index_node_visits: usize,
+    receipt_membership_checks: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCENE_WORK: std::cell::Cell<SceneWork> = const {
+        std::cell::Cell::new(SceneWork {
+            definition_index_builds: 0,
+            definition_index_node_visits: 0,
+            receipt_membership_checks: 0,
+        })
+    };
+}
+
+#[cfg(test)]
+fn reset_scene_work() {
+    SCENE_WORK.set(SceneWork::default());
+}
+
+#[cfg(test)]
+fn scene_work() -> SceneWork {
+    SCENE_WORK.get()
+}
+
+#[cfg(test)]
+fn record_scene_work(update: impl FnOnce(&mut SceneWork)) {
+    SCENE_WORK.with(|cell| {
+        let mut work = cell.get();
+        update(&mut work);
+        cell.set(work);
+    });
+}
+
+impl Definitions {
+    fn canonicalize_and_validate(
+        &mut self,
+        operation_index: usize,
+    ) -> std::result::Result<(), EditAbort> {
+        Hierarchy::canonicalize_and_validate(self, operation_index)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IndexedObject {
+    artboard: ArtboardId,
+    artboard_index: usize,
+    node_index: usize,
+    kind: NodeKind,
+}
+
+/// Transaction-local identity and parent lookup. Structural operations may do
+/// deep candidate work, but the high-volume create path and receipt filtering
+/// never rescan the growing authored graph.
 #[derive(Default)]
-struct EditOrigins {
+struct DefinitionIndex {
+    artboards: BTreeMap<ArtboardId, usize>,
+    objects: BTreeMap<ObjectId, IndexedObject>,
+    children: BTreeMap<Parent, Vec<ObjectId>>,
+}
+
+impl DefinitionIndex {
+    fn build(definitions: &Definitions) -> Self {
+        #[cfg(test)]
+        record_scene_work(|work| {
+            work.definition_index_builds = work.definition_index_builds.saturating_add(1);
+            work.definition_index_node_visits = definitions
+                .artboards
+                .iter()
+                .fold(work.definition_index_node_visits, |visits, artboard| {
+                    visits.saturating_add(artboard.nodes.len())
+                });
+        });
+        let mut index = Self::default();
+        for (artboard_index, artboard) in definitions.artboards.iter().enumerate() {
+            index.artboards.insert(artboard.id, artboard_index);
+            index
+                .children
+                .entry(Parent::Artboard(artboard.id))
+                .or_default();
+            for (node_index, node) in artboard.nodes.iter().enumerate() {
+                index.objects.insert(
+                    node.id,
+                    IndexedObject {
+                        artboard: artboard.id,
+                        artboard_index,
+                        node_index,
+                        kind: node.spec.kind(),
+                    },
+                );
+                index.children.entry(node.parent).or_default().push(node.id);
+                index.children.entry(Parent::Object(node.id)).or_default();
+            }
+        }
+        index
+    }
+
+    fn rebuild(&mut self, definitions: &Definitions) {
+        *self = Self::build(definitions);
+    }
+
+    fn validate_parent(
+        &self,
+        operation_index: usize,
+        parent: Parent,
+        child: NodeKind,
+    ) -> std::result::Result<ArtboardId, EditAbort> {
+        match parent {
+            Parent::Artboard(artboard) => {
+                if child != NodeKind::Shape {
+                    return Err(EditAbort::new(
+                        operation_index,
+                        vec![EditId::Artboard(artboard)],
+                        EditReason::InvalidParent {
+                            parent: None,
+                            child,
+                        },
+                    ));
+                }
+                self.artboards
+                    .contains_key(&artboard)
+                    .then_some(artboard)
+                    .ok_or_else(|| {
+                        EditAbort::new(
+                            operation_index,
+                            vec![EditId::Artboard(artboard)],
+                            EditReason::UnknownArtboard,
+                        )
+                    })
+            }
+            Parent::Object(object) => {
+                let Some(parent) = self.objects.get(&object).copied() else {
+                    return Err(EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(object)],
+                        EditReason::UnknownObject,
+                    ));
+                };
+                if !valid_object_parent(parent.kind, child) {
+                    return Err(EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(object)],
+                        EditReason::InvalidParent {
+                            parent: Some(parent.kind),
+                            child,
+                        },
+                    ));
+                }
+                Ok(parent.artboard)
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct SpecOrigins {
     artboard_specs: BTreeMap<ArtboardId, usize>,
     nodes: BTreeMap<ObjectId, usize>,
 }
 
-impl EditOrigins {
+impl SpecOrigins {
     fn artboard(&self, id: ArtboardId, fallback: usize) -> usize {
         self.artboard_specs.get(&id).copied().unwrap_or(fallback)
     }
@@ -409,6 +577,811 @@ struct NodeDefinition {
     id: ObjectId,
     parent: Parent,
     spec: NodeSpec,
+}
+
+/// Deep private seam for every authored hierarchy invariant. A transaction
+/// keeps one indexed candidate; each method completely preflights one operation
+/// before mutating it, and commit validates and flattens canonical preorder
+/// once. This module owns sibling order, subtree movement, cycle and parent
+/// validation, and iterative canonical preorder.
+struct Hierarchy<'a> {
+    definitions: &'a mut Definitions,
+    index: &'a DefinitionIndex,
+    operation_index: usize,
+}
+
+impl Hierarchy<'_> {
+    fn remove_artboard(&mut self, artboard: ArtboardId) -> std::result::Result<(), EditAbort> {
+        let index = self
+            .index
+            .artboards
+            .get(&artboard)
+            .copied()
+            .ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::UnknownArtboard,
+                )
+            })?;
+        self.definitions.artboards.remove(index);
+        Ok(())
+    }
+
+    fn clear_artboard(&mut self, artboard: ArtboardId) -> std::result::Result<(), EditAbort> {
+        let artboard_index = self
+            .index
+            .artboards
+            .get(&artboard)
+            .copied()
+            .ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::UnknownArtboard,
+                )
+            })?;
+        let definition = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        definition.nodes.clear();
+        Ok(())
+    }
+
+    fn set_artboard(
+        &mut self,
+        artboard: ArtboardId,
+        spec: ArtboardSpec,
+    ) -> std::result::Result<(), EditAbort> {
+        let artboard_index = self
+            .index
+            .artboards
+            .get(&artboard)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::UnknownArtboard,
+                )
+            })?;
+        let definition = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        definition.spec = spec;
+        Ok(())
+    }
+
+    fn set<T>(
+        &mut self,
+        object: ObjectId,
+        property: Prop<T>,
+        value: T,
+    ) -> std::result::Result<ArtboardId, EditAbort> {
+        let (artboard_index, node_index) = self
+            .object_location(object)
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        let definition = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Object(object)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let artboard_id = definition.id;
+        let node = definition.nodes.get_mut(node_index).ok_or_else(|| {
+            EditAbort::new(
+                self.operation_index,
+                vec![EditId::Object(object)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        let actual = node.spec.kind();
+        if !property.is_available_on(actual) {
+            return Err(EditAbort::new(
+                self.operation_index,
+                vec![EditId::Object(object)],
+                EditReason::PropertyOwnerMismatch {
+                    property: property.schema_name,
+                    actual,
+                },
+            ));
+        }
+        let mut candidate = node.spec.clone();
+        (property.apply_to_definition)(&mut candidate, value).map_err(|reason| {
+            EditAbort::new(self.operation_index, vec![EditId::Object(object)], reason)
+        })?;
+        node.spec = candidate;
+        Ok(artboard_id)
+    }
+
+    fn reorder_artboard(
+        &mut self,
+        artboard: ArtboardId,
+        index: ChildIndex,
+    ) -> std::result::Result<(), EditAbort> {
+        let current_index = self
+            .index
+            .artboards
+            .get(&artboard)
+            .copied()
+            .ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::UnknownArtboard,
+                )
+            })?;
+        let final_index = resolve_child_index(index, self.definitions.artboards.len(), false)
+            .ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::ChildIndexOutOfRange,
+                )
+            })?;
+        let definition = self.definitions.artboards.remove(current_index);
+        self.definitions.artboards.insert(final_index, definition);
+        Ok(())
+    }
+
+    fn reorder(
+        &mut self,
+        object: ObjectId,
+        index: ChildIndex,
+    ) -> std::result::Result<ArtboardId, EditAbort> {
+        let indexed = self
+            .indexed_object(object)
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        let parent = self
+            .definitions
+            .artboards
+            .get(indexed.artboard_index)
+            .and_then(|artboard| artboard.nodes.get(indexed.node_index))
+            .map(|node| node.parent)
+            .ok_or_else(|| {
+                self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
+            })?;
+        let (source, target) = self.move_subtree(object, parent, index)?;
+        debug_assert_eq!(source, target);
+        Ok(source)
+    }
+
+    fn reparent(
+        &mut self,
+        object: ObjectId,
+        new_parent: Parent,
+        index: ChildIndex,
+    ) -> std::result::Result<(ArtboardId, ArtboardId), EditAbort> {
+        self.move_subtree(object, new_parent, index)
+    }
+
+    fn move_subtree(
+        &mut self,
+        object: ObjectId,
+        new_parent: Parent,
+        index: ChildIndex,
+    ) -> std::result::Result<(ArtboardId, ArtboardId), EditAbort> {
+        let source = self
+            .indexed_object(object)
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        let current_parent = self
+            .definitions
+            .artboards
+            .get(source.artboard_index)
+            .and_then(|artboard| artboard.nodes.get(source.node_index))
+            .map(|node| node.parent)
+            .ok_or_else(|| {
+                self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
+            })?;
+        let child_kind = source.kind;
+        let (target_index, parent_kind) = match new_parent {
+            Parent::Artboard(artboard) => {
+                let target = self
+                    .index
+                    .artboards
+                    .get(&artboard)
+                    .copied()
+                    .ok_or_else(|| {
+                        self.abort(
+                            vec![EditId::Artboard(artboard)],
+                            EditReason::UnknownArtboard,
+                        )
+                    })?;
+                (target, None)
+            }
+            Parent::Object(parent) => {
+                let indexed = self.indexed_object(parent).ok_or_else(|| {
+                    self.abort(vec![EditId::Object(parent)], EditReason::UnknownObject)
+                })?;
+                (indexed.artboard_index, Some(indexed.kind))
+            }
+        };
+
+        let subtree_ids = self.subtree_ids(object);
+        debug_assert!(subtree_ids.contains(&object));
+        if matches!(new_parent, Parent::Object(parent) if subtree_ids.contains(&parent)) {
+            return Err(self.abort(
+                vec![
+                    EditId::Object(object),
+                    EditId::Object(match new_parent {
+                        Parent::Object(parent) => parent,
+                        Parent::Artboard(_) => unreachable!(),
+                    }),
+                ],
+                EditReason::CycleDetected,
+            ));
+        }
+
+        let parent_is_valid = match parent_kind {
+            None => child_kind == NodeKind::Shape,
+            Some(parent) => valid_object_parent(parent, child_kind),
+        };
+        if !parent_is_valid {
+            return Err(self.abort(
+                parent_edit_ids(new_parent),
+                EditReason::InvalidParent {
+                    parent: parent_kind,
+                    child: child_kind,
+                },
+            ));
+        }
+
+        let same_parent = current_parent == new_parent;
+        let sibling_count = self
+            .index
+            .children
+            .get(&new_parent)
+            .map(Vec::len)
+            .unwrap_or(0);
+        let final_index =
+            resolve_child_index(index, sibling_count, !same_parent).ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Object(object)],
+                    EditReason::ChildIndexOutOfRange,
+                )
+            })?;
+
+        let source_artboard = source.artboard;
+        let target_artboard = self
+            .definitions
+            .artboards
+            .get(target_index)
+            .map(|artboard| artboard.id)
+            .ok_or_else(|| {
+                self.abort(parent_edit_ids(new_parent), EditReason::InternalInvariant)
+            })?;
+        let source_index = source.artboard_index;
+        let operation_index = self.operation_index;
+        if source_index == target_index {
+            let definition = self
+                .definitions
+                .artboards
+                .get_mut(source_index)
+                .ok_or_else(|| {
+                    EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(object)],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            let subtree =
+                detach_preflighted_subtree(&mut definition.nodes, &subtree_ids, object, new_parent);
+            attach_preflighted_subtree(&mut definition.nodes, new_parent, final_index, subtree);
+        } else {
+            let [source_definition, target_definition] = self
+                .definitions
+                .artboards
+                .get_disjoint_mut([source_index, target_index])
+                .map_err(|_| {
+                    EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(object)],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            let subtree = detach_preflighted_subtree(
+                &mut source_definition.nodes,
+                &subtree_ids,
+                object,
+                new_parent,
+            );
+            attach_preflighted_subtree(
+                &mut target_definition.nodes,
+                new_parent,
+                final_index,
+                subtree,
+            );
+        }
+        Ok((source_artboard, target_artboard))
+    }
+
+    fn object_location(&self, object: ObjectId) -> Option<(usize, usize)> {
+        self.index
+            .objects
+            .get(&object)
+            .map(|object| (object.artboard_index, object.node_index))
+    }
+
+    fn indexed_object(&self, object: ObjectId) -> Option<IndexedObject> {
+        self.index.objects.get(&object).copied()
+    }
+
+    fn subtree_ids(&self, root: ObjectId) -> BTreeSet<ObjectId> {
+        let mut subtree = BTreeSet::from([root]);
+        let mut frontier = vec![root];
+        while let Some(parent) = frontier.pop() {
+            if let Some(children) = self.index.children.get(&Parent::Object(parent)) {
+                for child in children {
+                    if subtree.insert(*child) {
+                        frontier.push(*child);
+                    }
+                }
+            }
+        }
+        subtree
+    }
+
+    fn detach_subtree(
+        &mut self,
+        object: ObjectId,
+    ) -> std::result::Result<RemovedSubtree, EditAbort> {
+        let (artboard_index, _) = self
+            .object_location(object)
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        let subtree_ids = self.subtree_ids(object);
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Object(object)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let mut nodes = Vec::with_capacity(subtree_ids.len());
+        let mut remaining =
+            Vec::with_capacity(artboard.nodes.len().saturating_sub(subtree_ids.len()));
+        for (original_index, definition) in
+            std::mem::take(&mut artboard.nodes).into_iter().enumerate()
+        {
+            if subtree_ids.contains(&definition.id) {
+                nodes.push(RemovedNode {
+                    original_index,
+                    definition,
+                });
+            } else {
+                remaining.push(definition);
+            }
+        }
+        debug_assert!(!nodes.is_empty());
+        artboard.nodes = remaining;
+        Ok(RemovedSubtree {
+            artboard: artboard.id,
+            root: object,
+            nodes,
+        })
+    }
+
+    fn attach_subtree(
+        &mut self,
+        removed: RemovedSubtree,
+    ) -> std::result::Result<(ArtboardId, ObjectId, Vec<ObjectId>), EditAbort> {
+        let RemovedSubtree {
+            artboard: artboard_id,
+            root,
+            nodes,
+        } = removed;
+        if nodes.is_empty() || !nodes.iter().any(|node| node.definition.id == root) {
+            return Err(self.abort(vec![EditId::Object(root)], EditReason::InternalInvariant));
+        }
+        let artboard_index = self
+            .index
+            .artboards
+            .get(&artboard_id)
+            .copied()
+            .ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Artboard(artboard_id), EditId::Object(root)],
+                    EditReason::UnknownArtboard,
+                )
+            })?;
+        let mut restored_kinds = BTreeMap::new();
+        for removed_node in &nodes {
+            let id = removed_node.definition.id;
+            if self.object_location(id).is_some() {
+                return Err(self.abort(vec![EditId::Object(id)], EditReason::IdentityCollision));
+            }
+            if restored_kinds
+                .insert(id, removed_node.definition.spec.kind())
+                .is_some()
+            {
+                return Err(self.abort(vec![EditId::Object(id)], EditReason::IdentityCollision));
+            }
+        }
+
+        for removed_node in &nodes {
+            let child = removed_node.definition.spec.kind();
+            let parent_kind = match removed_node.definition.parent {
+                Parent::Artboard(parent) if parent == artboard_id => None,
+                Parent::Artboard(parent) if !self.index.artboards.contains_key(&parent) => {
+                    return Err(self.abort(
+                        vec![
+                            EditId::Object(removed_node.definition.id),
+                            EditId::Artboard(parent),
+                        ],
+                        EditReason::UnknownArtboard,
+                    ));
+                }
+                Parent::Artboard(parent) => {
+                    return Err(self.abort(
+                        vec![
+                            EditId::Object(removed_node.definition.id),
+                            EditId::Artboard(parent),
+                        ],
+                        EditReason::InvalidParent {
+                            parent: None,
+                            child,
+                        },
+                    ));
+                }
+                Parent::Object(parent) => {
+                    if let Some(kind) = restored_kinds.get(&parent).copied() {
+                        Some(kind)
+                    } else {
+                        let Some(indexed) = self.index.objects.get(&parent).copied() else {
+                            return Err(self.abort(
+                                vec![
+                                    EditId::Object(removed_node.definition.id),
+                                    EditId::Object(parent),
+                                ],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        if indexed.artboard != artboard_id {
+                            return Err(self.abort(
+                                vec![
+                                    EditId::Object(removed_node.definition.id),
+                                    EditId::Object(parent),
+                                ],
+                                EditReason::InvalidParent {
+                                    parent: None,
+                                    child,
+                                },
+                            ));
+                        }
+                        Some(indexed.kind)
+                    }
+                }
+            };
+            let valid = match parent_kind {
+                None => child == NodeKind::Shape,
+                Some(parent) => valid_object_parent(parent, child),
+            };
+            if !valid {
+                return Err(self.abort(
+                    parent_edit_ids(removed_node.definition.parent),
+                    EditReason::InvalidParent {
+                        parent: parent_kind,
+                        child,
+                    },
+                ));
+            }
+        }
+
+        let existing_len = self
+            .definitions
+            .artboards
+            .get(artboard_index)
+            .map(|artboard| artboard.nodes.len())
+            .ok_or_else(|| {
+                self.abort(
+                    vec![EditId::Artboard(artboard_id), EditId::Object(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let mut insertions = Vec::with_capacity(nodes.len());
+        let mut last_position = None;
+        for (offset, removed_node) in nodes.into_iter().enumerate() {
+            let position = removed_node
+                .original_index
+                .min(existing_len.saturating_add(offset));
+            if last_position.is_some_and(|last| position <= last) {
+                return Err(self.abort(vec![EditId::Object(root)], EditReason::InternalInvariant));
+            }
+            last_position = Some(position);
+            insertions.push((position, removed_node.definition));
+        }
+        let restored = insertions
+            .iter()
+            .map(|(_, definition)| definition.id)
+            .collect::<Vec<_>>();
+
+        // Everything below is infallible. The merge exactly reproduces the
+        // previous sequential `original_index.min(current_len)` insertion
+        // semantics without repeatedly shifting the authored vector.
+        let final_len = existing_len.checked_add(insertions.len()).ok_or_else(|| {
+            self.abort(
+                vec![EditId::Artboard(artboard_id), EditId::Object(root)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Artboard(artboard_id), EditId::Object(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let existing = std::mem::take(&mut artboard.nodes);
+        let mut existing = existing.into_iter();
+        let mut insertions = insertions.into_iter().peekable();
+        let mut merged = Vec::with_capacity(final_len);
+        for position in 0..final_len {
+            if insertions
+                .peek()
+                .is_some_and(|(insertion_position, _)| *insertion_position == position)
+            {
+                merged.push(insertions.next().expect("peeked insertion exists").1);
+            } else {
+                merged.push(existing.next().expect("preflighted merge length is exact"));
+            }
+        }
+        debug_assert!(existing.next().is_none());
+        debug_assert!(insertions.next().is_none());
+        artboard.nodes = merged;
+        Ok((artboard_id, root, restored))
+    }
+
+    fn canonicalize_and_validate(
+        definitions: &mut Definitions,
+        operation_index: usize,
+    ) -> std::result::Result<(), EditAbort> {
+        let abort = |involved_ids, reason| EditAbort::new(operation_index, involved_ids, reason);
+        let mut artboard_ids = BTreeSet::new();
+        let mut objects = BTreeMap::new();
+        for artboard in &definitions.artboards {
+            if !artboard_ids.insert(artboard.id) {
+                return Err(abort(
+                    vec![EditId::Artboard(artboard.id)],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            for node in &artboard.nodes {
+                if objects
+                    .insert(node.id, (artboard.id, node.spec.kind()))
+                    .is_some()
+                {
+                    return Err(abort(
+                        vec![EditId::Object(node.id)],
+                        EditReason::IdentityCollision,
+                    ));
+                }
+            }
+        }
+
+        // Validate references before following parent chains. Parent-kind
+        // validation intentionally happens only after cycle detection.
+        for artboard in &definitions.artboards {
+            for node in &artboard.nodes {
+                match node.parent {
+                    Parent::Artboard(parent) if parent == artboard.id => {}
+                    Parent::Artboard(parent) if !artboard_ids.contains(&parent) => {
+                        return Err(abort(
+                            vec![EditId::Object(node.id), EditId::Artboard(parent)],
+                            EditReason::UnknownArtboard,
+                        ));
+                    }
+                    Parent::Artboard(parent) => {
+                        return Err(abort(
+                            vec![EditId::Object(node.id), EditId::Artboard(parent)],
+                            EditReason::InvalidParent {
+                                parent: None,
+                                child: node.spec.kind(),
+                            },
+                        ));
+                    }
+                    Parent::Object(parent) => match objects.get(&parent) {
+                        None => {
+                            return Err(abort(
+                                vec![EditId::Object(node.id), EditId::Object(parent)],
+                                EditReason::UnknownObject,
+                            ));
+                        }
+                        Some((parent_artboard, _)) if *parent_artboard != artboard.id => {
+                            return Err(abort(
+                                vec![EditId::Object(node.id), EditId::Object(parent)],
+                                EditReason::InvalidParent {
+                                    parent: None,
+                                    child: node.spec.kind(),
+                                },
+                            ));
+                        }
+                        Some(_) => {}
+                    },
+                }
+            }
+        }
+
+        for artboard in &definitions.artboards {
+            let nodes = artboard
+                .nodes
+                .iter()
+                .map(|node| (node.id, node))
+                .collect::<BTreeMap<_, _>>();
+            let mut complete = BTreeSet::new();
+            for node in &artboard.nodes {
+                if complete.contains(&node.id) {
+                    continue;
+                }
+                let mut path = Vec::new();
+                let mut path_ids = BTreeSet::new();
+                let mut cursor = node.id;
+                loop {
+                    if complete.contains(&cursor) {
+                        break;
+                    }
+                    if !path_ids.insert(cursor) {
+                        return Err(abort(
+                            vec![EditId::Object(node.id), EditId::Object(cursor)],
+                            EditReason::CycleDetected,
+                        ));
+                    }
+                    path.push(cursor);
+                    let Some(current) = nodes.get(&cursor) else {
+                        return Err(abort(
+                            vec![EditId::Object(cursor)],
+                            EditReason::InternalInvariant,
+                        ));
+                    };
+                    match current.parent {
+                        Parent::Artboard(_) => break,
+                        Parent::Object(parent) => cursor = parent,
+                    }
+                }
+                complete.extend(path);
+            }
+        }
+
+        for artboard in &definitions.artboards {
+            for node in &artboard.nodes {
+                let child = node.spec.kind();
+                let parent_kind = match node.parent {
+                    Parent::Artboard(_) => None,
+                    Parent::Object(parent) => objects.get(&parent).map(|(_, kind)| *kind),
+                };
+                let valid = match parent_kind {
+                    None => child == NodeKind::Shape,
+                    Some(parent) => valid_object_parent(parent, child),
+                };
+                if !valid {
+                    return Err(abort(
+                        parent_edit_ids(node.parent),
+                        EditReason::InvalidParent {
+                            parent: parent_kind,
+                            child,
+                        },
+                    ));
+                }
+            }
+        }
+
+        for artboard in &mut definitions.artboards {
+            let nodes = std::mem::take(&mut artboard.nodes);
+            let mut roots = Vec::new();
+            let mut children: BTreeMap<ObjectId, Vec<usize>> = BTreeMap::new();
+            for (index, node) in nodes.iter().enumerate() {
+                match node.parent {
+                    Parent::Artboard(_) => roots.push(index),
+                    Parent::Object(parent) => children.entry(parent).or_default().push(index),
+                }
+            }
+            let mut stack = roots.into_iter().rev().collect::<Vec<_>>();
+            let mut canonical = Vec::with_capacity(nodes.len());
+            while let Some(index) = stack.pop() {
+                let Some(node) = nodes.get(index).cloned() else {
+                    return Err(EditAbort::new(
+                        operation_index,
+                        vec![EditId::Artboard(artboard.id)],
+                        EditReason::InternalInvariant,
+                    ));
+                };
+                if let Some(child_indices) = children.get(&node.id) {
+                    stack.extend(child_indices.iter().rev().copied());
+                }
+                canonical.push(node);
+            }
+            if canonical.len() != nodes.len() {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard.id)],
+                    EditReason::InternalInvariant,
+                ));
+            }
+            artboard.nodes = canonical;
+        }
+        Ok(())
+    }
+
+    fn abort(&self, involved_ids: Vec<EditId>, reason: EditReason) -> EditAbort {
+        EditAbort::new(self.operation_index, involved_ids, reason)
+    }
+}
+
+fn resolve_child_index(index: ChildIndex, sibling_count: usize, inserting: bool) -> Option<usize> {
+    let upper_bound = if inserting {
+        sibling_count
+    } else {
+        sibling_count.checked_sub(1)?
+    };
+    match index {
+        ChildIndex::First => Some(0),
+        ChildIndex::Last => Some(upper_bound),
+        ChildIndex::At(index) if index <= upper_bound => Some(index),
+        ChildIndex::At(_) => None,
+    }
+}
+
+fn detach_preflighted_subtree(
+    source: &mut Vec<NodeDefinition>,
+    subtree_ids: &BTreeSet<ObjectId>,
+    root: ObjectId,
+    new_parent: Parent,
+) -> Vec<NodeDefinition> {
+    let mut subtree = Vec::with_capacity(subtree_ids.len());
+    let mut remaining = Vec::with_capacity(source.len().saturating_sub(subtree_ids.len()));
+    for mut node in std::mem::take(source) {
+        if subtree_ids.contains(&node.id) {
+            if node.id == root {
+                node.parent = new_parent;
+            }
+            subtree.push(node);
+        } else {
+            remaining.push(node);
+        }
+    }
+    *source = remaining;
+    subtree
+}
+
+fn attach_preflighted_subtree(
+    target: &mut Vec<NodeDefinition>,
+    parent: Parent,
+    final_index: usize,
+    subtree: Vec<NodeDefinition>,
+) {
+    let siblings = target
+        .iter()
+        .filter(|node| node.parent == parent)
+        .map(|node| node.id)
+        .collect::<Vec<_>>();
+    let insertion_index = siblings
+        .get(final_index)
+        .and_then(|sibling| target.iter().position(|node| node.id == *sibling))
+        .unwrap_or(target.len());
+    target.splice(insertion_index..insertion_index, subtree);
 }
 
 #[derive(Debug, Clone)]
@@ -699,14 +1672,22 @@ impl Scene {
         &mut self,
         edit: impl FnOnce(&mut SceneTx<'_>) -> std::result::Result<R, EditAbort>,
     ) -> std::result::Result<(R, EditReceipt), EditError> {
+        let previous_artboards = self
+            .definitions
+            .artboards
+            .iter()
+            .map(|artboard| artboard.id)
+            .collect::<BTreeSet<_>>();
         let mut definitions = self.definitions.clone();
-        let (result, created_objects, touched_artboards, edit_origins, commit_operation_index) = {
+        let (result, created_objects, touched_artboards, spec_origins, commit_operation_index) = {
+            let definition_index = DefinitionIndex::build(&definitions);
             let mut transaction = SceneTx {
                 definitions: &mut definitions,
+                definition_index,
                 next_operation_index: 0,
                 created_objects: Vec::new(),
                 touched_artboards: BTreeMap::new(),
-                edit_origins: EditOrigins::default(),
+                spec_origins: SpecOrigins::default(),
             };
             let result = edit(&mut transaction).map_err(EditError::aborted)?;
             let created_objects = transaction
@@ -714,62 +1695,82 @@ impl Scene {
                 .iter()
                 .copied()
                 .filter(|id| {
-                    transaction
-                        .definitions
-                        .artboards
-                        .iter()
-                        .any(|artboard| artboard.nodes.iter().any(|node| node.id == *id))
+                    #[cfg(test)]
+                    record_scene_work(|work| {
+                        work.receipt_membership_checks =
+                            work.receipt_membership_checks.saturating_add(1);
+                    });
+                    transaction.definition_index.objects.contains_key(id)
                 })
                 .collect();
             (
                 result,
                 created_objects,
                 transaction.touched_artboards,
-                transaction.edit_origins,
+                transaction.spec_origins,
                 transaction.next_operation_index,
             )
         };
 
-        if definitions.artboards.is_empty() {
-            return Err(EditError::commit(EditDiagnostic::new(
-                commit_operation_index,
-                Vec::new(),
-                EditReason::EmptyScene,
-            )));
-        }
+        definitions
+            .canonicalize_and_validate(commit_operation_index)
+            .map_err(|abort| EditError::commit(abort.diagnostic))?;
 
-        // Prepare every touched artboard before publishing any of them. A later failure therefore
-        // cannot partially replace definitions, files, instances, mounts, or render caches.
+        let final_artboards = definitions
+            .artboards
+            .iter()
+            .map(|artboard| artboard.id)
+            .collect::<BTreeSet<_>>();
+        let removed_artboards = previous_artboards
+            .difference(&final_artboards)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let dirty_artboards = final_artboards
+            .iter()
+            .copied()
+            .filter(|artboard| {
+                !previous_artboards.contains(artboard) || touched_artboards.contains_key(artboard)
+            })
+            .collect::<BTreeSet<_>>();
+
+        // Prepare every dirty surviving artboard before publishing any of them. A later failure
+        // therefore cannot partially replace definitions, files, instances, mounts, or caches.
         let mut candidates = BTreeMap::new();
         for artboard in definitions
             .artboards
             .iter()
-            .filter(|artboard| touched_artboards.contains_key(&artboard.id))
+            .filter(|artboard| dirty_artboards.contains(&artboard.id))
         {
-            let Some(touched_operation_index) = touched_artboards.get(&artboard.id).copied() else {
-                return Err(EditError::commit(EditDiagnostic::new(
-                    commit_operation_index,
-                    vec![EditId::Artboard(artboard.id)],
-                    EditReason::InternalInvariant,
-                )));
-            };
+            let touched_operation_index = touched_artboards
+                .get(&artboard.id)
+                .copied()
+                .unwrap_or(commit_operation_index);
             let materialized = MaterializedArtboard::build(
                 artboard,
                 commit_operation_index,
-                &edit_origins,
+                &spec_origins,
                 touched_operation_index,
             )
             .map_err(EditError::commit)?;
             candidates.insert(artboard.id, materialized);
         }
-        if candidates.len() != touched_artboards.len() {
+        if candidates.len() != dirty_artboards.len() {
             return Err(EditError::commit(EditDiagnostic::new(
                 commit_operation_index,
-                touched_artboards
-                    .keys()
+                dirty_artboards
+                    .iter()
                     .copied()
                     .map(EditId::Artboard)
                     .collect(),
+                EditReason::InternalInvariant,
+            )));
+        }
+        if let Some(artboard) = final_artboards.iter().find(|artboard| {
+            !dirty_artboards.contains(artboard) && !self.materialized.contains_key(artboard)
+        }) {
+            return Err(EditError::commit(EditDiagnostic::new(
+                commit_operation_index,
+                vec![EditId::Artboard(*artboard)],
                 EditReason::InternalInvariant,
             )));
         }
@@ -788,6 +1789,9 @@ impl Scene {
             let Some(instance) = instance.as_ref() else {
                 continue;
             };
+            if removed_artboards.contains(&instance.artboard) {
+                continue;
+            }
             let Some(touched_operation_index) = touched_artboards.get(&instance.artboard).copied()
             else {
                 continue;
@@ -835,6 +1839,12 @@ impl Scene {
             .into_iter()
             .enumerate()
             .map(|(instance_slot, instance)| {
+                if instance
+                    .as_ref()
+                    .is_some_and(|live| removed_artboards.contains(&live.artboard))
+                {
+                    return None;
+                }
                 replacements
                     .remove(&instance_slot)
                     .map(Some)
@@ -843,6 +1853,8 @@ impl Scene {
             .collect();
         debug_assert!(replacements.is_empty());
         self.definitions = definitions;
+        self.materialized
+            .retain(|artboard, _| final_artboards.contains(artboard));
         for (artboard, materialized) in candidates {
             self.materialized.insert(artboard, materialized);
         }
@@ -973,7 +1985,7 @@ impl Scene {
     /// [`Frame::set`]. Clients replay those values after a structural remount when needed.
     pub fn export_records(&self) -> ExportedDocument {
         let mut records = vec![backboard_record()];
-        let origins = EditOrigins::default();
+        let origins = SpecOrigins::default();
         for artboard in &self.definitions.artboards {
             let lowered = match lower_artboard(artboard, 0, &origins) {
                 Ok(lowered) => lowered,
@@ -992,10 +2004,11 @@ impl Scene {
 /// Mutable structural transaction over a scene's durable definitions.
 pub struct SceneTx<'a> {
     definitions: &'a mut Definitions,
+    definition_index: DefinitionIndex,
     next_operation_index: usize,
     created_objects: Vec<ObjectId>,
     touched_artboards: BTreeMap<ArtboardId, usize>,
-    edit_origins: EditOrigins,
+    spec_origins: SpecOrigins,
 }
 
 impl SceneTx<'_> {
@@ -1007,14 +2020,91 @@ impl SceneTx<'_> {
         let id = ArtboardId(allocate_global_identity(&NEXT_ARTBOARD_ID).ok_or_else(|| {
             EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
         })?);
+        let artboard_index = self.definitions.artboards.len();
         self.definitions.artboards.push(ArtboardDefinition {
             id,
             spec,
             nodes: Vec::new(),
         });
+        self.definition_index.artboards.insert(id, artboard_index);
+        self.definition_index
+            .children
+            .entry(Parent::Artboard(id))
+            .or_default();
         self.touched_artboards.insert(id, operation_index);
-        self.edit_origins.artboard_specs.insert(id, operation_index);
+        self.spec_origins.artboard_specs.insert(id, operation_index);
         Ok(id)
+    }
+
+    /// Replace one authored artboard's typed definition while retaining its
+    /// stable identity and live instance identities.
+    pub fn set_artboard(
+        &mut self,
+        artboard: ArtboardId,
+        spec: ArtboardSpec,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .set_artboard(artboard, spec)?;
+        self.touched_artboards.insert(artboard, operation_index);
+        self.spec_origins
+            .artboard_specs
+            .insert(artboard, operation_index);
+        Ok(())
+    }
+
+    /// Change only the deterministic definition/export order of authored
+    /// artboards. Per-artboard runtime mounts are intentionally untouched.
+    pub fn reorder_artboard(
+        &mut self,
+        artboard: ArtboardId,
+        index: ChildIndex,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .reorder_artboard(artboard, index)?;
+        self.refresh_definition_index();
+        Ok(())
+    }
+
+    /// Remove one authored artboard and all of its authored objects. Live
+    /// instances of the artboard are discarded atomically at publication.
+    pub fn remove_artboard(&mut self, artboard: ArtboardId) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .remove_artboard(artboard)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(artboard, operation_index);
+        Ok(())
+    }
+
+    /// Remove every authored object from one artboard while retaining the
+    /// artboard and its stable identity. This is the scoped replacement seam:
+    /// callers can clear once and append a complete typed replacement without
+    /// issuing one structural remove per old root.
+    pub fn clear_artboard(&mut self, artboard: ArtboardId) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .clear_artboard(artboard)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(artboard, operation_index);
+        Ok(())
     }
 
     pub fn create(
@@ -1023,7 +2113,10 @@ impl SceneTx<'_> {
         spec: NodeSpec,
     ) -> std::result::Result<ObjectId, EditAbort> {
         let operation_index = self.begin_operation()?;
-        let artboard_id = self.validate_parent(operation_index, parent, spec.kind())?;
+        let kind = spec.kind();
+        let artboard_id = self
+            .definition_index
+            .validate_parent(operation_index, parent, kind)?;
         let id = ObjectId(allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
             EditAbort::new(
                 operation_index,
@@ -1031,23 +2124,92 @@ impl SceneTx<'_> {
                 EditReason::IdentityExhausted,
             )
         })?);
-        let Some(artboard) = self
+        let artboard_index = *self
+            .definition_index
+            .artboards
+            .get(&artboard_id)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard_id)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let artboard = self
             .definitions
             .artboards
-            .iter_mut()
-            .find(|candidate| candidate.id == artboard_id)
-        else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Artboard(artboard_id)],
-                EditReason::InternalInvariant,
-            ));
-        };
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard_id)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let node_index = artboard.nodes.len();
         artboard.nodes.push(NodeDefinition { id, parent, spec });
+        self.definition_index.objects.insert(
+            id,
+            IndexedObject {
+                artboard: artboard_id,
+                artboard_index,
+                node_index,
+                kind,
+            },
+        );
+        self.definition_index
+            .children
+            .entry(parent)
+            .or_default()
+            .push(id);
+        self.definition_index
+            .children
+            .entry(Parent::Object(id))
+            .or_default();
         self.created_objects.push(id);
         self.touched_artboards.insert(artboard_id, operation_index);
-        self.edit_origins.nodes.insert(id, operation_index);
+        self.spec_origins.nodes.insert(id, operation_index);
         Ok(id)
+    }
+
+    /// Move an authored object subtree to an exact final position among its
+    /// current parent's children.
+    pub fn reorder(
+        &mut self,
+        object: ObjectId,
+        index: ChildIndex,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_id = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .reorder(object, index)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(artboard_id, operation_index);
+        Ok(())
+    }
+
+    /// Move an authored object subtree under a new parent at an exact final
+    /// sibling position. Stable object identities are retained.
+    pub fn reparent(
+        &mut self,
+        object: ObjectId,
+        new_parent: Parent,
+        index: ChildIndex,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let (source, target) = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .reparent(object, new_parent, index)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(source, operation_index);
+        self.touched_artboards.insert(target, operation_index);
+        Ok(())
     }
 
     /// Remove an object and its complete descendant subtree.
@@ -1056,199 +2218,30 @@ impl SceneTx<'_> {
     /// identities and ordering in this or a later transaction.
     pub fn remove(&mut self, object: ObjectId) -> std::result::Result<RemovedSubtree, EditAbort> {
         let operation_index = self.begin_operation()?;
-        let Some(artboard_index) = self.definitions.artboards.iter().position(|artboard| {
-            artboard
-                .nodes
-                .iter()
-                .any(|candidate| candidate.id == object)
-        }) else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Object(object)],
-                EditReason::UnknownObject,
-            ));
-        };
-        let Some(artboard) = self.definitions.artboards.get_mut(artboard_index) else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Object(object)],
-                EditReason::InternalInvariant,
-            ));
-        };
-
-        let mut subtree_ids = BTreeSet::from([object]);
-        loop {
-            let mut discovered = false;
-            for node in &artboard.nodes {
-                if matches!(node.parent, Parent::Object(parent) if subtree_ids.contains(&parent)) {
-                    discovered |= subtree_ids.insert(node.id);
-                }
-            }
-            if !discovered {
-                break;
-            }
+        let removed = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
         }
-
-        let mut nodes = Vec::with_capacity(subtree_ids.len());
-        for (original_index, definition) in artboard.nodes.iter().cloned().enumerate() {
-            if subtree_ids.contains(&definition.id) {
-                nodes.push(RemovedNode {
-                    original_index,
-                    definition,
-                });
-            }
-        }
-        if nodes.is_empty() {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Object(object)],
-                EditReason::InternalInvariant,
-            ));
-        }
-
-        artboard
-            .nodes
-            .retain(|node| !subtree_ids.contains(&node.id));
-        self.touched_artboards.insert(artboard.id, operation_index);
-        Ok(RemovedSubtree {
-            artboard: artboard.id,
-            root: object,
-            nodes,
-        })
+        .detach_subtree(object)?;
+        self.refresh_definition_index();
+        self.touched_artboards
+            .insert(removed.artboard, operation_index);
+        Ok(removed)
     }
 
     /// Restore a previously removed subtree without allocating new identities.
     pub fn restore(&mut self, removed: RemovedSubtree) -> std::result::Result<ObjectId, EditAbort> {
         let operation_index = self.begin_operation()?;
-        let RemovedSubtree {
-            artboard: artboard_id,
-            root,
-            nodes,
-        } = removed;
-        if nodes.is_empty() || !nodes.iter().any(|node| node.definition.id == root) {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Object(root)],
-                EditReason::InternalInvariant,
-            ));
+        let (artboard_id, root, restored) = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
         }
-
-        let Some(artboard_index) = self
-            .definitions
-            .artboards
-            .iter()
-            .position(|artboard| artboard.id == artboard_id)
-        else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Artboard(artboard_id), EditId::Object(root)],
-                EditReason::UnknownArtboard,
-            ));
-        };
-
-        for removed_node in &nodes {
-            let id = removed_node.definition.id;
-            if self
-                .definitions
-                .artboards
-                .iter()
-                .any(|artboard| artboard.nodes.iter().any(|candidate| candidate.id == id))
-            {
-                return Err(EditAbort::new(
-                    operation_index,
-                    vec![EditId::Object(id)],
-                    EditReason::IdentityCollision,
-                ));
-            }
-        }
-
-        let Some(artboard) = self.definitions.artboards.get(artboard_index) else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Artboard(artboard_id)],
-                EditReason::InternalInvariant,
-            ));
-        };
-        let mut available = artboard
-            .nodes
-            .iter()
-            .map(|node| (node.id, node.spec.kind()))
-            .collect::<BTreeMap<_, _>>();
-        for removed_node in &nodes {
-            let definition = &removed_node.definition;
-            if available
-                .insert(definition.id, definition.spec.kind())
-                .is_some()
-            {
-                return Err(EditAbort::new(
-                    operation_index,
-                    vec![EditId::Object(definition.id)],
-                    EditReason::InternalInvariant,
-                ));
-            }
-        }
-        for removed_node in &nodes {
-            let definition = &removed_node.definition;
-            let child = definition.spec.kind();
-            match definition.parent {
-                Parent::Artboard(parent) => {
-                    if parent != artboard_id {
-                        return Err(EditAbort::new(
-                            operation_index,
-                            vec![EditId::Object(definition.id), EditId::Artboard(parent)],
-                            EditReason::InvalidParent {
-                                parent: None,
-                                child,
-                            },
-                        ));
-                    }
-                    if child != NodeKind::Shape {
-                        return Err(EditAbort::new(
-                            operation_index,
-                            vec![EditId::Object(definition.id), EditId::Artboard(parent)],
-                            EditReason::InvalidParent {
-                                parent: None,
-                                child,
-                            },
-                        ));
-                    }
-                }
-                Parent::Object(parent) => {
-                    let Some(parent_kind) = available.get(&parent).copied() else {
-                        return Err(EditAbort::new(
-                            operation_index,
-                            vec![EditId::Object(definition.id), EditId::Object(parent)],
-                            EditReason::UnknownObject,
-                        ));
-                    };
-                    if !valid_object_parent(parent_kind, child) {
-                        return Err(EditAbort::new(
-                            operation_index,
-                            vec![EditId::Object(definition.id), EditId::Object(parent)],
-                            EditReason::InvalidParent {
-                                parent: Some(parent_kind),
-                                child,
-                            },
-                        ));
-                    }
-                }
-            }
-        }
-
-        let Some(artboard) = self.definitions.artboards.get_mut(artboard_index) else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Artboard(artboard_id)],
-                EditReason::InternalInvariant,
-            ));
-        };
-        for removed_node in nodes {
-            let insertion_index = removed_node.original_index.min(artboard.nodes.len());
-            let id = removed_node.definition.id;
-            artboard
-                .nodes
-                .insert(insertion_index, removed_node.definition);
-            self.edit_origins.nodes.insert(id, operation_index);
+        .attach_subtree(removed)?;
+        self.refresh_definition_index();
+        for id in restored {
+            self.spec_origins.nodes.insert(id, operation_index);
         }
         self.touched_artboards.insert(artboard_id, operation_index);
         Ok(root)
@@ -1261,37 +2254,13 @@ impl SceneTx<'_> {
         value: T,
     ) -> std::result::Result<(), EditAbort> {
         let operation_index = self.begin_operation()?;
-        let Some((artboard_id, node)) =
-            self.definitions.artboards.iter_mut().find_map(|artboard| {
-                artboard
-                    .nodes
-                    .iter_mut()
-                    .find(|candidate| candidate.id == object)
-                    .map(|node| (artboard.id, node))
-            })
-        else {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Object(object)],
-                EditReason::UnknownObject,
-            ));
-        };
-        let actual = node.spec.kind();
-        if !property.is_available_on(actual) {
-            return Err(EditAbort::new(
-                operation_index,
-                vec![EditId::Object(object)],
-                EditReason::PropertyOwnerMismatch {
-                    property: property.schema_name,
-                    actual,
-                },
-            ));
+        let artboard_id = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
         }
-        (property.apply_to_definition)(&mut node.spec, value).map_err(|reason| {
-            EditAbort::new(operation_index, vec![EditId::Object(object)], reason)
-        })?;
+        .set(object, property, value)?;
         self.touched_artboards.insert(artboard_id, operation_index);
-        self.edit_origins.nodes.insert(object, operation_index);
         Ok(())
     }
 
@@ -1322,68 +2291,14 @@ impl SceneTx<'_> {
         Ok(operation_index)
     }
 
-    fn validate_parent(
-        &self,
-        operation_index: usize,
-        parent: Parent,
-        child: NodeKind,
-    ) -> std::result::Result<ArtboardId, EditAbort> {
-        match parent {
-            Parent::Artboard(artboard) => {
-                if child != NodeKind::Shape {
-                    return Err(EditAbort::new(
-                        operation_index,
-                        vec![EditId::Artboard(artboard)],
-                        EditReason::InvalidParent {
-                            parent: None,
-                            child,
-                        },
-                    ));
-                }
-                if self
-                    .definitions
-                    .artboards
-                    .iter()
-                    .any(|candidate| candidate.id == artboard)
-                {
-                    Ok(artboard)
-                } else {
-                    Err(EditAbort::new(
-                        operation_index,
-                        vec![EditId::Artboard(artboard)],
-                        EditReason::UnknownArtboard,
-                    ))
-                }
-            }
-            Parent::Object(object) => {
-                let Some((artboard, parent_kind)) =
-                    self.definitions.artboards.iter().find_map(|artboard| {
-                        artboard
-                            .nodes
-                            .iter()
-                            .find(|candidate| candidate.id == object)
-                            .map(|node| (artboard.id, node.spec.kind()))
-                    })
-                else {
-                    return Err(EditAbort::new(
-                        operation_index,
-                        vec![EditId::Object(object)],
-                        EditReason::UnknownObject,
-                    ));
-                };
-                if !valid_object_parent(parent_kind, child) {
-                    return Err(EditAbort::new(
-                        operation_index,
-                        vec![EditId::Object(object)],
-                        EditReason::InvalidParent {
-                            parent: Some(parent_kind),
-                            child,
-                        },
-                    ));
-                }
-                Ok(artboard)
-            }
-        }
+    fn refresh_definition_index(&mut self) {
+        self.definition_index.rebuild(self.definitions);
+        self.spec_origins
+            .artboard_specs
+            .retain(|id, _| self.definition_index.artboards.contains_key(id));
+        self.spec_origins
+            .nodes
+            .retain(|id, _| self.definition_index.objects.contains_key(id));
     }
 }
 
@@ -1559,7 +2474,7 @@ impl MaterializedArtboard {
     fn build(
         definition: &ArtboardDefinition,
         fallback_operation_index: usize,
-        origins: &EditOrigins,
+        origins: &SpecOrigins,
         touched_operation_index: usize,
     ) -> std::result::Result<Self, EditDiagnostic> {
         let lowered = lower_artboard(definition, fallback_operation_index, origins)?;
@@ -1603,7 +2518,7 @@ struct LoweredArtboard {
 fn lower_artboard(
     artboard: &ArtboardDefinition,
     fallback_operation_index: usize,
-    origins: &EditOrigins,
+    origins: &SpecOrigins,
 ) -> std::result::Result<LoweredArtboard, EditDiagnostic> {
     validate_artboard_spec(&artboard.spec).map_err(|reason| {
         EditDiagnostic::new(
@@ -1614,7 +2529,20 @@ fn lower_artboard(
     })?;
 
     let mut records = vec![backboard_record(), artboard_record(&artboard.spec)];
+    let mut all_kinds = BTreeMap::new();
+    for node in &artboard.nodes {
+        if all_kinds.insert(node.id, node.spec.kind()).is_some() {
+            return Err(EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+    }
+
     let mut local_ids = BTreeMap::new();
+    let mut objects = BTreeMap::new();
+    let mut objects_by_local = vec![None];
     for (node_index, node) in artboard.nodes.iter().enumerate() {
         let local_id = node_index.checked_add(1).ok_or_else(|| {
             EditDiagnostic::new(
@@ -1623,12 +2551,6 @@ fn lower_artboard(
                 EditReason::CapacityExceeded,
             )
         })?;
-        local_ids.insert(node.id, local_id);
-    }
-
-    let mut objects = BTreeMap::new();
-    let mut objects_by_local = vec![None];
-    for node in &artboard.nodes {
         validate_node_spec(&node.spec).map_err(|reason| {
             EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -1636,15 +2558,22 @@ fn lower_artboard(
                 reason,
             )
         })?;
-        let local_id = local_ids.get(&node.id).copied().ok_or_else(|| {
-            EditDiagnostic::new(
-                origins.object(node.id, fallback_operation_index),
-                vec![EditId::Object(node.id)],
-                EditReason::InternalInvariant,
-            )
-        })?;
         let parent_id = match node.parent {
-            Parent::Artboard(parent) if parent == artboard.id => 0,
+            Parent::Artboard(parent)
+                if parent == artboard.id && node.spec.kind() == NodeKind::Shape =>
+            {
+                0
+            }
+            Parent::Artboard(parent) if parent == artboard.id => {
+                return Err(EditDiagnostic::new(
+                    origins.object(node.id, fallback_operation_index),
+                    vec![EditId::Object(node.id), EditId::Artboard(parent)],
+                    EditReason::InvalidParent {
+                        parent: None,
+                        child: node.spec.kind(),
+                    },
+                ));
+            }
             Parent::Artboard(parent) => {
                 return Err(EditDiagnostic::new(
                     origins.object(node.id, fallback_operation_index),
@@ -1655,16 +2584,41 @@ fn lower_artboard(
                     },
                 ));
             }
-            Parent::Object(parent) => local_ids.get(&parent).copied().ok_or_else(|| {
-                EditDiagnostic::new(
-                    origins.object(node.id, fallback_operation_index),
-                    vec![EditId::Object(node.id), EditId::Object(parent)],
-                    EditReason::InvalidParent {
-                        parent: None,
-                        child: node.spec.kind(),
-                    },
-                )
-            })?,
+            Parent::Object(parent) => {
+                let Some(parent_id) = local_ids.get(&parent).copied() else {
+                    let reason = if all_kinds.contains_key(&parent) {
+                        EditReason::InternalInvariant
+                    } else {
+                        EditReason::InvalidParent {
+                            parent: None,
+                            child: node.spec.kind(),
+                        }
+                    };
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::Object(parent)],
+                        reason,
+                    ));
+                };
+                let parent_kind = all_kinds.get(&parent).copied().ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::Object(parent)],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+                if !valid_object_parent(parent_kind, node.spec.kind()) {
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::Object(parent)],
+                        EditReason::InvalidParent {
+                            parent: Some(parent_kind),
+                            child: node.spec.kind(),
+                        },
+                    ));
+                }
+                parent_id
+            }
         };
         records.push(node_record(node, parent_id).map_err(|reason| {
             EditDiagnostic::new(
@@ -1673,24 +2627,56 @@ fn lower_artboard(
                 reason,
             )
         })?);
-        objects.insert(
-            node.id,
-            RuntimeSlot {
-                local_id,
-                kind: node.spec.kind(),
-            },
-        );
-        if objects_by_local.len() <= local_id {
-            objects_by_local.resize(local_id.saturating_add(1), None);
+        if local_ids.insert(node.id, local_id).is_some()
+            || objects
+                .insert(
+                    node.id,
+                    RuntimeSlot {
+                        local_id,
+                        kind: node.spec.kind(),
+                    },
+                )
+                .is_some()
+        {
+            return Err(EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::IdentityCollision,
+            ));
         }
-        let Some(slot) = objects_by_local.get_mut(local_id) else {
+        if objects_by_local.len() != local_id {
             return Err(EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
                 vec![EditId::Object(node.id)],
                 EditReason::InternalInvariant,
             ));
-        };
-        *slot = Some(node.id);
+        }
+        objects_by_local.push(Some(node.id));
+    }
+
+    let exact_record_count = artboard.nodes.len().checked_add(2).ok_or_else(|| {
+        EditDiagnostic::new(
+            fallback_operation_index,
+            vec![EditId::Artboard(artboard.id)],
+            EditReason::CapacityExceeded,
+        )
+    })?;
+    let exact_local_count = artboard.nodes.len().checked_add(1).ok_or_else(|| {
+        EditDiagnostic::new(
+            fallback_operation_index,
+            vec![EditId::Artboard(artboard.id)],
+            EditReason::CapacityExceeded,
+        )
+    })?;
+    if records.len() != exact_record_count
+        || objects.len() != artboard.nodes.len()
+        || objects_by_local.len() != exact_local_count
+    {
+        return Err(EditDiagnostic::new(
+            fallback_operation_index,
+            vec![EditId::Artboard(artboard.id)],
+            EditReason::InternalInvariant,
+        ));
     }
 
     canonicalize_exported_records(&mut records);
@@ -1833,8 +2819,12 @@ fn node_record(
     let kind = match &node.spec {
         NodeSpec::Shape(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
-            properties.push(ExportedProperty::TranslateX(spec.x));
-            properties.push(ExportedProperty::TranslateY(spec.y));
+            if spec.x != 0.0 {
+                properties.push(ExportedProperty::TranslateX(spec.x));
+            }
+            if spec.y != 0.0 {
+                properties.push(ExportedProperty::TranslateY(spec.y));
+            }
             if spec.opacity != 1.0 {
                 properties.push(ExportedProperty::WorldOpacity(spec.opacity));
             }
@@ -2054,6 +3044,164 @@ mod tests {
             assert_eq!(
                 imported_commands, live_commands,
                 "combined-file source-paint allocation may renumber resources, but the typed draw commands must remain identical"
+            );
+        }
+        Ok(())
+    }
+
+    fn work_test_shape(name: &str) -> NodeSpec {
+        NodeSpec::Shape(ShapeSpec {
+            name: name.to_owned(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        })
+    }
+
+    fn rejected_bulk_create_work(node_count: usize) -> Result<SceneWork> {
+        let mut scene = Scene::new();
+        reset_scene_work();
+        let error = scene
+            .edit(|tx| {
+                let artboard = tx.create_artboard(ArtboardSpec {
+                    name: "Rejected after hierarchy construction".into(),
+                    width: f32::NAN,
+                    height: 100.0,
+                })?;
+                for _ in 0..node_count {
+                    tx.create(Parent::Artboard(artboard), work_test_shape("Shape"))?;
+                }
+                Ok(())
+            })
+            .expect_err("the invalid artboard must reject after transaction indexing");
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::NonFiniteProperty { property: "width" }
+        );
+        Ok(scene_work())
+    }
+
+    #[test]
+    fn bulk_create_builds_one_index_and_checks_each_receipt_identity_once() -> Result<()> {
+        for node_count in [2_048, 4_096] {
+            assert_eq!(
+                rejected_bulk_create_work(node_count)?,
+                SceneWork {
+                    definition_index_builds: 1,
+                    definition_index_node_visits: 0,
+                    receipt_membership_checks: node_count,
+                }
+            );
+        }
+        Ok(())
+    }
+
+    fn rejected_scoped_replace_work(root_count: usize) -> Result<SceneWork> {
+        let mut scene = Scene::new();
+        let (artboard, _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            for _ in 0..root_count {
+                tx.create(Parent::Artboard(artboard), work_test_shape("Old"))?;
+            }
+            Ok(artboard)
+        })?;
+
+        reset_scene_work();
+        scene
+            .edit(|tx| {
+                tx.set_artboard(
+                    artboard,
+                    ArtboardSpec {
+                        name: "Rejected after hierarchy work".into(),
+                        width: f32::NAN,
+                        height: 100.0,
+                    },
+                )?;
+                tx.clear_artboard(artboard)?;
+                for _ in 0..root_count {
+                    tx.create(Parent::Artboard(artboard), work_test_shape("New"))?;
+                }
+                Ok(())
+            })
+            .expect_err("the invalid artboard must reject after replacement indexing");
+        Ok(scene_work())
+    }
+
+    fn rejected_subtree_round_trip_work(branch_count: usize) -> Result<SceneWork> {
+        let mut scene = Scene::new();
+        let ((artboard, root), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let root = tx.create(Parent::Artboard(artboard), work_test_shape("Root"))?;
+            for _ in 0..branch_count {
+                let fill = tx.create(
+                    Parent::Object(root),
+                    NodeSpec::Fill(FillSpec {
+                        name: "Fill".into(),
+                    }),
+                )?;
+                tx.create(
+                    Parent::Object(fill),
+                    NodeSpec::SolidColor(SolidColorSpec {
+                        name: "Color".into(),
+                        color: 0xff11_2233,
+                    }),
+                )?;
+            }
+            Ok((artboard, root))
+        })?;
+
+        reset_scene_work();
+        scene
+            .edit(|tx| {
+                tx.set_artboard(
+                    artboard,
+                    ArtboardSpec {
+                        name: "Rejected after hierarchy work".into(),
+                        width: f32::NAN,
+                        height: 100.0,
+                    },
+                )?;
+                let removed = tx.remove(root)?;
+                tx.restore(removed)?;
+                Ok(())
+            })
+            .expect_err("the invalid artboard must reject after subtree indexing");
+        Ok(scene_work())
+    }
+
+    #[test]
+    fn scoped_replacement_and_subtree_round_trip_have_linear_index_work() -> Result<()> {
+        for root_count in [300, 600] {
+            assert_eq!(
+                rejected_scoped_replace_work(root_count)?,
+                SceneWork {
+                    definition_index_builds: 2,
+                    definition_index_node_visits: root_count,
+                    receipt_membership_checks: root_count,
+                }
+            );
+        }
+
+        for branch_count in [300_usize, 600] {
+            let subtree_size = branch_count.saturating_mul(2).saturating_add(1);
+            assert_eq!(
+                rejected_subtree_round_trip_work(branch_count)?,
+                SceneWork {
+                    definition_index_builds: 3,
+                    definition_index_node_visits: subtree_size.saturating_mul(2),
+                    receipt_membership_checks: 0,
+                }
             );
         }
         Ok(())

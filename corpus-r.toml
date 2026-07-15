@@ -666,10 +666,9 @@ stream = "fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-dstreadshuffle-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-wgpu-msaa-advanced-blend-intermediate-precision"
 
 
 [[entry]]
@@ -2325,10 +2324,9 @@ stream = "fixtures/renderer/streams/gm/strokes_poly.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokes_poly-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-wgpu-msaa-stroke-edge-coverage"
 
 
 [[entry]]
@@ -8162,10 +8160,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-jellyfish_tes
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-wgpu-msaa-image-rect-dither-accumulation"
 
 [[entry]]
 id = "riv-joel_signed-frame-0-clockwise-atomic"

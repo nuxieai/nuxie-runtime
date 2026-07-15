@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,405, diverges=0, gated=63, total=1,468.
+- Rust wgpu: exact=1,408, diverges=0, gated=60, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -1205,6 +1205,13 @@ Run `make renderer-golden`.
 99. [x] Adjudicate the five `riv-joel_signed` MSAA edge residuals. Enabling
     C++-equivalent dithering for fixed MSAA paths closes the shared residual;
     all five frames pass their unchanged contracts.
+100. [x] Promote three independently repeated MSAA singleton captures:
+    `gm-dstreadshuffle-msaa`, `riv-jellyfish_test-frame-0-msaa`, and
+    `gm-strokes_poly-msaa`. Sol reproduced four fresh Rust wgpu/Metal rounds
+    for every row; each row was byte-stable across those rounds and passed its
+    unchanged `2/32` Dawn reference contract at 0/max 1, 0/max 1, and
+    12/max 46 respectively. No reference or tolerance changed; the ratchet is
+    exact=1,408/diverges=0/gated=60.
 
 ## R2 Completion Record
 
@@ -3754,3 +3761,15 @@ Run `make renderer-golden`.
   0. The same-backend Metal checks use the existing committed references, and
   `make renderer-decoder-oracle` reports zero decode delta for the reachable
   JPEG. The renderer ratchet advances to exact=1,405/diverges=0/gated=63.
+- 2026-07-15: Promoted exactly three repeated MSAA singleton captures after an
+  independent Sol review rendered four fresh Rust wgpu/Metal rounds for each
+  manifest-bound stream/frame/mode. `gm-dstreadshuffle-msaa` is 0 pixels over
+  delta 2/max delta 1 at 530x690
+  (`75b6e8bbfbba1f68f199a3da3b29ae78de42be1936f712d93717d7c45a37a67a`),
+  `riv-jellyfish_test-frame-0-msaa` is 0/max 1 at 2080x2080
+  (`5f1592aa67826fcd9ee05a8e32885490167566c68899693298b8c341061bb781`),
+  and `gm-strokes_poly-msaa` is 12/max 46 at 400x400
+  (`f17f02cb1dfdaa3218049d2161793518b3f11c0c953c3debb981615d3923e825`).
+  All outputs are valid 8-bit RGBA non-interlaced PNGs and byte-stable across
+  the fresh rounds. Existing stream/reference provenance and `2/32` contracts
+  remain unchanged. The corpus is exact=1,408/diverges=0/gated=60.

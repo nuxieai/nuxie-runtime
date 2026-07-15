@@ -129,6 +129,18 @@ reachable JPEG. The active ratchet is now exact=1,405/diverges=0/gated=63;
 the retained reviewed-boundary set falls from 61 to 58. The 91-row taxonomy
 above remains the historical R3 exit snapshot.
 
+### R3.1 Repeated Singleton Promotions (2026-07-15)
+
+An independent Sol review rendered four fresh Rust wgpu/Metal rounds for each
+of `gm-dstreadshuffle-msaa`, `riv-jellyfish_test-frame-0-msaa`, and
+`gm-strokes_poly-msaa`. Every row was byte-stable across those fresh rounds.
+Against the unchanged Dawn references and `2/32` contracts, the comparisons
+are 0 pixels/max delta 1 at 530x690, 0/max 1 at 2080x2080, and 12/max 46 at
+400x400 respectively. Stream hashes, reference hashes, provenance identities,
+dimensions, and unique reference ownership all remain valid. Exactly these
+three rows advance from gated to exact; the active ratchet is
+exact=1,408/diverges=0/gated=60.
+
 ## Reproduction
 
 ```sh
@@ -139,5 +151,6 @@ rg 'gated = "algorithm-core"' corpus-r.toml
 ```
 
 The final command must produce no output. Gate counts can be regenerated from
-the `[[entry]]` blocks in `corpus-r.toml`; they must total 91 and every gated
-block must contain a nonempty `gated` field.
+the `[[entry]]` blocks in `corpus-r.toml`; every currently gated block must
+contain a nonempty `gated` field. The 91-row table above is the historical R3
+exit snapshot, not a current-manifest invariant.

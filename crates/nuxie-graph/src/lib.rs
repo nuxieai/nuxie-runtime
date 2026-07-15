@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use nuxie_binary::{FieldValue, RuntimeFile, RuntimeObject};
+use nuxie_binary::{
+    FieldValue, RuntimeArtboardGeometry, RuntimeFile, RuntimeMesh, RuntimeNSlicerDetails,
+    RuntimeObject, RuntimePath, RuntimeShape, RuntimeShapePaintContainer,
+};
 use nuxie_schema::{definition_by_type_key, object_supports_property};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -171,11 +174,21 @@ impl ArtboardGraph {
         lifecycle.post_build_dependencies_draw_target_edges =
             draw_target_order.dependency_edges.len();
         lifecycle.draw_target_cycles = draw_target_order.cycles.len();
-        let path_composers = path_composers(file, artboard_index, &local_objects);
-        let meshes = meshes(file, artboard_index, &local_objects);
-        let paths = paths(file, artboard_index, &local_objects);
-        let shape_paint_containers = shape_paint_containers(file, artboard_index, &local_objects);
-        let n_slicer_details = n_slicer_details(file, artboard_index, &local_objects);
+        let RuntimeArtboardGeometry {
+            meshes: runtime_meshes,
+            paths: runtime_paths,
+            shapes: runtime_shapes,
+            shape_paint_containers: runtime_shape_paint_containers,
+            n_slicer_details: runtime_n_slicer_details,
+        } = file
+            .artboard_geometry(artboard_index)
+            .context("missing runtime artboard geometry")?;
+        let path_composers = path_composers(runtime_shapes, &local_objects);
+        let meshes = meshes(runtime_meshes, &local_objects);
+        let paths = paths(runtime_paths, &local_objects);
+        let shape_paint_containers =
+            shape_paint_containers(file, runtime_shape_paint_containers, &local_objects);
+        let n_slicer_details = n_slicer_details(runtime_n_slicer_details, &local_objects);
         let shape_deformers = shape_deformers(file, &local_objects);
         let skeletal_bones = skeletal_bones(file, &local_objects);
         let skeletal_skins = skeletal_skins(file, &local_objects);
@@ -2276,11 +2289,10 @@ fn clipping_shapes(
 }
 
 fn path_composers(
-    file: &RuntimeFile,
-    artboard_index: usize,
+    shapes: Vec<RuntimeShape<'_>>,
     local_objects: &[LocalObject],
 ) -> Vec<PathComposerNode> {
-    file.artboard_shapes(artboard_index)
+    shapes
         .into_iter()
         .filter_map(|shape| {
             let shape_global = local_object_global_id(local_objects, shape.local_id)?;
@@ -2313,12 +2325,8 @@ fn path_composers(
         .collect()
 }
 
-fn meshes(
-    file: &RuntimeFile,
-    artboard_index: usize,
-    local_objects: &[LocalObject],
-) -> Vec<MeshGeometryNode> {
-    file.artboard_meshes(artboard_index)
+fn meshes(meshes: Vec<RuntimeMesh<'_>>, local_objects: &[LocalObject]) -> Vec<MeshGeometryNode> {
+    meshes
         .into_iter()
         .filter_map(|mesh| {
             let global_id = local_object_global_id(local_objects, mesh.local_id)?;
@@ -2350,12 +2358,8 @@ fn meshes(
         .collect()
 }
 
-fn paths(
-    file: &RuntimeFile,
-    artboard_index: usize,
-    local_objects: &[LocalObject],
-) -> Vec<PathGeometryNode> {
-    file.artboard_paths(artboard_index)
+fn paths(paths: Vec<RuntimePath<'_>>, local_objects: &[LocalObject]) -> Vec<PathGeometryNode> {
+    paths
         .into_iter()
         .filter_map(|path| {
             let global_id = local_object_global_id(local_objects, path.local_id)?;
@@ -2414,10 +2418,10 @@ fn paths(
 
 fn shape_paint_containers(
     file: &RuntimeFile,
-    artboard_index: usize,
+    containers: Vec<RuntimeShapePaintContainer<'_>>,
     local_objects: &[LocalObject],
 ) -> Vec<ShapePaintContainerNode> {
-    file.artboard_shape_paint_containers(artboard_index)
+    containers
         .into_iter()
         .filter_map(|container| {
             let global_id = local_object_global_id(local_objects, container.local_id)?;
@@ -2771,11 +2775,10 @@ fn shape_paint_blend_mode_value(paint: &RuntimeObject) -> u32 {
 }
 
 fn n_slicer_details(
-    file: &RuntimeFile,
-    artboard_index: usize,
+    details: Vec<RuntimeNSlicerDetails<'_>>,
     local_objects: &[LocalObject],
 ) -> Vec<NSlicerDetailsNode> {
-    file.artboard_n_slicer_details(artboard_index)
+    details
         .into_iter()
         .filter_map(|details| {
             let global_id = local_object_global_id(local_objects, details.local_id)?;

@@ -17,7 +17,7 @@ pub use animation::{
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
     RuntimeKeyedProperty, RuntimeLinearAnimation,
 };
-pub use artboard::ArtboardInstance;
+pub use artboard::{ArtboardInstance, ExternalFontAssetError};
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
@@ -63,7 +63,7 @@ pub(crate) use state_machine::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
 };
-pub use text::static_text_support_error;
+pub use text::{embedded_font_is_parseable, static_text_support_error};
 pub use view_model::{
     RuntimeDataContext, RuntimeDataContextInstanceRef, RuntimeDataContextLookupKind,
     RuntimeDataContextLookupReport, RuntimeDataContextValueRef,

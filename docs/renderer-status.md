@@ -1130,7 +1130,14 @@ Run `make renderer-golden`.
     `2/32` contract. Bankcard is promoted and five substantive rows remain.
 91. [ ] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
-    wiring resumes only after the R3.1 exit criteria hold.
+    wiring resumes only after the R3.1 exit criteria hold. Strict linear and
+    radial gradient reconstruction is complete: the compiler validates
+    canonical stops and shader references, emits exact C++ resources, and
+    changes each paint shader binding exactly when the stream does. The
+    regenerated inventory has 43 capture-ready gradient rows, preserves five
+    gated rows with valid strict provenance, and has only four unsupported
+    rows: three render-buffer cases plus the synthetic first-light harness
+    row. Reference capture and adjudication remain open.
 
 ## R2 Completion Record
 
@@ -3593,3 +3600,19 @@ Run `make renderer-golden`.
   The native-Metal comparison falls to 22 pixels/max delta 18 and passes the
   unchanged `2/32` contract. The ratchet advances to
   exact=1,357/diverges=0/gated=111 with five substantive R3.1 rows left.
+- 2026-07-14: Implemented strict gradient-paint reconstruction in the C++ Dawn
+  stream compiler. Linear and radial declarations now retain exact endpoint,
+  color, and stop literals; duplicate resources and undeclared shader use are
+  rejected; paint shader transitions are reproduced without perturbing the
+  legacy unshaded registry hash. The generated inventory moves all 43 gradient
+  rejections to capture-ready, preserves five gated rows with valid strict
+  provenance, and leaves only three render-buffer rows plus synthetic
+  first-light unsupported.
+  Added a dedicated general-atomic Hunter X replay and the required sampled
+  target usage. It executes all 258 C++ Dawn batches without validation
+  errors. C++ Dawn differs from native Metal across 874,951 pixels/max 40 and
+  from Rust across 874,763/max 40; among Rust's 221 native-Metal outliers,
+  Dawn is closer to Metal on 177 and Rust on 44. This does not justify a
+  backend-boundary reclassification, so Hunter remains an advanced-feather
+  parity gate. Renderer replay now supports a tested `--command-limit` for
+  draw-prefix localization.

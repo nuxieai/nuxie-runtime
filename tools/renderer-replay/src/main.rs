@@ -12,11 +12,13 @@ struct Options {
     frame: usize,
     clear: Option<u32>,
     mode: String,
+    command_limit: Option<usize>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let options = parse_options()?;
-    let stream = RenderStream::parse(&fs::read_to_string(&options.stream)?)?;
+    let mut stream = RenderStream::parse(&fs::read_to_string(&options.stream)?)?;
+    apply_command_limit(&mut stream, options.frame, options.command_limit)?;
     let (width, height) = stream
         .frame_size
         .ok_or("recorded stream does not declare frameSize")?;
@@ -112,6 +114,22 @@ fn clear_pixels(width: u32, height: u32, color: u32) -> Vec<u8> {
         .collect()
 }
 
+fn apply_command_limit(
+    stream: &mut RenderStream,
+    frame_index: usize,
+    limit: Option<usize>,
+) -> Result<(), String> {
+    let Some(limit) = limit else {
+        return Ok(());
+    };
+    let frame = stream
+        .frames
+        .get_mut(frame_index)
+        .ok_or_else(|| format!("render stream has no frame {frame_index}"))?;
+    frame.commands.truncate(limit);
+    Ok(())
+}
+
 fn parse_options() -> Result<Options, Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let mut stream = None;
@@ -120,6 +138,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
     let mut frame = 0;
     let mut clear = None;
     let mut mode = "msaa".to_owned();
+    let mut command_limit = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--stream" => stream = Some(PathBuf::from(args.next().ok_or(usage())?)),
@@ -131,6 +150,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
                 clear = Some(u32::from_str_radix(value.trim_start_matches("0x"), 16)?);
             }
             "--mode" => mode = args.next().ok_or(usage())?,
+            "--command-limit" => command_limit = Some(args.next().ok_or(usage())?.parse()?),
             _ => return Err(format!("unknown argument `{arg}`\n{}", usage()).into()),
         }
     }
@@ -141,16 +161,18 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
         frame,
         clear,
         mode,
+        command_limit,
     })
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|ffi-metal] [--mode msaa|clockwise-atomic] [--frame N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|ffi-metal] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{clear_pixels, flip_rows};
+    use super::{apply_command_limit, clear_pixels, flip_rows};
+    use nuxie_render_stream::RenderStream;
 
     #[test]
     fn stub_uses_requested_rgba_clear_color() {
@@ -167,5 +189,20 @@ mod tests {
         flip_rows(&mut pixels, 2, 2);
         assert_eq!(&pixels[..8], &[2; 8]);
         assert_eq!(&pixels[8..], &[1; 8]);
+    }
+
+    #[test]
+    fn command_limit_truncates_only_the_selected_frame() {
+        let mut stream = RenderStream::parse(
+            "rive-golden-stream-v1\nframeSize width=1 height=1\nsave\nrestore\nframe\nsave\nframe\n",
+        )
+        .unwrap();
+        apply_command_limit(&mut stream, 0, Some(1)).unwrap();
+        assert_eq!(stream.frames[0].commands.len(), 1);
+        assert_eq!(stream.frames[1].commands.len(), 1);
+        assert_eq!(
+            apply_command_limit(&mut stream, 2, Some(1)).unwrap_err(),
+            "render stream has no frame 2"
+        );
     }
 }

@@ -32,6 +32,17 @@ DRAW_IMAGE_RE = re.compile(
     rf"drawImage image=(\d+) sampler=\{{wrapX=(\d+),wrapY=(\d+),"
     rf"filter=(\d+),key=(\d+)\}} blendMode=(\d+) opacity=({NUMBER})"
 )
+LINEAR_GRADIENT_RE = re.compile(
+    rf"makeLinearGradient id=(\d+) start=\(({NUMBER}),({NUMBER})\) "
+    rf"end=\(({NUMBER}),({NUMBER})\) stops=(\[.*\])"
+)
+RADIAL_GRADIENT_RE = re.compile(
+    rf"makeRadialGradient id=(\d+) center=\(({NUMBER}),({NUMBER})\) "
+    rf"radius=({NUMBER}) stops=(\[.*\])"
+)
+GRADIENT_STOP_RE = re.compile(
+    rf"\{{color=(0x[0-9a-f]{{8}}),stop=({NUMBER})\}}"
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -52,6 +63,12 @@ class PaintSnapshot:
     feather: str
     blend_mode: int
     shader: int
+
+
+@dataclasses.dataclass(frozen=True)
+class GradientStop:
+    color: str
+    offset: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -204,6 +221,16 @@ def parse_paint(text: str) -> PaintSnapshot:
     )
 
 
+def parse_gradient_stops(text: str) -> tuple[GradientStop, ...]:
+    if not text.startswith("[") or not text.endswith("]"):
+        raise ValueError("gradient stops must use canonical brackets")
+    matches = list(GRADIENT_STOP_RE.finditer(text[1:-1]))
+    canonical = ",".join(match.group(0) for match in matches)
+    if canonical != text[1:-1] or len(matches) < 2:
+        raise ValueError("gradient requires at least two canonical stops")
+    return tuple(GradientStop(*match.groups()) for match in matches)
+
+
 def float_literal(value: str) -> str:
     return f"{value}f" if any(char in value for char in ".eE") else f"{value}.f"
 
@@ -311,6 +338,8 @@ def generate_include(
         )
     paths: dict[int, PathSnapshot | None] = {}
     paints: set[int] = set()
+    paint_shaders: dict[int, int] = {}
+    shaders: set[int] = set()
     images: set[int] = set()
     counts: dict[str, int] = {}
     save_depth = 0
@@ -373,11 +402,49 @@ def generate_include(
             snapshot = parse_paint(line.removeprefix("makeRenderPaint "))
             if snapshot.object_id in paints:
                 raise ValueError("makeRenderPaint must declare a unique paint")
-            if snapshot.shader != 0:
-                raise ValueError("path-only replay does not support paint shaders")
             paints.add(snapshot.object_id)
+            paint_shaders[snapshot.object_id] = 0
             count("makeRenderPaint")
             output.append(f"    auto paint{snapshot.object_id} = context->makeRenderPaint();")
+            continue
+        linear_gradient = LINEAR_GRADIENT_RE.fullmatch(line)
+        radial_gradient = RADIAL_GRADIENT_RE.fullmatch(line)
+        if linear_gradient is not None or radial_gradient is not None:
+            match = linear_gradient or radial_gradient
+            assert match is not None
+            shader_id = int(match.group(1))
+            if shader_id in shaders:
+                raise ValueError(f"gradient redeclares shader {shader_id}")
+            stops = parse_gradient_stops(match.groups()[-1])
+            shaders.add(shader_id)
+            command = (
+                "makeLinearGradient"
+                if linear_gradient is not None
+                else "makeRadialGradient"
+            )
+            count(command)
+            colors = ", ".join(stop.color for stop in stops)
+            offsets = ", ".join(float_literal(stop.offset) for stop in stops)
+            output.extend(
+                [
+                    f"    static constexpr std::array<rive::ColorInt, {len(stops)}> shader{shader_id}Colors = {{{{{colors}}}}};",
+                    f"    static constexpr std::array<float, {len(stops)}> shader{shader_id}Stops = {{{{{offsets}}}}};",
+                ]
+            )
+            coordinates = ", ".join(
+                float_literal(value) for value in match.groups()[1:-1]
+            )
+            output.append(
+                f"    auto shader{shader_id} = context->{command}({coordinates}, shader{shader_id}Colors.data(), shader{shader_id}Stops.data(), shader{shader_id}Colors.size());"
+            )
+            output.extend(
+                [
+                    f"    if (shader{shader_id} == nullptr)",
+                    "    {",
+                    f'        fail("reference gradient {shader_id} creation drifted");',
+                    "    }",
+                ]
+            )
             continue
         decode_image = DECODE_IMAGE_RE.fullmatch(line)
         if decode_image is not None:
@@ -469,13 +536,22 @@ def generate_include(
             paint = parse_paint(paint_text)
             if path.object_id not in paths or paint.object_id not in paints:
                 raise ValueError("drawPath references an undeclared path or paint")
-            if paint.shader != 0:
-                raise ValueError("path-only replay does not support paint shaders")
+            if paint.shader != 0 and paint.shader not in shaders:
+                raise ValueError(f"drawPath references undeclared shader {paint.shader}")
             output.append(
                 f"    path{path.object_id}->fillRule(static_cast<rive::FillRule>({path.fill_rule}));"
             )
             materialize_path(path)
             style = "fill" if paint.style == "fill" else "stroke"
+            shader_binding = []
+            if paint.shader != paint_shaders[paint.object_id]:
+                shader_value = (
+                    f"shader{paint.shader}" if paint.shader != 0 else "nullptr"
+                )
+                shader_binding.append(
+                    f"    paint{paint.object_id}->shader({shader_value});"
+                )
+                paint_shaders[paint.object_id] = paint.shader
             output.extend(
                 [
                     f"    paint{paint.object_id}->style(rive::RenderPaintStyle::{style});",
@@ -485,6 +561,7 @@ def generate_include(
                     f"    paint{paint.object_id}->cap(static_cast<rive::StrokeCap>({paint.cap}));",
                     f"    paint{paint.object_id}->feather({float_literal(paint.feather)});",
                     f"    paint{paint.object_id}->blendMode(static_cast<rive::BlendMode>({blend_mode_override if blend_mode_override is not None else paint.blend_mode}));",
+                    *shader_binding,
                     f"    renderer->drawPath(path{path.object_id}.get(), paint{paint.object_id}.get());",
                 ]
             )

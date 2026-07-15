@@ -78,6 +78,7 @@ void fail(const char* message);
 #include "generated_dstreadshuffle_full.inc"
 #include "generated_dstreadshuffle_srcover_control.inc"
 #include "generated_spotify_kids_app_icon_full.inc"
+#include "generated_hunter_x_full.inc"
 #include "generated_msaa_reference_registry.inc"
 
 void fail(const char* message)
@@ -1111,13 +1112,15 @@ int main(int argc, char** argv)
     const bool atomicSpotifyKidsAppIconFullCase =
         argc > 4 &&
         std::strcmp(argv[4], "atomic-spotify-kids-app-icon-full") == 0;
+    const bool atomicHunterXFullCase =
+        argc > 4 && std::strcmp(argv[4], "atomic-hunter-x-full") == 0;
     const bool msaaReferenceMode =
         argc > 4 && std::strcmp(argv[4], "msaa-reference") == 0;
     const bool atomicDstReadShuffleCase =
         atomicDstReadShuffleFullCase || atomicDstReadShuffleSrcOverCase;
     const bool fullStreamCase =
         atomicInterleavedFeatherFullCase || atomicDstReadShuffleCase ||
-        atomicSpotifyKidsAppIconFullCase;
+        atomicSpotifyKidsAppIconFullCase || atomicHunterXFullCase;
     const bool intersectionGroupsCase =
         argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;
     const bool anyAdvancedBlendCase =
@@ -1196,7 +1199,7 @@ int main(int argc, char** argv)
         (msaaReferenceMode &&
          (msaaReference == nullptr || secondaryOutput == nullptr)))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext|direct-degenerate-cubic] [auxiliary-output-or-case-id] [secondary-output-or-selector]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|atomic-hunter-x-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext|direct-degenerate-cubic] [auxiliary-output-or-case-id] [secondary-output-or-selector]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1271,6 +1274,10 @@ int main(int argc, char** argv)
     wgpu::TextureDescriptor targetDesc = {};
     targetDesc.usage =
         wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
+    if (atomicHunterXFullCase)
+    {
+        targetDesc.usage |= wgpu::TextureUsage::TextureBinding;
+    }
     targetDesc.dimension = wgpu::TextureDimension::e2D;
     const uint32_t frameWidth = msaaReferenceMode
                                     ? msaaReference->width
@@ -1288,6 +1295,8 @@ int main(int argc, char** argv)
                                     ? kAtomicInterleavedFeatherFullFrameSize
                                 : atomicSpotifyKidsAppIconFullCase
                                     ? kAtomicSpotifyKidsAppIconFullLogicalWidth
+                                : atomicHunterXFullCase
+                                    ? 3387u
                                 : atomicDstReadShuffleCase
                                     ? kAtomicDstReadShuffleFullFrameWidth
                                     : (directTriangulatedCase ? kDirectGridFrameSize
@@ -1308,6 +1317,8 @@ int main(int argc, char** argv)
                                  ? kAtomicInterleavedFeatherFullFrameSize
                                  : atomicSpotifyKidsAppIconFullCase
                                  ? kAtomicSpotifyKidsAppIconFullLogicalHeight
+                                 : atomicHunterXFullCase
+                                 ? 1906u
                                  : atomicDstReadShuffleCase
                                  ? kAtomicDstReadShuffleFullFrameHeight
                                  : (directTriangulatedCase ? kDirectGridFrameSize
@@ -1708,6 +1719,10 @@ int main(int argc, char** argv)
     else if (atomicSpotifyKidsAppIconFullCase)
     {
         replaySpotifyKidsAppIconFull(&renderer, context.get());
+    }
+    else if (atomicHunterXFullCase)
+    {
+        replayHunterXFull(&renderer, context.get());
     }
     else if (intersectionGroupsCase)
     {

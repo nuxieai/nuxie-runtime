@@ -113,6 +113,23 @@ R16 sample including negative near-degenerate coverage at `2^-9` (the smallest
 passing power-of-two budget; `2^-10` fails), and retains the corpus `2/32`
 final-pixel contract.
 
+## Hunter X general-atomic diagnostic
+
+The build also compiles the complete `hunter_x_demo` frame after strict linear
+and radial gradient reconstruction. This is a same-device C++ Dawn diagnostic
+for the retained native-Metal advanced-feather gate; Dawn exposes general
+atomics rather than native clockwise atomics, so its pixels are evidence, not
+a promotion reference.
+
+```sh
+tools/cpp-atlas-mask-oracle/build.sh --build-only
+"${RIVE_RUNTIME_DIR:?}/renderer/out/cpp-atlas-mask-oracle/rive_atlas_mask_oracle" \
+  /dev/null /dev/null /tmp/hunter-dawn.rgba atomic-hunter-x-full \
+  /tmp/hunter-dawn.provenance
+cargo run -q -p pixel-compare --bin riveabl-to-png -- \
+  --artifact /tmp/hunter-dawn.rgba --output /tmp/hunter-dawn.png
+```
+
 `softened-cusp.bin` uses the `RIVESFT` version 1 contract: verb and point
 counts followed by canonical C++ `PathVerb` values and raw XY float bits. It
 captures the dedicated cusp source after C++ fill softening at feather `1` and

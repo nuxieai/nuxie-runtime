@@ -78,6 +78,7 @@ msaa_reference_manifest="$script_dir/msaa-reference-corpus.toml"
 interleavedfeather_stream="$script_dir/../../fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 dstreadshuffle_stream="$script_dir/../../fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
 spotify_kids_app_icon_stream="$script_dir/../../fixtures/renderer/streams/riv/spotify_kids_app_icon.rive-stream"
+hunter_x_stream="$script_dir/../../fixtures/renderer/streams/riv/hunter_x_demo.rive-stream"
 ninja_bin="${RIVE_ATLAS_MASK_NINJA:-$dawn_dir/third_party/ninja/ninja}"
 case "$(uname -s)" in
     Darwin) default_gn="$dawn_dir/buildtools/mac/gn" ;;
@@ -90,6 +91,7 @@ expected_naga_version="30.0.0"
 expected_interleavedfeather_sha256="8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
 expected_dstreadshuffle_sha256="0e08ecd19e6a9e1f89f3ae2291181cea3513edf5bbe8cadcd3e1e10a0c33f195"
 expected_spotify_kids_app_icon_sha256="1c230de80579ddfc9953541ec3311c981e8f53d94c4d023c5429635186ebbd88"
+expected_hunter_x_sha256="3544c61ac8a12790bc1b865074c5ea140caa05502a03f9bca7b5ca8e2f731b5f"
 expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 
@@ -513,6 +515,22 @@ python3 "$path_stream_generator" \
     --expected-count drawPath=14 \
     --function replaySpotifyKidsAppIconFull \
     --output "$injected_dir/generated_spotify_kids_app_icon_full.inc"
+python3 "$path_stream_generator" \
+    --profile riv \
+    --stream "$hunter_x_stream" \
+    --expected-sha256 "$expected_hunter_x_sha256" \
+    --expected-source-suffix tests/unit_tests/assets/hunter_x_demo.riv \
+    --expected-artboard "Main Menu" --expected-scene "State Machine 1" \
+    --expected-width 3387 --expected-height 1906 \
+    --expected-sample-seconds 0 \
+    --expected-count makeRenderPaint=1529 \
+    --expected-count makeLinearGradient=182 \
+    --expected-count makeRadialGradient=6 \
+    --expected-count save=356 --expected-count restore=356 \
+    --expected-count transform=343 --expected-count makeEmptyRenderPath=342 \
+    --expected-count clipPath=130 --expected-count drawPath=318 \
+    --function replayHunterXFull \
+    --output "$injected_dir/generated_hunter_x_full.inc"
 python3 "$msaa_reference_generator" \
     --manifest "$msaa_reference_manifest" \
     --repo-root "$script_dir/../.." \

@@ -1169,23 +1169,30 @@ Run `make renderer-golden`.
     `riv-ai_assitant-frame-0-msaa`, then close the five
     `rust-wgpu-msaa-feather-gradient-advanced-blend` rows. Reuse the existing
     ramp, destination-copy, and atlas-composite machinery without changing
-    tolerances.
-95. [ ] Fix repeated path-clipped MSAA strokes in
-    `gm-strokedlines-msaa`. The strict reference retains complete snowflakes;
-    Rust drops different stroke segments across the 15 sequential clip stacks.
-96. [ ] Close gradient destination-read compositing in
-    `gm-xfermodes2-msaa`; 2,151 pixels/max 188 remain across the advanced
-    gradient blend grid.
-97. [ ] Port the MSAA form of incompatible transformed clip rectangles for
+    tolerances. AI Assistant is exact; Data Viz, Echo Show, and Rewards pass
+    their unchanged contracts. Car Widgets and Hunter X remain under focused
+    same-backend diagnosis.
+95. [x] Fix repeated path-clipped MSAA strokes in
+    `gm-strokedlines-msaa`. Strict replay now preserves gradient snapshots
+    across all 15 sequential clip stacks; the corrected reference compares at
+    zero pixels beyond delta 2/max delta 1 under the unchanged contract.
+96. [x] Close gradient destination-read compositing in
+    `gm-xfermodes2-msaa`. Rust now preserves MSAA depth across destination
+    reads and schedules C++-equivalent independent fill subpasses without
+    reordering multipass draws. The target compares at zero pixels beyond
+    delta 2/max delta 2; mesh and Spotify regressions remain exact.
+97. [x] Port the MSAA form of incompatible transformed clip rectangles for
     `riv-bullet_man-frame-0-msaa`, preserving the already exact
-    clockwise-atomic implementation.
-98. [ ] Attribute and close the clipped/stroked gradient residuals in
+    clockwise-atomic implementation. Mesh clips now enter the MSAA schedule;
+    Bullet Man compares at zero pixels beyond delta 2/max delta 1.
+98. [x] Attribute and close the clipped/stroked gradient residuals in
     `riv-death_knight-frame-0-msaa`, all five `riv-juice` frames, and all
-    five `riv-off_road_car` frames. Their strict comparisons are executable
-    and grouped as path-clip or stroke-composite diagnostics.
-99. [ ] Adjudicate the five `riv-joel_signed` MSAA edge residuals. Every frame
-    has the same 45 differing pixels/max delta 3; use a draw prefix and
-    connected-component audit before implementation or reclassification.
+    five `riv-off_road_car` frames. All 11 pass their strict references under
+    unchanged contracts after the combined clipping, gradient, and MSAA
+    scheduling fixes.
+99. [x] Adjudicate the five `riv-joel_signed` MSAA edge residuals. Enabling
+    C++-equivalent dithering for fixed MSAA paths closes the shared residual;
+    all five frames pass their unchanged contracts.
 
 ## R2 Completion Record
 

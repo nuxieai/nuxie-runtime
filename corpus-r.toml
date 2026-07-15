@@ -2253,10 +2253,9 @@ stream = "fixtures/renderer/streams/gm/strokedlines.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokedlines-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-repeated-path-clipped-strokes"
 
 
 [[entry]]
@@ -2591,10 +2590,9 @@ stream = "fixtures/renderer/streams/gm/xfermodes2.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-xfermodes2-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-advanced-blend"
 
 
 [[entry]]
@@ -2737,10 +2735,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-ai_assitant-f
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-feather-gradient-stroke"
 
 [[entry]]
 id = "riv-align_target-frame-0-clockwise-atomic"
@@ -3509,10 +3506,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bullet_man-fr
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-incompatible-clip-rectangles"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-clockwise-atomic"
@@ -5662,10 +5658,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_viz_demo
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-databind_artboard-frame-0-clockwise-atomic"
@@ -5857,10 +5852,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-death_knight-
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-path-clip"
 
 [[entry]]
 id = "riv-dependency_test-frame-0-clockwise-atomic"
@@ -6268,10 +6262,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_dem
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-ellipsis-frame-0-clockwise-atomic"
@@ -8199,10 +8192,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-f
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-edge-residual"
 
 [[entry]]
 id = "riv-joel_signed-frame-1-clockwise-atomic"
@@ -8224,10 +8216,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-f
 mode = "msaa"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-edge-residual"
 
 [[entry]]
 id = "riv-joel_signed-frame-2-clockwise-atomic"
@@ -8249,10 +8240,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-f
 mode = "msaa"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-edge-residual"
 
 [[entry]]
 id = "riv-joel_signed-frame-3-clockwise-atomic"
@@ -8274,10 +8264,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-f
 mode = "msaa"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-edge-residual"
 
 [[entry]]
 id = "riv-joel_signed-frame-4-clockwise-atomic"
@@ -8299,10 +8288,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-joel_signed-f
 mode = "msaa"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-edge-residual"
 
 [[entry]]
 id = "riv-joel_v3-frame-0-clockwise-atomic"
@@ -8588,10 +8576,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-0
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-juice-frame-1-clockwise-atomic"
@@ -8613,10 +8600,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-1
 mode = "msaa"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-juice-frame-2-clockwise-atomic"
@@ -8638,10 +8624,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-2
 mode = "msaa"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-juice-frame-3-clockwise-atomic"
@@ -8663,10 +8648,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-3
 mode = "msaa"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-juice-frame-4-clockwise-atomic"
@@ -8688,10 +8672,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-juice-frame-4
 mode = "msaa"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-keyboard_event_to_script-frame-0-clockwise-atomic"
@@ -10694,10 +10677,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-off_road_car-frame-1-clockwise-atomic"
@@ -10719,10 +10701,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-
 mode = "msaa"
 backend = "metal"
 frame = 1
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-off_road_car-frame-2-clockwise-atomic"
@@ -10744,10 +10725,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-
 mode = "msaa"
 backend = "metal"
 frame = 2
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-off_road_car-frame-3-clockwise-atomic"
@@ -10769,10 +10749,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-
 mode = "msaa"
 backend = "metal"
 frame = 3
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-off_road_car-frame-4-clockwise-atomic"
@@ -10794,10 +10773,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-off_road_car-
 mode = "msaa"
 backend = "metal"
 frame = 4
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-gradient-stroke-composite"
 
 [[entry]]
 id = "riv-oneshotblend-frame-0-clockwise-atomic"
@@ -12262,10 +12240,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rewards_demo-
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-rocket-frame-0-clockwise-atomic"

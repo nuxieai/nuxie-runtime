@@ -12,9 +12,9 @@
   "summary": {
     "accepted": 0,
     "capture_manifest_cases": 732,
-    "gated_msaa_rows": 32,
+    "gated_msaa_rows": 9,
     "missing_strict_provenance_rows": 1,
-    "strict_provenance_rows": 31,
+    "strict_provenance_rows": 8,
     "unsupported": 1,
     "unsupported_by_reason": {
       "strict-replay-gm-header": 1

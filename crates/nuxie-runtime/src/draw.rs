@@ -33,7 +33,8 @@ use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
     RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
     runtime_text_shape_paint_commands, static_text_clip_bounds, static_text_constraint_bounds,
-    static_text_layout_measure_bounds, text_input_layout_measure_bounds,
+    static_text_controlled_layout_bounds, static_text_layout_measure_bounds,
+    text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D};
 
@@ -734,9 +735,9 @@ impl ArtboardInstance {
         if self.component(local_id)?.type_name == "Text" {
             let layout_constraint = self.runtime_text_layout_constraint(local_id, layout_bounds);
             let bounds = match layout_constraint {
-                Some(constraint) => {
-                    static_text_layout_measure_bounds(runtime, graph, self, local_id, constraint)?
-                }
+                Some(constraint) => static_text_controlled_layout_bounds(
+                    runtime, graph, self, local_id, constraint,
+                )?,
                 None => static_text_constraint_bounds(runtime, graph, self, local_id)?,
             };
             let world = cache.paths.component_world_transform_with_bounds(
@@ -9135,13 +9136,6 @@ fn runtime_draw_command(
     });
     let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
     let text_local = draws_text.then_some(command.local_id).flatten();
-    let text_clip_path_commands = if let Some(text_local) = text_local {
-        let layout_constraint = instance.runtime_text_layout_constraint(text_local, layout_bounds);
-        static_text_clip_bounds(runtime, graph, instance, text_local, layout_constraint)?
-            .map(|bounds| runtime_text_clip_path_commands(bounds, shape_world))
-    } else {
-        None
-    };
     let text_shape_paints = if draws_text {
         Some(path_cache.text_shape_paint_commands(
             runtime,
@@ -9150,6 +9144,17 @@ fn runtime_draw_command(
             command,
             layout_bounds,
         )?)
+    } else {
+        None
+    };
+    let text_clip_path_commands = if let Some(text_local) = text_local
+        && text_shape_paints
+            .as_ref()
+            .is_some_and(|paints| !paints.is_empty())
+    {
+        let layout_constraint = instance.runtime_text_layout_constraint(text_local, layout_bounds);
+        static_text_clip_bounds(runtime, graph, instance, text_local, layout_constraint)?
+            .map(|bounds| runtime_text_clip_path_commands(bounds, shape_world))
     } else {
         None
     };

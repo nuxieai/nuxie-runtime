@@ -86,6 +86,31 @@ pub(crate) fn static_text_layout_measure_bounds(
 ) -> Option<(f32, f32, f32, f32)> {
     if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
         && let Ok(Some(bounds)) =
+            slice.measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
+    {
+        return Some(bounds);
+    }
+    static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None).map(
+        |(_x, _y, width, height)| {
+            (
+                0.0,
+                0.0,
+                width.min(layout_constraint.width),
+                height.min(layout_constraint.height),
+            )
+        },
+    )
+}
+
+pub(crate) fn static_text_controlled_layout_bounds(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: RuntimeTextLayoutConstraint,
+) -> Option<(f32, f32, f32, f32)> {
+    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
+        && let Ok(Some(bounds)) =
             slice.local_bounds_with_layout_constraint(runtime, instance, layout_constraint)
     {
         return Some(bounds);
@@ -164,7 +189,7 @@ pub(crate) fn text_input_layout_measure_bounds(
 ) -> Option<(f32, f32, f32, f32)> {
     StaticTextSlice::from_text_input_graph(runtime, graph, text_input_local)
         .ok()?
-        .local_bounds_with_layout_constraint(runtime, instance, layout_constraint)
+        .measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
         .ok()
         .flatten()
 }
@@ -417,6 +442,12 @@ struct StaticVerticalTrim {
 struct StaticTextRenderData {
     path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
     local_transform: Mat2D,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StaticTextLayoutBoundsPurpose {
+    Measure,
+    Controlled,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1401,6 +1432,35 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         layout_constraint: RuntimeTextLayoutConstraint,
     ) -> Result<Option<(f32, f32, f32, f32)>> {
+        self.layout_bounds_with_constraint(
+            runtime,
+            instance,
+            layout_constraint,
+            StaticTextLayoutBoundsPurpose::Controlled,
+        )
+    }
+
+    fn measure_bounds_with_layout_constraint(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: RuntimeTextLayoutConstraint,
+    ) -> Result<Option<(f32, f32, f32, f32)>> {
+        self.layout_bounds_with_constraint(
+            runtime,
+            instance,
+            layout_constraint,
+            StaticTextLayoutBoundsPurpose::Measure,
+        )
+    }
+
+    fn layout_bounds_with_constraint(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: RuntimeTextLayoutConstraint,
+        purpose: StaticTextLayoutBoundsPurpose,
+    ) -> Result<Option<(f32, f32, f32, f32)>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
             .iter()
@@ -1409,10 +1469,20 @@ impl<'a> StaticTextSlice<'a> {
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
         if text.is_empty() || font_size < 0.0 {
-            return self.unshaped_local_bounds(runtime, instance, Some(layout_constraint));
+            return match purpose {
+                StaticTextLayoutBoundsPurpose::Measure => Ok(Some((0.0, 0.0, 0.0, 0.0))),
+                StaticTextLayoutBoundsPurpose::Controlled => {
+                    self.unshaped_local_bounds(runtime, instance, Some(layout_constraint))
+                }
+            };
         }
         let Some(font_bytes) = base_style.font_bytes(instance) else {
-            return self.unshaped_local_bounds(runtime, instance, Some(layout_constraint));
+            return match purpose {
+                StaticTextLayoutBoundsPurpose::Measure => Ok(Some((0.0, 0.0, 0.0, 0.0))),
+                StaticTextLayoutBoundsPurpose::Controlled => {
+                    self.unshaped_local_bounds(runtime, instance, Some(layout_constraint))
+                }
+            };
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
@@ -1469,34 +1539,59 @@ impl<'a> StaticTextSlice<'a> {
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .fold(0.0f32, f32::max);
-        let sizing = self.effective_sizing(runtime, instance, Some(layout_constraint))?;
-        let width = match sizing {
-            TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED => {
-                self.effective_width(runtime, instance, Some(layout_constraint))?
+        let sizing = match purpose {
+            StaticTextLayoutBoundsPurpose::Measure => self.authored_sizing(runtime, instance)?,
+            StaticTextLayoutBoundsPurpose::Controlled => {
+                self.effective_sizing(runtime, instance, Some(layout_constraint))?
             }
-            _ => measured_width,
+        };
+        let width = match (purpose, sizing) {
+            (
+                StaticTextLayoutBoundsPurpose::Measure,
+                TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED,
+            ) => self
+                .text_width(runtime, instance)?
+                .min(layout_constraint.width),
+            (StaticTextLayoutBoundsPurpose::Measure, _) => {
+                measured_width.min(layout_constraint.width)
+            }
+            (
+                StaticTextLayoutBoundsPurpose::Controlled,
+                TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED,
+            ) => self.effective_width(runtime, instance, Some(layout_constraint))?,
+            (StaticTextLayoutBoundsPurpose::Controlled, _) => measured_width,
         };
         let min_y = self.static_text_min_y(runtime, instance, &line_metrics)?;
         let measured_bottom = line_metrics
             .last()
             .map(|metrics| min_y + metrics.bottom)
             .unwrap_or(min_y);
-        let height = match sizing {
-            TEXT_SIZING_FIXED => {
+        let measured_height = || -> Result<f32> {
+            let trim = self.static_vertical_trim(
+                runtime,
+                instance,
+                &lines,
+                &line_metrics,
+                &resolved_runs,
+                font_scale,
+            )?;
+            Ok((measured_bottom - trim.top - trim.bottom).max(min_y) - min_y)
+        };
+        let height = match (purpose, sizing) {
+            (StaticTextLayoutBoundsPurpose::Measure, TEXT_SIZING_FIXED) => self
+                .text_height(runtime, instance)?
+                .min(layout_constraint.height),
+            (StaticTextLayoutBoundsPurpose::Measure, _) => {
+                measured_height()?.min(layout_constraint.height)
+            }
+            (StaticTextLayoutBoundsPurpose::Controlled, TEXT_SIZING_FIXED) => {
                 self.effective_height(runtime, instance, Some(layout_constraint))?
             }
-            _ => {
-                let trim = self.static_vertical_trim(
-                    runtime,
-                    instance,
-                    &lines,
-                    &line_metrics,
-                    &resolved_runs,
-                    font_scale,
-                )?;
-                (measured_bottom - trim.top - trim.bottom).max(min_y) - min_y
-            }
+            (StaticTextLayoutBoundsPurpose::Controlled, _) => measured_height()?,
         };
+        if purpose == StaticTextLayoutBoundsPurpose::Measure {
+            return Ok(Some((0.0, 0.0, width, height)));
+        }
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
         let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
         Ok(Some((
@@ -2141,6 +2236,13 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<u64> {
+        let authored = self.authored_sizing(runtime, instance)?;
+        Ok(layout_constraint
+            .map(|constraint| constraint.effective_sizing(authored))
+            .unwrap_or(authored))
+    }
+
+    fn authored_sizing(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<u64> {
         if self.kind == StaticTextKind::TextInput {
             return Ok(if self.text_input_multiline(runtime, instance)? {
                 TEXT_SIZING_AUTO_HEIGHT
@@ -2148,10 +2250,7 @@ impl<'a> StaticTextSlice<'a> {
                 TEXT_SIZING_AUTO_WIDTH
             });
         }
-        let authored = self.text_uint_property(runtime, instance, "sizingValue")?;
-        Ok(layout_constraint
-            .map(|constraint| constraint.effective_sizing(authored))
-            .unwrap_or(authored))
+        self.text_uint_property(runtime, instance, "sizingValue")
     }
 
     fn static_text_min_y(
@@ -4665,7 +4764,7 @@ mod tests {
         decoded
     }
 
-    fn baseline_origin_text_runtime() -> (RuntimeFile, GraphFile) {
+    fn baseline_origin_text_runtime_with_sizing(sizing_value: u64) -> (RuntimeFile, GraphFile) {
         let records = vec![
             authoring_record("Backboard", Vec::new()),
             authoring_record(
@@ -4690,11 +4789,7 @@ mod tests {
             authoring_record(
                 "Text",
                 vec![
-                    property(
-                        "Text",
-                        "sizingValue",
-                        AuthoringValue::Uint(TEXT_SIZING_FIXED),
-                    ),
+                    property("Text", "sizingValue", AuthoringValue::Uint(sizing_value)),
                     property("Text", "width", AuthoringValue::Double(80.0)),
                     property("Text", "height", AuthoringValue::Double(50.0)),
                     property(
@@ -4735,6 +4830,10 @@ mod tests {
         let graph =
             GraphFile::from_runtime_file(&runtime).expect("baseline-origin Text graph builds");
         (runtime, graph)
+    }
+
+    fn baseline_origin_text_runtime() -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing(TEXT_SIZING_FIXED)
     }
 
     fn assert_close(actual: f32, expected: f32) {
@@ -4792,5 +4891,31 @@ mod tests {
         assert_close(clip_top_left.1, local_bounds.1);
         assert_close(clip_bottom_right.0, local_bounds.0 + local_bounds.2);
         assert_close(clip_bottom_right.1, local_bounds.1 + local_bounds.3);
+    }
+
+    #[test]
+    fn layout_measure_uses_authored_sizing_before_controlled_bounds() {
+        let (runtime, graphs) = baseline_origin_text_runtime_with_sizing(TEXT_SIZING_AUTO_HEIGHT);
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let constraint = RuntimeTextLayoutConstraint {
+            width: 200.0,
+            height: 100.0,
+            width_scale_type: 0,
+            height_scale_type: 0,
+        };
+
+        let measured = slice
+            .measure_bounds_with_layout_constraint(&runtime, &instance, constraint)
+            .expect("Text measure computes")
+            .expect("Text has measured bounds");
+        let controlled = slice
+            .local_bounds_with_layout_constraint(&runtime, &instance, constraint)
+            .expect("controlled Text bounds compute")
+            .expect("Text has controlled bounds");
+
+        assert_close(measured.2, 80.0);
+        assert_close(controlled.2, 200.0);
     }
 }

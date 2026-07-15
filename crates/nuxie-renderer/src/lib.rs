@@ -1344,7 +1344,17 @@ impl WgpuFrame {
         let previous_active = self.msaa_path_clips.last().cloned();
 
         if current_clips.is_empty() {
-            return Some((Vec::new(), 0));
+            let mut scheduled = Vec::new();
+            if self.msaa_path_clip_id != 0 {
+                if let Some(active) = previous_active.as_ref() {
+                    scheduled.push(
+                        self.msaa_clip_reset_draw(active, MsaaClipResetAction::ClearPrevious),
+                    );
+                }
+            }
+            self.msaa_path_clips.clear();
+            self.msaa_path_clip_id = 0;
+            return Some((scheduled, 0));
         }
 
         // This is RiveRenderer::applyClip's scan for the clip ID currently in
@@ -2578,10 +2588,12 @@ impl WgpuFrame {
         let encode_fallback_run =
             |draws: &[SolidDraw],
              draw_groups: Option<&[u32]>,
+             draw_prepasses: Option<&[bool]>,
              logical_flush_starts: &[usize],
              clear_target: bool,
              encoder: &mut wgpu::CommandEncoder| {
                 debug_assert!(draw_groups.is_none_or(|groups| groups.len() == draws.len()));
+                debug_assert!(draw_prepasses.is_none_or(|prepasses| prepasses.len() == draws.len()));
                 debug_assert!(logical_flush_starts.first().is_none_or(|start| *start == 0));
                 let has_advanced_msaa = draws.iter().any(draw_uses_advanced_blend);
                 let destination_texture = has_advanced_msaa.then(|| {
@@ -2635,6 +2647,12 @@ impl WgpuFrame {
                     Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
+                #[derive(Clone, Copy)]
+                struct PreparedDrawSchedule {
+                    draw_group: u32,
+                    is_prepass: bool,
+                    logical_flush: usize,
+                }
                 let gradient_batch = prepare_gradient_batch(draws);
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
                 if gradient_batch.height != 0 {
@@ -2648,6 +2666,7 @@ impl WgpuFrame {
                     gradient_batch.height,
                 );
                 let mut prepared_draws = Vec::with_capacity(draws.len());
+                let mut prepared_schedules = Vec::with_capacity(draws.len());
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let z_index = draw_groups.map_or_else(
                         || {
@@ -2656,6 +2675,13 @@ impl WgpuFrame {
                         },
                         |groups| groups[draw_index],
                     );
+                    let schedule = PreparedDrawSchedule {
+                        draw_group: z_index,
+                        is_prepass: draw_prepasses.is_some_and(|prepasses| prepasses[draw_index]),
+                        logical_flush: logical_flush_starts
+                            .partition_point(|&start| start <= draw_index)
+                            .saturating_sub(1),
+                    };
                     if let DrawRole::ClipReset { bounds, action } = draw.role {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
                         prepared_draws.push(PreparedDraw::ClipReset(
@@ -2668,6 +2694,7 @@ impl WgpuFrame {
                             ),
                             action,
                         ));
+                        prepared_schedules.push(schedule);
                         continue;
                     }
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
@@ -2724,6 +2751,7 @@ impl WgpuFrame {
                             } else {
                                 PreparedDraw::NestedClipUpdate(prepared, draw.path.fill_rule)
                             });
+                            prepared_schedules.push(schedule);
                         }
                         continue;
                     }
@@ -2785,6 +2813,7 @@ impl WgpuFrame {
                             ),
                             options,
                         ));
+                        prepared_schedules.push(schedule);
                         continue;
                     }
                     if draw.paint.feather != 0.0
@@ -2967,6 +2996,7 @@ impl WgpuFrame {
                                     [left as u32, top as u32, right as u32, bottom as u32],
                                 ),
                             ));
+                            prepared_schedules.push(schedule);
                             continue;
                         }
                     }
@@ -3115,6 +3145,7 @@ impl WgpuFrame {
                             } else {
                                 PreparedDraw::Stroke(prepared, options)
                             });
+                            prepared_schedules.push(schedule);
                             continue;
                         }
                     }
@@ -3139,8 +3170,10 @@ impl WgpuFrame {
                             cover_buffer,
                             draw.path.fill_rule,
                         ));
+                        prepared_schedules.push(schedule);
                     }
                 }
+                debug_assert_eq!(prepared_draws.len(), prepared_schedules.len());
                 let prepared_advanced_count = prepared_draws
                     .iter()
                     .filter(|draw| match draw {
@@ -3214,44 +3247,50 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                 }
-                #[derive(Clone, Copy)]
+                #[derive(Clone)]
                 struct SegmentEnd {
                     index: usize,
                     starts_logical_flush: bool,
-                    copies_destination: bool,
-                    submits_encoder: bool,
+                    destination_copy_bounds: Vec<[u32; 4]>,
                 }
-                let mut segment_ends = prepared_draws
+                let mut segment_ends = Vec::new();
+                let prepared_draw_groups = prepared_schedules
                     .iter()
-                    .enumerate()
-                    .filter_map(|(index, draw)| {
-                        destination_copy_bounds(draw).map(|_| SegmentEnd {
-                            index,
-                            starts_logical_flush: false,
-                            copies_destination: true,
-                            submits_encoder: false,
-                        })
-                    })
+                    .map(|schedule| schedule.draw_group)
                     .collect::<Vec<_>>();
-                // A destination-read draw ends C++'s MSAA submission. The
-                // WebGPU renderer restarts it with Load for color, depth, and
-                // stencil after copying the resolved destination texture.
-                segment_ends.extend(prepared_draws.iter().enumerate().filter_map(
-                    |(index, draw)| {
-                        destination_copy_bounds(draw).map(|_| SegmentEnd {
-                            index: index + 1,
-                            starts_logical_flush: false,
-                            copies_destination: false,
-                            submits_encoder: true,
-                        })
-                    },
-                ));
+                let prepared_prepasses = prepared_schedules
+                    .iter()
+                    .map(|schedule| schedule.is_prepass)
+                    .collect::<Vec<_>>();
+                let prepared_logical_flushes = prepared_schedules
+                    .iter()
+                    .map(|schedule| schedule.logical_flush)
+                    .collect::<Vec<_>>();
+                // C++ attaches a destination-read barrier to the first
+                // subpass-0 batch in its draw group. Negative-key opaque
+                // prepasses stay before that barrier, so they can never be
+                // interrupted by a resolve/copy.
+                for (index, draw) in prepared_draws.iter().enumerate() {
+                    let Some(bounds) = destination_copy_bounds(draw) else {
+                        continue;
+                    };
+                    let group_head = msaa_destination_copy_head(
+                        &prepared_draw_groups,
+                        &prepared_prepasses,
+                        &prepared_logical_flushes,
+                        index,
+                    );
+                    segment_ends.push(SegmentEnd {
+                        index: group_head,
+                        starts_logical_flush: false,
+                        destination_copy_bounds: vec![bounds],
+                    });
+                }
                 segment_ends.extend(logical_flush_starts.iter().copied().skip(1).map(|index| {
                     SegmentEnd {
                         index,
                         starts_logical_flush: true,
-                        copies_destination: false,
-                        submits_encoder: false,
+                        destination_copy_bounds: Vec::new(),
                     }
                 }));
                 segment_ends.sort_unstable_by_key(|segment| segment.index);
@@ -3261,8 +3300,9 @@ impl WgpuFrame {
                     let merged = if let Some(previous) = merged_segment_ends.last_mut() {
                         if previous.index == segment.index {
                             previous.starts_logical_flush |= segment.starts_logical_flush;
-                            previous.copies_destination |= segment.copies_destination;
-                            previous.submits_encoder |= segment.submits_encoder;
+                            previous
+                                .destination_copy_bounds
+                                .extend(segment.destination_copy_bounds.iter().copied());
                             true
                         } else {
                             false
@@ -3277,8 +3317,7 @@ impl WgpuFrame {
                 merged_segment_ends.push(SegmentEnd {
                     index: prepared_draws.len(),
                     starts_logical_flush: false,
-                    copies_destination: false,
-                    submits_encoder: false,
+                    destination_copy_bounds: Vec::new(),
                 });
                 let mut segment_start = 0;
                 let mut starts_logical_flush = true;
@@ -3599,47 +3638,41 @@ impl WgpuFrame {
                         }
                     }
                     drop(pass);
-                    if segment_end.copies_destination {
-                        let bounds = destination_copy_bounds(&prepared_draws[segment_end.index])
-                            .expect("MSAA destination barrier must precede an advanced draw");
-                        let [left, top, right, bottom] = bounds;
-                        if left == right || top == bottom {
-                            if segment_end.starts_logical_flush || segment_end.submits_encoder {
-                                submit_and_wait(encoder)?;
-                            }
-                            segment_start = segment_end.index;
-                            starts_logical_flush = segment_end.starts_logical_flush;
-                            continue;
-                        }
-                        let origin = wgpu::Origin3d {
-                            x: left,
-                            y: top,
-                            z: 0,
-                        };
+                    if !segment_end.destination_copy_bounds.is_empty() {
                         let destination_texture = destination_texture
                             .as_ref()
                             .expect("advanced MSAA draw prepared without destination texture");
-                        encoder.copy_texture_to_texture(
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &texture,
-                                mip_level: 0,
-                                origin,
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::TexelCopyTextureInfo {
-                                texture: destination_texture,
-                                mip_level: 0,
-                                origin,
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::Extent3d {
-                                width: right - left,
-                                height: bottom - top,
-                                depth_or_array_layers: 1,
-                            },
-                        );
+                        for [left, top, right, bottom] in &segment_end.destination_copy_bounds {
+                            if left == right || top == bottom {
+                                continue;
+                            }
+                            let origin = wgpu::Origin3d {
+                                x: *left,
+                                y: *top,
+                                z: 0,
+                            };
+                            encoder.copy_texture_to_texture(
+                                wgpu::TexelCopyTextureInfo {
+                                    texture: &texture,
+                                    mip_level: 0,
+                                    origin,
+                                    aspect: wgpu::TextureAspect::All,
+                                },
+                                wgpu::TexelCopyTextureInfo {
+                                    texture: destination_texture,
+                                    mip_level: 0,
+                                    origin,
+                                    aspect: wgpu::TextureAspect::All,
+                                },
+                                wgpu::Extent3d {
+                                    width: *right - *left,
+                                    height: *bottom - *top,
+                                    depth_or_array_layers: 1,
+                                },
+                            );
+                        }
                     }
-                    if segment_end.starts_logical_flush || segment_end.submits_encoder {
+                    if segment_end.starts_logical_flush {
                         submit_and_wait(encoder)?;
                     }
                     segment_start = segment_end.index;
@@ -3658,7 +3691,7 @@ impl WgpuFrame {
                 Ok(())
             };
         if self.draws.is_empty() {
-            encode_fallback_run(&self.draws, None, &[0], true, &mut encoder)?;
+            encode_fallback_run(&self.draws, None, None, &[0], true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
             if self.draws.len() > MAX_MSAA_DRAWS_PER_SUBMISSION
                 && msaa_draws_can_submit_independently(&self.draws)
@@ -3670,7 +3703,7 @@ impl WgpuFrame {
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    let (scheduled_draws, draw_groups) = ordered_msaa_draws(
+                    let (scheduled_draws, draw_groups, draw_prepasses) = ordered_msaa_draws(
                         &self.draws[flush_start..flush_end],
                         self.width,
                         self.height,
@@ -3683,6 +3716,7 @@ impl WgpuFrame {
                         encode_fallback_run(
                             &scheduled_draws[chunk_start..chunk_end],
                             Some(&draw_groups[chunk_start..chunk_end]),
+                            Some(&draw_prepasses[chunk_start..chunk_end]),
                             &[0],
                             clear_target,
                             &mut encoder,
@@ -3694,6 +3728,7 @@ impl WgpuFrame {
             } else {
                 let mut scheduled_draws = Vec::with_capacity(self.draws.len());
                 let mut draw_groups = Vec::with_capacity(self.draws.len());
+                let mut draw_prepasses = Vec::with_capacity(self.draws.len());
                 let mut scheduled_flush_starts =
                     Vec::with_capacity(self.logical_flush_starts.len());
                 for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
@@ -3703,18 +3738,20 @@ impl WgpuFrame {
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    let (flush_draws, flush_groups) = ordered_msaa_draws(
+                    let (flush_draws, flush_groups, flush_prepasses) = ordered_msaa_draws(
                         &self.draws[flush_start..flush_end],
                         self.width,
                         self.height,
                     );
                     scheduled_draws.extend(flush_draws);
                     draw_groups.extend(flush_groups);
+                    draw_prepasses.extend(flush_prepasses);
                 }
                 debug_assert_eq!(scheduled_draws.len(), self.draws.len());
                 encode_fallback_run(
                     &scheduled_draws,
                     Some(&draw_groups),
+                    Some(&draw_prepasses),
                     &scheduled_flush_starts,
                     true,
                     &mut encoder,
@@ -3723,6 +3760,7 @@ impl WgpuFrame {
         } else if self.mode == RenderMode::Msaa {
             encode_fallback_run(
                 &self.draws,
+                None,
                 None,
                 &self.logical_flush_starts,
                 true,
@@ -3834,6 +3872,7 @@ impl WgpuFrame {
                 } else {
                     encode_fallback_run(
                         &self.draws[start..end],
+                        None,
                         None,
                         &[0],
                         clear_target,
@@ -5333,26 +5372,35 @@ fn msaa_draw_uses_opaque_prepass(draw: &SolidDraw) -> bool {
     msaa_draw_has_opaque_paint(draw) && matches!(draw.role, DrawRole::Content { clip_id: 0 })
 }
 
-fn rects_intersect(left: intersection_board::Rect, right: intersection_board::Rect) -> bool {
-    left.left < right.right
-        && left.top < right.bottom
-        && left.right > right.left
-        && left.bottom > right.top
+fn msaa_destination_copy_head(
+    draw_groups: &[u32],
+    draw_prepasses: &[bool],
+    logical_flushes: &[usize],
+    destination_read_index: usize,
+) -> usize {
+    debug_assert_eq!(draw_groups.len(), draw_prepasses.len());
+    debug_assert_eq!(draw_groups.len(), logical_flushes.len());
+    let group = draw_groups[destination_read_index];
+    let logical_flush = logical_flushes[destination_read_index];
+    draw_groups
+        .iter()
+        .zip(draw_prepasses)
+        .zip(logical_flushes)
+        .position(|((&candidate_group, &is_prepass), &candidate_flush)| {
+            candidate_group == group && candidate_flush == logical_flush && !is_prepass
+        })
+        .expect("MSAA destination-read group must contain a subpass")
 }
 
 fn ordered_msaa_draws(
     draws: &[SolidDraw],
     viewport_width: u32,
     viewport_height: u32,
-) -> (Vec<SolidDraw>, Vec<u32>) {
-    // renderer/src/render_context.cpp sorts negative-key opaque prepasses
-    // front-to-back before positive-key clipped/translucent subpasses. Until
-    // Rust records those subpasses separately, move only the opaque draws that
-    // must precede an overlapping destination-read draw.
-    let rects = draws
-        .iter()
-        .map(|draw| msaa_draw_rect(draw, viewport_width, viewport_height))
-        .collect::<Vec<_>>();
+) -> (Vec<SolidDraw>, Vec<u32>, Vec<bool>) {
+    // renderer/src/render_context.cpp puts every unclipped opaque MSAA draw in
+    // the negative-key prepass list, then sorts it before all positive-key
+    // subpasses. This must not depend on rectangle overlap: a destination-read
+    // barrier belongs before the first batch in the draw group.
     let mut prepasses = Vec::<(u32, usize)>::new();
     let mut subpasses = Vec::<(u32, usize)>::new();
     for (group_index, group) in disjoint_msaa_draw_indices(draws, viewport_width, viewport_height)
@@ -5362,16 +5410,7 @@ fn ordered_msaa_draws(
         let z_index = u32::try_from(group_index + 1)
             .expect("MSAA draw group must fit the path-data contract");
         for draw_index in group {
-            let needs_prepass = msaa_draw_uses_opaque_prepass(&draws[draw_index])
-                && draws[..draw_index]
-                    .iter()
-                    .enumerate()
-                    .any(|(prior_index, prior)| {
-                        matches!(prior.role, DrawRole::Content { clip_id: 0 })
-                            && draw_uses_advanced_blend(prior)
-                            && rects_intersect(rects[draw_index], rects[prior_index])
-                    });
-            if needs_prepass {
+            if msaa_draw_uses_opaque_prepass(&draws[draw_index]) {
                 prepasses.push((z_index, draw_index));
             } else {
                 subpasses.push((z_index, draw_index));
@@ -5379,14 +5418,17 @@ fn ordered_msaa_draws(
         }
     }
     prepasses.sort_by(|left, right| right.0.cmp(&left.0));
+    let prepass_count = prepasses.len();
     prepasses.extend(subpasses);
     let mut scheduled_draws = Vec::with_capacity(prepasses.len());
     let mut draw_groups = Vec::with_capacity(prepasses.len());
-    for (z_index, draw_index) in prepasses {
+    let mut draw_prepasses = Vec::with_capacity(prepasses.len());
+    for (index, (z_index, draw_index)) in prepasses.into_iter().enumerate() {
         draw_groups.push(z_index);
+        draw_prepasses.push(index < prepass_count);
         scheduled_draws.push(draws[draw_index].clone());
     }
-    (scheduled_draws, draw_groups)
+    (scheduled_draws, draw_groups, draw_prepasses)
 }
 
 fn msaa_draws_can_submit_independently(draws: &[SolidDraw]) -> bool {
@@ -6601,15 +6643,16 @@ mod tests {
 
         assert_eq!(colors, vec![vec![1, 3], vec![], vec![], vec![2]]);
 
-        let (scheduled, z_indices) = ordered_msaa_draws(&draws, 64, 64);
+        let (scheduled, z_indices, prepasses) = ordered_msaa_draws(&draws, 64, 64);
         assert_eq!(
             scheduled
                 .iter()
                 .map(|draw| draw.paint.color & 0xff)
                 .collect::<Vec<_>>(),
-            [1, 3, 2]
+            [2, 1, 3]
         );
-        assert_eq!(z_indices, [1, 1, 4]);
+        assert_eq!(z_indices, [4, 1, 1]);
+        assert_eq!(prepasses, [true, true, true]);
     }
 
     #[test]
@@ -6631,7 +6674,7 @@ mod tests {
             make_draw(3, BlendMode::SrcOver),
         ];
 
-        let (scheduled, z_indices) = ordered_msaa_draws(&draws, 64, 64);
+        let (scheduled, z_indices, prepasses) = ordered_msaa_draws(&draws, 64, 64);
 
         assert_eq!(
             scheduled
@@ -6641,6 +6684,58 @@ mod tests {
             [3, 2, 1]
         );
         assert_eq!(z_indices, [3, 2, 1]);
+        assert_eq!(prepasses, [true, true, false]);
+    }
+
+    #[test]
+    fn msaa_scheduler_promotes_non_overlapping_opaque_draws_before_destination_reads() {
+        let make_draw = |rect, color, blend_mode| SolidDraw {
+            path: rect_path(rect, FillRule::NonZero),
+            paint: WgpuPaint {
+                color: 0xff00_0000u32 | color,
+                blend_mode,
+                ..WgpuPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let draws = [
+            make_draw([0.0, 0.0, 10.0, 10.0], 1, BlendMode::Difference),
+            make_draw([20.0, 20.0, 30.0, 30.0], 2, BlendMode::SrcOver),
+        ];
+
+        let (scheduled, z_indices, prepasses) = ordered_msaa_draws(&draws, 64, 64);
+
+        assert_eq!(
+            scheduled
+                .iter()
+                .map(|draw| draw.paint.color & 0xff)
+                .collect::<Vec<_>>(),
+            [2, 1]
+        );
+        assert_eq!(z_indices, [1, 1]);
+        assert_eq!(prepasses, [true, false]);
+    }
+
+    #[test]
+    fn msaa_destination_copy_starts_at_subpass_head_in_its_logical_flush() {
+        // The first two entries model an opaque negative-key prepass and a
+        // clipped SrcOver subpass in one group. The latter is where C++ puts
+        // the dstBlend barrier for the advanced draw at index 2. The final
+        // pair reuses group 1 in a new logical flush and must not find index 1.
+        let draw_groups = [1, 1, 1, 1, 1];
+        let draw_prepasses = [true, false, false, true, false];
+        let logical_flushes = [0, 0, 0, 1, 1];
+
+        assert_eq!(
+            msaa_destination_copy_head(&draw_groups, &draw_prepasses, &logical_flushes, 2),
+            1
+        );
+        assert_eq!(
+            msaa_destination_copy_head(&draw_groups, &draw_prepasses, &logical_flushes, 4),
+            4
+        );
     }
 
     #[test]
@@ -7428,6 +7523,50 @@ mod tests {
         assert_eq!(clip_id, 4);
         assert_eq!(frame.clips[0].clip_id, 3);
         assert_eq!(frame.clips[1].clip_id, 4);
+    }
+
+    #[test]
+    fn msaa_clip_stack_clears_resident_clip_before_unclipped_content() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let clip = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.save();
+        frame.clip_path(&clip);
+        let (initial, initial_id) = frame.prepare_scheduled_clip_updates().unwrap();
+        assert_eq!(initial.len(), 1);
+        assert_eq!(initial_id, 1);
+        frame.restore();
+
+        let (unclipped, clip_id) = frame.prepare_scheduled_clip_updates().unwrap();
+        assert_eq!(clip_id, 0);
+        assert!(matches!(
+            unclipped.as_slice(),
+            [SolidDraw {
+                role: DrawRole::ClipReset {
+                    action: MsaaClipResetAction::ClearPrevious,
+                    ..
+                },
+                ..
+            }]
+        ));
+        assert_eq!(frame.msaa_path_clip_id, 0);
+        assert!(frame.msaa_path_clips.is_empty());
+
+        frame.save();
+        frame.clip_path(&clip);
+        let (reentered, reentered_id) = frame.prepare_scheduled_clip_updates().unwrap();
+        assert_eq!(reentered_id, 2);
+        assert!(matches!(
+            reentered.as_slice(),
+            [SolidDraw {
+                role: DrawRole::ClipUpdate {
+                    replacement_id: 2,
+                    parent_id: 0
+                },
+                ..
+            }]
+        ));
     }
 
     #[test]

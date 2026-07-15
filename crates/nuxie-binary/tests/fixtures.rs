@@ -7970,6 +7970,28 @@ fn dependency_test_preserves_stable_object_slots_and_inherited_properties() {
 }
 
 #[test]
+fn artboard_local_object_slots_batch_matches_point_queries_and_preserves_nulls() {
+    let file = read_fixture("graph/dependency_test.riv");
+
+    let slots = file
+        .artboard_local_object_slots(0)
+        .expect("dependency_test has an artboard");
+
+    assert!(
+        slots.iter().any(Option::is_none),
+        "the abstract BindableProperty must remain an indexed null slot"
+    );
+    for (local_index, slot) in slots.iter().enumerate() {
+        assert_eq!(
+            slot.map(|object| object.id),
+            file.artboard_local_object(0, local_index)
+                .map(|object| object.id),
+            "batch and point lookup disagree at local slot {local_index}"
+        );
+    }
+}
+
+#[test]
 fn two_artboards_preserves_named_artboard_slots() {
     let file = read_fixture("minimal/two_artboards.riv");
 

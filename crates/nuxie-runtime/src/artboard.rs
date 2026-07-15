@@ -3542,7 +3542,10 @@ fn apply_authored_nested_input_values(
 mod tests {
     use super::*;
     use crate::Mat2D;
-    use crate::components::{RuntimeComponentCapabilities, TransformRuntimeState};
+    use crate::components::{
+        RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
+        reset_solo_mapping_work, solo_mapping_work,
+    };
     use crate::data_bind_graph::{
         RuntimeDataBindGraphConverter, runtime_data_bind_graph_reverse_convert_value,
     };
@@ -4878,6 +4881,141 @@ mod tests {
             collapsed,
             "component {local_id} collapse mismatch"
         );
+    }
+
+    #[test]
+    fn instantiating_an_artboard_without_solos_skips_solo_mapping_analysis() {
+        let bytes = synthetic_riv(9600, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 1)]);
+        });
+
+        reset_solo_mapping_work();
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 1, false);
+        assert_collapsed(&instance, 2, false);
+        assert_eq!(solo_mapping_work(), SoloMappingWork::default());
+    }
+
+    #[test]
+    fn imported_solo_mapping_preserves_a_null_slot_before_the_active_child() {
+        let bytes = synthetic_riv(9604, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1: abstract runtime objects become indexed null slots in
+            // C++ Artboard::objects(). They must not compact later local ids.
+            push_synthetic_object(bytes, "BindableProperty", &[]);
+            // Local 2: solo; local 4 is active across the null slot.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 4)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 2)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 2)]);
+        });
+
+        reset_solo_mapping_work();
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 3, true);
+        assert_collapsed(&instance, 4, false);
+        let mapping = &instance.solos[0].runtime_local_by_cpp_local;
+        assert_eq!(mapping.len(), 4);
+        assert_eq!(mapping.get(&0), Some(&0));
+        assert!(!mapping.contains_key(&1));
+        assert_eq!(mapping.get(&2), Some(&2));
+        assert_eq!(mapping.get(&3), Some(&3));
+        assert_eq!(mapping.get(&4), Some(&4));
+        assert_eq!(
+            solo_mapping_work(),
+            SoloMappingWork {
+                analyses: 1,
+                batch_queries: 1,
+                visited_slots: 5,
+            }
+        );
+    }
+
+    fn imported_solo_mapping_work(child_count: usize) -> SoloMappingWork {
+        let bytes = synthetic_riv(9605 + child_count as u64, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
+            for _ in 0..child_count {
+                push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            }
+        });
+
+        reset_solo_mapping_work();
+        let instance = instance_from_riv(&bytes);
+        assert_eq!(instance.solos.len(), 1);
+        solo_mapping_work()
+    }
+
+    #[test]
+    fn solo_mapping_analysis_is_one_batched_linear_pass() {
+        let small_child_count = 8;
+        let large_child_count = 64;
+
+        let small = imported_solo_mapping_work(small_child_count);
+        let large = imported_solo_mapping_work(large_child_count);
+
+        assert_eq!(small.analyses, 1);
+        assert_eq!(large.analyses, 1);
+        assert_eq!(small.batch_queries, 1);
+        assert_eq!(large.batch_queries, 1);
+        assert_eq!(small.visited_slots, small_child_count + 2);
+        assert_eq!(large.visited_slots, large_child_count + 2);
+    }
+
+    #[test]
+    fn imported_solos_share_one_mapping_without_behavior_drift() {
+        let bytes = synthetic_riv(9670, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1 with active/inactive children 2 and 3.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            // Local 4 with active/inactive children 5 and 6.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 5)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+        });
+
+        reset_solo_mapping_work();
+        let mut instance = instance_from_riv(&bytes);
+
+        assert_eq!(instance.solos.len(), 2);
+        assert!(std::sync::Arc::ptr_eq(
+            &instance.solos[0].runtime_local_by_cpp_local,
+            &instance.solos[1].runtime_local_by_cpp_local,
+        ));
+        assert_eq!(
+            solo_mapping_work(),
+            SoloMappingWork {
+                analyses: 1,
+                batch_queries: 1,
+                visited_slots: 7,
+            }
+        );
+
+        assert_collapsed(&instance, 2, false);
+        assert_collapsed(&instance, 3, true);
+        assert_collapsed(&instance, 5, false);
+        assert_collapsed(&instance, 6, true);
+
+        assert!(instance.set_solo_active_child_by_index(1, 1.0));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, false);
+        assert_collapsed(&instance, 5, false);
+        assert_collapsed(&instance, 6, true);
+
+        assert!(instance.set_solo_active_child_by_index(4, 1.0));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, false);
+        assert_collapsed(&instance, 5, true);
+        assert_collapsed(&instance, 6, false);
     }
 
     // Regression for the M8 audit finding: apply_initial_solo_collapses only

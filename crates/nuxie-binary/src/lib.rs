@@ -500,11 +500,30 @@ impl RuntimeFile {
         artboard_index: usize,
         local_index: usize,
     ) -> Option<&RuntimeObject> {
+        self.artboard_local_object_slots(artboard_index)?
+            .get(local_index)
+            .copied()
+            .flatten()
+    }
+
+    /// Returns the validated C++ artboard-local object table in one pass.
+    ///
+    /// The vector index is the C++ artboard-local id. `None` entries are
+    /// significant: C++ keeps null slots for abstract, unknown, dropped, or
+    /// invalid local objects, so callers must not compact the result.
+    pub fn artboard_local_object_slots(
+        &self,
+        artboard_index: usize,
+    ) -> Option<Vec<Option<&RuntimeObject>>> {
         let range = self.cpp_artboard_range(artboard_index)?;
         let mut slots = runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
         validate_cpp_artboard_local_slots(&mut slots, &self.objects);
-        let file_index = slots.get(local_index).and_then(|slot| *slot)?;
-        self.object(file_index)
+        Some(
+            slots
+                .into_iter()
+                .map(|file_index| file_index.and_then(|file_index| self.object(file_index)))
+                .collect(),
+        )
     }
 
     pub fn default_artboard(&self) -> Option<&RuntimeObject> {

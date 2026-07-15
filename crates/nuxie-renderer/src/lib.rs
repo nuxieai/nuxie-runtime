@@ -3203,7 +3203,6 @@ impl WgpuFrame {
                     starts_logical_flush: bool,
                     copies_destination: bool,
                     submits_encoder: bool,
-                    resets_depth: bool,
                 }
                 let mut segment_ends = prepared_draws
                     .iter()
@@ -3214,13 +3213,12 @@ impl WgpuFrame {
                             starts_logical_flush: false,
                             copies_destination: true,
                             submits_encoder: false,
-                            resets_depth: false,
                         })
                     })
                     .collect::<Vec<_>>();
-                // A destination-read draw ends C++'s MSAA submission. Its
-                // color and stencil are preserved, but later draws begin with
-                // fresh depth state.
+                // A destination-read draw ends C++'s MSAA submission. The
+                // WebGPU renderer restarts it with Load for color, depth, and
+                // stencil after copying the resolved destination texture.
                 segment_ends.extend(prepared_draws.iter().enumerate().filter_map(
                     |(index, draw)| {
                         destination_copy_bounds(draw).map(|_| SegmentEnd {
@@ -3228,7 +3226,6 @@ impl WgpuFrame {
                             starts_logical_flush: false,
                             copies_destination: false,
                             submits_encoder: true,
-                            resets_depth: true,
                         })
                     },
                 ));
@@ -3238,7 +3235,6 @@ impl WgpuFrame {
                         starts_logical_flush: true,
                         copies_destination: false,
                         submits_encoder: false,
-                        resets_depth: false,
                     }
                 }));
                 segment_ends.sort_unstable_by_key(|segment| segment.index);
@@ -3250,7 +3246,6 @@ impl WgpuFrame {
                             previous.starts_logical_flush |= segment.starts_logical_flush;
                             previous.copies_destination |= segment.copies_destination;
                             previous.submits_encoder |= segment.submits_encoder;
-                            previous.resets_depth |= segment.resets_depth;
                             true
                         } else {
                             false
@@ -3267,14 +3262,12 @@ impl WgpuFrame {
                     starts_logical_flush: false,
                     copies_destination: false,
                     submits_encoder: false,
-                    resets_depth: false,
                 });
                 let mut segment_start = 0;
                 let mut starts_logical_flush = true;
-                let mut resets_depth = false;
                 for (segment_index, segment_end) in merged_segment_ends.into_iter().enumerate() {
                     let first_segment = segment_index == 0;
-                    let reset_depth = first_segment || starts_logical_flush || resets_depth;
+                    let reset_depth = first_segment || starts_logical_flush;
                     let reset_stencil = first_segment || starts_logical_flush;
                     let resolve_target = if has_advanced_msaa {
                         &view
@@ -3599,7 +3592,6 @@ impl WgpuFrame {
                             }
                             segment_start = segment_end.index;
                             starts_logical_flush = segment_end.starts_logical_flush;
-                            resets_depth = segment_end.resets_depth;
                             continue;
                         }
                         let origin = wgpu::Origin3d {
@@ -3635,7 +3627,6 @@ impl WgpuFrame {
                     }
                     segment_start = segment_end.index;
                     starts_logical_flush = segment_end.starts_logical_flush;
-                    resets_depth = segment_end.resets_depth;
                 }
                 if !has_advanced_msaa {
                     self.context.composite_pipeline.encode(
@@ -7403,6 +7394,29 @@ mod tests {
                 "at ({x}, {y}): msaa={msaa_pixel:?} atomic={atomic_pixel:?}"
             );
         }
+    }
+
+    #[test]
+    fn msaa_gradient_destination_reads_restart_with_loaded_depth() {
+        use nuxie_render_stream::RenderStream;
+
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/xfermodes2.rive-stream"
+        )))
+        .unwrap();
+        let (width, height) = stream.frame_size.unwrap();
+        let mut factory = WgpuFactory::new_with_mode(width, height, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+        let pixels = frame.finish().unwrap();
+        let pixel = |x: usize, y: usize| &pixels[(y * width as usize + x) * 4..][..4];
+
+        // These destination-read gradient cells require the C++ WebGPU restart
+        // to Load the prior MSAA depth/stencil attachments after its copy.
+        assert_eq!(pixel(306, 83), [63, 0, 0, 255]);
+        assert_eq!(pixel(332, 20), [1, 22, 0, 181]);
+        assert_eq!(pixel(443, 24), [0, 121, 0, 254]);
     }
 
     #[test]

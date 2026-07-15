@@ -296,11 +296,13 @@ retained set:
    and render-buffer reconstruction are complete. The 732-case Dawn capture
    preserves all 686 prior PNGs byte-for-byte and adds the 46 references. One
    row promotes byte-exact; the remaining 45 are executable renderer work:
-   37 ordinary MSAA gradient paths, three MSAA image meshes, and five MSAA
+   37 ordinary MSAA gradient paths, three MSAA image-mesh streams, and five MSAA
    feathered-gradient advanced blends. No row remains behind a harness
    placeholder. Direct MSAA gradient preparation promotes 17 of the 37 under
    unchanged contracts; the remaining 20 are split into executable clip,
-   stroke, feather, advanced-blend, and edge-residual queues.
+   stroke, feather, advanced-blend, and edge-residual queues. The image-mesh
+   port promotes two rows; same-backend prefix capture proves the third clears
+   every mesh and retains only a later image-rectangle dither-precision gate.
 3. Keep the 59 reviewed platform limitations parked unless new same-backend
    evidence identifies a Rust defect: 58 backend/decoder/precision rows plus
    the native C++ Metal MSAA limitation.

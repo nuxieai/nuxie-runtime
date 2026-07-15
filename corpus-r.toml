@@ -1581,10 +1581,9 @@ stream = "fixtures/renderer/streams/gm/mesh.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mesh-msaa.png"
 mode = "msaa"
 backend = "metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-mesh"
 
 
 [[entry]]
@@ -8178,7 +8177,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-mesh"
+gated = "dawn-wgpu-msaa-image-rect-dither-accumulation"
 
 [[entry]]
 id = "riv-joel_signed-frame-0-clockwise-atomic"
@@ -15964,10 +15963,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-tape-frame-0-
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-image-mesh"
 
 [[entry]]
 id = "riv-target_event-frame-0-clockwise-atomic"

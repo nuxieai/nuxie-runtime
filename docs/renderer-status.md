@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,375, diverges=0, gated=93, total=1,468.
+- Rust wgpu: exact=1,377, diverges=0, gated=91, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -362,7 +362,8 @@ Run `make renderer-golden`.
   624 provenance-bound strict RIV MSAA rows, plus 17 newly exact MSAA
   gradient rows: `gm-{degengrad,rect_grad,verycomplexgrad}`;
   `riv-{bad_skin,bankcard,coin,db_health_tracker,deterministic_mode,new_text}`;
-  all five `riv-rocket` frames; and `riv-{scroll_test,scroll_threshold,zombie_skins}`.
+  all five `riv-rocket` frames; `riv-{scroll_test,scroll_threshold,zombie_skins}`;
+  and the MSAA image-mesh rows `gm-mesh` and `riv-tape-frame-0`.
   The retained rows are
   queryable by their concrete diagnostics in `corpus-r.toml`.
 
@@ -1155,9 +1156,15 @@ Run `make renderer-golden`.
     and includes shader paints in destination-read accounting. Seventeen rows
     promote under unchanged `2/32`; all 20 residuals were probed and split
     into the concrete queues below.
-93. [ ] Port C++ MSAA image-mesh draws for `gm-mesh-msaa`,
+93. [x] Port C++ MSAA image-mesh draws for `gm-mesh-msaa`,
     `riv-jellyfish_test-frame-0-msaa`, and `riv-tape-frame-0-msaa`; preserve
-    typed-buffer, sampler, clipping, blend, and draw-order semantics.
+    typed-buffer, sampler, clipping, blend, and draw-order semantics. The
+    generated C++ WGSL path promotes `gm-mesh-msaa` and `riv-tape-frame-0-msaa`
+    under unchanged contracts. Same-backend C++ Dawn prefix captures prove
+    all 19 Jellyfish meshes remain within delta 2; its three later translucent
+    image rectangles cumulatively introduce 3,691/max 3, 8,548/max 4, then
+    11,988/max 5 pixels. That row is retained under the concrete
+    `dawn-wgpu-msaa-image-rect-dither-accumulation` precision diagnostic.
 94. [ ] Port feathered MSAA gradient strokes, starting with
     `riv-ai_assitant-frame-0-msaa`, then close the five
     `rust-wgpu-msaa-feather-gradient-advanced-blend` rows. Reuse the existing
@@ -3684,3 +3691,12 @@ Run `make renderer-golden`.
   repeated path clips, gradient destination reads, feathered gradient strokes,
   transformed clip rectangles, clipped/stroked composites, and a five-frame
   45-pixel edge residual. Queue item 93 ports the three image meshes next.
+- 2026-07-14: Closed queue item 93 by porting C++'s generated MSAA image-mesh
+  pipeline with typed position/UV/index buffers, sampler state, clip-distance
+  and stencil clipping, fixed and advanced blends, and authored depth order.
+  `gm-mesh-msaa` and `riv-tape-frame-0-msaa` promote under unchanged `2/32`
+  contracts. A disposable five-prefix C++ Dawn oracle proves all 19 Jellyfish
+  meshes stay within delta 2; its three later translucent image rectangles
+  accumulate 3,691/max 3, 8,548/max 4, and 11,988/max 5. Jellyfish retains the
+  concrete dither-accumulation precision gate, and the ratchet advances to
+  exact=1,377/diverges=0/gated=91.

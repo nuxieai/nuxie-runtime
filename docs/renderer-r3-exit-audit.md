@@ -4,8 +4,8 @@ Date: 2026-07-14
 
 ## Verdict
 
-R3 corpus convergence is complete at `exact=1,375`, `diverges=0`,
-`gated=93`, `total=1,468`. Every non-gated entry passes its committed
+R3 corpus convergence is complete at `exact=1,377`, `diverges=0`,
+`gated=91`, `total=1,468`. Every non-gated entry passes its committed
 contract on the macOS Metal CI backend, and every retained gate has a specific
 feature, backend/compiler boundary, or harness diagnostic. No
 `algorithm-core` placeholder remains.
@@ -27,7 +27,7 @@ The corpus manifest has no renderer-selection field separate from its status:
   stream families, deadlines, findings, and CI smoke gate are recorded in
   `docs/renderer-fuzz-replay.md`.
 - The full renderer corpus and V2 regression floor pass: renderer
-  `1,375/0/93`, normal V2 `584` exact segments, scripted V2 `35` exact
+  `1,377/0/91`, normal V2 `584` exact segments, scripted V2 `35` exact
   segments, and `cargo test --workspace`.
 
 ## Retained Gate Taxonomy
@@ -39,11 +39,11 @@ The corpus manifest has no renderer-selection field separate from its status:
 | 5 | `native-clockwise-atomic-advanced-feather-parity` |
 | 5 | `rust-wgpu-msaa-feather-gradient-advanced-blend` |
 | 5 | `rust-wgpu-msaa-gradient-edge-residual` |
-| 3 | `rust-wgpu-msaa-image-mesh` |
 | 3 | `platform-image-decode-color-profile` |
 | 2 | `metal-webgpu-atomic-intermediate-precision` |
 | 1 | `dawn-wgpu-msaa-advanced-blend-intermediate-precision` |
 | 1 | `dawn-wgpu-msaa-interleaved-feather-color-precision` |
+| 1 | `dawn-wgpu-msaa-image-rect-dither-accumulation` |
 | 1 | `dawn-wgpu-msaa-stroke-edge-coverage` |
 | 1 | `metal-webgpu-fixed-function-color-output` |
 | 1 | `reference-harness: C++ Metal does not implement MSAA flush` |
@@ -52,18 +52,18 @@ The corpus manifest has no renderer-selection field separate from its status:
 | 1 | `rust-wgpu-msaa-gradient-path-clip` |
 | 1 | `rust-wgpu-msaa-incompatible-clip-rectangles` |
 | 1 | `rust-wgpu-msaa-repeated-path-clipped-strokes` |
-| **93** | **Total** |
+| **91** | **Total** |
 
 Operationally, these rows collapse into three groups:
 
 | Rows | Disposition |
 | ---: | --- |
 | 0 | Reference/oracle harness gap |
-| 60 | Reviewed backend, decoder, or precision boundary |
-| 33 | Unsupported feature or remaining algorithm-parity boundary |
+| 61 | Reviewed backend, decoder, or precision boundary |
+| 30 | Unsupported feature or remaining algorithm-parity boundary |
 
-The actionable set is 33 rows: five prior clockwise-atomic feather boundaries
-plus 28 concrete renderer findings exposed by strict replay. The other 60 rows
+The actionable set is 30 rows: five prior clockwise-atomic feather boundaries
+plus 25 concrete renderer findings exposed by strict replay. The other 61 rows
 remain parked unless same-backend evidence exposes a Rust defect.
 
 R3.1 promoted `riv-bullet_man-frame-0-clockwise-atomic` after porting C++'s
@@ -106,6 +106,16 @@ strokes, gradient advanced blending, feathered gradient strokes, incompatible
 clip rectangles, a clipped gradient path, ten gradient stroke-composite rows,
 and five identical 45-pixel/max-delta-3 edge residuals.
 
+The C++ MSAA image-mesh path is now ported with the generated WGSL, typed
+position/UV/index streams, authored sampler and blend state, path and
+rectangle clipping, and draw-order depth. `gm-mesh-msaa` and
+`riv-tape-frame-0-msaa` promote under unchanged contracts. Disposable C++
+Dawn command-prefix captures isolate Jellyfish: the background and all 19
+meshes have no pixels beyond delta 2, while its three subsequent translucent
+image rectangles accumulate 3,691/max 3, 8,548/max 4, and 11,988/max 5.
+Jellyfish therefore retains a measured image-rectangle dither-accumulation
+precision gate rather than an image-mesh feature gate.
+
 ## Reproduction
 
 ```sh
@@ -116,5 +126,5 @@ rg 'gated = "algorithm-core"' corpus-r.toml
 ```
 
 The final command must produce no output. Gate counts can be regenerated from
-the `[[entry]]` blocks in `corpus-r.toml`; they must total 93 and every gated
+the `[[entry]]` blocks in `corpus-r.toml`; they must total 91 and every gated
 block must contain a nonempty `gated` field.

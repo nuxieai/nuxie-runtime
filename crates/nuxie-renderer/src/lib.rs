@@ -25,6 +25,7 @@ mod intersection_board;
 mod logical_flush;
 mod mipmap_pipeline;
 mod msaa_atlas_pipeline;
+mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
 mod skyline;
@@ -138,6 +139,7 @@ struct Context {
     gradient_pipeline: gradient_pipeline::GradientPipeline,
     mipmap_pipeline: mipmap_pipeline::MipmapPipeline,
     msaa_atlas_pipeline: msaa_atlas_pipeline::MsaaAtlasPipeline,
+    msaa_image_mesh_pipeline: msaa_image_mesh_pipeline::MsaaImageMeshPipeline,
     msaa_stencil_pipeline: msaa_stencil_pipeline::MsaaStencilPipeline,
     feather_lut: feather_lut::FeatherLut,
 }
@@ -319,6 +321,8 @@ impl WgpuFactory {
         let gradient_pipeline = gradient_pipeline::GradientPipeline::new(&device);
         let mipmap_pipeline = mipmap_pipeline::MipmapPipeline::new(&device);
         let msaa_atlas_pipeline = msaa_atlas_pipeline::MsaaAtlasPipeline::new(&device);
+        let msaa_image_mesh_pipeline =
+            msaa_image_mesh_pipeline::MsaaImageMeshPipeline::new(&device);
         let msaa_stencil_pipeline = msaa_stencil_pipeline::MsaaStencilPipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
         Ok(Self {
@@ -339,6 +343,7 @@ impl WgpuFactory {
                 gradient_pipeline,
                 mipmap_pipeline,
                 msaa_atlas_pipeline,
+                msaa_image_mesh_pipeline,
                 msaa_stencil_pipeline,
                 feather_lut,
             }),
@@ -1223,10 +1228,6 @@ impl Renderer for WgpuFrame {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
-        if self.mode != RenderMode::ClockwiseAtomic {
-            self.unsupported.get_or_insert("images in msaa mode");
-            return;
-        }
         if self.state.clip_is_empty {
             return;
         }
@@ -2598,9 +2599,21 @@ impl WgpuFrame {
                     hsl_blend: bool,
                     destination_copy_bounds: [u32; 4],
                 }
+                #[derive(Clone, Copy)]
+                struct ImageMeshOptions {
+                    path_clip: bool,
+                    clip_rect: bool,
+                    advanced_blend: bool,
+                    hsl_blend: bool,
+                    destination_copy_bounds: [u32; 4],
+                }
                 enum PreparedDraw {
                     Stroke(path_pipeline::PreparedPathDraw, DirectPathOptions),
                     Fill(path_pipeline::PreparedPathDraw, FillRule, DirectPathOptions),
+                    ImageMesh(
+                        msaa_image_mesh_pipeline::PreparedImageMesh,
+                        ImageMeshOptions,
+                    ),
                     OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
                     ClipReset(
@@ -2700,6 +2713,66 @@ impl WgpuFrame {
                                 PreparedDraw::NestedClipUpdate(prepared, draw.path.fill_rule)
                             });
                         }
+                        continue;
+                    }
+                    if let Some(ImageDraw::Mesh(mesh)) = &draw.image {
+                        let path_clip = matches!(
+                            draw.role,
+                            DrawRole::Content { clip_id } if clip_id != 0
+                        );
+                        let clip_rect = draw.state.clip_rect.is_some();
+                        if clip_rect && !self.context.msaa_image_mesh_pipeline.supports_clip_rect()
+                        {
+                            return Err(RendererError::Unsupported(
+                                "clip rectangles on msaa image meshes",
+                            ));
+                        }
+                        let advanced_blend = mesh.blend_mode != BlendMode::SrcOver;
+                        let options = ImageMeshOptions {
+                            path_clip,
+                            clip_rect,
+                            advanced_blend,
+                            hsl_blend: blend_mode_uses_hsl(mesh.blend_mode),
+                            destination_copy_bounds: msaa_destination_copy_bounds(
+                                draw,
+                                self.width,
+                                self.height,
+                            ),
+                        };
+                        let uniforms = analytic_uniforms(self.width, self.height, 1);
+                        let clip_id = match draw.role {
+                            DrawRole::Content { clip_id } => clip_id,
+                            DrawRole::ClipUpdate { .. } | DrawRole::ClipReset { .. } => {
+                                unreachable!("non-content draw carried an image mesh")
+                            }
+                        };
+                        let image_uniforms = gpu::ImageDrawUniforms::new(
+                            draw.state.transform,
+                            mesh.opacity,
+                            image_clip_rect_inverse_matrix(draw.state.clip_rect),
+                            clip_id,
+                            mesh.blend_mode,
+                            z_index,
+                        );
+                        prepared_draws.push(PreparedDraw::ImageMesh(
+                            self.context.msaa_image_mesh_pipeline.prepare(
+                                &self.context.device,
+                                &uniforms,
+                                &image_uniforms,
+                                if advanced_blend {
+                                    destination_view.as_ref()
+                                } else {
+                                    None
+                                },
+                                &mesh.texture.view,
+                                mesh.sampler,
+                                &mesh.vertices,
+                                &mesh.uvs,
+                                &mesh.indices,
+                                mesh.index_count,
+                            ),
+                            options,
+                        ));
                         continue;
                     }
                     if draw.paint.shader.is_none()
@@ -2935,7 +3008,7 @@ impl WgpuFrame {
                                 ImageDraw::Rect(image) => image,
                                 ImageDraw::Mesh(_) => {
                                     unreachable!(
-                                        "MSAA image meshes are rejected before preparation"
+                                        "MSAA image meshes are prepared before direct paths"
                                     )
                                 }
                             });
@@ -3043,6 +3116,7 @@ impl WgpuFrame {
                         PreparedDraw::Stroke(_, options) | PreparedDraw::Fill(_, _, options) => {
                             options.advanced_blend
                         }
+                        PreparedDraw::ImageMesh(_, options) => options.advanced_blend,
                         PreparedDraw::Atlas(draw) => {
                             msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(draw)
                         }
@@ -3062,6 +3136,9 @@ impl WgpuFrame {
                     PreparedDraw::Stroke(_, options) | PreparedDraw::Fill(_, _, options)
                         if options.advanced_blend =>
                     {
+                        Some(options.destination_copy_bounds)
+                    }
+                    PreparedDraw::ImageMesh(_, options) if options.advanced_blend => {
                         Some(options.destination_copy_bounds)
                     }
                     PreparedDraw::Atlas(draw) => {
@@ -3319,6 +3396,28 @@ impl WgpuFrame {
                                             ..draw.base_instance + draw.instance_count,
                                     );
                                 }
+                            }
+                            PreparedDraw::ImageMesh(draw, options) => {
+                                pass.set_stencil_reference(if options.path_clip {
+                                    0x80
+                                } else {
+                                    0
+                                });
+                                pass.set_pipeline(self.context.msaa_image_mesh_pipeline.pipeline(
+                                    options.path_clip,
+                                    options.clip_rect,
+                                    options.advanced_blend,
+                                    options.hsl_blend,
+                                ));
+                                pass.set_bind_group(0, &draw.flush_group, &[]);
+                                pass.set_bind_group(1, &draw.image_group, &[]);
+                                pass.set_vertex_buffer(0, draw.vertices.slice(..));
+                                pass.set_vertex_buffer(1, draw.uvs.slice(..));
+                                pass.set_index_buffer(
+                                    draw.indices.slice(..),
+                                    wgpu::IndexFormat::Uint16,
+                                );
+                                pass.draw_indexed(0..draw.index_count, 0, 0..1);
                             }
                             PreparedDraw::OutermostClipUpdate(draw, fill_rule) => {
                                 pass.set_stencil_reference(0x80);
@@ -5990,7 +6089,7 @@ mod tests {
     }
 
     #[test]
-    fn atomic_image_mesh_draws_indexed_position_and_uv_buffers() {
+    fn image_mesh_draws_indexed_position_and_uv_buffers_in_both_modes() {
         let mut encoded = Vec::new();
         {
             let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
@@ -6003,7 +6102,99 @@ mod tests {
                 .unwrap();
         }
 
-        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let mut factory = WgpuFactory::new_with_mode(16, 16, mode).unwrap();
+            let image = factory.decode_image(&encoded);
+            let mut vertices = factory.make_render_buffer(
+                RenderBufferType::Vertex,
+                RenderBufferFlags::MappedOnceAtInitialization,
+                24,
+            );
+            vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+                [2.0f32, 2.0],
+                [14.0, 2.0],
+                [2.0, 14.0],
+            ]));
+            vertices.unmap();
+            let mut uvs = factory.make_render_buffer(
+                RenderBufferType::Vertex,
+                RenderBufferFlags::MappedOnceAtInitialization,
+                24,
+            );
+            uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+                [0.0f32, 0.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+            ]));
+            uvs.unmap();
+            let mut indices = factory.make_render_buffer(
+                RenderBufferType::Index,
+                RenderBufferFlags::MappedOnceAtInitialization,
+                6,
+            );
+            indices
+                .map_mut()
+                .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+            indices.unmap();
+
+            let mut frame = factory.begin_frame(0xff00_0000);
+            frame.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                1.0,
+            );
+            let pixels = frame.finish().unwrap();
+            let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+            assert_eq!(pixel(4, 4), [255, 0, 0, 255], "{mode:?}");
+            assert_eq!(pixel(15, 15), [0, 0, 0, 255], "{mode:?}");
+
+            for (blend_mode, expected) in [
+                (BlendMode::Screen, [255, 255, 0, 255]),
+                (BlendMode::Darken, [0, 0, 0, 255]),
+                (BlendMode::Exclusion, [255, 255, 0, 255]),
+                (BlendMode::Luminosity, [0, 130, 0, 255]),
+            ] {
+                let mut advanced_blend = factory.begin_frame(0xff00_ff00);
+                advanced_blend.draw_image_mesh(
+                    Some(image.as_ref()),
+                    ImageSampler::default(),
+                    Some(vertices.as_ref()),
+                    Some(uvs.as_ref()),
+                    Some(indices.as_ref()),
+                    3,
+                    3,
+                    blend_mode,
+                    1.0,
+                );
+                let pixels = advanced_blend.finish().unwrap();
+                let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+                assert_eq!(pixel(4, 4), expected, "{mode:?} {blend_mode:?}");
+                assert_eq!(pixel(15, 15), [0, 255, 0, 255], "{mode:?} {blend_mode:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn msaa_path_clip_applies_to_image_mesh() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+
+        let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let image = factory.decode_image(&encoded);
         let mut vertices = factory.make_render_buffer(
             RenderBufferType::Vertex,
@@ -6011,9 +6202,9 @@ mod tests {
             24,
         );
         vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
-            [2.0f32, 2.0],
-            [14.0, 2.0],
-            [2.0, 14.0],
+            [0.0f32, 0.0],
+            [64.0, 0.0],
+            [0.0, 64.0],
         ]));
         vertices.unmap();
         let mut uvs = factory.make_render_buffer(
@@ -6037,7 +6228,17 @@ mod tests {
             .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
         indices.unmap();
 
-        let mut frame = factory.begin_frame(0xff00_0000);
+        let mut raw_clip = RawPath::new();
+        raw_clip.move_to(32.0, 8.0);
+        raw_clip.line_to(56.0, 56.0);
+        raw_clip.line_to(8.0, 56.0);
+        raw_clip.close();
+        let clip = WgpuPath {
+            raw_path: raw_clip,
+            fill_rule: FillRule::NonZero,
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&clip);
         frame.draw_image_mesh(
             Some(image.as_ref()),
             ImageSampler::default(),
@@ -6050,33 +6251,12 @@ mod tests {
             1.0,
         );
         let pixels = frame.finish().unwrap();
-        let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
-        assert_eq!(pixel(4, 4), [255, 0, 0, 255]);
-        assert_eq!(pixel(15, 15), [0, 0, 0, 255]);
+        let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
 
-        for (blend_mode, expected) in [
-            (BlendMode::Screen, [255, 255, 0, 255]),
-            (BlendMode::Darken, [0, 0, 0, 255]),
-            (BlendMode::Exclusion, [255, 255, 0, 255]),
-            (BlendMode::Luminosity, [0, 130, 0, 255]),
-        ] {
-            let mut advanced_blend = factory.begin_frame(0xff00_ff00);
-            advanced_blend.draw_image_mesh(
-                Some(image.as_ref()),
-                ImageSampler::default(),
-                Some(vertices.as_ref()),
-                Some(uvs.as_ref()),
-                Some(indices.as_ref()),
-                3,
-                3,
-                blend_mode,
-                1.0,
-            );
-            let pixels = advanced_blend.finish().unwrap();
-            let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
-            assert_eq!(pixel(4, 4), expected, "{blend_mode:?}");
-            assert_eq!(pixel(15, 15), [0, 255, 0, 255], "{blend_mode:?}");
-        }
+        assert_eq!(pixel(8, 32), [0; 4]);
+        assert_eq!(pixel(24, 32), [255, 0, 0, 255]);
+        assert_eq!(pixel(32, 4), [0; 4]);
+        assert_eq!(pixel(20, 40), [255, 0, 0, 255]);
     }
 
     #[test]
@@ -9926,7 +10106,7 @@ mod tests {
     }
 
     #[test]
-    fn image_mesh_rejects_msaa_before_enqueuing_clip_updates() {
+    fn missing_image_mesh_is_a_noop_in_msaa() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let mut frame = factory.begin_frame(0);
         frame.draw_image_mesh(
@@ -9941,10 +10121,7 @@ mod tests {
             1.0,
         );
 
-        assert!(matches!(
-            frame.finish(),
-            Err(RendererError::Unsupported("images in msaa mode"))
-        ));
+        assert!(frame.finish().unwrap().iter().all(|channel| *channel == 0));
     }
 
     #[test]

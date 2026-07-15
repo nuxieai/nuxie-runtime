@@ -110,3 +110,35 @@ fn production_decode_contracts() {
 
     assert!(decode_bitmap_rgba(b"not an image").is_none());
 }
+
+#[test]
+fn jellyfish_mesh_images_decode_exactly() {
+    let stream = nuxie_render_stream::RenderStream::parse(include_str!(
+        "../../../fixtures/renderer/streams/riv/jellyfish_test.rive-stream"
+    ))
+    .expect("jellyfish stream");
+    let deltas = stream
+        .resources
+        .into_iter()
+        .filter_map(|resource| match resource {
+            nuxie_render_stream::Resource::Image { data, .. } => {
+                let decoded = nuxie_renderer::decode_image_rgba_for_oracle(&data)
+                    .expect("Rust jellyfish image decode");
+                Some(compare_decode(&data, (decoded.width, decoded.height)))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(deltas.len(), 23);
+    assert!(deltas.iter().all(|delta| {
+        *delta
+            == DecodeDelta {
+                differing_pixels: 0,
+                pixels_over_delta_2: 0,
+                differing_channels: 0,
+                max_delta: 0,
+                alpha_mismatches: 0,
+            }
+    }));
+}

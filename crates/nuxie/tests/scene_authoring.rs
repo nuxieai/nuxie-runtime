@@ -60,6 +60,364 @@ fn create_card(
 }
 
 #[test]
+fn a_removed_subtree_restores_the_same_objects_records_and_draw_in_a_later_edit() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, rectangle, _fill, color), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 50.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let rectangle = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Card Rectangle", 80.0, 60.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Card Fill".into(),
+            }),
+        )?;
+        let color = tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Card Color".into(),
+                color: 0xff112233,
+            }),
+        )?;
+        Ok((artboard, shape, rectangle, fill, color))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let before_records = scene.export_records();
+    let before_draw = draw_stream(&mut scene, instance)?;
+
+    let (removed, remove_receipt) = scene.edit(|tx| tx.remove(shape))?;
+    assert!(remove_receipt.created.is_empty());
+    assert!(matches!(
+        scene.cursor(instance, shape, props::WORLD_OPACITY),
+        Err(ResolveError::UnknownObject)
+    ));
+    assert!(matches!(
+        scene.cursor(instance, rectangle, props::PATH_WIDTH),
+        Err(ResolveError::UnknownObject)
+    ));
+    assert!(matches!(
+        scene.cursor(instance, color, props::COLOR_VALUE),
+        Err(ResolveError::UnknownObject)
+    ));
+    assert_ne!(draw_stream(&mut scene, instance)?, before_draw);
+
+    let (restored_root, restore_receipt) = scene.edit(|tx| tx.restore(removed))?;
+    assert_eq!(restored_root, shape);
+    assert!(restore_receipt.created.is_empty());
+    assert_eq!(scene.export_records(), before_records);
+    assert_eq!(draw_stream(&mut scene, instance)?, before_draw);
+    assert!(scene.cursor(instance, shape, props::WORLD_OPACITY).is_ok());
+    assert!(scene.cursor(instance, rectangle, props::PATH_WIDTH).is_ok());
+    assert!(scene.cursor(instance, color, props::COLOR_VALUE).is_ok());
+    Ok(())
+}
+
+#[test]
+fn restore_reinserts_interleaved_descendants_at_their_original_record_positions() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((shape_a, _shape_b, _rectangle_a, _rectangle_b), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let mut create_shape = |name: &str, x: f32| {
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: name.into(),
+                    x,
+                    y: 50.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )
+        };
+        let shape_a = create_shape("A", 25.0)?;
+        let shape_b = create_shape("B", 75.0)?;
+        let rectangle_a = tx.create(
+            Parent::Object(shape_a),
+            NodeSpec::Rectangle(RectangleSpec::new("A Rectangle", 20.0, 20.0)),
+        )?;
+        let rectangle_b = tx.create(
+            Parent::Object(shape_b),
+            NodeSpec::Rectangle(RectangleSpec::new("B Rectangle", 30.0, 30.0)),
+        )?;
+        Ok((shape_a, shape_b, rectangle_a, rectangle_b))
+    })?;
+    let records_before = scene.export_records();
+
+    let (removed, _) = scene.edit(|tx| tx.remove(shape_a))?;
+    scene.edit(|tx| tx.restore(removed))?;
+
+    assert_eq!(scene.export_records(), records_before);
+    Ok(())
+}
+
+#[test]
+fn restoring_an_existing_identity_aborts_the_entire_edit_with_a_collision_diagnostic() -> Result<()>
+{
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, color), _) = scene.edit(|tx| create_card(tx, "Main", 0xff112233))?;
+    let instance = scene.instantiate(artboard)?;
+    let (removed, _) = scene.edit(|tx| tx.remove(rectangle))?;
+    scene.edit(|tx| tx.restore(removed.clone()))?;
+    let color_cursor = scene.cursor(instance, color, props::COLOR_VALUE)?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+    let draw_before = draw_stream(&mut scene, instance)?;
+
+    let error = scene
+        .edit(|tx| {
+            tx.set(color, props::COLOR_VALUE, 0xff445566)?;
+            tx.restore(removed)?;
+            Ok(())
+        })
+        .expect_err("the restored rectangle identity already exists");
+
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().operation_index, 1);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Object(rectangle)]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::IdentityCollision);
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    assert_eq!(draw_stream(&mut scene, instance)?, draw_before);
+    assert_eq!(scene.frame().get(color_cursor)?, 0xff112233);
+    Ok(())
+}
+
+#[test]
+fn remove_then_restore_in_one_edit_is_an_exact_structural_commit_that_stales_all_cursors()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, color), _) = scene.edit(|tx| create_card(tx, "Main", 0xff112233))?;
+    let instance = scene.instantiate(artboard)?;
+    let old_color_cursor = scene.cursor(instance, color, props::COLOR_VALUE)?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+    let draw_before = draw_stream(&mut scene, instance)?;
+
+    let (restored, receipt) = scene.edit(|tx| {
+        let removed = tx.remove(rectangle)?;
+        tx.restore(removed)
+    })?;
+
+    assert_eq!(restored, rectangle);
+    assert_eq!(receipt.epoch, scene.epoch());
+    assert_eq!(scene.epoch().get(), epoch_before.get() + 1);
+    assert!(receipt.created.is_empty());
+    assert_eq!(scene.export_records(), records_before);
+    assert_eq!(draw_stream(&mut scene, instance)?, draw_before);
+    assert_eq!(scene.frame().get(old_color_cursor), Err(StaleCursor));
+    let fresh_color_cursor = scene.cursor(instance, color, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(fresh_color_cursor)?, 0xff112233);
+    Ok(())
+}
+
+#[test]
+fn edit_receipts_exclude_objects_created_and_removed_before_commit() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })
+    })?;
+    let epoch_before = scene.epoch();
+
+    let ((shape, removed), receipt) = scene.edit(|tx| {
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Transient".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let removed = tx.remove(shape)?;
+        Ok((shape, removed))
+    })?;
+
+    assert!(receipt.created.is_empty());
+    assert_eq!(scene.epoch().get(), epoch_before.get() + 1);
+    let (restored, restore_receipt) = scene.edit(|tx| tx.restore(removed))?;
+    assert_eq!(restored, shape);
+    assert!(
+        restore_receipt.created.is_empty(),
+        "restoring an existing identity never reports a new allocation"
+    );
+    Ok(())
+}
+
+#[test]
+fn restore_rejects_a_missing_original_parent_with_structured_diagnostics() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, rectangle), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Main".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 50.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let rectangle = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Card Rectangle", 80.0, 60.0)),
+        )?;
+        Ok((artboard, shape, rectangle))
+    })?;
+    let (removed_rectangle, _) = scene.edit(|tx| tx.remove(rectangle))?;
+    let (_removed_shape, _) = scene.edit(|tx| tx.remove(shape))?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| tx.restore(removed_rectangle))
+        .expect_err("the rectangle's original shape parent no longer exists");
+
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().operation_index, 0);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Object(rectangle), EditId::Object(shape)]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownObject);
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    assert!(scene.instantiate(artboard).is_ok());
+    Ok(())
+}
+
+#[test]
+fn restoring_a_subtree_into_another_scene_rejects_its_owner_and_rolls_back_the_edit() -> Result<()>
+{
+    let mut source = Scene::new();
+    let ((source_artboard, source_rectangle, _), _) =
+        source.edit(|tx| create_card(tx, "Source", 0xff112233))?;
+    let (removed, _) = source.edit(|tx| tx.remove(source_rectangle))?;
+
+    let mut target = Scene::new();
+    let ((target_artboard, _, target_color), _) =
+        target.edit(|tx| create_card(tx, "Target", 0xff223344))?;
+    let target_instance = target.instantiate(target_artboard)?;
+    let target_cursor = target.cursor(target_instance, target_color, props::COLOR_VALUE)?;
+    let epoch_before = target.epoch();
+    let records_before = target.export_records();
+    let draw_before = draw_stream(&mut target, target_instance)?;
+
+    let error = target
+        .edit(|tx| {
+            tx.set(target_color, props::COLOR_VALUE, 0xff556677)?;
+            tx.restore(removed)?;
+            Ok(())
+        })
+        .expect_err("a removed subtree remains owned by its original scene artboard");
+
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().operation_index, 1);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Artboard(source_artboard),
+            EditId::Object(source_rectangle)
+        ]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownArtboard);
+    assert_eq!(target.epoch(), epoch_before);
+    assert_eq!(target.export_records(), records_before);
+    assert_eq!(draw_stream(&mut target, target_instance)?, draw_before);
+    assert_eq!(target.frame().get(target_cursor)?, 0xff223344);
+    Ok(())
+}
+
+#[test]
+fn removing_from_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((_, rectangle_a, _, artboard_b, _, color_b), _) = scene.edit(|tx| {
+        let (artboard_a, rectangle_a, color_a) = create_card(tx, "A", 0xff112233)?;
+        let (artboard_b, rectangle_b, color_b) = create_card(tx, "B", 0xff223344)?;
+        Ok((
+            artboard_a,
+            rectangle_a,
+            color_a,
+            artboard_b,
+            rectangle_b,
+            color_b,
+        ))
+    })?;
+    let instance_b = scene.instantiate(artboard_b)?;
+    let old_cursor_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(old_cursor_b, 0xff556677)?);
+
+    let mut factory_b = RecordingFactory::new();
+    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut renderer_b = factory_b.make_renderer();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    let draw_before = factory_b.stream();
+    assert!(draw_before.contains("ff556677"));
+
+    scene.edit(|tx| tx.remove(rectangle_a))?;
+
+    assert_eq!(scene.frame().get(old_cursor_b), Err(StaleCursor));
+    let fresh_cursor_b = scene.cursor(instance_b, color_b, props::COLOR_VALUE)?;
+    assert_eq!(scene.frame().get(fresh_cursor_b)?, 0xff556677);
+    factory_b.clear();
+    scene
+        .frame()
+        .draw(instance_b, &mut factory_b, &mut renderer_b, &mut cache_b)?;
+    assert_eq!(
+        factory_b.stream(),
+        draw_before,
+        "the untouched artboard must retain both its live instance and held cache"
+    );
+    Ok(())
+}
+
+#[test]
 fn authored_scene_uses_typed_cursor_writes_and_stales_them_after_structure_changes() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, shape, rectangle, color), _) = scene.edit(|tx| {

@@ -1,7 +1,7 @@
 //! Dynamic authoring facade backed by the same runtime file and graph used by imported scenes.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
     sync::{
         Arc,
@@ -65,6 +65,7 @@ pub enum EditReason {
         message: String,
     },
     IdentityExhausted,
+    IdentityCollision,
     OperationLimitExceeded,
     UnknownArtboard,
     UnknownObject,
@@ -410,6 +411,25 @@ struct NodeDefinition {
     spec: NodeSpec,
 }
 
+#[derive(Debug, Clone)]
+struct RemovedNode {
+    original_index: usize,
+    definition: NodeDefinition,
+}
+
+/// Opaque ownership token for an authored object and all of its descendants.
+///
+/// The token retains the original stable identities, parent relationships, and
+/// authored order required by [`SceneTx::restore`]. Cloning a token is useful
+/// for retrying an undo after a rejected transaction; restoring two copies is
+/// rejected as an identity collision.
+#[derive(Clone)]
+pub struct RemovedSubtree {
+    artboard: ArtboardId,
+    root: ObjectId,
+    nodes: Vec<RemovedNode>,
+}
+
 struct RuntimeSlot {
     local_id: usize,
     kind: NodeKind,
@@ -688,9 +708,21 @@ impl Scene {
                 edit_origins: EditOrigins::default(),
             };
             let result = edit(&mut transaction).map_err(EditError::aborted)?;
+            let created_objects = transaction
+                .created_objects
+                .iter()
+                .copied()
+                .filter(|id| {
+                    transaction
+                        .definitions
+                        .artboards
+                        .iter()
+                        .any(|artboard| artboard.nodes.iter().any(|node| node.id == *id))
+                })
+                .collect();
             (
                 result,
-                transaction.created_objects,
+                created_objects,
                 transaction.touched_artboards,
                 transaction.edit_origins,
                 transaction.next_operation_index,
@@ -1017,6 +1049,210 @@ impl SceneTx<'_> {
         Ok(id)
     }
 
+    /// Remove an object and its complete descendant subtree.
+    ///
+    /// The returned token owns everything needed to restore the same authored
+    /// identities and ordering in this or a later transaction.
+    pub fn remove(&mut self, object: ObjectId) -> std::result::Result<RemovedSubtree, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let Some(artboard_index) = self.definitions.artboards.iter().position(|artboard| {
+            artboard
+                .nodes
+                .iter()
+                .any(|candidate| candidate.id == object)
+        }) else {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(object)],
+                EditReason::UnknownObject,
+            ));
+        };
+        let Some(artboard) = self.definitions.artboards.get_mut(artboard_index) else {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(object)],
+                EditReason::InternalInvariant,
+            ));
+        };
+
+        let mut subtree_ids = BTreeSet::from([object]);
+        loop {
+            let mut discovered = false;
+            for node in &artboard.nodes {
+                if matches!(node.parent, Parent::Object(parent) if subtree_ids.contains(&parent)) {
+                    discovered |= subtree_ids.insert(node.id);
+                }
+            }
+            if !discovered {
+                break;
+            }
+        }
+
+        let mut nodes = Vec::with_capacity(subtree_ids.len());
+        for (original_index, definition) in artboard.nodes.iter().cloned().enumerate() {
+            if subtree_ids.contains(&definition.id) {
+                nodes.push(RemovedNode {
+                    original_index,
+                    definition,
+                });
+            }
+        }
+        if nodes.is_empty() {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(object)],
+                EditReason::InternalInvariant,
+            ));
+        }
+
+        artboard
+            .nodes
+            .retain(|node| !subtree_ids.contains(&node.id));
+        self.touched_artboards.insert(artboard.id, operation_index);
+        Ok(RemovedSubtree {
+            artboard: artboard.id,
+            root: object,
+            nodes,
+        })
+    }
+
+    /// Restore a previously removed subtree without allocating new identities.
+    pub fn restore(&mut self, removed: RemovedSubtree) -> std::result::Result<ObjectId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let RemovedSubtree {
+            artboard: artboard_id,
+            root,
+            nodes,
+        } = removed;
+        if nodes.is_empty() || !nodes.iter().any(|node| node.definition.id == root) {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(root)],
+                EditReason::InternalInvariant,
+            ));
+        }
+
+        let Some(artboard_index) = self
+            .definitions
+            .artboards
+            .iter()
+            .position(|artboard| artboard.id == artboard_id)
+        else {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Artboard(artboard_id), EditId::Object(root)],
+                EditReason::UnknownArtboard,
+            ));
+        };
+
+        for removed_node in &nodes {
+            let id = removed_node.definition.id;
+            if self
+                .definitions
+                .artboards
+                .iter()
+                .any(|artboard| artboard.nodes.iter().any(|candidate| candidate.id == id))
+            {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(id)],
+                    EditReason::IdentityCollision,
+                ));
+            }
+        }
+
+        let Some(artboard) = self.definitions.artboards.get(artboard_index) else {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Artboard(artboard_id)],
+                EditReason::InternalInvariant,
+            ));
+        };
+        let mut available = artboard
+            .nodes
+            .iter()
+            .map(|node| (node.id, node.spec.kind()))
+            .collect::<BTreeMap<_, _>>();
+        for removed_node in &nodes {
+            let definition = &removed_node.definition;
+            if available
+                .insert(definition.id, definition.spec.kind())
+                .is_some()
+            {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(definition.id)],
+                    EditReason::InternalInvariant,
+                ));
+            }
+        }
+        for removed_node in &nodes {
+            let definition = &removed_node.definition;
+            let child = definition.spec.kind();
+            match definition.parent {
+                Parent::Artboard(parent) => {
+                    if parent != artboard_id {
+                        return Err(EditAbort::new(
+                            operation_index,
+                            vec![EditId::Object(definition.id), EditId::Artboard(parent)],
+                            EditReason::InvalidParent {
+                                parent: None,
+                                child,
+                            },
+                        ));
+                    }
+                    if child != NodeKind::Shape {
+                        return Err(EditAbort::new(
+                            operation_index,
+                            vec![EditId::Object(definition.id), EditId::Artboard(parent)],
+                            EditReason::InvalidParent {
+                                parent: None,
+                                child,
+                            },
+                        ));
+                    }
+                }
+                Parent::Object(parent) => {
+                    let Some(parent_kind) = available.get(&parent).copied() else {
+                        return Err(EditAbort::new(
+                            operation_index,
+                            vec![EditId::Object(definition.id), EditId::Object(parent)],
+                            EditReason::UnknownObject,
+                        ));
+                    };
+                    if !valid_object_parent(parent_kind, child) {
+                        return Err(EditAbort::new(
+                            operation_index,
+                            vec![EditId::Object(definition.id), EditId::Object(parent)],
+                            EditReason::InvalidParent {
+                                parent: Some(parent_kind),
+                                child,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        let Some(artboard) = self.definitions.artboards.get_mut(artboard_index) else {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Artboard(artboard_id)],
+                EditReason::InternalInvariant,
+            ));
+        };
+        for removed_node in nodes {
+            let insertion_index = removed_node.original_index.min(artboard.nodes.len());
+            let id = removed_node.definition.id;
+            artboard
+                .nodes
+                .insert(insertion_index, removed_node.definition);
+            self.edit_origins.nodes.insert(id, operation_index);
+        }
+        self.touched_artboards.insert(artboard_id, operation_index);
+        Ok(root)
+    }
+
     pub fn set<T>(
         &mut self,
         object: ObjectId,
@@ -1134,16 +1370,7 @@ impl SceneTx<'_> {
                         EditReason::UnknownObject,
                     ));
                 };
-                let valid = matches!(
-                    (parent_kind, child),
-                    (
-                        NodeKind::Shape,
-                        NodeKind::Rectangle | NodeKind::Fill | NodeKind::Stroke
-                    ) | (NodeKind::Fill, NodeKind::SolidColor)
-                        | (NodeKind::Stroke, NodeKind::SolidColor | NodeKind::DashPath)
-                        | (NodeKind::DashPath, NodeKind::Dash)
-                );
-                if !valid {
+                if !valid_object_parent(parent_kind, child) {
                     return Err(EditAbort::new(
                         operation_index,
                         vec![EditId::Object(object)],
@@ -1157,6 +1384,18 @@ impl SceneTx<'_> {
             }
         }
     }
+}
+
+fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
+    matches!(
+        (parent, child),
+        (
+            NodeKind::Shape,
+            NodeKind::Rectangle | NodeKind::Fill | NodeKind::Stroke
+        ) | (NodeKind::Fill, NodeKind::SolidColor)
+            | (NodeKind::Stroke, NodeKind::SolidColor | NodeKind::DashPath)
+            | (NodeKind::DashPath, NodeKind::Dash)
+    )
 }
 
 /// A short-lived facade over direct runtime instance writes and draws.

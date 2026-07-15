@@ -3,8 +3,8 @@ use nuxie::{
     Aabb, ArtboardId, ArtboardSpec, ChildIndex, DashPathSpec, DashSpec, EditAbort, EditErrorKind,
     EditId, EditReason, ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec,
     ObjectId, Parent, PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec,
-    ResolveError, Scene, SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec, SolidColorSpec,
-    StaleCursor, StrokeSpec, StructureEpoch, Vec2D, props,
+    ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec,
+    SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, Vec2D, props,
 };
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
@@ -15,6 +15,44 @@ fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String>
         .frame()
         .draw(instance, &mut factory, &mut renderer, &mut cache)?;
     Ok(factory.stream())
+}
+
+#[test]
+fn frame_advance_targets_only_the_requested_live_instance() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, _, color), _) = scene.edit(|tx| create_card(tx, "Main", 0xff11_2233))?;
+    let first = scene.instantiate(artboard)?;
+    let second = scene.instantiate(artboard)?;
+    let first_cursor = scene.cursor(first, color, props::COLOR_VALUE)?;
+    let second_cursor = scene.cursor(second, color, props::COLOR_VALUE)?;
+    assert!(scene.frame().set(first_cursor, 0xff44_5566)?);
+    assert!(scene.frame().set(second_cursor, 0xff77_8899)?);
+
+    let mut events: Vec<SceneEvent> = Vec::new();
+    assert!(scene.frame().advance(first, 1.0 / 120.0, &mut events));
+    assert!(
+        events.is_empty(),
+        "the current static scene emits no events"
+    );
+    assert!(
+        !scene.frame().advance(first, 0.0, &mut events),
+        "the requested instance is settled"
+    );
+    assert!(
+        scene.frame().advance(second, 0.0, &mut events),
+        "advancing the first instance must not settle the second"
+    );
+    assert!(
+        !scene.frame().advance(second, 0.0, &mut events),
+        "the second instance settles independently"
+    );
+
+    scene.drop_instance(first);
+    assert!(
+        !scene.frame().advance(first, 1.0 / 120.0, &mut events),
+        "a dropped instance is an unchanged frame"
+    );
+    Ok(())
 }
 
 fn create_card(

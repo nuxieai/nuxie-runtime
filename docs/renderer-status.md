@@ -1131,6 +1131,15 @@ Run `make renderer-golden`.
     preserving C++ batch order. Interleaving them reduces the row from
     1,485,510 pixels/max delta 20 to a passing 22/max 18 under the unchanged
     `2/32` contract. Bankcard is promoted and five substantive rows remain.
+    A later command-prefix bisect of Rewards found another shared atomic-batch
+    defect: each draw resolves coverage left by the preceding draw, but Rust
+    selected HSL-enabled feather and atlas shader variants from only the
+    current draw. Selecting the feature from the combined logical batch removes
+    the full-frame color loss and reduces Rewards from 357,444 pixels/max 53 to
+    1,677/max 33. Current probes are `car_widgets_v01` 65,522/96,
+    `data_viz_demo` 12,118/99, `echo_show_demo` 67,302/54,
+    `hunter_x_demo` 222/18, and `rewards_demo` 1,677/33; all five remain open
+    under the unchanged contract.
 91. [x] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold. Strict linear and
@@ -3724,3 +3733,16 @@ Run `make renderer-golden`.
   exact files/584 exact segments, `make scripted-golden-compare` at 27 exact
   files/35 exact segments, `cargo test --workspace`, all 46 oracle-format
   tests, and the pinned 60-module/50-header shader reproducibility check.
+- 2026-07-15: Fixed atomic HSL shader-feature selection from a Rewards
+  command-prefix cliff. Command 538, a non-HSL atlas feather, resolves the
+  pending full-frame Hue path from command 530; selecting the shader from only
+  command 538 discarded the prior destination color. Atomic batches now use
+  their combined HSL feature for direct-feather and atlas pipelines. A focused
+  GPU regression fails before the fix and passes after it, while the Rewards
+  native-Metal probe falls from 357,444 pixels/max delta 53 to 1,677/max 33.
+  Sol approved the C++ parity and batching lifecycle with no findings. No
+  manifest entry or tolerance changed. The 252 enabled renderer tests pass,
+  the full corpus remains exact=1,402/diverges=0/gated=66, and the normal and
+  scripted V2 floors remain 584 and 35 exact segments. Queue item 90 next
+  adjudicates Rewards' remaining thin-edge residual before moving to the next
+  open advanced-feather row.

@@ -276,8 +276,8 @@ retained set:
    `gm-cliprectintersections-msaa`, and `gm-beziers-msaa`. Use same-backend
    evidence to distinguish a Rust defect from a platform boundary before
    reclassification.
-   `riv-bullet_man-frame-0-clockwise-atomic` and `gm-beziers-msaa` are
-   complete; eight substantive rows remain.
+   `riv-bullet_man-frame-0-clockwise-atomic`, `gm-beziers-msaa`, and
+   `gm-cliprectintersections-msaa` are complete; seven substantive rows remain.
 2. Implement strict replay for gradient paints and render buffers. Capture all
    46 rows those two harness capabilities unlock, then promote passes and turn
    every failure into a concrete parity task. A harness prerequisite needed to

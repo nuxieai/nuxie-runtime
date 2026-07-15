@@ -7,7 +7,7 @@ current evidence, open gates, and decisions needed by the next session.
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,355, diverges=0, gated=113, total=1,468.
+- Rust wgpu: exact=1,356, diverges=0, gated=112, total=1,468.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,
@@ -49,7 +49,7 @@ Run `make renderer-golden`.
   `gm-feather_polyshapes-clockwise-atomic`, and
   `gm-feather_corner-clockwise-atomic`,
   `gm-feather_roundcorner-clockwise-atomic`, and
-  `gm-cliprectintersections-clockwise-atomic`,
+  `gm-cliprectintersections-{clockwise-atomic,msaa}`,
   `gm-cliprects-clockwise-atomic`,
   `gm-gamma_correction_clip-clockwise-atomic`,
   `gm-strokes_poly-clockwise-atomic`, and
@@ -1095,9 +1095,15 @@ Run `make renderer-golden`.
     regression pins the actual self-overdraw boundary. The current probe passes
     the unchanged `2/32` contract and advances the ratchet to
     exact=1,355/diverges=0/gated=113.
-89. [ ] Close `msaa-clip-intersection-edge-coverage` in
+89. [x] Close `msaa-clip-intersection-edge-coverage` in
     `gm-cliprectintersections-msaa` from its pinned C++ Dawn reference without
-    broadening the 240-pixel residual into a tolerance.
+    broadening the 240-pixel residual into a tolerance. Historical replay with
+    unchanged asset hashes proves the row moves from 240 pixels/max 55 before
+    `90c8fd52` to byte-exact/max 1 after C++'s dedicated MSAA stroke depth
+    state. The sparse edge components were translucent stroke self-overdraw,
+    not clip-intersection rasterization. The current probe passes the unchanged
+    `2/32` contract and advances the ratchet to
+    exact=1,356/diverges=0/gated=112.
 90. [ ] Adjudicate the seven
     `native-clockwise-atomic-advanced-feather-parity` rows with full-stream C++
     Dawn clockwise-atomic references. Port any same-backend Rust defect; only
@@ -3535,3 +3541,9 @@ Run `make renderer-golden`.
   C++ MSAA stroke depth state, whose duplicate-contour GPU test pins the actual
   self-overdraw behavior. Promoted under the unchanged `2/32` contract; the
   ratchet is exact=1,355/diverges=0/gated=113 with eight substantive rows left.
+- 2026-07-14: Closed R3.1 queue item 89 by bisecting the stale
+  `gm-cliprectintersections-msaa` gate against unchanged Dawn assets. The row
+  moves from 240 pixels/max 55 before `90c8fd52` to byte-exact/max 1 after its
+  dedicated MSAA stroke depth state. Promoted under the unchanged `2/32`
+  contract with no tolerance change; the ratchet is
+  exact=1,356/diverges=0/gated=112 and only seven substantive rows remain.

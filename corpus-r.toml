@@ -449,10 +449,9 @@ stream = "fixtures/renderer/streams/gm/cliprectintersections.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-cliprectintersections-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "msaa-clip-intersection-edge-coverage"
 
 
 [[entry]]

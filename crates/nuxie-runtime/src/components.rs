@@ -5,9 +5,11 @@ use crate::properties::{
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{ArtboardGraph, ComponentNode};
 use nuxie_schema::definition_by_name;
+#[cfg(test)]
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// Runtime component dirt and transform state.
 ///
@@ -595,7 +597,7 @@ fn runtime_constrained_layout_ancestor(
 pub(crate) struct RuntimeSolo {
     pub(crate) local_id: usize,
     pub(crate) active_component_property_key: u16,
-    pub(crate) runtime_local_by_cpp_local: BTreeMap<usize, usize>,
+    pub(crate) runtime_local_by_cpp_local: Arc<BTreeMap<usize, usize>>,
     pub(crate) children: Vec<RuntimeSoloChild>,
 }
 
@@ -605,23 +607,80 @@ pub(crate) struct RuntimeSoloChild {
     pub(crate) participates: bool,
 }
 
+#[cfg(test)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SoloMappingWork {
+    pub(crate) analyses: usize,
+    pub(crate) batch_queries: usize,
+    pub(crate) visited_slots: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SOLO_MAPPING_WORK: Cell<SoloMappingWork> = const {
+        Cell::new(SoloMappingWork {
+            analyses: 0,
+            batch_queries: 0,
+            visited_slots: 0,
+        })
+    };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_solo_mapping_work() {
+    SOLO_MAPPING_WORK.set(SoloMappingWork::default());
+}
+
+#[cfg(test)]
+pub(crate) fn solo_mapping_work() -> SoloMappingWork {
+    SOLO_MAPPING_WORK.get()
+}
+
+#[cfg(test)]
+fn record_solo_mapping_analysis() {
+    SOLO_MAPPING_WORK.with(|slot| {
+        let mut work = slot.get();
+        work.analyses += 1;
+        slot.set(work);
+    });
+}
+
+#[cfg(test)]
+fn record_solo_mapping_batch_query(visited_slots: usize) {
+    SOLO_MAPPING_WORK.with(|slot| {
+        let mut work = slot.get();
+        work.batch_queries += 1;
+        work.visited_slots += visited_slots;
+        slot.set(work);
+    });
+}
+
 pub(crate) fn build_runtime_solos(file: &RuntimeFile, graph: &ArtboardGraph) -> Vec<RuntimeSolo> {
+    let solos = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Solo")
+        .collect::<Vec<_>>();
+    if solos.is_empty() {
+        return Vec::new();
+    }
+
     let Some(active_component_property_key) = property_key_for_name("Solo", "activeComponentId")
     else {
         return Vec::new();
     };
-    let runtime_local_by_cpp_local = artboard_index_for_graph(file, graph)
-        .map(|artboard_index| runtime_local_by_cpp_artboard_local(file, graph, artboard_index))
-        .unwrap_or_default();
+    let runtime_local_by_cpp_local = Arc::new(
+        artboard_index_for_graph(file, graph)
+            .map(|artboard_index| runtime_local_by_cpp_artboard_local(file, graph, artboard_index))
+            .unwrap_or_default(),
+    );
 
-    graph
-        .components
-        .iter()
-        .filter(|component| component.type_name == "Solo")
+    solos
+        .into_iter()
         .map(|solo| RuntimeSolo {
             local_id: solo.local_id,
             active_component_property_key,
-            runtime_local_by_cpp_local: runtime_local_by_cpp_local.clone(),
+            runtime_local_by_cpp_local: Arc::clone(&runtime_local_by_cpp_local),
             children: solo
                 .children
                 .iter()
@@ -711,29 +770,36 @@ fn runtime_solo_child_participates(graph: &ArtboardGraph, child_local: usize) ->
     !definition.is_a("Constraint") && !definition.is_a("ClippingShape")
 }
 
-fn runtime_graph_local_for_cpp_artboard_local(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    artboard_index: usize,
-    local_index: usize,
-) -> Option<usize> {
-    let object = file.artboard_local_object(artboard_index, local_index)?;
-    graph
-        .local_objects
-        .iter()
-        .find(|local_object| local_object.global_id == object.id)
-        .map(|local_object| local_object.local_id)
-}
-
 fn runtime_local_by_cpp_artboard_local(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
     artboard_index: usize,
 ) -> BTreeMap<usize, usize> {
-    (0..graph.local_objects.len())
-        .filter_map(|local_index| {
-            runtime_graph_local_for_cpp_artboard_local(file, graph, artboard_index, local_index)
-                .map(|runtime_local| (local_index, runtime_local))
+    #[cfg(test)]
+    record_solo_mapping_analysis();
+
+    let runtime_local_by_global = graph
+        .local_objects
+        .iter()
+        .map(|local_object| (local_object.global_id, local_object.local_id))
+        .collect::<BTreeMap<_, _>>();
+    let slots = file
+        .artboard_local_object_slots(artboard_index)
+        .unwrap_or_default();
+
+    #[cfg(test)]
+    record_solo_mapping_batch_query(slots.len());
+
+    slots
+        .into_iter()
+        .enumerate()
+        .filter_map(|(cpp_local, object)| {
+            object.and_then(|object| {
+                runtime_local_by_global
+                    .get(&object.id)
+                    .copied()
+                    .map(|runtime_local| (cpp_local, runtime_local))
+            })
         })
         .collect()
 }

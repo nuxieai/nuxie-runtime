@@ -278,6 +278,10 @@ retained set:
    reclassification.
    `riv-bullet_man-frame-0-clockwise-atomic`, `gm-beziers-msaa`, and
    `gm-cliprectintersections-msaa` are complete; seven substantive rows remain.
+   All seven now have fresh native-Metal references and execute to pixels after
+   aligning off-frame draw culling, expanded atomic coverage bounds, and
+   singular nested-clip handling with C++; `coin` is the first pixel target at
+   48 differing pixels/max delta 58.
 2. Implement strict replay for gradient paints and render buffers. Capture all
    46 rows those two harness capabilities unlock, then promote passes and turn
    every failure into a concrete parity task. A harness prerequisite needed to

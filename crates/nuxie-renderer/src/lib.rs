@@ -932,7 +932,7 @@ struct LogicalFlushAllocations {
 }
 
 impl LogicalFlushAllocations {
-    fn with_batch(&self, frame: &WgpuFrame, draws: &[SolidDraw]) -> Option<Self> {
+    fn with_batch(&self, frame: &WgpuFrame, draws: &[SolidDraw]) -> Result<Self, &'static str> {
         const MAX_GRADIENT_HEIGHT: usize = 2048;
         const MAX_COVERAGE_WORD_COUNT: usize = (1 << 27) / std::mem::size_of::<u32>();
         const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
@@ -950,9 +950,15 @@ impl LogicalFlushAllocations {
                         && gradient.stops[0] == 0.0
                         && gradient.stops[1] == 1.0);
                 if simple {
-                    next.simple_gradient_count = next.simple_gradient_count.checked_add(1)?;
+                    next.simple_gradient_count = next
+                        .simple_gradient_count
+                        .checked_add(1)
+                        .ok_or("logical flush gradient count overflow")?;
                 } else {
-                    next.complex_gradient_count = next.complex_gradient_count.checked_add(1)?;
+                    next.complex_gradient_count = next
+                        .complex_gradient_count
+                        .checked_add(1)
+                        .ok_or("logical flush gradient count overflow")?;
                 }
             }
 
@@ -965,14 +971,37 @@ impl LogicalFlushAllocations {
                 && draw.image.is_none()
                 && !matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. })
             {
-                let (_, word_count) = draw::clockwise_atomic_coverage_range(
-                    &draw.path.raw_path,
-                    draw.state.transform,
+                let inverse_clip_path = match draw.role {
+                    DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0 => Some(
+                        invert_clockwise_path(
+                            &draw.path.raw_path,
+                            draw.path.fill_rule,
+                            draw.state.transform,
+                            frame.width,
+                            frame.height,
+                        )
+                        .ok_or("nested clip has invalid inverse coverage path")?,
+                    ),
+                    _ => None,
+                };
+                let coverage_path = inverse_clip_path.as_ref().unwrap_or(&draw.path.raw_path);
+                let coverage_bounds = if inverse_clip_path.is_some() {
+                    draw::path_pixel_bounds(coverage_path, draw.state.transform)
+                } else {
+                    path_draw_pixel_bounds(&draw.path, &draw.paint, draw.state.transform)
+                }
+                .ok_or("draw has invalid clockwise coverage bounds")?;
+                let (_, word_count) = draw::clockwise_atomic_coverage_range_from_bounds(
+                    coverage_bounds,
                     frame.width,
                     frame.height,
                     next.coverage_word_count,
-                )?;
-                next.coverage_word_count = next.coverage_word_count.checked_add(word_count)?;
+                )
+                .ok_or("draw has invalid clockwise coverage allocation")?;
+                next.coverage_word_count = next
+                    .coverage_word_count
+                    .checked_add(word_count)
+                    .ok_or("logical flush coverage count overflow")?;
             }
 
             if frame.mode == RenderMode::ClockwiseAtomic
@@ -986,7 +1015,8 @@ impl LogicalFlushAllocations {
                     draw.paint.effective_stroke(),
                     frame.width,
                     frame.height,
-                )?;
+                )
+                .ok_or("draw has invalid feather atlas placement")?;
                 next.atlas_regions.push((placement.width, placement.height));
             }
         }
@@ -994,16 +1024,17 @@ impl LogicalFlushAllocations {
         let gradient_height = next
             .simple_gradient_count
             .div_ceil(RAMPS_PER_SIMPLE_ROW)
-            .checked_add(next.complex_gradient_count)?;
+            .checked_add(next.complex_gradient_count)
+            .ok_or("logical flush gradient height overflow")?;
         let limits = frame.context.device.limits();
         if gradient_height > MAX_GRADIENT_HEIGHT.min(limits.max_texture_dimension_2d as usize) {
-            return None;
+            return Err("draw batch exceeds logical flush gradient texture limit");
         }
         let max_coverage_words = MAX_COVERAGE_WORD_COUNT
             .min(limits.max_storage_buffer_binding_size as usize / std::mem::size_of::<u32>())
             .min(limits.max_buffer_size as usize / std::mem::size_of::<u32>());
         if next.coverage_word_count > max_coverage_words {
-            return None;
+            return Err("draw batch exceeds logical flush coverage buffer limit");
         }
         if !next.atlas_regions.is_empty() {
             let max_dimension = limits.max_texture_dimension_2d;
@@ -1018,9 +1049,9 @@ impl LogicalFlushAllocations {
                 max_dimension,
                 &next.atlas_regions,
             )
-            .ok()?;
+            .map_err(|_| "draw batch exceeds logical flush feather atlas texture limit")?;
         }
-        Some(next)
+        Ok(next)
     }
 }
 
@@ -1055,7 +1086,15 @@ impl Renderer for WgpuFrame {
         }
         let path = wgpu_path(path);
         let paint = wgpu_paint(paint);
-        if path_draw_is_noop(path, paint, self.state.transform) {
+        if path_draw_is_noop(path, paint, self.state.transform)
+            || path_draw_is_outside_frame(
+                path,
+                paint,
+                self.state.transform,
+                self.width,
+                self.height,
+            )
+        {
             return;
         }
         let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
@@ -1359,7 +1398,7 @@ impl WgpuFrame {
             batch
         };
         let batch = make_batch(clip_updates, content.clone());
-        if self.try_push_logical_batch(&batch) {
+        if self.try_push_logical_batch(&batch).is_ok() {
             self.draws.extend(batch);
             return;
         }
@@ -1383,28 +1422,22 @@ impl WgpuFrame {
             }
         }
         let batch = make_batch(clip_updates, content);
-        if !self.try_push_logical_batch(&batch) {
-            self.unsupported
-                .get_or_insert("draw batch exceeds logical flush resource limits");
+        if let Err(reason) = self.try_push_logical_batch(&batch) {
+            self.unsupported.get_or_insert(reason);
             return;
         }
         self.draws.extend(batch);
     }
 
-    fn try_push_logical_batch(&mut self, batch: &[SolidDraw]) -> bool {
-        let Some(resources) =
-            logical_flush_batch_resources(batch, self.mode, self.width, self.height)
-        else {
-            return false;
-        };
-        let Some(allocations) = self.logical_flush_allocations.with_batch(self, batch) else {
-            return false;
-        };
+    fn try_push_logical_batch(&mut self, batch: &[SolidDraw]) -> Result<(), &'static str> {
+        let resources = logical_flush_batch_resources(batch, self.mode, self.width, self.height)
+            .ok_or("draw batch overflows logical flush resource accounting")?;
+        let allocations = self.logical_flush_allocations.with_batch(self, batch)?;
         if !self.logical_flush.push_draws(resources) {
-            return false;
+            return Err("draw batch exceeds logical flush resource counters");
         }
         self.logical_flush_allocations = allocations;
-        true
+        Ok(())
     }
 
     fn msaa_clip_reset_draw(&self, clip: &ClipElement, action: MsaaClipResetAction) -> SolidDraw {
@@ -1465,6 +1498,19 @@ impl WgpuFrame {
         let mut updates = Vec::with_capacity(height - start);
         let mut parent_id = initial_parent_id;
         for (offset, clip) in self.clips[start..height].iter().enumerate() {
+            if self.mode == RenderMode::ClockwiseAtomic
+                && parent_id != 0
+                && invert_clockwise_path(
+                    &clip.path.raw_path,
+                    clip.path.fill_rule,
+                    clip.matrix,
+                    self.width,
+                    self.height,
+                )
+                .is_none()
+            {
+                return None;
+            }
             let replacement_id = (self.next_clip_id + offset as u32) as u16;
             updates.push(SolidDraw {
                 path: clip.path.clone(),
@@ -1941,14 +1987,20 @@ impl WgpuFrame {
                     let is_outermost_clip =
                         matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. });
                     if use_clockwise_atomic_batch && !is_outermost_clip {
-                        let (range, word_count) = draw::clockwise_atomic_coverage_range(
-                            raw_path,
-                            draw.state.transform,
-                            self.width,
-                            self.height,
-                            clockwise_atomic_coverage_words,
-                        )
+                        let coverage_bounds = if inverse_clip_path.is_some() {
+                            draw::path_pixel_bounds(raw_path, draw.state.transform)
+                        } else {
+                            path_draw_pixel_bounds(&draw.path, &draw.paint, draw.state.transform)
+                        }
                         .expect("atomic eligibility already validated visible path bounds");
+                        let (range, word_count) =
+                            draw::clockwise_atomic_coverage_range_from_bounds(
+                                coverage_bounds,
+                                self.width,
+                                self.height,
+                                clockwise_atomic_coverage_words,
+                            )
+                            .expect("atomic eligibility already validated visible path bounds");
                         path.coverage_buffer_range = range;
                         clockwise_atomic_coverage_words += word_count;
                     } else {
@@ -4587,6 +4639,41 @@ fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint, transform: Mat2D) -> bo
                 || fill_path_is_collinear(&path.raw_path)))
 }
 
+fn path_draw_is_outside_frame(
+    path: &WgpuPath,
+    paint: &WgpuPaint,
+    transform: Mat2D,
+    width: u32,
+    height: u32,
+) -> bool {
+    let Some([left, top, right, bottom]) = path_draw_pixel_bounds(path, paint, transform) else {
+        return true;
+    };
+    left >= width as i32
+        || top >= height as i32
+        || right <= 0
+        || bottom <= 0
+        || left >= right
+        || top >= bottom
+}
+
+fn path_draw_pixel_bounds(
+    path: &WgpuPath,
+    paint: &WgpuPaint,
+    transform: Mat2D,
+) -> Option<[i32; 4]> {
+    if paint.style == RenderPaintStyle::Stroke || paint.feather != 0.0 {
+        draw::feather_pixel_bounds(
+            &path.raw_path,
+            transform,
+            paint.feather,
+            paint.effective_stroke(),
+        )
+    } else {
+        draw::path_pixel_bounds(&path.raw_path, transform)
+    }
+}
+
 fn invert_clockwise_path(
     path: &RawPath,
     fill_rule: FillRule,
@@ -6752,6 +6839,37 @@ mod tests {
         move_only.raw_path.move_to(4.0, 4.0);
         paint = WgpuPaint::default();
         assert!(path_draw_is_noop(&move_only, &paint, Mat2D::IDENTITY));
+    }
+
+    #[test]
+    fn culls_path_draws_outside_the_cpp_frame_bounds() {
+        let mut path = WgpuPath {
+            raw_path: RawPath::new(),
+            fill_rule: FillRule::NonZero,
+        };
+        path.raw_path.move_to(-20.0, -20.0);
+        path.raw_path.line_to(-10.0, -20.0);
+        path.raw_path.line_to(-10.0, -10.0);
+        path.raw_path.close();
+        let mut paint = WgpuPaint::default();
+
+        assert!(path_draw_is_outside_frame(
+            &path,
+            &paint,
+            Mat2D::IDENTITY,
+            64,
+            64
+        ));
+
+        paint.style = RenderPaintStyle::Stroke;
+        paint.thickness = 24.0;
+        assert!(!path_draw_is_outside_frame(
+            &path,
+            &paint,
+            Mat2D::IDENTITY,
+            64,
+            64
+        ));
     }
 
     #[test]
@@ -10050,10 +10168,10 @@ mod tests {
         assert_eq!(allocations.complex_gradient_count, 2048);
         assert!(allocations
             .with_batch(&frame, std::slice::from_ref(&draw))
-            .is_none());
+            .is_err());
         assert!(LogicalFlushAllocations::default()
             .with_batch(&frame, std::slice::from_ref(&draw))
-            .is_some());
+            .is_ok());
     }
 
     #[test]
@@ -10074,7 +10192,7 @@ mod tests {
         let mut atlas = LogicalFlushAllocations::default();
         let atlas_count = (1..10_000)
             .find(|_| {
-                let Some(next) = atlas.with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+                let Ok(next) = atlas.with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
                 else {
                     return true;
                 };
@@ -10085,7 +10203,7 @@ mod tests {
         assert!(atlas_count > 1);
         assert!(LogicalFlushAllocations::default()
             .with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
-            .is_some());
+            .is_ok());
 
         let coverage_factory =
             WgpuFactory::new_with_mode(1024, 1024, RenderMode::ClockwiseAtomic).unwrap();
@@ -10114,7 +10232,7 @@ mod tests {
         let mut coverage = LogicalFlushAllocations::default();
         let coverage_count = (1..1_000)
             .find(|_| {
-                let Some(next) =
+                let Ok(next) =
                     coverage.with_batch(&coverage_frame, std::slice::from_ref(&coverage_draw))
                 else {
                     return true;
@@ -10126,7 +10244,70 @@ mod tests {
         assert!(coverage_count > 1);
         assert!(LogicalFlushAllocations::default()
             .with_batch(&coverage_frame, std::slice::from_ref(&coverage_draw))
-            .is_some());
+            .is_ok());
+    }
+
+    #[test]
+    fn logical_flush_allocates_nested_clip_inverse_coverage() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let frame = factory.begin_frame(0);
+        let draw = SolidDraw {
+            path: rect_path([-20.0, -20.0, -10.0, -10.0], FillRule::Clockwise),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::ClipUpdate {
+                replacement_id: 2,
+                parent_id: 1,
+            },
+            image: None,
+        };
+
+        let allocations = LogicalFlushAllocations::default()
+            .with_batch(&frame, std::slice::from_ref(&draw))
+            .unwrap();
+        assert_eq!(allocations.coverage_word_count, 96 * 96);
+    }
+
+    #[test]
+    fn logical_flush_coverage_includes_visible_stroke_outset() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let frame = factory.begin_frame(0);
+        let draw = SolidDraw {
+            path: rect_path([-20.0, -20.0, -10.0, -10.0], FillRule::Clockwise),
+            paint: WgpuPaint {
+                style: RenderPaintStyle::Stroke,
+                thickness: 24.0,
+                ..WgpuPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 1 },
+            image: None,
+        };
+
+        let allocations = LogicalFlushAllocations::default()
+            .with_batch(&frame, std::slice::from_ref(&draw))
+            .unwrap();
+        assert_eq!(allocations.coverage_word_count, 64 * 64);
+    }
+
+    #[test]
+    fn singular_nested_clip_is_empty_instead_of_unsupported() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let mut frame = factory.begin_frame(0);
+        frame.clips = vec![
+            ClipElement {
+                path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
+                matrix: Mat2D::IDENTITY,
+            },
+            ClipElement {
+                path: rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise),
+                matrix: Mat2D([0.0; 6]),
+            },
+        ];
+        frame.state.clip_stack_height = 2;
+
+        assert!(frame.prepare_clip_updates().is_none());
+        assert!(frame.unsupported.is_none());
     }
 
     #[test]

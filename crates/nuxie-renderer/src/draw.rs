@@ -227,25 +227,23 @@ pub(crate) fn clockwise_atomic_coverage_range(
     viewport_height: u32,
     offset: usize,
 ) -> Option<(CoverageBufferRange, usize)> {
+    let bounds = path_pixel_bounds(path, transform)?;
+    clockwise_atomic_coverage_range_from_bounds(bounds, viewport_width, viewport_height, offset)
+}
+
+pub(crate) fn clockwise_atomic_coverage_range_from_bounds(
+    [left, top, right, bottom]: [i32; 4],
+    viewport_width: u32,
+    viewport_height: u32,
+    offset: usize,
+) -> Option<(CoverageBufferRange, usize)> {
     const PADDING: i32 = 2;
     const TILE_SIZE: u32 = 32;
 
-    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    for point in path.points() {
-        let point = transform.transform_point(*point);
-        min.x = min.x.min(point.x);
-        min.y = min.y.min(point.y);
-        max.x = max.x.max(point.x);
-        max.y = max.y.max(point.y);
-    }
-    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
-        return None;
-    }
-    let left = (min.x.floor() as i32).clamp(0, viewport_width as i32);
-    let top = (min.y.floor() as i32).clamp(0, viewport_height as i32);
-    let right = (max.x.ceil() as i32).clamp(0, viewport_width as i32);
-    let bottom = (max.y.ceil() as i32).clamp(0, viewport_height as i32);
+    let left = left.clamp(0, viewport_width as i32);
+    let top = top.clamp(0, viewport_height as i32);
+    let right = right.clamp(0, viewport_width as i32);
+    let bottom = bottom.clamp(0, viewport_height as i32);
     if right <= left || bottom <= top {
         return None;
     }

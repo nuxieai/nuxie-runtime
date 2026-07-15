@@ -1109,7 +1109,17 @@ Run `make renderer-golden`.
     Dawn clockwise-atomic references. Port any same-backend Rust defect; only
     reclassify a row after the full stream passes its unchanged contract. The
     minimum strict-gradient replay work needed for this oracle is an allowed
-    R3.1 prerequisite.
+    R3.1 prerequisite. Fresh native-Metal references from upstream
+    `7c778d13` now exist for all seven rows and every Rust stream reaches
+    pixels. The capture sweep exposed and
+    closed three admission mismatches before pixel adjudication: off-frame
+    path draws are culled before clip/resource allocation, clockwise coverage
+    uses C++'s stroke/feather-expanded pixel bounds, and singular nested clips
+    become empty instead of unsupported. Current differing-pixel/max-delta
+    probes are: `bankcard` 1,485,510/20, `car_widgets_v01` 875,754/249, `coin`
+    48/58, `data_viz_demo` 169,028/253, `echo_show_demo` 217,492/171,
+    `hunter_x_demo` 659,956/255, and `rewards_demo` 311,799/192. Start pixel
+    localization with the bounded `coin` residual; none is promoted yet.
 91. [ ] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold.
@@ -3547,3 +3557,13 @@ Run `make renderer-golden`.
   dedicated MSAA stroke depth state. Promoted under the unchanged `2/32`
   contract with no tolerance change; the ratchet is
   exact=1,356/diverges=0/gated=112 and only seven substantive rows remain.
+- 2026-07-14: Began R3.1 queue item 90 by capturing all seven missing native
+  Metal clockwise-atomic references from upstream `7c778d13` and converting
+  every retained row into a runnable pixel comparison. Ported C++'s
+  pre-allocation off-frame draw cull,
+  stroke/feather-expanded atomic coverage bounds, nested inverse-clip
+  preflight, and empty handling for singular nested clips. `car_widgets_v01`
+  and `echo_show_demo` advance from unsupported to measured output; all seven
+  now reach pixels. The 235-test renderer suite and full corpus pass at
+  exact=1,356/diverges=0/gated=112. `coin` is next at 48 differing pixels/max
+  delta 58; no gate or tolerance changed in this slice.

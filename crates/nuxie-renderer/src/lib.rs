@@ -5397,10 +5397,13 @@ fn ordered_msaa_draws(
     viewport_width: u32,
     viewport_height: u32,
 ) -> (Vec<SolidDraw>, Vec<u32>, Vec<bool>) {
-    // renderer/src/render_context.cpp puts every unclipped opaque MSAA draw in
-    // the negative-key prepass list, then sorts it before all positive-key
-    // subpasses. This must not depend on rectangle overlap: a destination-read
-    // barrier belongs before the first batch in the draw group.
+    // renderer/src/render_context.cpp sorts opaque MSAA prepasses one subpass
+    // at a time. Rust still prepares the passes of a fill as one draw, so it
+    // can only move that draw as a unit when all passes share a draw group or
+    // the draw has a single pass. Destination-read flushes force the former,
+    // which preserves C++ barrier placement without reordering multi-layer
+    // fills as indivisible units.
+    let all_subpasses_in_same_group = draws.iter().any(draw_uses_advanced_blend);
     let mut prepasses = Vec::<(u32, usize)>::new();
     let mut subpasses = Vec::<(u32, usize)>::new();
     for (group_index, group) in disjoint_msaa_draw_indices(draws, viewport_width, viewport_height)
@@ -5410,7 +5413,10 @@ fn ordered_msaa_draws(
         let z_index = u32::try_from(group_index + 1)
             .expect("MSAA draw group must fit the path-data contract");
         for draw_index in group {
-            if msaa_draw_uses_opaque_prepass(&draws[draw_index]) {
+            let draw = &draws[draw_index];
+            let can_move_as_one_prepass =
+                msaa_draw_layer_count(draw, all_subpasses_in_same_group) == 1;
+            if msaa_draw_uses_opaque_prepass(draw) && can_move_as_one_prepass {
                 prepasses.push((z_index, draw_index));
             } else {
                 subpasses.push((z_index, draw_index));
@@ -6649,10 +6655,10 @@ mod tests {
                 .iter()
                 .map(|draw| draw.paint.color & 0xff)
                 .collect::<Vec<_>>(),
-            [2, 1, 3]
+            [1, 3, 2]
         );
-        assert_eq!(z_indices, [4, 1, 1]);
-        assert_eq!(prepasses, [true, true, true]);
+        assert_eq!(z_indices, [1, 1, 4]);
+        assert_eq!(prepasses, [false, false, false]);
     }
 
     #[test]

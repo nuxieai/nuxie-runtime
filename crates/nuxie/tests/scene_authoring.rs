@@ -1,9 +1,10 @@
 use anyhow::Result;
 use nuxie::{
-    ArtboardId, ArtboardSpec, EditAbort, EditErrorKind, EditId, EditReason, ExportedObjectKind,
-    ExportedProperty, FillSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind,
-    RecordingFactory, RectangleSpec, ResolveError, Scene, SceneTx, ShapeSpec, SolidColorSpec,
-    StaleCursor, StructureEpoch, props,
+    ArtboardId, ArtboardSpec, DashPathSpec, DashSpec, EditAbort, EditErrorKind, EditId, EditReason,
+    ExportedObjectKind, ExportedProperty, FillSpec, NodeKind, NodeSpec, ObjectId, Parent,
+    PropValueKind, RecordingFactory, RectangleCornerRadii, RectangleSpec, ResolveError, Scene,
+    SceneStrokeCap, SceneStrokeJoin, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
+    StructureEpoch, props,
 };
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
@@ -40,11 +41,7 @@ fn create_card(
     )?;
     let rectangle = tx.create(
         Parent::Object(shape),
-        NodeSpec::Rectangle(RectangleSpec {
-            name: format!("{name} Rectangle"),
-            width: 80.0,
-            height: 60.0,
-        }),
+        NodeSpec::Rectangle(RectangleSpec::new(format!("{name} Rectangle"), 80.0, 60.0)),
     )?;
     let fill = tx.create(
         Parent::Object(shape),
@@ -85,11 +82,7 @@ fn authored_scene_uses_typed_cursor_writes_and_stales_them_after_structure_chang
         )?;
         let rectangle = tx.create(
             Parent::Object(shape),
-            NodeSpec::Rectangle(RectangleSpec {
-                name: "Card Rectangle".into(),
-                width: 80.0,
-                height: 60.0,
-            }),
+            NodeSpec::Rectangle(RectangleSpec::new("Card Rectangle", 80.0, 60.0)),
         )?;
         let fill = tx.create(
             Parent::Object(shape),
@@ -406,11 +399,7 @@ fn local_validation_returns_a_structured_abort_diagnostic() -> Result<()> {
         .edit(|tx| {
             tx.create(
                 Parent::Artboard(artboard),
-                NodeSpec::Rectangle(RectangleSpec {
-                    name: "Invalid child".into(),
-                    width: 10.0,
-                    height: 10.0,
-                }),
+                NodeSpec::Rectangle(RectangleSpec::new("Invalid child", 10.0, 10.0)),
             )?;
             Ok(())
         })
@@ -527,11 +516,7 @@ fn export_records_are_sparse_canonical_and_compose_one_backboard() -> Result<()>
         )?;
         tx.create(
             Parent::Object(default_shape),
-            NodeSpec::Rectangle(RectangleSpec {
-                name: "Default Rectangle".into(),
-                width: 40.0,
-                height: 30.0,
-            }),
+            NodeSpec::Rectangle(RectangleSpec::new("Default Rectangle", 40.0, 30.0)),
         )?;
         tx.create(
             Parent::Artboard(first),
@@ -638,11 +623,7 @@ fn sparse_export_omits_only_exact_schema_defaults_across_remounts() -> Result<()
         )?;
         let rectangle = tx.create(
             Parent::Object(shape),
-            NodeSpec::Rectangle(RectangleSpec {
-                name: "Rectangle".into(),
-                width: 80.0,
-                height: 60.0,
-            }),
+            NodeSpec::Rectangle(RectangleSpec::new("Rectangle", 80.0, 60.0)),
         )?;
         Ok((artboard, shape, rectangle))
     })?;
@@ -682,6 +663,259 @@ fn sparse_export_omits_only_exact_schema_defaults_across_remounts() -> Result<()
         Ok(())
     })?;
     assert_near_defaults(&mut scene)?;
+    Ok(())
+}
+
+#[test]
+fn typed_scene_materializes_rectangle_radii_and_a_dashed_stroke_without_raw_schema_keys()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Border".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Border Shape".into(),
+                x: 5.0,
+                y: 5.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec {
+                name: "Border Rectangle".into(),
+                width: 8.0,
+                height: 8.0,
+                corner_radii: Some(RectangleCornerRadii {
+                    top_left: 1.0,
+                    top_right: 2.0,
+                    bottom_right: 3.0,
+                    bottom_left: 4.0,
+                    linked: false,
+                }),
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Border Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Fill Color".into(),
+                color: 0xff112233,
+            }),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Border Stroke".into(),
+                thickness: 2.0,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(stroke),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Stroke Color".into(),
+                color: 0xff445566,
+            }),
+        )?;
+        let dash_path = tx.create(
+            Parent::Object(stroke),
+            NodeSpec::DashPath(DashPathSpec {
+                name: "Dash Path".into(),
+                offset: 0.0,
+                offset_is_percentage: false,
+            }),
+        )?;
+        for (index, length) in [0.5, 0.5].into_iter().enumerate() {
+            tx.create(
+                Parent::Object(dash_path),
+                NodeSpec::Dash(DashSpec {
+                    name: format!("Dash {index}"),
+                    length,
+                    length_is_percentage: true,
+                }),
+            )?;
+        }
+        Ok(artboard)
+    })?;
+
+    let records = scene.export_records();
+    let [
+        _,
+        _,
+        _,
+        rectangle,
+        _,
+        _,
+        stroke,
+        stroke_color,
+        dash_path,
+        dash_on,
+        dash_off,
+    ] = records.records()
+    else {
+        panic!("border scene must export exactly eleven records");
+    };
+    assert_eq!(
+        records
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::Shape,
+            ExportedObjectKind::Rectangle,
+            ExportedObjectKind::Fill,
+            ExportedObjectKind::SolidColor,
+            ExportedObjectKind::Stroke,
+            ExportedObjectKind::SolidColor,
+            ExportedObjectKind::DashPath,
+            ExportedObjectKind::Dash,
+            ExportedObjectKind::Dash,
+        ]
+    );
+    assert_eq!(
+        rectangle.properties,
+        vec![
+            ExportedProperty::ComponentName("Border Rectangle".into()),
+            ExportedProperty::ParentId(1),
+            ExportedProperty::PathWidth(8.0),
+            ExportedProperty::PathHeight(8.0),
+            ExportedProperty::RectangleCornerRadiusTopLeft(1.0),
+            ExportedProperty::RectangleCornerRadiusTopRight(2.0),
+            ExportedProperty::RectangleCornerRadiusBottomLeft(4.0),
+            ExportedProperty::RectangleCornerRadiusBottomRight(3.0),
+            ExportedProperty::RectangleLinkCornerRadius(false),
+        ]
+    );
+    assert_eq!(
+        stroke.properties,
+        vec![
+            ExportedProperty::ComponentName("Border Stroke".into()),
+            ExportedProperty::ParentId(1),
+            ExportedProperty::StrokeThickness(2.0),
+            ExportedProperty::StrokeCap(SceneStrokeCap::Butt),
+            ExportedProperty::StrokeJoin(SceneStrokeJoin::Miter),
+            ExportedProperty::StrokeTransformAffectsStroke(true),
+        ]
+    );
+    assert_eq!(
+        stroke_color.properties,
+        vec![
+            ExportedProperty::ComponentName("Stroke Color".into()),
+            ExportedProperty::ParentId(5),
+            ExportedProperty::ColorValue(0xff445566),
+        ]
+    );
+    assert_eq!(
+        dash_path.properties,
+        vec![
+            ExportedProperty::ComponentName("Dash Path".into()),
+            ExportedProperty::ParentId(5),
+            ExportedProperty::DashOffset(0.0),
+            ExportedProperty::DashOffsetIsPercentage(false),
+        ]
+    );
+    assert_eq!(
+        dash_on.properties,
+        vec![
+            ExportedProperty::ComponentName("Dash 0".into()),
+            ExportedProperty::ParentId(7),
+            ExportedProperty::DashLength(0.5),
+            ExportedProperty::DashLengthIsPercentage(true),
+        ]
+    );
+    assert_eq!(
+        dash_off.properties,
+        vec![
+            ExportedProperty::ComponentName("Dash 1".into()),
+            ExportedProperty::ParentId(7),
+            ExportedProperty::DashLength(0.5),
+            ExportedProperty::DashLengthIsPercentage(true),
+        ]
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let stream = draw_stream(&mut scene, instance)?;
+    assert!(stream.contains("style=stroke"));
+    assert!(stream.contains("color=0xff445566"));
+    Ok(())
+}
+
+#[test]
+fn explicit_all_zero_rectangle_radii_remain_present_in_typed_export() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Zero Radius".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Shape".into(),
+                x: 5.0,
+                y: 5.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec {
+                name: "Rectangle".into(),
+                width: 8.0,
+                height: 8.0,
+                corner_radii: Some(RectangleCornerRadii {
+                    top_left: 0.0,
+                    top_right: 0.0,
+                    bottom_right: 0.0,
+                    bottom_left: 0.0,
+                    linked: false,
+                }),
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records();
+    let [_, _, _, rectangle] = records.records() else {
+        panic!("zero-radius scene must export exactly four records");
+    };
+    assert_eq!(
+        rectangle.properties,
+        vec![
+            ExportedProperty::ComponentName("Rectangle".into()),
+            ExportedProperty::ParentId(1),
+            ExportedProperty::PathWidth(8.0),
+            ExportedProperty::PathHeight(8.0),
+            ExportedProperty::RectangleCornerRadiusTopLeft(0.0),
+            ExportedProperty::RectangleCornerRadiusTopRight(0.0),
+            ExportedProperty::RectangleCornerRadiusBottomLeft(0.0),
+            ExportedProperty::RectangleCornerRadiusBottomRight(0.0),
+            ExportedProperty::RectangleLinkCornerRadius(false),
+        ]
+    );
     Ok(())
 }
 
@@ -792,11 +1026,7 @@ fn render_cache_held_across_a_structural_remount_matches_a_fresh_cache() -> Resu
         )?;
         let rectangle = tx.create(
             Parent::Object(shape),
-            NodeSpec::Rectangle(RectangleSpec {
-                name: "Card Rectangle".into(),
-                width: 80.0,
-                height: 60.0,
-            }),
+            NodeSpec::Rectangle(RectangleSpec::new("Card Rectangle", 80.0, 60.0)),
         )?;
         let fill = tx.create(
             Parent::Object(shape),
@@ -876,11 +1106,7 @@ fn editing_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -
         )?;
         let rectangle_a = tx.create(
             Parent::Object(shape_a),
-            NodeSpec::Rectangle(RectangleSpec {
-                name: "A Rectangle".into(),
-                width: 80.0,
-                height: 60.0,
-            }),
+            NodeSpec::Rectangle(RectangleSpec::new("A Rectangle", 80.0, 60.0)),
         )?;
         let fill_a = tx.create(
             Parent::Object(shape_a),
@@ -915,11 +1141,7 @@ fn editing_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -
         )?;
         tx.create(
             Parent::Object(shape_b),
-            NodeSpec::Rectangle(RectangleSpec {
-                name: "B Rectangle".into(),
-                width: 80.0,
-                height: 60.0,
-            }),
+            NodeSpec::Rectangle(RectangleSpec::new("B Rectangle", 80.0, 60.0)),
         )?;
         let fill_b = tx.create(
             Parent::Object(shape_b),

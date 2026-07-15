@@ -467,6 +467,9 @@ pub enum ExportedObjectKind {
     Rectangle,
     Fill,
     SolidColor,
+    Stroke,
+    DashPath,
+    Dash,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -489,8 +492,21 @@ pub enum ExportedProperty {
     ScaleY(f32),
     PathWidth(f32),
     PathHeight(f32),
+    RectangleCornerRadiusTopLeft(f32),
+    RectangleCornerRadiusTopRight(f32),
+    RectangleCornerRadiusBottomRight(f32),
+    RectangleCornerRadiusBottomLeft(f32),
+    RectangleLinkCornerRadius(bool),
     FillRule(ExportedFillRule),
     ColorValue(u32),
+    StrokeThickness(f32),
+    StrokeCap(SceneStrokeCap),
+    StrokeJoin(SceneStrokeJoin),
+    StrokeTransformAffectsStroke(bool),
+    DashOffset(f32),
+    DashOffsetIsPercentage(bool),
+    DashLength(f32),
+    DashLengthIsPercentage(bool),
 }
 
 impl ExportedProperty {
@@ -508,8 +524,21 @@ impl ExportedProperty {
             Self::ScaleY(_) => PROPERTY_SCALE_Y,
             Self::PathWidth(_) => PROPERTY_PATH_WIDTH,
             Self::PathHeight(_) => PROPERTY_PATH_HEIGHT,
+            Self::RectangleCornerRadiusTopLeft(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_TL,
+            Self::RectangleCornerRadiusTopRight(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_TR,
+            Self::RectangleCornerRadiusBottomRight(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_BR,
+            Self::RectangleCornerRadiusBottomLeft(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_BL,
+            Self::RectangleLinkCornerRadius(_) => PROPERTY_RECTANGLE_LINK_CORNER_RADIUS,
             Self::FillRule(_) => PROPERTY_FILL_RULE,
             Self::ColorValue(_) => PROPERTY_COLOR_VALUE,
+            Self::StrokeThickness(_) => PROPERTY_STROKE_THICKNESS,
+            Self::StrokeCap(_) => PROPERTY_STROKE_CAP,
+            Self::StrokeJoin(_) => PROPERTY_STROKE_JOIN,
+            Self::StrokeTransformAffectsStroke(_) => PROPERTY_STROKE_TRANSFORM_AFFECTS_STROKE,
+            Self::DashOffset(_) => PROPERTY_DASH_OFFSET,
+            Self::DashOffsetIsPercentage(_) => PROPERTY_DASH_OFFSET_IS_PERCENTAGE,
+            Self::DashLength(_) => PROPERTY_DASH_LENGTH,
+            Self::DashLengthIsPercentage(_) => PROPERTY_DASH_LENGTH_IS_PERCENTAGE,
         }
     }
 
@@ -519,6 +548,8 @@ impl ExportedProperty {
             Self::ComponentName(value) => AuthoringValue::String(value),
             Self::ParentId(value) => AuthoringValue::Uint(u64::from(value)),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
+            Self::StrokeCap(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
+            Self::StrokeJoin(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::LayoutWidth(value)
             | Self::LayoutHeight(value)
             | Self::TranslateX(value)
@@ -528,7 +559,18 @@ impl ExportedProperty {
             | Self::ScaleX(value)
             | Self::ScaleY(value)
             | Self::PathWidth(value)
-            | Self::PathHeight(value) => AuthoringValue::Double(value),
+            | Self::PathHeight(value)
+            | Self::RectangleCornerRadiusTopLeft(value)
+            | Self::RectangleCornerRadiusTopRight(value)
+            | Self::RectangleCornerRadiusBottomRight(value)
+            | Self::RectangleCornerRadiusBottomLeft(value)
+            | Self::StrokeThickness(value)
+            | Self::DashOffset(value)
+            | Self::DashLength(value) => AuthoringValue::Double(value),
+            Self::RectangleLinkCornerRadius(value)
+            | Self::StrokeTransformAffectsStroke(value)
+            | Self::DashOffsetIsPercentage(value)
+            | Self::DashLengthIsPercentage(value) => AuthoringValue::Bool(value),
             Self::ColorValue(value) => AuthoringValue::Color(value),
         };
         AuthoringProperty { key, value }
@@ -551,6 +593,9 @@ impl ExportedRecord {
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::Fill => TYPE_FILL,
             ExportedObjectKind::SolidColor => TYPE_SOLID_COLOR,
+            ExportedObjectKind::Stroke => TYPE_STROKE,
+            ExportedObjectKind::DashPath => TYPE_DASH_PATH,
+            ExportedObjectKind::Dash => TYPE_DASH,
         };
         AuthoringRecord {
             type_key,
@@ -1091,8 +1136,12 @@ impl SceneTx<'_> {
                 };
                 let valid = matches!(
                     (parent_kind, child),
-                    (NodeKind::Shape, NodeKind::Rectangle | NodeKind::Fill)
-                        | (NodeKind::Fill, NodeKind::SolidColor)
+                    (
+                        NodeKind::Shape,
+                        NodeKind::Rectangle | NodeKind::Fill | NodeKind::Stroke
+                    ) | (NodeKind::Fill, NodeKind::SolidColor)
+                        | (NodeKind::Stroke, NodeKind::SolidColor | NodeKind::DashPath)
+                        | (NodeKind::DashPath, NodeKind::Dash)
                 );
                 if !valid {
                     return Err(EditAbort::new(
@@ -1390,6 +1439,35 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
             if !spec.height.is_finite() {
                 return Err(EditReason::NonFiniteProperty { property: "height" });
             }
+            if let Some(radii) = spec.corner_radii {
+                for (property, value) in [
+                    ("corner_radius_tl", radii.top_left),
+                    ("corner_radius_tr", radii.top_right),
+                    ("corner_radius_br", radii.bottom_right),
+                    ("corner_radius_bl", radii.bottom_left),
+                ] {
+                    if !value.is_finite() {
+                        return Err(EditReason::NonFiniteProperty { property });
+                    }
+                }
+            }
+        }
+        NodeSpec::Stroke(spec) => {
+            if !spec.thickness.is_finite() {
+                return Err(EditReason::NonFiniteProperty {
+                    property: "thickness",
+                });
+            }
+        }
+        NodeSpec::DashPath(spec) => {
+            if !spec.offset.is_finite() {
+                return Err(EditReason::NonFiniteProperty { property: "offset" });
+            }
+        }
+        NodeSpec::Dash(spec) => {
+            if !spec.length.is_finite() {
+                return Err(EditReason::NonFiniteProperty { property: "length" });
+            }
         }
         NodeSpec::Fill(_) | NodeSpec::SolidColor(_) => {}
     }
@@ -1446,6 +1524,21 @@ fn node_record(
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
             properties.push(ExportedProperty::PathWidth(spec.width));
             properties.push(ExportedProperty::PathHeight(spec.height));
+            if let Some(radii) = spec.corner_radii {
+                properties.push(ExportedProperty::RectangleLinkCornerRadius(radii.linked));
+                properties.push(ExportedProperty::RectangleCornerRadiusTopLeft(
+                    radii.top_left,
+                ));
+                properties.push(ExportedProperty::RectangleCornerRadiusTopRight(
+                    radii.top_right,
+                ));
+                properties.push(ExportedProperty::RectangleCornerRadiusBottomRight(
+                    radii.bottom_right,
+                ));
+                properties.push(ExportedProperty::RectangleCornerRadiusBottomLeft(
+                    radii.bottom_left,
+                ));
+            }
             ExportedObjectKind::Rectangle
         }
         NodeSpec::Fill(spec) => {
@@ -1457,6 +1550,32 @@ fn node_record(
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
             properties.push(ExportedProperty::ColorValue(spec.color));
             ExportedObjectKind::SolidColor
+        }
+        NodeSpec::Stroke(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::StrokeThickness(spec.thickness));
+            properties.push(ExportedProperty::StrokeCap(spec.cap));
+            properties.push(ExportedProperty::StrokeJoin(spec.join));
+            properties.push(ExportedProperty::StrokeTransformAffectsStroke(
+                spec.transform_affects_stroke,
+            ));
+            ExportedObjectKind::Stroke
+        }
+        NodeSpec::DashPath(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::DashOffset(spec.offset));
+            properties.push(ExportedProperty::DashOffsetIsPercentage(
+                spec.offset_is_percentage,
+            ));
+            ExportedObjectKind::DashPath
+        }
+        NodeSpec::Dash(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::DashLength(spec.length));
+            properties.push(ExportedProperty::DashLengthIsPercentage(
+                spec.length_is_percentage,
+            ));
+            ExportedObjectKind::Dash
         }
     };
     Ok(ExportedRecord { kind, properties })
@@ -1536,11 +1655,11 @@ mod tests {
                 )?;
                 tx.create(
                     Parent::Object(shape),
-                    NodeSpec::Rectangle(RectangleSpec {
-                        name: format!("{name} Rectangle"),
-                        width: 40.0,
-                        height: 30.0,
-                    }),
+                    NodeSpec::Rectangle(RectangleSpec::new(
+                        format!("{name} Rectangle"),
+                        40.0,
+                        30.0,
+                    )),
                 )?;
                 let fill = tx.create(
                     Parent::Object(shape),

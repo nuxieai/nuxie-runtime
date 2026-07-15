@@ -22,6 +22,42 @@ impl Vec2D {
     }
 }
 
+/// Axis-aligned bounds in the same coordinate space as the queried geometry.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Aabb {
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+}
+
+impl Aabb {
+    pub const fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
+        Self {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
+    }
+
+    pub fn width(self) -> f32 {
+        self.max_x - self.min_x
+    }
+
+    pub fn height(self) -> f32 {
+        self.max_y - self.min_y
+    }
+
+    /// Inclusive containment, including points on the maximum edges.
+    pub fn contains(self, point: Vec2D) -> bool {
+        point.x >= self.min_x
+            && point.x <= self.max_x
+            && point.y >= self.min_y
+            && point.y <= self.max_y
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mat2D(pub [f32; 6]);
 

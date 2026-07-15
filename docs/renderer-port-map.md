@@ -277,8 +277,11 @@ retained set:
    evidence to distinguish a Rust defect from a platform boundary before
    reclassification.
    `riv-bullet_man-frame-0-clockwise-atomic`, `gm-beziers-msaa`, and
-   `gm-cliprectintersections-msaa`, and `bankcard` are complete; five
-   substantive rows remain.
+   `gm-cliprectintersections-msaa`, and `bankcard` are complete. Later
+   same-hardware artifact comparisons reclassified `coin`, `hunter_x_demo`,
+   and `rewards_demo` to the reviewed Metal/WebGPU subpixel-edge boundary;
+   `car_widgets_v01`, `data_viz_demo`, and Echo's separate clip/composite
+   finding remain actionable.
    All seven now have fresh native-Metal references and execute to pixels after
    aligning off-frame draw culling, expanded atomic coverage bounds, and
    singular nested-clip handling with C++. `coin` is adjudicated as the
@@ -287,7 +290,9 @@ retained set:
    reordering: Rust emitted every atlas blit before ordinary paths, while C++
    preserves authored batch order. Interleaving the draw types reduces the
    row from 1,485,510 pixels/max delta 20 to a passing 22/max 18 under its
-   unchanged `2/32` contract; five substantive rows remain.
+   unchanged `2/32` contract. Rewards' fresh command-21 preparation, clip,
+   coverage, and pixel artifacts subsequently proved that its remaining
+   output is sparse clip-edge rasterization, not advanced-feather behavior.
 2. Implement strict replay for gradient paints and render buffers. Capture all
    46 rows those two harness capabilities unlock, then promote passes and turn
    every failure into a concrete parity task. A harness prerequisite needed to

@@ -1143,9 +1143,12 @@ Run `make renderer-golden`.
     atomic coverage prefix. Unclipped positive interior weights now replay as
     unit-weight instanced draws, with adjacent unit-weight triangles retained
     as one batch. The command-16 C++ blit is 0/max 1 and the full frame improves
-    from 1,677/max 33 to 1,575/max 33. Current actionable probes are
-    `car_widgets_v01` 65,522/96, `data_viz_demo` 12,118/99,
-    `echo_show_demo` 67,301/54, and `rewards_demo` 1,575/33; all four remain
+    from 1,677/max 33 to 1,575/max 33. A fresh command-21 WebGPU-on-Metal
+    artifact comparison then proved all 254 visible isolated differences are
+    exactly on its sparse clip-plane edge differences, while the unclipped
+    control passes. Rewards is reclassified to the reviewed subpixel-edge
+    boundary. Current actionable probes are `car_widgets_v01` 65,522/96,
+    `data_viz_demo` 12,118/99, and `echo_show_demo` 67,301/54; all three remain
     open under unchanged contracts.
 91. [x] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
@@ -1232,10 +1235,18 @@ Run `make renderer-golden`.
 104. [ ] Capture paired native-Metal/Rust Echo color and clip state after
     commands 16, 35, 39, and 104, then port only the defect identified by that
     trace. Clip-plane format precision has already been disproved.
-105. [ ] Close Rewards' remaining command-21 clipped residual with a fresh
-    cross-language payload/plane oracle. Keep the rejected mixed artifact
-    harness out of production; the command-16 weighted-interior fix is already
-    isolated and green.
+105. [x] Close Rewards' remaining command-21 clipped residual with a fresh
+    cross-language payload/plane oracle. An empty-directory recapture from the
+    pinned C++ Dawn executable reproduced all nine artifact hashes. CPU spans
+    and preparation agree, the unclipped control passes, and coverage differs
+    at only six words. The clip plane differs at 802 sparse edge words, 797 of
+    which are C++ partial coverage versus Rust full coverage; every one of the
+    254 over-threshold isolated pixels lies on those words. The full native
+    residual is 1,575/max 33 across 1,517 tiny components, largest six pixels.
+    Rewards therefore moves to `metal-webgpu-subpixel-edge-coverage` without a
+    status, reference, or tolerance change. The rejected mixed artifact
+    harness remains out of production; see
+    `docs/renderer-rewards-command21-audit.md`.
 
 ## R2 Completion Record
 
@@ -3831,3 +3842,14 @@ Run `make renderer-golden`.
   tolerance changed. The renderer remains exact=1,408/diverges=0/gated=60;
   all 256 enabled renderer tests, the full workspace, normal 584-segment V2
   floor, scripted 35-segment floor, and 1,468-row renderer corpus pass.
+- 2026-07-15: Closed queue item 105 with a fresh empty-directory Rewards
+  command-21 recapture from the pinned C++ Dawn executable. All nine artifact
+  hashes reproduced exactly. CPU spans, preparation, and the unclipped control
+  agree; the clipped output's 254 over-threshold pixels all lie on 802 sparse
+  clip-plane edge words, while normalized coverage differs at only six
+  unrelated words. The full native residual is 1,575/max 33 across 1,517 tiny
+  components, largest six. Rewards moves to the existing
+  `metal-webgpu-subpixel-edge-coverage` boundary without changing status,
+  reference, tolerance, or exact=1,408/diverges=0/gated=60. The rejected mixed
+  artifact harness remains out of production; evidence is in
+  `docs/renderer-rewards-command21-audit.md`.

@@ -168,6 +168,21 @@ contract, and aggregate counts are unchanged; the active taxonomy has 51
 subpixel-edge rows, three advanced-feather rows, and one clip-edge/composite
 parity row.
 
+### Post-R3.1 Rewards Adjudication (2026-07-15)
+
+A fresh empty-directory C++ Dawn recapture and independent Rust Metal replay
+close Rewards' remaining command-21 question. CPU spans and the pinned draw
+schedule agree, the unclipped control passes, and only six normalized coverage
+words differ. The clip plane differs at 802 sparse edge words; 797 are C++
+partial coverage versus Rust full coverage, and all 254 isolated pixels beyond
+delta 2 lie exactly on those words. The native full-frame residual remains
+1,575/max delta 33 but consists of 1,517 tiny components, largest six pixels.
+Rewards is therefore reclassified from advanced-feather parity to the existing
+`metal-webgpu-subpixel-edge-coverage` boundary with no status, reference, or
+tolerance change. The active taxonomy now has 52 subpixel-edge rows, two
+advanced-feather rows, and one clip-edge/composite parity row. Full evidence is
+in `docs/renderer-rewards-command21-audit.md`.
+
 ## Reproduction
 
 ```sh

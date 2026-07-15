@@ -1170,8 +1170,9 @@ Run `make renderer-golden`.
     `rust-wgpu-msaa-feather-gradient-advanced-blend` rows. Reuse the existing
     ramp, destination-copy, and atlas-composite machinery without changing
     tolerances. AI Assistant is exact; Data Viz, Echo Show, and Rewards pass
-    their unchanged contracts. Car Widgets and Hunter X remain under focused
-    same-backend diagnosis.
+    their unchanged contracts. Car Widgets now passes at 14 pixels/max delta
+    8 after matching C++'s absolute-value feather setter. Hunter X remains
+    under focused same-backend diagnosis.
 95. [x] Fix repeated path-clipped MSAA strokes in
     `gm-strokedlines-msaa`. Strict replay now preserves gradient snapshots
     across all 15 sequential clip stacks; the corrected reference compares at

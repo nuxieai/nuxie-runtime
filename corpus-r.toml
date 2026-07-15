@@ -3531,10 +3531,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v
 mode = "msaa"
 backend = "metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-msaa-feather-gradient-advanced-blend"
 
 [[entry]]
 id = "riv-circle_clips-frame-0-clockwise-atomic"

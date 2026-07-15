@@ -34,9 +34,9 @@ The corpus manifest has no renderer-selection field separate from its status:
 
 | Count | Diagnostic |
 | ---: | --- |
-| 49 | `metal-webgpu-subpixel-edge-coverage` |
+| 50 | `metal-webgpu-subpixel-edge-coverage` |
 | 43 | `strict-replay-gradient-paint` |
-| 7 | `native-clockwise-atomic-advanced-feather-parity` |
+| 6 | `native-clockwise-atomic-advanced-feather-parity` |
 | 3 | `strict-replay-render-buffer` |
 | 3 | `platform-image-decode-color-profile` |
 | 2 | `metal-webgpu-atomic-intermediate-precision` |
@@ -52,11 +52,11 @@ Operationally, these rows collapse into three groups:
 | Rows | Disposition |
 | ---: | --- |
 | 47 | Reference/oracle harness gap |
-| 58 | Reviewed backend, decoder, or precision boundary |
-| 7 | Unsupported feature or remaining algorithm-parity boundary |
+| 59 | Reviewed backend, decoder, or precision boundary |
+| 6 | Unsupported feature or remaining algorithm-parity boundary |
 
-The actionable set is 53 rows: the seven substantive boundaries plus 46 rows
-unlocked by gradient-paint and render-buffer strict replay. The other 59 rows
+The actionable set is 52 rows: the six substantive boundaries plus 46 rows
+unlocked by gradient-paint and render-buffer strict replay. The other 60 rows
 remain parked unless same-backend evidence exposes a Rust defect.
 
 R3.1 promoted `riv-bullet_man-frame-0-clockwise-atomic` after porting C++'s
@@ -71,6 +71,11 @@ The same historical replay closes `gm-cliprectintersections-msaa`: it moves
 from 240 pixels/max delta 55 before `90c8fd52` to byte-exact/max delta 1 after
 the stroke depth state. The retained edge components were stroke self-overdraw,
 not a clip-intersection raster boundary.
+R3.1 reclassified `riv-coin-frame-0-clockwise-atomic` after eight draw-prefix
+comparisons showed the first excess on a clipped zero-feather ring, not an
+advanced-feather draw. Its final 48 outliers form 13 one-pixel-wide path/clip
+edge components, largest 12, matching the retained Metal/WebGPU subpixel-edge
+boundary without a tolerance change.
 
 The final 43 generic placeholders were not runnable renderer failures: the
 checked-in strict Dawn inventory proves that 41 require gradient-paint replay

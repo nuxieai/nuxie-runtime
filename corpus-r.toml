@@ -4135,7 +4135,7 @@ frame = 0
 status = "gated"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "native-clockwise-atomic-advanced-feather-parity"
+gated = "metal-webgpu-subpixel-edge-coverage"
 
 [[entry]]
 id = "riv-coin-frame-0-msaa"

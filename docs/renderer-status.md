@@ -1118,8 +1118,11 @@ Run `make renderer-golden`.
     become empty instead of unsupported. Current differing-pixel/max-delta
     probes are: `bankcard` 1,485,510/20, `car_widgets_v01` 875,754/249, `coin`
     48/58, `data_viz_demo` 169,028/253, `echo_show_demo` 217,492/171,
-    `hunter_x_demo` 659,956/255, and `rewards_demo` 311,799/192. Start pixel
-    localization with the bounded `coin` residual; none is promoted yet.
+    `hunter_x_demo` 659,956/255, and `rewards_demo` 311,799/192. Coin's first
+    excess appears on its second clipped, non-feathered ring; the final 48
+    outliers form 13 one-pixel-wide path/clip-edge components, largest 12.
+    Reclassified it to the existing Metal/WebGPU subpixel-edge boundary with
+    no tolerance change; six substantive rows remain and none is promoted yet.
 91. [ ] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold.
@@ -3567,3 +3570,11 @@ Run `make renderer-golden`.
   now reach pixels. The 235-test renderer suite and full corpus pass at
   exact=1,356/diverges=0/gated=112. `coin` is next at 48 differing pixels/max
   delta 58; no gate or tolerance changed in this slice.
+- 2026-07-14: Adjudicated `coin` with eight native-Metal/Rust draw prefixes and
+  a full-frame connected-component audit. The first over-budget prefix is the
+  second clipped, zero-feather ring at 43 pixels/max 95; later authored layers
+  overwrite it down to 48 pixels/max 58. The final outliers form 13
+  one-pixel-wide path/clip-edge components, largest 12, with no interior color
+  region. Reclassified the row from advanced-feather parity to the existing
+  `metal-webgpu-subpixel-edge-coverage` boundary. The corpus remains
+  exact=1,356/diverges=0/gated=112 with six substantive R3.1 rows left.

@@ -502,5 +502,45 @@ first structural target of twelve fill draws becoming three and fourteen
 total draws becoming five. The separate Rust composite draw/pass is measured
 after that merge rather than folded into the same change.
 
+## Item 122: MSAA Subpass-Major Merge
+
+C++ reserves one flush-wide midpoint padding span, writes path patch ranges
+contiguously, and adds one final outer-patch alignment envelope in
+`renderer/src/render_context.cpp:1094-1160`. Its draw list then sorts the
+disjoint fills by low-level draw type and merges adjacent base/count ranges in
+`render_context.cpp:1560-2090` and `3603-3768`. Rust previously retained each
+standalone path's padding envelope, which separated its base ranges and forced
+four calls for each of the three nonzero fill subpasses.
+
+Rust now admits only a narrow compatible family: opaque, un-clipped, nonzero
+fills with no image, gradient, feather, or destination read, where every path
+fits one tessellation row. It removes the standalone padding spans, relocates
+the paths into one contiguous flush range, and emits borrowed-coverage,
+forward, and cleanup once each over that range. The synthetic regression pins
+the resulting 5 draws, 19 spans, and 12 path patches, then compares the merged
+scheduled pixels with a unique-group serialized render. The existing overlap
+regression separately preserves source ordering across intersecting paths.
+
+On `gm-batchedtriangulations-msaa`, GPU draws fall 14->5 against C++ Dawn's
+four, draw instances fall 114->105 against 104, and tessellation spans fall
+32->23, now exact. Path patches stay exact at 81. The one remaining draw and
+instance are Rust's separate fallback composite. Across all sixteen fixed
+variants, Rust draws move 178->169, instances 6,362->6,353, spans
+1,677->1,668, uploaded bytes 168,936->168,424, and ranked excess rows 72->71.
+
+The target's light snapshot is Rust/C++=4.904x (1.389/0.283 ms), while the
+fixed-matrix sum is 2.172x. These numbers are directional context only. The
+exact draw/range reduction and unchanged output are the acceptance evidence.
+
+The refreshed highest-ranked family is now ordinary MSAA render passes: every
+fixed MSAA row reports four in Rust versus two in C++ Dawn. The source cause is
+exact. Rust clears the final view, resolves to a fallback texture, and performs
+a final premultiplied composite in `crates/nuxie-renderer/src/lib.rs`; C++'s
+`MSAADrawRenderPass` clears its transient multisample attachment and resolves
+directly to the target in
+`renderer/src/webgpu/render_context_webgpu_impl.cpp:3660-3794`. Item 123 owns
+the clear-owned, non-advanced direct-resolve path. Preserve-target and
+destination-read runs retain fallback composition.
+
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

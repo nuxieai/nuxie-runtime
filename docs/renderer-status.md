@@ -1447,13 +1447,31 @@ Run `make renderer-golden`.
     excess rows move 81->72. Renderer exact=1,409/diverges=0/gated=59, V2
     floors 584/35, and the workspace suite pass. The target's light snapshot
     is Rust/C++=1.382x; counters and output are the acceptance evidence.
-122. [ ] Port C++'s compact midpoint layout and subpass-major merge for
-    `gm-batchedtriangulations-msaa`. Rust currently issues four paths times
-    three nonzero fill subpasses; C++ writes contiguous path ranges and merges
-    each low-level draw type. Reduce the twelve fill draws to three and total
-    draws from 14 to five without changing path patches (81), pixels, or the
-    V2 floors. Attribute the remaining fifth Rust composite draw against C++'s
-    attachment resolve only after this merge lands.
+122. [x] Port C++'s compact midpoint layout and subpass-major merge for
+    `gm-batchedtriangulations-msaa`. Compatible disjoint opaque nonzero fills
+    now share one flush-wide padding envelope and contiguous instance ranges;
+    the encoder emits each of the three fill subpasses once over that combined
+    range. The target moves from 14 to five GPU draws, 114 to 105 instances,
+    and 32 to 23 tessellation spans, with spans and path patches (81) now exact
+    against C++ Dawn. Fixed-matrix Rust draws move 178->169, instances
+    6,362->6,353, spans 1,677->1,668, uploaded bytes 168,936->168,424, and
+    ranked excess rows 72->71. The target's one-frame snapshot is 4.904x and
+    the matrix sum is 2.172x; both are directional context, while exact work
+    reduction and unchanged output are the acceptance evidence. Renderer
+    exact=1,409/diverges=0/gated=59, V2 floors 584/35, the renderer feature
+    suite (265 passed/38 ignored), and the full workspace suite pass. Sol's
+    independent review found one missing merged-pixel regression; the test now
+    compares scheduled and serialized output byte-for-byte, and the review has
+    no open findings.
+123. [ ] Resolve ordinary fixed MSAA directly into the final attachment when
+    the run owns the target clear. Rust currently clears the final target,
+    resolves into a transparent fallback texture, then composites that texture
+    back; C++ clears the multisample attachment and names the final target as
+    its resolve attachment. Remove the two redundant passes only for the
+    clear-owned, non-advanced path, retaining fallback composition for
+    preserve-target and destination-read runs. The fixed matrix target is
+    107->91 render passes (exact with C++ Dawn), and
+    `gm-batchedtriangulations-msaa` should move five->four draws.
 
 ## R2 Completion Record
 
@@ -2603,6 +2621,19 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 122 with C++'s compact midpoint layout and
+  subpass-major MSAA fill merge. `gm-batchedtriangulations-msaa` falls from 14
+  to five draws, 114 to 105 instances, and 32 to 23 spans; C++ Dawn reports
+  4/104/23, with Rust's one extra draw/instance isolated to the fallback
+  composite. Path patches stay exact at 81. Fixed-matrix Rust draws move
+  178->169, instances 6,362->6,353, spans 1,677->1,668, uploaded bytes
+  168,936->168,424, and ranked excess rows 72->71. The target/matrix timing
+  snapshots are 4.904x/2.172x and remain directional only. A Sol review added
+  a scheduled-versus-serialized pixel regression and closed with no remaining
+  findings. Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35, and
+  both renderer-feature and workspace suites pass. Item 123 owns the measured
+  two-pass ordinary-MSAA direct-resolve excess.
 
 - 2026-07-16: Closed R4 item 121 by porting C++'s contiguous outer-curve and
   triangle batching for compatible plain interior fills. On

@@ -2825,13 +2825,14 @@ impl WgpuFrame {
                 let destination_view = destination_texture
                     .as_ref()
                     .map(|texture| texture.create_view(&Default::default()));
-                #[derive(Clone, Copy)]
+                #[derive(Clone, Copy, PartialEq, Eq)]
                 struct DirectPathOptions {
                     path_clip: bool,
                     clip_rect: bool,
                     opaque: bool,
                     advanced_blend: bool,
                     hsl_blend: bool,
+                    batchable_midpoint_fill: bool,
                     destination_copy_bounds: [u32; 4],
                 }
                 #[derive(Clone, Copy)]
@@ -2847,6 +2848,7 @@ impl WgpuFrame {
                     paint: gpu::PaintData,
                     paint_aux: gpu::PaintAuxData,
                     image: Option<(wgpu::TextureView, ImageSampler)>,
+                    batchable_midpoint_fill: bool,
                     logical_flush: usize,
                     prepared: Option<path_pipeline::PreparedPathDraw>,
                 }
@@ -2957,6 +2959,7 @@ impl WgpuFrame {
                                 paint,
                                 paint_aux: gpu::PaintAuxData::zeroed(),
                                 image: None,
+                                batchable_midpoint_fill: false,
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
                             });
@@ -3227,6 +3230,14 @@ impl WgpuFrame {
                             opaque: msaa_draw_has_opaque_paint(draw),
                             advanced_blend,
                             hsl_blend: blend_mode_uses_hsl(draw.paint.blend_mode),
+                            batchable_midpoint_fill: draw.paint.style == RenderPaintStyle::Fill
+                                && draw.path.fill_rule == FillRule::NonZero
+                                && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                && !has_clip_rect
+                                && !advanced_blend
+                                && msaa_draw_has_opaque_paint(draw)
+                                && draw.image.is_none()
+                                && gradient_batch.draws[draw_index].is_none(),
                             destination_copy_bounds: msaa_destination_copy_bounds(
                                 draw,
                                 self.width,
@@ -3327,6 +3338,7 @@ impl WgpuFrame {
                                 paint_aux,
                                 image: image
                                     .map(|image| (image.texture.view.clone(), image.sampler)),
+                                batchable_midpoint_fill: options.batchable_midpoint_fill,
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
                             });
@@ -3379,43 +3391,96 @@ impl WgpuFrame {
                     let mut paints = vec![gpu::PaintData::zeroed()];
                     let mut paint_aux = vec![gpu::PaintAuxData::zeroed()];
                     let mut contours = Vec::new();
-                    let mut cursor_x = 0;
-                    let mut cursor_y = 0;
                     let mut tessellation_height = 1;
                     let max_height = self.context.device.limits().max_texture_dimension_2d;
-                    for path in paths_in_flush.iter_mut() {
-                        let local_height =
-                            draw::tessellation_texture_height(&path.tessellation.spans);
-                        let single_row_width = (local_height == 1)
-                            .then(|| {
-                                midpoint_tessellation_single_row_width(&path.tessellation.spans)
-                            })
-                            .flatten();
-                        let placement = midpoint_shelf_placement(
-                            cursor_x,
-                            cursor_y,
-                            local_height,
-                            single_row_width,
-                        );
-                        if placement.height > max_height {
-                            return Err(RendererError::Device(
-                                "flush-wide tessellation texture exceeds device dimension limit"
-                                    .into(),
-                            ));
+                    let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+                    let compact_geometry_end = (paths_in_flush.len() > 1
+                        && paths_in_flush.iter().all(|path| {
+                            path.batchable_midpoint_fill
+                                && path.tessellation.base_instance == 1
+                                && midpoint_tessellation_single_row_width(&path.tessellation.spans)
+                                    .is_some()
+                        }))
+                    .then(|| {
+                        paths_in_flush.iter().try_fold(midpoint_span, |end, path| {
+                            path.tessellation
+                                .instance_count
+                                .checked_mul(midpoint_span)
+                                .and_then(|count| end.checked_add(count))
+                        })
+                    })
+                    .flatten()
+                    .filter(|&end| {
+                        end <= gpu::TESS_TEXTURE_WIDTH as u32
+                            && align_to(end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32)
+                                < gpu::TESS_TEXTURE_WIDTH as u32
+                    });
+                    if let Some(geometry_end) = compact_geometry_end {
+                        append_tessellation_padding_span(&mut spans, 0, midpoint_span);
+                        let mut next_base_instance = 1;
+                        for (path_offset, path) in paths_in_flush.iter_mut().enumerate() {
+                            let path_id = u32::try_from(path_offset + 1)
+                                .expect("MSAA path ID must fit the shader contract");
+                            next_base_instance = append_compact_midpoint_tessellation_to_flush(
+                                &mut path.tessellation,
+                                path_id,
+                                next_base_instance,
+                                &mut spans,
+                                &mut contours,
+                            );
                         }
-                        cursor_x = placement.next_x;
-                        cursor_y = placement.next_y;
-                        tessellation_height = tessellation_height.max(placement.height);
-                        let path_id = u32::try_from(paths.len())
-                            .expect("MSAA path ID must fit the shader contract");
-                        append_midpoint_tessellation_to_flush(
-                            &mut path.tessellation,
-                            path_id,
-                            placement.x,
-                            placement.y,
+                        debug_assert_eq!(next_base_instance * midpoint_span, geometry_end);
+                        let outer_curve_start =
+                            align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+                        append_tessellation_padding_span(
                             &mut spans,
-                            &mut contours,
+                            geometry_end,
+                            outer_curve_start,
                         );
+                        append_tessellation_padding_span(
+                            &mut spans,
+                            outer_curve_start,
+                            outer_curve_start + 1,
+                        );
+                    } else {
+                        let mut cursor_x = 0;
+                        let mut cursor_y = 0;
+                        for (path_offset, path) in paths_in_flush.iter_mut().enumerate() {
+                            let local_height =
+                                draw::tessellation_texture_height(&path.tessellation.spans);
+                            let single_row_width = (local_height == 1)
+                                .then(|| {
+                                    midpoint_tessellation_single_row_width(&path.tessellation.spans)
+                                })
+                                .flatten();
+                            let placement = midpoint_shelf_placement(
+                                cursor_x,
+                                cursor_y,
+                                local_height,
+                                single_row_width,
+                            );
+                            if placement.height > max_height {
+                                return Err(RendererError::Device(
+                                    "flush-wide tessellation texture exceeds device dimension limit"
+                                        .into(),
+                                ));
+                            }
+                            cursor_x = placement.next_x;
+                            cursor_y = placement.next_y;
+                            tessellation_height = tessellation_height.max(placement.height);
+                            let path_id = u32::try_from(path_offset + 1)
+                                .expect("MSAA path ID must fit the shader contract");
+                            append_midpoint_tessellation_to_flush(
+                                &mut path.tessellation,
+                                path_id,
+                                placement.x,
+                                placement.y,
+                                &mut spans,
+                                &mut contours,
+                            );
+                        }
+                    }
+                    for path in paths_in_flush.iter() {
                         paths.push(path.tessellation.path);
                         paints.push(path.paint);
                         paint_aux.push(path.paint_aux);
@@ -3706,8 +3771,61 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                     pass.set_stencil_reference(0);
+                    let segment_draws = &prepared_draws[segment_start..segment_end.index];
+                    let segment_schedules = &prepared_schedules[segment_start..segment_end.index];
+                    let batched_fill = match (segment_draws.first(), segment_schedules.first()) {
+                        (
+                            Some(PreparedDraw::Fill(first, fill_rule, options)),
+                            Some(first_schedule),
+                        ) if segment_draws.len() > 1 && options.batchable_midpoint_fill => {
+                            let mut instance_end =
+                                first.base_instance.checked_add(first.instance_count);
+                            let mut compatible = instance_end.is_some();
+                            for (candidate, schedule) in
+                                segment_draws.iter().zip(segment_schedules).skip(1)
+                            {
+                                let PreparedDraw::Fill(
+                                    candidate,
+                                    candidate_fill_rule,
+                                    candidate_options,
+                                ) = candidate
+                                else {
+                                    compatible = false;
+                                    break;
+                                };
+                                let same_pipeline = candidate_fill_rule == fill_rule
+                                    && candidate_options.path_clip == options.path_clip
+                                    && candidate_options.clip_rect == options.clip_rect
+                                    && candidate_options.opaque == options.opaque
+                                    && candidate_options.advanced_blend == options.advanced_blend
+                                    && candidate_options.hsl_blend == options.hsl_blend
+                                    && candidate_options.batchable_midpoint_fill
+                                        == options.batchable_midpoint_fill;
+                                let same_schedule = schedule.draw_group
+                                    == first_schedule.draw_group
+                                    && schedule.is_prepass == first_schedule.is_prepass
+                                    && schedule.logical_flush == first_schedule.logical_flush;
+                                if !same_pipeline
+                                    || !same_schedule
+                                    || instance_end != Some(candidate.base_instance)
+                                {
+                                    compatible = false;
+                                    break;
+                                }
+                                instance_end = candidate
+                                    .base_instance
+                                    .checked_add(candidate.instance_count);
+                                if instance_end.is_none() {
+                                    compatible = false;
+                                    break;
+                                }
+                            }
+                            compatible.then(|| instance_end.unwrap())
+                        }
+                        _ => None,
+                    };
                     let mut direct_path_bindings_active = false;
-                    for prepared in &prepared_draws[segment_start..segment_end.index] {
+                    for (prepared_offset, prepared) in segment_draws.iter().enumerate() {
                         match prepared {
                             PreparedDraw::Stroke(draw, options) => {
                                 pass.set_stencil_reference(if options.path_clip {
@@ -3740,6 +3858,14 @@ impl WgpuFrame {
                                 );
                             }
                             PreparedDraw::Fill(draw, fill_rule, options) => {
+                                if batched_fill.is_some() && prepared_offset != 0 {
+                                    continue;
+                                }
+                                let instance_end = batched_fill.unwrap_or_else(|| {
+                                    draw.base_instance
+                                        .checked_add(draw.instance_count)
+                                        .expect("MSAA fill instance range overflow")
+                                });
                                 pass.set_stencil_reference(0x80);
                                 draw.bind_resources(&mut pass, !direct_path_bindings_active);
                                 direct_path_bindings_active = true;
@@ -3754,26 +3880,7 @@ impl WgpuFrame {
                                 let indices = gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT as u32
                                     ..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32;
                                 for fill_pass in msaa_fill_passes(*fill_rule) {
-                                    let pipeline = match fill_pass {
-                                        MsaaFillPass::BorrowedCoverage => {
-                                            path_pipeline::DirectPathPipelineKind::FillBorrowed
-                                        }
-                                        MsaaFillPass::Forward => {
-                                            path_pipeline::DirectPathPipelineKind::FillForward
-                                        }
-                                        MsaaFillPass::Cleanup => {
-                                            path_pipeline::DirectPathPipelineKind::FillCleanup
-                                        }
-                                        MsaaFillPass::ClockwiseCleanup => {
-                                            path_pipeline::DirectPathPipelineKind::ClockwiseFillCleanup
-                                        }
-                                        MsaaFillPass::EvenOddStencil => {
-                                            path_pipeline::DirectPathPipelineKind::EvenOddFillStencil
-                                        }
-                                        MsaaFillPass::EvenOddCover => {
-                                            path_pipeline::DirectPathPipelineKind::EvenOddFillCover
-                                        }
-                                    };
+                                    let pipeline = msaa_fill_pipeline_kind(*fill_pass);
                                     pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
                                         pipeline,
                                         options.path_clip,
@@ -3785,8 +3892,7 @@ impl WgpuFrame {
                                     pass.draw_path_patches(
                                         indices.clone(),
                                         0,
-                                        draw.base_instance
-                                            ..draw.base_instance + draw.instance_count,
+                                        draw.base_instance..instance_end,
                                     );
                                 }
                             }
@@ -5891,6 +5997,19 @@ fn msaa_fill_passes(fill_rule: FillRule) -> &'static [MsaaFillPass] {
     }
 }
 
+fn msaa_fill_pipeline_kind(fill_pass: MsaaFillPass) -> path_pipeline::DirectPathPipelineKind {
+    match fill_pass {
+        MsaaFillPass::BorrowedCoverage => path_pipeline::DirectPathPipelineKind::FillBorrowed,
+        MsaaFillPass::Forward => path_pipeline::DirectPathPipelineKind::FillForward,
+        MsaaFillPass::Cleanup => path_pipeline::DirectPathPipelineKind::FillCleanup,
+        MsaaFillPass::ClockwiseCleanup => {
+            path_pipeline::DirectPathPipelineKind::ClockwiseFillCleanup
+        }
+        MsaaFillPass::EvenOddStencil => path_pipeline::DirectPathPipelineKind::EvenOddFillStencil,
+        MsaaFillPass::EvenOddCover => path_pipeline::DirectPathPipelineKind::EvenOddFillCover,
+    }
+}
+
 fn msaa_draw_layer_count(draw: &SolidDraw, all_subpasses_in_same_group: bool) -> i16 {
     // C++ reserves max(prepassCount, subpassCount) board layers, except when
     // destination-copy blending requires every MSAA subpass to share a group.
@@ -6294,6 +6413,44 @@ fn relocate_tessellation(
             reflection_y,
         );
     }
+}
+
+fn append_tessellation_padding_span(spans: &mut Vec<gpu::TessVertexSpan>, x0: u32, x1: u32) {
+    if x0 == x1 {
+        return;
+    }
+    spans.push(gpu::TessVertexSpan::without_reflection(
+        [[0.0; 2]; 4],
+        [0.0; 2],
+        0.0,
+        x0 as i32,
+        x1 as i32,
+        0,
+        0,
+        1,
+        0,
+    ));
+}
+
+fn append_compact_midpoint_tessellation_to_flush(
+    tessellation: &mut draw::FillTessellation,
+    path_id: u32,
+    next_base_instance: u32,
+    spans: &mut Vec<gpu::TessVertexSpan>,
+    contours: &mut Vec<gpu::ContourData>,
+) -> u32 {
+    let instance_count = tessellation.instance_count;
+    let relocation = next_base_instance
+        .checked_sub(tessellation.base_instance)
+        .and_then(|instances| instances.checked_mul(gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32))
+        .expect("compact MSAA midpoint relocation overflow");
+    tessellation
+        .spans
+        .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+    append_midpoint_tessellation_to_flush(tessellation, path_id, relocation, 0, spans, contours);
+    next_base_instance
+        .checked_add(instance_count)
+        .expect("compact MSAA midpoint instance range overflow")
 }
 
 fn append_midpoint_tessellation_to_flush(
@@ -7822,6 +7979,39 @@ mod tests {
             msaa_fill_passes(FillRule::EvenOdd),
             &[MsaaFillPass::EvenOddStencil, MsaaFillPass::EvenOddCover]
         );
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn msaa_batches_disjoint_opaque_fills_by_subpass() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let make_frame = || {
+            let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
+            for (bounds, color) in [
+                ([2.0, 2.0, 26.0, 26.0], 0xffff_0000),
+                ([38.0, 2.0, 62.0, 26.0], 0xff00_ff00),
+                ([2.0, 38.0, 26.0, 62.0], 0xff00_00ff),
+                ([38.0, 38.0, 62.0, 62.0], 0xffff_ffff),
+            ] {
+                frame.draw_path(
+                    &rect_path(bounds, FillRule::NonZero),
+                    &WgpuPaint {
+                        color,
+                        ..WgpuPaint::default()
+                    },
+                );
+            }
+            frame
+        };
+
+        let metrics = make_frame().finish_for_benchmark().unwrap();
+        assert_eq!(metrics.backend_work.gpu_draw_calls, 5);
+        assert_eq!(metrics.backend_work.tessellation_spans, 19);
+        assert_eq!(metrics.backend_work.path_patches, 12);
+
+        let scheduled = make_frame().finish().unwrap();
+        let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
+        assert_eq!(scheduled, serialized);
     }
 
     #[test]

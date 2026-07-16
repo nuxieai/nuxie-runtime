@@ -110,6 +110,28 @@ become C++'s three subpass-major batches. Item 122 ports the compact midpoint
 layout and merge first; its target is 14->5 total draws. The remaining Rust
 composite draw is attributed separately afterward.
 
+### Item 122 Update
+
+Compatible disjoint opaque nonzero fills now use C++'s compact flush-wide
+midpoint layout. Rust strips each standalone path's padding envelope, relocates
+the geometry into contiguous base-instance ranges, and emits the three fill
+subpasses once each over the combined range.
+
+`gm-batchedtriangulations-msaa` moves from 14 to five draws against C++ Dawn's
+four. Tessellation spans move 32->23 and path patches remain 81, both exact;
+the remaining draw/instance is Rust's separate fallback composite. Fixed-matrix
+Rust totals move from 178 to 169 draws, 6,362 to 6,353 instances, 1,677 to
+1,668 spans, and 168,936 to 168,424 uploaded bytes. Ranked excess rows fall
+72->71. The target's one-frame ratio is 4.904x and the matrix sum is 2.172x;
+both are directional only.
+
+The refreshed top family is render passes on every ordinary fixed MSAA row:
+Rust reports four versus C++ Dawn's two. C++ clears the transient multisample
+attachment and resolves directly into the target. Rust additionally clears
+the target, resolves into a transparent fallback, and composites the fallback
+back into the target. Item 123 owns direct resolve for clear-owned,
+non-advanced runs; preserve-target and destination-read paths stay unchanged.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -122,11 +144,11 @@ composite draw is attributed separately afterward.
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
-| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic interior fills now share outer and triangle batches with the required role barrier. Item 122 owns the equivalent MSAA subpass merge. |
+| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic interior fills and compatible MSAA nonzero fills now use contiguous role/subpass batches while retaining required barriers. |
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
-| Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179` | per-frame texture creation and clears | Rust retains core MSAA and atomic backing. Audit destination/gradient/atlas textures by counter scene. |
+| Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179`, `3660-3794` | per-frame texture creation, clears, render passes | Rust retains core MSAA and atomic backing. Item 123 removes the ordinary MSAA fallback texture/composite when the run can resolve directly into its clear-owned target. |
 | Lazily retained atomic PLS buffers | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2867-2909` | initialized-buffer and pending-write work | Ported as guarded persistent slots in item 114. |
 | Optional gradient, tessellation, and atlas passes | `renderer/src/webgpu/render_context_webgpu_impl.cpp:3981-4137` | render passes and GPU draws | Flush-wide MSAA tessellation is ported. Gradient/atlas cadence remains report-driven. |
 | Barrier-aware render-pass restart | `renderer/src/webgpu/render_context_webgpu_impl.cpp:3280-3800`, `4275-4290` | pass count and mandatory rebinding | Atomic group barriers are preserved. Rust should carry binding invalidation with the same restart boundary. |
@@ -139,9 +161,10 @@ composite draw is attributed separately afterward.
 - `bind_group_sets` no longer owns the top row. Item 119 removed 141 repeated
   direct-MSAA sets; retain the remaining layout-bound sets until another
   source-matched redundancy is identified.
-- `gpu_draw_calls` is next. `gm-batchedtriangulations-msaa` has twelve
-  draw-major fill calls where C++ has three subpass-major batches; item 122
-  owns that exact merge before the separate composite-pass audit.
+- `render_passes` is next. Every ordinary fixed MSAA row has four Rust passes
+  versus two in C++ Dawn because Rust uses a standalone target clear and
+  fallback composite around the draw pass. Item 123 owns the direct-resolve
+  path for clear-owned, non-advanced runs.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

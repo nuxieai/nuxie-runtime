@@ -685,8 +685,37 @@ snapshot is 2.421x and is directional context only; no A-B-B-A campaign is
 warranted for this source- and oracle-defined correction. Sol reports no
 correctness findings.
 
-The new top rows are `gm-batchedconvexpaths` upload bytes and tessellation
-spans. Item 127 owns source attribution before another edit.
+### Item 127 Update
+
+The `gm-batchedconvexpaths` span excess was redundant padding, not geometry.
+C++ allocates tessellation vertices across the full `LogicalFlush`
+(`renderer/src/render_context.cpp:1128-1160`) and emits one leading padding
+span, optional inter-type alignment, and one final sentinel
+(`renderer/src/render_context.cpp:1516-1533`). Rust already relocated the ten
+translucent SrcOver fills into one texture, but only strokes and opaque
+batchable fills used one shared padding envelope. Each translucent fill kept
+its local leading and trailing records.
+
+Rust now shares the midpoint layout for homogeneous plain nonzero fills while
+keeping draw batching independent. Clip, clip-rect, gradient, image, feather,
+advanced-blend, row-width, and logical-flush boundaries retain the old path.
+Atomic spans move 101->78 and MSAA spans 105->78, both exact. Atomic
+instances move 244->221 and uploads 9,752->8,216 bytes; MSAA instances move
+318->291 exactly and uploads 10,400->8,608 bytes. Draw calls and patch counts
+are unchanged. The residual 600 atomic and 992 MSAA upload bytes are a
+separate alignment or buffer-layout question.
+
+Across the fixed matrix, Rust spans move 1,708->1,658, instances
+5,987->5,937, uploads 179,824->176,496 bytes, and ranked positive rows
+39->35. Both target frames are byte-identical before and after. The one-frame
+matrix snapshot is 2.114x and remains directional context only; exact work
+elimination plus unchanged rendering accepts this source-defined change
+without A-B-B-A.
+
+The highest coherent remaining row is `gm-bug339297_as_clip-msaa`: Rust/C++
+report 3,704/2,816 upload bytes, 23/18 spans, 854/830 path patches, and 9/8
+draws. Item 128 splits clip-update work from content preparation before any
+edit.
 
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

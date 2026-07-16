@@ -1523,11 +1523,30 @@ Run `make renderer-golden`.
     remain 584/35, and the
     workspace passes. No A-B-B-A campaign was run. Sol found no correctness
     issue.
-127. [ ] Attribute the new top fixed-matrix rows before editing:
-    `gm-batchedconvexpaths-msaa` uploads 10,400 versus 7,616 bytes and emits
-    105 versus 78 tessellation spans; clockwise atomic emits 9,752 versus
-    7,616 bytes and 101 versus 78 spans. Classify the excess span kinds and
-    source-map C++'s layout before choosing the next bounded port.
+127. [x] Match C++'s one logical-flush midpoint-padding envelope for
+    homogeneous plain fills. C++ allocates tessellation vertices globally per
+    `LogicalFlush` and emits one leading padding span, an optional inter-type
+    alignment span, and one final sentinel. Rust already shared the texture
+    but retained path-local padding for ten translucent SrcOver fills.
+    Generalize the shared midpoint layout independently of draw batching while
+    retaining clip, clip-rect, gradient, image, feather, blend, fill-rule,
+    row-width, and flush fences. `gm-batchedconvexpaths` atomic spans move
+    101->78 and MSAA spans 105->78, both exact; atomic instances move 244->221
+    and uploads 9,752->8,216 bytes, while MSAA instances move 318->291 exactly
+    and uploads 10,400->8,608 bytes. Draw calls and patches remain unchanged.
+    The fixed matrix moves 1,708->1,658 spans, 5,987->5,937 instances, and
+    179,824->176,496 upload bytes; ranked positive rows fall 39->35. Both
+    target images are byte-identical before and after. The 2.114x one-frame
+    matrix snapshot is directional context only; exact counters and unchanged
+    pixels accept the slice without A-B-B-A. Renderer
+    exact=1,409/diverges=0/gated=59, the renderer perf-counter feature suite
+    passes 276/39, normal/scripted V2 floors remain 584/35, and the workspace
+    passes. The residual 600 atomic and 992 MSAA upload bytes are separate
+    alignment or buffer-layout work, not part of this claim.
+128. [ ] Attribute `gm-bug339297_as_clip-msaa`, the new highest coherent
+    fixed-matrix row: Rust/C++ report 3,704/2,816 upload bytes, 23/18 spans,
+    854/830 path patches, and 9/8 draws. Split clip-update work from content
+    preparation and source-map the C++ path before editing.
 
 ## R2 Completion Record
 
@@ -2678,6 +2697,24 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    may run concurrently; timing acceptance stays serial and records load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 127 by sharing one flush-wide midpoint-padding
+  envelope across the ten homogeneous translucent fills in
+  `gm-batchedconvexpaths`. C++ source inspection shows one logical-flush
+  tessellation allocation with one leading padding span and one final
+  sentinel; Rust's texture was shared but its padding remained path-local.
+  Atomic spans move 101->78 and MSAA 105->78, both exact. Atomic
+  instances/uploads move 244->221 and 9,752->8,216 bytes; MSAA moves 318->291
+  instances exactly and 10,400->8,608 bytes. Draws and patches are unchanged.
+  Fixed-matrix spans move 1,708->1,658, instances 5,987->5,937, uploads
+  179,824->176,496 bytes, and ranked positive rows 39->35. Target pixels are
+  byte-identical. The 2.114x one-frame snapshot is directional context only;
+  exact work counters and unchanged pixels accept the change without A-B-B-A.
+  Renderer exact=1,409/diverges=0/gated=59, the renderer perf-counter suite
+  passes 276/39, normal/scripted V2 floors remain 584/35, and the workspace
+  passes. The remaining target upload-byte differences are recorded as
+  separate alignment/layout debt. Item 128 attributes the multi-counter
+  `gm-bug339297_as_clip-msaa` row.
 
 - 2026-07-16: Closed R4 item 126 by replacing Rust's local single-contour ear
   preparation with the C++-matched global interior triangulator. Source

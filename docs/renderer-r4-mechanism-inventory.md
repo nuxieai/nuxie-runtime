@@ -209,8 +209,32 @@ one-frame snapshot is context only. Exact preparation, exact target counters,
 same-tier pixels, the corpus ratchet, and the test floors accept the change;
 no A-B-B-A campaign was run. Sol reports no correctness findings.
 
-The new top rows are `gm-batchedconvexpaths` upload bytes and tessellation
-spans. Item 127 first classifies the excess span kinds against C++.
+### Item 127 Update
+
+C++ allocates midpoint tessellation vertices once across a `LogicalFlush` in
+`renderer/src/render_context.cpp:1128-1160`, then
+`renderer/src/render_context.cpp:1516-1533` emits one leading padding span,
+optional inter-type alignment, and one final sentinel. Rust already shared a
+texture for `gm-batchedconvexpaths`, but ten translucent SrcOver fills retained
+path-local padding envelopes because layout compaction was coupled to opaque
+fill or stroke draw batching.
+
+Layout sharing is now independent of draw batching. Homogeneous plain nonzero
+fills can use one flush-wide midpoint envelope while clip, clip-rect, gradient,
+image, feather, advanced-blend, row-width, and flush boundaries remain fenced.
+Atomic spans move 101->78 and MSAA 105->78, both exact. Atomic
+instances/uploads move 244->221 and 9,752->8,216 bytes; MSAA moves 318->291
+instances exactly and 10,400->8,608 bytes. Draws and patches do not change.
+Target pixels are byte-identical.
+
+The fixed matrix moves 1,708->1,658 spans, 5,987->5,937 instances,
+179,824->176,496 upload bytes, and 39->35 ranked positive rows. The 2.114x
+one-frame snapshot is context only. Exact counters and unchanged output accept
+the slice without A-B-B-A. The remaining 600 atomic and 992 MSAA target upload
+bytes are separately ranked alignment or buffer-layout work.
+
+Item 128 next attributes `gm-bug339297_as_clip-msaa`, where Rust/C++ report
+3,704/2,816 upload bytes, 23/18 spans, 854/830 path patches, and 9/8 draws.
 
 ## Port Checklist
 
@@ -221,6 +245,7 @@ spans. Item 127 first classifies the excess span kinds against C++.
 | Logical-flush container reuse | `renderer/src/render_context.cpp:155-157`, `268-273`, `282-343`, `998-1004` | host allocation without changing GPU counters | Rust retains frame containers in several paths; audit only when profiles identify host churn. |
 | Resource-budget flush splitting | `renderer/src/render_context.cpp:497-573`, `663-725` | logical flushes and draws per flush | Rust preserves the 1,024-draw and resource fences; fixed corpus is structurally exact. |
 | Frame-wide layout, then upload and encode | `renderer/src/render_context.cpp:740-822`, `953-993` | command encoders, submissions, upload calls | Ported to one encoder and one submission per fixed variant; these counters are exact. |
+| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533` | tessellation spans, instances, upload bytes | Plain stroke and homogeneous nonzero-fill midpoint layouts now emit one leading envelope and final sentinel per logical flush. |
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
@@ -245,18 +270,20 @@ spans. Item 127 first classifies the excess span kinds against C++.
   topology. Rust now reports 94 versus 91; the three residual passes are in
   the two `bug339297` rows and remain below the current top-ranked work.
 - Item 124 keeps `gm-bevel180strokes` tessellation spans exact at 63 in both
-  modes. Item 126's restored topology makes `batchedconvexpaths` span layout
-  the next attribution target instead.
+  modes. Item 127 moves `gm-batchedconvexpaths` spans to 78 exactly in both
+  modes by matching C++'s flush-wide padding envelope.
 - `gpu_draw_calls` no longer owns the top row. Item 125 moves
   `gm-OverStroke` to eight MSAA draws exactly and nine atomic draws versus ten;
   C++'s counted initialize operation explains the lower Rust value.
 - `path_patches` no longer owns the top row. Item 126 moves both
   clockwise-atomic `bug339297` variants to exact C++ counts at 423 and 431 by
   matching global interior preparation.
-- `buffer_upload_bytes` and `tessellation_spans` are next.
-  `gm-batchedconvexpaths-msaa` reports 10,400/7,616 bytes and 105/78 spans
-  (Rust/C++); clockwise atomic reports 9,752/7,616 bytes and 101/78 spans.
-  Item 127 owns source attribution before reduction.
+- `gm-batchedconvexpaths` retains 600 atomic and 992 MSAA excess upload bytes
+  after item 127 makes its spans exact. Treat those as separate alignment or
+  buffer-layout work; they are no longer the highest coherent row.
+- `gm-bug339297_as_clip-msaa` is next at 3,704/2,816 upload bytes, 23/18
+  spans, 854/830 path patches, and 9/8 draws (Rust/C++). Item 128 separates
+  clip-update work from content preparation before reduction.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

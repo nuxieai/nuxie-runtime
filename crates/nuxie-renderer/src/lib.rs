@@ -2318,7 +2318,8 @@ impl WgpuFrame {
                     });
                 let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
                 // C++ RenderContext::LogicalFlush emits midpoint padding once around the flush.
-                let compact_shared_stroke_end = (share_midpoint_tessellation
+                // Layout sharing is independent of whether translucent fills can share a draw.
+                let compact_shared_midpoint_end = (share_midpoint_tessellation
                     && prepared.len() > 1
                     && gradient_batch.draws.iter().all(Option::is_none)
                     && draws.iter().all(|draw| {
@@ -2326,9 +2327,13 @@ impl WgpuFrame {
                             && draw.state.clip_rect.is_none()
                             && draw.paint.blend_mode == BlendMode::SrcOver
                     })
+                    && (prepared.iter().all(|draw| draw.is_stroke)
+                        || draws.iter().all(|draw| {
+                            draw.paint.style == RenderPaintStyle::Fill
+                                && draw.path.fill_rule == FillRule::NonZero
+                        }))
                     && prepared.iter().all(|draw| {
-                        draw.is_stroke
-                            && draw.base_instance == 1
+                        draw.base_instance == 1
                             && midpoint_tessellation_single_row_width(&draw.spans).is_some()
                     }))
                 .then(|| {
@@ -2406,7 +2411,7 @@ impl WgpuFrame {
                 let mut tessellation_span_batches = Vec::new();
                 let mut tessellation_heights = Vec::new();
                 let mut needs_dummy_tessellation = false;
-                if let Some(geometry_end) = compact_shared_stroke_end {
+                if let Some(geometry_end) = compact_shared_midpoint_end {
                     let mut packed = Vec::new();
                     append_tessellation_padding_span(&mut packed, 0, midpoint_span);
                     let mut next_base_instance = 1u32;
@@ -3484,7 +3489,14 @@ impl WgpuFrame {
                                 clip_rect_paint_aux(draw.state.clip_rect)
                             };
                             let path_index = pending_paths.len();
-                            let compact_midpoint_layout = options.batchable_midpoint_fill
+                            let compact_midpoint_layout = (draw.paint.style
+                                == RenderPaintStyle::Fill
+                                && draw.path.fill_rule == FillRule::NonZero
+                                && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                && !has_clip_rect
+                                && !advanced_blend
+                                && image.is_none()
+                                && gradient.is_none())
                                 || (draw.paint.style == RenderPaintStyle::Stroke
                                     && matches!(draw.role, DrawRole::Content { clip_id: 0 })
                                     && !has_clip_rect
@@ -8438,6 +8450,33 @@ mod tests {
         });
 
         assert_eq!(work, [(63, 104, 40), (63, 103, 40)]);
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn translucent_fills_use_one_flush_wide_midpoint_padding_envelope() {
+        use nuxie_render_stream::RenderStream;
+
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream"
+        )))
+        .unwrap();
+        let (width, height) = stream.frame_size.unwrap();
+        let work = [RenderMode::ClockwiseAtomic, RenderMode::Msaa].map(|mode| {
+            let mut factory = WgpuFactory::new_with_mode(width, height, mode).unwrap();
+            let mut frame =
+                factory.begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true);
+            stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+            let work = frame.finish_for_benchmark().unwrap().backend_work;
+            (
+                work.tessellation_spans,
+                work.gpu_draw_calls,
+                work.path_patches,
+            )
+        });
+
+        assert_eq!(work, [(78, 12, 142), (78, 31, 213)]);
     }
 
     #[cfg(feature = "perf-counters")]

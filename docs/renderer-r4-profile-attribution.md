@@ -91,19 +91,37 @@ resized when dimensions change.
 
 Rust creates one tessellation output texture per draw and recreates those
 textures every frame. Each `Tessellator::encode` also creates four initialized
-buffers immediately before its render pass. The first profile proved that a
-`PendingWrites` command buffer precedes almost every tessellation pass, but it
-did not by itself distinguish buffer upload from first-use texture work.
+buffers immediately before its render pass. `wgpu::util::DeviceExt` implements
+`create_buffer_init` with a mapped-at-creation buffer. In wgpu-core 30,
+unmapping that buffer records its staging copy in `Queue::pending_writes`, and
+the next `Queue::submit` flushes those copies as the internal `PendingWrites`
+command buffer.
 
-A controlled follow-up made that distinction. Merely preparing all buffers
-before encoding left 19.99 pending-write submissions/frame. Packing every span
-into one buffer and sharing one uniform/path/contour bind group still left
-19.85/frame, with each event immediately preceding the next distinct
-tessellation texture's first pass. The packed-buffer candidate also changed
-the 20-draw median from 69.644 ms to 70.463 ms. The only per-draw resource left
-unchanged by both candidates was the newly allocated output texture, so the
-trace supports first-use texture initialization as the submission boundary.
-Both candidates were removed.
+The missing causal edge was Rust's submission policy. Generic atomic work
+called `submit_and_wait` after every intersection-board group, so each group
+forced the accumulated initialized-buffer copies to flush before its first
+tessellation pass. Preparing uploads earlier and packing them into four shared
+buffers did not change that policy; this is why both item-110 candidates
+retained approximately twenty pending-write command buffers despite radically
+different buffer counts.
+
+A bounded exact-size tessellation-texture pool then falsified the texture
+hypothesis directly. The pool retained at most 256 textures/64 MiB and recycled
+only after GPU completion, but the steady-state trace still measured 19.88
+pending-write command buffers and 53.996 ms of pending-write encoder time per
+frame. It also regressed `bug5099` from 4.010 ms to 4.301 ms and
+`bevel180strokes` from 71.605 ms to 78.398 ms. The pool was removed.
+
+The accepted follow-up coalesces independent atomic groups into one command
+encoder until their combined authored-draw count reaches the existing 1,024-
+draw Metal safety fence. It still submits at logical-flush boundaries and
+preserves a single oversized group intact. Across 110 traced frames this
+reduced `PendingWrites` from 19.88 to exactly 1.00/frame while preserving all
+twenty tessellation and atomic passes. Pending-write encoder time fell to
+39.760 ms/frame. The fixed 16-variant old-Rust/current-Rust report improved
+from 162.237 ms to 138.841 ms in aggregate (0.8558x); every affected clockwise
+scene was flat or faster and MSAA stayed within measurement noise. The full
+pixel and V2 regression floors remained green.
 
 Authoritative source sites:
 
@@ -114,24 +132,29 @@ Authoritative source sites:
 - C++ one-encoder Dawn bridge:
   `crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_dawn.cpp`,
   `beforeFlush` and `afterFlush`.
-- Rust interleaving: `crates/nuxie-renderer/src/tessellator.rs`,
+- Rust upload creation: `crates/nuxie-renderer/src/tessellator.rs`,
   `Tessellator::encode`.
+- Rust submission cadence: `crates/nuxie-renderer/src/lib.rs`,
+  `WgpuFrame::finish_internal`.
 
 ## Next Port
 
-First adapt C++'s persistent resource lifetime without changing geometry or
-GPU pass semantics:
+Port C++ WebGPU's persistent three-buffer upload rings without changing
+geometry or GPU pass semantics:
 
-1. Check out size-compatible tessellation textures from a bounded pool.
-2. Hold checked-out textures until the frame's GPU-completion fence passes,
-   then return them for a later frame.
-3. Preserve one tessellation texture per draw, existing indices, pass order,
-   and every shader input. Do not revive vertical packing or pass merging.
-4. Cover concurrent/in-flight frames and bounded retention explicitly.
-5. Accept only if the steady-state twenty-draw trace collapses pending-write
-   submissions from approximately twenty per frame to a small constant, the
-   fixed old-Rust/current-Rust A/B improves, and the 1,468-row corpus remains
-   exact=1,409/diverges=0/gated=59.
+1. Pack each flush's tessellation spans, uniforms, paths, and contours into
+   reusable, alignment-correct buffers instead of per-draw
+   `create_buffer_init` allocations.
+2. Rotate three GPU buffers per resource class and resize only when capacity
+   grows, matching `BufferWebGPU` and `gpu::kBufferRingSize`.
+3. Upload each used range once with `Queue::write_buffer`; bind per-draw slices
+   with exact offsets and sizes while preserving indices, pass order, and
+   shader inputs.
+4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries until
+   a larger measured change proves they can move.
+5. Accept only if the twenty-draw trace reduces the remaining 39.760 ms
+   pending-write encoder cost, the fixed old-Rust/current-Rust report improves,
+   and the 1,468-row corpus remains exact=1,409/diverges=0/gated=59.
 
-Persistent buffer rings and atomic backing-plane reuse remain subsequent
-measured work if texture reuse does not close enough of the gap.
+Persistent atomic backing-plane reuse remains the next measured resource site
+after upload rings.

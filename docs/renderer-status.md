@@ -1317,14 +1317,31 @@ Run `make renderer-golden`.
     before a distinct tessellation texture's first pass. The packed candidate
     changed the 20-draw median from 69.644 ms to 70.463 ms and the one-draw
     control from 3.331 ms to 5.016 ms. Both candidates were removed.
-111. [ ] Port C++'s persistent tessellation-resource lifetime by reusing
-    size-compatible per-draw textures after GPU completion. Preserve separate
-    textures, indices, pass order, and shader inputs; do not revive vertical
-    packing or pass merging. The pool must be bounded and safe for concurrent
-    in-flight frames. Accept only if the steady-state 20-draw Metal trace
-    collapses pending-write submissions from approximately 20/frame to a small
-    constant, the fixed alternating old-Rust/current-Rust report improves, and
-    the corpus remains exact=1,409/diverges=0/gated=59.
+111. [x] Test C++'s persistent tessellation-resource lifetime with bounded,
+    completed-frame texture reuse. An exact-size pool retained at most 256
+    textures/64 MiB and recycled only after GPU completion, but the trace
+    remained at 19.88 pending-write submissions and 53.996 ms of pending-write
+    encoder time per frame. It regressed `bug5099` from 4.010 ms to 4.301 ms
+    and `bevel180strokes` from 71.605 ms to 78.398 ms. The pool was removed;
+    texture creation was not the pending-write submission cause.
+112. [x] Coalesce independent generic-atomic intersection-board groups under
+    the existing 1,024 authored-draw Metal safety fence. Logical-flush
+    boundaries still submit, and a single oversized group remains intact.
+    The 110-frame trace falls from 19.88 to exactly 1.00 `PendingWrites` per
+    frame while preserving all twenty tessellation and atomic passes. The
+    fixed 16-variant old-Rust/current-Rust report improves from 162.237 ms to
+    138.841 ms aggregate (0.8558x); every affected clockwise scene is flat or
+    faster and MSAA stays within noise. The renderer corpus remains
+    exact=1,409/diverges=0/gated=59 and both V2 floors stay green.
+113. [ ] Port C++ WebGPU's persistent three-buffer upload rings for
+    tessellation spans, uniforms, paths, and contours. Pack each flush into
+    alignment-correct reusable buffers, rotate `gpu::kBufferRingSize == 3`
+    backing buffers, grow capacity only when needed, and upload each used
+    range once with `Queue::write_buffer`. Preserve exact per-draw slices,
+    pass order, shader inputs, logical-flush boundaries, and the 1,024-draw
+    safety fence. Accept only if the steady-state trace reduces the remaining
+    39.760 ms pending-write encoder cost, the fixed alternating report
+    improves, and all pixel and V2 gates remain green.
 
 ## R2 Completion Record
 
@@ -1537,13 +1554,16 @@ Run `make renderer-golden`.
 
 ## Decisions
 
-- 2026-07-15: R4 item 110 falsifies the initial buffer-order explanation for
-  `PendingWrites`. Preparing uploads early and then packing all tessellation
-  spans plus shared metadata into four total buffers both retain approximately
-  20 pending-write submissions/frame. The events remain immediately before
-  first use of each freshly allocated tessellation texture. Queue item 111
-  therefore tests completed-frame texture reuse, preserving separate textures
-  and avoiding the rejected vertical-packing and pass-merging designs.
+- 2026-07-15: R4 items 111-112 correct item 110's provisional texture
+  attribution. A bounded completed-frame texture pool leaves 19.88
+  `PendingWrites` events/frame and slows both controls, so texture first use is
+  not the cause. wgpu-core instead records initialized-buffer copies from
+  mapped-at-creation buffers in `Queue::pending_writes`; Rust's per-group
+  `submit_and_wait` flushed those copies after every independent atomic group.
+  Coalescing only those groups under the existing 1,024-draw safety fence is
+  accepted at 0.8558x aggregate and 1.00 event/frame. Logical-flush boundaries
+  and oversized-group atomicity remain unchanged. Item 113 ports C++ WebGPU's
+  persistent three-buffer upload rings against the remaining 39.760 ms/frame.
 
 - 2026-07-15: R4's paired Time Profiler and Metal System Trace attribution
   names wgpu pending-write processing as the first hot site. At 20 draws it
@@ -2403,6 +2423,17 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-15: Closed R4 items 111-112. The bounded 256-texture/64 MiB pool was
+  rejected at 1.0727x for `bug5099` and 1.0949x for `bevel180strokes` with no
+  trace improvement. Source inspection then identified per-group queue submits
+  as the real pending-write flush. Bounded independent-group coalescing reduces
+  `PendingWrites` from 19.88 to 1.00/frame and the fixed 16-variant aggregate
+  from 162.237 ms to 138.841 ms (0.8558x), with unchanged structural counters.
+  `make renderer-golden` passes at exact=1,409/diverges=0/gated=59/total=1,468;
+  the normal and scripted V2 floors pass at 584 and 35 exact segments, and
+  `cargo test --workspace` passes. Item 113 ports C++'s three-buffer upload
+  rings to attack the remaining pending-write encoder cost.
 
 - 2026-07-15: Closed R4 queue item 110 as a measured rejection. The strongest
   shared-buffer candidate retained 19.85 pending-write submissions/frame and

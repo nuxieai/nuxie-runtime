@@ -347,15 +347,24 @@ implicated per-draw clockwise render passes, but controlled Rust-only A/Bs
 rejected both merging borrowed/main passes (23.95% aggregate regression) and
 vertically packing safe simple-draw tessellation textures (22.25% regression).
 Both candidates preserved the full pixel corpus and were removed. Paired
-one-draw/20-draw Time Profiler and Metal traces identify approximately one
-wgpu pending-write submission per tessellation draw and 59.72 ms of encoder
-time in the 20-draw case. A controlled preparation-order candidate and a
-packed shared-buffer candidate both retained approximately 20 submissions per
-frame and failed timing acceptance, proving initialized-buffer ordering was
-not the boundary. Each submission immediately precedes first use of a newly
-allocated per-draw tessellation texture, while C++ retains tessellation
-resources across frames. The next task ports completed-frame texture reuse
-while preserving separate textures and passes; see
+one-draw/20-draw Time Profiler and Metal traces identified approximately one
+wgpu `PendingWrites` command buffer per independent atomic group. A controlled
+preparation-order candidate and a packed shared-buffer candidate both retained
+approximately 20 events/frame and failed timing acceptance. A bounded
+completed-frame tessellation-texture pool then retained 19.88 events and
+regressed both controls, falsifying first-use texture initialization as the
+cause. Source inspection instead showed that each generic atomic group called
+`submit_and_wait`, flushing wgpu's mapped-at-creation initialized-buffer copies
+from `Queue::pending_writes`.
+
+Bounded coalescing of independent groups now shares one encoder until the
+existing 1,024 authored-draw safety fence or a logical-flush boundary. The
+110-frame trace falls from 19.88 to exactly 1.00 `PendingWrites` event/frame,
+and the fixed 16-variant old-Rust/current-Rust aggregate improves from
+162.237 ms to 138.841 ms (0.8558x) without changing structural counters or
+pixel output. The remaining first hot site is 39.760 ms/frame of pending-write
+encoder work. The next task ports C++ WebGPU's persistent three-buffer upload
+rings for flush-wide tessellation spans, uniforms, paths, and contours; see
 `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria

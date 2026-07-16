@@ -93,9 +93,9 @@ const CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION: u32 = 2048;
 const CPP_LOGICAL_ATLAS_MAX_DIMENSION: u32 = 4096;
 const FEATHER_ATLAS_PADDING: u32 = 2;
 // A single Metal command buffer first fails at 2,044 direct MSAA draws with
-// the current per-draw tessellation resources. Keep twofold headroom while
-// the shared C++ logical-flush resource layout is still being translated.
-const MAX_MSAA_DRAWS_PER_SUBMISSION: usize = 1_024;
+// the current per-draw tessellation resources. Reuse that twofold safety
+// fence while the shared C++ logical-flush resource layout is translated.
+const MAX_DRAWS_PER_SUBMISSION: usize = 1_024;
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
@@ -3789,7 +3789,7 @@ impl WgpuFrame {
         if self.draws.is_empty() {
             encode_fallback_run(&self.draws, None, None, &[0], true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
-            if self.draws.len() > MAX_MSAA_DRAWS_PER_SUBMISSION
+            if self.draws.len() > MAX_DRAWS_PER_SUBMISSION
                 && msaa_draws_can_submit_independently(&self.draws)
             {
                 let mut clear_target = true;
@@ -3804,11 +3804,10 @@ impl WgpuFrame {
                         self.width,
                         self.height,
                     );
-                    for chunk_start in
-                        (0..scheduled_draws.len()).step_by(MAX_MSAA_DRAWS_PER_SUBMISSION)
+                    for chunk_start in (0..scheduled_draws.len()).step_by(MAX_DRAWS_PER_SUBMISSION)
                     {
-                        let chunk_end = (chunk_start + MAX_MSAA_DRAWS_PER_SUBMISSION)
-                            .min(scheduled_draws.len());
+                        let chunk_end =
+                            (chunk_start + MAX_DRAWS_PER_SUBMISSION).min(scheduled_draws.len());
                         encode_fallback_run(
                             &scheduled_draws[chunk_start..chunk_end],
                             Some(&draw_groups[chunk_start..chunk_end]),
@@ -3866,6 +3865,7 @@ impl WgpuFrame {
             let mut start = 0;
             let mut clear_target = true;
             let mut logical_flush_index = 0;
+            let mut independent_atomic_draws_in_encoder = 0usize;
             while start < self.draws.len() {
                 let logical_flush_end = self
                     .logical_flush_starts
@@ -3950,8 +3950,16 @@ impl WgpuFrame {
                             self.width,
                             self.height,
                         ) {
+                            if independent_atomic_group_requires_submit(
+                                independent_atomic_draws_in_encoder,
+                                group.len(),
+                            ) {
+                                submit_and_wait(&mut encoder)?;
+                                independent_atomic_draws_in_encoder = 0;
+                            }
                             encode_atomic_run(&group, clear_target, false, None, &mut encoder)?;
-                            submit_and_wait(&mut encoder)?;
+                            independent_atomic_draws_in_encoder =
+                                independent_atomic_draws_in_encoder.saturating_add(group.len());
                             clear_target = false;
                         }
                     }
@@ -3971,6 +3979,7 @@ impl WgpuFrame {
                     logical_flush_index += 1;
                     if start < self.draws.len() {
                         submit_and_wait(&mut encoder)?;
+                        independent_atomic_draws_in_encoder = 0;
                     }
                 }
             }
@@ -5762,6 +5771,14 @@ fn disjoint_atomic_draw_groups(
     )
 }
 
+fn independent_atomic_group_requires_submit(
+    draws_in_encoder: usize,
+    next_group_draws: usize,
+) -> bool {
+    draws_in_encoder != 0
+        && draws_in_encoder.saturating_add(next_group_draws) > MAX_DRAWS_PER_SUBMISSION
+}
+
 fn disjoint_atomic_draw_groups_with_limit(
     draws: &[SolidDraw],
     viewport_width: u32,
@@ -6998,6 +7015,14 @@ mod tests {
 
         assert_eq!(groups.len(), draws.len());
         assert!(groups.iter().all(|group| group.len() == 1));
+    }
+
+    #[test]
+    fn independent_atomic_groups_share_an_encoder_until_the_draw_budget() {
+        assert!(!independent_atomic_group_requires_submit(0, 2_048));
+        assert!(!independent_atomic_group_requires_submit(1_023, 1));
+        assert!(independent_atomic_group_requires_submit(1_024, 1));
+        assert!(independent_atomic_group_requires_submit(1, 1_024));
     }
 
     #[test]

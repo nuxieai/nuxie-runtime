@@ -457,5 +457,50 @@ The refreshed top mode-paired excess is `gm-batchedtriangulations`: MSAA emits
 and 13 draws versus five and five. Item 121 attributes those pass roles and
 C++ batch boundaries before another scheduling change.
 
+## Item 121: Interior Draw-Batch Merge
+
+The four authored fills are non-overlapping and use interior triangulation.
+C++ sorts their low-level work by draw group and draw type in
+`renderer/src/render_context.cpp:1624-2070`, lays outer-curve and triangle
+ranges contiguously, and merges adjacent ranges in `pushDraw` at
+`render_context.cpp:3603-3768`. The counter split makes both Rust gaps exact:
+
+- Atomic Rust emitted four tessellation passes, four outer-curve passes, four
+  interior passes, and one resolve draw. C++ emits one flush tessellation,
+  one outer batch, one interior batch, an explicit initialize draw, and one
+  resolve draw.
+- MSAA Rust emits one tessellation draw, twelve draw-major fill subpasses, and
+  one composite draw. C++ emits one tessellation draw and three subpass-major
+  fill batches; it resolves through the render attachment.
+
+The atomic implementation now packs compatible plain outer-curve spans into
+one C++-style 16-vertex layout, concatenates their triangle vertices, and
+issues one outer and one interior draw per non-overlap group. The
+outer-to-interior render-pass boundary is mandatory: a first candidate that
+put both roles in one pass made the large-interior repeatability test differ
+by three pixels. Restoring the C++ barrier is deterministic and repeatable.
+
+On `gm-batchedtriangulations-clockwise-atomic`, Rust moves from 14 to five
+passes, matching C++, and from 13 to four GPU draws versus C++'s five. The one
+missing Rust draw is an advantage with a named cause: wgpu clears the backing
+attachment directly while C++ Dawn emits `renderPassInitialize`. Path patches
+are exact at 56/56, tessellation spans move 36->30 against C++'s 31, and Rust
+uploads 4,600 bytes against C++'s 4,816. Across the fixed matrix, Rust moves
+from 116 to 107 passes, 67 to 61 created bind groups, 332 to 302 bind-group
+sets, 113 to 98 texture bindings, 172,008 to 168,936 uploaded bytes, and 187
+to 178 draws. Ranked excess rows fall from 81 to 72.
+
+The light one-frame target snapshot is Rust/C++=1.382x (0.640/0.463 ms), and
+the fixed-matrix sum is 2.365x. These are directional smoke checks only; the
+exact work reduction and unchanged outputs are the acceptance evidence.
+Renderer exact=1,409/diverges=0/gated=59, both V2 floors remain 584/35, and
+the workspace suite passes.
+
+The remaining top row is the MSAA half at 14 draws versus four. Item 122 owns
+only the C++-matched compact midpoint layout and subpass-major merge, with a
+first structural target of twelve fill draws becoming three and fourteen
+total draws becoming five. The separate Rust composite draw/pass is measured
+after that merge rather than folded into the same change.
+
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

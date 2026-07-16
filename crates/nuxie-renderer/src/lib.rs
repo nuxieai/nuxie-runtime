@@ -2312,6 +2312,40 @@ impl WgpuFrame {
                                     + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
                                     as u32
                     });
+                let outer_patch_range = (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                    + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                    as u32
+                    ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                        + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT
+                        + gpu::OUTER_CURVE_PATCH_INDEX_COUNT) as u32;
+                let outer_segment_span = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
+                let shared_outer_end = prepared.iter().try_fold(outer_segment_span, |end, draw| {
+                    draw.instance_count
+                        .checked_mul(outer_segment_span)
+                        .and_then(|count| end.checked_add(count))
+                });
+                let share_outer_tessellation = load_color.is_none()
+                    && !force_clockwise_atomic_batch
+                    && gradient_batch.draws.iter().all(Option::is_none)
+                    && draws.iter().all(|draw| {
+                        matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                            && draw.state.clip_rect.is_none()
+                            && draw.paint.blend_mode == BlendMode::SrcOver
+                    })
+                    && prepared.iter().all(|draw| {
+                        draw.image.is_none()
+                            && !draw.triangles.is_empty()
+                            && draw.atlas.is_none()
+                            && !draw.is_feather
+                            && !draw.is_stroke
+                            && draw.base_instance == 1
+                            && draw.patch_index_range == outer_patch_range
+                            && draw.spans.iter().all(|span| span.y == 0.0)
+                    })
+                    && shared_outer_end.is_some_and(|end| {
+                        end.checked_add(1)
+                            .is_some_and(|end| end <= gpu::TESS_TEXTURE_WIDTH as u32)
+                    });
                 let mut tessellation_span_batches = Vec::new();
                 let mut tessellation_heights = Vec::new();
                 let mut needs_dummy_tessellation = false;
@@ -2367,6 +2401,55 @@ impl WgpuFrame {
                         tessellation_span_batches.push(packed);
                         tessellation_heights.push(packed_height);
                     }
+                } else if share_outer_tessellation {
+                    let mut packed = vec![gpu::TessVertexSpan::without_reflection(
+                        [[0.0; 2]; 4],
+                        [0.0; 2],
+                        0.0,
+                        0,
+                        outer_segment_span as i32,
+                        0,
+                        0,
+                        1,
+                        0,
+                    )];
+                    let mut next_base_instance = 1u32;
+                    for draw in &mut prepared {
+                        let relocation = (next_base_instance - draw.base_instance)
+                            .checked_mul(outer_segment_span)
+                            .expect("outer tessellation relocation overflow");
+                        relocate_tessellation(
+                            &mut draw.spans,
+                            &mut draw.base_instance,
+                            &mut contours[draw.contour_range.clone()],
+                            relocation,
+                            0,
+                            outer_segment_span,
+                        );
+                        draw.spans
+                            .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+                        packed.append(&mut draw.spans);
+                        next_base_instance = next_base_instance
+                            .checked_add(draw.instance_count)
+                            .expect("outer tessellation instance range overflow");
+                        draw.tessellation_index = 0;
+                    }
+                    let final_vertex = next_base_instance
+                        .checked_mul(outer_segment_span)
+                        .expect("outer tessellation final padding overflow");
+                    packed.push(gpu::TessVertexSpan::without_reflection(
+                        [[0.0; 2]; 4],
+                        [0.0; 2],
+                        0.0,
+                        final_vertex as i32,
+                        final_vertex as i32 + 1,
+                        0,
+                        0,
+                        1,
+                        0,
+                    ));
+                    tessellation_span_batches.push(packed);
+                    tessellation_heights.push(1);
                 } else {
                     for draw in &mut prepared {
                         if draw.spans.is_empty() {
@@ -6168,12 +6251,27 @@ fn relocate_midpoint_tessellation(
     x: u32,
     y: u32,
 ) {
-    let logical_offset = y * gpu::TESS_TEXTURE_WIDTH as u32 + x;
-    assert_eq!(
-        logical_offset % gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
-        0
+    relocate_tessellation(
+        spans,
+        base_instance,
+        contours,
+        x,
+        y,
+        gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
     );
-    *base_instance += logical_offset / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+}
+
+fn relocate_tessellation(
+    spans: &mut [gpu::TessVertexSpan],
+    base_instance: &mut u32,
+    contours: &mut [gpu::ContourData],
+    x: u32,
+    y: u32,
+    patch_segment_span: u32,
+) {
+    let logical_offset = y * gpu::TESS_TEXTURE_WIDTH as u32 + x;
+    assert_eq!(logical_offset % patch_segment_span, 0);
+    *base_instance += logical_offset / patch_segment_span;
     for contour in contours {
         contour.vertex_index0 += logical_offset;
     }
@@ -7306,6 +7404,44 @@ mod tests {
             .iter()
             .zip(vertex_indices)
             .all(|(contour, original)| contour.vertex_index0 == original + logical_offset));
+    }
+
+    #[test]
+    fn outer_tessellations_relocate_into_contiguous_batch_ranges() {
+        let mut path = RawPath::new();
+        append_oval(&mut path, [0.0, 0.0, 100.0, 100.0]);
+        let first =
+            draw::build_interior_tessellation(&path, Mat2D::IDENTITY, FillRule::NonZero, false)
+                .unwrap();
+        let mut second =
+            draw::build_interior_tessellation(&path, Mat2D::IDENTITY, FillRule::NonZero, false)
+                .unwrap();
+        let original_vertex_indices = second
+            .contours
+            .iter()
+            .map(|contour| contour.vertex_index0)
+            .collect::<Vec<_>>();
+        let segment_span = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
+        let relocation = first.instance_count * segment_span;
+
+        relocate_tessellation(
+            &mut second.spans,
+            &mut second.base_instance,
+            &mut second.contours,
+            relocation,
+            0,
+            segment_span,
+        );
+
+        assert_eq!(
+            second.base_instance,
+            first.base_instance + first.instance_count
+        );
+        assert!(second
+            .contours
+            .iter()
+            .zip(original_vertex_indices)
+            .all(|(contour, original)| contour.vertex_index0 == original + relocation));
     }
 
     #[test]

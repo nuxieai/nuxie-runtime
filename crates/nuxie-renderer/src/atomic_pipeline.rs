@@ -1134,26 +1134,55 @@ impl AtomicPipeline {
             }),
             word_count: color_word_count,
         });
+        let shared_flush_group = draws.iter().all(|draw| {
+            std::ptr::eq(draw.tessellation, draws[0].tessellation)
+                && draw.atlas.is_none()
+                && draws[0].atlas.is_none()
+                && draw.image.is_none()
+        });
         #[cfg(feature = "perf-diagnostics")]
         let triangle_upload_started = Instant::now();
-        let triangle_buffers = draws
-            .iter()
-            .map(|draw| {
-                let vertices = if draw.atlas.is_some() {
-                    draw.atlas_blit_vertices
-                } else {
-                    draw.triangle_vertices
-                };
-                (!vertices.is_empty()).then(|| {
+        let (shared_triangle_buffer, shared_triangle_ranges, triangle_buffers) =
+            if shared_flush_group {
+                let mut vertices = Vec::new();
+                let ranges = draws
+                    .iter()
+                    .map(|draw| {
+                        let start = vertices.len() as u32;
+                        vertices.extend_from_slice(draw.triangle_vertices);
+                        start..vertices.len() as u32
+                    })
+                    .collect::<Vec<_>>();
+                let buffer = (!vertices.is_empty()).then(|| {
                     upload(
                         device,
-                        "nuxie-atomic-triangles",
-                        vertices,
+                        "nuxie-atomic-shared-triangles",
+                        &vertices,
                         wgpu::BufferUsages::VERTEX,
                     )
-                })
-            })
-            .collect::<Vec<_>>();
+                });
+                (buffer, ranges, Vec::new())
+            } else {
+                let buffers = draws
+                    .iter()
+                    .map(|draw| {
+                        let vertices = if draw.atlas.is_some() {
+                            draw.atlas_blit_vertices
+                        } else {
+                            draw.triangle_vertices
+                        };
+                        (!vertices.is_empty()).then(|| {
+                            upload(
+                                device,
+                                "nuxie-atomic-triangles",
+                                vertices,
+                                wgpu::BufferUsages::VERTEX,
+                            )
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                (None, Vec::new(), buffers)
+            };
         #[cfg(feature = "perf-diagnostics")]
         {
             backing.diagnostics.buffer_upload_ns = backing
@@ -1217,13 +1246,6 @@ impl AtomicPipeline {
                 .buffer_upload_ns
                 .saturating_add(elapsed_ns(image_uniform_upload_started));
         }
-        let shared_flush_group = draws.iter().all(|draw| {
-            std::ptr::eq(draw.tessellation, draws[0].tessellation)
-                && draw.atlas.is_none()
-                && draws[0].atlas.is_none()
-                && draw.image.is_none()
-                && draw.triangle_vertices.is_empty()
-        });
         let make_flush_group = |draw_index: usize, draw: &AtomicDraw<'_>| {
             device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-atomic-flush-group"),
@@ -1422,43 +1444,90 @@ impl AtomicPipeline {
                 pass.set_bind_group(3, &samplers, &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-                for (draw_index, draw) in draws[group_start..group_end].iter().enumerate() {
-                    let draw_index = group_start + draw_index;
-                    pass.set_pipeline(
-                        if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
-                            &self.advanced_feather_hsl_stroke_path
-                        } else if advanced_blend && draw.is_feather && draw.is_stroke {
-                            &self.advanced_feather_stroke_path
-                        } else if advanced_blend && draw.is_feather && hsl_blend {
-                            &self.advanced_feather_hsl_path
-                        } else if advanced_blend && draw.is_feather {
-                            &self.advanced_feather_path
-                        } else if advanced_blend && !draw.triangle_vertices.is_empty() {
-                            &self.advanced_outer_path
-                        } else if advanced_blend {
-                            &self.advanced_path
-                        } else if draw.is_feather && draw.is_stroke {
-                            &self.feather_stroke_path
-                        } else if draw.is_feather {
-                            &self.feather_path
-                        } else if draw.is_stroke {
-                            &self.stroke_path
-                        } else if !draw.triangle_vertices.is_empty() {
-                            &self.outer_path
-                        } else {
-                            &self.path
-                        },
-                    );
-                    pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                let group_draws = &draws[group_start..group_end];
+                let first_draw = &group_draws[0];
+                let batch_paths = shared_triangle_buffer.is_some()
+                    && group_draws.iter().all(|draw| {
+                        draw.patch_index_range == first_draw.patch_index_range
+                            && draw.is_feather == first_draw.is_feather
+                            && draw.is_stroke == first_draw.is_stroke
+                            && draw.triangle_vertices.is_empty()
+                                == first_draw.triangle_vertices.is_empty()
+                    })
+                    && group_draws.windows(2).all(|pair| {
+                        pair[0].base_instance + pair[0].instance_count == pair[1].base_instance
+                    });
+                let path_pipeline = |draw: &AtomicDraw<'_>| {
+                    if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
+                        &self.advanced_feather_hsl_stroke_path
+                    } else if advanced_blend && draw.is_feather && draw.is_stroke {
+                        &self.advanced_feather_stroke_path
+                    } else if advanced_blend && draw.is_feather && hsl_blend {
+                        &self.advanced_feather_hsl_path
+                    } else if advanced_blend && draw.is_feather {
+                        &self.advanced_feather_path
+                    } else if advanced_blend && !draw.triangle_vertices.is_empty() {
+                        &self.advanced_outer_path
+                    } else if advanced_blend {
+                        &self.advanced_path
+                    } else if draw.is_feather && draw.is_stroke {
+                        &self.feather_stroke_path
+                    } else if draw.is_feather {
+                        &self.feather_path
+                    } else if draw.is_stroke {
+                        &self.stroke_path
+                    } else if !draw.triangle_vertices.is_empty() {
+                        &self.outer_path
+                    } else {
+                        &self.path
+                    }
+                };
+                if batch_paths {
+                    let last_draw = group_draws.last().expect("atomic draw group is nonempty");
+                    pass.set_pipeline(path_pipeline(first_draw));
+                    pass.set_bind_group(0, &flush_groups[0], &[]);
                     pass.draw_path_patches(
-                        draw.patch_index_range.clone(),
+                        first_draw.patch_index_range.clone(),
                         0,
-                        draw.base_instance..draw.base_instance + draw.instance_count,
+                        first_draw.base_instance
+                            ..last_draw.base_instance + last_draw.instance_count,
                     );
-                    if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
-                        pass.set_pipeline(&self.interior);
-                        pass.set_vertex_buffer(0, triangle_buffer.slice(..));
-                        pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                } else {
+                    for (draw_index, draw) in group_draws.iter().enumerate() {
+                        let draw_index = group_start + draw_index;
+                        pass.set_pipeline(path_pipeline(draw));
+                        pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                        pass.draw_path_patches(
+                            draw.patch_index_range.clone(),
+                            0,
+                            draw.base_instance..draw.base_instance + draw.instance_count,
+                        );
+                    }
+                }
+                drop(pass);
+                if let Some(triangle_buffer) = &shared_triangle_buffer {
+                    let vertex_range = shared_triangle_ranges[group_start].start
+                        ..shared_triangle_ranges[group_end - 1].end;
+                    if !vertex_range.is_empty() {
+                        #[cfg(feature = "perf-diagnostics")]
+                        {
+                            backing.diagnostics.render_passes =
+                                backing.diagnostics.render_passes.saturating_add(1);
+                        }
+                        let mut interior_pass = encoder.begin_counted_render_pass(
+                            &render_pass_descriptor("nuxie-atomic-interior-pass", &attachments),
+                        );
+                        interior_pass.set_pipeline(if advanced_blend {
+                            &self.advanced_interior
+                        } else {
+                            &self.interior
+                        });
+                        interior_pass.set_bind_group(0, &flush_groups[0], &[]);
+                        interior_pass.set_bind_group(1, image_group(0), &[]);
+                        interior_pass.set_bind_group(2, &atomics, &[]);
+                        interior_pass.set_bind_group(3, &samplers, &[]);
+                        interior_pass.set_vertex_buffer(0, triangle_buffer.slice(..));
+                        interior_pass.draw(vertex_range, 0..1);
                     }
                 }
             }

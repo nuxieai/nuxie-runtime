@@ -88,6 +88,28 @@ The refreshed top rows belong to `gm-batchedtriangulations`: MSAA has 14 GPU
 draws versus four, while clockwise atomic has 14 passes and 13 draws versus
 five and five. Item 121 owns the mode-paired batch-boundary attribution.
 
+### Item 121 Update
+
+C++ sorts the four disjoint interior fills by low-level draw type and merges
+contiguous outer-curve and triangle ranges. Rust's atomic path instead built
+four tessellation textures and issued four outer plus four interior draws.
+Compatible plain interior fills now use one 16-vertex outer-curve layout, one
+shared triangle buffer, and one draw per geometry role while retaining the
+required outer-to-interior render-pass boundary.
+
+`gm-batchedtriangulations-clockwise-atomic` moves from 14 to five passes and
+13 to four draws; C++ reports five and five. The draw difference is C++ Dawn's
+explicit initialize draw versus Rust's attachment clear. Path patches are
+exact at 56, and spans move 36->30 against C++'s 31. Fixed-matrix Rust totals
+move from 116 to 107 passes and 187 to 178 draws; ranked excess rows fall
+81->72. The one-frame target snapshot is Rust/C++=1.382x and remains
+directional only.
+
+MSAA is now the unambiguous top row: twelve draw-major fill subpasses must
+become C++'s three subpass-major batches. Item 122 ports the compact midpoint
+layout and merge first; its target is 14->5 total draws. The remaining Rust
+composite draw is attributed separately afterward.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -100,7 +122,7 @@ five and five. Item 121 owns the mode-paired batch-boundary attribution.
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
-| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic flush-wide lifetime and plain-stroke midpoint sharing are ported. Item 121 attributes the remaining `batchedtriangulations` excess. |
+| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic interior fills now share outer and triangle batches with the required role barrier. Item 122 owns the equivalent MSAA subpass merge. |
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
@@ -117,10 +139,9 @@ five and five. Item 121 owns the mode-paired batch-boundary attribution.
 - `bind_group_sets` no longer owns the top row. Item 119 removed 141 repeated
   direct-MSAA sets; retain the remaining layout-bound sets until another
   source-matched redundancy is identified.
-- `render_passes` and `gpu_draw_calls` are next. The top mode-paired scene is
-  `gm-batchedtriangulations`; split it by pipeline/pass class before changing
-  scheduling because mandatory fill-rule work and avoidable boundaries share
-  the aggregate counters.
+- `gpu_draw_calls` is next. `gm-batchedtriangulations-msaa` has twelve
+  draw-major fill calls where C++ has three subpass-major batches; item 122
+  owns that exact merge before the separate composite-pass audit.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

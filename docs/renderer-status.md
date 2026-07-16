@@ -1435,13 +1435,25 @@ Run `make renderer-golden`.
     exact=1,409/diverges=0/gated=59, V2 floors are 584/35, and the workspace
     suite passes. The four affected Rust directional frames sum to 4.124 ms
     from 6.937 ms; no load-controlled timing claim is attached.
-121. [ ] Attribute the new mode-paired top excess on
+121. [x] Attribute the new mode-paired top excess on
     `gm-batchedtriangulations`: MSAA emits 14 GPU draws versus four in C++
     Dawn, while clockwise atomic emits 14 passes and 13 draws versus five and
-    five. Split those rows by pipeline/pass role and map each avoidable
-    boundary to C++ draw-batch merge rules before changing scheduling. Accept
-    only source-matched structural reductions with unchanged correctness floors
-    and a light directional snapshot.
+    five. C++ sorts the four disjoint interior fills by draw type and merges
+    contiguous ranges. Rust now packs compatible plain outer curves and
+    triangles once per flush and retains C++'s required role barrier. Atomic
+    passes move 14->5 (C++ 5), draws 13->4 (C++ 5; its extra draw explicitly
+    initializes what Rust clears as an attachment), and path patches are exact
+    at 56. Fixed-matrix Rust passes move 116->107 and draws 187->178; ranked
+    excess rows move 81->72. Renderer exact=1,409/diverges=0/gated=59, V2
+    floors 584/35, and the workspace suite pass. The target's light snapshot
+    is Rust/C++=1.382x; counters and output are the acceptance evidence.
+122. [ ] Port C++'s compact midpoint layout and subpass-major merge for
+    `gm-batchedtriangulations-msaa`. Rust currently issues four paths times
+    three nonzero fill subpasses; C++ writes contiguous path ranges and merges
+    each low-level draw type. Reduce the twelve fill draws to three and total
+    draws from 14 to five without changing path patches (81), pixels, or the
+    V2 floors. Attribute the remaining fifth Rust composite draw against C++'s
+    attachment resolve only after this merge lands.
 
 ## R2 Completion Record
 
@@ -2579,8 +2591,8 @@ C. **Perf-mechanism inventory scout (proactive port list).** One scout
    enumerates EVERY pooling/ring/budget/reuse/coalescing mechanism in
    render_context.cpp + backend buffer management (the render-side
    analog of V2's dirt-gating audit). Remaining R4 items become 'port
-   the checklist' verified by counters + brackets, with profiling as
-   confirmation rather than discovery.
+   the checklist' verified with the proportionate evidence in D, with
+   profiling as confirmation rather than discovery.
 D. **Evidence proportional to uncertainty.** A deterministic reduction in
    redundant work, such as twenty equivalent passes becoming one, is accepted
    with exact structural counters, unchanged pixels/contracts, and a light
@@ -2591,6 +2603,19 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 121 by porting C++'s contiguous outer-curve and
+  triangle batching for compatible plain interior fills. On
+  `gm-batchedtriangulations-clockwise-atomic`, Rust passes fall 14->5 against
+  C++ 5 and draws fall 13->4 against C++ 5; C++'s extra draw is its explicit
+  initialize operation, while Rust uses an attachment clear. Path patches are
+  exact at 56. A first same-pass candidate made a large interior fill differ
+  across repeats by three pixels; preserving C++'s outer-to-interior barrier
+  restores determinism. Fixed-matrix passes move 116->107, bind-group sets
+  332->302, uploaded bytes 172,008->168,936, draws 187->178, and ranked excess
+  rows 81->72. The target's light Rust/C++ snapshot is 1.382x. Renderer
+  exact=1,409/diverges=0/gated=59, V2 floors 584/35, and the workspace suite
+  pass. Item 122 owns the remaining MSAA 12->3 fill-draw merge.
 
 - 2026-07-16: Closed R4 item 120 by admitting plain strokes to the existing
   flush-wide midpoint tessellation layout. On the target scene, passes fall

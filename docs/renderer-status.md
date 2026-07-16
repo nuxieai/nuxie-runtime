@@ -1463,15 +1463,25 @@ Run `make renderer-golden`.
     independent review found one missing merged-pixel regression; the test now
     compares scheduled and serialized output byte-for-byte, and the review has
     no open findings.
-123. [ ] Resolve ordinary fixed MSAA directly into the final attachment when
-    the run owns the target clear. Rust currently clears the final target,
-    resolves into a transparent fallback texture, then composites that texture
-    back; C++ clears the multisample attachment and names the final target as
-    its resolve attachment. Remove the two redundant passes only for the
-    clear-owned, non-advanced path, retaining fallback composition for
-    preserve-target and destination-read runs. The fixed matrix target is
-    107->91 render passes (exact with C++ Dawn), and
-    `gm-batchedtriangulations-msaa` should move five->four draws.
+123. [x] Resolve ordinary fixed MSAA directly into the final attachment when
+    the run owns the target clear. The multisample attachment now receives the
+    frame clear and resolves into the final view; preserve-target chunks retain
+    fallback composition, and advanced destination-read MSAA is unchanged.
+    Fixed-matrix passes move 107->91, exactly matching C++ Dawn, and ranked
+    excess rows move 71->47. `gm-batchedtriangulations-msaa` is exact at two
+    passes, four draws, and 104 instances. Empty-clear, logical-flush,
+    advanced-blend, mixed atomic/fallback, and translucent split-submission
+    regressions pass. Renderer exact=1,409/diverges=0/gated=59, V2 floors are
+    584/35, the renderer feature suite passes 267/38, and the workspace passes.
+124. [ ] Compact shared plain-stroke midpoint tessellation to C++'s flush-wide
+    padding layout. `gm-bevel180strokes` emits 120 Rust spans versus 63 in C++
+    Dawn in both modes. Rust relocates twenty standalone stroke layouts but
+    retains each layout's three padding spans; C++ writes three padding spans
+    once around the logical-flush geometry. Remove only those local zero-ID
+    padding spans, retain one flush-wide leading/interior/final envelope, and
+    preserve contour IDs and geometry order. The target is 120->63 spans in
+    both modes; MSAA instances should move 160->103 exactly, while atomic moves
+    161->104 versus C++'s 105 because C++ emits an explicit initialize draw.
 
 ## R2 Completion Record
 
@@ -2621,6 +2631,20 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 123 by resolving clear-owned ordinary MSAA runs
+  directly into the final target. Preserve-target chunks keep fallback
+  composition, and advanced destination-read MSAA is unchanged. Fixed-matrix
+  Rust passes fall 107->91, exactly matching C++ Dawn; draws fall 169->161,
+  instances 6,353->6,345, created bind groups 61->53, bind-group sets 302->294,
+  texture bindings 98->90, and ranked excess rows 71->47.
+  `gm-batchedtriangulations-msaa` is exact at 2 passes/4 draws/104 instances.
+  The target/matrix one-frame snapshots are 1.657x/2.839x and remain
+  directional only. Sol found no implementation issue and prompted a focused
+  translucent split-submission regression. Renderer exact=1,409/diverges=0/
+  gated=59, V2 floors 584/35, the renderer feature suite passes 267/38, and
+  the workspace suite passes. Item 124 owns the new mode-paired 120-versus-63
+  stroke tessellation-span excess.
 
 - 2026-07-16: Closed R4 item 122 with C++'s compact midpoint layout and
   subpass-major MSAA fill merge. `gm-batchedtriangulations-msaa` falls from 14

@@ -132,6 +132,26 @@ the target, resolves into a transparent fallback, and composites the fallback
 back into the target. Item 123 owns direct resolve for clear-owned,
 non-advanced runs; preserve-target and destination-read paths stay unchanged.
 
+### Item 123 Update
+
+Clear-owned ordinary MSAA runs now clear the multisample attachment and resolve
+directly into the final target. Preserve-target chunks retain the transparent
+fallback texture and premultiplied composite, while advanced destination-read
+runs keep their existing direct resolve and copy barriers.
+
+Fixed-matrix Rust render passes fall 107->91, exactly matching C++ Dawn. GPU
+draws fall 169->161 against C++'s 158, instances 6,353->6,345, created bind
+groups 61->53, bind-group sets 302->294, texture bindings 98->90, and ranked
+excess rows 71->47. `gm-batchedtriangulations-msaa` is now exact at two passes,
+four draws, and 104 instances. The one-frame target and matrix snapshots are
+1.657x and 2.839x; both remain directional only.
+
+The top excess is now `gm-bevel180strokes` tessellation spans in both modes:
+Rust reports 120 versus C++ Dawn's 63. The 57-span excess is the exact cost of
+retaining three standalone padding spans for each of twenty strokes instead of
+emitting three padding spans once for the shared logical-flush texture. Item
+124 owns that compaction.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -148,7 +168,7 @@ non-advanced runs; preserve-target and destination-read paths stay unchanged.
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
-| Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179`, `3660-3794` | per-frame texture creation, clears, render passes | Rust retains core MSAA and atomic backing. Item 123 removes the ordinary MSAA fallback texture/composite when the run can resolve directly into its clear-owned target. |
+| Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179`, `3660-3794` | per-frame texture creation, clears, render passes | Rust retains core MSAA and atomic backing. Clear-owned ordinary MSAA now resolves directly into the final target; preserve-target runs retain fallback composition. |
 | Lazily retained atomic PLS buffers | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2867-2909` | initialized-buffer and pending-write work | Ported as guarded persistent slots in item 114. |
 | Optional gradient, tessellation, and atlas passes | `renderer/src/webgpu/render_context_webgpu_impl.cpp:3981-4137` | render passes and GPU draws | Flush-wide MSAA tessellation is ported. Gradient/atlas cadence remains report-driven. |
 | Barrier-aware render-pass restart | `renderer/src/webgpu/render_context_webgpu_impl.cpp:3280-3800`, `4275-4290` | pass count and mandatory rebinding | Atomic group barriers are preserved. Rust should carry binding invalidation with the same restart boundary. |
@@ -161,10 +181,11 @@ non-advanced runs; preserve-target and destination-read paths stay unchanged.
 - `bind_group_sets` no longer owns the top row. Item 119 removed 141 repeated
   direct-MSAA sets; retain the remaining layout-bound sets until another
   source-matched redundancy is identified.
-- `render_passes` is next. Every ordinary fixed MSAA row has four Rust passes
-  versus two in C++ Dawn because Rust uses a standalone target clear and
-  fallback composite around the draw pass. Item 123 owns the direct-resolve
-  path for clear-owned, non-advanced runs.
+- `render_passes` is closed for the fixed matrix at 91/91. Do not revisit the
+  direct-resolve path without a new counter or correctness regression.
+- `tessellation_spans` is next. `gm-bevel180strokes` reports 120 Rust spans
+  versus 63 in C++ Dawn in both modes because the shared Rust texture retains
+  per-path padding. Item 124 owns the C++-matched flush-wide padding layout.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

@@ -542,5 +542,44 @@ directly to the target in
 the clear-owned, non-advanced direct-resolve path. Preserve-target and
 destination-read runs retain fallback composition.
 
+## Item 123: Clear-Owned Ordinary MSAA Direct Resolve
+
+C++'s `MSAADrawRenderPass` clears its multisample color attachment and names
+the final target as its resolve attachment. Rust previously resolved ordinary
+MSAA into a transparent fallback texture, surrounded that pass with a separate
+final-target clear and premultiplied composite, and therefore paid two extra
+passes plus one extra draw on every fixed MSAA row.
+
+Rust now resolves directly into the final view only when the ordinary MSAA run
+owns the target clear. The multisample attachment receives the frame clear
+color, and the fallback texture, standalone clear, and final composite are all
+skipped. Later submission chunks and atomic-to-fallback transitions still use
+the transparent fallback and composite because they must preserve existing
+target contents. Advanced destination-read MSAA remains unchanged. Empty
+frames also resolve their clear directly, and logical-flush reloads continue to
+seed the multisample attachment from the resolved target.
+
+Across the fixed matrix, Rust render passes fall 107->91, exactly matching C++
+Dawn. GPU draws fall 169->161 against C++'s 158, instances 6,353->6,345,
+created bind groups 61->53, bind-group sets 302->294, and texture bindings
+98->90. Ranked excess rows fall 71->47. On
+`gm-batchedtriangulations-msaa`, Rust moves from four to two passes, five to
+four draws, and 105 to 104 instances, all exact with C++ Dawn.
+
+The fresh one-frame target snapshot is Rust/C++=1.657x and the matrix sum is
+2.839x. They are directional context only; no cross-window timing claim is
+attached. Exact counter parity and unchanged output are the acceptance
+evidence. Renderer exact=1,409/diverges=0/gated=59, V2 floors remain 584/35,
+the renderer feature suite passes 267/38, and the workspace suite passes. A
+Sol review found no implementation issue and prompted a focused regression
+that forces an overlapping translucent SrcOver draw into a later submission
+chunk.
+
+The refreshed top excess is mode-paired stroke tessellation on
+`gm-bevel180strokes`: Rust emits 120 spans versus C++ Dawn's 63 in both modes.
+Rust relocates each standalone stroke into the shared texture but retains its
+three local padding spans; C++ emits the three padding spans once per logical
+flush. Item 124 owns that compact shared-stroke layout.
+
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

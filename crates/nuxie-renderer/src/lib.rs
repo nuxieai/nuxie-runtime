@@ -2807,6 +2807,7 @@ impl WgpuFrame {
                 debug_assert!(draw_prepasses.is_none_or(|prepasses| prepasses.len() == draws.len()));
                 debug_assert!(logical_flush_starts.first().is_none_or(|start| *start == 0));
                 let has_advanced_msaa = draws.iter().any(draw_uses_advanced_blend);
+                let resolve_fixed_msaa_directly = clear_target && !has_advanced_msaa;
                 let destination_texture = has_advanced_msaa.then(|| {
                     self.context
                         .device
@@ -3598,43 +3599,25 @@ impl WgpuFrame {
                     }
                     _ => None,
                 };
-                let fallback_texture = (!has_advanced_msaa).then(|| {
-                    self.context
-                        .device
-                        .create_texture(&wgpu::TextureDescriptor {
-                            label: Some("nuxie-fallback-resolve-target"),
-                            size: texture.size(),
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Rgba8Unorm,
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                                | wgpu::TextureUsages::TEXTURE_BINDING,
-                            view_formats: &[],
-                        })
-                });
+                let fallback_texture =
+                    (!has_advanced_msaa && !resolve_fixed_msaa_directly).then(|| {
+                        self.context
+                            .device
+                            .create_texture(&wgpu::TextureDescriptor {
+                                label: Some("nuxie-fallback-resolve-target"),
+                                size: texture.size(),
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                dimension: wgpu::TextureDimension::D2,
+                                format: wgpu::TextureFormat::Rgba8Unorm,
+                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                                view_formats: &[],
+                            })
+                    });
                 let fallback_view = fallback_texture
                     .as_ref()
                     .map(|texture| texture.create_view(&Default::default()));
-                if clear_target && !has_advanced_msaa {
-                    let attachments = [Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(color(self.clear_color)),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })];
-                    let _pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("nuxie-fallback-frame-clear"),
-                        color_attachments: &attachments,
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
-                }
                 #[derive(Clone)]
                 struct SegmentEnd {
                     index: usize,
@@ -3713,7 +3696,7 @@ impl WgpuFrame {
                     let first_segment = segment_index == 0;
                     let reset_depth = first_segment || starts_logical_flush;
                     let reset_stencil = first_segment || starts_logical_flush;
-                    let resolve_target = if has_advanced_msaa {
+                    let resolve_target = if has_advanced_msaa || resolve_fixed_msaa_directly {
                         &view
                     } else {
                         fallback_view
@@ -3736,11 +3719,13 @@ impl WgpuFrame {
                             resolve_target: Some(resolve_target),
                             ops: wgpu::Operations {
                                 load: if first_segment {
-                                    wgpu::LoadOp::Clear(if has_advanced_msaa {
-                                        color(self.clear_color)
-                                    } else {
-                                        wgpu::Color::TRANSPARENT
-                                    })
+                                    wgpu::LoadOp::Clear(
+                                        if has_advanced_msaa || resolve_fixed_msaa_directly {
+                                            color(self.clear_color)
+                                        } else {
+                                            wgpu::Color::TRANSPARENT
+                                        },
+                                    )
                                 } else {
                                     wgpu::LoadOp::Load
                                 },
@@ -4116,7 +4101,7 @@ impl WgpuFrame {
                     segment_start = segment_end.index;
                     starts_logical_flush = segment_end.starts_logical_flush;
                 }
-                if !has_advanced_msaa {
+                if !has_advanced_msaa && !resolve_fixed_msaa_directly {
                     self.context.composite_pipeline.encode(
                         &self.context.device,
                         encoder,
@@ -7912,6 +7897,32 @@ mod tests {
     }
 
     #[test]
+    fn msaa_split_submission_composites_translucent_src_over() {
+        let factory = WgpuFactory::new_with_mode(2, 2, RenderMode::Msaa).unwrap();
+        let path = rect_path([0.0, 0.0, 2.0, 2.0], FillRule::NonZero);
+        let red = WgpuPaint {
+            color: 0xffff_0000,
+            ..WgpuPaint::default()
+        };
+        let green = WgpuPaint {
+            color: 0x8000_ff00,
+            ..WgpuPaint::default()
+        };
+
+        let mut split = factory.begin_frame(0xff00_0000);
+        for _ in 0..MAX_DRAWS_PER_SUBMISSION {
+            split.draw_path(&path, &red);
+        }
+        split.draw_path(&path, &green);
+
+        let mut control = factory.begin_frame(0xff00_0000);
+        control.draw_path(&path, &red);
+        control.draw_path(&path, &green);
+
+        assert_eq!(split.finish().unwrap(), control.finish().unwrap());
+    }
+
+    #[test]
     fn msaa_submission_splitting_requires_source_over_without_path_clips() {
         let mut draw = SolidDraw {
             path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
@@ -8005,13 +8016,25 @@ mod tests {
         };
 
         let metrics = make_frame().finish_for_benchmark().unwrap();
-        assert_eq!(metrics.backend_work.gpu_draw_calls, 5);
+        assert_eq!(metrics.backend_work.render_passes, 2);
+        assert_eq!(metrics.backend_work.gpu_draw_calls, 4);
         assert_eq!(metrics.backend_work.tessellation_spans, 19);
         assert_eq!(metrics.backend_work.path_patches, 12);
 
         let scheduled = make_frame().finish().unwrap();
         let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
         assert_eq!(scheduled, serialized);
+    }
+
+    #[test]
+    fn empty_msaa_frame_resolves_its_clear_directly() {
+        let factory = WgpuFactory::new_with_mode(2, 2, RenderMode::Msaa).unwrap();
+
+        let pixels = factory.begin_frame(0x8040_2010).finish().unwrap();
+
+        for pixel in pixels.chunks_exact(4) {
+            assert_eq!(pixel, [32, 16, 8, 128]);
+        }
     }
 
     #[test]

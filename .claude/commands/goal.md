@@ -61,10 +61,11 @@ reverted or fixed before anything else.
    `docs/renderer-status.md` (metric, ticket checkboxes, Next queue,
    one-line log entry; archive completed-ticket logs to keep the file
    small), and commit with the ticket tag, e.g. `[R2] Port intersection
-   board`. After committing, `git push` (origin is
-   github.com/nuxieai/nuxie-runtime) and `git push origin <branch>:main` —
-   main mirrors this branch by standing user decision. Push failures get a
-   log note, never block slices.
+   board`. All work happens directly on `main` (standing user decision,
+   2026-07-16 — the old `levi/rive-runtime-instancing` branch is retired;
+   never commit to it). After committing, `git push origin main` (origin
+   is github.com/nuxieai/nuxie-runtime). Push failures get a log note,
+   never block slices.
 6. **Continue or hand off.** If context budget allows, loop to step 2.
    Otherwise end with the status file current — the next session must be
    able to resume from it alone.

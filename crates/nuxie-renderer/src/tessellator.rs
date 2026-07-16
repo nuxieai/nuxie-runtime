@@ -1,6 +1,8 @@
 //! GPU tessellation pass translated from `renderer/src/shaders/tessellate.glsl`.
 
 use crate::gpu::{ContourData, FlushUniforms, PathData, TessVertexSpan};
+#[cfg(feature = "perf-diagnostics")]
+use std::time::Instant;
 use std::{
     num::NonZeroU64,
     sync::{
@@ -12,6 +14,21 @@ use std::{
 // Mirrors C++ `gpu::kBufferRingSize`; the frame guard owns its slot through GPU completion.
 const BUFFER_RING_SIZE: usize = 3;
 const MIN_UPLOAD_CAPACITY: u64 = 4 * 1024;
+
+#[cfg(feature = "perf-diagnostics")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TessellationUploadDiagnostics {
+    pub submissions: u64,
+    pub upload_calls: u64,
+    pub populated_pages: u64,
+    pub page_allocations: u64,
+    pub payload_bytes: u64,
+    pub used_bytes: u64,
+    pub written_bytes: u64,
+    pub populated_capacity_bytes: u64,
+    pub cpu_pack_ns: u64,
+    pub write_buffer_ns: u64,
+}
 
 pub(crate) struct Tessellator {
     pub pipeline: wgpu::RenderPipeline,
@@ -132,6 +149,8 @@ impl Tessellator {
         let mut slot = self.upload_slots[slot_index]
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        #[cfg(feature = "perf-diagnostics")]
+        slot.reset_diagnostics();
         slot.begin_submission(device);
         TessellationUploadFrame { slot }
     }
@@ -251,6 +270,11 @@ impl TessellationUploadFrame<'_> {
     pub(crate) fn begin_next_submission(&mut self, device: &wgpu::Device) {
         self.slot.begin_submission(device);
     }
+
+    #[cfg(feature = "perf-diagnostics")]
+    pub(crate) fn diagnostics(&self) -> TessellationUploadDiagnostics {
+        self.slot.uploads.diagnostics
+    }
 }
 
 struct TessellationUploadSlot {
@@ -277,6 +301,11 @@ impl TessellationUploadSlot {
         self.uploads.begin_submission(device);
     }
 
+    #[cfg(feature = "perf-diagnostics")]
+    fn reset_diagnostics(&mut self) {
+        self.uploads.diagnostics = TessellationUploadDiagnostics::default();
+    }
+
     fn flush(&mut self, queue: &wgpu::Queue) {
         self.uploads.flush(queue);
     }
@@ -286,6 +315,8 @@ struct UploadArena {
     label: &'static str,
     usage: wgpu::BufferUsages,
     pages: Vec<UploadPage>,
+    #[cfg(feature = "perf-diagnostics")]
+    diagnostics: TessellationUploadDiagnostics,
 }
 
 impl UploadArena {
@@ -294,6 +325,8 @@ impl UploadArena {
             label,
             usage: usage | wgpu::BufferUsages::COPY_DST,
             pages: Vec::new(),
+            #[cfg(feature = "perf-diagnostics")]
+            diagnostics: TessellationUploadDiagnostics::default(),
         }
     }
 
@@ -307,6 +340,11 @@ impl UploadArena {
                 self.usage,
                 upload_capacity(previous_usage),
             ));
+            #[cfg(feature = "perf-diagnostics")]
+            {
+                self.diagnostics.page_allocations =
+                    self.diagnostics.page_allocations.saturating_add(1);
+            }
         }
         for page in &mut self.pages {
             page.used = 0;
@@ -315,9 +353,13 @@ impl UploadArena {
     }
 
     fn upload(&mut self, device: &wgpu::Device, bytes: &[u8], alignment: u64) -> UploadSlice {
+        #[cfg(feature = "perf-diagnostics")]
+        let started = Instant::now();
         assert!(!bytes.is_empty());
         let size = bytes.len() as u64;
         let alignment = alignment.max(wgpu::COPY_BUFFER_ALIGNMENT);
+        #[cfg(feature = "perf-diagnostics")]
+        let page_count_before = self.pages.len();
         let page_index = self
             .pages
             .last()
@@ -335,29 +377,70 @@ impl UploadArena {
                 ));
                 self.pages.len() - 1
             });
-        let page = &mut self.pages[page_index];
-        let offset = align_u64(page.used, alignment);
-        let end = offset
-            .checked_add(size)
-            .expect("tessellation upload overflow");
-        page.shadow.resize(end as usize, 0);
-        page.shadow[offset as usize..end as usize].copy_from_slice(bytes);
-        page.used = end;
-        UploadSlice {
-            buffer: page.buffer.clone(),
-            offset,
-            size: NonZeroU64::new(size).expect("nonempty tessellation upload"),
+        let upload = {
+            let page = &mut self.pages[page_index];
+            let offset = align_u64(page.used, alignment);
+            let end = offset
+                .checked_add(size)
+                .expect("tessellation upload overflow");
+            page.shadow.resize(end as usize, 0);
+            page.shadow[offset as usize..end as usize].copy_from_slice(bytes);
+            page.used = end;
+            UploadSlice {
+                buffer: page.buffer.clone(),
+                offset,
+                size: NonZeroU64::new(size).expect("nonempty tessellation upload"),
+            }
+        };
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
+            self.diagnostics.payload_bytes = self.diagnostics.payload_bytes.saturating_add(size);
+            self.diagnostics.page_allocations = self
+                .diagnostics
+                .page_allocations
+                .saturating_add((self.pages.len() - page_count_before) as u64);
+            self.diagnostics.cpu_pack_ns = self
+                .diagnostics
+                .cpu_pack_ns
+                .saturating_add(elapsed_ns(started));
         }
+        upload
     }
 
     fn flush(&mut self, queue: &wgpu::Queue) {
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            self.diagnostics.submissions = self.diagnostics.submissions.saturating_add(1);
+        }
         for page in &mut self.pages {
             if page.used == 0 {
                 continue;
             }
             let write_size = align_u64(page.used, wgpu::COPY_BUFFER_ALIGNMENT);
             page.shadow.resize(write_size as usize, 0);
+            #[cfg(feature = "perf-diagnostics")]
+            {
+                self.diagnostics.populated_pages =
+                    self.diagnostics.populated_pages.saturating_add(1);
+                self.diagnostics.used_bytes = self.diagnostics.used_bytes.saturating_add(page.used);
+                self.diagnostics.written_bytes =
+                    self.diagnostics.written_bytes.saturating_add(write_size);
+                self.diagnostics.populated_capacity_bytes = self
+                    .diagnostics
+                    .populated_capacity_bytes
+                    .saturating_add(page.capacity);
+            }
+            #[cfg(feature = "perf-diagnostics")]
+            let started = Instant::now();
             queue.write_buffer(&page.buffer, 0, &page.shadow);
+            #[cfg(feature = "perf-diagnostics")]
+            {
+                self.diagnostics.write_buffer_ns = self
+                    .diagnostics
+                    .write_buffer_ns
+                    .saturating_add(elapsed_ns(started));
+            }
         }
     }
 }
@@ -424,6 +507,11 @@ fn upload_capacity(required: u64) -> u64 {
 fn align_u64(value: u64, alignment: u64) -> u64 {
     debug_assert!(alignment.is_power_of_two());
     value.saturating_add(alignment - 1) & !(alignment - 1)
+}
+
+#[cfg(feature = "perf-diagnostics")]
+fn elapsed_ns(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 #[cfg(test)]

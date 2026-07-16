@@ -1346,12 +1346,27 @@ Run `make renderer-golden`.
     was invalidated by uncontrolled machine load and non-interleaved captures.
     The renderer corpus remains exact=1,409/diverges=0/gated=59, both V2 floors
     pass at 584 and 35 exact segments, and the full workspace suite is green.
-114. [ ] Attribute the remaining single `PendingWrites` command buffer under
-    the controlled R4 measurement fence before changing another resource
-    lifetime. Record upload pages/bytes and separate CPU packing, wgpu staged
-    writes, Metal encoder work, and persistent atomic backing allocation. The
-    next implementation must improve repeated alternating frame time without
-    materially regressing the bracketed A-B-B-A trace or any parity floor.
+114. [x] Attribute the remaining single `PendingWrites` command buffer under
+    the controlled R4 measurement fence. Feature-gated telemetry shows only
+    1,040 written upload bytes for one draw and 20,496 for twenty draws after
+    warmup. The baseline profile instead places 3,438/4,030 per-frame samples
+    in initialized-buffer creation and 2,323 in zero/copy work, versus two in
+    `Queue::write_buffer`; the generic-atomic clip and coverage planes alone
+    recreate and zero roughly 8 MiB/frame at 1,024 square. Porting C++'s
+    persistent three-buffer atomic-backing lifetime drops two repeated fixed
+    report aggregates to 0.2913x and 0.2908x while untouched MSAA controls
+    remain within 3.6% and 2.3%. In load-recorded A-B-B-A Metal captures,
+    `PendingWrites` changes from 27.532/28.067 ms in the bracket baselines to
+    2.899/2.897 ms in the candidates with 75%-82% host idle. The post-change
+    profile has 27 initialized-buffer samples out of 185, down from 3,438 out
+    of 4,030. Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35, and
+    the full workspace suite remain green.
+115. [ ] Attribute the now-dominant generic-atomic command-encoding work. The
+    post-item-114 Time Profiler has 100/185 per-frame samples in command
+    encoding. First measure the per-batch dummy texture/sampler and bind-group
+    construction in `AtomicPipeline::encode_batch`, then test only the
+    measured lifetime or batching cause under the same alternating report,
+    load-recorded A-B-B-A trace, and parity fences.
 
 ## R2 Completion Record
 
@@ -2433,6 +2448,22 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 114 with load-controlled attribution and a
+  persistent atomic-backing implementation. The initial host snapshot showed
+  concurrent indexing/build activity and was excluded from acceptance. In the
+  accepted A-B-B-A Metal sequence, host idle stayed between 75% and 82% while
+  baseline `PendingWrites` measured 27.532/28.067 ms per frame and the two
+  candidate captures measured 2.899/2.897 ms. Two fixed alternating reports
+  improve aggregate frame time to 0.2913x and 0.2908x; untouched MSAA controls
+  stay near 1.0. Feature-gated upload telemetry reports just 1,040 written
+  bytes for one draw and 20,496 for twenty, while Time Profiler locates the
+  former long pole in per-frame atomic backing allocation and zeroing. Three
+  guarded persistent slots now grow on demand and clear only active ranges in
+  encoder order. The post-change profile reduces initialized-buffer samples
+  from 3,438/4,030 to 27/185. Renderer exact=1,409/diverges=0/gated=59, both V2
+  floors pass at 584/35, and the full workspace suite passes. Item 115 starts
+  from the newly dominant command-encoding samples.
 
 - 2026-07-15: Accepted R4 item 113 after correcting the performance control.
   A one-off, non-interleaved trace had falsely suggested the unified upload

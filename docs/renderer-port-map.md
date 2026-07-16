@@ -366,12 +366,18 @@ pixel output. Tessellation uploads now rotate through three guarded reusable
 slots, pack all four resource classes into one aligned union-usage arena, and
 issue one `Queue::write_buffer` per populated page. Independent alternating
 reports improve aggregate frame time to 0.9605x, 0.9826x, and 0.9797x; the
-last measures the exact final binary. A controlled
-A-B-B-A trace shows the remaining `PendingWrites` interval is neutral at
-1.006x while bracketed frame medians improve; an earlier apparent 1.2565x
-regression was invalidated as a non-interleaved load artifact. The next task
-attributes the work inside that single pending-write submission under the
-controlled measurement fence; see `docs/renderer-r4-profile-attribution.md`.
+last measures the exact final binary. A controlled A-B-B-A trace shows the
+remaining `PendingWrites` interval is neutral at 1.006x while bracketed frame
+medians improve; an earlier apparent 1.2565x regression was invalidated as a
+non-interleaved load artifact. Feature-gated upload telemetry and Time Profiler
+then show that the remaining 20 KiB tessellation write is negligible beside
+roughly 8 MiB/frame of generic-atomic backing allocation and zeroing.
+Persistent three-slot atomic backing reduces repeated fixed-report aggregates
+to 0.2913x and 0.2908x. A load-recorded Metal A-B-B-A reduces `PendingWrites`
+from 27.532/28.067 ms in the bracket baselines to 2.899/2.897 ms in the
+candidates while untouched MSAA controls remain near 1.0. Command encoding is
+now the largest sampled CPU category and is the next measurement target; see
+`docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

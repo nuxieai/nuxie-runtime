@@ -1752,6 +1752,7 @@ impl WgpuFrame {
                 .tessellator
                 .begin_frame_uploads(&self.context.device),
         );
+        let atomic_backing = RefCell::new(None);
         let submit_and_wait = |encoder: &mut wgpu::CommandEncoder| {
             let next_encoder =
                 self.context
@@ -2655,8 +2656,12 @@ impl WgpuFrame {
                         );
                     }
                 } else {
+                    let mut atomic_backing = atomic_backing.borrow_mut();
+                    let atomic_backing = atomic_backing
+                        .get_or_insert_with(|| self.context.atomic_pipeline.begin_frame_backing());
                     let readbacks = self.context.atomic_pipeline.encode_batch(
                         &self.context.device,
+                        atomic_backing,
                         encoder,
                         &view,
                         load_color,
@@ -4008,6 +4013,23 @@ impl WgpuFrame {
                 .device
                 .poll(wgpu::PollType::wait_indefinitely())
                 .map_err(|error| RendererError::Map(error.to_string()))?;
+            #[cfg(feature = "perf-diagnostics")]
+            {
+                let diagnostics = tessellation_uploads.borrow().diagnostics();
+                eprintln!(
+                    "renderer-upload-diagnostics submissions={} upload_calls={} populated_pages={} page_allocations={} payload_bytes={} used_bytes={} written_bytes={} populated_capacity_bytes={} cpu_pack_ns={} write_buffer_ns={}",
+                    diagnostics.submissions,
+                    diagnostics.upload_calls,
+                    diagnostics.populated_pages,
+                    diagnostics.page_allocations,
+                    diagnostics.payload_bytes,
+                    diagnostics.used_bytes,
+                    diagnostics.written_bytes,
+                    diagnostics.populated_capacity_bytes,
+                    diagnostics.cpu_pack_ns,
+                    diagnostics.write_buffer_ns,
+                );
+            }
             return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
         }
 

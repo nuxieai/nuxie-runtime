@@ -1,6 +1,6 @@
 # Renderer R4 Profile Attribution
 
-Date: 2026-07-15
+Date: 2026-07-15; updated 2026-07-16
 
 ## Question
 
@@ -153,6 +153,63 @@ candidate frame time improves in both brackets. This falsifies the claimed
 the Metal encoder interval. The full renderer corpus, both V2 floors, and the
 workspace suite remain green.
 
+## Remaining Pending-Write Attribution
+
+The next audit first rejected an overloaded measurement window rather than
+interpreting it. The host snapshot showed `fseventsd` and concurrent Codex and
+build workers consuming cores, so only deterministic upload byte counts were
+retained from that window. Accepted timing and trace evidence records host load
+beside every baseline and candidate capture.
+
+Feature-gated upload telemetry measures the warm three-slot tessellation arena:
+
+| control | upload calls | populated pages | payload | written | page capacity |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| one draw | 4 | 1 | 784 B | 1,040 B | 5,120 B |
+| twenty draws | 80 | 1 | 15,680 B | 20,496 B | 25,480 B |
+
+The corresponding baseline Time Profiler trace contains 4,030 samples inside
+the Rust per-frame render path. `create_buffer_init` appears in 3,438 (85.3%),
+zero/copy work appears in 2,323 (57.6%), and `Queue::write_buffer` appears in
+only two (0.05%). The remaining pending-write cost therefore cannot be
+explained by a 20 KiB tessellation upload. Source inspection found the larger
+cause: generic atomic recreated zero-initialized color, clip, and coverage
+buffers for every frame. At 1,024 square, clip and coverage alone account for
+roughly 8 MiB of allocation and zeroing.
+
+C++ WebGPU retains atomic PLS backing and releases it only on resize. The Rust
+port now follows that lifetime with three guarded slots, growing each color,
+clip, and coverage buffer only when necessary. Every atomic batch records
+ordered `clear_buffer` commands for its exact active ranges, preserving the
+old zero-initialized semantics and plane capture sizes while avoiding CPU-side
+zero vectors and mapped-at-creation staging.
+
+Two independent fixed alternating reports reproduce the gain:
+
+| report | aggregate candidate/baseline | worst untouched MSAA control |
+| --- | ---: | ---: |
+| first | 0.291290x | 1.035515x |
+| replicate | 0.290764x | 1.022341x |
+
+A direct candidate-baseline-baseline-candidate bracket for the twenty-draw
+control measured candidate medians of 4.174 and 4.293 ms against baseline
+medians of 36.757 and 34.561 ms with 71%-76% host idle. The independent Metal
+A-B-B-A sequence was likewise load-matched:
+
+| order | runner | host idle | pending-write encoder/frame |
+| ---: | --- | ---: | ---: |
+| 1 | baseline | 79.57% | 27.532 ms |
+| 2 | persistent backing | 81.34% | 2.899 ms |
+| 3 | persistent backing | 81.60% | 2.897 ms |
+| 4 | baseline | 75.14% | 28.067 ms |
+
+The candidate Time Profiler trace then falls to 185 per-frame samples:
+initialized-buffer creation drops to 27, zero/copy drops to nine, and
+`Queue::write_buffer` disappears from sampled stacks. Command encoding is now
+the largest CPU category at 100 samples (54.1%). The renderer corpus remains
+exact=1,409/diverges=0/gated=59, V2 exact-segment floors remain 584 and 35, and
+the full workspace suite passes.
+
 ## Measurement Fence
 
 R4 performance decisions use these controls:
@@ -186,15 +243,16 @@ Authoritative source sites:
 
 ## Next Measurement
 
-Attribute the remaining single pending-write submission before changing
-another resource lifetime:
+Attribute the newly dominant generic-atomic command-encoding work before
+changing another resource lifetime:
 
-1. Report populated upload pages and bytes per submission for the fixed one-
-   and twenty-draw controls.
-2. Separate CPU packing and `Queue::write_buffer` setup from Metal encoder time
-   with paired Time Profiler and A-B-B-A Metal captures.
-3. Audit persistent atomic backing-plane allocation only after the upload
-   telemetry identifies it as a measured contributor.
+1. Separate per-batch dummy image texture/sampler creation, bind-group
+   construction, and render-pass encoding in the fixed one- and twenty-draw
+   controls.
+2. Reuse or batch only the resource class that remains material in a fresh
+   profile; preserve image-binding semantics and capture/readback behavior.
+3. Compare against the item-114 release binary with the fixed alternating
+   report and load-recorded A-B-B-A Metal captures.
 4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries until
    a measured change proves they can move.
 5. Accept the next implementation only on repeated end-to-end improvement,

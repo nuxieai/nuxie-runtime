@@ -8,6 +8,7 @@ license = "MIT"
 default = []
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]
+perf-diagnostics = ["nuxie-renderer/perf-diagnostics"]
 
 [dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }

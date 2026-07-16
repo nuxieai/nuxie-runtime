@@ -6,7 +6,13 @@ use crate::gpu::{
 };
 use bytemuck::Zeroable;
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Mutex, MutexGuard,
+};
 use wgpu::util::DeviceExt;
+
+const ATOMIC_BUFFER_RING_SIZE: usize = 3;
 
 pub(crate) struct AtomicPipeline {
     path: wgpu::RenderPipeline,
@@ -44,6 +50,75 @@ pub(crate) struct AtomicPipeline {
     image_samplers: Vec<wgpu::Sampler>,
     image_rect_vertices: wgpu::Buffer,
     image_rect_indices: wgpu::Buffer,
+    backing_slots: [Mutex<AtomicBackingSlot>; ATOMIC_BUFFER_RING_SIZE],
+    next_backing_slot: AtomicUsize,
+}
+
+pub(crate) struct AtomicBackingFrame<'a> {
+    slot: MutexGuard<'a, AtomicBackingSlot>,
+}
+
+#[derive(Default)]
+struct AtomicBackingSlot {
+    colors: Option<AtomicBackingBuffer>,
+    clips: Option<AtomicBackingBuffer>,
+    coverage: Option<AtomicBackingBuffer>,
+}
+
+struct AtomicBackingBuffer {
+    buffer: wgpu::Buffer,
+    capacity: u64,
+}
+
+impl AtomicBackingSlot {
+    fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        plane_size: u64,
+        color_size: u64,
+    ) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
+        let colors = backing_buffer(device, &mut self.colors, "nuxie-atomic-colors", color_size);
+        let clips = backing_buffer(device, &mut self.clips, "nuxie-atomic-clips", plane_size);
+        let coverage = backing_buffer(
+            device,
+            &mut self.coverage,
+            "nuxie-atomic-coverage",
+            plane_size,
+        );
+        encoder.clear_buffer(&colors, 0, Some(color_size));
+        encoder.clear_buffer(&clips, 0, Some(plane_size));
+        encoder.clear_buffer(&coverage, 0, Some(plane_size));
+        (colors, clips, coverage)
+    }
+}
+
+fn backing_buffer(
+    device: &wgpu::Device,
+    slot: &mut Option<AtomicBackingBuffer>,
+    label: &'static str,
+    required_size: u64,
+) -> wgpu::Buffer {
+    if slot
+        .as_ref()
+        .is_none_or(|backing| backing.capacity < required_size)
+    {
+        *slot = Some(AtomicBackingBuffer {
+            buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: required_size,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            capacity: required_size,
+        });
+    }
+    slot.as_ref()
+        .expect("atomic backing buffer was initialized")
+        .buffer
+        .clone()
 }
 
 pub(crate) struct AtomicDraw<'a> {
@@ -860,13 +935,25 @@ impl AtomicPipeline {
             image_samplers,
             image_rect_vertices,
             image_rect_indices,
+            backing_slots: std::array::from_fn(|_| Mutex::new(AtomicBackingSlot::default())),
+            next_backing_slot: AtomicUsize::new(0),
         }
+    }
+
+    pub(crate) fn begin_frame_backing(&self) -> AtomicBackingFrame<'_> {
+        let slot_index =
+            self.next_backing_slot.fetch_add(1, Ordering::Relaxed) % ATOMIC_BUFFER_RING_SIZE;
+        let slot = self.backing_slots[slot_index]
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        AtomicBackingFrame { slot }
     }
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_batch(
         &self,
         device: &wgpu::Device,
+        backing: &mut AtomicBackingFrame<'_>,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         load_color: Option<&wgpu::TextureView>,
@@ -930,70 +1017,44 @@ impl AtomicPipeline {
             },
             wgpu::BufferUsages::STORAGE,
         );
-        let clips = upload(
-            device,
-            "nuxie-atomic-clips",
-            &vec![0u32; pixel_count],
-            wgpu::BufferUsages::STORAGE
-                | if capture_planes {
-                    wgpu::BufferUsages::COPY_SRC
-                } else {
-                    wgpu::BufferUsages::empty()
-                },
-        );
+        let plane_size = u64::try_from(pixel_count)
+            .expect("atomic backing word count fits u64")
+            .checked_mul(std::mem::size_of::<u32>() as u64)
+            .expect("atomic backing byte size overflow");
+        let color_word_count = if advanced_blend { pixel_count } else { 1 };
+        let color_size = u64::try_from(color_word_count)
+            .expect("atomic color word count fits u64")
+            .checked_mul(std::mem::size_of::<u32>() as u64)
+            .expect("atomic color byte size overflow");
+        let (colors, clips, coverage) = backing
+            .slot
+            .prepare(device, encoder, plane_size, color_size);
         let clip_readback = capture_planes.then(|| AtomicPlaneReadback {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atomic-clip-readback"),
-                size: clips.size(),
+                size: plane_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
             word_count: pixel_count,
         });
-        let coverage = upload(
-            device,
-            "nuxie-atomic-coverage",
-            &vec![0u32; pixel_count],
-            wgpu::BufferUsages::STORAGE
-                | if capture_planes {
-                    wgpu::BufferUsages::COPY_SRC
-                } else {
-                    wgpu::BufferUsages::empty()
-                },
-        );
         let coverage_readback = capture_planes.then(|| AtomicPlaneReadback {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atomic-coverage-readback"),
-                size: coverage.size(),
+                size: plane_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
             word_count: pixel_count,
         });
-        let color_words = if advanced_blend {
-            vec![0u32; pixel_count]
-        } else {
-            vec![0u32; 1]
-        };
-        let colors = upload(
-            device,
-            "nuxie-atomic-colors",
-            &color_words,
-            wgpu::BufferUsages::STORAGE
-                | if capture_planes {
-                    wgpu::BufferUsages::COPY_SRC
-                } else {
-                    wgpu::BufferUsages::empty()
-                },
-        );
         let color_readback = (capture_planes && advanced_blend).then(|| AtomicPlaneReadback {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atomic-color-readback"),
-                size: colors.size(),
+                size: color_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
-            word_count: color_words.len(),
+            word_count: color_word_count,
         });
         let triangle_buffers = draws
             .iter()
@@ -1345,13 +1406,13 @@ impl AtomicPipeline {
             }
         }
         if let Some(readback) = &coverage_readback {
-            encoder.copy_buffer_to_buffer(&coverage, 0, &readback.buffer, 0, coverage.size());
+            encoder.copy_buffer_to_buffer(&coverage, 0, &readback.buffer, 0, plane_size);
         }
         if let Some(readback) = &clip_readback {
-            encoder.copy_buffer_to_buffer(&clips, 0, &readback.buffer, 0, clips.size());
+            encoder.copy_buffer_to_buffer(&clips, 0, &readback.buffer, 0, plane_size);
         }
         if let Some(readback) = &color_readback {
-            encoder.copy_buffer_to_buffer(&colors, 0, &readback.buffer, 0, colors.size());
+            encoder.copy_buffer_to_buffer(&colors, 0, &readback.buffer, 0, color_size);
         }
         {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];

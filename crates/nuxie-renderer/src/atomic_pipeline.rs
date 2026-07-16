@@ -10,6 +10,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Mutex, MutexGuard,
 };
+#[cfg(feature = "perf-diagnostics")]
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 
 const ATOMIC_BUFFER_RING_SIZE: usize = 3;
@@ -56,6 +58,40 @@ pub(crate) struct AtomicPipeline {
 
 pub(crate) struct AtomicBackingFrame<'a> {
     slot: MutexGuard<'a, AtomicBackingSlot>,
+    #[cfg(feature = "perf-diagnostics")]
+    diagnostics: AtomicEncodeDiagnostics,
+}
+
+#[cfg(feature = "perf-diagnostics")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AtomicEncodeDiagnostics {
+    pub batches: u64,
+    pub draw_groups: u64,
+    pub draws: u64,
+    pub buffer_upload_ns: u64,
+    pub backing_prepare_ns: u64,
+    pub dummy_texture_ns: u64,
+    pub sampler_create_ns: u64,
+    pub flush_bind_groups: u64,
+    pub flush_bind_group_ns: u64,
+    pub image_bind_groups: u64,
+    pub image_bind_group_ns: u64,
+    pub load_color_bind_groups: u64,
+    pub load_color_bind_group_ns: u64,
+    pub atomic_bind_groups: u64,
+    pub atomic_bind_group_ns: u64,
+    pub sampler_bind_groups: u64,
+    pub sampler_bind_group_ns: u64,
+    pub render_passes: u64,
+    pub render_encode_ns: u64,
+    pub total_ns: u64,
+}
+
+impl AtomicBackingFrame<'_> {
+    #[cfg(feature = "perf-diagnostics")]
+    pub(crate) fn diagnostics(&self) -> AtomicEncodeDiagnostics {
+        self.diagnostics
+    }
 }
 
 #[derive(Default)]
@@ -946,7 +982,11 @@ impl AtomicPipeline {
         let slot = self.backing_slots[slot_index]
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        AtomicBackingFrame { slot }
+        AtomicBackingFrame {
+            slot,
+            #[cfg(feature = "perf-diagnostics")]
+            diagnostics: AtomicEncodeDiagnostics::default(),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -962,6 +1002,7 @@ impl AtomicPipeline {
         patch_vertices: &wgpu::Buffer,
         patch_indices: &wgpu::Buffer,
         draws: &[AtomicDraw<'_>],
+        draw_group_starts: &[usize],
         uniforms: &FlushUniforms,
         paths: &[PathData],
         paints: &[PaintData],
@@ -971,6 +1012,25 @@ impl AtomicPipeline {
         capture_planes: bool,
     ) -> AtomicPlaneReadbacks {
         assert!(!draws.is_empty());
+        assert_eq!(draw_group_starts.first(), Some(&0));
+        assert!(draw_group_starts
+            .windows(2)
+            .all(|starts| starts[0] < starts[1]));
+        assert!(draw_group_starts
+            .last()
+            .is_some_and(|start| *start < draws.len()));
+        #[cfg(feature = "perf-diagnostics")]
+        let total_started = Instant::now();
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.batches = backing.diagnostics.batches.saturating_add(1);
+            backing.diagnostics.draw_groups = backing
+                .diagnostics
+                .draw_groups
+                .saturating_add(draw_group_starts.len() as u64);
+            backing.diagnostics.draws =
+                backing.diagnostics.draws.saturating_add(draws.len() as u64);
+        }
         // C++ RenderContextWebGPUImpl::AtomicDrawRenderPass switches the whole
         // flush to storage-buffer color when fixedFunctionColorOutput is false.
         let advanced_blend = paints.iter().any(|paint| (paint.params >> 4) & 0xf != 0)
@@ -982,6 +1042,8 @@ impl AtomicPipeline {
         // features therefore describe the whole batch, not only the geometry
         // currently being emitted.
         let hsl_blend = draws.iter().any(|draw| draw.hsl_blend);
+        #[cfg(feature = "perf-diagnostics")]
+        let buffer_upload_started = Instant::now();
         let uniform = upload(
             device,
             "nuxie-atomic-uniforms",
@@ -1017,6 +1079,13 @@ impl AtomicPipeline {
             },
             wgpu::BufferUsages::STORAGE,
         );
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.buffer_upload_ns = backing
+                .diagnostics
+                .buffer_upload_ns
+                .saturating_add(elapsed_ns(buffer_upload_started));
+        }
         let plane_size = u64::try_from(pixel_count)
             .expect("atomic backing word count fits u64")
             .checked_mul(std::mem::size_of::<u32>() as u64)
@@ -1026,9 +1095,18 @@ impl AtomicPipeline {
             .expect("atomic color word count fits u64")
             .checked_mul(std::mem::size_of::<u32>() as u64)
             .expect("atomic color byte size overflow");
+        #[cfg(feature = "perf-diagnostics")]
+        let backing_prepare_started = Instant::now();
         let (colors, clips, coverage) = backing
             .slot
             .prepare(device, encoder, plane_size, color_size);
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.backing_prepare_ns = backing
+                .diagnostics
+                .backing_prepare_ns
+                .saturating_add(elapsed_ns(backing_prepare_started));
+        }
         let clip_readback = capture_planes.then(|| AtomicPlaneReadback {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("nuxie-atomic-clip-readback"),
@@ -1056,6 +1134,8 @@ impl AtomicPipeline {
             }),
             word_count: color_word_count,
         });
+        #[cfg(feature = "perf-diagnostics")]
+        let triangle_upload_started = Instant::now();
         let triangle_buffers = draws
             .iter()
             .map(|draw| {
@@ -1074,6 +1154,15 @@ impl AtomicPipeline {
                 })
             })
             .collect::<Vec<_>>();
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.buffer_upload_ns = backing
+                .diagnostics
+                .buffer_upload_ns
+                .saturating_add(elapsed_ns(triangle_upload_started));
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        let dummy_texture_started = Instant::now();
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-atomic-dummy-texture"),
             size: wgpu::Extent3d {
@@ -1089,7 +1178,25 @@ impl AtomicPipeline {
             view_formats: &[],
         });
         let dummy_view = dummy.create_view(&Default::default());
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.dummy_texture_ns = backing
+                .diagnostics
+                .dummy_texture_ns
+                .saturating_add(elapsed_ns(dummy_texture_started));
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        let sampler_create_started = Instant::now();
         let sampler = device.create_sampler(&linear_sampler());
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.sampler_create_ns = backing
+                .diagnostics
+                .sampler_create_ns
+                .saturating_add(elapsed_ns(sampler_create_started));
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        let image_uniform_upload_started = Instant::now();
         let image_uniform_buffers = draws
             .iter()
             .map(|draw| {
@@ -1103,6 +1210,13 @@ impl AtomicPipeline {
                 })
             })
             .collect::<Vec<_>>();
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.buffer_upload_ns = backing
+                .diagnostics
+                .buffer_upload_ns
+                .saturating_add(elapsed_ns(image_uniform_upload_started));
+        }
         let shared_flush_group = draws.iter().all(|draw| {
             std::ptr::eq(draw.tessellation, draws[0].tessellation)
                 && draw.atlas.is_none()
@@ -1140,6 +1254,8 @@ impl AtomicPipeline {
                 ],
             })
         };
+        #[cfg(feature = "perf-diagnostics")]
+        let flush_bind_group_started = Instant::now();
         let flush_groups = if shared_flush_group {
             vec![make_flush_group(0, &draws[0])]
         } else {
@@ -1149,7 +1265,20 @@ impl AtomicPipeline {
                 .map(|(index, draw)| make_flush_group(index, draw))
                 .collect::<Vec<_>>()
         };
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.flush_bind_groups = backing
+                .diagnostics
+                .flush_bind_groups
+                .saturating_add(flush_groups.len() as u64);
+            backing.diagnostics.flush_bind_group_ns = backing
+                .diagnostics
+                .flush_bind_group_ns
+                .saturating_add(elapsed_ns(flush_bind_group_started));
+        }
         let flush_group_index = |draw_index: usize| if shared_flush_group { 0 } else { draw_index };
+        #[cfg(feature = "perf-diagnostics")]
+        let image_bind_group_started = Instant::now();
         let image_groups = draws
             .iter()
             .map(|draw| {
@@ -1170,11 +1299,24 @@ impl AtomicPipeline {
                 })
             })
             .collect::<Vec<_>>();
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.image_bind_groups = backing
+                .diagnostics
+                .image_bind_groups
+                .saturating_add(image_groups.iter().flatten().count() as u64);
+            backing.diagnostics.image_bind_group_ns = backing
+                .diagnostics
+                .image_bind_group_ns
+                .saturating_add(elapsed_ns(image_bind_group_started));
+        }
         let image_group = |draw_index: usize| {
             image_groups[draw_index]
                 .as_ref()
                 .unwrap_or(&self.dummy_image_group)
         };
+        #[cfg(feature = "perf-diagnostics")]
+        let load_color_bind_group_started = Instant::now();
         let load_color_group = load_color.map(|view| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-atomic-load-color-group"),
@@ -1185,6 +1327,19 @@ impl AtomicPipeline {
                 ],
             })
         });
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.load_color_bind_groups = backing
+                .diagnostics
+                .load_color_bind_groups
+                .saturating_add(u64::from(load_color_group.is_some()));
+            backing.diagnostics.load_color_bind_group_ns = backing
+                .diagnostics
+                .load_color_bind_group_ns
+                .saturating_add(elapsed_ns(load_color_bind_group_started));
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        let atomic_bind_group_started = Instant::now();
         let atomics = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-buffer-group"),
             layout: &self.atomic_layout,
@@ -1194,6 +1349,17 @@ impl AtomicPipeline {
                 binding(3, coverage.as_entire_binding()),
             ],
         });
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.atomic_bind_groups =
+                backing.diagnostics.atomic_bind_groups.saturating_add(1);
+            backing.diagnostics.atomic_bind_group_ns = backing
+                .diagnostics
+                .atomic_bind_group_ns
+                .saturating_add(elapsed_ns(atomic_bind_group_started));
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        let sampler_bind_group_started = Instant::now();
         let samplers = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-sampler-group"),
             layout: &self.sampler_layout,
@@ -1203,11 +1369,27 @@ impl AtomicPipeline {
                 binding(11, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.sampler_bind_groups =
+                backing.diagnostics.sampler_bind_groups.saturating_add(1);
+            backing.diagnostics.sampler_bind_group_ns = backing
+                .diagnostics
+                .sampler_bind_group_ns
+                .saturating_add(elapsed_ns(sampler_bind_group_started));
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        let render_encode_started = Instant::now();
         if advanced_blend {
             let load_color_group = load_color_group
                 .as_ref()
                 .expect("advanced atomic blending requires a destination-color copy");
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+            #[cfg(feature = "perf-diagnostics")]
+            {
+                backing.diagnostics.render_passes =
+                    backing.diagnostics.render_passes.saturating_add(1);
+            }
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-advanced-init-pass",
                 &attachments,
@@ -1220,63 +1402,75 @@ impl AtomicPipeline {
             pass.draw(0..4, 0..1);
         }
         if shared_flush_group && draws.iter().all(|draw| draw.atlas.is_none()) {
-            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
-                "nuxie-atomic-path-pass",
-                &attachments,
-            ));
-            pass.set_bind_group(1, image_group(0), &[]);
-            pass.set_bind_group(2, &atomics, &[]);
-            pass.set_bind_group(3, &samplers, &[]);
-            pass.set_vertex_buffer(0, patch_vertices.slice(..));
-            pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-            for (draw_index, draw) in draws.iter().enumerate() {
-                if draw.atlas.is_some() {
-                    continue;
+            for (group_index, &group_start) in draw_group_starts.iter().enumerate() {
+                let group_end = draw_group_starts
+                    .get(group_index + 1)
+                    .copied()
+                    .unwrap_or(draws.len());
+                let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                #[cfg(feature = "perf-diagnostics")]
+                {
+                    backing.diagnostics.render_passes =
+                        backing.diagnostics.render_passes.saturating_add(1);
                 }
-                pass.set_pipeline(
-                    if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
-                        &self.advanced_feather_hsl_stroke_path
-                    } else if advanced_blend && draw.is_feather && draw.is_stroke {
-                        &self.advanced_feather_stroke_path
-                    } else if advanced_blend && draw.is_feather && hsl_blend {
-                        &self.advanced_feather_hsl_path
-                    } else if advanced_blend && draw.is_feather {
-                        &self.advanced_feather_path
-                    } else if advanced_blend && !draw.triangle_vertices.is_empty() {
-                        &self.advanced_outer_path
-                    } else if advanced_blend {
-                        &self.advanced_path
-                    } else if draw.is_feather && draw.is_stroke {
-                        &self.feather_stroke_path
-                    } else if draw.is_feather {
-                        &self.feather_path
-                    } else if draw.is_stroke {
-                        &self.stroke_path
-                    } else if !draw.triangle_vertices.is_empty() {
-                        &self.outer_path
-                    } else {
-                        &self.path
-                    },
-                );
-                pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    "nuxie-atomic-path-pass",
+                    &attachments,
+                ));
+                pass.set_bind_group(1, image_group(0), &[]);
+                pass.set_bind_group(2, &atomics, &[]);
+                pass.set_bind_group(3, &samplers, &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-                pass.draw_indexed(
-                    draw.patch_index_range.clone(),
-                    0,
-                    draw.base_instance..draw.base_instance + draw.instance_count,
-                );
-                if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
-                    pass.set_pipeline(&self.interior);
-                    pass.set_vertex_buffer(0, triangle_buffer.slice(..));
-                    pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                for (draw_index, draw) in draws[group_start..group_end].iter().enumerate() {
+                    let draw_index = group_start + draw_index;
+                    pass.set_pipeline(
+                        if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
+                            &self.advanced_feather_hsl_stroke_path
+                        } else if advanced_blend && draw.is_feather && draw.is_stroke {
+                            &self.advanced_feather_stroke_path
+                        } else if advanced_blend && draw.is_feather && hsl_blend {
+                            &self.advanced_feather_hsl_path
+                        } else if advanced_blend && draw.is_feather {
+                            &self.advanced_feather_path
+                        } else if advanced_blend && !draw.triangle_vertices.is_empty() {
+                            &self.advanced_outer_path
+                        } else if advanced_blend {
+                            &self.advanced_path
+                        } else if draw.is_feather && draw.is_stroke {
+                            &self.feather_stroke_path
+                        } else if draw.is_feather {
+                            &self.feather_path
+                        } else if draw.is_stroke {
+                            &self.stroke_path
+                        } else if !draw.triangle_vertices.is_empty() {
+                            &self.outer_path
+                        } else {
+                            &self.path
+                        },
+                    );
+                    pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
+                    pass.draw_indexed(
+                        draw.patch_index_range.clone(),
+                        0,
+                        draw.base_instance..draw.base_instance + draw.instance_count,
+                    );
+                    if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
+                        pass.set_pipeline(&self.interior);
+                        pass.set_vertex_buffer(0, triangle_buffer.slice(..));
+                        pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                    }
                 }
             }
         } else {
             for (draw_index, draw) in draws.iter().enumerate() {
                 if draw.atlas.is_some() {
                     let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    #[cfg(feature = "perf-diagnostics")]
+                    {
+                        backing.diagnostics.render_passes =
+                            backing.diagnostics.render_passes.saturating_add(1);
+                    }
                     let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-atlas-blit-pass",
                         &attachments,
@@ -1301,6 +1495,11 @@ impl AtomicPipeline {
                 }
                 if let Some(mesh) = draw.image_mesh {
                     let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    #[cfg(feature = "perf-diagnostics")]
+                    {
+                        backing.diagnostics.render_passes =
+                            backing.diagnostics.render_passes.saturating_add(1);
+                    }
                     let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-image-mesh-pass",
                         &attachments,
@@ -1322,6 +1521,11 @@ impl AtomicPipeline {
                 }
                 if draw.image.is_some() {
                     let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    #[cfg(feature = "perf-diagnostics")]
+                    {
+                        backing.diagnostics.render_passes =
+                            backing.diagnostics.render_passes.saturating_add(1);
+                    }
                     let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-image-rect-pass",
                         &attachments,
@@ -1344,6 +1548,11 @@ impl AtomicPipeline {
                     continue;
                 }
                 let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                #[cfg(feature = "perf-diagnostics")]
+                {
+                    backing.diagnostics.render_passes =
+                        backing.diagnostics.render_passes.saturating_add(1);
+                }
                 let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                     "nuxie-atomic-path-pass",
                     &attachments,
@@ -1387,6 +1596,11 @@ impl AtomicPipeline {
                 drop(pass);
                 if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
                     let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    #[cfg(feature = "perf-diagnostics")]
+                    {
+                        backing.diagnostics.render_passes =
+                            backing.diagnostics.render_passes.saturating_add(1);
+                    }
                     let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-interior-pass",
                         &attachments,
@@ -1416,6 +1630,11 @@ impl AtomicPipeline {
         }
         {
             let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+            #[cfg(feature = "perf-diagnostics")]
+            {
+                backing.diagnostics.render_passes =
+                    backing.diagnostics.render_passes.saturating_add(1);
+            }
             let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-resolve-pass",
                 &attachments,
@@ -1432,6 +1651,17 @@ impl AtomicPipeline {
             pass.set_bind_group(2, &atomics, &[]);
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
+        }
+        #[cfg(feature = "perf-diagnostics")]
+        {
+            backing.diagnostics.render_encode_ns = backing
+                .diagnostics
+                .render_encode_ns
+                .saturating_add(elapsed_ns(render_encode_started));
+            backing.diagnostics.total_ns = backing
+                .diagnostics
+                .total_ns
+                .saturating_add(elapsed_ns(total_started));
         }
         AtomicPlaneReadbacks {
             coverage: coverage_readback,
@@ -1574,6 +1804,11 @@ fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     }
+}
+
+#[cfg(feature = "perf-diagnostics")]
+fn elapsed_ns(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 pub(crate) fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'static> {

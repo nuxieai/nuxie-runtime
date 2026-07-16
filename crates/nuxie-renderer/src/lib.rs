@@ -1778,6 +1778,7 @@ impl WgpuFrame {
         let mut pending_atomic_color_readbacks = Vec::new();
         let mut encode_atomic_run =
             |draws: &[SolidDraw],
+             draw_group_starts: &[usize],
              clear_target: bool,
              force_clockwise_atomic_batch: bool,
              load_color: Option<&wgpu::TextureView>,
@@ -2670,6 +2671,7 @@ impl WgpuFrame {
                         &self.context.patch_vertex_buffer,
                         &self.context.patch_index_buffer,
                         &atomic_draws,
+                        draw_group_starts,
                         &uniforms,
                         &paths,
                         &paints,
@@ -3951,6 +3953,7 @@ impl WgpuFrame {
                             load_texture.create_view(&wgpu::TextureViewDescriptor::default());
                         encode_atomic_run(
                             &self.draws[start..end],
+                            &[0],
                             false,
                             clockwise_atomic,
                             Some(&load_view),
@@ -3959,28 +3962,57 @@ impl WgpuFrame {
                     } else if clockwise_atomic || has_clip_updates {
                         encode_atomic_run(
                             &self.draws[start..end],
+                            &[0],
                             clear_target,
                             clockwise_atomic,
                             None,
                             &mut encoder,
                         )?;
                     } else {
-                        for group in disjoint_atomic_draw_groups(
+                        let groups = disjoint_atomic_draw_groups(
                             &self.draws[start..end],
                             self.width,
                             self.height,
-                        ) {
+                        );
+                        let mut batch_draws = Vec::new();
+                        let mut draw_group_starts = Vec::new();
+                        for group in groups {
                             if independent_atomic_group_requires_submit(
-                                independent_atomic_draws_in_encoder,
+                                independent_atomic_draws_in_encoder
+                                    .saturating_add(batch_draws.len()),
                                 group.len(),
                             ) {
+                                if !batch_draws.is_empty() {
+                                    encode_atomic_run(
+                                        &batch_draws,
+                                        &draw_group_starts,
+                                        clear_target,
+                                        false,
+                                        None,
+                                        &mut encoder,
+                                    )?;
+                                    clear_target = false;
+                                    batch_draws.clear();
+                                    draw_group_starts.clear();
+                                }
                                 submit_and_wait(&mut encoder)?;
                                 independent_atomic_draws_in_encoder = 0;
                             }
-                            encode_atomic_run(&group, clear_target, false, None, &mut encoder)?;
+                            draw_group_starts.push(batch_draws.len());
+                            batch_draws.extend(group);
+                        }
+                        if !batch_draws.is_empty() {
+                            encode_atomic_run(
+                                &batch_draws,
+                                &draw_group_starts,
+                                clear_target,
+                                false,
+                                None,
+                                &mut encoder,
+                            )?;
                             independent_atomic_draws_in_encoder =
-                                independent_atomic_draws_in_encoder.saturating_add(group.len());
-                            clear_target = false;
+                                independent_atomic_draws_in_encoder
+                                    .saturating_add(batch_draws.len());
                         }
                     }
                 } else {
@@ -4029,6 +4061,32 @@ impl WgpuFrame {
                     diagnostics.cpu_pack_ns,
                     diagnostics.write_buffer_ns,
                 );
+                if let Some(backing) = atomic_backing.borrow().as_ref() {
+                    let diagnostics = backing.diagnostics();
+                    eprintln!(
+                        "renderer-atomic-encode-diagnostics batches={} draw_groups={} draws={} buffer_upload_ns={} backing_prepare_ns={} dummy_texture_ns={} sampler_create_ns={} flush_bind_groups={} flush_bind_group_ns={} image_bind_groups={} image_bind_group_ns={} load_color_bind_groups={} load_color_bind_group_ns={} atomic_bind_groups={} atomic_bind_group_ns={} sampler_bind_groups={} sampler_bind_group_ns={} render_passes={} render_encode_ns={} total_ns={}",
+                        diagnostics.batches,
+                        diagnostics.draw_groups,
+                        diagnostics.draws,
+                        diagnostics.buffer_upload_ns,
+                        diagnostics.backing_prepare_ns,
+                        diagnostics.dummy_texture_ns,
+                        diagnostics.sampler_create_ns,
+                        diagnostics.flush_bind_groups,
+                        diagnostics.flush_bind_group_ns,
+                        diagnostics.image_bind_groups,
+                        diagnostics.image_bind_group_ns,
+                        diagnostics.load_color_bind_groups,
+                        diagnostics.load_color_bind_group_ns,
+                        diagnostics.atomic_bind_groups,
+                        diagnostics.atomic_bind_group_ns,
+                        diagnostics.sampler_bind_groups,
+                        diagnostics.sampler_bind_group_ns,
+                        diagnostics.render_passes,
+                        diagnostics.render_encode_ns,
+                        diagnostics.total_ns,
+                    );
+                }
             }
             return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
         }

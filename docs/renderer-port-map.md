@@ -376,8 +376,16 @@ Persistent three-slot atomic backing reduces repeated fixed-report aggregates
 to 0.2913x and 0.2908x. A load-recorded Metal A-B-B-A reduces `PendingWrites`
 from 27.532/28.067 ms in the bracket baselines to 2.899/2.897 ms in the
 candidates while untouched MSAA controls remain near 1.0. Command encoding is
-now the largest sampled CPU category and is the next measurement target; see
-`docs/renderer-r4-profile-attribution.md`.
+then the largest sampled CPU category. Feature-gated attribution rejects
+per-batch dummy texture and sampler lifetime as too small and identifies a
+larger C++ architecture mismatch: Rust repeated the complete generic-atomic
+backing/path/resolve lifecycle for each intersection-board group, while C++
+initializes once, preserves the group barriers, and resolves once. Porting that
+flush-wide lifetime reduces repeated old-Rust/current-Rust reports to 0.7978x
+and 0.8164x, and a load-matched Metal A-B-B-A reduces encoder rows from 11,221
+to 4,951 over 110 frames without changing pixels or structural counters. The
+current same-backend C++/Rust report is 5.0537x aggregate, so R4 remains open;
+see `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

@@ -210,6 +210,54 @@ the largest CPU category at 100 samples (54.1%). The renderer corpus remains
 exact=1,409/diverges=0/gated=59, V2 exact-segment floors remain 584 and 35, and
 the full workspace suite passes.
 
+## Generic-Atomic Flush Lifetime
+
+Feature-gated timers split `AtomicPipeline::encode_batch` into resource and
+encoding categories. On the twenty-draw `bevel180strokes` control, dummy
+texture creation, sampler creation, and the sampler bind group together cost
+about 66 microseconds inside a 5.23 ms frame. Buffer upload and all directly
+timed setup total about 460 microseconds. Persisting only the named dummy and
+sampler objects therefore cannot explain the dominant command-encoding work.
+
+The Metal traces expose the structural cause. C++ WebGPU emits 2,644 encoder
+rows over 110 frames, or 24 encoders per steady frame plus four startup rows.
+The item-114 Rust binary emits 11,221 rows, or 102 per frame plus one startup
+row. C++ `LogicalFlush::buildDrawList` sorts draws into intersection-board
+groups, then `AtomicDrawRenderPass` initializes PLS once, restarts the path
+pass at each `plsAtomic` barrier, and resolves once. Rust preserved the same
+groups but called the complete initialize/path/resolve lifecycle for every
+group.
+
+The accepted port flattens those already validated groups into one preparation
+unit per submission. Explicit group starts preserve every barrier, while the
+atomic backing clear and final resolve happen once. The existing 1,024-draw
+submission fence and every logical-flush boundary remain unchanged. On the
+twenty-draw control this changes 20 atomic preparations and 40 atomic render
+passes into one preparation, 20 group passes, and one resolve. The full corpus,
+including all scenes that failed an unsafe no-barrier experiment, remains
+exact=1,409/diverges=0/gated=59.
+
+Two fixed old-Rust/current-Rust reports reproduce the end-to-end gain at
+0.797783x and 0.816390x aggregate. Untouched MSAA controls remain within 3.8%
+and 1.7%, respectively. A direct twenty-draw A-B-B-A records baseline medians
+of 5.881 and 5.156 ms around candidate medians of 2.369 and 2.352 ms, with host
+idle between 87.3% and 89.8%.
+
+The independent Metal A-B-B-A is likewise load matched:
+
+| order | runner | host idle | encoder rows | encoder time/frame | median frame |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1 | item-114 baseline | 86.15% | 11,221 | 4.335 ms | 7.740 ms |
+| 2 | flush-wide lifetime | 87.80% | 4,951 | 2.706 ms | 3.939 ms |
+| 3 | flush-wide lifetime | 89.28% | 4,951 | 2.050 ms | 3.300 ms |
+| 4 | item-114 baseline | 89.31% | 11,221 | 4.502 ms | 7.822 ms |
+
+The current C++/Rust fixed report is now 5.053695x aggregate. Clockwise-atomic
+variants range from 2.05x to 4.60x, while MSAA ranges from 5.97x to 11.99x and
+owns the worst scene. The candidate trace still has 20 tessellation encoders
+and 20 atomic path encoders per frame versus C++'s 24 total encoders, so R4 is
+not complete.
+
 ## Measurement Fence
 
 R4 performance decisions use these controls:
@@ -243,17 +291,15 @@ Authoritative source sites:
 
 ## Next Measurement
 
-Attribute the newly dominant generic-atomic command-encoding work before
-changing another resource lifetime:
+Reprofile the exact item-115 binary before changing another lifetime:
 
-1. Separate per-batch dummy image texture/sampler creation, bind-group
-   construction, and render-pass encoding in the fixed one- and twenty-draw
-   controls.
-2. Reuse or batch only the resource class that remains material in a fresh
-   profile; preserve image-binding semantics and capture/readback behavior.
-3. Compare against the item-114 release binary with the fixed alternating
-   report and load-recorded A-B-B-A Metal captures.
+1. Capture paired one- and twenty-draw Time Profiler and Metal traces in both
+   clockwise-atomic and MSAA modes.
+2. Attribute the remaining 20 tessellation encoders in the generic-atomic
+   control and the larger 5.97x-11.99x MSAA gap separately.
+3. Port only the largest measured C++-aligned batching or lifetime site; the
+   rejected item-108 vertical-packing experiment is not evidence by itself.
 4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries until
    a measured change proves they can move.
-5. Accept the next implementation only on repeated end-to-end improvement,
-   bracketed trace non-regression, and unchanged pixel/V2/workspace floors.
+5. Use the same repeated alternating report, load-recorded A-B-B-A trace, and
+   pixel/V2/workspace floors for acceptance.

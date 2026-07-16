@@ -22,7 +22,7 @@ pub fn run(kind: BackendKind) -> Result<(), String> {
 
     let request: RunRequest = serde_json::from_reader(io::stdin().lock())
         .map_err(|error| format!("invalid runner request JSON: {error}"))?;
-    validate_runner_request(&request)?;
+    validate_request(&request)?;
     let stream = RenderStream::parse(
         &fs::read_to_string(&request.stream)
             .map_err(|error| format!("failed to read {}: {error}", request.stream))?,
@@ -106,6 +106,17 @@ pub fn run(kind: BackendKind) -> Result<(), String> {
         .map_err(|error| format!("failed to encode runner response: {error}"))?;
     println!();
     Ok(())
+}
+
+fn validate_request(request: &RunRequest) -> Result<(), String> {
+    #[cfg(feature = "perf-diagnostics")]
+    if std::env::var_os("RIVE_RENDERER_PERF_DIAGNOSTIC_SIZE").is_some() {
+        let mut fenced = request.clone();
+        fenced.width = 1024;
+        fenced.height = 1024;
+        return validate_runner_request(&fenced);
+    }
+    validate_runner_request(request)
 }
 
 fn validate_arguments() -> Result<(), String> {

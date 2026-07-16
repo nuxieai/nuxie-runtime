@@ -1361,12 +1361,26 @@ Run `make renderer-golden`.
     profile has 27 initialized-buffer samples out of 185, down from 3,438 out
     of 4,030. Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35, and
     the full workspace suite remain green.
-115. [ ] Attribute the now-dominant generic-atomic command-encoding work. The
-    post-item-114 Time Profiler has 100/185 per-frame samples in command
-    encoding. First measure the per-batch dummy texture/sampler and bind-group
-    construction in `AtomicPipeline::encode_batch`, then test only the
-    measured lifetime or batching cause under the same alternating report,
-    load-recorded A-B-B-A trace, and parity fences.
+115. [x] Attribute the now-dominant generic-atomic command-encoding work.
+    Feature-gated timers show dummy texture, sampler, and sampler bind-group
+    creation consume only about 66 microseconds of the 5.23 ms twenty-draw
+    frame. Metal traces instead show 102 Rust encoders/frame versus 24 in C++:
+    Rust repeated the full atomic backing/path/resolve lifecycle for each
+    intersection-board group. The port now prepares all groups flush-wide,
+    preserves every explicit group barrier, and resolves once under the
+    unchanged 1,024-draw and logical-flush fences. Two repeated reports improve
+    aggregate time to 0.7978x and 0.8164x. A load-matched A-B-B-A reduces
+    encoder rows from 11,221 to 4,951 and traced frame medians from
+    7.740/7.822 ms to 3.939/3.300 ms. Renderer exact=1,409/diverges=0/gated=59.
+    The normal and scripted V2 floors pass at 584 and 35 exact segments, and
+    the full workspace suite is green.
+116. [ ] Reprofile the exact item-115 binary before another optimization. The
+    current same-backend C++/Rust report is 5.0537x aggregate: clockwise-atomic
+    scenes are 2.05x-4.60x, while MSAA is 5.97x-11.99x and owns the worst
+    scene. Capture paired one- and twenty-draw Time Profiler and Metal traces
+    in both modes, distinguish the remaining 20 generic-atomic tessellation
+    encoders from the larger MSAA cadence, and port only the largest measured
+    C++-aligned site under the existing acceptance fence.
 
 ## R2 Completion Record
 
@@ -1578,6 +1592,15 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-16: R4 item 115 keeps intersection-board barriers but changes their
+  ownership from complete per-group atomic lifecycles to one C++-aligned
+  flush-wide lifetime. The unsafe no-barrier control was fast but failed 17
+  corpus scenes; the accepted implementation passes all 1,468 rows and reduces
+  the twenty-draw control from 20 preparations/40 atomic passes to one
+  preparation/21 passes. Two repeated reports and a load-matched Metal A-B-B-A
+  accept the change. The remaining C++ report is 5.0537x aggregate, so item 116
+  reprofiles both modes rather than extrapolating another fix from pass counts.
 
 - 2026-07-15: R4 items 111-112 correct item 110's provisional texture
   attribution. A bounded completed-frame texture pool leaves 19.88
@@ -2448,6 +2471,18 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 115 with feature-gated command-encoding
+  attribution and a C++-aligned generic-atomic flush lifetime. Per-batch dummy
+  and sampler work was only about 66 microseconds; the actual mismatch was a
+  full initialize/path/resolve cycle per intersection-board group. Explicit
+  group barriers now survive inside one preparation and final resolve. Two
+  fixed reports improve to 0.7978x/0.8164x, and the load-matched A-B-B-A trace
+  cuts encoder rows from 11,221 to 4,951 while both candidate frame medians beat
+  their bracket baselines. The renderer corpus remains
+  exact=1,409/diverges=0/gated=59; the V2 floors remain 584/35 and the workspace
+  suite passes. The current C++/Rust report is 5.0537x; item 116 profiles the
+  remaining generic tessellation and MSAA cadence before another optimization.
 
 - 2026-07-16: Closed R4 item 114 with load-controlled attribution and a
   persistent atomic-backing implementation. The initial host snapshot showed

@@ -120,13 +120,11 @@ not guessed.
 The **R4 Addendum (2026-07-16)** in `docs/renderer-status.md` is binding
 and sequences R4 as follows:
 
-1. **Mode-ladder decomposition FIRST.** Before further optimization items,
-   benchmark C++ against itself across the mode ladder (native-Metal
-   raster-order vs native-Metal atomic vs Dawn-WebGPU clockwise-atomic) to
-   split the current gap into mode/API tax vs genuine implementation gap.
-   Record the R4 gate as a Decision measured against **C++ Dawn
-   clockwise-atomic** — the same capability tier we ported. Native-Metal
-   numbers are reported as informational context, never as the gate.
+1. **Use the same-capability denominator.** This is resolved by the fenced
+   runners: C++ Dawn WebGPU and Rust wgpu both run over Metal on the same
+   adapter and receive the same requested mode. Native C++ Metal cannot run
+   the fixed MSAA matrix, so it is informational where available and never the
+   R4 denominator or a prerequisite for same-tier work.
 2. **Attribute by counter parity, not profiles, where possible.** The
    counter-parity harness (deterministic per-stream work counters from
    both implementations, diffed and ranked) is the primary attribution
@@ -136,10 +134,12 @@ and sequences R4 as follows:
    (pooling, rings, coalescing, reuse in `render_context.cpp` and
    friends) turns discovery into checklist-porting: prefer porting the
    C++ mechanism at the same site over inventing an optimization.
-4. **Explore in parallel, accept serially.** Scouts/profiling may run
-   concurrently, but bench acceptance is one-at-a-time A-B-B-A
-   load-matched brackets under the recorded load fence; measured
-   rejections are recorded, not retried until they pass.
+4. **Match evidence intensity to uncertainty.** Counter-proven elimination of
+   redundant work needs exact structural evidence, unchanged pixels/contracts,
+   and one light directional timing snapshot. Reserve repeated alternating
+   reports and serial load-matched A-B-B-A for timing-defined candidates,
+   disputed effects, or directional results that contradict the structural
+   oracle. Scouts and timing-free attribution may run concurrently.
 
 ## Weeds tripwires — check at every commit
 

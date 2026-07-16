@@ -69,6 +69,10 @@ pub(crate) struct PreparedPathDraw {
     pub instance_count: u32,
 }
 
+pub(crate) struct PreparedPathResources {
+    flush_group: wgpu::BindGroup,
+}
+
 impl PathPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let no_clip_vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -794,7 +798,7 @@ impl PathPipeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare(
+    pub(crate) fn prepare_resources(
         &self,
         device: &wgpu::Device,
         uploads: &mut TessellationUploadFrame<'_>,
@@ -802,21 +806,18 @@ impl PathPipeline {
         feather_lut: &wgpu::TextureView,
         gradient: Option<&wgpu::TextureView>,
         destination: Option<&wgpu::TextureView>,
-        image: Option<(&wgpu::TextureView, ImageSampler)>,
         uniforms: &FlushUniforms,
-        path: &PathData,
-        paint: &PaintData,
-        paint_aux: &PaintAuxData,
+        paths: &[PathData],
+        paints: &[PaintData],
+        paint_aux: &[PaintAuxData],
         contours: &[ContourData],
-        base_instance: u32,
-        instance_count: u32,
-    ) -> PreparedPathDraw {
+    ) -> PreparedPathResources {
         // C++ maps these resource rings flush-wide. Exact aligned slices in
         // the guarded frame arena give wgpu the same completed-frame lifetime.
         let uniform_buffer = uploads.upload_uniforms(device, bytemuck::bytes_of(uniforms));
-        let path_buffer = uploads.upload_storage(device, bytemuck::bytes_of(path));
-        let paint_buffer = uploads.upload_storage(device, bytemuck::bytes_of(paint));
-        let paint_aux_buffer = uploads.upload_storage(device, bytemuck::bytes_of(paint_aux));
+        let path_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paths));
+        let paint_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paints));
+        let paint_aux_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paint_aux));
         let contour_buffer = uploads.upload_storage(device, bytemuck::cast_slice(contours));
         let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-flush-group"),
@@ -839,6 +840,17 @@ impl PathPipeline {
                 ),
             ],
         });
+        PreparedPathResources { flush_group }
+    }
+
+    pub(crate) fn prepare_draw(
+        &self,
+        device: &wgpu::Device,
+        resources: &PreparedPathResources,
+        image: Option<(&wgpu::TextureView, ImageSampler)>,
+        base_instance: u32,
+        instance_count: u32,
+    ) -> PreparedPathDraw {
         let image_group = image.map_or_else(
             || self.dummy_image_group.clone(),
             |(view, sampler)| {
@@ -858,7 +870,7 @@ impl PathPipeline {
             },
         );
         PreparedPathDraw {
-            flush_group,
+            flush_group: resources.flush_group.clone(),
             image_group,
             sampler_group: self.sampler_group.clone(),
             base_instance,

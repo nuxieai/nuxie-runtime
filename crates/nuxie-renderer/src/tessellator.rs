@@ -33,8 +33,9 @@ pub(crate) struct TessellationUploadDiagnostics {
 pub(crate) struct Tessellator {
     pub pipeline: wgpu::RenderPipeline,
     pub flush_layout: wgpu::BindGroupLayout,
-    pub sampler_layout: wgpu::BindGroupLayout,
     pub span_indices: wgpu::Buffer,
+    _linear_sampler: wgpu::Sampler,
+    sampler_group: wgpu::BindGroup,
     upload_slots: [Mutex<TessellationUploadSlot>; BUFFER_RING_SIZE],
     next_upload_slot: AtomicUsize,
 }
@@ -133,12 +134,24 @@ impl Tessellator {
             contents: bytemuck::cast_slice(&[0u16, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7]),
             usage: wgpu::BufferUsages::INDEX,
         });
+        let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("nuxie-tessellation-linear-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-tessellation-sampler-group"),
+            layout: &sampler_layout,
+            entries: &[binding(10, wgpu::BindingResource::Sampler(&linear_sampler))],
+        });
         let limits = device.limits();
         Self {
             pipeline,
             flush_layout,
-            sampler_layout,
             span_indices,
+            _linear_sampler: linear_sampler,
+            sampler_group,
             upload_slots: std::array::from_fn(|_| Mutex::new(TessellationUploadSlot::new(&limits))),
             next_upload_slot: AtomicUsize::new(0),
         }
@@ -172,12 +185,6 @@ impl Tessellator {
         let uniform_buffer = uploads.upload_uniforms(device, bytemuck::bytes_of(uniforms));
         let path_buffer = uploads.upload_paths(device, bytemuck::cast_slice(paths));
         let contour_buffer = uploads.upload_contours(device, bytemuck::cast_slice(contours));
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("nuxie-tessellation-linear-sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
         let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-flush-group"),
             layout: &self.flush_layout,
@@ -187,11 +194,6 @@ impl Tessellator {
                 binding(6, contour_buffer.binding()),
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
             ],
-        });
-        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-tessellation-sampler-group"),
-            layout: &self.sampler_layout,
-            entries: &[binding(10, wgpu::BindingResource::Sampler(&sampler))],
         });
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-tessellation-data"),
@@ -228,7 +230,7 @@ impl Tessellator {
         });
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &flush_group, &[]);
-        pass.set_bind_group(3, &sampler_group, &[]);
+        pass.set_bind_group(3, &self.sampler_group, &[]);
         pass.set_vertex_buffer(0, span_buffer.slice());
         pass.set_index_buffer(self.span_indices.slice(..), wgpu::IndexFormat::Uint16);
         pass.draw_indexed(0..12, 0, 0..spans.len() as u32);

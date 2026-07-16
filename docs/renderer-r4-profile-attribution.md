@@ -320,22 +320,65 @@ from 5.053695x to 4.598614x aggregate, and the worst scene improves from
 11.994x to 8.750x. Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35,
 and the full workspace suite remain green.
 
+## Flush-Wide MSAA Tessellation
+
+Item 117 built immutable runners from item 116 and the current candidate. Their
+SHA-256 hashes are `995b2dd726595a440a7f08017541fac10140a9c1f42d42789f19466f455aeca2`
+and `ab5d795145aa57f78d0adc4b5de07599f6e6eddb9df912c627dddf0a05930c7b`.
+Direct MSAA paths now shelf-pack midpoint spans into one tessellation texture
+per logical flush. Path, paint, paint-aux, contour, and uniform resources share
+the flush lifetime; only an image draw's texture/sampler group remains per
+draw. Existing logical-flush, clip-reset, destination-read, advanced-blend,
+and 1,024-draw submission boundaries are unchanged.
+
+The first corpus run located a correctness defect rather than a tolerance
+candidate. Authored empty contours leave sparse contour IDs in tessellation
+spans, while the compact `ContourData` array contains only drawable contours.
+Dense rebasing aliased the next path's first contour. Flush packing now retains
+zeroed slots for those authored gaps and rebases the actual IDs. The focused
+sparse-ID regression and `gm-emptystroke-msaa` are exact.
+
+The structural oracle is decisive. Independent Metal exports reproduce 2,641
+to 551 total encoder rows and 2,200 to 110 tessellation rows over 110 frames.
+The 2,090-row reduction is exactly nineteen removed tessellation passes per
+frame: the known C++ architecture mismatch moved from twenty passes to one.
+
+Timing is retained as a directional snapshot, not as the proof of this slice:
+
+| report | aggregate candidate/baseline | `bevel180strokes-msaa` |
+| --- | ---: | ---: |
+| first | 0.923633x | 0.661817x |
+| replicate | 0.914020x | 0.651227x |
+
+The freshly built C++ Dawn runner hash is
+`cdc8fe44337236f14ae3bda4f212a4985b48c4539ef278d96b4674c844b507eb`.
+It selects the same Apple M5 Max adapter and mode as Rust wgpu. The fixed
+C++/Rust aggregate improves from 4.598614x to 4.144194x; the worst scene is now
+5.764152x. Native C++ Metal is not used as the denominator and cannot execute
+the report's MSAA matrix. Renderer exact=1,409/diverges=0/gated=59, V2 floors
+584/35, and the full workspace suite remain green.
+
 ## Measurement Fence
 
 R4 performance decisions use these controls:
 
-1. Compare immutable release binaries with the fixed 16-variant alternating
-   report; repeat the report before accepting or rejecting a disputed result.
-2. Treat end-to-end submit-to-GPU-complete frame time as the primary metric.
-   Trace intervals are diagnostic and may veto only a reproducible material
-   regression, not a one-off absolute-duration change.
-3. Record Metal comparisons in A-B-B-A order with the full fenced request so
-   both candidate captures are bracketed by baselines.
-4. Record system load and defer a capture during known build, deletion, or
-   indexing spikes. Absolute trace values from different load windows are not
-   directly comparable.
-5. Require unchanged structural counters, the renderer pixel ratchet, both V2
-   segment floors, and the full workspace suite for every accepted slice.
+1. Match evidence intensity to uncertainty. A deterministic reduction in
+   redundant work is primarily proved by exact structural counters plus
+   unchanged output/contracts. One light fixed timing snapshot is enough to
+   catch a contradictory gross regression.
+2. Use immutable repeated alternating reports and load-matched A-B-B-A when
+   the claimed benefit is defined by timing, the effect is disputed, or the
+   directional snapshot contradicts the structural oracle.
+3. For timing-defined work, treat end-to-end submit-to-GPU-complete frame time
+   as primary. Trace intervals are diagnostic and may veto only a reproducible
+   material regression, not a one-off absolute-duration change.
+4. Record system load for controlled timing and defer captures during known
+   build, deletion, or indexing spikes. Absolute values from different load
+   windows are not directly comparable.
+5. Require the renderer pixel ratchet, relevant deterministic counters, both
+   V2 segment floors, and the full workspace suite for every accepted slice.
+   Run the normal and scripted V2 make targets serially because both write
+   `target/debug/rust-golden-runner` during setup.
 
 Authoritative source sites:
 
@@ -353,18 +396,16 @@ Authoritative source sites:
 
 ## Next Measurement
 
-Port C++'s flush-wide tessellation texture/pass under the item-116 resource
-lifetime:
+Build a deterministic counter-parity report before selecting item 119:
 
-1. The post-change twenty-draw MSAA profile attributes 12 of 55 renderer
-   samples to `Tessellator::encode`; ten of twelve sampled texture creations
-   are under that call, while only two belong to frame-target setup.
-2. Rust still emits twenty tessellation passes per frame and C++ emits one per
-   flush. Pack paths into a shared texture and bind flush-wide path resources
-   without changing clip, advanced-blend, or logical-flush order.
-3. Treat item 108 as a rejected historical implementation, not a veto or a
-   shortcut: the pending-write and path-resource lifetimes have changed since
-   that experiment, so measure a new candidate from the current binary.
-4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries.
-5. Use the same repeated alternating report, load-recorded A-B-B-A trace, and
-   pixel/V2/workspace floors for acceptance.
+1. Extend both fenced runners with per-logical-flush counts for paths, draws,
+   tessellation spans and patches, uploaded bytes, texture/bind-group work, and
+   encoder/pass classes.
+2. Diff every fixed perf-corpus variant and rank excess Rust work by ratio and
+   absolute count. Keep counters exact and timing-free.
+3. Inventory the matching C++ pooling, ring, budget, reuse, and coalescing
+   mechanisms in `render_context.cpp` and backend resource management, then
+   attach a source site to every excess class.
+4. Use parallel read-only attribution for ranked rows. Apply heavier timing
+   only when a candidate's benefit is not already settled by structural work
+   counts or when a directional snapshot reveals a contradiction.

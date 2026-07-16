@@ -2738,6 +2738,30 @@ impl WgpuFrame {
                     hsl_blend: bool,
                     destination_copy_bounds: [u32; 4],
                 }
+                struct PendingPathDraw {
+                    tessellation: draw::FillTessellation,
+                    paint: gpu::PaintData,
+                    paint_aux: gpu::PaintAuxData,
+                    image: Option<(wgpu::TextureView, ImageSampler)>,
+                    logical_flush: usize,
+                    prepared: Option<path_pipeline::PreparedPathDraw>,
+                }
+                enum PendingDraw {
+                    Stroke(usize, DirectPathOptions),
+                    Fill(usize, FillRule, DirectPathOptions),
+                    ImageMesh(
+                        msaa_image_mesh_pipeline::PreparedImageMesh,
+                        ImageMeshOptions,
+                    ),
+                    OutermostClipUpdate(usize, FillRule),
+                    NestedClipUpdate(usize, FillRule),
+                    ClipReset(
+                        msaa_stencil_pipeline::PreparedStencilDraw,
+                        MsaaClipResetAction,
+                    ),
+                    Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
+                    Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
+                }
                 enum PreparedDraw {
                     Stroke(path_pipeline::PreparedPathDraw, DirectPathOptions),
                     Fill(path_pipeline::PreparedPathDraw, FillRule, DirectPathOptions),
@@ -2772,7 +2796,8 @@ impl WgpuFrame {
                     &gradient_batch.spans,
                     gradient_batch.height,
                 );
-                let mut prepared_draws = Vec::with_capacity(draws.len());
+                let mut pending_draws = Vec::with_capacity(draws.len());
+                let mut pending_paths = Vec::new();
                 let mut prepared_schedules = Vec::with_capacity(draws.len());
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let z_index = draw_groups.map_or_else(
@@ -2791,7 +2816,7 @@ impl WgpuFrame {
                     };
                     if let DrawRole::ClipReset { bounds, action } = draw.role {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
-                        prepared_draws.push(PreparedDraw::ClipReset(
+                        pending_draws.push(PendingDraw::ClipReset(
                             self.context.msaa_stencil_pipeline.prepare_clip_reset(
                                 &self.context.device,
                                 &uniforms,
@@ -2820,45 +2845,21 @@ impl WgpuFrame {
                             draw::build_fill_tessellation(raw_path, draw.state.transform)
                         {
                             tessellation.path.z_index = z_index;
-                            let tessellation_height =
-                                draw::tessellation_texture_height(&tessellation.spans);
-                            let uniforms =
-                                analytic_uniforms(self.width, self.height, tessellation_height);
-                            let tessellation_texture = self.context.tessellator.encode(
-                                &self.context.device,
-                                &mut tessellation_uploads.borrow_mut(),
-                                encoder,
-                                &self.context.feather_lut.view,
-                                &tessellation.spans,
-                                &uniforms,
-                                std::slice::from_ref(&tessellation.path),
-                                &tessellation.contours,
-                                tessellation_height,
-                            );
-                            let tessellation_view = tessellation_texture
-                                .create_view(&wgpu::TextureViewDescriptor::default());
                             let paint =
                                 gpu::PaintData::solid(0, draw.path.fill_rule, BlendMode::SrcOver);
-                            let prepared = self.context.path_pipeline.prepare(
-                                &self.context.device,
-                                &mut tessellation_uploads.borrow_mut(),
-                                &tessellation_view,
-                                &self.context.feather_lut.view,
-                                None,
-                                None,
-                                None,
-                                &uniforms,
-                                &tessellation.path,
-                                &paint,
-                                &gpu::PaintAuxData::zeroed(),
-                                &tessellation.contours,
-                                tessellation.base_instance,
-                                tessellation.instance_count,
-                            );
-                            prepared_draws.push(if parent_id == 0 {
-                                PreparedDraw::OutermostClipUpdate(prepared, draw.path.fill_rule)
+                            let path_index = pending_paths.len();
+                            pending_paths.push(PendingPathDraw {
+                                tessellation,
+                                paint,
+                                paint_aux: gpu::PaintAuxData::zeroed(),
+                                image: None,
+                                logical_flush: schedule.logical_flush,
+                                prepared: None,
+                            });
+                            pending_draws.push(if parent_id == 0 {
+                                PendingDraw::OutermostClipUpdate(path_index, draw.path.fill_rule)
                             } else {
-                                PreparedDraw::NestedClipUpdate(prepared, draw.path.fill_rule)
+                                PendingDraw::NestedClipUpdate(path_index, draw.path.fill_rule)
                             });
                             prepared_schedules.push(schedule);
                         }
@@ -2903,7 +2904,7 @@ impl WgpuFrame {
                             mesh.blend_mode,
                             z_index,
                         );
-                        prepared_draws.push(PreparedDraw::ImageMesh(
+                        pending_draws.push(PendingDraw::ImageMesh(
                             self.context.msaa_image_mesh_pipeline.prepare(
                                 &self.context.device,
                                 &uniforms,
@@ -3082,7 +3083,7 @@ impl WgpuFrame {
                                 gpu::TriangleVertex::new([left, top], 1, 1),
                                 gpu::TriangleVertex::new([right, top], 1, 1),
                             ];
-                            prepared_draws.push(PreparedDraw::Atlas(
+                            pending_draws.push(PendingDraw::Atlas(
                                 self.context.msaa_atlas_pipeline.prepare(
                                     &self.context.device,
                                     &tessellation_view,
@@ -3159,23 +3160,6 @@ impl WgpuFrame {
                         };
                         if let Some(mut tessellation) = tessellation {
                             tessellation.path.z_index = z_index;
-                            let tessellation_height =
-                                draw::tessellation_texture_height(&tessellation.spans);
-                            let uniforms =
-                                analytic_uniforms(self.width, self.height, tessellation_height);
-                            let tessellation_texture = self.context.tessellator.encode(
-                                &self.context.device,
-                                &mut tessellation_uploads.borrow_mut(),
-                                encoder,
-                                &self.context.feather_lut.view,
-                                &tessellation.spans,
-                                &uniforms,
-                                std::slice::from_ref(&tessellation.path),
-                                &tessellation.contours,
-                                tessellation_height,
-                            );
-                            let tessellation_view = tessellation_texture
-                                .create_view(&wgpu::TextureViewDescriptor::default());
                             let image = draw.image.as_ref().map(|image| match image {
                                 ImageDraw::Rect(image) => image,
                                 ImageDraw::Mesh(_) => {
@@ -3232,30 +3216,20 @@ impl WgpuFrame {
                             } else {
                                 clip_rect_paint_aux(draw.state.clip_rect)
                             };
-                            let prepared = self.context.path_pipeline.prepare(
-                                &self.context.device,
-                                &mut tessellation_uploads.borrow_mut(),
-                                &tessellation_view,
-                                &self.context.feather_lut.view,
-                                gradient_texture.as_ref().map(|texture| &texture.view),
-                                if advanced_blend {
-                                    destination_view.as_ref()
-                                } else {
-                                    None
-                                },
-                                image.map(|image| (&image.texture.view, image.sampler)),
-                                &uniforms,
-                                &tessellation.path,
-                                &paint,
-                                &paint_aux,
-                                &tessellation.contours,
-                                tessellation.base_instance,
-                                tessellation.instance_count,
-                            );
-                            prepared_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
-                                PreparedDraw::Fill(prepared, draw.path.fill_rule, options)
+                            let path_index = pending_paths.len();
+                            pending_paths.push(PendingPathDraw {
+                                tessellation,
+                                paint,
+                                paint_aux,
+                                image: image
+                                    .map(|image| (image.texture.view.clone(), image.sampler)),
+                                logical_flush: schedule.logical_flush,
+                                prepared: None,
+                            });
+                            pending_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
+                                PendingDraw::Fill(path_index, draw.path.fill_rule, options)
                             } else {
-                                PreparedDraw::Stroke(prepared, options)
+                                PendingDraw::Stroke(path_index, options)
                             });
                             prepared_schedules.push(schedule);
                             continue;
@@ -3277,7 +3251,7 @@ impl WgpuFrame {
                                 usage: wgpu::BufferUsages::VERTEX,
                             },
                         );
-                        prepared_draws.push(PreparedDraw::Bootstrap(
+                        pending_draws.push(PendingDraw::Bootstrap(
                             path_buffer,
                             cover_buffer,
                             draw.path.fill_rule,
@@ -3285,6 +3259,139 @@ impl WgpuFrame {
                         prepared_schedules.push(schedule);
                     }
                 }
+                debug_assert_eq!(pending_draws.len(), prepared_schedules.len());
+                let logical_flush_count = logical_flush_starts.len().max(1);
+                for logical_flush in 0..logical_flush_count {
+                    let path_start =
+                        pending_paths.partition_point(|path| path.logical_flush < logical_flush);
+                    let path_end =
+                        pending_paths.partition_point(|path| path.logical_flush <= logical_flush);
+                    if path_start == path_end {
+                        continue;
+                    }
+                    let paths_in_flush = &mut pending_paths[path_start..path_end];
+                    let mut spans = Vec::new();
+                    let mut paths = vec![gpu::PathData::zeroed()];
+                    let mut paints = vec![gpu::PaintData::zeroed()];
+                    let mut paint_aux = vec![gpu::PaintAuxData::zeroed()];
+                    let mut contours = Vec::new();
+                    let mut cursor_x = 0;
+                    let mut cursor_y = 0;
+                    let mut tessellation_height = 1;
+                    let max_height = self.context.device.limits().max_texture_dimension_2d;
+                    for path in paths_in_flush.iter_mut() {
+                        let local_height =
+                            draw::tessellation_texture_height(&path.tessellation.spans);
+                        let single_row_width = (local_height == 1)
+                            .then(|| {
+                                midpoint_tessellation_single_row_width(&path.tessellation.spans)
+                            })
+                            .flatten();
+                        let placement = midpoint_shelf_placement(
+                            cursor_x,
+                            cursor_y,
+                            local_height,
+                            single_row_width,
+                        );
+                        if placement.height > max_height {
+                            return Err(RendererError::Device(
+                                "flush-wide tessellation texture exceeds device dimension limit"
+                                    .into(),
+                            ));
+                        }
+                        cursor_x = placement.next_x;
+                        cursor_y = placement.next_y;
+                        tessellation_height = tessellation_height.max(placement.height);
+                        let path_id = u32::try_from(paths.len())
+                            .expect("MSAA path ID must fit the shader contract");
+                        append_midpoint_tessellation_to_flush(
+                            &mut path.tessellation,
+                            path_id,
+                            placement.x,
+                            placement.y,
+                            &mut spans,
+                            &mut contours,
+                        );
+                        paths.push(path.tessellation.path);
+                        paints.push(path.paint);
+                        paint_aux.push(path.paint_aux);
+                    }
+                    let mut uniforms =
+                        analytic_uniforms(self.width, self.height, tessellation_height);
+                    if gradient_batch.height != 0 {
+                        uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                    }
+                    uniforms.max_path_id =
+                        u32::try_from(paths.len() - 1).expect("MSAA path ID overflow");
+                    let tessellation_texture = self.context.tessellator.encode(
+                        &self.context.device,
+                        &mut tessellation_uploads.borrow_mut(),
+                        encoder,
+                        &self.context.feather_lut.view,
+                        &spans,
+                        &uniforms,
+                        &paths,
+                        &contours,
+                        tessellation_height,
+                    );
+                    let tessellation_view =
+                        tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let resources = self.context.path_pipeline.prepare_resources(
+                        &self.context.device,
+                        &mut tessellation_uploads.borrow_mut(),
+                        &tessellation_view,
+                        &self.context.feather_lut.view,
+                        gradient_texture.as_ref().map(|texture| &texture.view),
+                        destination_view.as_ref(),
+                        &uniforms,
+                        &paths,
+                        &paints,
+                        &paint_aux,
+                        &contours,
+                    );
+                    for path in paths_in_flush {
+                        path.prepared = Some(self.context.path_pipeline.prepare_draw(
+                            &self.context.device,
+                            &resources,
+                            path.image.as_ref().map(|(view, sampler)| (view, *sampler)),
+                            path.tessellation.base_instance,
+                            path.tessellation.instance_count,
+                        ));
+                    }
+                }
+                let mut take_path = |index: usize| {
+                    pending_paths[index]
+                        .prepared
+                        .take()
+                        .expect("MSAA path escaped flush-wide preparation")
+                };
+                let prepared_draws = pending_draws
+                    .into_iter()
+                    .map(|draw| match draw {
+                        PendingDraw::Stroke(index, options) => {
+                            PreparedDraw::Stroke(take_path(index), options)
+                        }
+                        PendingDraw::Fill(index, fill_rule, options) => {
+                            PreparedDraw::Fill(take_path(index), fill_rule, options)
+                        }
+                        PendingDraw::ImageMesh(draw, options) => {
+                            PreparedDraw::ImageMesh(draw, options)
+                        }
+                        PendingDraw::OutermostClipUpdate(index, fill_rule) => {
+                            PreparedDraw::OutermostClipUpdate(take_path(index), fill_rule)
+                        }
+                        PendingDraw::NestedClipUpdate(index, fill_rule) => {
+                            PreparedDraw::NestedClipUpdate(take_path(index), fill_rule)
+                        }
+                        PendingDraw::ClipReset(draw, action) => {
+                            PreparedDraw::ClipReset(draw, action)
+                        }
+                        PendingDraw::Atlas(draw) => PreparedDraw::Atlas(draw),
+                        PendingDraw::Bootstrap(path, cover, fill_rule) => {
+                            PreparedDraw::Bootstrap(path, cover, fill_rule)
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 debug_assert_eq!(prepared_draws.len(), prepared_schedules.len());
                 let prepared_advanced_count = prepared_draws
                     .iter()
@@ -6060,6 +6167,59 @@ fn relocate_midpoint_tessellation(
     }
 }
 
+fn append_midpoint_tessellation_to_flush(
+    tessellation: &mut draw::FillTessellation,
+    path_id: u32,
+    x: u32,
+    y: u32,
+    spans: &mut Vec<gpu::TessVertexSpan>,
+    contours: &mut Vec<gpu::ContourData>,
+) {
+    relocate_midpoint_tessellation(
+        &mut tessellation.spans,
+        &mut tessellation.base_instance,
+        &mut tessellation.contours,
+        x,
+        y,
+    );
+    let contour_offset = u32::try_from(contours.len()).expect("MSAA contour offset overflow");
+    let mut local_contour_ids = tessellation
+        .spans
+        .iter()
+        .map(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK)
+        .filter(|id| *id != 0)
+        .collect::<Vec<_>>();
+    local_contour_ids.sort_unstable();
+    local_contour_ids.dedup();
+    assert_eq!(local_contour_ids.len(), tessellation.contours.len());
+    let local_contour_slots = local_contour_ids.last().copied().unwrap_or(0);
+    let contour_end = contour_offset
+        .checked_add(local_contour_slots)
+        .expect("MSAA contour ID overflow");
+    assert!(contour_end <= gpu::CONTOUR_ID_MASK);
+    contours.resize(contour_end as usize, gpu::ContourData::zeroed());
+    for span in &mut tessellation.spans {
+        let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+        if local_id == 0 {
+            continue;
+        }
+        let global_id = contour_offset
+            .checked_add(local_id)
+            .expect("MSAA contour ID overflow");
+        assert!(global_id <= gpu::CONTOUR_ID_MASK);
+        span.contour_id_with_flags =
+            (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK) | global_id;
+    }
+    for (local_id, contour) in local_contour_ids
+        .into_iter()
+        .zip(&mut tessellation.contours)
+    {
+        contour.path_id = path_id;
+        contours[(contour_offset + local_id - 1) as usize] = *contour;
+    }
+    spans.extend_from_slice(&tessellation.spans);
+}
+
 fn draw_requires_clockwise_atomic(
     draw: &SolidDraw,
     viewport_width: u32,
@@ -7075,6 +7235,85 @@ mod tests {
             vertex_index0 + logical_offset
         );
         assert!(tessellation.spans.iter().all(|span| span.y == 2.0));
+    }
+
+    #[test]
+    fn midpoint_tessellations_share_flush_wide_path_and_contour_ids() {
+        let path = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let mut first = draw::build_fill_tessellation(&path.raw_path, Mat2D::IDENTITY).unwrap();
+        let mut second = draw::build_fill_tessellation(&path.raw_path, Mat2D::IDENTITY).unwrap();
+        let second_x = midpoint_tessellation_single_row_width(&first.spans).unwrap();
+        let mut spans = Vec::new();
+        let mut contours = Vec::new();
+
+        append_midpoint_tessellation_to_flush(&mut first, 1, 0, 0, &mut spans, &mut contours);
+        let second_span_start = spans.len();
+        append_midpoint_tessellation_to_flush(
+            &mut second,
+            2,
+            second_x,
+            0,
+            &mut spans,
+            &mut contours,
+        );
+
+        assert_eq!(contours.len(), 2);
+        assert_eq!(contours[0].path_id, 1);
+        assert_eq!(contours[1].path_id, 2);
+        assert_eq!(
+            second.base_instance,
+            1 + second_x / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
+        );
+        assert!(spans[..second_span_start].iter().all(|span| {
+            let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+            id == 0 || id == 1
+        }));
+        assert!(spans[second_span_start..].iter().all(|span| {
+            let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+            id == 0 || id == 2
+        }));
+    }
+
+    #[test]
+    fn flush_wide_tessellation_preserves_sparse_empty_contour_ids() {
+        let mut path = RawPath::new();
+        path.move_to(40.0, 40.0);
+        path.move_to(80.0, 40.0);
+        path.close();
+        path.move_to(120.0, 40.0);
+        path.line_to(120.0, 40.0);
+        let mut tessellation = draw::build_stroke_tessellation(
+            &path,
+            Mat2D::IDENTITY,
+            21.0,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        assert_eq!(tessellation.contours.len(), 1);
+        assert!(tessellation
+            .spans
+            .iter()
+            .any(|span| { span.contour_id_with_flags & gpu::CONTOUR_ID_MASK == 2 }));
+        let mut spans = Vec::new();
+        let mut contours = Vec::new();
+
+        append_midpoint_tessellation_to_flush(
+            &mut tessellation,
+            1,
+            0,
+            0,
+            &mut spans,
+            &mut contours,
+        );
+
+        assert_eq!(contours.len(), 2);
+        assert_eq!(contours[0].path_id, 0);
+        assert_eq!(contours[1].path_id, 1);
+        assert!(spans.iter().all(|span| {
+            let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+            id == 0 || id == 2
+        }));
     }
 
     #[test]

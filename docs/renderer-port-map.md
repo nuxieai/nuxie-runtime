@@ -387,16 +387,21 @@ to 4,951 over 110 frames without changing pixels or structural counters. The
 next paired profile localizes MSAA's largest host site to per-draw path buffer,
 null-texture, and sampler preparation. Porting C++'s flush-lifetime resources
 reduces repeated old-Rust/current-Rust reports to 0.9089x and 0.9124x and
-removes 2,199 encoder rows in a load-matched twenty-draw trace. The current
-same-backend C++/Rust report is 4.5986x aggregate with an 8.75x worst scene, so
-R4 remains open. The next measured site is Rust's twenty tessellation
-textures/passes per frame versus C++'s one per flush; see
-`docs/renderer-r4-profile-attribution.md`.
+removes 2,199 encoder rows in a load-matched twenty-draw trace. Flush-wide MSAA
+tessellation then reduces 2,641 encoder rows to 551 and exactly collapses
+twenty tessellation passes per frame to one. Light directional old/current
+reports improve to 0.9236x and 0.9140x. The same-capability C++ Dawn/Rust wgpu
+report is now 4.1442x aggregate with a 5.76x worst scene, so R4 remains open.
+The next step is a deterministic per-stream counter-parity report and complete
+C++ performance-mechanism inventory before another timing-led optimization;
+see `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 
-Frame times within an agreed factor of the C++ renderer per scene on the
-primary backends, with flush/draw counts matching.
+Deterministic work counters match C++ or have an explicit backend justification,
+and directional frame times are within an agreed factor of C++ Dawn on the same
+mode and adapter. Heavy load-bracketed timing is required only for remaining
+timing-defined gaps, not for counter-proven work elimination.
 
 ## #R-5: Native Fast Paths And Extensions (gated)
 

@@ -1384,13 +1384,27 @@ Run `make renderer-golden`.
     rows. The C++/Rust aggregate falls from 5.0537x to 4.5986x and the worst
     scene from 11.99x to 8.75x. Renderer exact=1,409/diverges=0/gated=59, V2
     floors 584/35, and the full workspace suite remain green.
-117. [ ] Port C++'s flush-wide tessellation texture/pass from the exact
-    item-116 binary. The post-change twenty-draw MSAA profile assigns 12/55
-    renderer samples and ten of twelve sampled texture creations to
-    `Tessellator::encode`; Rust still emits 20 tessellation passes versus one
-    in C++. Build a fresh current-state candidate rather than restoring the
-    rejected item-108 implementation, preserve clip/advanced-blend ordering
-    and all submission fences, then apply the full performance and pixel gate.
+117. [x] Port C++'s flush-wide tessellation texture/pass from the exact
+    item-116 binary. Direct MSAA paths now share one packed tessellation
+    texture, pass, and flush resource group per logical flush while retaining
+    per-draw image bindings and the existing clip, advanced-blend, and
+    submission schedule. A sparse-contour regression found by
+    `gm-emptystroke-msaa` preserves authored empty-contour ID slots instead of
+    compacting them into the next path. Independent Metal exports reproduce
+    2,641 to 551 total encoder rows and 2,200 to 110 tessellation rows over 110
+    frames, exactly 20 passes/frame to one. Light directional reports improve
+    to 0.9236x and 0.9140x; the same-tier C++ Dawn/Rust wgpu aggregate falls
+    from 4.5986x to 4.1442x. Renderer exact=1,409/diverges=0/gated=59.
+    The V2 floors pass at 584/35 exact segments and the workspace suite is
+    green.
+118. [ ] Build `perf-counter-compare` before another timing-led optimization.
+    Extend both fenced runners with deterministic per-stream counters for
+    flush composition, tessellation spans/patches, uploaded bytes, texture and
+    bind-group work, and encoder/pass counts; diff and rank the fixed corpus by
+    excess ratio. In parallel, inventory every C++ renderer pooling, ring,
+    budget, reuse, and coalescing mechanism and map each excess counter to its
+    reference source site. Timing profiles remain an acceptance tool for
+    ambiguous candidates, not the discovery queue.
 
 ## R2 Completion Record
 
@@ -2493,17 +2507,14 @@ Run `make renderer-golden`.
 ## R4 Addendum (coordinator, 2026-07-16 — fold into the item queue as
 priority work; rationale recorded here so no session re-derives it)
 
-A. **Mode-ladder decomposition FIRST (highest priority, ~one session).**
-   Benchmark the C++ renderer against ITSELF on the perf corpus across
-   its mode/backend ladder: native-Metal raster-order vs native-Metal
-   atomic vs Dawn-WebGPU clockwise-atomic. This decomposes the current
-   5.05x into (i) mode/API tax wgpu structurally cannot close, (ii)
-   Dawn-vs-wgpu overhead, (iii) the real implementation gap that is
-   R4's job. Then RECORD THE GATE as a Decision: parity target defined
-   against C++ Dawn clockwise-atomic (same capability tier — the M7
-   shipping-config-vs-shipping-config rule), with the native-Metal ratio
-   reported as informational only. Do not run further optimization items
-   until the gate is defined against the fair denominator.
+A. **Same-capability denominator (resolved).** The fenced C++ runner already
+   uses Dawn WebGPU over Metal, and the Rust runner uses wgpu WebGPU over Metal;
+   both select the same Apple adapter, receive the same render mode, replay the
+   same stream, and wait for GPU completion after every frame. Native C++ Metal
+   cannot execute the fixed MSAA matrix and is therefore not the denominator.
+   The R4 gate is C++ Dawn versus Rust wgpu in the same mode. Native Metal may
+   be reported as informational evidence where implemented, but it cannot
+   block same-tier optimization or redefine the fixed report.
 B. **Counter-parity harness (perf-counter-compare).** Deterministic
    per-stream counters on BOTH renderers — flushes, draws/flush,
    tessellation spans, patch counts, uploaded bytes, texture binds,
@@ -2518,15 +2529,31 @@ C. **Perf-mechanism inventory scout (proactive port list).** One scout
    analog of V2's dirt-gating audit). Remaining R4 items become 'port
    the checklist' verified by counters + brackets, with profiling as
    confirmation rather than discovery.
-D. **Parallel exploration, serial acceptance.** Attribution/profiling of
-   multiple perf-corpus entries runs as concurrent read-only scouts
-   producing ranked tables; the A-B-B-A acceptance bracket protocol
-   stays serial on the main loop and is the only path to accepting a
-   change. Formalize the quiet-machine fence: brackets are valid only
-   under a recorded load threshold (M7 rule), queued to idle windows
-   instead of retried ad hoc.
+D. **Evidence proportional to uncertainty.** A deterministic reduction in
+   redundant work, such as twenty equivalent passes becoming one, is accepted
+   with exact structural counters, unchanged pixels/contracts, and a light
+   directional timing snapshot. Repeated alternating reports and load-matched
+   A-B-B-A are reserved for timing-defined candidates, disputed effects, or a
+   directional result that contradicts the structural oracle. Attribution of
+   multiple corpus entries may run concurrently; noisy timing acceptance stays
+   serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 117 with C++'s flush-wide MSAA tessellation
+  lifetime. A first full-corpus run exposed sparse authored contour IDs after
+  empty contours; preserving those slots restored `gm-emptystroke-msaa` to
+  exact and added a focused regression. Independent Metal exports reproduce
+  2,641 to 551 total encoder rows and 2,200 to 110 tessellation rows, exactly
+  twenty passes/frame to one. Light old/current snapshots improve to
+  0.9236x/0.9140x, and the same-tier C++ Dawn/Rust wgpu report is now 4.1442x.
+  The measurement rule now makes evidence proportional to uncertainty: this
+  objective structural win does not require exhaustive A-B-B-A confirmation.
+  Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35, and the workspace
+  suite pass. `make golden-compare` and `make scripted-golden-compare` share the
+  `target/debug/rust-golden-runner` output path and therefore run serially.
+  Item 118 turns deterministic counter parity and the C++
+  performance-mechanism inventory into the next discovery step.
 
 - 2026-07-16: Closed R4 item 115 with feature-gated command-encoding
   attribution and a C++-aligned generic-atomic flush lifetime. Per-batch dummy

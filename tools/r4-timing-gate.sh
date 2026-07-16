@@ -16,9 +16,9 @@ b_runner="${R4_TIMING_GATE_B_RUNNER:-}"
 renderer_perf_max_ratio="${R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO:-2.0}"
 max_b_over_a="${R4_TIMING_GATE_MAX_B_OVER_A:-1.0}"
 max_control_drift="${R4_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
+max_repeat_drift="${R4_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
 min_idle_percent="${R4_TIMING_GATE_MIN_IDLE_PERCENT:-70}"
 max_idle_spread_percent="${R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT:-12}"
-host_sample_interval_seconds="${R4_TIMING_GATE_HOST_SAMPLE_INTERVAL_SECONDS:-1}"
 host_sampler="${R4_TIMING_GATE_HOST_SAMPLER:-}"
 
 usage() {
@@ -34,9 +34,9 @@ comparison is retained in the output directory.
 
 R4_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
 emits a `r4-host-idle-percent=<number>` line or a normal `top` CPU line. Its
-raw output is retained, including process rows. Sampling occurs before, during,
-and after each leg; R4_TIMING_GATE_HOST_SAMPLE_INTERVAL_SECONDS controls the
-between-sample interval.
+raw output is retained. Sampling occurs before and after each leg; paired C++
+controls inside every report account for load during the timed work without
+running a competing monitor.
 EOF
 }
 
@@ -123,9 +123,9 @@ printf 'sequence=A-B-B-A\n' >>"$metadata"
 printf 'renderer_perf_max_ratio=%s\n' "$renderer_perf_max_ratio" >>"$metadata"
 printf 'max_b_over_a=%s\n' "$max_b_over_a" >>"$metadata"
 printf 'max_control_drift=%s\n' "$max_control_drift" >>"$metadata"
+printf 'max_repeat_drift=%s\n' "$max_repeat_drift" >>"$metadata"
 printf 'min_idle_percent=%s\n' "$min_idle_percent" >>"$metadata"
 printf 'max_idle_spread_percent=%s\n' "$max_idle_spread_percent" >>"$metadata"
-printf 'host_sample_interval_seconds=%s\n' "$host_sample_interval_seconds" >>"$metadata"
 printf 'label\tphase\tidle_percent\traw_file\n' >"$output_dir/host-idle.tsv"
 
 fail() {
@@ -149,13 +149,12 @@ for numeric in \
     R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO="$renderer_perf_max_ratio" \
     R4_TIMING_GATE_MAX_B_OVER_A="$max_b_over_a" \
     R4_TIMING_GATE_MAX_CONTROL_DRIFT="$max_control_drift" \
+    R4_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift" \
     R4_TIMING_GATE_MIN_IDLE_PERCENT="$min_idle_percent" \
     R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT="$max_idle_spread_percent"; do
     is_positive_number "${numeric#*=}" \
         || fail "validate-configuration" "${numeric%%=*} must be a positive number" 2
 done
-is_positive_number "$host_sample_interval_seconds" \
-    || fail "validate-configuration" "R4_TIMING_GATE_HOST_SAMPLE_INTERVAL_SECONDS must be a positive number" 2
 
 canonical_executable() {
     local path="$1"
@@ -263,34 +262,20 @@ run_leg() {
         B) candidate_runner="$b_runner" ;;
         *) fail "run-leg" "unsupported trace variant: $variant" ;;
     esac
-    local label json markdown status pid sample_index
+    local label json markdown status
     label="$(printf '%02d-%s' "$index" "$variant")"
     json="$output_dir/${label}.renderer-perf.json"
     markdown="$output_dir/${label}.renderer-perf.md"
 
     sample_host "$label" before
     phase="run-$label"
+    set +e
     (
         cd "$root"
         "$renderer_perf" --manifest "$manifest" --baseline-runner "$baseline_runner" \
             --candidate-runner "$candidate_runner" --max-ratio "$renderer_perf_max_ratio" \
             --json "$json" --markdown "$markdown"
-    ) >"$output_dir/${label}.stdout" 2>"$output_dir/${label}.stderr" &
-    pid=$!
-
-    # The immediate sample makes every leg have an in-leg process snapshot;
-    # the loop keeps the configured cadence while renderer-perf is running.
-    sample_index=1
-    sample_host "$label" "during-$(printf '%04d' "$sample_index")"
-    while kill -0 "$pid" 2>/dev/null; do
-        sleep "$host_sample_interval_seconds"
-        if kill -0 "$pid" 2>/dev/null; then
-            sample_index=$((sample_index + 1))
-            sample_host "$label" "during-$(printf '%04d' "$sample_index")"
-        fi
-    done
-    set +e
-    wait "$pid"
+    ) >"$output_dir/${label}.stdout" 2>"$output_dir/${label}.stderr"
     status=$?
     set -e
     printf '%s\n' "$status" >"$output_dir/${label}.exit-status"
@@ -312,6 +297,7 @@ if ! "$comparator" --a-first "$output_dir/01-A.renderer-perf.json" \
     --b-second "$output_dir/03-B.renderer-perf.json" \
     --a-second "$output_dir/04-A.renderer-perf.json" \
     --max-b-over-a "$max_b_over_a" --max-control-drift "$max_control_drift" \
+    --max-repeat-drift "$max_repeat_drift" \
     --output "$comparison_path" >"$output_dir/comparator.stdout" 2>"$output_dir/comparator.stderr" \
 ; then
     comparison_reason="$(tr '\n' ' ' <"$output_dir/comparator.stderr")"

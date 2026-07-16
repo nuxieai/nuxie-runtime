@@ -34,14 +34,24 @@ fn run() -> Result<(), String> {
     }
 
     check_limit(
-        "B/A candidate timing",
-        comparison.candidate_b_over_a,
+        "normalized B/A candidate timing",
+        comparison.normalized_b_over_a,
         options.max_b_over_a,
     )?;
     check_limit(
         "C++ control drift",
-        comparison.control_drift,
+        comparison.cpp_control_drift,
         options.max_control_drift,
+    )?;
+    check_limit(
+        "normalized A repeat drift",
+        comparison.normalized_a_repeat_drift,
+        options.max_repeat_drift,
+    )?;
+    check_limit(
+        "normalized B repeat drift",
+        comparison.normalized_b_repeat_drift,
+        options.max_repeat_drift,
     )?;
     Ok(())
 }
@@ -333,15 +343,25 @@ struct Aggregate {
 }
 
 #[derive(Serialize)]
+struct LegValues {
+    a_first: f64,
+    b_first: f64,
+    b_second: f64,
+    a_second: f64,
+}
+
+#[derive(Serialize)]
 struct Comparison {
     schema: &'static str,
-    candidate_a_average_ns: f64,
-    candidate_b_average_ns: f64,
-    candidate_b_over_a: f64,
-    cpp_control_a_average_ns: f64,
-    cpp_control_b_average_ns: f64,
-    cpp_control_b_over_a: f64,
-    control_drift: f64,
+    candidate_ns: LegValues,
+    cpp_control_ns: LegValues,
+    candidate_over_cpp: LegValues,
+    normalized_a_average: f64,
+    normalized_b_average: f64,
+    normalized_b_over_a: f64,
+    cpp_control_drift: f64,
+    normalized_a_repeat_drift: f64,
+    normalized_b_repeat_drift: f64,
 }
 
 impl Comparison {
@@ -351,39 +371,69 @@ impl Comparison {
         b_second: &Report,
         a_second: &Report,
     ) -> Result<Self, String> {
-        let candidate_a_average_ns = average(
-            a_first.aggregate.candidate_min_of_medians_ns_sum,
-            a_second.aggregate.candidate_min_of_medians_ns_sum,
-        );
-        let candidate_b_average_ns = average(
-            b_first.aggregate.candidate_min_of_medians_ns_sum,
-            b_second.aggregate.candidate_min_of_medians_ns_sum,
-        );
-        let cpp_control_a_average_ns = average(
-            a_first.aggregate.baseline_min_of_medians_ns_sum,
-            a_second.aggregate.baseline_min_of_medians_ns_sum,
-        );
-        let cpp_control_b_average_ns = average(
-            b_first.aggregate.baseline_min_of_medians_ns_sum,
-            b_second.aggregate.baseline_min_of_medians_ns_sum,
-        );
-        let candidate_b_over_a = candidate_b_average_ns / candidate_a_average_ns;
-        let cpp_control_b_over_a = cpp_control_b_average_ns / cpp_control_a_average_ns;
+        let candidate_ns = LegValues {
+            a_first: a_first.aggregate.candidate_min_of_medians_ns_sum as f64,
+            b_first: b_first.aggregate.candidate_min_of_medians_ns_sum as f64,
+            b_second: b_second.aggregate.candidate_min_of_medians_ns_sum as f64,
+            a_second: a_second.aggregate.candidate_min_of_medians_ns_sum as f64,
+        };
+        let cpp_control_ns = LegValues {
+            a_first: a_first.aggregate.baseline_min_of_medians_ns_sum as f64,
+            b_first: b_first.aggregate.baseline_min_of_medians_ns_sum as f64,
+            b_second: b_second.aggregate.baseline_min_of_medians_ns_sum as f64,
+            a_second: a_second.aggregate.baseline_min_of_medians_ns_sum as f64,
+        };
+        let candidate_over_cpp = LegValues {
+            a_first: candidate_ns.a_first / cpp_control_ns.a_first,
+            b_first: candidate_ns.b_first / cpp_control_ns.b_first,
+            b_second: candidate_ns.b_second / cpp_control_ns.b_second,
+            a_second: candidate_ns.a_second / cpp_control_ns.a_second,
+        };
+        let normalized_a_average =
+            average_number(candidate_over_cpp.a_first, candidate_over_cpp.a_second);
+        let normalized_b_average =
+            average_number(candidate_over_cpp.b_first, candidate_over_cpp.b_second);
+        let normalized_b_over_a = normalized_b_average / normalized_a_average;
+        let cpp_control_drift = spread([
+            cpp_control_ns.a_first,
+            cpp_control_ns.b_first,
+            cpp_control_ns.b_second,
+            cpp_control_ns.a_second,
+        ])?;
+        let normalized_a_repeat_drift =
+            spread([candidate_over_cpp.a_first, candidate_over_cpp.a_second])?;
+        let normalized_b_repeat_drift =
+            spread([candidate_over_cpp.b_first, candidate_over_cpp.b_second])?;
         Ok(Self {
-            schema: "rive-r4-timing-comparison-v1",
-            candidate_a_average_ns,
-            candidate_b_average_ns,
-            candidate_b_over_a,
-            cpp_control_a_average_ns,
-            cpp_control_b_average_ns,
-            cpp_control_b_over_a,
-            control_drift: cpp_control_b_over_a.max(1.0 / cpp_control_b_over_a),
+            schema: "rive-r4-timing-comparison-v2",
+            candidate_ns,
+            cpp_control_ns,
+            candidate_over_cpp,
+            normalized_a_average,
+            normalized_b_average,
+            normalized_b_over_a,
+            cpp_control_drift,
+            normalized_a_repeat_drift,
+            normalized_b_repeat_drift,
         })
     }
 }
 
-fn average(left: u64, right: u64) -> f64 {
-    (left as f64 + right as f64) / 2.0
+fn average_number(left: f64, right: f64) -> f64 {
+    (left + right) / 2.0
+}
+
+fn spread<const N: usize>(values: [f64; N]) -> Result<f64, String> {
+    let mut minimum = f64::INFINITY;
+    let mut maximum = f64::NEG_INFINITY;
+    for value in values {
+        if !value.is_finite() || value <= 0.0 {
+            return Err("timing comparison values must be finite and greater than zero".to_owned());
+        }
+        minimum = minimum.min(value);
+        maximum = maximum.max(value);
+    }
+    Ok(maximum / minimum)
 }
 
 fn ratio(numerator: u64, denominator: u64) -> Result<f64, String> {
@@ -404,6 +454,7 @@ struct Options {
     a_second: PathBuf,
     max_b_over_a: f64,
     max_control_drift: f64,
+    max_repeat_drift: f64,
     output: Option<PathBuf>,
 }
 
@@ -415,6 +466,7 @@ impl Options {
         let mut a_second = None;
         let mut max_b_over_a = None;
         let mut max_control_drift = None;
+        let mut max_repeat_drift = None;
         let mut output = None;
         let mut args = args.into_iter();
         while let Some(argument) = args.next() {
@@ -427,6 +479,9 @@ impl Options {
                 "--max-b-over-a" => max_b_over_a = Some(parse_number(value("--max-b-over-a")?)?),
                 "--max-control-drift" => {
                     max_control_drift = Some(parse_number(value("--max-control-drift")?)?)
+                }
+                "--max-repeat-drift" => {
+                    max_repeat_drift = Some(parse_number(value("--max-repeat-drift")?)?)
                 }
                 "--output" => output = Some(PathBuf::from(value("--output")?)),
                 "--help" | "-h" => return Err(usage().to_owned()),
@@ -441,6 +496,8 @@ impl Options {
             max_b_over_a: max_b_over_a.ok_or_else(|| "--max-b-over-a is required".to_owned())?,
             max_control_drift: max_control_drift
                 .ok_or_else(|| "--max-control-drift is required".to_owned())?,
+            max_repeat_drift: max_repeat_drift
+                .ok_or_else(|| "--max-repeat-drift is required".to_owned())?,
             output,
         })
     }
@@ -458,5 +515,75 @@ fn parse_number(value: String) -> Result<f64, String> {
 }
 
 fn usage() -> &'static str {
-    "usage: r4-timing-compare --a-first report --b-first report --b-second report --a-second report --max-b-over-a N --max-control-drift N [--output path]"
+    "usage: r4-timing-compare --a-first report --b-first report --b-second report --a-second report --max-b-over-a N --max-control-drift N --max-repeat-drift N [--output path]"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn report(control_ns: u64, candidate_ns: u64) -> Report {
+        Report {
+            schema: REPORT_SCHEMA.to_owned(),
+            runner_protocol: RUNNER_PROTOCOL.to_owned(),
+            release: true,
+            profile: "release".to_owned(),
+            debug: false,
+            samples_per_runner: SAMPLES_PER_RUNNER,
+            manifest_schema: MANIFEST_SCHEMA.to_owned(),
+            scenes: Vec::new(),
+            aggregate: Aggregate {
+                baseline_min_of_medians_ns_sum: control_ns,
+                candidate_min_of_medians_ns_sum: candidate_ns,
+                ratio: candidate_ns as f64 / control_ns as f64,
+                worst_scene: String::new(),
+                worst_ratio: 0.0,
+            },
+        }
+    }
+
+    #[test]
+    fn comparison_normalizes_each_candidate_leg_against_cpp() {
+        let a_first = report(100, 100);
+        let b_first = report(80, 96);
+        let b_second = report(120, 180);
+        let a_second = report(200, 300);
+
+        let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second).unwrap();
+
+        assert!((comparison.candidate_over_cpp.a_first - 1.0).abs() < 1e-12);
+        assert!((comparison.candidate_over_cpp.b_first - 1.2).abs() < 1e-12);
+        assert!((comparison.candidate_over_cpp.b_second - 1.5).abs() < 1e-12);
+        assert!((comparison.candidate_over_cpp.a_second - 1.5).abs() < 1e-12);
+        assert!((comparison.normalized_a_average - 1.25).abs() < 1e-12);
+        assert!((comparison.normalized_b_average - 1.35).abs() < 1e-12);
+        assert!((comparison.normalized_b_over_a - 1.08).abs() < 1e-12);
+        assert!((comparison.cpp_control_drift - 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn comparison_does_not_average_away_control_instability() {
+        let a_first = report(100, 100);
+        let b_first = report(200, 100);
+        let b_second = report(100, 100);
+        let a_second = report(200, 100);
+
+        let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second).unwrap();
+
+        assert_eq!(comparison.cpp_control_drift, 2.0);
+    }
+
+    #[test]
+    fn comparison_does_not_average_away_variant_instability() {
+        let a_first = report(100, 100);
+        let b_first = report(100, 200);
+        let b_second = report(100, 100);
+        let a_second = report(100, 200);
+
+        let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second).unwrap();
+
+        assert_eq!(comparison.normalized_b_over_a, 1.0);
+        assert_eq!(comparison.normalized_a_repeat_drift, 2.0);
+        assert_eq!(comparison.normalized_b_repeat_drift, 2.0);
+    }
 }

@@ -2,7 +2,7 @@
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 const SCENE_SAMPLES_PER_LEG: usize = 16 * 7;
 
@@ -63,10 +63,30 @@ fn drifting_baseline_runner(directory: &Path) -> PathBuf {
     path
 }
 
-fn malformed_runner(directory: &Path) -> PathBuf {
-    let path = directory.join("malformed.sh");
-    executable(&path, "#!/bin/sh\ncat >/dev/null\nprintf '{not json}\\n'\n");
+fn drifting_candidate_runner(directory: &Path) -> PathBuf {
+    let path = directory.join("drifting-candidate.sh");
+    let count = directory.join("candidate-count");
+    executable(
+        &path,
+        &format!(
+            "#!/bin/sh\nset -eu\ncount_file='{}'\ncount=0\nif [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$count_file\"\nmedian=100\nif [ \"$count\" -gt {SCENE_SAMPLES_PER_LEG} ]; then median=150; fi\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\\\"selected_adapter\\\":{{\\\"backend\\\":\\\"metal\\\",\\\"name\\\":\\\"Integration GPU\\\",\\\"vendor\\\":\\\"Integration Vendor\\\",\\\"device\\\":\\\"Integration Device\\\",\\\"driver\\\":\\\"1.0\\\"}},\\\"measured_frame_median_ns\\\":%s,\\\"logical_flushes\\\":3,\\\"draws\\\":11,\\\"atomic_strategy_partitions\\\":2}}\\n' \"$prefix\" \"$median\"\n",
+            count.display()
+        ),
+    );
     path
+}
+
+fn malformed_runner(directory: &Path) -> (PathBuf, PathBuf) {
+    let path = directory.join("malformed.sh");
+    let pid_file = directory.join("malformed.pid");
+    executable(
+        &path,
+        &format!(
+            "#!/bin/sh\nset -eu\nprintf '%s' \"$$\" > '{}'\nIFS= read -r request\nsleep 0.2\nprintf '{{not json}}\\n'\n",
+            pid_file.display()
+        ),
+    );
+    (path, pid_file)
 }
 
 fn mutating_runner(directory: &Path) -> PathBuf {
@@ -91,6 +111,45 @@ fn host_sampler(directory: &Path) -> PathBuf {
     path
 }
 
+fn coordinated_runner(
+    directory: &Path,
+    name: &str,
+    runner_active: &Path,
+    sampler_active: &Path,
+    overlap: &Path,
+) -> PathBuf {
+    let path = directory.join(name);
+    executable(
+        &path,
+        &format!(
+            "#!/bin/sh\n# {name}\nset -eu\nrunner_active='{}'\nsampler_active='{}'\noverlap='{}'\ncleanup() {{ rm -f \"$runner_active\"; }}\ntrap cleanup EXIT HUP INT TERM\n: > \"$runner_active\"\n[ ! -e \"$sampler_active\" ] || : > \"$overlap\"\nsleep 0.005\n[ ! -e \"$sampler_active\" ] || : > \"$overlap\"\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\\\"selected_adapter\\\":{{\\\"backend\\\":\\\"metal\\\",\\\"name\\\":\\\"Integration GPU\\\",\\\"vendor\\\":\\\"Integration Vendor\\\",\\\"device\\\":\\\"Integration Device\\\",\\\"driver\\\":\\\"1.0\\\"}},\\\"measured_frame_median_ns\\\":100,\\\"logical_flushes\\\":3,\\\"draws\\\":11,\\\"atomic_strategy_partitions\\\":2}}\\n' \"$prefix\"\n",
+            runner_active.display(),
+            sampler_active.display(),
+            overlap.display()
+        ),
+    );
+    path
+}
+
+fn coordinated_host_sampler(
+    directory: &Path,
+    runner_active: &Path,
+    sampler_active: &Path,
+    overlap: &Path,
+) -> PathBuf {
+    let path = directory.join("coordinated-host-sampler.sh");
+    executable(
+        &path,
+        &format!(
+            "#!/bin/sh\nset -eu\nrunner_active='{}'\nsampler_active='{}'\noverlap='{}'\ncleanup() {{ rm -f \"$sampler_active\"; }}\ntrap cleanup EXIT HUP INT TERM\n: > \"$sampler_active\"\n[ ! -e \"$runner_active\" ] || : > \"$overlap\"\nsleep 0.01\n[ ! -e \"$runner_active\" ] || : > \"$overlap\"\nprintf 'r4-host-idle-percent=98\\n'\n",
+            runner_active.display(),
+            sampler_active.display(),
+            overlap.display()
+        ),
+    );
+    path
+}
+
 struct Gate<'a> {
     directory: &'a Path,
     baseline: &'a Path,
@@ -98,9 +157,15 @@ struct Gate<'a> {
     b: &'a Path,
     max_b_over_a: &'a str,
     max_control_drift: &'a str,
+    max_repeat_drift: &'a str,
 }
 
 fn run_gate(gate: Gate<'_>) -> Output {
+    let sampler = host_sampler(gate.directory);
+    run_gate_with_sampler(gate, &sampler)
+}
+
+fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../r4-timing-gate.sh");
     Command::new(script)
         .current_dir(gate.directory)
@@ -123,12 +188,22 @@ fn run_gate(gate: Gate<'_>) -> Output {
         .env("R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO", "10")
         .env("R4_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
         .env("R4_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
+        .env("R4_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
         .env("R4_TIMING_GATE_MIN_IDLE_PERCENT", "90")
         .env("R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT", "1")
-        .env("R4_TIMING_GATE_HOST_SAMPLE_INTERVAL_SECONDS", "0.01")
-        .env("R4_TIMING_GATE_HOST_SAMPLER", host_sampler(gate.directory))
+        .env("R4_TIMING_GATE_HOST_SAMPLER", sampler)
         .output()
         .unwrap()
+}
+
+fn process_is_alive(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap()
+        .success()
 }
 
 fn metadata(directory: &Path) -> String {
@@ -145,7 +220,7 @@ fn assert_finalized_failure(directory: &Path) {
 }
 
 #[test]
-fn r4_gate_accepts_faster_b_and_retains_in_leg_process_samples() {
+fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
     let directory = TempDir::new("faster");
     let baseline = static_runner(&directory.path, "baseline.sh", 100);
     let a = static_runner(&directory.path, "a.sh", 100);
@@ -157,6 +232,7 @@ fn r4_gate_accepts_faster_b_and_retains_in_leg_process_samples() {
         b: &b,
         max_b_over_a: "1",
         max_control_drift: "1",
+        max_repeat_drift: "1",
     });
 
     assert!(
@@ -176,11 +252,12 @@ fn r4_gate_accepts_faster_b_and_retains_in_leg_process_samples() {
         "{metadata}"
     );
     let samples = std::fs::read_to_string(directory.path.join("artifacts/host-idle.tsv")).unwrap();
-    assert!(samples.contains("during-0001"), "{samples}");
+    assert_eq!(samples.lines().count(), 9, "{samples}");
+    assert!(!samples.contains("during"), "{samples}");
     let comparison =
         std::fs::read_to_string(directory.path.join("artifacts/comparison.json")).unwrap();
     assert!(
-        comparison.contains("\"candidate_b_over_a\": 0.9"),
+        comparison.contains("\"normalized_b_over_a\": 0.9"),
         "{comparison}"
     );
 
@@ -212,6 +289,8 @@ fn r4_gate_accepts_faster_b_and_retains_in_leg_process_samples() {
             "1",
             "--max-control-drift",
             "1",
+            "--max-repeat-drift",
+            "1",
         ])
         .output()
         .unwrap();
@@ -234,6 +313,7 @@ fn r4_gate_rejects_slow_b_and_finalizes_metadata() {
         b: &b,
         max_b_over_a: "1.05",
         max_control_drift: "1",
+        max_repeat_drift: "1",
     });
 
     assert!(!output.status.success());
@@ -254,6 +334,7 @@ fn r4_gate_rejects_cpp_control_drift() {
         b: &b,
         max_b_over_a: "1",
         max_control_drift: "1.1",
+        max_repeat_drift: "2",
     });
 
     assert!(!output.status.success());
@@ -262,10 +343,86 @@ fn r4_gate_rejects_cpp_control_drift() {
 }
 
 #[test]
+fn r4_gate_rejects_candidate_repeat_drift() {
+    let directory = TempDir::new("candidate-repeat-drift");
+    let baseline = static_runner(&directory.path, "baseline.sh", 100);
+    let a = drifting_candidate_runner(&directory.path);
+    let b = static_runner(&directory.path, "b.sh", 100);
+    let output = run_gate(Gate {
+        directory: &directory.path,
+        baseline: &baseline,
+        a: &a,
+        b: &b,
+        max_b_over_a: "2",
+        max_control_drift: "1",
+        max_repeat_drift: "1.1",
+    });
+
+    assert!(!output.status.success());
+    assert_finalized_failure(&directory.path);
+    assert!(
+        metadata(&directory.path).contains("normalized\\ A\\ repeat\\ drift\\ failed"),
+        "{}",
+        metadata(&directory.path)
+    );
+}
+
+#[test]
+fn r4_gate_never_overlaps_host_sampling_with_runner_work() {
+    let directory = TempDir::new("host-sampling-serialization");
+    let runner_active = directory.path.join("runner-active");
+    let sampler_active = directory.path.join("sampler-active");
+    let overlap = directory.path.join("overlap-observed");
+    let baseline = coordinated_runner(
+        &directory.path,
+        "baseline.sh",
+        &runner_active,
+        &sampler_active,
+        &overlap,
+    );
+    let a = coordinated_runner(
+        &directory.path,
+        "a.sh",
+        &runner_active,
+        &sampler_active,
+        &overlap,
+    );
+    let b = coordinated_runner(
+        &directory.path,
+        "b.sh",
+        &runner_active,
+        &sampler_active,
+        &overlap,
+    );
+    let sampler =
+        coordinated_host_sampler(&directory.path, &runner_active, &sampler_active, &overlap);
+    let output = run_gate_with_sampler(
+        Gate {
+            directory: &directory.path,
+            baseline: &baseline,
+            a: &a,
+            b: &b,
+            max_b_over_a: "1",
+            max_control_drift: "1",
+            max_repeat_drift: "1",
+        },
+        &sampler,
+    );
+
+    assert!(
+        output.status.success(),
+        "stderr={} metadata={}",
+        String::from_utf8_lossy(&output.stderr),
+        metadata(&directory.path)
+    );
+    assert!(!overlap.exists(), "host sampling overlapped timed work");
+}
+
+#[test]
 fn r4_gate_rejects_malformed_report_json() {
     let directory = TempDir::new("malformed");
     let baseline = static_runner(&directory.path, "baseline.sh", 100);
-    let malformed = malformed_runner(&directory.path);
+    let (malformed, pid_file) = malformed_runner(&directory.path);
     let b = static_runner(&directory.path, "b.sh", 100);
     let output = run_gate(Gate {
         directory: &directory.path,
@@ -274,11 +431,20 @@ fn r4_gate_rejects_malformed_report_json() {
         b: &b,
         max_b_over_a: "1",
         max_control_drift: "1",
+        max_repeat_drift: "1",
     });
 
     assert!(!output.status.success());
     assert_finalized_failure(&directory.path);
     assert!(metadata(&directory.path).contains("failure_phase=run-01-A"));
+    let pid = std::fs::read_to_string(pid_file)
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    assert!(
+        !process_is_alive(pid),
+        "malformed runner {pid} was not reaped"
+    );
 }
 
 #[test]
@@ -293,6 +459,7 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
         b: &a,
         max_b_over_a: "1",
         max_control_drift: "1",
+        max_repeat_drift: "1",
     });
     assert!(!output.status.success());
     assert_finalized_failure(&identity.path);
@@ -309,6 +476,7 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
         b: &b,
         max_b_over_a: "1",
         max_control_drift: "1",
+        max_repeat_drift: "1",
     });
     assert!(!output.status.success());
     assert_finalized_failure(&mutation.path);

@@ -1012,6 +1012,7 @@ impl AtomicPipeline {
         patch_indices: &wgpu::Buffer,
         draws: &[AtomicDraw<'_>],
         draw_group_starts: &[usize],
+        batch_shared_draws: bool,
         uniforms: &FlushUniforms,
         paths: &[PathData],
         paints: &[PaintData],
@@ -1432,7 +1433,8 @@ impl AtomicPipeline {
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
         }
-        if shared_flush_group && draws.iter().all(|draw| draw.atlas.is_none()) {
+        if batch_shared_draws && shared_flush_group && draws.iter().all(|draw| draw.atlas.is_none())
+        {
             for (group_index, &group_start) in draw_group_starts.iter().enumerate() {
                 let group_end = draw_group_starts
                     .get(group_index + 1)
@@ -1673,7 +1675,24 @@ impl AtomicPipeline {
                     draw.base_instance..draw.base_instance + draw.instance_count,
                 );
                 drop(pass);
-                if let Some(triangle_buffer) = &triangle_buffers[draw_index] {
+                let triangle_buffer = triangle_vertex_range(
+                    shared_flush_group,
+                    &shared_triangle_ranges,
+                    draw_index,
+                    draw.triangle_vertices.len() as u32,
+                )
+                .and_then(|range| {
+                    if shared_flush_group {
+                        shared_triangle_buffer
+                            .as_ref()
+                            .map(|buffer| (buffer, range))
+                    } else {
+                        triangle_buffers[draw_index]
+                            .as_ref()
+                            .map(|buffer| (buffer, range))
+                    }
+                });
+                if let Some((triangle_buffer, vertex_range)) = triangle_buffer {
                     let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
                     #[cfg(feature = "perf-diagnostics")]
                     {
@@ -1694,7 +1713,7 @@ impl AtomicPipeline {
                     pass.set_bind_group(2, &atomics, &[]);
                     pass.set_bind_group(3, &samplers, &[]);
                     pass.set_vertex_buffer(0, triangle_buffer.slice(..));
-                    pass.draw(0..draw.triangle_vertices.len() as u32, 0..1);
+                    pass.draw(vertex_range, 0..1);
                 }
             }
         }
@@ -1913,6 +1932,20 @@ pub(crate) fn image_sampler(sampler: ImageSampler) -> wgpu::SamplerDescriptor<'s
     }
 }
 
+fn triangle_vertex_range(
+    shared_flush_group: bool,
+    shared_ranges: &[std::ops::Range<u32>],
+    draw_index: usize,
+    per_draw_vertex_count: u32,
+) -> Option<std::ops::Range<u32>> {
+    if shared_flush_group {
+        let range = shared_ranges[draw_index].clone();
+        (!range.is_empty()).then_some(range)
+    } else {
+        (per_draw_vertex_count != 0).then_some(0..per_draw_vertex_count)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1943,6 +1976,13 @@ mod tests {
         assert_eq!(descriptor.min_filter, wgpu::FilterMode::Linear);
         assert_eq!(descriptor.mag_filter, wgpu::FilterMode::Linear);
         assert_eq!(descriptor.mipmap_filter, wgpu::MipmapFilterMode::Nearest);
+    }
+
+    #[test]
+    fn triangle_free_shared_batch_does_not_select_a_per_draw_buffer() {
+        assert_eq!(triangle_vertex_range(true, &[0..0, 0..0], 1, 0), None);
+        assert_eq!(triangle_vertex_range(true, &[0..3], 0, 3), Some(0..3));
+        assert_eq!(triangle_vertex_range(false, &[], 0, 3), Some(0..3));
     }
 }
 fn color_attachment(

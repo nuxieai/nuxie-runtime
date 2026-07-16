@@ -1572,10 +1572,38 @@ Run `make renderer-golden`.
     while implementation and acceptance remain serial. A clean rebuild of
     both counter runners confirms the fixed report has exactly 26 ranked
     excess rows.
-130. [ ] Close `BUG-MIX`, the ten-row atomic `bug339297` cluster. Port C++'s
-    single mixed midpoint/outer logical-flush tessellation allocation and pass,
-    then regenerate the full report once. Keep C++'s counted initialize draw
-    normalized rather than adding fake Rust work.
+130. [x] Close `BUG-MIX`, the ten-row atomic `bug339297` cluster. Rust now
+    packs midpoint-fan and outer-curve work into one C++-ordered logical
+    tessellation address space, rebuilds row-wrapped forward/reflected spans,
+    and shares the resulting texture without collapsing clip-update barriers.
+    Normalized `(passes, draws, instances, spans, patches)` reach exact tuples
+    `(6,5,542,117,423)` and `(8,7,555,121,431)` for the unclipped and clipped
+    variants. Both upload totals fall below C++, all ten rows disappear, and
+    the ranked tail moves 26->16. A Sol review caught the empty shared-triangle
+    case before commit; the buffer-selection branch now distinguishes an empty
+    shared set from per-draw buffers and has a focused regression. A second
+    review caught C++'s unsigned reflected-row wrap; the relocation helper now
+    preserves it with a zero-relocation byte-for-byte regression. Sol's final
+    review passes. The light timing snapshot remains directional context only;
+    no A-B-B-A was run. Final verification passes renderer
+    exact=1,409/diverges=0/gated=59, normal/scripted V2 floors at 584/35 exact
+    segments, the full workspace, formatting, and diff hygiene.
+131. [ ] Close `OVER-AENV`. Replace atomic direct-stroke group-row padding with
+    one logical-flush midpoint envelope while preserving `draw_group_starts`
+    as semantic execution barriers. Target `gm-OverStroke` atomic spans
+    `506->490`, instances `1005->989`, and uploads `43,496->42,472` before the
+    independent patch correction.
+132. [ ] Reuse tessellator-owned uniform, path, and contour upload slices in
+    MSAA, then atomic. Regenerate the report after each mode-wide change and
+    preserve actual written-byte accounting; do not hide arena padding.
+133. [ ] Attribute and close the two `UPLOAD-LAYOUT` rows. Add per-payload byte
+    telemetry for span, uniform, path, paint, paint auxiliary, contour,
+    triangle, and padding classes, then resolve the 600/992-byte
+    `batchedconvexpaths` residuals from evidence.
+134. [ ] Close `OVER-PATCH` from a per-draw C++/Rust `RIVEATS` preparation
+    oracle. Locate the first OverStroke draw whose cumulative count diverges,
+    then correct only the shared stroke-preparation source that emits patch
+    498. Targets are 497 patches in both modes and 986 MSAA instances.
 
 ## R2 Completion Record
 
@@ -2736,6 +2764,23 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-16: Closed R4 item 130 and pre-attributed the complete remaining
+  counter tail. One C++-ordered logical tessellation allocation now carries
+  both midpoint-fan and outer-curve atomic work across texture rows while
+  semantic clip-update passes remain separate. `gm-bug339297` reaches exact
+  normalized `(passes,draws,instances,spans,patches)` at
+  `(6,5,542,117,423)` and `gm-bug339297_as_clip` at
+  `(8,7,555,121,431)`; all ten `BUG-MIX` rows disappear and no replacement
+  upload row appears, moving the ranked report 26->16. Sol caught an empty
+  shared-triangle buffer selection panic and a checked reflected-row underflow
+  during review; both are corrected with focused regressions. Sol's final
+  review passes and the 284-test renderer suite is green. Parallel read-only
+  attribution leaves four finite implementation targets:
+  `OVER-AENV`, shared typed uploads, two `UPLOAD-LAYOUT` rows, and the
+  oracle-first extra stroke patch. Timing is a light directional snapshot
+  only; no A-B-B-A campaign was run. Final verification passes renderer
+  exact=1,409/diverges=0/gated=59, normal/scripted V2 floors at 584/35 exact
+  segments, the full workspace, formatting, and diff hygiene.
 - 2026-07-16: Closed R4 items 128-129 and replaced row-at-a-time tail work
   with `docs/renderer-r4-counter-tail-audit.md`. Item 128 ports C++'s
   one-segment line rule, lazy stale-stencil lifetime, and multi-row

@@ -760,3 +760,37 @@ The full remaining tail is classified once in
 `docs/renderer-r4-counter-tail-audit.md`: all 26 rows belong to four shared
 implementation clusters, no final-pixel capture is missing, and no row is
 closed as a counter-only accounting difference.
+
+### Item 130 Update
+
+The `BUG-MIX` cluster was one C++ logical-layout mismatch, not ten independent
+timing targets. C++ places all midpoint work first, aligns once to the outer
+patch span, places all outer work, and emits one final sentinel. Rust now
+relocates both sections into that address space and rebuilds any pre-wrapped
+forward/reflected spans before upload. Resource sharing no longer implies draw
+batching: clip-update barriers retain their original passes.
+
+Both normalized target tuples reach exact C++ values:
+`gm-bug339297=(6,5,542,117,423)` and
+`gm-bug339297_as_clip=(8,7,555,121,431)` for
+`(passes,draws,instances,spans,patches)`. All ten rows disappear and the report
+moves 26->16. The final directional one-frame ratios, 1.502x and 0.984x, are
+context only; exact work parity and unchanged pixel contracts define
+acceptance.
+
+Parallel attribution now feeds the serial tail:
+
+- `OVER-AENV`: replace seven atomic direct-stroke group envelopes with one
+  logical-flush envelope while retaining execution groups; deterministic
+  deltas are -16 spans, -16 instances, and -1,024 upload bytes.
+- `UPLOAD-DUP`: pass tessellator-uploaded uniform/path/contour slices into the
+  MSAA pipeline, then atomic. Seven MSAA rows have deterministic typed-payload
+  targets; atomic closure follows per-class byte attribution.
+- `UPLOAD-LAYOUT`: the 600/992-byte `batchedconvexpaths` residuals are not yet
+  proved duplicate payloads and stay separately named.
+- `OVER-PATCH`: a twelve-draw per-draw `RIVEATS` oracle must locate the first
+  cumulative stroke-preparation mismatch before any source edit.
+
+No fresh final-pixel capture is required. The only new artifact is the focused
+preparation oracle for `OVER-PATCH`; the final timing gate remains staged for
+the timing-defined R4 decision after deterministic rows are closed.

@@ -2405,10 +2405,107 @@ impl WgpuFrame {
                         end.checked_add(1)
                             .is_some_and(|end| end <= gpu::TESS_TEXTURE_WIDTH as u32)
                     });
+                let mixed_midpoint_draw = |draw: &PreparedAtomicDraw| {
+                    draw.image.is_none()
+                        && draw.triangles.is_empty()
+                        && draw.atlas.is_none()
+                        && !draw.is_feather
+                        && draw.base_instance == 1
+                        && !draw.spans.is_empty()
+                        && draw.patch_index_range.start
+                            < (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                as u32
+                        && draw.patch_index_range.end
+                            <= (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                as u32
+                };
+                let mixed_outer_draw = |draw: &PreparedAtomicDraw| {
+                    draw.image.is_none()
+                        && draw.atlas.is_none()
+                        && !draw.is_feather
+                        && !draw.is_stroke
+                        && draw.base_instance == 1
+                        && !draw.spans.is_empty()
+                        && draw.patch_index_range == outer_patch_range
+                };
+                let share_mixed_tessellation = load_color.is_none()
+                    && gradient_batch.draws.iter().all(Option::is_none)
+                    && draws.iter().all(|draw| {
+                        draw.image.is_none()
+                            && draw.paint.feather == 0.0
+                            && draw.paint.blend_mode == BlendMode::SrcOver
+                            && draw.state.clip_rect.is_none()
+                    })
+                    && prepared.iter().any(|draw| mixed_midpoint_draw(draw))
+                    && prepared.iter().any(|draw| mixed_outer_draw(draw))
+                    && prepared
+                        .iter()
+                        .all(|draw| mixed_midpoint_draw(draw) || mixed_outer_draw(draw));
                 let mut tessellation_span_batches = Vec::new();
                 let mut tessellation_heights = Vec::new();
                 let mut needs_dummy_tessellation = false;
-                if let Some(geometry_end) = compact_shared_midpoint_end {
+                if share_mixed_tessellation {
+                    let mut packed = Vec::new();
+                    append_tessellation_padding_span(&mut packed, 0, midpoint_span);
+
+                    let mut next_midpoint_base = 1u32;
+                    for draw in prepared.iter_mut().filter(|draw| mixed_midpoint_draw(draw)) {
+                        draw.spans
+                            .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+                        relocate_tessellation_logically(
+                            &mut draw.spans,
+                            &mut draw.base_instance,
+                            &mut contours[draw.contour_range.clone()],
+                            next_midpoint_base,
+                            midpoint_span,
+                        );
+                        packed.append(&mut draw.spans);
+                        next_midpoint_base = next_midpoint_base
+                            .checked_add(draw.instance_count)
+                            .expect("mixed atomic midpoint instance range overflow");
+                        draw.tessellation_index = 0;
+                    }
+                    let midpoint_end = next_midpoint_base
+                        .checked_mul(midpoint_span)
+                        .expect("mixed atomic midpoint end overflow");
+                    let outer_start = align_to(midpoint_end, outer_segment_span);
+                    append_tessellation_padding_span(&mut packed, midpoint_end, outer_start);
+
+                    let mut next_outer_base = outer_start / outer_segment_span;
+                    for draw in prepared.iter_mut().filter(|draw| mixed_outer_draw(draw)) {
+                        draw.spans
+                            .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+                        relocate_tessellation_logically(
+                            &mut draw.spans,
+                            &mut draw.base_instance,
+                            &mut contours[draw.contour_range.clone()],
+                            next_outer_base,
+                            outer_segment_span,
+                        );
+                        packed.append(&mut draw.spans);
+                        next_outer_base = next_outer_base
+                            .checked_add(draw.instance_count)
+                            .expect("mixed atomic outer instance range overflow");
+                        draw.tessellation_index = 0;
+                    }
+                    let outer_end = next_outer_base
+                        .checked_mul(outer_segment_span)
+                        .expect("mixed atomic outer end overflow");
+                    let final_end = outer_end
+                        .checked_add(1)
+                        .expect("mixed atomic final padding overflow");
+                    append_tessellation_padding_span(&mut packed, outer_end, final_end);
+                    let tessellation_height = final_end.div_ceil(gpu::TESS_TEXTURE_WIDTH as u32);
+                    if tessellation_height > max_atlas_dimension {
+                        return Err(RendererError::Device(
+                            "tessellation texture exceeds device dimension limit".into(),
+                        ));
+                    }
+                    tessellation_span_batches.push(packed);
+                    tessellation_heights.push(tessellation_height);
+                } else if let Some(geometry_end) = compact_shared_midpoint_end {
                     let mut packed = Vec::new();
                     append_tessellation_padding_span(&mut packed, 0, midpoint_span);
                     let mut next_base_instance = 1u32;
@@ -2910,6 +3007,9 @@ impl WgpuFrame {
                     let mut atomic_backing = atomic_backing.borrow_mut();
                     let atomic_backing = atomic_backing
                         .get_or_insert_with(|| self.context.atomic_pipeline.begin_frame_backing());
+                    let batch_shared_draws = draws
+                        .iter()
+                        .all(|draw| matches!(draw.role, DrawRole::Content { clip_id: 0 }));
                     let readbacks = self.context.atomic_pipeline.encode_batch(
                         &self.context.device,
                         atomic_backing,
@@ -2922,6 +3022,7 @@ impl WgpuFrame {
                         &self.context.patch_index_buffer,
                         &atomic_draws,
                         draw_group_starts,
+                        batch_shared_draws,
                         &uniforms,
                         &paths,
                         &paints,
@@ -6753,40 +6854,94 @@ fn relocate_midpoint_tessellation_logically(
     contours: &mut [gpu::ContourData],
     next_base_instance: u32,
 ) {
-    let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+    relocate_tessellation_logically(
+        spans,
+        base_instance,
+        contours,
+        next_base_instance,
+        gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+    );
+}
+
+fn relocate_tessellation_logically(
+    spans: &mut Vec<gpu::TessVertexSpan>,
+    base_instance: &mut u32,
+    contours: &mut [gpu::ContourData],
+    next_base_instance: u32,
+    segment_span: u32,
+) {
+    #[derive(PartialEq, Eq)]
+    struct SourceSpanKey {
+        points: [[u32; 2]; 4],
+        join_tangent: [u32; 2],
+        logical_x0: i64,
+        logical_x1: i64,
+        segment_counts: u32,
+        contour_id_with_flags: u32,
+    }
+
     let texture_width = gpu::TESS_TEXTURE_WIDTH as u32;
     let old_base = base_instance
         .checked_mul(segment_span)
-        .expect("MSAA midpoint source location overflow");
+        .expect("tessellation source location overflow");
     let new_base = next_base_instance
         .checked_mul(segment_span)
-        .expect("MSAA midpoint destination location overflow");
+        .expect("tessellation destination location overflow");
     let relocation = new_base
         .checked_sub(old_base)
-        .expect("compact MSAA midpoint layout must move forward");
+        .expect("compact tessellation layout must move forward");
     let source = std::mem::take(spans);
     spans.reserve(source.len());
+    let mut previous_key = None;
     for mut span in source {
         let (source_x0, source_x1) = span.x_range();
-        debug_assert_eq!(span.y, 0.0);
-        debug_assert!(source_x0 >= 0 && source_x1 >= source_x0);
+        debug_assert!(span.y >= 0.0 && span.y.fract() == 0.0);
+        debug_assert!(source_x1 >= source_x0);
         let vertex_count = u32::try_from(source_x1 - source_x0)
-            .expect("MSAA midpoint span width must be non-negative");
+            .expect("tessellation span width must be non-negative");
         let vertex_count_i32 =
-            i32::try_from(vertex_count).expect("MSAA midpoint span width fits i32");
-        let logical_x0 = u32::try_from(source_x0)
-            .expect("MSAA midpoint span start must be non-negative")
+            i32::try_from(vertex_count).expect("tessellation span width fits i32");
+        let source_logical_x0 = (span.y as i64)
+            .checked_mul(i64::from(texture_width))
+            .and_then(|row| row.checked_add(i64::from(source_x0)))
+            .expect("tessellation source span location overflow");
+        let source_logical_x1 = source_logical_x0
+            .checked_add(i64::from(vertex_count))
+            .expect("tessellation source span end overflow");
+        let key = SourceSpanKey {
+            points: span.points.map(|point| point.map(f32::to_bits)),
+            join_tangent: span.join_tangent.map(f32::to_bits),
+            logical_x0: source_logical_x0,
+            logical_x1: source_logical_x1,
+            segment_counts: span.segment_counts,
+            contour_id_with_flags: span.contour_id_with_flags,
+        };
+        if previous_key.as_ref() == Some(&key) {
+            continue;
+        }
+        previous_key = Some(key);
+
+        let reflection_location = span.reflection_y.is_finite().then(|| {
+            debug_assert!(span.reflection_y >= 0.0 && span.reflection_y.fract() == 0.0);
+            let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
+            (span.reflection_y as i64)
+                .checked_mul(i64::from(texture_width))
+                .and_then(|row| row.checked_add(i64::from(source_reflection_x0)))
+                .expect("tessellation source reflection location overflow")
+        });
+
+        let logical_x0 = u32::try_from(source_logical_x0)
+            .expect("tessellation span start must be non-negative")
             .checked_add(relocation)
-            .expect("MSAA midpoint span relocation overflow");
+            .expect("tessellation span relocation overflow");
         let mut y = logical_x0 / texture_width;
         let mut x0 =
-            i32::try_from(logical_x0 % texture_width).expect("MSAA midpoint span x must fit i32");
+            i32::try_from(logical_x0 % texture_width).expect("tessellation span x must fit i32");
         let mut x1 = x0
             .checked_add(vertex_count_i32)
-            .expect("MSAA midpoint span end overflow");
+            .expect("tessellation span end overflow");
 
-        if span.reflection_y.is_finite() {
-            debug_assert_eq!(span.reflection_y, 0.0);
+        if let Some(source_reflection_location) = reflection_location {
             let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
             let source_reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
             debug_assert!(source_reflection_x0 >= source_reflection_x1);
@@ -6794,16 +6949,14 @@ fn relocate_midpoint_tessellation_logically(
                 source_reflection_x0 - source_reflection_x1,
                 vertex_count_i32
             );
-            let reflection_location = u32::try_from(source_reflection_x0)
-                .expect("MSAA midpoint reflection start must be non-negative")
+            let reflection_location = u32::try_from(source_reflection_location)
+                .expect("tessellation reflection start must be non-negative")
                 .checked_add(relocation)
-                .expect("MSAA midpoint reflection relocation overflow");
-            let reflection_last = reflection_location
-                .checked_sub(1)
-                .expect("MSAA midpoint reflection location must be positive");
+                .expect("tessellation reflection relocation overflow");
+            let reflection_last = reflection_location.wrapping_sub(1);
             let mut reflection_y = reflection_last / texture_width;
             let mut reflection_x0 = i32::try_from(reflection_last % texture_width + 1)
-                .expect("MSAA midpoint reflection x must fit i32");
+                .expect("tessellation reflection x must fit i32");
             let mut reflection_x1 = reflection_x0 - vertex_count_i32;
             loop {
                 span.y = y as f32;
@@ -6815,9 +6968,7 @@ fn relocate_midpoint_tessellation_logically(
                 y += 1;
                 x0 -= gpu::TESS_TEXTURE_WIDTH;
                 x1 -= gpu::TESS_TEXTURE_WIDTH;
-                reflection_y = reflection_y
-                    .checked_sub(1)
-                    .expect("MSAA midpoint reflection row underflow");
+                reflection_y = reflection_y.wrapping_sub(1);
                 reflection_x0 += gpu::TESS_TEXTURE_WIDTH;
                 reflection_x1 += gpu::TESS_TEXTURE_WIDTH;
             }
@@ -8167,6 +8318,108 @@ mod tests {
     }
 
     #[test]
+    fn logical_relocation_rebuilds_previously_wrapped_reflected_spans_once() {
+        let texture_width = gpu::TESS_TEXTURE_WIDTH;
+        let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let source_base_instance = texture_width as u32 / segment_span - 1;
+        let first = gpu::TessVertexSpan::new(
+            [[1.0; 2]; 4],
+            [2.0; 2],
+            0.0,
+            texture_width - segment_span as i32,
+            texture_width + 9,
+            0.0,
+            16,
+            -1,
+            1,
+            1,
+            0,
+            1,
+        );
+        let mut second = first;
+        second.y = 1.0;
+        second.set_ranges(
+            -(segment_span as i32),
+            9,
+            texture_width + 16,
+            texture_width - 1,
+            u32::MAX as f32,
+        );
+        let mut spans = vec![first, second];
+        let mut base_instance = source_base_instance;
+        let source_vertex_index = source_base_instance * segment_span;
+        let mut contours = [gpu::ContourData::new([0.0, 0.0], 1, source_vertex_index)];
+
+        relocate_midpoint_tessellation_logically(
+            &mut spans,
+            &mut base_instance,
+            &mut contours,
+            source_base_instance + 1,
+        );
+
+        assert_eq!(base_instance, source_base_instance + 1);
+        assert_eq!(
+            contours[0].vertex_index0,
+            source_vertex_index + segment_span
+        );
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].y, 1.0);
+        assert_eq!(spans[0].x_range(), (0, segment_span as i32 + 9));
+        assert_eq!(spans[0].reflection_y, 0.0);
+        assert_eq!(spans[0].reflection_x0_x1 as i16 as i32, 24);
+        assert_eq!((spans[0].reflection_x0_x1 >> 16) as i16 as i32, 7);
+    }
+
+    #[test]
+    fn logical_relocation_preserves_unsigned_reflection_row_wrap() {
+        let texture_width = gpu::TESS_TEXTURE_WIDTH;
+        let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let source_base_instance = texture_width as u32 / segment_span - 1;
+        let first = gpu::TessVertexSpan::new(
+            [[1.0; 2]; 4],
+            [2.0; 2],
+            0.0,
+            texture_width - segment_span as i32,
+            texture_width + 9,
+            0.0,
+            16,
+            -1,
+            1,
+            1,
+            0,
+            1,
+        );
+        let mut second = first;
+        second.y = 1.0;
+        second.set_ranges(
+            -(segment_span as i32),
+            9,
+            texture_width + 16,
+            texture_width - 1,
+            u32::MAX as f32,
+        );
+        let expected = [first, second];
+        let mut spans = expected.to_vec();
+        let mut base_instance = source_base_instance;
+        let source_vertex_index = source_base_instance * segment_span;
+        let mut contours = [gpu::ContourData::new([0.0, 0.0], 1, source_vertex_index)];
+
+        relocate_midpoint_tessellation_logically(
+            &mut spans,
+            &mut base_instance,
+            &mut contours,
+            source_base_instance,
+        );
+
+        assert_eq!(base_instance, source_base_instance);
+        assert_eq!(contours[0].vertex_index0, source_vertex_index);
+        assert_eq!(spans.len(), expected.len());
+        for (actual, expected) in spans.iter().zip(expected.iter()) {
+            assert_eq!(bytemuck::bytes_of(actual), bytemuck::bytes_of(expected));
+        }
+    }
+
+    #[test]
     fn outer_tessellations_relocate_into_contiguous_batch_ranges() {
         let mut path = RawPath::new();
         append_oval(&mut path, [0.0, 0.0, 100.0, 100.0]);
@@ -8738,23 +8991,23 @@ mod tests {
 
     #[cfg(feature = "perf-counters")]
     #[test]
-    fn clockwise_atomic_large_single_contours_match_cpp_patch_counts() {
+    fn clockwise_atomic_large_single_contours_share_cpp_tessellation_layout() {
         use nuxie_render_stream::RenderStream;
 
-        for (source, expected_path_patches) in [
-            (
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../../fixtures/renderer/streams/gm/bug339297.rive-stream"
-                )),
-                423,
-            ),
+        for (source, expected_work) in [
             (
                 include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
                 )),
-                431,
+                (8, 7, 555, 121, 431),
+            ),
+            (
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../fixtures/renderer/streams/gm/bug339297.rive-stream"
+                )),
+                (6, 5, 542, 117, 423),
             ),
         ] {
             let stream = RenderStream::parse(source).unwrap();
@@ -8766,7 +9019,16 @@ mod tests {
             stream.replay_frame(0, &mut factory, &mut frame).unwrap();
             let full = frame.finish_for_benchmark().unwrap().backend_work;
 
-            assert_eq!(full.path_patches, expected_path_patches);
+            assert_eq!(
+                (
+                    full.render_passes,
+                    full.gpu_draw_calls,
+                    full.gpu_draw_instances,
+                    full.tessellation_spans,
+                    full.path_patches,
+                ),
+                expected_work
+            );
         }
     }
 

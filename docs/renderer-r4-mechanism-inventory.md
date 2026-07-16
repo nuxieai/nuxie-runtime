@@ -265,6 +265,37 @@ The fixed matrix moves 1,658->1,634 spans, 5,937->5,885 instances,
 one-frame snapshot is directional only. The complete finite tail and its four
 cluster queue live in `docs/renderer-r4-counter-tail-audit.md`.
 
+### Item 130 Update
+
+C++ allocates midpoint and outer tessellation in one logical address space,
+aligning the outer section only after all midpoint instances and wrapping both
+forward and reflected ranges across texture rows. Rust previously prepared the
+two `bug339297` atomic families as separate tessellation textures and passes.
+
+Rust now uses the same pre-padding, midpoint section, outer alignment, outer
+section, and final-sentinel order. Texture sharing is deliberately independent
+of draw batching: unclipped content may use the grouped path, while clip-update
+and clipped-content draws retain their semantic pass boundaries and merely
+reuse the shared texture and triangle allocation.
+
+The normalized `(passes, draws, instances, spans, patches)` tuples are exact at
+`(6,5,542,117,423)` for `gm-bug339297` and `(8,7,555,121,431)` for
+`gm-bug339297_as_clip`. Both upload totals are below C++ Dawn. The report falls
+26->16 rows, removing the complete ten-row `BUG-MIX` cluster in one report.
+A Sol review found that a shared clip batch with zero aggregate triangle
+vertices could select an empty per-draw buffer vector, and that reflected
+row-wrap rebuilding used checked subtraction where C++ deliberately wraps an
+unsigned row. Buffer selection now branches on shared-flush ownership, both
+reflection decrements use C++-matched wrapping, and focused regressions cover
+the empty triangle range plus zero-relocation persistent wrap.
+
+The complete remaining report was attributed concurrently. Atomic OverStroke
+still owns sixteen group-local padding spans (`OVER-AENV`); uniform/path/contour
+payloads are uploaded once for tessellation and again for draw pipelines
+(`UPLOAD-DUP`); the two `batchedconvexpaths` byte rows require per-class layout
+telemetry (`UPLOAD-LAYOUT`); and one shared OverStroke preparation patch remains
+oracle-first (`OVER-PATCH`).
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -274,7 +305,7 @@ cluster queue live in `docs/renderer-r4-counter-tail-audit.md`.
 | Logical-flush container reuse | `renderer/src/render_context.cpp:155-157`, `268-273`, `282-343`, `998-1004` | host allocation without changing GPU counters | Rust retains frame containers in several paths; audit only when profiles identify host churn. |
 | Resource-budget flush splitting | `renderer/src/render_context.cpp:497-573`, `663-725` | logical flushes and draws per flush | Rust preserves the 1,024-draw and resource fences; fixed corpus is structurally exact. |
 | Frame-wide layout, then upload and encode | `renderer/src/render_context.cpp:740-822`, `953-993` | command encoders, submissions, upload calls | Ported to one encoder and one submission per fixed variant; these counters are exact. |
-| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533`, `3150-3292` | tessellation spans, instances, upload bytes | Eligible MSAA clip/content midpoint layouts now share one multi-row logical envelope; atomic mixed and multi-row layouts remain in the finite tail audit. |
+| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533`, `3150-3292` | tessellation spans, instances, upload bytes | Eligible MSAA clip/content and mixed atomic midpoint/outer layouts share one multi-row logical envelope. Atomic direct-stroke group rows remain in `OVER-AENV`. |
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
@@ -313,8 +344,9 @@ cluster queue live in `docs/renderer-r4-counter-tail-audit.md`.
 - Item 128 makes `gm-bug339297_as_clip-msaa` exact for bind sets, draws,
   instances, spans, and patches. Its remaining 3,120/2,816 upload-byte row is
   part of the shared `UPLOAD-DUP` cluster.
-- The post-item-128 report has 26 positive rows, all assigned to `BUG-MIX`,
-  `OVER-AENV`, `UPLOAD-DUP`, or `OVER-PATCH` in
+- Item 130 closes all ten `BUG-MIX` rows and moves the report 26->16. The
+  remaining rows are assigned to `OVER-AENV`, `UPLOAD-DUP`,
+  `UPLOAD-LAYOUT`, or `OVER-PATCH` in
   `docs/renderer-r4-counter-tail-audit.md`. Work that does not close or narrow
   one of those finite rows is outside the counter-tail queue.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent

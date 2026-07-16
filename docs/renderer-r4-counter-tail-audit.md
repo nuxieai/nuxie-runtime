@@ -2,7 +2,7 @@
 
 This audit replaces row-at-a-time discovery with a finite cluster queue. It is
 based on the authoritative `target/renderer-work-counters.md` report generated
-after R4 item 128.
+after R4 item 128 and updated after each cluster-wide report.
 
 ## Baseline And Classification
 
@@ -12,11 +12,11 @@ instances, tessellation spans, and path patches. The same multi-row logical
 flush layout also removed all 17 excess `gm-OverStroke-msaa` spans and 16 of
 its 17 excess instances.
 
-The 26 current rows classify as:
+The 26 post-item-128 rows classified as:
 
 | Class | Rows | Meaning |
 | --- | ---: | --- |
-| Accounting-only Decision | 0 | No current excess is only a counter-definition mismatch. |
+| Accounting-only Decision | 0 | No excess was only a counter-definition mismatch. |
 | Shared implementation cluster | 26 | Every row belongs to one of four finite mechanisms below. |
 | Genuine singleton | 0 | The remaining patch mismatch is mode-paired and therefore shared. |
 
@@ -24,10 +24,50 @@ Upload bytes remain real work: both shims count bytes passed to WebGPU buffer
 uploads. Alignment and duplicate payloads must be reduced or retained with a
 specific implementation reason; they are not closed by relabeling the counter.
 
-No fresh Dawn pixel capture is needed for any current row. All 13 affected
+No fresh Dawn pixel capture was needed for any of those rows. All 13 affected
 scene/mode variants already have acceptance-grade references and provenance
 pins. Only `OVER-PATCH` needs a new preparation-stage C++ oracle to locate one
 record; it does not need a new final-pixel reference.
+
+## Item 130 Closure And Current Tail
+
+Item 130 closes all ten `BUG-MIX` rows in one source-matched change. Rust now
+packs midpoint-fan and outer-curve work into one C++-ordered logical
+tessellation allocation, wraps forward and reflected spans across rows, and
+shares the texture without merging semantic clip draw-pass barriers. The two
+normalized `(passes, draws, instances, spans, patches)` tuples are exact:
+
+- `gm-bug339297-clockwise-atomic`: `(6, 5, 542, 117, 423)`.
+- `gm-bug339297_as_clip-clockwise-atomic`: `(8, 7, 555, 121, 431)`.
+
+Both atomic upload totals also fall below their C++ Dawn values, so no
+replacement upload row appears. The ranked tail moves from 26 to 16 rows.
+Those rows are now fully pre-attributed:
+
+| Current owner | Unique rows | Concrete boundary |
+| --- | ---: | --- |
+| `OVER-AENV` | 2 | Sixteen redundant atomic OverStroke padding spans and instances; it also owns 1,024 bytes inside one upload row. |
+| `UPLOAD-DUP` | 9 | Seven MSAA typed-payload rows, atomic bevel payload reuse, and the residual atomic OverStroke payload/layout row. |
+| `UPLOAD-LAYOUT` | 2 | The two `batchedconvexpaths` byte deltas need per-class attribution before being called duplicate payloads. |
+| `OVER-PATCH` | 3 | One shared stroke-preparation patch in both modes and the corresponding MSAA instance. |
+
+`OVER-AENV` is implementation-ready. C++ allocates one midpoint address space
+per logical flush; Rust still allocates one envelope per intersection-board
+stroke group. Reusing item 130's logical relocation while preserving
+`draw_group_starts` should move spans `506->490`, instances `1005->989`, and
+uploads `43,496->42,472` before the independent patch correction.
+
+`UPLOAD-DUP` is also source-located. C++ maps each typed per-flush resource
+once and binds it to tessellation and draw work. Rust uploads uniform, path,
+and contour payloads in `Tessellator`, then uploads them again in the MSAA or
+atomic pipeline. The serial port is a move-only set of reusable uploaded
+slices, MSAA first and atomic second. Per-class byte attribution must precede
+closure of the two `UPLOAD-LAYOUT` rows.
+
+`OVER-PATCH` remains oracle-first. Capture the twelve OverStroke draws as
+per-draw `RIVEATS` records, compare cumulative patch counts and raw 64-byte
+spans, and change only the first shared preparation branch that emits Rust's
+498th patch. Do not guess at implicit-close or join handling.
 
 ## Source Map
 
@@ -51,15 +91,15 @@ record; it does not need a new final-pixel reference.
   or instance below the raw C++ count.
 - `EC`: C++ wraps logical tessellation locations across texture rows in
   `renderer/src/render_context.cpp:3150-3292`.
-- `ER`: Rust item 128's reusable MSAA logical relocation is in
-  `crates/nuxie-renderer/src/lib.rs`; atomic packing still has single-row and
-  group-row fences.
+- `ER`: Rust's reusable logical relocation is in
+  `crates/nuxie-renderer/src/lib.rs`; item 130 uses it for mixed atomic work,
+  while the atomic direct-stroke group-row fence remains for `OVER-AENV`.
 - `PC`: C++ stroke counting and preparation in
   `renderer/src/draw.cpp:1120-1175,1794-1935`.
 - `PR`: Rust stroke preparation in
   `crates/nuxie-renderer/src/draw.rs:280-540`.
 
-## Complete Row Triage
+## Historical Post-Item-128 Row Triage
 
 Values are `C++ Dawn / Rust wgpu` from the post-item-128 report. Every row is
 class B: shared implementation work.
@@ -95,17 +135,16 @@ class B: shared implementation work.
 
 ## Ordered Cluster Queue
 
-1. `BUG-MIX` owns 10 rows. Port C++'s single mixed midpoint/outer
-   logical-flush tessellation allocation and pass for the two `bug339297`
-   atomic variants.
-2. `OVER-AENV` owns two primary rows and part of one upload row. Reuse item
-   128's multi-row logical relocation in atomic packing. The deterministic
-   first-order upload reduction is 16 spans times 64 bytes, or 1,024 bytes.
-3. `UPLOAD-DUP` owns 11 primary rows plus residual bytes from the first two
-   clusters. Make tessellator-created uniform/path/contour resources reusable
-   by both path pipelines while preserving true written-byte accounting.
-4. `OVER-PATCH` owns three rows. Add one focused C++/Rust per-draw preparation
-   oracle, find the 498th Rust patch, and correct the shared stroke source.
+1. [x] `BUG-MIX`: all ten rows closed in item 130; report `26->16`.
+2. [ ] `OVER-AENV`: reuse logical multi-row relocation for atomic direct
+   strokes without merging draw groups. Deterministic first-order upload
+   reduction: 16 spans times 64 bytes, or 1,024 bytes.
+3. [ ] `UPLOAD-DUP`: reuse tessellator-created uniform/path/contour upload
+   slices in MSAA, then atomic, while preserving true written-byte accounting.
+4. [ ] `UPLOAD-LAYOUT`: use per-class byte telemetry to resolve the two
+   `batchedconvexpaths` rows after shared-slice reuse lands.
+5. [ ] `OVER-PATCH`: capture one focused C++/Rust per-draw preparation oracle,
+   find the 498th Rust patch, and correct the shared stroke source.
 
 ## Execution And Stop Rules
 

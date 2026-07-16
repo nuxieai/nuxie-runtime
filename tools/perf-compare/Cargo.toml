@@ -17,3 +17,7 @@ path = "src/bin/renderer-perf.rs"
 [[bin]]
 name = "perf-counter-compare"
 path = "src/bin/perf-counter-compare.rs"
+
+[[bin]]
+name = "r4-timing-compare"
+path = "src/bin/r4-timing-compare.rs"

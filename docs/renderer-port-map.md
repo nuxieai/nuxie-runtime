@@ -346,10 +346,14 @@ for all 16 variants. Its 26.37x aggregate and 93.80x worst-scene ratios first
 implicated per-draw clockwise render passes, but controlled Rust-only A/Bs
 rejected both merging borrowed/main passes (23.95% aggregate regression) and
 vertically packing safe simple-draw tessellation textures (22.25% regression).
-Both candidates preserved the full pixel corpus and were removed. The next
-task captures paired CPU and GPU profiles for one-draw and 20-draw controls,
-then ports or adapts the first measured Rust-only hot site instead of inferring
-it from structural multiplicity.
+Both candidates preserved the full pixel corpus and were removed. Paired
+one-draw/20-draw Time Profiler and Metal traces now identify the first hot
+site: Rust interleaves initialized buffer uploads with tessellation passes,
+forcing approximately one wgpu pending-write submission per draw and 59.72 ms
+of upload encoder time in the 20-draw case. C++ maps flush-wide buffer rings
+before encoding and submits one command buffer. The next task adapts that
+upload-before-encode ordering while preserving separate textures and passes;
+see `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

@@ -1299,13 +1299,24 @@ Run `make renderer-golden`.
     Every targeted clockwise scene slowed: `OverStroke` 1.31x,
     `batchedconvexpaths` 1.43x, and `bevel180strokes` 1.17x. No production code
     is retained from the experiment.
-109. [ ] Attribute the fixed R4 gap before attempting another optimization.
-    Capture paired CPU and GPU profiles for the one-draw `bug5099` control and
-    the 20-draw `bevel180strokes` case in both live runners. Separate resource
-    creation, command encoding, queue submission, and GPU execution/wait time;
-    name the first dominant Rust-only site and its C++ counterpart, then queue
-    a port or adaptation at that measured site. Structural multiplicity alone
-    is no longer sufficient evidence after two controlled regressions.
+109. [x] Attribute the fixed R4 gap before attempting another optimization.
+    Paired Time Profiler and Metal System Trace captures cover the one-draw
+    `bug5099` and 20-draw `bevel180strokes` controls in both live runners. Rust
+    grows from 3.167 ms to 63.695 ms while C++ grows from 0.260 ms to 0.942 ms.
+    The Rust 20-draw path spends 2,798/3,526 renderer samples in
+    `create_buffer_init` and emits 19.98 pending-write submissions/frame at
+    59.722 ms of encoder time, versus one total command buffer/frame in C++.
+    Rust GPU execution is 6.474 ms/frame, proving resource upload is the first
+    dominant site. See `docs/renderer-r4-profile-attribution.md`.
+110. [ ] Port C++'s flush-wide resource-preparation order into Rust's
+    tessellation path. Split `Tessellator::encode` into preparation and encoding,
+    prepare every draw's uploads before the first tessellation render pass, and
+    let wgpu coalesce pending writes. Preserve separate textures, indices, and
+    pass order; do not revive vertical packing or borrowed/main pass merging.
+    Accept only if the 20-draw Metal trace collapses pending-write submissions
+    from approximately 20/frame to a small constant, the fixed alternating
+    old-Rust/current-Rust report improves, and the corpus remains
+    exact=1,409/diverges=0/gated=59.
 
 ## R2 Completion Record
 
@@ -1517,6 +1528,14 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-15: R4's paired Time Profiler and Metal System Trace attribution
+  names Rust's interleaved `create_buffer_init`/render-pass ordering as the
+  first hot site. At 20 draws it creates 19.98 pending-write submissions and
+  59.722 ms of pending-write encoder time per frame; C++ maps flush-wide rings
+  before encoding and submits one command buffer. GPU union is 6.474 ms of the
+  63.695 ms Rust frame, so native fast paths and wait tuning are not first.
+  Queue item 110 ports preparation order while preserving textures and passes.
 
 - 2026-07-15: R4 optimization acceptance uses an alternating old-Rust versus
   current-Rust A/B when the C++ control drifts under machine load. Controlled
@@ -2368,6 +2387,14 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-15: Closed R4 queue item 109 with paired one-draw/20-draw CPU and
+  Metal captures. The measured Rust-only long pole is one wgpu pending-write
+  flush per tessellated draw: 20-draw Rust uses 101 Metal command buffers and
+  6.474 ms GPU time inside a 63.695 ms frame, while C++ uses one command buffer
+  and 0.646 ms GPU time inside a 0.942 ms frame. Queue item 110 now adapts
+  C++'s flush-wide upload-before-encode ordering; no renderer code, pixel,
+  reference, or tolerance changed.
 
 - 2026-07-15: Closed R4 queue item 108 as a measured rejection. Safe vertical
   tessellation packing preserved exact=1,409/diverges=0/gated=59, but lost

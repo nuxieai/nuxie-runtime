@@ -362,10 +362,16 @@ existing 1,024 authored-draw safety fence or a logical-flush boundary. The
 110-frame trace falls from 19.88 to exactly 1.00 `PendingWrites` event/frame,
 and the fixed 16-variant old-Rust/current-Rust aggregate improves from
 162.237 ms to 138.841 ms (0.8558x) without changing structural counters or
-pixel output. The remaining first hot site is 39.760 ms/frame of pending-write
-encoder work. The next task ports C++ WebGPU's persistent three-buffer upload
-rings for flush-wide tessellation spans, uniforms, paths, and contours; see
-`docs/renderer-r4-profile-attribution.md`.
+pixel output. Tessellation uploads now rotate through three guarded reusable
+slots, pack all four resource classes into one aligned union-usage arena, and
+issue one `Queue::write_buffer` per populated page. Independent alternating
+reports improve aggregate frame time to 0.9605x, 0.9826x, and 0.9797x; the
+last measures the exact final binary. A controlled
+A-B-B-A trace shows the remaining `PendingWrites` interval is neutral at
+1.006x while bracketed frame medians improve; an earlier apparent 1.2565x
+regression was invalidated as a non-interleaved load artifact. The next task
+attributes the work inside that single pending-write submission under the
+controlled measurement fence; see `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

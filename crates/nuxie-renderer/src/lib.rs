@@ -40,6 +40,7 @@ use nuxie_render_api::{
     RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
+use std::cell::RefCell;
 use std::error::Error;
 #[cfg(target_os = "macos")]
 use std::ffi::c_void;
@@ -1746,6 +1747,11 @@ impl WgpuFrame {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
+        let tessellation_uploads = RefCell::new(
+            self.context
+                .tessellator
+                .begin_frame_uploads(&self.context.device),
+        );
         let submit_and_wait = |encoder: &mut wgpu::CommandEncoder| {
             let next_encoder =
                 self.context
@@ -1754,11 +1760,16 @@ impl WgpuFrame {
                         label: Some("nuxie-frame-encoder"),
                     });
             let submitted_encoder = std::mem::replace(encoder, next_encoder);
+            tessellation_uploads.borrow_mut().flush(&self.context.queue);
             self.context.queue.submit(Some(submitted_encoder.finish()));
             self.context
                 .device
                 .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|error| RendererError::Map(error.to_string()))
+                .map_err(|error| RendererError::Map(error.to_string()))?;
+            tessellation_uploads
+                .borrow_mut()
+                .begin_next_submission(&self.context.device);
+            Ok::<(), RendererError>(())
         };
         let mut pending_coverage_readbacks = Vec::new();
         let mut pending_atomic_coverage_readbacks = Vec::new();
@@ -2370,6 +2381,7 @@ impl WgpuFrame {
                 {
                     let tessellation_texture = self.context.tessellator.encode(
                         &self.context.device,
+                        &mut tessellation_uploads.borrow_mut(),
                         encoder,
                         &self.context.feather_lut.view,
                         spans,
@@ -2807,6 +2819,7 @@ impl WgpuFrame {
                                 analytic_uniforms(self.width, self.height, tessellation_height);
                             let tessellation_texture = self.context.tessellator.encode(
                                 &self.context.device,
+                                &mut tessellation_uploads.borrow_mut(),
                                 encoder,
                                 &self.context.feather_lut.view,
                                 &tessellation.spans,
@@ -3002,6 +3015,7 @@ impl WgpuFrame {
                             ];
                             let tessellation_texture = self.context.tessellator.encode(
                                 &self.context.device,
+                                &mut tessellation_uploads.borrow_mut(),
                                 encoder,
                                 &self.context.feather_lut.view,
                                 &tessellation.spans,
@@ -3143,6 +3157,7 @@ impl WgpuFrame {
                                 analytic_uniforms(self.width, self.height, tessellation_height);
                             let tessellation_texture = self.context.tessellator.encode(
                                 &self.context.device,
+                                &mut tessellation_uploads.borrow_mut(),
                                 encoder,
                                 &self.context.feather_lut.view,
                                 &tessellation.spans,
@@ -3987,6 +4002,7 @@ impl WgpuFrame {
 
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
+            tessellation_uploads.borrow_mut().flush(&self.context.queue);
             self.context.queue.submit(Some(encoder.finish()));
             self.context
                 .device
@@ -4016,6 +4032,7 @@ impl WgpuFrame {
             },
             texture.size(),
         );
+        tessellation_uploads.borrow_mut().flush(&self.context.queue);
         self.context.queue.submit(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
@@ -9261,8 +9278,13 @@ mod tests {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-tessellation-test-encoder"),
                 });
+        let mut tessellation_uploads = factory
+            .context
+            .tessellator
+            .begin_frame_uploads(&factory.context.device);
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,
             &[first, second],
@@ -9293,6 +9315,7 @@ mod tests {
             },
             texture.size(),
         );
+        tessellation_uploads.flush(&factory.context.queue);
         factory.context.queue.submit(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
@@ -9482,8 +9505,13 @@ mod tests {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-direct-input-encoder"),
                 });
+        let mut tessellation_uploads = factory
+            .context
+            .tessellator
+            .begin_frame_uploads(&factory.context.device);
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,
             &tessellation.spans,
@@ -9515,6 +9543,7 @@ mod tests {
             },
             size,
         );
+        tessellation_uploads.flush(&factory.context.queue);
         factory.context.queue.submit(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
@@ -9965,8 +9994,13 @@ mod tests {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-atlas-test-encoder"),
                 });
+        let mut tessellation_uploads = factory
+            .context
+            .tessellator
+            .begin_frame_uploads(&factory.context.device);
         let tessellation_texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,
             &tessellation.spans,
@@ -10065,6 +10099,7 @@ mod tests {
             },
             tessellation_size,
         );
+        tessellation_uploads.flush(&factory.context.queue);
         factory.context.queue.submit(Some(encoder.finish()));
         let atlas_slice = atlas_readback.slice(..);
         let tessellation_slice = tessellation_readback.slice(..);

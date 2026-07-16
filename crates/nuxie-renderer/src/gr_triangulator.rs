@@ -2421,8 +2421,13 @@ mod tests {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-direct-flower-tessellation-encoder"),
                 });
+        let mut tessellation_uploads = factory
+            .context
+            .tessellator
+            .begin_frame_uploads(&factory.context.device);
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,
             &tessellation.spans,
@@ -2453,6 +2458,7 @@ mod tests {
             },
             texture.size(),
         );
+        tessellation_uploads.flush(&factory.context.queue);
         factory.context.queue.submit(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();

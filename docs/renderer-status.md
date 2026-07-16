@@ -1333,15 +1333,25 @@ Run `make renderer-golden`.
     138.841 ms aggregate (0.8558x); every affected clockwise scene is flat or
     faster and MSAA stays within noise. The renderer corpus remains
     exact=1,409/diverges=0/gated=59 and both V2 floors stay green.
-113. [ ] Port C++ WebGPU's persistent three-buffer upload rings for
-    tessellation spans, uniforms, paths, and contours. Pack each flush into
-    alignment-correct reusable buffers, rotate `gpu::kBufferRingSize == 3`
-    backing buffers, grow capacity only when needed, and upload each used
-    range once with `Queue::write_buffer`. Preserve exact per-draw slices,
-    pass order, shader inputs, logical-flush boundaries, and the 1,024-draw
-    safety fence. Accept only if the steady-state trace reduces the remaining
-    39.760 ms pending-write encoder cost, the fixed alternating report
-    improves, and all pixel and V2 gates remain green.
+113. [x] Port C++ WebGPU's persistent three-buffer upload-ring lifetime for
+    tessellation spans, uniforms, paths, and contours. Each slot now owns one
+    alignment-correct union-usage arena, grows only when needed, consolidates
+    overflow pages on the next submission, and writes each populated page once
+    before submit. Three fixed 16-variant alternating reports improve aggregate
+    time to 0.9605x, 0.9826x, and 0.9797x; the last measures the exact final
+    binary. Its lone minimum outlier is falsified by a targeted A-B-B-A where
+    both candidate medians beat their bracket baselines.
+    A fenced A-B-B-A trace finds `PendingWrites` neutral at 1.006x while paired
+    frame medians improve in both brackets. The earlier 1.2565x trace result
+    was invalidated by uncontrolled machine load and non-interleaved captures.
+    The renderer corpus remains exact=1,409/diverges=0/gated=59, both V2 floors
+    pass at 584 and 35 exact segments, and the full workspace suite is green.
+114. [ ] Attribute the remaining single `PendingWrites` command buffer under
+    the controlled R4 measurement fence before changing another resource
+    lifetime. Record upload pages/bytes and separate CPU packing, wgpu staged
+    writes, Metal encoder work, and persistent atomic backing allocation. The
+    next implementation must improve repeated alternating frame time without
+    materially regressing the bracketed A-B-B-A trace or any parity floor.
 
 ## R2 Completion Record
 
@@ -2423,6 +2433,18 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-15: Accepted R4 item 113 after correcting the performance control.
+  A one-off, non-interleaved trace had falsely suggested the unified upload
+  arena worsened `PendingWrites` by 25.65%. Full-request A-B-B-A captures show
+  the interval is neutral at 1.006x while frame medians improve in both paired
+  brackets. Three fixed alternating reports improve aggregate time to 0.9605x,
+  0.9826x, and 0.9797x; a targeted A-B-B-A also clears the exact-final-binary
+  report's lone minimum outlier. The accepted ring
+  rotates three guarded slots, packs exact aligned slices into one union-usage
+  arena, and writes each populated page once. Renderer exact=1,409/diverges=0/
+  gated=59, V2 floors 584/35, and the workspace suite all pass. Item 114 first
+  attributes the remaining pending-write work under the new measurement fence.
 
 - 2026-07-15: Closed R4 items 111-112. The bounded 256-texture/64 MiB pool was
   rejected at 1.0727x for `bug5099` and 1.0949x for `bevel180strokes` with no

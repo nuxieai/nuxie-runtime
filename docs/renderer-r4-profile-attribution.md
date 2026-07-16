@@ -123,6 +123,53 @@ from 162.237 ms to 138.841 ms in aggregate (0.8558x); every affected clockwise
 scene was flat or faster and MSAA stayed within measurement noise. The full
 pixel and V2 regression floors remained green.
 
+The next accepted slice ports C++'s three-buffer upload lifetime while adapting
+the transfer path to wgpu. Three guarded slots each retain one union-usage
+arena for tessellation spans, uniforms, paths, and contours. Per-draw bindings
+use exact aligned slices; overflow pages consolidate on the next submission;
+each populated page is uploaded once with `Queue::write_buffer` before submit.
+
+The first two fixed 16-variant alternating reports improved aggregate time to
+0.9605x and 0.9826x; the second made every variant faster. A third report
+against the exact final binary improved aggregate time to 0.9797x. Its only
+minimum outlier, `bug339297_as_clip` clockwise-atomic at 1.176x, reversed in a
+targeted A-B-B-A: candidate medians were 3.069 and 3.012 ms versus bracket
+baselines of 4.152 and 3.117 ms. The initial standalone Metal comparison
+appeared to worsen pending-write encoder time from 59.107 to 74.267 ms/frame,
+but the captures were fourteen minutes apart and machine load was not
+controlled. A subsequent full-request A-B-B-A campaign brackets both candidate
+traces with baselines:
+
+| order | runner | pending-write encoder/frame | median frame |
+| ---: | --- | ---: | ---: |
+| 1 | baseline | 29.159 ms | 38.404 ms |
+| 2 | upload arena | 29.309 ms | 38.258 ms |
+| 3 | upload arena | 46.051 ms | 55.362 ms |
+| 4 | baseline | 45.718 ms | 56.998 ms |
+
+The paired pending-write result is neutral at approximately 1.006x, while
+candidate frame time improves in both brackets. This falsifies the claimed
+1.2565x regression and shows the arena's gain is CPU/resource setup outside
+the Metal encoder interval. The full renderer corpus, both V2 floors, and the
+workspace suite remain green.
+
+## Measurement Fence
+
+R4 performance decisions use these controls:
+
+1. Compare immutable release binaries with the fixed 16-variant alternating
+   report; repeat the report before accepting or rejecting a disputed result.
+2. Treat end-to-end submit-to-GPU-complete frame time as the primary metric.
+   Trace intervals are diagnostic and may veto only a reproducible material
+   regression, not a one-off absolute-duration change.
+3. Record Metal comparisons in A-B-B-A order with the full fenced request so
+   both candidate captures are bracketed by baselines.
+4. Record system load and defer a capture during known build, deletion, or
+   indexing spikes. Absolute trace values from different load windows are not
+   directly comparable.
+5. Require unchanged structural counters, the renderer pixel ratchet, both V2
+   segment floors, and the full workspace suite for every accepted slice.
+
 Authoritative source sites:
 
 - C++ flush-wide mapping: `renderer/src/render_context.cpp`,
@@ -137,24 +184,18 @@ Authoritative source sites:
 - Rust submission cadence: `crates/nuxie-renderer/src/lib.rs`,
   `WgpuFrame::finish_internal`.
 
-## Next Port
+## Next Measurement
 
-Port C++ WebGPU's persistent three-buffer upload rings without changing
-geometry or GPU pass semantics:
+Attribute the remaining single pending-write submission before changing
+another resource lifetime:
 
-1. Pack each flush's tessellation spans, uniforms, paths, and contours into
-   reusable, alignment-correct buffers instead of per-draw
-   `create_buffer_init` allocations.
-2. Rotate three GPU buffers per resource class and resize only when capacity
-   grows, matching `BufferWebGPU` and `gpu::kBufferRingSize`.
-3. Upload each used range once with `Queue::write_buffer`; bind per-draw slices
-   with exact offsets and sizes while preserving indices, pass order, and
-   shader inputs.
+1. Report populated upload pages and bytes per submission for the fixed one-
+   and twenty-draw controls.
+2. Separate CPU packing and `Queue::write_buffer` setup from Metal encoder time
+   with paired Time Profiler and A-B-B-A Metal captures.
+3. Audit persistent atomic backing-plane allocation only after the upload
+   telemetry identifies it as a measured contributor.
 4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries until
-   a larger measured change proves they can move.
-5. Accept only if the twenty-draw trace reduces the remaining 39.760 ms
-   pending-write encoder cost, the fixed old-Rust/current-Rust report improves,
-   and the 1,468-row corpus remains exact=1,409/diverges=0/gated=59.
-
-Persistent atomic backing-plane reuse remains the next measured resource site
-after upload rings.
+   a measured change proves they can move.
+5. Accept the next implementation only on repeated end-to-end improvement,
+   bracketed trace non-regression, and unchanged pixel/V2/workspace floors.

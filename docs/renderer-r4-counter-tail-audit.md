@@ -51,25 +51,42 @@ Those rows are now fully pre-attributed:
 | `UPLOAD-LAYOUT` | 2 | The two `batchedconvexpaths` byte deltas need per-class attribution before being called duplicate payloads. |
 | `OVER-PATCH` | 3 | One shared stroke-preparation patch in both modes and the corresponding MSAA instance. |
 
-`OVER-AENV` is implementation-ready. C++ allocates one midpoint address space
-per logical flush; Rust still allocates one envelope per intersection-board
-stroke group. Reusing item 130's logical relocation while preserving
-`draw_group_starts` should move spans `506->490`, instances `1005->989`, and
-uploads `43,496->42,472` before the independent patch correction.
+## Item 132 Closure And Current Tail
 
-`UPLOAD-DUP` is also source-located. C++ maps each typed per-flush resource
-once and binds it to tessellation and draw work. Rust uploads uniform, path,
-and contour payloads in `Tessellator`, then uploads them again in the MSAA or
-atomic pipeline. The serial port is a move-only set of reusable uploaded
-slices, MSAA first and atomic second. Per-class byte attribution must precede
-closure of the two `UPLOAD-LAYOUT` rows.
+Item 132 closes all eleven upload rows in two mode-wide report steps. A
+`TessellationFlushResources` object owns the aligned uniform, path, and contour
+upload slices for one logical flush. Tessellation, MSAA drawing, general atomic
+drawing, and specialized clockwise-atomic drawing now bind those same slices.
+Multiple atomic tessellation textures upload only their distinct span buffers;
+image-only runs allocate the same shared resources with a real dummy contour.
+
+The MSAA step removes all eight MSAA upload rows and moves the report `14->6`.
+The atomic step removes the other three upload rows and moves it `6->3`. Every
+one of the fixed matrix's sixteen Rust upload totals is now at or below its C++
+Dawn value; the aggregate is 148,680 versus 156,832 bytes. The arena still
+reports the bytes actually written, including alignment, so no accounting was
+hidden.
+
+The two `batchedconvexpaths` rows disappear under the same shared-resource
+change. That proves they were consequences of duplicate typed payloads and
+arena placement, not a separate data-layout mechanism. `UPLOAD-LAYOUT` closes
+without adding telemetry because its stop condition is already satisfied. The
+current tail is finite and single-owner:
+
+| Current owner | Unique rows | Concrete boundary |
+| --- | ---: | --- |
+| `OVER-PATCH` | 3 | One shared stroke-preparation patch in both modes and the corresponding MSAA instance. |
+
+Final verification passes renderer exact=1,409/diverges=0/gated=59,
+normal/scripted V2 floors at 584/35 exact segments, the full workspace,
+formatting, and diff hygiene. Sol's read-only review passes with no findings.
 
 `OVER-PATCH` remains oracle-first. Capture the twelve OverStroke draws as
 per-draw `RIVEATS` records, compare cumulative patch counts and raw 64-byte
 spans, and change only the first shared preparation branch that emits Rust's
 498th patch. Do not guess at implicit-close or join handling.
 
-## Item 131 Closure And Current Tail
+## Item 131 Closure And Prior Tail
 
 Item 131 closes both `OVER-AENV` rows. Atomic direct strokes now share one
 logical-flush midpoint address space while `draw_group_starts` continue to
@@ -97,11 +114,13 @@ disappear, and the ranked tail moves from 16 to 14 rows:
   `renderer/src/render_context.cpp:2753-2885` and
   `renderer/src/webgpu/render_context_webgpu_impl.cpp:2676-2696`.
 - `UM`: Rust MSAA duplicate tessellator/path payloads in
-  `crates/nuxie-renderer/src/tessellator.rs:172-236` and
-  `crates/nuxie-renderer/src/path_pipeline.rs:817-900`.
+  `crates/nuxie-renderer/src/tessellator.rs` and
+  `crates/nuxie-renderer/src/path_pipeline.rs`; closed by item 132's shared
+  flush resources.
 - `UA`: Rust atomic duplicate payloads in
-  `crates/nuxie-renderer/src/tessellator.rs:172-236` and
-  `crates/nuxie-renderer/src/atomic_pipeline.rs:1056-1190`.
+  `crates/nuxie-renderer/src/tessellator.rs`,
+  `crates/nuxie-renderer/src/atomic_pipeline.rs`, and
+  `crates/nuxie-renderer/src/clockwise_atomic_pipeline.rs`; closed by item 132.
 - `MC`: C++ mixed midpoint/outer logical-flush allocation and one tessellation
   pass in `renderer/src/render_context.cpp:1128-1160,1516-1533` and
   `renderer/src/webgpu/render_context_webgpu_impl.cpp:4025-4060`.
@@ -161,10 +180,10 @@ class B: shared implementation work.
 2. [x] `OVER-AENV`: item 131 reuses logical multi-row relocation for atomic
    direct strokes without merging draw groups; report `16->14`, with exactly
    1,024 fewer upload bytes.
-3. [ ] `UPLOAD-DUP`: reuse tessellator-created uniform/path/contour upload
-   slices in MSAA, then atomic, while preserving true written-byte accounting.
-4. [ ] `UPLOAD-LAYOUT`: use per-class byte telemetry to resolve the two
-   `batchedconvexpaths` rows after shared-slice reuse lands.
+3. [x] `UPLOAD-DUP`: item 132 reuses one uniform/path/contour resource set in
+   tessellation and every draw pipeline; reports move `14->6->3`.
+4. [x] `UPLOAD-LAYOUT`: both `batchedconvexpaths` rows disappear under the
+   shared-resource port, so the proposed telemetry is unnecessary.
 5. [ ] `OVER-PATCH`: capture one focused C++/Rust per-draw preparation oracle,
    find the 498th Rust patch, and correct the shared stroke source.
 

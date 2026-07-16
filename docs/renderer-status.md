@@ -1604,13 +1604,25 @@ Run `make renderer-golden`.
     regression coverage. Final verification passes renderer
     exact=1,409/diverges=0/gated=59, normal/scripted V2 floors at 584/35 exact
     segments, the full workspace, formatting, and diff hygiene.
-132. [ ] Reuse tessellator-owned uniform, path, and contour upload slices in
-    MSAA, then atomic. Regenerate the report after each mode-wide change and
-    preserve actual written-byte accounting; do not hide arena padding.
-133. [ ] Attribute and close the two `UPLOAD-LAYOUT` rows. Add per-payload byte
-    telemetry for span, uniform, path, paint, paint auxiliary, contour,
-    triangle, and padding classes, then resolve the 600/992-byte
-    `batchedconvexpaths` residuals from evidence.
+132. [x] Reuse one aligned uniform/path/contour upload set across tessellation,
+    MSAA drawing, general atomic drawing, and specialized clockwise-atomic
+    drawing. Multiple atomic tessellation textures now upload only distinct
+    span buffers, while image-only runs bind a real dummy contour. The MSAA
+    report removes eight rows and moves `14->6`; atomic removes the other three
+    upload rows and moves `6->3`. All sixteen fixed-matrix Rust upload totals
+    are at or below C++ Dawn, with aggregate bytes 148,680 versus 156,832.
+    Counted arena writes still include alignment. The final clockwise coverage
+    prefix is set before the one shared uniform upload, and all 285 renderer
+    tests pass after that ordering regression was caught locally. Sol's
+    read-only review passes with no findings across GPU lifetime, submission
+    order, binding ranges, repeated textures, and dummy/image-only paths.
+    Final verification passes renderer exact=1,409/diverges=0/gated=59,
+    normal/scripted V2 floors at 584/35 exact segments, the full workspace,
+    formatting, and diff hygiene.
+133. [x] Close `UPLOAD-LAYOUT` by evidence from item 132. Both
+    `batchedconvexpaths` upload rows disappear under shared typed-resource
+    reuse, proving no separate payload-layout residual remains. Per-class
+    telemetry would no longer answer an open row and is not added.
 134. [ ] Close `OVER-PATCH` from a per-draw C++/Rust `RIVEATS` preparation
     oracle. Locate the first OverStroke draw whose cumulative count diverges,
     then correct only the shared stroke-preparation source that emits patch

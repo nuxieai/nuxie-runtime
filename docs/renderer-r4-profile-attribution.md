@@ -812,3 +812,21 @@ Final verification passes the renderer corpus at 1,409 exact, zero divergent,
 and 59 retained gates; normal/scripted V2 floors at 584/35 exact segments; the
 full workspace; formatting; and diff hygiene. Sol's read-only review passes
 with no findings.
+
+### Item 132 Update
+
+The upload tail was one shared ownership mismatch. C++ binds its per-flush
+typed buffers to both tessellation and drawing; Rust previously copied
+uniform/path/contour payloads into tessellation storage and then uploaded them
+again in each draw pipeline. One owned `TessellationFlushResources` now carries
+the aligned slices through all four consumers.
+
+The mode-wide reports move `14->6` after MSAA and `6->3` after general plus
+specialized atomic reuse. Every upload row disappears, including both
+`batchedconvexpaths` rows formerly parked as `UPLOAD-LAYOUT`; aggregate fixed
+matrix uploads are 148,680 Rust bytes versus 156,832 C++ Dawn bytes. The
+one-frame ratios remain directional context only. Exact byte accounting and
+the finite row elimination accept this slice without A-B-B-A. Final
+verification passes renderer exact=1,409/diverges=0/gated=59,
+normal/scripted V2 floors at 584/35 exact segments, the full workspace,
+formatting, and diff hygiene. Sol's read-only review passes with no findings.

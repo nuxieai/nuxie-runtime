@@ -2691,24 +2691,53 @@ impl WgpuFrame {
                 ];
                 uniforms.atlas_content_inverse_viewport =
                     [2.0 / atlas_width as f32, -2.0 / atlas_height as f32];
+                if use_clockwise_atomic_batch {
+                    uniforms.coverage_buffer_prefix = 1 << 20;
+                }
                 let mut tessellation_textures = Vec::with_capacity(tessellation_span_batches.len());
+                let mut tessellation_flush_resources = None;
                 for (spans, height) in tessellation_span_batches
                     .iter()
                     .zip(tessellation_heights.iter().copied())
                 {
-                    let tessellation_texture = self.context.tessellator.encode(
-                        &self.context.device,
-                        &mut tessellation_uploads.borrow_mut(),
-                        encoder,
-                        &self.context.feather_lut.view,
-                        spans,
-                        &uniforms,
-                        &paths,
-                        &contours,
-                        height,
-                    );
+                    let tessellation_texture = if let Some(flush_resources) =
+                        &tessellation_flush_resources
+                    {
+                        self.context.tessellator.encode_with_flush_resources(
+                            &self.context.device,
+                            &mut tessellation_uploads.borrow_mut(),
+                            encoder,
+                            &self.context.feather_lut.view,
+                            spans,
+                            flush_resources,
+                            height,
+                        )
+                    } else {
+                        let encoding = self.context.tessellator.encode_with_new_flush_resources(
+                            &self.context.device,
+                            &mut tessellation_uploads.borrow_mut(),
+                            encoder,
+                            &self.context.feather_lut.view,
+                            spans,
+                            &uniforms,
+                            &paths,
+                            &contours,
+                            height,
+                        );
+                        tessellation_flush_resources = Some(encoding.flush_resources);
+                        encoding.texture
+                    };
                     tessellation_textures.push(tessellation_texture);
                 }
+                let tessellation_flush_resources =
+                    tessellation_flush_resources.unwrap_or_else(|| {
+                        tessellation_uploads.borrow_mut().upload_flush_resources(
+                            &self.context.device,
+                            &uniforms,
+                            &paths,
+                            &contours,
+                        )
+                    });
                 if needs_dummy_tessellation {
                     let dummy_index = tessellation_textures.len();
                     tessellation_textures.push(self.context.device.create_texture(
@@ -2861,7 +2890,6 @@ impl WgpuFrame {
                                 multiview_mask: None,
                             });
                     }
-                    uniforms.coverage_buffer_prefix = 1 << 20;
                     let borrowed_triangles = prepared
                         .iter()
                         .map(|draw| {
@@ -2937,10 +2965,9 @@ impl WgpuFrame {
                         &self.context.patch_index_buffer,
                         &clockwise_atomic_draws,
                         &uniforms,
-                        &paths,
+                        &tessellation_flush_resources,
                         &paints,
                         &paint_aux,
-                        &contours,
                         clockwise_atomic_coverage_words,
                         capture_clockwise_atomic_coverage,
                     );
@@ -2993,11 +3020,9 @@ impl WgpuFrame {
                         &atomic_draws,
                         draw_group_starts,
                         batch_shared_draws,
-                        &uniforms,
-                        &paths,
+                        &tessellation_flush_resources,
                         &paints,
                         &paint_aux,
-                        &contours,
                         padded_width as usize * padded_height as usize,
                         capture_atomic_planes,
                     );
@@ -3815,7 +3840,7 @@ impl WgpuFrame {
                     }
                     uniforms.max_path_id =
                         u32::try_from(paths.len() - 1).expect("MSAA path ID overflow");
-                    let tessellation_texture = self.context.tessellator.encode(
+                    let tessellation = self.context.tessellator.encode_with_new_flush_resources(
                         &self.context.device,
                         &mut tessellation_uploads.borrow_mut(),
                         encoder,
@@ -3826,8 +3851,9 @@ impl WgpuFrame {
                         &contours,
                         tessellation_height,
                     );
-                    let tessellation_view =
-                        tessellation_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let tessellation_view = tessellation
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
                     let resources = self.context.path_pipeline.prepare_resources(
                         &self.context.device,
                         &mut tessellation_uploads.borrow_mut(),
@@ -3835,11 +3861,9 @@ impl WgpuFrame {
                         &self.context.feather_lut.view,
                         gradient_texture.as_ref().map(|texture| &texture.view),
                         destination_view.as_ref(),
-                        &uniforms,
-                        &paths,
+                        &tessellation.flush_resources,
                         &paints,
                         &paint_aux,
-                        &contours,
                     );
                     for path in paths_in_flush {
                         path.prepared = Some(self.context.path_pipeline.prepare_draw(
@@ -9008,7 +9032,7 @@ mod tests {
                 work[0].path_patches,
                 work[0].buffer_upload_bytes,
             ),
-            (9, 988, 489, 498, 42_472)
+            (9, 988, 489, 498, 37_544)
         );
         assert_eq!(
             (
@@ -9016,8 +9040,9 @@ mod tests {
                 work[1].gpu_draw_instances,
                 work[1].tessellation_spans,
                 work[1].path_patches,
+                work[1].buffer_upload_bytes,
             ),
-            (8, 987, 489, 498)
+            (8, 987, 489, 498, 37_696)
         );
     }
 

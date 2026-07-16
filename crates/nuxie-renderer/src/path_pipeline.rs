@@ -2,8 +2,8 @@
 
 use crate::{
     atomic_pipeline::image_sampler,
-    gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData},
-    tessellator::TessellationUploadFrame,
+    gpu::{PaintAuxData, PaintData, PatchVertex},
+    tessellator::{TessellationFlushResources, TessellationUploadFrame},
     work_metrics::{CountedDeviceExt, CountedRenderPass},
 };
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
@@ -822,28 +822,23 @@ impl PathPipeline {
         feather_lut: &wgpu::TextureView,
         gradient: Option<&wgpu::TextureView>,
         destination: Option<&wgpu::TextureView>,
-        uniforms: &FlushUniforms,
-        paths: &[PathData],
+        flush_resources: &TessellationFlushResources,
         paints: &[PaintData],
         paint_aux: &[PaintAuxData],
-        contours: &[ContourData],
     ) -> PreparedPathResources {
         // C++ maps these resource rings flush-wide. Exact aligned slices in
         // the guarded frame arena give wgpu the same completed-frame lifetime.
-        let uniform_buffer = uploads.upload_uniforms(device, bytemuck::bytes_of(uniforms));
-        let path_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paths));
         let paint_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paints));
         let paint_aux_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paint_aux));
-        let contour_buffer = uploads.upload_storage(device, bytemuck::cast_slice(contours));
         let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-flush-group"),
             layout: &self.flush_layout,
             entries: &[
-                binding(0, uniform_buffer.binding()),
-                binding(3, path_buffer.binding()),
+                binding(0, flush_resources.uniform_binding()),
+                binding(3, flush_resources.path_binding()),
                 binding(4, paint_buffer.binding()),
                 binding(5, paint_aux_buffer.binding()),
-                binding(6, contour_buffer.binding()),
+                binding(6, flush_resources.contour_binding()),
                 binding(8, wgpu::BindingResource::TextureView(tessellation_view)),
                 binding(
                     9,

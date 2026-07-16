@@ -2,6 +2,7 @@
 
 use crate::gpu::{ContourData, FlushUniforms, PathData, TessVertexSpan};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
+use bytemuck::Zeroable;
 #[cfg(feature = "perf-diagnostics")]
 use std::time::Instant;
 use std::{
@@ -181,18 +182,92 @@ impl Tessellator {
         contours: &[ContourData],
         height: u32,
     ) -> wgpu::Texture {
-        assert!(!spans.is_empty() && !paths.is_empty() && !contours.is_empty());
+        self.encode_with_new_flush_resources(
+            device,
+            uploads,
+            encoder,
+            feather_lut,
+            spans,
+            uniforms,
+            paths,
+            contours,
+            height,
+        )
+        .texture
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode_with_new_flush_resources(
+        &self,
+        device: &wgpu::Device,
+        uploads: &mut TessellationUploadFrame<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        feather_lut: &wgpu::TextureView,
+        spans: &[TessVertexSpan],
+        uniforms: &FlushUniforms,
+        paths: &[PathData],
+        contours: &[ContourData],
+        height: u32,
+    ) -> TessellationEncoding {
+        assert!(!spans.is_empty() && !paths.is_empty());
         let span_buffer = uploads.upload_spans(device, bytemuck::cast_slice(spans));
-        let uniform_buffer = uploads.upload_uniforms(device, bytemuck::bytes_of(uniforms));
-        let path_buffer = uploads.upload_paths(device, bytemuck::cast_slice(paths));
-        let contour_buffer = uploads.upload_contours(device, bytemuck::cast_slice(contours));
+        let flush_resources = uploads.upload_flush_resources(device, uniforms, paths, contours);
+        let texture = self.encode_uploaded(
+            device,
+            encoder,
+            feather_lut,
+            &span_buffer,
+            &flush_resources,
+            spans.len(),
+            height,
+        );
+        TessellationEncoding {
+            texture,
+            flush_resources,
+        }
+    }
+
+    pub(crate) fn encode_with_flush_resources(
+        &self,
+        device: &wgpu::Device,
+        uploads: &mut TessellationUploadFrame<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        feather_lut: &wgpu::TextureView,
+        spans: &[TessVertexSpan],
+        flush_resources: &TessellationFlushResources,
+        height: u32,
+    ) -> wgpu::Texture {
+        assert!(!spans.is_empty());
+        let span_buffer = uploads.upload_spans(device, bytemuck::cast_slice(spans));
+        self.encode_uploaded(
+            device,
+            encoder,
+            feather_lut,
+            &span_buffer,
+            flush_resources,
+            spans.len(),
+            height,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn encode_uploaded(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        feather_lut: &wgpu::TextureView,
+        span_buffer: &UploadSlice,
+        flush_resources: &TessellationFlushResources,
+        span_count: usize,
+        height: u32,
+    ) -> wgpu::Texture {
         let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-flush-group"),
             layout: &self.flush_layout,
             entries: &[
-                binding(0, uniform_buffer.binding()),
-                binding(3, path_buffer.binding()),
-                binding(6, contour_buffer.binding()),
+                binding(0, flush_resources.uniform_binding()),
+                binding(3, flush_resources.path_binding()),
+                binding(6, flush_resources.contour_binding()),
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
@@ -234,7 +309,7 @@ impl Tessellator {
         pass.set_bind_group(3, &self.sampler_group, &[]);
         pass.set_vertex_buffer(0, span_buffer.slice());
         pass.set_index_buffer(self.span_indices.slice(..), wgpu::IndexFormat::Uint16);
-        pass.draw_tessellation_spans(0..12, 0, 0..spans.len() as u32);
+        pass.draw_tessellation_spans(0..12, 0, 0..span_count as u32);
         drop(pass);
         texture
     }
@@ -269,6 +344,29 @@ impl TessellationUploadFrame<'_> {
     fn upload_contours(&mut self, device: &wgpu::Device, bytes: &[u8]) -> UploadSlice {
         let alignment = self.slot.storage_alignment;
         self.slot.uploads.upload(device, bytes, alignment)
+    }
+
+    pub(crate) fn upload_flush_resources(
+        &mut self,
+        device: &wgpu::Device,
+        uniforms: &FlushUniforms,
+        paths: &[PathData],
+        contours: &[ContourData],
+    ) -> TessellationFlushResources {
+        assert!(!paths.is_empty());
+        let dummy_contours = [ContourData::zeroed()];
+        TessellationFlushResources {
+            uniform_buffer: self.upload_uniforms(device, bytemuck::bytes_of(uniforms)),
+            path_buffer: self.upload_paths(device, bytemuck::cast_slice(paths)),
+            contour_buffer: self.upload_contours(
+                device,
+                bytemuck::cast_slice(if contours.is_empty() {
+                    &dummy_contours
+                } else {
+                    contours
+                }),
+            ),
+        }
     }
 
     pub(crate) fn flush(&mut self, queue: &wgpu::Queue) {
@@ -485,6 +583,31 @@ pub(crate) struct UploadSlice {
     buffer: wgpu::Buffer,
     offset: u64,
     size: NonZeroU64,
+}
+
+pub(crate) struct TessellationFlushResources {
+    uniform_buffer: UploadSlice,
+    path_buffer: UploadSlice,
+    contour_buffer: UploadSlice,
+}
+
+impl TessellationFlushResources {
+    pub(crate) fn uniform_binding(&self) -> wgpu::BindingResource<'_> {
+        self.uniform_buffer.binding()
+    }
+
+    pub(crate) fn path_binding(&self) -> wgpu::BindingResource<'_> {
+        self.path_buffer.binding()
+    }
+
+    pub(crate) fn contour_binding(&self) -> wgpu::BindingResource<'_> {
+        self.contour_buffer.binding()
+    }
+}
+
+pub(crate) struct TessellationEncoding {
+    pub(crate) texture: wgpu::Texture,
+    pub(crate) flush_resources: TessellationFlushResources,
 }
 
 impl UploadSlice {

@@ -3,9 +3,8 @@
 //! This is intentionally separate from `atomic_pipeline`: the two shader
 //! families use incompatible coverage-buffer encodings and pass schedules.
 
-use crate::gpu::{
-    ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData, TriangleVertex,
-};
+use crate::gpu::{FlushUniforms, PaintAuxData, PaintData, PatchVertex, TriangleVertex};
+use crate::tessellator::TessellationFlushResources;
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) struct ClockwiseAtomicPipeline {
@@ -518,27 +517,14 @@ impl ClockwiseAtomicPipeline {
         patch_indices: &wgpu::Buffer,
         draws: &[ClockwiseAtomicDraw<'_>],
         uniforms: &FlushUniforms,
-        paths: &[PathData],
+        flush_resources: &TessellationFlushResources,
         paints: &[PaintData],
         paint_aux: &[PaintAuxData],
-        contours: &[ContourData],
         coverage_word_count: usize,
         capture_coverage: bool,
     ) -> Option<ClockwiseAtomicCoverageReadback> {
         assert!(!draws.is_empty());
         assert_ne!(uniforms.coverage_buffer_prefix, 0);
-        let uniform = upload(
-            device,
-            "nuxie-cwa-uniforms",
-            std::slice::from_ref(uniforms),
-            wgpu::BufferUsages::UNIFORM,
-        );
-        let paths = upload(
-            device,
-            "nuxie-cwa-paths",
-            paths,
-            wgpu::BufferUsages::STORAGE,
-        );
         let paints = upload(
             device,
             "nuxie-cwa-paints",
@@ -549,12 +535,6 @@ impl ClockwiseAtomicPipeline {
             device,
             "nuxie-cwa-paint-aux",
             paint_aux,
-            wgpu::BufferUsages::STORAGE,
-        );
-        let contours = upload(
-            device,
-            "nuxie-cwa-contours",
-            contours,
             wgpu::BufferUsages::STORAGE,
         );
         let coverage = upload(
@@ -640,11 +620,11 @@ impl ClockwiseAtomicPipeline {
                     label: Some("nuxie-cwa-flush-group"),
                     layout: &self.flush_layout,
                     entries: &[
-                        binding(0, uniform.as_entire_binding()),
-                        binding(3, paths.as_entire_binding()),
+                        binding(0, flush_resources.uniform_binding()),
+                        binding(3, flush_resources.path_binding()),
                         binding(4, paints.as_entire_binding()),
                         binding(5, paint_aux.as_entire_binding()),
-                        binding(6, contours.as_entire_binding()),
+                        binding(6, flush_resources.contour_binding()),
                         binding(7, coverage.as_entire_binding()),
                         binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
                         binding(

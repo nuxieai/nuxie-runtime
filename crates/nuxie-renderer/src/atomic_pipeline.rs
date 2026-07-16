@@ -1,9 +1,9 @@
 //! Clockwise-atomic draw and resolve translated from Rive's WebGPU shaders.
 
 use crate::gpu::{
-    ContourData, FlushUniforms, ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData,
-    PatchVertex, PathData, TriangleVertex,
+    ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData, PatchVertex, TriangleVertex,
 };
+use crate::tessellator::TessellationFlushResources;
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 use bytemuck::Zeroable;
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
@@ -1013,11 +1013,9 @@ impl AtomicPipeline {
         draws: &[AtomicDraw<'_>],
         draw_group_starts: &[usize],
         batch_shared_draws: bool,
-        uniforms: &FlushUniforms,
-        paths: &[PathData],
+        flush_resources: &TessellationFlushResources,
         paints: &[PaintData],
         paint_aux: &[PaintAuxData],
-        contours: &[ContourData],
         pixel_count: usize,
         capture_planes: bool,
     ) -> AtomicPlaneReadbacks {
@@ -1054,18 +1052,6 @@ impl AtomicPipeline {
         let hsl_blend = draws.iter().any(|draw| draw.hsl_blend);
         #[cfg(feature = "perf-diagnostics")]
         let buffer_upload_started = Instant::now();
-        let uniform = upload(
-            device,
-            "nuxie-atomic-uniforms",
-            std::slice::from_ref(uniforms),
-            wgpu::BufferUsages::UNIFORM,
-        );
-        let paths = upload(
-            device,
-            "nuxie-atomic-path-data",
-            paths,
-            wgpu::BufferUsages::STORAGE,
-        );
         let paints = upload(
             device,
             "nuxie-atomic-paint-data",
@@ -1076,17 +1062,6 @@ impl AtomicPipeline {
             device,
             "nuxie-atomic-paint-aux",
             paint_aux,
-            wgpu::BufferUsages::STORAGE,
-        );
-        let dummy_contours = [ContourData::zeroed()];
-        let contours = upload(
-            device,
-            "nuxie-atomic-contours",
-            if contours.is_empty() {
-                &dummy_contours
-            } else {
-                contours
-            },
             wgpu::BufferUsages::STORAGE,
         );
         #[cfg(feature = "perf-diagnostics")]
@@ -1261,7 +1236,7 @@ impl AtomicPipeline {
                 label: Some("nuxie-atomic-flush-group"),
                 layout: &self.flush_layout,
                 entries: &[
-                    binding(0, uniform.as_entire_binding()),
+                    binding(0, flush_resources.uniform_binding()),
                     binding(
                         2,
                         image_uniform_buffers[draw_index]
@@ -1269,10 +1244,10 @@ impl AtomicPipeline {
                             .unwrap_or(&self.dummy_image_uniforms)
                             .as_entire_binding(),
                     ),
-                    binding(3, paths.as_entire_binding()),
+                    binding(3, flush_resources.path_binding()),
                     binding(4, paints.as_entire_binding()),
                     binding(5, paint_aux.as_entire_binding()),
-                    binding(6, contours.as_entire_binding()),
+                    binding(6, flush_resources.contour_binding()),
                     binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
                     binding(
                         9,

@@ -316,11 +316,31 @@ Sol's independent read-only review passes with no findings across eligibility,
 execution barriers, logical relocation, reflection wrapping, texture bounds,
 and focused regression coverage.
 
+### Item 132 Update
+
+C++ maps each uniform, path, paint, paint-auxiliary, contour, and tessellation
+span ring once per flush, then binds the same submitted buffers in tessellation
+and drawing. Rust now mirrors that ownership for the three payloads shared by
+both stages. `TessellationFlushResources` owns aligned uniform, path, and
+contour slices in the guarded frame upload arena; tessellation, MSAA, general
+atomic, and specialized clockwise atomic all bind those exact ranges.
+
+The MSAA report removes eight upload rows (`14->6`), and the atomic report
+removes the final three upload rows (`6->3`). All fixed-matrix Rust upload
+totals are at or below C++ Dawn. The two `batchedconvexpaths` rows also vanish,
+closing `UPLOAD-LAYOUT` without speculative telemetry. Multiple atomic
+tessellation textures reuse the flush resources while retaining separate span
+uploads, and no-span image runs allocate a shader-valid dummy contour.
+Sol's read-only review passes with no findings across upload-slot lifetime,
+submission ordering, binding ranges, repeated textures, and dummy/image-only
+paths.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
 | --- | --- | --- | --- |
 | Triple-buffer GPU upload rings | `renderer/include/rive/renderer/buffer_ring.hpp:11-79`; `renderer/include/rive/renderer/gpu.hpp:75-77`; `renderer/src/webgpu/render_context_webgpu_impl.cpp:2632-2804` | upload calls/bytes, allocation and pending-write work | Core frame upload arena and guarded completed-frame slots are ported; continue comparing byte volume. |
+| Per-flush typed-resource reuse | `renderer/src/render_context.cpp:2753-2885`; `renderer/src/webgpu/render_context_webgpu_impl.cpp:3880-4055` | upload bytes and binding ranges | Uniform/path/contour slices are uploaded once and shared by tessellation plus every draw pipeline; all fixed upload-byte excesses are closed. |
 | Dynamic render-buffer rings | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2253-2334` | per-update buffer allocation and copies | Retained Rust render buffers exist; ring/capacity behavior remains a later counter-led check. |
 | Logical-flush container reuse | `renderer/src/render_context.cpp:155-157`, `268-273`, `282-343`, `998-1004` | host allocation without changing GPU counters | Rust retains frame containers in several paths; audit only when profiles identify host churn. |
 | Resource-budget flush splitting | `renderer/src/render_context.cpp:497-573`, `663-725` | logical flushes and draws per flush | Rust preserves the 1,024-draw and resource fences; fixed corpus is structurally exact. |
@@ -373,6 +393,9 @@ and focused regression coverage.
   remaining tail is eleven upload rows plus the three shared `OVER-PATCH`
   rows; atomic OverStroke's residual 4,328 upload bytes belong to
   `UPLOAD-DUP`.
+- Item 132 closes all eleven upload rows in two mode-wide steps, moving the
+  report 14->6->3. `UPLOAD-DUP` and `UPLOAD-LAYOUT` are complete; only the
+  three `OVER-PATCH` rows remain in the deterministic tail.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

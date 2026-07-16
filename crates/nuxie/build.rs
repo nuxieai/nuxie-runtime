@@ -119,6 +119,63 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "NestedArtboard",
+        schema_name: "NestedArtboard",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "WorldTransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "rotation",
+                schema_name: "rotation",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_x",
+                schema_name: "scaleX",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_y",
+                schema_name: "scaleY",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "artboard",
+                schema_name: "artboardId",
+                declared_owner: "NestedArtboard",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "Rectangle",
         schema_name: "Rectangle",
         fields: &[
@@ -588,6 +645,13 @@ fn render_scene_schema() -> String {
         FieldKind::Double,
         true,
     );
+    let nested_artboard_id = resolve_named_property(
+        "NestedArtboard",
+        "artboardId",
+        "NestedArtboard",
+        FieldKind::Uint,
+        false,
+    );
     let path_width = resolve_named_property(
         "Rectangle",
         "width",
@@ -737,6 +801,7 @@ fn render_scene_schema() -> String {
         ("ROTATION", rotation),
         ("SCALE_X", scale_x),
         ("SCALE_Y", scale_y),
+        ("NESTED_ARTBOARD_ID", nested_artboard_id),
         ("PATH_WIDTH", path_width),
         ("PATH_HEIGHT", path_height),
         ("FILL_RULE", fill_rule),
@@ -1247,6 +1312,7 @@ fn public_field_rust_type(
         ("Text", "overflow") => "SceneTextOverflow",
         ("TextValueRun", "style") => "ObjectId",
         ("TextStylePaint", "font") => "FontAssetId",
+        ("NestedArtboard", "artboard") => "ArtboardId",
         _ => rust_type(runtime_type),
     }
 }

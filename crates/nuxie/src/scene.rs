@@ -2667,6 +2667,19 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
     )
 }
 
+/// World-space endpoints of one shaped Text caret line.
+///
+/// The public canonical caret uses downstream affinity at a source boundary.
+/// Selection and hit testing retain both visual sides internally when a
+/// modifier or soft wrap makes upstream and downstream geometry differ.
+/// Source boundaries in whitespace omitted at a soft wrap canonically share
+/// the next-line caret; static trailing separators have no synthetic caret.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CaretGeometry {
+    pub top: crate::Vec2D,
+    pub bottom: crate::Vec2D,
+}
+
 /// A short-lived facade over direct runtime instance writes and draws.
 pub struct Frame<'a> {
     scene: &'a mut Scene,
@@ -2807,6 +2820,91 @@ impl Frame<'_> {
             .find(|candidate| candidate.id == instance && candidate.artboard == artboard)?
             .runtime
             .world_transform(local_id)
+    }
+
+    /// Return the canonical downstream shaped Text caret in source-artboard
+    /// world space for one exact UTF-8 byte boundary.
+    ///
+    /// A boundary skipped with leading whitespace at a soft wrap snaps to the
+    /// next visual line. Static Text does not synthesize a caret after a
+    /// trailing newline or other static line separator. CRLF is one authored
+    /// separator, so the boundary between its two scalars has no geometry.
+    ///
+    /// Returns `None` when the instance or object is unknown, stale, foreign,
+    /// or not Text; the offset is past the source or inside a UTF-8 scalar;
+    /// font data for the base style or any participating nonempty run is
+    /// missing or invalid; layout, transform, or modifier geometry is
+    /// nonfinite; or overflow is unsupported or unknown. Geometry v1 supports
+    /// only `Visible`, `Fit`, and `FitFontSize`; `Hidden`, `Clipped`, and
+    /// `Ellipsis` fail closed.
+    pub fn text_caret(
+        &mut self,
+        instance: InstanceId,
+        object: ObjectId,
+        byte_offset: usize,
+    ) -> Option<CaretGeometry> {
+        let (artboard, local_id) = self.resolve_geometry_target(instance, object)?;
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)?
+            .runtime
+            .text_caret(local_id, byte_offset)
+    }
+
+    /// Return the nearest valid UTF-8 byte caret for one source-artboard
+    /// world-space point on shaped Text.
+    ///
+    /// Returns `None` for a nonfinite point; an unknown, stale, foreign, or
+    /// non-Text target; unshapeable text; nonfinite layout, transform, or
+    /// modifier geometry; a singular/non-invertible world transform; and
+    /// unsupported or unknown overflow. Geometry v1 supports only `Visible`,
+    /// `Fit`, and `FitFontSize`.
+    pub fn text_hit(
+        &mut self,
+        instance: InstanceId,
+        object: ObjectId,
+        point: crate::Vec2D,
+    ) -> Option<usize> {
+        let (artboard, local_id) = self.resolve_geometry_target(instance, object)?;
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)?
+            .runtime
+            .text_hit(local_id, point)
+    }
+
+    /// Return one source-artboard world-space selection rectangle per shaped
+    /// line segment covered by an exact UTF-8 byte range.
+    ///
+    /// Returns an empty result when either endpoint is past the source or
+    /// inside a UTF-8 scalar, the range is empty or reversed, the instance or
+    /// object is unknown, stale, foreign, or not Text, the text is unshapeable,
+    /// geometry is nonfinite, or overflow is unsupported or unknown. Selection
+    /// starts use downstream affinity and ends use upstream affinity, including
+    /// source whitespace omitted at soft wraps. A trailing static line
+    /// separator does not create a selectable final empty line. CRLF is
+    /// treated as one authored separator; its internal scalar boundary is not
+    /// selectable.
+    pub fn text_selection_rects(
+        &mut self,
+        instance: InstanceId,
+        object: ObjectId,
+        range: std::ops::Range<usize>,
+    ) -> Vec<crate::Aabb> {
+        let Some((artboard, local_id)) = self.resolve_geometry_target(instance, object) else {
+            return Vec::new();
+        };
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)
+            .map(|live| live.runtime.text_selection_rects(local_id, range))
+            .unwrap_or_default()
     }
 
     fn resolve_geometry_target(
@@ -3606,6 +3704,499 @@ mod tests {
         decoded
     }
 
+    fn fixture_authoring_record(
+        type_name: &str,
+        properties: Vec<(&str, AuthoringValue)>,
+    ) -> AuthoringRecord {
+        let definition = nuxie_schema::definition_by_name(type_name)
+            .expect("fixture record type exists in the generated schema");
+        let properties = properties
+            .into_iter()
+            .map(|(property_name, value)| {
+                let property = std::iter::once(definition.name)
+                    .chain(definition.ancestors.iter().copied())
+                    .filter_map(nuxie_schema::definition_by_name)
+                    .flat_map(|owner| owner.properties)
+                    .find(|property| property.name == property_name)
+                    .expect("fixture property exists in the generated schema hierarchy");
+                AuthoringProperty {
+                    key: property.key.int,
+                    value,
+                }
+            })
+            .collect();
+        AuthoringRecord {
+            type_key: definition.type_key.int,
+            properties,
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct ImportedModifierFixture {
+        x: f32,
+        y: f32,
+        modify_from: f32,
+        modify_to: f32,
+    }
+
+    fn imported_modifier_scene_fixture(
+        text_value: &str,
+        text_width: f32,
+        wrap_value: u64,
+        overflow_value: u64,
+        modifier: Option<ImportedModifierFixture>,
+    ) -> Result<(Scene, InstanceId, ObjectId)> {
+        imported_modifier_scene_fixture_with_x(
+            text_value,
+            text_width,
+            wrap_value,
+            overflow_value,
+            10.0,
+            modifier,
+        )
+    }
+
+    fn imported_modifier_scene_fixture_with_x(
+        text_value: &str,
+        text_width: f32,
+        wrap_value: u64,
+        overflow_value: u64,
+        text_x: f32,
+        modifier: Option<ImportedModifierFixture>,
+    ) -> Result<(Scene, InstanceId, ObjectId)> {
+        imported_modifier_scene_fixture_with_style_values(
+            text_value,
+            text_width,
+            40.0,
+            wrap_value,
+            overflow_value,
+            text_x,
+            20.0,
+            20.0,
+            modifier,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn imported_modifier_scene_fixture_with_style_values(
+        text_value: &str,
+        text_width: f32,
+        text_height: f32,
+        wrap_value: u64,
+        overflow_value: u64,
+        text_x: f32,
+        font_size: f32,
+        line_height: f32,
+        modifier: Option<ImportedModifierFixture>,
+    ) -> Result<(Scene, InstanceId, ObjectId)> {
+        let mut records = vec![
+            fixture_authoring_record("Backboard", Vec::new()),
+            fixture_authoring_record("FontAsset", vec![("assetId", AuthoringValue::Uint(0))]),
+            fixture_authoring_record(
+                "FileAssetContents",
+                vec![("bytes", AuthoringValue::Bytes(fixture_font_bytes()))],
+            ),
+            fixture_authoring_record(
+                "Artboard",
+                vec![
+                    ("width", AuthoringValue::Double(200.0)),
+                    ("height", AuthoringValue::Double(100.0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "Text",
+                vec![
+                    ("x", AuthoringValue::Double(text_x)),
+                    ("y", AuthoringValue::Double(10.0)),
+                    ("sizingValue", AuthoringValue::Uint(2)),
+                    ("width", AuthoringValue::Double(text_width)),
+                    ("height", AuthoringValue::Double(text_height)),
+                    ("wrapValue", AuthoringValue::Uint(wrap_value)),
+                    ("overflowValue", AuthoringValue::Uint(overflow_value)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("fontSize", AuthoringValue::Double(font_size)),
+                    ("lineHeight", AuthoringValue::Double(line_height)),
+                    ("fontAssetId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            fixture_authoring_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+            fixture_authoring_record(
+                "SolidColor",
+                vec![
+                    ("parentId", AuthoringValue::Uint(3)),
+                    ("colorValue", AuthoringValue::Color(0xff11_2233)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("text", AuthoringValue::String(text_value.into())),
+                    ("styleId", AuthoringValue::Uint(2)),
+                ],
+            ),
+        ];
+        if let Some(modifier) = modifier {
+            // This is an actual imported Rive modifier graph, not a mocked
+            // post-layout offset: the group and range travel through binary
+            // import, graph dependency construction, shaping, and draw.
+            records.extend([
+                fixture_authoring_record(
+                    "TextModifierGroup",
+                    vec![
+                        ("parentId", AuthoringValue::Uint(1)),
+                        ("modifierFlags", AuthoringValue::Uint(1 << 2)),
+                        ("x", AuthoringValue::Double(modifier.x)),
+                        ("y", AuthoringValue::Double(modifier.y)),
+                    ],
+                ),
+                fixture_authoring_record(
+                    "TextModifierRange",
+                    vec![
+                        ("parentId", AuthoringValue::Uint(6)),
+                        ("typeValue", AuthoringValue::Uint(1)),
+                        ("modifyFrom", AuthoringValue::Double(modifier.modify_from)),
+                        ("modifyTo", AuthoringValue::Double(modifier.modify_to)),
+                        ("falloffFrom", AuthoringValue::Double(modifier.modify_from)),
+                        ("falloffTo", AuthoringValue::Double(modifier.modify_to)),
+                    ],
+                ),
+            ]);
+        }
+
+        let runtime = RuntimeFile::from_authoring_records(records)?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        let local_count = file
+            .graph
+            .artboards
+            .first()
+            .map(|graph| graph.local_objects.len())
+            .ok_or_else(|| anyhow::anyhow!("modifier fixture has no artboard graph"))?;
+        let artboard = ArtboardId(
+            allocate_global_identity(&NEXT_ARTBOARD_ID)
+                .ok_or_else(|| anyhow::anyhow!("artboard identity exhausted"))?,
+        );
+        let text = ObjectId(
+            allocate_global_identity(&NEXT_OBJECT_ID)
+                .ok_or_else(|| anyhow::anyhow!("object identity exhausted"))?,
+        );
+        let mut objects = BTreeMap::new();
+        objects.insert(
+            text,
+            RuntimeSlot {
+                local_id: 1,
+                kind: NodeKind::Text,
+            },
+        );
+        let mut objects_by_local = vec![None; local_count];
+        *objects_by_local
+            .get_mut(1)
+            .ok_or_else(|| anyhow::anyhow!("modifier fixture Text local is missing"))? = Some(text);
+
+        let mut scene = Scene::new();
+        scene.materialized.insert(
+            artboard,
+            MaterializedArtboard {
+                file,
+                objects,
+                objects_by_local,
+            },
+        );
+        let instance = scene.instantiate(artboard)?;
+        Ok((scene, instance, text))
+    }
+
+    fn imported_follow_path_scene_fixture() -> Result<(Scene, InstanceId, ObjectId)> {
+        let records = vec![
+            fixture_authoring_record("Backboard", Vec::new()),
+            fixture_authoring_record("FontAsset", vec![("assetId", AuthoringValue::Uint(0))]),
+            fixture_authoring_record(
+                "FileAssetContents",
+                vec![("bytes", AuthoringValue::Bytes(fixture_font_bytes()))],
+            ),
+            fixture_authoring_record(
+                "Artboard",
+                vec![
+                    ("width", AuthoringValue::Double(200.0)),
+                    ("height", AuthoringValue::Double(150.0)),
+                ],
+            ),
+            fixture_authoring_record("Shape", Vec::new()),
+            fixture_authoring_record("PointsPath", vec![("parentId", AuthoringValue::Uint(1))]),
+            fixture_authoring_record(
+                "StraightVertex",
+                vec![
+                    ("parentId", AuthoringValue::Uint(2)),
+                    ("x", AuthoringValue::Double(0.0)),
+                    ("y", AuthoringValue::Double(50.0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "StraightVertex",
+                vec![
+                    ("parentId", AuthoringValue::Uint(2)),
+                    ("x", AuthoringValue::Double(10.0)),
+                    ("y", AuthoringValue::Double(50.0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "StraightVertex",
+                vec![
+                    ("parentId", AuthoringValue::Uint(2)),
+                    ("x", AuthoringValue::Double(10.0)),
+                    ("y", AuthoringValue::Double(100.0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "Text",
+                vec![
+                    ("sizingValue", AuthoringValue::Uint(2)),
+                    ("width", AuthoringValue::Double(80.0)),
+                    ("height", AuthoringValue::Double(40.0)),
+                    ("wrapValue", AuthoringValue::Uint(1)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", AuthoringValue::Uint(6)),
+                    ("fontSize", AuthoringValue::Double(20.0)),
+                    ("lineHeight", AuthoringValue::Double(20.0)),
+                    ("fontAssetId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            fixture_authoring_record("Fill", vec![("parentId", AuthoringValue::Uint(7))]),
+            fixture_authoring_record(
+                "SolidColor",
+                vec![
+                    ("parentId", AuthoringValue::Uint(8)),
+                    ("colorValue", AuthoringValue::Color(0xff11_2233)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(6)),
+                    ("text", AuthoringValue::String("aa".into())),
+                    ("styleId", AuthoringValue::Uint(7)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextModifierGroup",
+                vec![("parentId", AuthoringValue::Uint(6))],
+            ),
+            fixture_authoring_record(
+                "TextModifierRange",
+                vec![("parentId", AuthoringValue::Uint(11))],
+            ),
+            fixture_authoring_record(
+                "TextFollowPathModifier",
+                vec![
+                    ("parentId", AuthoringValue::Uint(11)),
+                    ("targetId", AuthoringValue::Uint(2)),
+                ],
+            ),
+        ];
+        let runtime = RuntimeFile::from_authoring_records(records)?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        let graph = file
+            .graph
+            .artboards
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("follow-path fixture has no artboard graph"))?;
+        let text_local = graph
+            .local_objects
+            .iter()
+            .find(|object| object.type_name == Some("Text"))
+            .map(|object| object.local_id)
+            .ok_or_else(|| anyhow::anyhow!("follow-path fixture Text local is missing"))?;
+        let local_count = graph.local_objects.len();
+        let artboard = ArtboardId(
+            allocate_global_identity(&NEXT_ARTBOARD_ID)
+                .ok_or_else(|| anyhow::anyhow!("artboard identity exhausted"))?,
+        );
+        let text = ObjectId(
+            allocate_global_identity(&NEXT_OBJECT_ID)
+                .ok_or_else(|| anyhow::anyhow!("object identity exhausted"))?,
+        );
+        let mut objects = BTreeMap::new();
+        objects.insert(
+            text,
+            RuntimeSlot {
+                local_id: text_local,
+                kind: NodeKind::Text,
+            },
+        );
+        let mut objects_by_local = vec![None; local_count];
+        *objects_by_local
+            .get_mut(text_local)
+            .ok_or_else(|| anyhow::anyhow!("follow-path fixture Text local is out of range"))? =
+            Some(text);
+
+        let mut scene = Scene::new();
+        scene.materialized.insert(
+            artboard,
+            MaterializedArtboard {
+                file,
+                objects,
+                objects_by_local,
+            },
+        );
+        let instance = scene.instantiate(artboard)?;
+        Ok((scene, instance, text))
+    }
+
+    fn static_text_file_fixture(
+        text_value: &str,
+        vertical_align_value: u64,
+        overflow_value: u64,
+    ) -> Result<Arc<File>> {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            fixture_authoring_record("Backboard", Vec::new()),
+            fixture_authoring_record("FontAsset", vec![("assetId", AuthoringValue::Uint(0))]),
+            fixture_authoring_record(
+                "FileAssetContents",
+                vec![("bytes", AuthoringValue::Bytes(fixture_font_bytes()))],
+            ),
+            fixture_authoring_record(
+                "Artboard",
+                vec![
+                    ("width", AuthoringValue::Double(200.0)),
+                    ("height", AuthoringValue::Double(100.0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "Text",
+                vec![
+                    ("x", AuthoringValue::Double(10.0)),
+                    ("y", AuthoringValue::Double(10.0)),
+                    ("sizingValue", AuthoringValue::Uint(2)),
+                    ("width", AuthoringValue::Double(80.0)),
+                    ("height", AuthoringValue::Double(60.0)),
+                    ("wrapValue", AuthoringValue::Uint(1)),
+                    (
+                        "verticalAlignValue",
+                        AuthoringValue::Uint(vertical_align_value),
+                    ),
+                    ("overflowValue", AuthoringValue::Uint(overflow_value)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("fontSize", AuthoringValue::Double(20.0)),
+                    ("lineHeight", AuthoringValue::Double(20.0)),
+                    ("fontAssetId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            fixture_authoring_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+            fixture_authoring_record(
+                "SolidColor",
+                vec![
+                    ("parentId", AuthoringValue::Uint(3)),
+                    ("colorValue", AuthoringValue::Color(0xff11_2233)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("text", AuthoringValue::String(text_value.into())),
+                    ("styleId", AuthoringValue::Uint(2)),
+                ],
+            ),
+        ])?;
+        Ok(Arc::new(File::from_runtime(runtime)?))
+    }
+
+    fn owned_static_text_fixture(
+        text_value: &str,
+        vertical_align_value: u64,
+        overflow_value: u64,
+    ) -> Result<OwnedArtboardInstance> {
+        OwnedArtboardInstance::instantiate(
+            static_text_file_fixture(text_value, vertical_align_value, overflow_value)?,
+            0,
+        )
+    }
+
+    fn owned_multi_font_text_with_missing_second_font_fixture() -> Result<OwnedArtboardInstance> {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            fixture_authoring_record("Backboard", Vec::new()),
+            fixture_authoring_record("FontAsset", vec![("assetId", AuthoringValue::Uint(0))]),
+            fixture_authoring_record(
+                "FileAssetContents",
+                vec![("bytes", AuthoringValue::Bytes(fixture_font_bytes()))],
+            ),
+            fixture_authoring_record("FontAsset", vec![("assetId", AuthoringValue::Uint(1))]),
+            fixture_authoring_record(
+                "Artboard",
+                vec![
+                    ("width", AuthoringValue::Double(200.0)),
+                    ("height", AuthoringValue::Double(100.0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "Text",
+                vec![
+                    ("sizingValue", AuthoringValue::Uint(2)),
+                    ("width", AuthoringValue::Double(80.0)),
+                    ("height", AuthoringValue::Double(40.0)),
+                    ("wrapValue", AuthoringValue::Uint(1)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("fontSize", AuthoringValue::Double(20.0)),
+                    ("lineHeight", AuthoringValue::Double(20.0)),
+                    ("fontAssetId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("fontSize", AuthoringValue::Double(20.0)),
+                    ("lineHeight", AuthoringValue::Double(20.0)),
+                    ("fontAssetId", AuthoringValue::Uint(1)),
+                ],
+            ),
+            fixture_authoring_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+            fixture_authoring_record(
+                "SolidColor",
+                vec![
+                    ("parentId", AuthoringValue::Uint(4)),
+                    ("colorValue", AuthoringValue::Color(0xff11_2233)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("text", AuthoringValue::String("a".into())),
+                    ("styleId", AuthoringValue::Uint(2)),
+                ],
+            ),
+            fixture_authoring_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("text", AuthoringValue::String("b".into())),
+                    ("styleId", AuthoringValue::Uint(3)),
+                ],
+            ),
+        ])?;
+        OwnedArtboardInstance::instantiate(Arc::new(File::from_runtime(runtime)?), 0)
+    }
+
     fn owned_font_text_fixture(include_embedded_contents: bool) -> Result<OwnedArtboardInstance> {
         let mut scene = Scene::new();
         scene.edit(|tx| {
@@ -3677,6 +4268,856 @@ mod tests {
         let runtime = RuntimeFile::from_authoring_records(records)?;
         let file = Arc::new(File::from_runtime(runtime)?);
         Ok(OwnedArtboardInstance::instantiate(file, 0)?)
+    }
+
+    #[test]
+    fn shaped_auto_sized_bottom_trim_moves_public_geometry_with_the_trimmed_glyph_layout()
+    -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, text), _) = scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Trim geometry".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Trimmed Text".into(),
+                    x: 10.0,
+                    y: 20.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 80.0,
+                    height: 40.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Trim Style".into(),
+                    font_size: 24.0,
+                    line_height: 30.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Trim Run".into(),
+                    text: "a".into(),
+                    style,
+                }),
+            )?;
+            Ok((artboard, text))
+        })?;
+        let instance = scene.instantiate(artboard)?;
+        let local_id = scene
+            .materialized
+            .get(&artboard)
+            .and_then(|materialized| materialized.objects.get(&text))
+            .map(|slot| slot.local_id)
+            .expect("authored Text has a runtime local");
+        let text_property_key = |name: &str| {
+            nuxie_schema::definition_by_name("Text")
+                .and_then(|definition| {
+                    definition
+                        .properties
+                        .iter()
+                        .find(|property| property.name == name)
+                })
+                .map(|property| property.key.int)
+                .expect("Text property exists in the generated schema")
+        };
+        let sizing_key = text_property_key("sizingValue");
+        let trim_key = text_property_key("verticalTrimValue");
+        let origin_y_key = text_property_key("originY");
+        let live = scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|live| live.id == instance)
+            .expect("instance is live");
+        assert!(
+            live.runtime
+                .raw_mut()
+                .set_uint_property(local_id, sizing_key, 0),
+            "the runtime fixture switches Text to auto width"
+        );
+        assert!(
+            live.runtime
+                .raw_mut()
+                .set_double_property(local_id, origin_y_key, 1.0),
+            "the runtime fixture anchors Text at its bottom edge"
+        );
+
+        let (untrimmed_start, untrimmed_end, untrimmed_selection, untrimmed_bounds) = {
+            let mut frame = scene.frame();
+            let start = frame
+                .text_caret(instance, text, 0)
+                .expect("auto-sized text has a start caret");
+            let end = frame
+                .text_caret(instance, text, 1)
+                .expect("auto-sized text has an end caret");
+            let selection = frame
+                .text_selection_rects(instance, text, 0..1)
+                .into_iter()
+                .next()
+                .expect("auto-sized text has one selected line segment");
+            let bounds = frame
+                .world_bounds(instance, text)
+                .expect("auto-sized text has logical bounds");
+            (start, end, selection, bounds)
+        };
+        assert!(
+            untrimmed_bounds.width() < 80.0,
+            "the runtime fixture must be auto-sized, got {untrimmed_bounds:?}"
+        );
+
+        let live = scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|live| live.id == instance)
+            .expect("instance remains live");
+        assert!(
+            live.runtime
+                .raw_mut()
+                .set_uint_property(local_id, trim_key, 1 << 8),
+            "second-byte value 1 enables alphabetic bottom trim"
+        );
+
+        let mut frame = scene.frame();
+        let trimmed_start = frame
+            .text_caret(instance, text, 0)
+            .expect("trimmed text has a start caret");
+        let trimmed_end = frame
+            .text_caret(instance, text, 1)
+            .expect("trimmed text has an end caret");
+        let trimmed_selection = frame
+            .text_selection_rects(instance, text, 0..1)
+            .into_iter()
+            .next()
+            .expect("trimmed text has one selected line segment");
+        let trimmed_bounds = frame
+            .world_bounds(instance, text)
+            .expect("trimmed text has logical bounds");
+
+        let trim_shift = trimmed_start.top.y - untrimmed_start.top.y;
+        assert!(
+            trim_shift > 0.0,
+            "bottom trim must move bottom-anchored shaped geometry down: {untrimmed_start:?} -> {trimmed_start:?}; bounds {untrimmed_bounds:?} -> {trimmed_bounds:?}"
+        );
+        assert!((untrimmed_start.top.x - trimmed_start.top.x).abs() <= 0.001);
+        assert!((untrimmed_end.top.x - trimmed_end.top.x).abs() <= 0.001);
+        assert!((trimmed_start.bottom.y - untrimmed_start.bottom.y - trim_shift).abs() <= 0.001);
+        assert!((trimmed_end.bottom.y - untrimmed_end.bottom.y - trim_shift).abs() <= 0.001);
+        assert!((trimmed_selection.min_y - untrimmed_selection.min_y - trim_shift).abs() <= 0.001);
+        assert!((trimmed_selection.max_y - untrimmed_selection.max_y - trim_shift).abs() <= 0.001);
+        assert!((untrimmed_selection.width() - trimmed_selection.width()).abs() <= 0.001);
+        assert!((untrimmed_selection.height() - trimmed_selection.height()).abs() <= 0.001);
+        for (expected, caret) in [(0, trimmed_start), (1, trimmed_end)] {
+            let midpoint = crate::Vec2D::new(
+                (caret.top.x + caret.bottom.x) / 2.0,
+                (caret.top.y + caret.bottom.y) / 2.0,
+            );
+            assert_eq!(frame.text_hit(instance, text, midpoint), Some(expected));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn public_frame_text_geometry_follows_supported_runtime_modifier_transform() -> Result<()> {
+        const MODIFIER_X: f32 = 50.0;
+        const MODIFIER_Y: f32 = 30.0;
+
+        let (mut baseline, baseline_instance, baseline_text) =
+            imported_modifier_scene_fixture("a", 80.0, 1, 0, None)?;
+        let (baseline_start, baseline_end, baseline_selection) = {
+            let mut frame = baseline.frame();
+            let start = frame
+                .text_caret(baseline_instance, baseline_text, 0)
+                .expect("baseline fixture has a start caret");
+            let end = frame
+                .text_caret(baseline_instance, baseline_text, 1)
+                .expect("baseline fixture has an end caret");
+            let selection = frame
+                .text_selection_rects(baseline_instance, baseline_text, 0..1)
+                .into_iter()
+                .next()
+                .expect("baseline fixture has one selected segment");
+            (start, end, selection)
+        };
+
+        let (mut modified, modified_instance, modified_text) = imported_modifier_scene_fixture(
+            "a",
+            80.0,
+            1,
+            0,
+            Some(ImportedModifierFixture {
+                x: MODIFIER_X,
+                y: MODIFIER_Y,
+                modify_from: 0.0,
+                modify_to: 1.0,
+            }),
+        )?;
+        let mut frame = modified.frame();
+        let modified_start = frame
+            .text_caret(modified_instance, modified_text, 0)
+            .expect("modified fixture has a start caret");
+        let modified_end = frame
+            .text_caret(modified_instance, modified_text, 1)
+            .expect("modified fixture has an end caret");
+        let modified_selection = frame
+            .text_selection_rects(modified_instance, modified_text, 0..1)
+            .into_iter()
+            .next()
+            .expect("modified fixture has one selected segment");
+
+        for (baseline, modified) in [
+            (baseline_start.top, modified_start.top),
+            (baseline_start.bottom, modified_start.bottom),
+            (baseline_end.top, modified_end.top),
+            (baseline_end.bottom, modified_end.bottom),
+        ] {
+            assert!(
+                (modified.x - baseline.x - MODIFIER_X).abs() <= 0.001,
+                "modifier x did not reach public geometry: {baseline:?} -> {modified:?}"
+            );
+            assert!(
+                (modified.y - baseline.y - MODIFIER_Y).abs() <= 0.001,
+                "modifier y did not reach public geometry: {baseline:?} -> {modified:?}"
+            );
+        }
+        assert!((modified_selection.min_x - baseline_selection.min_x - MODIFIER_X).abs() <= 0.001);
+        assert!((modified_selection.max_x - baseline_selection.max_x - MODIFIER_X).abs() <= 0.001);
+        assert!((modified_selection.min_y - baseline_selection.min_y - MODIFIER_Y).abs() <= 0.001);
+        assert!((modified_selection.max_y - baseline_selection.max_y - MODIFIER_Y).abs() <= 0.001);
+
+        for (expected, caret) in [(0, modified_start), (1, modified_end)] {
+            let midpoint = crate::Vec2D::new(
+                (caret.top.x + caret.bottom.x) / 2.0,
+                (caret.top.y + caret.bottom.y) / 2.0,
+            );
+            assert_eq!(
+                frame.text_hit(modified_instance, modified_text, midpoint),
+                Some(expected)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn public_frame_text_geometry_preserves_both_sides_of_a_modifier_boundary() -> Result<()> {
+        const SECOND_GLYPH_X: f32 = 200.0;
+
+        let (mut baseline, baseline_instance, baseline_text) =
+            imported_modifier_scene_fixture("aa", 80.0, 1, 0, None)?;
+        let (baseline_boundary, baseline_selection) = {
+            let mut frame = baseline.frame();
+            let boundary = frame
+                .text_caret(baseline_instance, baseline_text, 1)
+                .expect("the unmodified glyph boundary has a caret");
+            let selection = frame
+                .text_selection_rects(baseline_instance, baseline_text, 0..1)
+                .into_iter()
+                .next()
+                .expect("the first unmodified glyph has one selected segment");
+            (boundary, selection)
+        };
+
+        let (mut modified, instance, text) = imported_modifier_scene_fixture(
+            "aa",
+            80.0,
+            1,
+            0,
+            Some(ImportedModifierFixture {
+                x: SECOND_GLYPH_X,
+                y: 0.0,
+                modify_from: 1.0,
+                modify_to: 2.0,
+            }),
+        )?;
+        let mut frame = modified.frame();
+        let canonical_boundary = frame
+            .text_caret(instance, text, 1)
+            .expect("the public caret keeps downstream affinity");
+        assert!(
+            (canonical_boundary.top.x - baseline_boundary.top.x - SECOND_GLYPH_X).abs() <= 0.001,
+            "the canonical caret must follow the translated downstream glyph: {baseline_boundary:?} -> {canonical_boundary:?}"
+        );
+
+        let first_glyph_selection = frame
+            .text_selection_rects(instance, text, 0..1)
+            .into_iter()
+            .next()
+            .expect("the first modified-layout glyph has one selected segment");
+        for (actual, expected) in [
+            (first_glyph_selection.min_x, baseline_selection.min_x),
+            (first_glyph_selection.min_y, baseline_selection.min_y),
+            (first_glyph_selection.max_x, baseline_selection.max_x),
+            (first_glyph_selection.max_y, baseline_selection.max_y),
+        ] {
+            assert!(
+                (actual - expected).abs() <= 0.001,
+                "selection ending at the boundary must use glyph 0's upstream edge: {baseline_selection:?} -> {first_glyph_selection:?}"
+            );
+        }
+
+        let upstream_midpoint = crate::Vec2D::new(
+            (baseline_boundary.top.x + baseline_boundary.bottom.x) / 2.0,
+            (baseline_boundary.top.y + baseline_boundary.bottom.y) / 2.0,
+        );
+        assert_eq!(
+            frame.text_hit(instance, text, upstream_midpoint),
+            Some(1),
+            "hit testing must keep the visible upstream edge for the same source offset"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_selection_keeps_modified_glyph_cells_when_range_carets_coincide() -> Result<()> {
+        let (mut baseline, baseline_instance, baseline_text) =
+            imported_modifier_scene_fixture("aa", 80.0, 1, 0, None)?;
+        let closing_offset = {
+            let mut frame = baseline.frame();
+            let start = frame
+                .text_caret(baseline_instance, baseline_text, 0)
+                .expect("the baseline text has a start caret");
+            let end = frame
+                .text_caret(baseline_instance, baseline_text, 2)
+                .expect("the baseline text has an end caret");
+            start.top.x - end.top.x
+        };
+
+        let (mut scene, instance, text) = imported_modifier_scene_fixture(
+            "aa",
+            80.0,
+            1,
+            0,
+            Some(ImportedModifierFixture {
+                x: closing_offset,
+                y: 0.0,
+                modify_from: 1.0,
+                modify_to: 2.0,
+            }),
+        )?;
+        let mut frame = scene.frame();
+        let start = frame
+            .text_caret(instance, text, 0)
+            .expect("the modified text has a start caret");
+        let end = frame
+            .text_caret(instance, text, 2)
+            .expect("the modified text has an end caret");
+        assert_eq!(
+            start, end,
+            "the fixture closes the range while leaving both glyph cells visible"
+        );
+
+        let selection = frame.text_selection_rects(instance, text, 0..2);
+        assert_eq!(
+            selection.len(),
+            1,
+            "coincident range carets must not erase visible modified glyph cells"
+        );
+        assert!(
+            selection[0].width() > 0.001,
+            "the retained selection must cover nonzero modified glyph geometry: {:?}",
+            selection[0]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_selection_keeps_a_modified_combining_cluster_indivisible() -> Result<()> {
+        let (mut scene, instance, text) = imported_modifier_scene_fixture(
+            "a\u{0301}",
+            80.0,
+            1,
+            0,
+            Some(ImportedModifierFixture {
+                x: 50.0,
+                y: 0.0,
+                modify_from: 0.0,
+                modify_to: 2.0,
+            }),
+        )?;
+        let mut frame = scene.frame();
+        let internal = frame
+            .text_caret(instance, text, 1)
+            .expect("the modified cluster keeps its internal source boundary");
+        let end = frame
+            .text_caret(instance, text, 3)
+            .expect("the modified cluster has an end caret");
+        assert_eq!(
+            internal, end,
+            "both source boundaries snap to the indivisible cluster end"
+        );
+        assert!(
+            frame.text_selection_rects(instance, text, 1..3).is_empty(),
+            "a range strictly inside one modified cluster has no visual segment"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_modified_selection_excludes_the_cluster_before_a_snapped_start() -> Result<()> {
+        let (mut scene, instance, text) = imported_modifier_scene_fixture(
+            "a\u{0301}b",
+            80.0,
+            1,
+            0,
+            Some(ImportedModifierFixture {
+                x: 50.0,
+                y: 0.0,
+                modify_from: 0.0,
+                modify_to: 3.0,
+            }),
+        )?;
+        let mut frame = scene.frame();
+        assert_eq!(
+            frame.text_caret(instance, text, 1),
+            frame.text_caret(instance, text, 3),
+            "the internal source boundary snaps to the first cluster end"
+        );
+
+        let snapped = frame.text_selection_rects(instance, text, 1..4);
+        let after_cluster = frame.text_selection_rects(instance, text, 3..4);
+        assert_eq!(
+            snapped, after_cluster,
+            "starting inside an indivisible cluster must not include that cluster's glyph cells"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_frame_text_hit_preserves_the_upstream_side_of_a_modified_soft_wrap() -> Result<()> {
+        let (mut baseline, baseline_instance, baseline_text) =
+            imported_modifier_scene_fixture("aa", 8.0, 0, 0, None)?;
+        let upstream_point = {
+            let mut frame = baseline.frame();
+            let first_line = frame
+                .text_selection_rects(baseline_instance, baseline_text, 0..1)
+                .into_iter()
+                .next()
+                .expect("the first wrapped glyph has one selected line segment");
+            crate::Vec2D::new(
+                first_line.max_x,
+                (first_line.min_y + first_line.max_y) / 2.0,
+            )
+        };
+
+        let (mut modified, instance, text) = imported_modifier_scene_fixture(
+            "aa",
+            8.0,
+            0,
+            0,
+            Some(ImportedModifierFixture {
+                x: 200.0,
+                y: 100.0,
+                modify_from: 1.0,
+                modify_to: 2.0,
+            }),
+        )?;
+        let mut frame = modified.frame();
+        assert_eq!(
+            frame.text_hit(instance, text, upstream_point),
+            Some(1),
+            "the source offset at a soft wrap keeps its first-line upstream hit target even when its downstream glyph moves"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_flat_and_modified_soft_wrap_hit_choose_the_end_of_skipped_whitespace() -> Result<()> {
+        let content = "a  \u{2003}a";
+        let (mut baseline, baseline_instance, baseline_text) =
+            imported_modifier_scene_fixture(content, 8.0, 0, 0, None)?;
+        let upstream_point = {
+            let mut frame = baseline.frame();
+            let first_line = frame
+                .text_selection_rects(baseline_instance, baseline_text, 0..1)
+                .into_iter()
+                .next()
+                .expect("the first wrapped glyph has one selected line segment");
+            let upstream = crate::Vec2D::new(
+                first_line.max_x,
+                (first_line.min_y + first_line.max_y) / 2.0,
+            );
+            let downstream = frame
+                .text_caret(baseline_instance, baseline_text, 6)
+                .expect("the skipped whitespace snaps to the next-line glyph");
+            let downstream = crate::Vec2D::new(
+                (downstream.top.x + downstream.bottom.x) / 2.0,
+                (downstream.top.y + downstream.bottom.y) / 2.0,
+            );
+            assert_eq!(
+                frame.text_hit(baseline_instance, baseline_text, upstream),
+                Some(6)
+            );
+            assert_eq!(
+                frame.text_hit(baseline_instance, baseline_text, downstream),
+                Some(6)
+            );
+            upstream
+        };
+
+        let (mut modified, instance, text) = imported_modifier_scene_fixture(
+            content,
+            8.0,
+            0,
+            0,
+            Some(ImportedModifierFixture {
+                x: 200.0,
+                y: 100.0,
+                modify_from: 4.0,
+                modify_to: 5.0,
+            }),
+        )?;
+        let mut frame = modified.frame();
+        let downstream = frame
+            .text_caret(instance, text, 6)
+            .expect("the end of skipped whitespace snaps to the moved next-line glyph");
+        let downstream_point = crate::Vec2D::new(
+            (downstream.top.x + downstream.bottom.x) / 2.0,
+            (downstream.top.y + downstream.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, upstream_point), Some(6));
+        assert_eq!(frame.text_hit(instance, text, downstream_point), Some(6));
+        Ok(())
+    }
+
+    #[test]
+    fn public_frame_text_geometry_preserves_both_sides_of_a_real_follow_path_boundary() -> Result<()>
+    {
+        let (mut scene, instance, text) = imported_follow_path_scene_fixture()?;
+        let mut frame = scene.frame();
+        let canonical_downstream = frame
+            .text_caret(instance, text, 1)
+            .expect("the follow-path glyph boundary has a canonical caret");
+        let first_glyph = frame
+            .text_selection_rects(instance, text, 0..1)
+            .into_iter()
+            .next()
+            .expect("the first follow-path glyph has one selected segment");
+        let upstream_point = crate::Vec2D::new(
+            first_glyph.max_x,
+            (first_glyph.min_y + first_glyph.max_y) / 2.0,
+        );
+        for (actual, expected) in [
+            (canonical_downstream.top.x, 28.554_688),
+            (canonical_downstream.top.y, 50.878_906),
+            (canonical_downstream.bottom.x, 5.833_334),
+            (canonical_downstream.bottom.y, 50.878_906),
+            (first_glyph.max_x, 10.878_906),
+            (first_glyph.min_y, 31.445_313),
+            (upstream_point.x, 10.878_906),
+            (upstream_point.y, 42.805_99),
+        ] {
+            assert!(
+                (actual - expected).abs() <= 0.001,
+                "follow-path affinity golden changed: expected {expected}, got {actual}"
+            );
+        }
+
+        assert!(
+            (canonical_downstream.top.x - upstream_point.x).abs() > 0.1
+                || (canonical_downstream.bottom.x - upstream_point.x).abs() > 0.1,
+            "the cornered path fixture must give the boundary visibly distinct upstream and downstream caret segments"
+        );
+        assert_eq!(
+            frame.text_hit(instance, text, upstream_point),
+            Some(1),
+            "the upstream side of the real follow-path boundary remains hittable"
+        );
+        let upstream_golden_top = crate::Vec2D::new(10.878_906, 31.445_313);
+        assert_eq!(
+            frame.text_hit(instance, text, upstream_golden_top),
+            Some(1),
+            "the draw-derived fixture endpoint must remain a boundary-1 upstream hit"
+        );
+        let downstream_midpoint = crate::Vec2D::new(
+            (canonical_downstream.top.x + canonical_downstream.bottom.x) / 2.0,
+            (canonical_downstream.top.y + canonical_downstream.bottom.y) / 2.0,
+        );
+        assert_eq!(
+            frame.text_hit(instance, text, downstream_midpoint),
+            Some(1),
+            "the same source offset also remains hittable on its downstream side"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_frame_text_geometry_supports_imported_fit_font_size_overflow() -> Result<()> {
+        let (mut scene, instance, text) = imported_modifier_scene_fixture("aa", 80.0, 1, 5, None)?;
+        let mut frame = scene.frame();
+        let start = frame
+            .text_caret(instance, text, 0)
+            .expect("FitFontSize keeps shaped caret geometry in v1");
+        let midpoint = crate::Vec2D::new(
+            (start.top.x + start.bottom.x) / 2.0,
+            (start.top.y + start.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, midpoint), Some(0));
+        assert_eq!(frame.text_selection_rects(instance, text, 0..2).len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn public_text_geometry_fails_closed_for_imported_nonfinite_layout() -> Result<()> {
+        let (mut scene, instance, text) =
+            imported_modifier_scene_fixture("aa", f32::NAN, 0, 0, None)?;
+        let mut frame = scene.frame();
+        assert_eq!(frame.text_caret(instance, text, 0), None);
+        assert_eq!(
+            frame.text_hit(instance, text, crate::Vec2D::new(10.0, 20.0)),
+            None
+        );
+        assert!(frame.text_selection_rects(instance, text, 0..1).is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn public_text_geometry_preflights_infinite_fit_font_size() -> Result<()> {
+        let (mut scene, instance, text) = imported_modifier_scene_fixture_with_style_values(
+            "aa",
+            80.0,
+            40.0,
+            0,
+            5,
+            10.0,
+            f32::INFINITY,
+            20.0,
+            None,
+        )?;
+        let mut frame = scene.frame();
+        assert_eq!(frame.text_caret(instance, text, 0), None);
+        assert_eq!(
+            frame.text_hit(instance, text, crate::Vec2D::new(10.0, 20.0)),
+            None
+        );
+        assert!(frame.text_selection_rects(instance, text, 0..1).is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn public_text_geometry_safely_searches_max_finite_fit_font_size() -> Result<()> {
+        let (mut scene, instance, text) = imported_modifier_scene_fixture_with_style_values(
+            "aa",
+            f32::MAX,
+            f32::MAX,
+            0,
+            5,
+            10.0,
+            f32::MAX,
+            20.0,
+            None,
+        )?;
+        let mut frame = scene.frame();
+        let start = frame
+            .text_caret(instance, text, 0)
+            .expect("a huge finite FitFontSize value is searched without integer overflow");
+        let midpoint = crate::Vec2D::new(
+            (start.top.x + start.bottom.x) / 2.0,
+            (start.top.y + start.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, midpoint), Some(0));
+        assert_eq!(frame.text_selection_rects(instance, text, 0..2).len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn public_text_geometry_preflights_nan_line_height() -> Result<()> {
+        let (mut scene, instance, text) = imported_modifier_scene_fixture_with_style_values(
+            "aa",
+            80.0,
+            40.0,
+            1,
+            0,
+            10.0,
+            20.0,
+            f32::NAN,
+            None,
+        )?;
+        let mut frame = scene.frame();
+        assert_eq!(frame.text_caret(instance, text, 0), None);
+        assert_eq!(
+            frame.text_hit(instance, text, crate::Vec2D::new(10.0, 20.0)),
+            None
+        );
+        assert!(frame.text_selection_rects(instance, text, 0..1).is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn public_text_geometry_fails_closed_for_imported_nonfinite_transform() -> Result<()> {
+        let (mut scene, instance, text) =
+            imported_modifier_scene_fixture_with_x("aa", 80.0, 1, 0, f32::INFINITY, None)?;
+        let mut frame = scene.frame();
+        assert_eq!(frame.text_caret(instance, text, 0), None);
+        assert_eq!(
+            frame.text_hit(instance, text, crate::Vec2D::new(10.0, 20.0)),
+            None
+        );
+        assert!(frame.text_selection_rects(instance, text, 0..1).is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn public_text_geometry_fails_closed_for_imported_nonfinite_modifier() -> Result<()> {
+        for (x, y) in [(f32::NAN, 0.0), (0.0, f32::INFINITY)] {
+            let (mut scene, instance, text) = imported_modifier_scene_fixture(
+                "aa",
+                80.0,
+                1,
+                0,
+                Some(ImportedModifierFixture {
+                    x,
+                    y,
+                    modify_from: 0.0,
+                    modify_to: 2.0,
+                }),
+            )?;
+            let mut frame = scene.frame();
+            assert_eq!(frame.text_caret(instance, text, 0), None);
+            assert_eq!(
+                frame.text_hit(instance, text, crate::Vec2D::new(10.0, 20.0)),
+                None
+            );
+            assert!(frame.text_selection_rects(instance, text, 0..1).is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn static_trailing_newline_preserves_origin_draw_and_bounds_for_all_vertical_alignments()
+    -> Result<()> {
+        for vertical_align in [0, 1, 2] {
+            let mut plain = owned_static_text_fixture("a", vertical_align, 0)?;
+            let mut trailing_newline = owned_static_text_fixture("a\n", vertical_align, 0)?;
+            assert_eq!(
+                trailing_newline.world_bounds(1),
+                plain.world_bounds(1),
+                "a trailing static newline does not alter logical bounds for vertical alignment {vertical_align}"
+            );
+            assert_eq!(
+                owned_draw_stream(&mut trailing_newline)?,
+                owned_draw_stream(&mut plain)?,
+                "a trailing static newline does not alter draw placement for vertical alignment {vertical_align}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn static_empty_text_preserves_origin_draw_and_bounds_for_all_vertical_alignments() -> Result<()>
+    {
+        let mut top = owned_static_text_fixture("", 0, 0)?;
+        let caret: CaretGeometry = top
+            .text_caret(1, 0)
+            .expect("OwnedArtboardInstance returns the named empty-text caret geometry");
+        assert!(top.text_selection_rects(1, 0..0).is_empty());
+        let caret_midpoint = crate::Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(top.text_hit(1, caret_midpoint), Some(0));
+        let expected_stream = owned_draw_stream(&mut top)?;
+        assert!(
+            !stream_draws_path(&expected_stream),
+            "empty static Text must not emit a glyph path"
+        );
+        assert_eq!(
+            top.world_bounds(1),
+            Some(crate::Aabb::new(10.0, 10.0, 90.0, 70.0))
+        );
+        for vertical_align in [1, 2] {
+            let mut empty = owned_static_text_fixture("", vertical_align, 0)?;
+            assert_eq!(empty.world_bounds(1), top.world_bounds(1));
+            assert_eq!(
+                owned_draw_stream(&mut empty)?,
+                expected_stream,
+                "empty static draw behavior ignores vertical alignment {vertical_align}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn borrowed_and_owned_instances_match_for_successful_text_geometry_queries() -> Result<()> {
+        let file = static_text_file_fixture("a", 0, 0)?;
+        let mut borrowed = file
+            .default_artboard()
+            .ok_or_else(|| anyhow::anyhow!("fixture has no default artboard"))?
+            .instantiate()?;
+        let mut owned = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
+
+        let borrowed_caret = borrowed
+            .text_caret(1, 0)
+            .expect("borrowed instance exposes shaped Text geometry");
+        let owned_caret = owned
+            .text_caret(1, 0)
+            .expect("owned instance exposes shaped Text geometry");
+        assert_eq!(borrowed_caret, owned_caret);
+        let midpoint = crate::Vec2D::new(
+            (borrowed_caret.top.x + borrowed_caret.bottom.x) / 2.0,
+            (borrowed_caret.top.y + borrowed_caret.bottom.y) / 2.0,
+        );
+        assert_eq!(borrowed.text_hit(1, midpoint), owned.text_hit(1, midpoint));
+        assert_eq!(
+            borrowed.text_selection_rects(1, 0..1),
+            owned.text_selection_rects(1, 0..1)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn owned_text_geometry_applies_the_same_v1_overflow_policy_to_every_query() -> Result<()> {
+        for overflow in [1, 2, 3, 77] {
+            let mut instance = owned_static_text_fixture("a", 0, overflow)?;
+            assert_eq!(instance.text_caret(1, 0), None);
+            assert_eq!(instance.text_hit(1, crate::Vec2D::new(10.0, 10.0)), None);
+            assert!(instance.text_selection_rects(1, 0..1).is_empty());
+        }
+        for overflow in [0, 4, 5] {
+            let mut instance = owned_static_text_fixture("a", 0, overflow)?;
+            let caret = instance
+                .text_caret(1, 0)
+                .unwrap_or_else(|| panic!("overflow value {overflow} remains supported in v1"));
+            let midpoint = crate::Vec2D::new(
+                (caret.top.x + caret.bottom.x) / 2.0,
+                (caret.top.y + caret.bottom.y) / 2.0,
+            );
+            assert_eq!(instance.text_hit(1, midpoint), Some(0));
+            assert_eq!(instance.text_selection_rects(1, 0..1).len(), 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn owned_text_geometry_rejects_a_missing_participating_non_base_run_font() -> Result<()> {
+        let mut instance = owned_multi_font_text_with_missing_second_font_fixture()?;
+        assert_eq!(instance.text_caret(1, 0), None);
+        assert_eq!(instance.text_hit(1, crate::Vec2D::new(0.0, 0.0)), None);
+        assert!(instance.text_selection_rects(1, 0..2).is_empty());
+        assert!(
+            stream_draws_path(&owned_draw_stream(&mut instance)?),
+            "render purpose keeps the existing partial-draw behavior"
+        );
+        Ok(())
     }
 
     fn owned_draw_stream(instance: &mut OwnedArtboardInstance) -> Result<String> {

@@ -32,8 +32,9 @@ use crate::properties::{
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
     RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
-    runtime_text_shape_paint_commands, static_text_clip_bounds, static_text_constraint_bounds,
-    static_text_controlled_layout_bounds, static_text_layout_measure_bounds,
+    runtime_text_shape_paint_commands, static_text_caret_geometry, static_text_clip_bounds,
+    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
+    static_text_layout_measure_bounds, static_text_selection_rects,
     text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D};
@@ -755,6 +756,118 @@ impl ArtboardInstance {
             &mut cache.paths,
         )?;
         runtime_exact_path_bounds(&commands)
+    }
+
+    /// Settle pending writes and return a shaped Text caret in source-artboard
+    /// world space for one exact UTF-8 byte boundary.
+    ///
+    /// Returns `None` for an unknown or non-Text local, an invalid UTF-8
+    /// boundary, unshapeable text, nonfinite geometry, and every overflow value
+    /// except Visible, Fit, and FitFontSize. Soft-wrap whitespace uses
+    /// downstream affinity; a trailing static separator creates no final caret.
+    pub fn geometry_text_caret(
+        &mut self,
+        local_id: usize,
+        byte_offset: usize,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<(RenderVec2D, RenderVec2D)> {
+        self.update_pass();
+        let (runtime, graph, layout_constraint, text_world) =
+            self.geometry_static_text_query_context(local_id, cache)?;
+        static_text_caret_geometry(
+            runtime,
+            graph,
+            self,
+            local_id,
+            layout_constraint,
+            text_world,
+            byte_offset,
+        )
+    }
+
+    /// Settle pending writes and return the nearest valid UTF-8 byte caret for
+    /// one world-space point on a shaped Text object.
+    ///
+    /// Returns `None` for a nonfinite point, an unknown or non-Text local,
+    /// unshapeable text, nonfinite geometry, a singular/non-invertible world
+    /// transform, and every overflow value except Visible, Fit, and FitFontSize.
+    pub fn geometry_text_hit(
+        &mut self,
+        local_id: usize,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<usize> {
+        self.update_pass();
+        let (runtime, graph, layout_constraint, text_world) =
+            self.geometry_static_text_query_context(local_id, cache)?;
+        static_text_hit(
+            runtime,
+            graph,
+            self,
+            local_id,
+            layout_constraint,
+            text_world,
+            point,
+        )
+    }
+
+    /// Settle pending writes and return shaped selection rectangles in
+    /// source-artboard world space for an exact UTF-8 byte range.
+    ///
+    /// Returns no rectangles for an empty, reversed, out-of-range, or
+    /// non-boundary range; an unknown or non-Text local; unshapeable text;
+    /// nonfinite geometry; or every overflow except Visible, Fit, and
+    /// FitFontSize. Soft-wrap whitespace uses downstream-start/upstream-end
+    /// affinity, and a trailing static separator creates no final empty line.
+    pub fn geometry_text_selection_rects(
+        &mut self,
+        local_id: usize,
+        range: std::ops::Range<usize>,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RenderAabb> {
+        self.update_pass();
+        let Some((runtime, graph, layout_constraint, text_world)) =
+            self.geometry_static_text_query_context(local_id, cache)
+        else {
+            return Vec::new();
+        };
+        static_text_selection_rects(
+            runtime,
+            graph,
+            self,
+            local_id,
+            layout_constraint,
+            text_world,
+            range,
+        )
+    }
+
+    fn geometry_static_text_query_context<'a>(
+        &'a self,
+        local_id: usize,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Option<(
+        &'a RuntimeFile,
+        &'a ArtboardGraph,
+        Option<RuntimeTextLayoutConstraint>,
+        Mat2D,
+    )> {
+        if self.component(local_id)?.type_name != "Text" {
+            return None;
+        }
+        let runtime = self.runtime_file()?;
+        let graph = self.runtime_graph()?;
+        cache.retain_instance(self);
+        let prepared = cache
+            .paths
+            .prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let layout_constraint = self.runtime_text_layout_constraint(local_id, layout_bounds);
+        let text_world =
+            cache
+                .paths
+                .component_world_transform_with_bounds(self, graph, local_id, layout_bounds);
+        Some((runtime, graph, layout_constraint, text_world))
     }
 
     fn draw_commands_with_layout_bounds(

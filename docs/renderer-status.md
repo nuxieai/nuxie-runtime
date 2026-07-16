@@ -1374,13 +1374,23 @@ Run `make renderer-golden`.
     7.740/7.822 ms to 3.939/3.300 ms. Renderer exact=1,409/diverges=0/gated=59.
     The normal and scripted V2 floors pass at 584 and 35 exact segments, and
     the full workspace suite is green.
-116. [ ] Reprofile the exact item-115 binary before another optimization. The
-    current same-backend C++/Rust report is 5.0537x aggregate: clockwise-atomic
-    scenes are 2.05x-4.60x, while MSAA is 5.97x-11.99x and owns the worst
-    scene. Capture paired one- and twenty-draw Time Profiler and Metal traces
-    in both modes, distinguish the remaining 20 generic-atomic tessellation
-    encoders from the larger MSAA cadence, and port only the largest measured
-    C++-aligned site under the existing acceptance fence.
+116. [x] Reprofile the exact item-115 binary and port the largest measured
+    C++-aligned site. Twenty-draw MSAA puts 35/119 renderer samples in
+    `PathPipeline::prepare`, including 24 in five per-draw initialized-buffer
+    allocations. Path data now uses exact slices of the guarded frame upload
+    arena, while the null texture and sampler bindings live on the pipeline.
+    Two fixed reports improve to 0.9089x and 0.9124x; a load-matched Metal
+    A-B-B-A improves 4.766/4.748 ms to 2.845/2.852 ms and removes 2,199 encoder
+    rows. The C++/Rust aggregate falls from 5.0537x to 4.5986x and the worst
+    scene from 11.99x to 8.75x. Renderer exact=1,409/diverges=0/gated=59, V2
+    floors 584/35, and the full workspace suite remain green.
+117. [ ] Port C++'s flush-wide tessellation texture/pass from the exact
+    item-116 binary. The post-change twenty-draw MSAA profile assigns 12/55
+    renderer samples and ten of twelve sampled texture creations to
+    `Tessellator::encode`; Rust still emits 20 tessellation passes versus one
+    in C++. Build a fresh current-state candidate rather than restoring the
+    rejected item-108 implementation, preserve clip/advanced-blend ordering
+    and all submission fences, then apply the full performance and pixel gate.
 
 ## R2 Completion Record
 
@@ -1592,6 +1602,16 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-16: R4 item 116 ports C++'s flush-lifetime MSAA path resources after
+  paired profiles localize 24/35 `PathPipeline::prepare` samples to per-draw
+  initialized buffers. Exact arena slices plus pipeline-lifetime null/sampler
+  bindings improve repeated fixed reports to 0.9089x/0.9124x. A load-matched
+  Metal A-B-B-A removes twenty security-clear encoders per frame and improves
+  both candidate brackets. The full C++/Rust gap is now 4.5986x. Item 117 owns
+  the still-measured twenty-to-one tessellation-pass mismatch; item 108 is
+  historical evidence only because the upload and submission lifetimes have
+  since changed.
 
 - 2026-07-16: R4 item 115 keeps intersection-board barriers but changes their
   ownership from complete per-group atomic lifecycles to one C++-aligned

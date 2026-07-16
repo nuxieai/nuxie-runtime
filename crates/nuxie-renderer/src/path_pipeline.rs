@@ -3,9 +3,9 @@
 use crate::{
     atomic_pipeline::image_sampler,
     gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData},
+    tessellator::TessellationUploadFrame,
 };
-use nuxie_render_api::ImageSampler;
-use wgpu::util::DeviceExt;
+use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 
 // C++ includes ENABLE_DITHER in fixed-color MSAA path batches.
 const FIXED_COLOR_FRAGMENT_CONSTANTS: [(&str, f64); 2] = [("2", 0.0), ("7", 1.0)];
@@ -28,7 +28,12 @@ pub(crate) struct PathPipeline {
     pub nested_even_odd_clip_pipeline: wgpu::RenderPipeline,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
-    sampler_layout: wgpu::BindGroupLayout,
+    // C++ owns its null texture and sampler bindings on the WebGPU context.
+    _dummy_texture: wgpu::Texture,
+    dummy_view: wgpu::TextureView,
+    dummy_image_group: wgpu::BindGroup,
+    image_samplers: Vec<wgpu::Sampler>,
+    sampler_group: wgpu::BindGroup,
 }
 
 struct DirectPipelineSet {
@@ -659,6 +664,61 @@ impl PathPipeline {
             wgpu::ColorWrites::empty(),
             false,
         );
+        let dummy_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-msaa-path-dummy-texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let dummy_view = dummy_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let image_samplers = [ImageFilter::Bilinear, ImageFilter::Nearest]
+            .into_iter()
+            .flat_map(|filter| {
+                [ImageWrap::Clamp, ImageWrap::Repeat, ImageWrap::Mirror]
+                    .into_iter()
+                    .flat_map(move |wrap_y| {
+                        [ImageWrap::Clamp, ImageWrap::Repeat, ImageWrap::Mirror]
+                            .into_iter()
+                            .map(move |wrap_x| ImageSampler {
+                                wrap_x,
+                                wrap_y,
+                                filter,
+                            })
+                    })
+            })
+            .map(|sampler| device.create_sampler(&image_sampler(sampler)))
+            .collect::<Vec<_>>();
+        debug_assert_eq!(image_samplers.len(), 18);
+        let dummy_image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-msaa-path-dummy-image-group"),
+            layout: &image_layout,
+            entries: &[
+                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(14, wgpu::BindingResource::Sampler(&image_samplers[0])),
+            ],
+        });
+        let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("nuxie-msaa-path-linear-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-msaa-path-sampler-group"),
+            layout: &sampler_layout,
+            entries: &[
+                binding(9, wgpu::BindingResource::Sampler(&linear_sampler)),
+                binding(10, wgpu::BindingResource::Sampler(&linear_sampler)),
+            ],
+        });
         Self {
             stroke,
             fill_borrowed,
@@ -677,7 +737,11 @@ impl PathPipeline {
             nested_even_odd_clip_pipeline,
             flush_layout,
             image_layout,
-            sampler_layout,
+            _dummy_texture: dummy_texture,
+            dummy_view,
+            dummy_image_group,
+            image_samplers,
+            sampler_group,
         }
     }
 
@@ -733,6 +797,7 @@ impl PathPipeline {
     pub(crate) fn prepare(
         &self,
         device: &wgpu::Device,
+        uploads: &mut TessellationUploadFrame<'_>,
         tessellation_view: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
         gradient: Option<&wgpu::TextureView>,
@@ -746,127 +811,60 @@ impl PathPipeline {
         base_instance: u32,
         instance_count: u32,
     ) -> PreparedPathDraw {
-        let uniform_buffer = upload(
-            device,
-            "nuxie-path-uniforms",
-            std::slice::from_ref(uniforms),
-            wgpu::BufferUsages::UNIFORM,
-        );
-        let path_buffer = upload(
-            device,
-            "nuxie-path-data",
-            std::slice::from_ref(path),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let paint_buffer = upload(
-            device,
-            "nuxie-paint-data",
-            std::slice::from_ref(paint),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let paint_aux_buffer = upload(
-            device,
-            "nuxie-paint-aux-data",
-            std::slice::from_ref(paint_aux),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let contour_buffer = upload(
-            device,
-            "nuxie-contour-data",
-            contours,
-            wgpu::BufferUsages::STORAGE,
-        );
-        let dummy = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nuxie-path-dummy-texture"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let dummy_view = dummy.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("nuxie-msaa-path-linear-sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-        let image_sampler_resource = device.create_sampler(&image.map_or_else(
-            || wgpu::SamplerDescriptor {
-                label: Some("nuxie-msaa-path-dummy-image-sampler"),
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                ..Default::default()
-            },
-            |(_, sampler)| image_sampler(sampler),
-        ));
+        // C++ maps these resource rings flush-wide. Exact aligned slices in
+        // the guarded frame arena give wgpu the same completed-frame lifetime.
+        let uniform_buffer = uploads.upload_uniforms(device, bytemuck::bytes_of(uniforms));
+        let path_buffer = uploads.upload_storage(device, bytemuck::bytes_of(path));
+        let paint_buffer = uploads.upload_storage(device, bytemuck::bytes_of(paint));
+        let paint_aux_buffer = uploads.upload_storage(device, bytemuck::bytes_of(paint_aux));
+        let contour_buffer = uploads.upload_storage(device, bytemuck::cast_slice(contours));
         let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-flush-group"),
             layout: &self.flush_layout,
             entries: &[
-                binding(0, uniform_buffer.as_entire_binding()),
-                binding(3, path_buffer.as_entire_binding()),
-                binding(4, paint_buffer.as_entire_binding()),
-                binding(5, paint_aux_buffer.as_entire_binding()),
-                binding(6, contour_buffer.as_entire_binding()),
+                binding(0, uniform_buffer.binding()),
+                binding(3, path_buffer.binding()),
+                binding(4, paint_buffer.binding()),
+                binding(5, paint_aux_buffer.binding()),
+                binding(6, contour_buffer.binding()),
                 binding(8, wgpu::BindingResource::TextureView(tessellation_view)),
                 binding(
                     9,
-                    wgpu::BindingResource::TextureView(gradient.unwrap_or(&dummy_view)),
+                    wgpu::BindingResource::TextureView(gradient.unwrap_or(&self.dummy_view)),
                 ),
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                 binding(
                     13,
-                    wgpu::BindingResource::TextureView(destination.unwrap_or(&dummy_view)),
+                    wgpu::BindingResource::TextureView(destination.unwrap_or(&self.dummy_view)),
                 ),
             ],
         });
-        let image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-msaa-path-image-group"),
-            layout: &self.image_layout,
-            entries: &[
-                binding(
-                    12,
-                    wgpu::BindingResource::TextureView(image.map_or(&dummy_view, |(view, _)| view)),
-                ),
-                binding(14, wgpu::BindingResource::Sampler(&image_sampler_resource)),
-            ],
-        });
-        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-msaa-path-sampler-group"),
-            layout: &self.sampler_layout,
-            entries: &[
-                binding(9, wgpu::BindingResource::Sampler(&sampler)),
-                binding(10, wgpu::BindingResource::Sampler(&sampler)),
-            ],
-        });
+        let image_group = image.map_or_else(
+            || self.dummy_image_group.clone(),
+            |(view, sampler)| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("nuxie-msaa-path-image-group"),
+                    layout: &self.image_layout,
+                    entries: &[
+                        binding(12, wgpu::BindingResource::TextureView(view)),
+                        binding(
+                            14,
+                            wgpu::BindingResource::Sampler(
+                                &self.image_samplers[sampler.as_key() as usize],
+                            ),
+                        ),
+                    ],
+                })
+            },
+        );
         PreparedPathDraw {
             flush_group,
             image_group,
-            sampler_group,
+            sampler_group: self.sampler_group.clone(),
             base_instance,
             instance_count,
         }
     }
-}
-
-fn upload<T: bytemuck::Pod>(
-    device: &wgpu::Device,
-    label: &'static str,
-    values: &[T],
-    usage: wgpu::BufferUsages,
-) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents: bytemuck::cast_slice(values),
-        usage,
-    })
 }
 
 fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroupEntry<'_> {

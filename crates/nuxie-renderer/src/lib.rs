@@ -2841,6 +2841,7 @@ impl WgpuFrame {
                                 gpu::PaintData::solid(0, draw.path.fill_rule, BlendMode::SrcOver);
                             let prepared = self.context.path_pipeline.prepare(
                                 &self.context.device,
+                                &mut tessellation_uploads.borrow_mut(),
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
                                 None,
@@ -3233,6 +3234,7 @@ impl WgpuFrame {
                             };
                             let prepared = self.context.path_pipeline.prepare(
                                 &self.context.device,
+                                &mut tessellation_uploads.borrow_mut(),
                                 &tessellation_view,
                                 &self.context.feather_lut.view,
                                 gradient_texture.as_ref().map(|texture| &texture.view),

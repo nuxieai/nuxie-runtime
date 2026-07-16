@@ -248,8 +248,13 @@ impl TessellationUploadFrame<'_> {
             .upload(device, bytes, wgpu::COPY_BUFFER_ALIGNMENT)
     }
 
-    fn upload_uniforms(&mut self, device: &wgpu::Device, bytes: &[u8]) -> UploadSlice {
+    pub(crate) fn upload_uniforms(&mut self, device: &wgpu::Device, bytes: &[u8]) -> UploadSlice {
         let alignment = self.slot.uniform_alignment;
+        self.slot.uploads.upload(device, bytes, alignment)
+    }
+
+    pub(crate) fn upload_storage(&mut self, device: &wgpu::Device, bytes: &[u8]) -> UploadSlice {
+        let alignment = self.slot.storage_alignment;
         self.slot.uploads.upload(device, bytes, alignment)
     }
 
@@ -473,14 +478,14 @@ impl UploadPage {
     }
 }
 
-struct UploadSlice {
+pub(crate) struct UploadSlice {
     buffer: wgpu::Buffer,
     offset: u64,
     size: NonZeroU64,
 }
 
 impl UploadSlice {
-    fn binding(&self) -> wgpu::BindingResource<'_> {
+    pub(crate) fn binding(&self) -> wgpu::BindingResource<'_> {
         wgpu::BindingResource::Buffer(wgpu::BufferBinding {
             buffer: &self.buffer,
             offset: self.offset,

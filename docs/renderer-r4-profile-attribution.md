@@ -258,6 +258,68 @@ owns the worst scene. The candidate trace still has 20 tessellation encoders
 and 20 atomic path encoders per frame versus C++'s 24 total encoders, so R4 is
 not complete.
 
+## MSAA Path Resource Lifetime
+
+Item 116 reprofiled the exact item-115 binaries before changing another
+lifetime. The C++ runner SHA-256 was
+`5a550bf5cc4c3d3a8306b7bf68c63f8d220d3ae31b34ea1cfea69fe63359e1b1`;
+the Rust runner was
+`b16b8400f4f4f76e2f24b74450cd300f381f59bfd96fc0ee75051af6316715a1`.
+Paired one- and twenty-draw Time Profiler and Metal System Trace captures in
+both modes separate the remaining atomic pass cadence from the larger MSAA
+host setup cost.
+
+The twenty-draw MSAA Time Profiler capture contains 119 samples in
+`RustBackend::render`. `PathPipeline::prepare` owns 35, including 24 in its
+five per-draw `create_buffer_init` calls, six in per-draw null-texture
+creation, three in sampler creation, and two in bind-group creation. The
+corresponding one-draw profile has only 11 renderer samples. The generic-
+atomic twenty-draw control instead spends 76 of 130 samples in render-pass
+encoding and only three in `create_buffer_init`, so the MSAA resource site is
+mode-specific rather than an extrapolation from encoder counts.
+
+Metal shows the same structural slope. Rust twenty-draw MSAA emits 2,200
+tessellation encoders and 2,200 internal texture-clear encoders across 110
+frames, plus one pending-write, frame-clear, solid, and composite encoder per
+frame. C++ emits one flush-wide tessellation pass and one MSAA draw pass per
+steady frame. The internal clear passes belong to the twenty newly created
+null textures, not the tessellation attachments. Encoder lifetime is used only
+as diagnostic attribution here; the load-bracketed end-to-end runner median
+remains the acceptance metric.
+
+C++ `RenderContext::mapResourceBuffers` maps uniform, path, paint, paint-aux,
+contour, and tessellation-span rings for the flush. Its WebGPU context also
+owns one null texture, all image sampler permutations, and one sampler bind
+group. Rust now places the MSAA path resources in exact aligned slices of the
+existing guarded frame upload arena, writes each populated page once before
+submit, and retains the null texture and sampler bindings on `PathPipeline`.
+Tessellation textures and passes remain per draw; item 108's rejected packing
+implementation was not restored.
+
+Two fixed 16-variant old-Rust/current-Rust reports improve to 0.908863x and
+0.912357x aggregate. Every MSAA variant improves in both reports;
+`bevel180strokes-msaa` falls to 0.726788x and 0.724408x. A direct bracket makes
+the rotating untouched-atomic outliers explicit: the two baseline pairs for
+`bug339297` are 1.039/1.027 and 1.031/1.035 ms, while the candidate pairs are
+1.049/1.035 and 0.993/1.027 ms.
+
+The independent twenty-draw MSAA Metal A-B-B-A is load matched:
+
+| order | runner | host idle | encoder rows | pending-write lifetime/frame | median frame |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1 | item-115 baseline | 83.83% | 4,840 | 2.396 ms | 4.766 ms |
+| 2 | shared path lifetime | 80.32% | 2,641 | 1.173 ms | 2.845 ms |
+| 3 | shared path lifetime | 84.56% | 2,641 | 1.180 ms | 2.852 ms |
+| 4 | item-115 baseline | 83.50% | 4,840 | 2.421 ms | 4.748 ms |
+
+The candidate retains all twenty tessellation passes but removes the twenty
+per-frame null-texture clear passes. Its twenty-draw Time Profiler capture
+drops from 119 to 55 renderer samples, `PathPipeline::prepare` from 35 to two,
+and `create_buffer_init` from 24 to zero. The full C++/Rust report improves
+from 5.053695x to 4.598614x aggregate, and the worst scene improves from
+11.994x to 8.750x. Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35,
+and the full workspace suite remain green.
+
 ## Measurement Fence
 
 R4 performance decisions use these controls:
@@ -291,15 +353,18 @@ Authoritative source sites:
 
 ## Next Measurement
 
-Reprofile the exact item-115 binary before changing another lifetime:
+Port C++'s flush-wide tessellation texture/pass under the item-116 resource
+lifetime:
 
-1. Capture paired one- and twenty-draw Time Profiler and Metal traces in both
-   clockwise-atomic and MSAA modes.
-2. Attribute the remaining 20 tessellation encoders in the generic-atomic
-   control and the larger 5.97x-11.99x MSAA gap separately.
-3. Port only the largest measured C++-aligned batching or lifetime site; the
-   rejected item-108 vertical-packing experiment is not evidence by itself.
-4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries until
-   a measured change proves they can move.
+1. The post-change twenty-draw MSAA profile attributes 12 of 55 renderer
+   samples to `Tessellator::encode`; ten of twelve sampled texture creations
+   are under that call, while only two belong to frame-target setup.
+2. Rust still emits twenty tessellation passes per frame and C++ emits one per
+   flush. Pack paths into a shared texture and bind flush-wide path resources
+   without changing clip, advanced-blend, or logical-flush order.
+3. Treat item 108 as a rejected historical implementation, not a veto or a
+   shortcut: the pending-write and path-resource lifetimes have changed since
+   that experiment, so measure a new candidate from the current binary.
+4. Keep the 1,024-draw command-buffer fence and logical-flush boundaries.
 5. Use the same repeated alternating report, load-recorded A-B-B-A trace, and
    pixel/V2/workspace floors for acceptance.

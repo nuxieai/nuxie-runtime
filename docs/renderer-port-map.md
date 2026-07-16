@@ -384,8 +384,14 @@ initializes once, preserves the group barriers, and resolves once. Porting that
 flush-wide lifetime reduces repeated old-Rust/current-Rust reports to 0.7978x
 and 0.8164x, and a load-matched Metal A-B-B-A reduces encoder rows from 11,221
 to 4,951 over 110 frames without changing pixels or structural counters. The
-current same-backend C++/Rust report is 5.0537x aggregate, so R4 remains open;
-see `docs/renderer-r4-profile-attribution.md`.
+next paired profile localizes MSAA's largest host site to per-draw path buffer,
+null-texture, and sampler preparation. Porting C++'s flush-lifetime resources
+reduces repeated old-Rust/current-Rust reports to 0.9089x and 0.9124x and
+removes 2,199 encoder rows in a load-matched twenty-draw trace. The current
+same-backend C++/Rust report is 4.5986x aggregate with an 8.75x worst scene, so
+R4 remains open. The next measured site is Rust's twenty tessellation
+textures/passes per frame versus C++'s one per flush; see
+`docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

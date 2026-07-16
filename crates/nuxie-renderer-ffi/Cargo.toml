@@ -9,6 +9,7 @@ repository.workspace = true
 default = []
 native = []
 dawn = ["native"]
+perf-counters = ["dawn"]
 decode-oracle = ["native"]
 
 [[test]]

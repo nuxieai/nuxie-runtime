@@ -6,7 +6,7 @@
 use crate::gpu::{
     ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData, TriangleVertex,
 };
-use wgpu::util::DeviceExt;
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) struct ClockwiseAtomicPipeline {
     borrowed_path: wgpu::RenderPipeline,
@@ -636,7 +636,7 @@ impl ClockwiseAtomicPipeline {
         let flush_groups = draws
             .iter()
             .map(|draw| {
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("nuxie-cwa-flush-group"),
                     layout: &self.flush_layout,
                     entries: &[
@@ -657,7 +657,7 @@ impl ClockwiseAtomicPipeline {
                 })
             })
             .collect::<Vec<_>>();
-        let image = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let image = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-cwa-image-group"),
             layout: &self.image_layout,
             entries: &[
@@ -665,17 +665,17 @@ impl ClockwiseAtomicPipeline {
                 binding(14, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
-        let clip = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let clip = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-cwa-clip-group"),
             layout: &self.clip_layout,
             entries: &[binding(1, scratch_clip.as_entire_binding())],
         });
-        let sampled_clip = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let sampled_clip = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-cwa-sampled-clip-group"),
             layout: &self.sampled_clip_layout,
             entries: &[binding(1, wgpu::BindingResource::TextureView(&clip_view))],
         });
-        let samplers = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let samplers = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-cwa-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
@@ -702,7 +702,7 @@ impl ClockwiseAtomicPipeline {
                 continue;
             }
             let attachments = [color_attachment(target)];
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+            let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                 "nuxie-cwa-borrowed-path-pass",
                 &attachments,
             ));
@@ -710,7 +710,7 @@ impl ClockwiseAtomicPipeline {
             set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
             pass.set_vertex_buffer(0, patch_vertices.slice(..));
             pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-            pass.draw_indexed(
+            pass.draw_path_patches(
                 draw.patch_index_range.clone(),
                 0,
                 draw.borrowed_base_instance..draw.borrowed_base_instance + draw.instance_count,
@@ -718,7 +718,7 @@ impl ClockwiseAtomicPipeline {
             drop(pass);
             if let Some(buffer) = &borrowed_triangle_buffers[index] {
                 let attachments = [color_attachment(target)];
-                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                     "nuxie-cwa-borrowed-interior-pass",
                     &attachments,
                 ));
@@ -737,7 +737,7 @@ impl ClockwiseAtomicPipeline {
             match draw.kind {
                 ClockwiseAtomicDrawKind::Content | ClockwiseAtomicDrawKind::ClippedContent => {
                     let attachments = [color_attachment(target)];
-                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                         "nuxie-cwa-main-path-pass",
                         &attachments,
                     ));
@@ -762,7 +762,7 @@ impl ClockwiseAtomicPipeline {
                     }
                     pass.set_vertex_buffer(0, patch_vertices.slice(..));
                     pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-                    pass.draw_indexed(
+                    pass.draw_path_patches(
                         draw.patch_index_range.clone(),
                         0,
                         draw.main_base_instance..draw.main_base_instance + draw.instance_count,
@@ -770,7 +770,7 @@ impl ClockwiseAtomicPipeline {
                     drop(pass);
                     if let Some(buffer) = &main_triangle_buffers[index] {
                         let attachments = [color_attachment(target)];
-                        let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                             "nuxie-cwa-main-interior-pass",
                             &attachments,
                         ));
@@ -815,7 +815,7 @@ impl ClockwiseAtomicPipeline {
                         color_attachment(target),
                         color_attachment_with_load(&clip_view, clip_load),
                     ];
-                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                         "nuxie-cwa-clip-path-pass",
                         &attachments,
                     ));
@@ -827,7 +827,7 @@ impl ClockwiseAtomicPipeline {
                     set_groups(&mut pass, &flush_groups[index], &image, &clip, &samplers);
                     pass.set_vertex_buffer(0, patch_vertices.slice(..));
                     pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-                    pass.draw_indexed(
+                    pass.draw_path_patches(
                         draw.patch_index_range.clone(),
                         0,
                         draw.main_base_instance..draw.main_base_instance + draw.instance_count,
@@ -838,7 +838,7 @@ impl ClockwiseAtomicPipeline {
                             color_attachment(target),
                             color_attachment_with_load(&clip_view, wgpu::LoadOp::Load),
                         ];
-                        let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                        let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                             "nuxie-cwa-clip-interior-pass",
                             &attachments,
                         ));
@@ -940,7 +940,7 @@ fn upload<T: bytemuck::Pod>(
     values: &[T],
     usage: wgpu::BufferUsages,
 ) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(values),
         usage,

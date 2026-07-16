@@ -294,6 +294,7 @@ fn read_u32(bytes: &[u8], offset: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::work_metrics::{CountedDeviceExt, CountedQueueExt};
 
     fn canonical_triangles(records: &[TriangleRecord]) -> Vec<[(u32, u32, u32); 3]> {
         assert_eq!(records.len() % 3, 0);
@@ -594,13 +595,11 @@ mod tests {
         assert_eq!([capture.tess_width, capture.tess_height], [2048, height]);
         let uniforms = crate::analytic_uniforms(999, 720, height);
         let paths = [crate::gpu::PathData::zeroed(), tessellation.path];
-        let mut encoder =
-            factory
-                .context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-direct-bad-skin-tessellation-encoder"),
-                });
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-direct-bad-skin-tessellation-encoder"),
+            },
+        );
         let mut tessellation_uploads = factory
             .context
             .tessellator
@@ -639,7 +638,7 @@ mod tests {
             texture.size(),
         );
         tessellation_uploads.flush(&factory.context.queue);
-        factory.context.queue.submit(Some(encoder.finish()));
+        factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {

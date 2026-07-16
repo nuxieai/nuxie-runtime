@@ -1397,14 +1397,26 @@ Run `make renderer-golden`.
     from 4.5986x to 4.1442x. Renderer exact=1,409/diverges=0/gated=59.
     The V2 floors pass at 584/35 exact segments and the workspace suite is
     green.
-118. [ ] Build `perf-counter-compare` before another timing-led optimization.
+118. [x] Build `perf-counter-compare` before another timing-led optimization.
     Extend both fenced runners with deterministic per-stream counters for
     flush composition, tessellation spans/patches, uploaded bytes, texture and
     bind-group work, and encoder/pass counts; diff and rank the fixed corpus by
     excess ratio. In parallel, inventory every C++ renderer pooling, ring,
     budget, reuse, and coalescing mechanism and map each excess counter to its
-    reference source site. Timing profiles remain an acceptance tool for
-    ambiguous candidates, not the discovery queue.
+    reference source site. The live 16-variant report validates nonzero work
+    and structural parity on both backends. Encoders/submissions are exact at
+    16/16; Rust has 230 excess bind-group sets, 63 excess passes, 62 excess GPU
+    draws, and 116,808 excess uploaded bytes. The source-mapped inventory is
+    `docs/renderer-r4-mechanism-inventory.md`.
+119. [ ] Port C++ WebGPU's `needsNewBindings` rule for direct MSAA paths.
+    C++ binds stable per-flush/per-draw state once per pass and invalidates it
+    only after a pass restart or image draw. Rust currently binds the same
+    flush, dummy-image, and sampler groups for every direct path, producing
+    the report's top row: 63 sets versus five for
+    `gm-bevel180strokes-msaa`. Carry binding state across compatible direct
+    draws, rebind image state when required, and invalidate it on foreign
+    pipeline layouts. Accept with the exact counter delta, unchanged pixels
+    and V2 floors, plus one directional timing snapshot.
 
 ## R2 Completion Record
 
@@ -1616,6 +1628,15 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-16: R4 item 118 makes deterministic backend work the discovery
+  oracle. A feature-gated C++ Dawn proc table and Rust wgpu wrappers count
+  encoders, passes, bind groups, uploads, submissions, draws, tessellation
+  spans, and path patches after warmup. The ordinary timing runners remain
+  uninstrumented. The first fixed report finds exact one-encoder/one-submit
+  frames but 230 excess Rust bind-group sets and names C++'s
+  `needsNewBindings` rule as item 119. Single-frame timing is directional only;
+  no threshold or load claim is attached.
 
 - 2026-07-16: R4 item 116 ports C++'s flush-lifetime MSAA path resources after
   paired profiles localize 24/35 `PathPipeline::prepare` samples to per-draw
@@ -2539,6 +2560,16 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 118 with a cross-backend work-counter oracle and
+  complete C++ performance-mechanism inventory. `make perf-counter-compare`
+  builds counter-enabled runners in an isolated target, validates all 16 fixed
+  scene/mode variants, and emits ranked JSON/Markdown artifacts. Aggregate
+  structural work is C++/Rust: encoders 16/16, submissions 16/16, passes
+  91/154, bind-group sets 324/554, uploaded bytes 156,832/273,640, and GPU
+  draws 158/220. The light one-frame sum is 3.224x and remains directional.
+  The top deterministic excess is `gm-bevel180strokes-msaa` bind-group sets at
+  5/63; item 119 ports C++'s binding invalidation rule.
 
 - 2026-07-16: Closed R4 item 117 with C++'s flush-wide MSAA tessellation
   lifetime. A first full-corpus run exposed sparse authored contour IDs after

@@ -13,3 +13,7 @@ toml = "0.9"
 [[bin]]
 name = "renderer-perf"
 path = "src/bin/renderer-perf.rs"
+
+[[bin]]
+name = "perf-counter-compare"
+path = "src/bin/perf-counter-compare.rs"

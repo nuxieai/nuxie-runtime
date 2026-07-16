@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -30,6 +30,11 @@ RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-r
 RENDERER_PERF_MAX_RATIO ?= 2.0
 RENDERER_PERF_JSON ?= $(CURDIR)/target/renderer-perf.json
 RENDERER_PERF_MARKDOWN ?= $(CURDIR)/target/renderer-perf.md
+RENDERER_COUNTER_TARGET_DIR ?= $(CURDIR)/target/renderer-counter
+RENDERER_COUNTER_CPP_RUNNER ?= $(RENDERER_COUNTER_TARGET_DIR)/release/renderer-perf-cpp-runner
+RENDERER_COUNTER_RUST_RUNNER ?= $(RENDERER_COUNTER_TARGET_DIR)/release/renderer-perf-rust-runner
+RENDERER_COUNTER_JSON ?= $(CURDIR)/target/renderer-work-counters.json
+RENDERER_COUNTER_MARKDOWN ?= $(CURDIR)/target/renderer-work-counters.md
 CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
 CC ?= cc
 
@@ -140,6 +145,12 @@ renderer-perf-runners:
 
 renderer-perf: renderer-perf-runners
 	cargo run --quiet -p perf-compare --bin renderer-perf -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_PERF_CPP_RUNNER)" --candidate-runner "$(RENDERER_PERF_RUST_RUNNER)" --max-ratio "$(RENDERER_PERF_MAX_RATIO)" --json "$(RENDERER_PERF_JSON)" --markdown "$(RENDERER_PERF_MARKDOWN)"
+
+renderer-counter-runners:
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_COUNTER_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-counters --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
+
+perf-counter-compare: renderer-counter-runners
+	cargo run --quiet -p perf-compare --bin perf-counter-compare -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_COUNTER_CPP_RUNNER)" --candidate-runner "$(RENDERER_COUNTER_RUST_RUNNER)" --json "$(RENDERER_COUNTER_JSON)" --markdown "$(RENDERER_COUNTER_MARKDOWN)"
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release

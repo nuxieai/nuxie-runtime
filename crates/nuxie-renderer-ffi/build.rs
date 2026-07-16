@@ -19,6 +19,7 @@ fn main() {
         .map(|target_os| target_os == "macos")
         .unwrap_or(false);
     let has_dawn = env::var_os("CARGO_FEATURE_DAWN").is_some();
+    let has_perf_counters = env::var_os("CARGO_FEATURE_PERF_COUNTERS").is_some();
 
     let runtime_dir = env::var("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
@@ -163,6 +164,9 @@ fn main() {
             .include(dawn_dir.join("include"))
             .include(dawn_out_dir.join("gen/include"))
             .define("RIVE_FFI_HAS_DAWN", None);
+        if has_perf_counters {
+            build.define("RIVE_FFI_PERF_COUNTERS", None);
+        }
     }
 
     if !renderer_lib.exists() {
@@ -274,12 +278,22 @@ fn main() {
         ] {
             println!("cargo:rustc-link-search=native={}", directory.display());
         }
-        for lib in [
-            "webgpu_dawn",
-            "dawn_native_static",
-            "dawn_proc_static",
-            "dawn_platform_static",
-        ] {
+        let dawn_libs = if has_perf_counters {
+            [
+                "dawn_proc_static",
+                "webgpu_dawn",
+                "dawn_native_static",
+                "dawn_platform_static",
+            ]
+        } else {
+            [
+                "webgpu_dawn",
+                "dawn_native_static",
+                "dawn_proc_static",
+                "dawn_platform_static",
+            ]
+        };
+        for lib in dawn_libs {
             println!("cargo:rustc-link-lib=static={lib}");
         }
         let clang_runtime_dir = clang_runtime_dir.expect("Dawn builds require the Clang runtime");

@@ -4,6 +4,7 @@ use crate::gpu::{
     ContourData, FlushUniforms, ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData,
     PatchVertex, PathData, TriangleVertex,
 };
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 use bytemuck::Zeroable;
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 use std::sync::{
@@ -12,7 +13,6 @@ use std::sync::{
 };
 #[cfg(feature = "perf-diagnostics")]
 use std::time::Instant;
-use wgpu::util::DeviceExt;
 
 const ATOMIC_BUFFER_RING_SIZE: usize = 3;
 
@@ -624,7 +624,7 @@ impl AtomicPipeline {
             .map(|sampler| device.create_sampler(&image_sampler(sampler)))
             .collect::<Vec<_>>();
         debug_assert_eq!(image_samplers.len(), 18);
-        let dummy_image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let dummy_image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-dummy-image-group"),
             layout: &image_layout,
             entries: &[
@@ -1225,7 +1225,7 @@ impl AtomicPipeline {
                 && draw.triangle_vertices.is_empty()
         });
         let make_flush_group = |draw_index: usize, draw: &AtomicDraw<'_>| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
+            device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-atomic-flush-group"),
                 layout: &self.flush_layout,
                 entries: &[
@@ -1283,7 +1283,7 @@ impl AtomicPipeline {
             .iter()
             .map(|draw| {
                 draw.image.map(|image| {
-                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("nuxie-atomic-image-group"),
                         layout: &self.image_layout,
                         entries: &[
@@ -1318,7 +1318,7 @@ impl AtomicPipeline {
         #[cfg(feature = "perf-diagnostics")]
         let load_color_bind_group_started = Instant::now();
         let load_color_group = load_color.map(|view| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
+            device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-atomic-load-color-group"),
                 layout: &self.image_layout,
                 entries: &[
@@ -1340,7 +1340,7 @@ impl AtomicPipeline {
         }
         #[cfg(feature = "perf-diagnostics")]
         let atomic_bind_group_started = Instant::now();
-        let atomics = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let atomics = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-buffer-group"),
             layout: &self.atomic_layout,
             entries: &[
@@ -1360,7 +1360,7 @@ impl AtomicPipeline {
         }
         #[cfg(feature = "perf-diagnostics")]
         let sampler_bind_group_started = Instant::now();
-        let samplers = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let samplers = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
@@ -1390,7 +1390,7 @@ impl AtomicPipeline {
                 backing.diagnostics.render_passes =
                     backing.diagnostics.render_passes.saturating_add(1);
             }
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+            let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-advanced-init-pass",
                 &attachments,
             ));
@@ -1413,7 +1413,7 @@ impl AtomicPipeline {
                     backing.diagnostics.render_passes =
                         backing.diagnostics.render_passes.saturating_add(1);
                 }
-                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                     "nuxie-atomic-path-pass",
                     &attachments,
                 ));
@@ -1450,7 +1450,7 @@ impl AtomicPipeline {
                         },
                     );
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
-                    pass.draw_indexed(
+                    pass.draw_path_patches(
                         draw.patch_index_range.clone(),
                         0,
                         draw.base_instance..draw.base_instance + draw.instance_count,
@@ -1471,7 +1471,7 @@ impl AtomicPipeline {
                         backing.diagnostics.render_passes =
                             backing.diagnostics.render_passes.saturating_add(1);
                     }
-                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-atlas-blit-pass",
                         &attachments,
                     ));
@@ -1500,7 +1500,7 @@ impl AtomicPipeline {
                         backing.diagnostics.render_passes =
                             backing.diagnostics.render_passes.saturating_add(1);
                     }
-                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-image-mesh-pass",
                         &attachments,
                     ));
@@ -1526,7 +1526,7 @@ impl AtomicPipeline {
                         backing.diagnostics.render_passes =
                             backing.diagnostics.render_passes.saturating_add(1);
                     }
-                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-image-rect-pass",
                         &attachments,
                     ));
@@ -1553,7 +1553,7 @@ impl AtomicPipeline {
                     backing.diagnostics.render_passes =
                         backing.diagnostics.render_passes.saturating_add(1);
                 }
-                let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                     "nuxie-atomic-path-pass",
                     &attachments,
                 ));
@@ -1588,7 +1588,7 @@ impl AtomicPipeline {
                 pass.set_bind_group(3, &samplers, &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
-                pass.draw_indexed(
+                pass.draw_path_patches(
                     draw.patch_index_range.clone(),
                     0,
                     draw.base_instance..draw.base_instance + draw.instance_count,
@@ -1601,7 +1601,7 @@ impl AtomicPipeline {
                         backing.diagnostics.render_passes =
                             backing.diagnostics.render_passes.saturating_add(1);
                     }
-                    let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+                    let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                         "nuxie-atomic-interior-pass",
                         &attachments,
                     ));
@@ -1635,7 +1635,7 @@ impl AtomicPipeline {
                 backing.diagnostics.render_passes =
                     backing.diagnostics.render_passes.saturating_add(1);
             }
-            let mut pass = encoder.begin_render_pass(&render_pass_descriptor(
+            let mut pass = encoder.begin_counted_render_pass(&render_pass_descriptor(
                 "nuxie-atomic-resolve-pass",
                 &attachments,
             ));
@@ -1740,7 +1740,7 @@ fn upload<T: bytemuck::Pod>(
     values: &[T],
     usage: wgpu::BufferUsages,
 ) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(values),
         usage,

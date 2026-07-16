@@ -32,6 +32,7 @@ mod skyline;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
+mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
@@ -47,7 +48,7 @@ use std::ffi::c_void;
 use std::fmt;
 use std::io::Cursor;
 use std::sync::{mpsc, Arc};
-use wgpu::util::DeviceExt;
+use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
 #[derive(Debug)]
 pub enum RendererError {
@@ -175,7 +176,10 @@ pub struct WgpuFrameMetrics {
     pub draw_calls: u64,
     pub logical_flushes: u64,
     pub atomic_strategy_partitions: u64,
+    pub backend_work: BackendWorkMetrics,
 }
+
+pub use work_metrics::BackendWorkMetrics;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderMode {
@@ -336,16 +340,18 @@ impl WgpuFactory {
             Some(stencil_state(cover_stencil_face, cover_stencil_face)),
         ));
         let (patch_vertices, patch_indices) = gpu::generate_patch_buffer_data();
-        let patch_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("nuxie-patch-vertices"),
-            contents: bytemuck::cast_slice(&patch_vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let patch_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("nuxie-patch-indices"),
-            contents: bytemuck::cast_slice(&patch_indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let patch_vertex_buffer =
+            device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("nuxie-patch-vertices"),
+                contents: bytemuck::cast_slice(&patch_vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let patch_index_buffer =
+            device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("nuxie-patch-indices"),
+                contents: bytemuck::cast_slice(&patch_indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
         let tessellator = tessellator::Tessellator::new(&device);
         let path_pipeline = path_pipeline::PathPipeline::new(&device);
         let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
@@ -390,6 +396,14 @@ impl WgpuFactory {
     }
 
     pub fn begin_frame(&self, clear_color: ColorInt) -> WgpuFrame {
+        self.begin_frame_for_benchmark(clear_color, false)
+    }
+
+    pub fn begin_frame_for_benchmark(
+        &self,
+        clear_color: ColorInt,
+        collect_work_metrics: bool,
+    ) -> WgpuFrame {
         WgpuFrame {
             context: Arc::clone(&self.context),
             width: self.width,
@@ -408,6 +422,7 @@ impl WgpuFactory {
             msaa_path_clip_id: 0,
             unsupported: None,
             mode: self.mode,
+            work_recorder: work_metrics::FrameWorkRecorder::new(collect_work_metrics),
         }
     }
 
@@ -522,7 +537,7 @@ impl Factory for WgpuFactory {
                     | wgpu::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             });
-        self.context.queue.write_texture(
+        self.context.queue.write_counted_texture(
             texture.as_image_copy(),
             &pixels,
             wgpu::TexelCopyBufferLayout {
@@ -795,7 +810,7 @@ impl RenderBuffer for WgpuBuffer {
         } else {
             self.bytes.as_slice()
         };
-        self.submitted = Some(Arc::new(self.context.device.create_buffer_init(
+        self.submitted = Some(Arc::new(self.context.device.create_counted_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("nuxie-render-buffer"),
                 contents,
@@ -977,6 +992,7 @@ pub struct WgpuFrame {
     msaa_path_clip_id: u16,
     unsupported: Option<&'static str>,
     mode: RenderMode,
+    work_recorder: work_metrics::FrameWorkRecorder,
 }
 
 #[derive(Clone, Default)]
@@ -1629,19 +1645,21 @@ impl WgpuFrame {
             draw_calls: self.draw_calls,
             logical_flushes,
             atomic_strategy_partitions,
+            backend_work: BackendWorkMetrics::default(),
         }
     }
 
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, true, true)
-            .map(|(pixels, _, _, _, _)| pixels)
+            .map(|(pixels, _, _, _, _, _)| pixels)
     }
 
     /// Encodes the frame, submits all work, and waits for GPU completion
     /// without copying the render target back to the CPU.
     pub fn finish_for_benchmark(self) -> Result<WgpuFrameMetrics, RendererError> {
-        let metrics = self.metrics();
-        self.finish_internal(false, false, true, false)?;
+        let mut metrics = self.metrics();
+        let (_, _, _, _, _, backend_work) = self.finish_internal(false, false, true, false)?;
+        metrics.backend_work = backend_work;
         Ok(metrics)
     }
 
@@ -1650,13 +1668,13 @@ impl WgpuFrame {
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
         self.finish_internal(true, false, true, true)
-            .map(|(pixels, coverage, _, _, _)| (pixels, coverage))
+            .map(|(pixels, coverage, _, _, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
         self.finish_internal(false, true, true, true)
-            .map(|(pixels, _, coverage, _, _)| (pixels, coverage))
+            .map(|(pixels, _, coverage, _, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
@@ -1664,13 +1682,13 @@ impl WgpuFrame {
         self,
     ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
         self.finish_internal(false, true, true, true)
-            .map(|(pixels, _, coverage, clips, colors)| (pixels, coverage, clips, colors))
+            .map(|(pixels, _, coverage, clips, colors, _)| (pixels, coverage, clips, colors))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, false, true)
-            .map(|(pixels, _, _, _, _)| pixels)
+            .map(|(pixels, _, _, _, _, _)| pixels)
     }
 
     fn finish_internal(
@@ -1686,6 +1704,7 @@ impl WgpuFrame {
             Vec<Vec<u32>>,
             Vec<Vec<u32>>,
             Vec<Vec<u32>>,
+            BackendWorkMetrics,
         ),
         RendererError,
     > {
@@ -1744,7 +1763,7 @@ impl WgpuFrame {
         let mut encoder =
             self.context
                 .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                .create_counted_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("nuxie-frame-encoder"),
                 });
         let tessellation_uploads = RefCell::new(
@@ -1754,15 +1773,16 @@ impl WgpuFrame {
         );
         let atomic_backing = RefCell::new(None);
         let submit_and_wait = |encoder: &mut wgpu::CommandEncoder| {
-            let next_encoder =
-                self.context
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("nuxie-frame-encoder"),
-                    });
+            let next_encoder = self.context.device.create_counted_command_encoder(
+                &wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-frame-encoder"),
+                },
+            );
             let submitted_encoder = std::mem::replace(encoder, next_encoder);
             tessellation_uploads.borrow_mut().flush(&self.context.queue);
-            self.context.queue.submit(Some(submitted_encoder.finish()));
+            self.context
+                .queue
+                .submit_counted(Some(submitted_encoder.finish()));
             self.context
                 .device
                 .poll(wgpu::PollType::wait_indefinitely())
@@ -1821,7 +1841,7 @@ impl WgpuFrame {
                             store: wgpu::StoreOp::Store,
                         },
                     })];
-                    let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    let _pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("nuxie-atomic-frame-clear"),
                         color_attachments: &attachments,
                         depth_stencil_attachment: None,
@@ -2535,14 +2555,15 @@ impl WgpuFrame {
                                 store: wgpu::StoreOp::Store,
                             },
                         })];
-                        let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("nuxie-cwa-advanced-source-clear"),
-                            color_attachments: &attachments,
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                            multiview_mask: None,
-                        });
+                        let _pass =
+                            encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("nuxie-cwa-advanced-source-clear"),
+                                color_attachments: &attachments,
+                                depth_stencil_attachment: None,
+                                timestamp_writes: None,
+                                occlusion_query_set: None,
+                                multiview_mask: None,
+                            });
                     }
                     uniforms.coverage_buffer_prefix = 1 << 20;
                     let borrowed_triangles = prepared
@@ -3237,14 +3258,14 @@ impl WgpuFrame {
                     }
                     if let Some(path_vertices) = tessellate_solid(draw, self.width, self.height) {
                         let cover_vertices = cover_vertices(&path_vertices);
-                        let path_buffer = self.context.device.create_buffer_init(
+                        let path_buffer = self.context.device.create_counted_buffer_init(
                             &wgpu::util::BufferInitDescriptor {
                                 label: Some("nuxie-path-vertices"),
                                 contents: bytemuck::cast_slice(&path_vertices),
                                 usage: wgpu::BufferUsages::VERTEX,
                             },
                         );
-                        let cover_buffer = self.context.device.create_buffer_init(
+                        let cover_buffer = self.context.device.create_counted_buffer_init(
                             &wgpu::util::BufferInitDescriptor {
                                 label: Some("nuxie-path-cover"),
                                 contents: bytemuck::cast_slice(&cover_vertices),
@@ -3457,7 +3478,7 @@ impl WgpuFrame {
                             store: wgpu::StoreOp::Store,
                         },
                     })];
-                    let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    let _pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("nuxie-fallback-frame-clear"),
                         color_attachments: &attachments,
                         depth_stencil_attachment: None,
@@ -3559,7 +3580,7 @@ impl WgpuFrame {
                             resolve_target,
                         );
                     }
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("nuxie-solid-pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                             view: &multisample_view,
@@ -3629,7 +3650,7 @@ impl WgpuFrame {
                                     self.context.patch_index_buffer.slice(..),
                                     wgpu::IndexFormat::Uint16,
                                 );
-                                pass.draw_indexed(
+                                pass.draw_path_patches(
                                     0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
                                     0,
                                     draw.base_instance..draw.base_instance + draw.instance_count,
@@ -3679,7 +3700,7 @@ impl WgpuFrame {
                                         options.advanced_blend,
                                         options.hsl_blend,
                                     ));
-                                    pass.draw_indexed(
+                                    pass.draw_path_patches(
                                         indices.clone(),
                                         0,
                                         draw.base_instance
@@ -3737,7 +3758,7 @@ impl WgpuFrame {
                                                 .even_odd_clip_cover_pipeline,
                                         ] {
                                             pass.set_pipeline(pipeline);
-                                            pass.draw_indexed(
+                                            pass.draw_path_patches(
                                                 indices.clone(),
                                                 0,
                                                 draw.base_instance
@@ -3760,7 +3781,7 @@ impl WgpuFrame {
                                             cleanup,
                                         ] {
                                             pass.set_pipeline(pipeline);
-                                            pass.draw_indexed(
+                                            pass.draw_path_patches(
                                                 indices.clone(),
                                                 0,
                                                 draw.base_instance
@@ -3788,7 +3809,7 @@ impl WgpuFrame {
                                     self.context.patch_index_buffer.slice(..),
                                     wgpu::IndexFormat::Uint16,
                                 );
-                                pass.draw_indexed(
+                                pass.draw_path_patches(
                                     gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT as u32
                                         ..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32,
                                     0,
@@ -4030,14 +4051,15 @@ impl WgpuFrame {
                                     store: wgpu::StoreOp::Store,
                                 },
                             })];
-                            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("nuxie-advanced-frame-clear"),
-                                color_attachments: &attachments,
-                                depth_stencil_attachment: None,
-                                timestamp_writes: None,
-                                occlusion_query_set: None,
-                                multiview_mask: None,
-                            });
+                            let _pass =
+                                encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: Some("nuxie-advanced-frame-clear"),
+                                    color_attachments: &attachments,
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                    multiview_mask: None,
+                                });
                         }
                         let load_texture =
                             self.context
@@ -4149,7 +4171,7 @@ impl WgpuFrame {
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
             tessellation_uploads.borrow_mut().flush(&self.context.queue);
-            self.context.queue.submit(Some(encoder.finish()));
+            self.context.queue.submit_counted(Some(encoder.finish()));
             self.context
                 .device
                 .poll(wgpu::PollType::wait_indefinitely())
@@ -4197,7 +4219,14 @@ impl WgpuFrame {
                     );
                 }
             }
-            return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+            return Ok((
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                self.work_recorder.snapshot(),
+            ));
         }
 
         let unpadded_bytes_per_row = self.width * 4;
@@ -4222,7 +4251,7 @@ impl WgpuFrame {
             texture.size(),
         );
         tessellation_uploads.borrow_mut().flush(&self.context.queue);
-        self.context.queue.submit(Some(encoder.finish()));
+        self.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -4284,6 +4313,7 @@ impl WgpuFrame {
             atomic_coverage_snapshots,
             atomic_clip_snapshots,
             atomic_color_snapshots,
+            self.work_recorder.snapshot(),
         ))
     }
 }
@@ -9419,7 +9449,7 @@ mod tests {
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             });
-        factory.context.queue.write_texture(
+        factory.context.queue.write_counted_texture(
             source.as_image_copy(),
             &[128, 0, 0, 128].repeat(4),
             wgpu::TexelCopyBufferLayout {
@@ -9443,13 +9473,11 @@ mod tests {
                 view_formats: &[],
             });
         let target_view = target.create_view(&Default::default());
-        let mut encoder =
-            factory
-                .context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-composite-test-encoder"),
-                });
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-composite-test-encoder"),
+            },
+        );
         {
             let attachments = [Some(wgpu::RenderPassColorAttachment {
                 view: &target_view,
@@ -9460,7 +9488,7 @@ mod tests {
                     store: wgpu::StoreOp::Store,
                 },
             })];
-            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let _pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nuxie-composite-test-clear"),
                 color_attachments: &attachments,
                 depth_stencil_attachment: None,
@@ -9496,7 +9524,7 @@ mod tests {
             },
             target.size(),
         );
-        factory.context.queue.submit(Some(encoder.finish()));
+        factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -9592,13 +9620,11 @@ mod tests {
             gpu::TessVertexSpan::without_reflection(points, [1.0, 0.0], 1.0, -2, 4, 1, 0, 1, 1);
         let paths = [gpu::PathData::zeroed()];
         let contours = [gpu::ContourData::new([32.0, 4.0], 0, 0)];
-        let mut encoder =
-            factory
-                .context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-tessellation-test-encoder"),
-                });
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-tessellation-test-encoder"),
+            },
+        );
         let mut tessellation_uploads = factory
             .context
             .tessellator
@@ -9637,7 +9663,7 @@ mod tests {
             texture.size(),
         );
         tessellation_uploads.flush(&factory.context.queue);
-        factory.context.queue.submit(Some(encoder.finish()));
+        factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -9819,13 +9845,11 @@ mod tests {
         let tessellation_height = logical_tessellation_height * 5 / 4;
         let uniforms = analytic_uniforms(frame_width, frame_height, tessellation_height);
         let paths = [gpu::PathData::zeroed(), tessellation.path];
-        let mut encoder =
-            factory
-                .context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-direct-input-encoder"),
-                });
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-direct-input-encoder"),
+            },
+        );
         let mut tessellation_uploads = factory
             .context
             .tessellator
@@ -9865,7 +9889,7 @@ mod tests {
             size,
         );
         tessellation_uploads.flush(&factory.context.queue);
-        factory.context.queue.submit(Some(encoder.finish()));
+        factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -10308,13 +10332,11 @@ mod tests {
             2.0 / layout.extent()[0] as f32,
             -2.0 / layout.extent()[1] as f32,
         ];
-        let mut encoder =
-            factory
-                .context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-atlas-test-encoder"),
-                });
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-atlas-test-encoder"),
+            },
+        );
         let mut tessellation_uploads = factory
             .context
             .tessellator
@@ -10421,7 +10443,7 @@ mod tests {
             tessellation_size,
         );
         tessellation_uploads.flush(&factory.context.queue);
-        factory.context.queue.submit(Some(encoder.finish()));
+        factory.context.queue.submit_counted(Some(encoder.finish()));
         let atlas_slice = atlas_readback.slice(..);
         let tessellation_slice = tessellation_readback.slice(..);
         let (atlas_sender, atlas_receiver) = mpsc::channel();

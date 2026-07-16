@@ -9,6 +9,8 @@ pub const REPORT_SCHEMA: &str = "rive-renderer-perf-v1";
 pub const SAMPLE_COUNT: usize = 7;
 pub const WARMUP_FRAMES: u32 = 10;
 pub const MEASURED_FRAMES: u32 = 100;
+pub const COUNTER_WARMUP_FRAMES: u32 = 10;
+pub const COUNTER_MEASURED_FRAMES: u32 = 1;
 
 const REQUIRED_WIDTH: u32 = 1024;
 const REQUIRED_HEIGHT: u32 = 1024;
@@ -97,7 +99,17 @@ pub struct RunRequest {
     pub width: u32,
     pub height: u32,
     pub adapter_selection: String,
+    #[serde(default)]
+    pub measurement: Measurement,
     pub timing: TimingMethod,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Measurement {
+    #[default]
+    Timing,
+    Counters,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -130,6 +142,15 @@ impl TimingMethod {
             gpu_completion: GpuCompletion::WaitForCompletionEachFrame,
         }
     }
+
+    pub fn counters() -> Self {
+        Self {
+            warmup_frames: COUNTER_WARMUP_FRAMES,
+            measured_frames: COUNTER_MEASURED_FRAMES,
+            scope: TimingScope::SubmitToGpuComplete,
+            gpu_completion: GpuCompletion::WaitForCompletionEachFrame,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -143,7 +164,12 @@ pub struct AdapterIdentity {
 }
 
 impl RunRequest {
-    fn for_scene(scene: &Scene, defaults: &Defaults, mode: Mode) -> Self {
+    pub fn for_scene(
+        scene: &Scene,
+        defaults: &Defaults,
+        mode: Mode,
+        measurement: Measurement,
+    ) -> Self {
         Self {
             protocol: RUNNER_PROTOCOL.to_owned(),
             release: true,
@@ -155,9 +181,32 @@ impl RunRequest {
             width: defaults.width,
             height: defaults.height,
             adapter_selection: defaults.adapter_selection.clone(),
-            timing: TimingMethod::required(),
+            measurement,
+            timing: match measurement {
+                Measurement::Timing => TimingMethod::required(),
+                Measurement::Counters => TimingMethod::counters(),
+            },
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackendWorkMetrics {
+    pub command_encoders: u64,
+    pub render_passes: u64,
+    pub bind_groups_created: u64,
+    pub bind_group_sets: u64,
+    pub texture_bindings: u64,
+    pub buffer_upload_calls: u64,
+    pub buffer_upload_bytes: u64,
+    pub texture_upload_calls: u64,
+    pub texture_upload_bytes: u64,
+    pub queue_submissions: u64,
+    pub gpu_draw_calls: u64,
+    pub gpu_draw_instances: u64,
+    pub tessellation_spans: u64,
+    pub path_patches: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -173,12 +222,16 @@ pub struct RunnerResponse {
     pub width: u32,
     pub height: u32,
     pub adapter_selection: String,
+    #[serde(default)]
+    pub measurement: Measurement,
     pub selected_adapter: AdapterIdentity,
     pub timing: TimingMethod,
     pub measured_frame_median_ns: u64,
     pub logical_flushes: u64,
     pub draws: u64,
     pub atomic_strategy_partitions: u64,
+    #[serde(default)]
+    pub backend_work: BackendWorkMetrics,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -207,10 +260,14 @@ pub fn validate_runner_request(request: &RunRequest) -> Result<(), String> {
         || request.width != REQUIRED_WIDTH
         || request.height != REQUIRED_HEIGHT
         || request.adapter_selection != REQUIRED_ADAPTER_SELECTION
-        || request.timing != TimingMethod::required()
+        || request.timing
+            != match request.measurement {
+                Measurement::Timing => TimingMethod::required(),
+                Measurement::Counters => TimingMethod::counters(),
+            }
     {
         return Err(format!(
-            "runner request must use protocol={RUNNER_PROTOCOL}, release profile, {REQUIRED_WIDTH}x{REQUIRED_HEIGHT} frame {REQUIRED_FRAME}, adapter_selection={REQUIRED_ADAPTER_SELECTION}, and the fenced timing method"
+            "runner request must use protocol={RUNNER_PROTOCOL}, release profile, {REQUIRED_WIDTH}x{REQUIRED_HEIGHT} frame {REQUIRED_FRAME}, adapter_selection={REQUIRED_ADAPTER_SELECTION}, and the fenced measurement method"
         ));
     }
     Ok(())
@@ -349,7 +406,8 @@ pub fn run_benchmark(
     for scene in &manifest.scene {
         for &mode in &manifest.modes {
             let id = format!("{}-{}", scene.id, mode_name(mode));
-            let request = RunRequest::for_scene(scene, &manifest.defaults, mode);
+            let request =
+                RunRequest::for_scene(scene, &manifest.defaults, mode, Measurement::Timing);
             let mut baseline_medians = Vec::with_capacity(SAMPLE_COUNT);
             let mut candidate_medians = Vec::with_capacity(SAMPLE_COUNT);
             let mut structural = None;
@@ -422,7 +480,7 @@ pub fn run_benchmark(
     })
 }
 
-fn validate_response(
+pub(crate) fn validate_response(
     runner: &str,
     scene_id: &str,
     sample: usize,
@@ -439,6 +497,7 @@ fn validate_response(
         || response.width != request.width
         || response.height != request.height
         || response.adapter_selection != request.adapter_selection
+        || response.measurement != request.measurement
         || response.timing != request.timing;
     if mismatch {
         return Err(format!(
@@ -457,7 +516,7 @@ fn validate_response(
     Ok(())
 }
 
-fn validate_adapter(
+pub(crate) fn validate_adapter(
     scene_id: &str,
     runner: &str,
     sample: usize,
@@ -494,7 +553,7 @@ fn validate_adapter(
     Ok(())
 }
 
-fn validate_structural(
+pub(crate) fn validate_structural(
     scene_id: &str,
     runner: &str,
     sample: usize,
@@ -680,7 +739,7 @@ fn ratio(numerator: u64, denominator: u64) -> Result<f64, String> {
     Ok(numerator as f64 / denominator as f64)
 }
 
-fn mode_name(mode: Mode) -> &'static str {
+pub fn mode_name(mode: Mode) -> &'static str {
     match mode {
         Mode::ClockwiseAtomic => "clockwise-atomic",
         Mode::Msaa => "msaa",
@@ -723,12 +782,14 @@ mod tests {
             width: defaults.width,
             height: defaults.height,
             adapter_selection: defaults.adapter_selection.clone(),
+            measurement: Measurement::Timing,
             selected_adapter: adapter_identity(),
             timing: TimingMethod::required(),
             measured_frame_median_ns: median_ns,
             logical_flushes: 3,
             draws: 11,
             atomic_strategy_partitions: 2,
+            backend_work: BackendWorkMetrics::default(),
         }
     }
 
@@ -767,7 +828,12 @@ mod tests {
     fn fence_mismatch_is_rejected() {
         let manifest = manifest();
         let scene = &manifest.scene[0];
-        let request = RunRequest::for_scene(scene, &manifest.defaults, manifest.modes[0]);
+        let request = RunRequest::for_scene(
+            scene,
+            &manifest.defaults,
+            manifest.modes[0],
+            Measurement::Timing,
+        );
         let mut response = response(scene, &manifest.defaults, manifest.modes[0], 10);
         response.debug = true;
         let error = validate_response("candidate", &scene.id, 0, &request, &response)
@@ -779,7 +845,12 @@ mod tests {
     fn timing_method_mismatch_is_rejected() {
         let manifest = manifest();
         let scene = &manifest.scene[0];
-        let request = RunRequest::for_scene(scene, &manifest.defaults, manifest.modes[0]);
+        let request = RunRequest::for_scene(
+            scene,
+            &manifest.defaults,
+            manifest.modes[0],
+            Measurement::Timing,
+        );
         let mut response = response(scene, &manifest.defaults, manifest.modes[0], 10);
         response.timing.measured_frames -= 1;
         let error = validate_response("candidate", &scene.id, 0, &request, &response)
@@ -790,11 +861,15 @@ mod tests {
     #[test]
     fn live_runner_request_rejects_a_relaxed_measurement_count() {
         let manifest = manifest();
-        let mut request =
-            RunRequest::for_scene(&manifest.scene[0], &manifest.defaults, manifest.modes[0]);
+        let mut request = RunRequest::for_scene(
+            &manifest.scene[0],
+            &manifest.defaults,
+            manifest.modes[0],
+            Measurement::Timing,
+        );
         request.timing.measured_frames -= 1;
         let error = validate_runner_request(&request).expect_err("relaxed fence must fail");
-        assert!(error.contains("fenced timing method"));
+        assert!(error.contains("fenced measurement method"));
     }
 
     #[test]
@@ -895,7 +970,7 @@ mod tests {
         let manifest = manifest();
         let scene = &manifest.scene[0];
         let mode = manifest.modes[0];
-        let request = RunRequest::for_scene(scene, &manifest.defaults, mode);
+        let request = RunRequest::for_scene(scene, &manifest.defaults, mode, Measurement::Timing);
         let expected_response = response(scene, &manifest.defaults, mode, 1234);
         let unique = format!(
             "rive-renderer-perf-{}-{}",
@@ -943,8 +1018,12 @@ mod tests {
     #[test]
     fn subprocess_runner_reports_failure_stderr() {
         let manifest = manifest();
-        let request =
-            RunRequest::for_scene(&manifest.scene[0], &manifest.defaults, manifest.modes[0]);
+        let request = RunRequest::for_scene(
+            &manifest.scene[0],
+            &manifest.defaults,
+            manifest.modes[0],
+            Measurement::Timing,
+        );
         let unique = format!("rive-renderer-perf-fail-{}", std::process::id());
         let directory = std::env::temp_dir().join(unique);
         let _ = std::fs::remove_dir_all(&directory);

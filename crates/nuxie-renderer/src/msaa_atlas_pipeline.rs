@@ -1,7 +1,7 @@
 //! Fixed-function MSAA atlas blit translated from Rive's WebGPU renderer.
 
 use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TriangleVertex};
-use wgpu::util::DeviceExt;
+use crate::work_metrics::CountedDeviceExt;
 
 pub(crate) struct MsaaAtlasPipeline {
     fixed: PipelineSet,
@@ -369,7 +369,7 @@ impl MsaaAtlasPipeline {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-atlas-flush-group"),
             layout: &self.flush_layout,
             entries: &[
@@ -391,7 +391,7 @@ impl MsaaAtlasPipeline {
                 ),
             ],
         });
-        let image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-atlas-image-group"),
             layout: &self.image_layout,
             entries: &[
@@ -399,7 +399,7 @@ impl MsaaAtlasPipeline {
                 binding(14, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
-        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let sampler_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-atlas-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
@@ -429,7 +429,7 @@ fn upload<T: bytemuck::Pod>(
     values: &[T],
     usage: wgpu::BufferUsages,
 ) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(values),
         usage,

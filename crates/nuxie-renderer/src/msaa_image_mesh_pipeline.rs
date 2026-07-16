@@ -1,12 +1,12 @@
 //! MSAA image meshes translated from C++ `DrawType::imageMesh`.
 
+use crate::work_metrics::CountedDeviceExt;
 use crate::{
     atomic_pipeline::image_sampler,
     gpu::{FlushUniforms, ImageDrawUniforms},
 };
 use nuxie_render_api::ImageSampler;
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 
 pub(crate) struct MsaaImageMeshPipeline {
     fixed: PipelineVariants,
@@ -283,7 +283,7 @@ impl MsaaImageMeshPipeline {
             view_formats: &[],
         });
         let dummy_view = dummy.create_view(&Default::default());
-        let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-image-mesh-flush-group"),
             layout: &self.flush_layout,
             entries: &[
@@ -296,7 +296,7 @@ impl MsaaImageMeshPipeline {
             ],
         });
         let sampler = device.create_sampler(&image_sampler(sampler));
-        let image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-image-mesh-image-group"),
             layout: &self.image_layout,
             entries: &[
@@ -323,7 +323,7 @@ fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> w
 }
 
 fn upload<T: bytemuck::Pod>(device: &wgpu::Device, label: &'static str, value: &T) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::bytes_of(value),
         usage: wgpu::BufferUsages::UNIFORM,

@@ -1,6 +1,7 @@
 //! GPU tessellation pass translated from `renderer/src/shaders/tessellate.glsl`.
 
 use crate::gpu::{ContourData, FlushUniforms, PathData, TessVertexSpan};
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 #[cfg(feature = "perf-diagnostics")]
 use std::time::Instant;
 use std::{
@@ -129,7 +130,7 @@ impl Tessellator {
             multiview_mask: None,
             cache: None,
         });
-        let span_indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let span_indices = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-tessellation-span-indices"),
             contents: bytemuck::cast_slice(&[0u16, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7]),
             usage: wgpu::BufferUsages::INDEX,
@@ -140,7 +141,7 @@ impl Tessellator {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let sampler_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-sampler-group"),
             layout: &sampler_layout,
             entries: &[binding(10, wgpu::BindingResource::Sampler(&linear_sampler))],
@@ -185,7 +186,7 @@ impl Tessellator {
         let uniform_buffer = uploads.upload_uniforms(device, bytemuck::bytes_of(uniforms));
         let path_buffer = uploads.upload_paths(device, bytemuck::cast_slice(paths));
         let contour_buffer = uploads.upload_contours(device, bytemuck::cast_slice(contours));
-        let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-flush-group"),
             layout: &self.flush_layout,
             entries: &[
@@ -212,7 +213,7 @@ impl Tessellator {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-tessellation-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
@@ -233,7 +234,7 @@ impl Tessellator {
         pass.set_bind_group(3, &self.sampler_group, &[]);
         pass.set_vertex_buffer(0, span_buffer.slice());
         pass.set_index_buffer(self.span_indices.slice(..), wgpu::IndexFormat::Uint16);
-        pass.draw_indexed(0..12, 0, 0..spans.len() as u32);
+        pass.draw_tessellation_spans(0..12, 0, 0..spans.len() as u32);
         drop(pass);
         texture
     }
@@ -440,7 +441,7 @@ impl UploadArena {
             }
             #[cfg(feature = "perf-diagnostics")]
             let started = Instant::now();
-            queue.write_buffer(&page.buffer, 0, &page.shadow);
+            queue.write_counted_buffer(&page.buffer, 0, &page.shadow);
             #[cfg(feature = "perf-diagnostics")]
             {
                 self.diagnostics.write_buffer_ns = self
@@ -559,5 +560,3 @@ fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         count: None,
     }
 }
-
-use wgpu::util::DeviceExt;

@@ -8,6 +8,7 @@ license = "MIT"
 default = []
 decode-oracle = []
 perf-diagnostics = []
+perf-counters = []
 
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }

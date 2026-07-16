@@ -1,6 +1,6 @@
 //! Ordered composition of resolved fallback runs into the main color target.
 
-use wgpu::util::DeviceExt;
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) struct CompositePipeline {
     pipeline: wgpu::RenderPipeline,
@@ -180,7 +180,7 @@ impl CompositePipeline {
         target: &wgpu::TextureView,
         source: &wgpu::TextureView,
     ) {
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-composite-group"),
             layout: &self.layout,
             entries: &[
@@ -203,7 +203,7 @@ impl CompositePipeline {
                 store: wgpu::StoreOp::Store,
             },
         })];
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-composite-pass"),
             color_attachments: &attachments,
             depth_stencil_attachment: None,
@@ -223,7 +223,7 @@ impl CompositePipeline {
         target: &wgpu::TextureView,
         source: &wgpu::TextureView,
     ) {
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-preserve-group"),
             layout: &self.layout,
             entries: &[
@@ -246,7 +246,7 @@ impl CompositePipeline {
                 store: wgpu::StoreOp::Store,
             },
         })];
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-msaa-preserve-pass"),
             color_attachments: &attachments,
             depth_stencil_attachment: None,
@@ -268,12 +268,12 @@ impl CompositePipeline {
         destination: &wgpu::TextureView,
         blend_mode: u32,
     ) {
-        let uniforms = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let uniforms = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-advanced-composite-uniforms"),
             contents: bytemuck::cast_slice(&[blend_mode, 0, 0, 0]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-advanced-composite-group"),
             layout: &self.advanced_layout,
             entries: &[
@@ -300,7 +300,7 @@ impl CompositePipeline {
                 store: wgpu::StoreOp::Store,
             },
         })];
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-advanced-composite-pass"),
             color_attachments: &attachments,
             depth_stencil_attachment: None,

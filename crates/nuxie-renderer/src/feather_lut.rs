@@ -1,5 +1,7 @@
 //! Canonical Gaussian lookup texture used by Rive's feather shaders.
 
+use crate::work_metrics::CountedQueueExt;
+
 pub(crate) const TABLE_SIZE: usize = 512;
 const TEXTURE_STDDEVS: f32 = 3.0;
 
@@ -26,7 +28,7 @@ impl FeatherLut {
             view_formats: &[],
         });
         let rows = table_rows();
-        queue.write_texture(
+        queue.write_counted_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
                 mip_level: 0,

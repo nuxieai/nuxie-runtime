@@ -4,6 +4,7 @@ use crate::{
     atomic_pipeline::image_sampler,
     gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData},
     tessellator::TessellationUploadFrame,
+    work_metrics::CountedDeviceExt,
 };
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 
@@ -701,7 +702,7 @@ impl PathPipeline {
             .map(|sampler| device.create_sampler(&image_sampler(sampler)))
             .collect::<Vec<_>>();
         debug_assert_eq!(image_samplers.len(), 18);
-        let dummy_image_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let dummy_image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-dummy-image-group"),
             layout: &image_layout,
             entries: &[
@@ -715,7 +716,7 @@ impl PathPipeline {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let sampler_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let sampler_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-sampler-group"),
             layout: &sampler_layout,
             entries: &[
@@ -819,7 +820,7 @@ impl PathPipeline {
         let paint_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paints));
         let paint_aux_buffer = uploads.upload_storage(device, bytemuck::cast_slice(paint_aux));
         let contour_buffer = uploads.upload_storage(device, bytemuck::cast_slice(contours));
-        let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-path-flush-group"),
             layout: &self.flush_layout,
             entries: &[
@@ -854,7 +855,7 @@ impl PathPipeline {
         let image_group = image.map_or_else(
             || self.dummy_image_group.clone(),
             |(view, sampler)| {
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("nuxie-msaa-path-image-group"),
                     layout: &self.image_layout,
                     entries: &[

@@ -394,18 +394,25 @@ Authoritative source sites:
 - Rust submission cadence: `crates/nuxie-renderer/src/lib.rs`,
   `WgpuFrame::finish_internal`.
 
-## Next Measurement
+## Counter Oracle
 
-Build a deterministic counter-parity report before selecting item 119:
+Item 118 adds feature-gated API-boundary counters to both fenced runners and a
+separate `make perf-counter-compare` build lane. Normal timing binaries do not
+contain active counter collection. The report validates adapter, mode, scene,
+and structural parity, rejects a backend that reports zero live work, and
+ranks only candidate excess.
 
-1. Extend both fenced runners with per-logical-flush counts for paths, draws,
-   tessellation spans and patches, uploaded bytes, texture/bind-group work, and
-   encoder/pass classes.
-2. Diff every fixed perf-corpus variant and rank excess Rust work by ratio and
-   absolute count. Keep counters exact and timing-free.
-3. Inventory the matching C++ pooling, ring, budget, reuse, and coalescing
-   mechanisms in `render_context.cpp` and backend resource management, then
-   attach a source site to every excess class.
-4. Use parallel read-only attribution for ranked rows. Apply heavier timing
-   only when a candidate's benefit is not already settled by structural work
-   counts or when a directional snapshot reveals a contradiction.
+Across the fixed sixteen variants, command encoders and submissions are exact
+at 16/16. Rust reports 154 versus 91 render passes, 554 versus 324 bind-group
+sets, 278 versus 171 texture bindings, 273,640 versus 156,832 uploaded bytes,
+and 220 versus 158 GPU draw calls. The one-frame timing sum is 3.224x and is
+directional only.
+
+The top row is `gm-bevel180strokes-msaa`: 63 Rust bind-group sets versus five
+in C++ Dawn. Source inspection makes the excess objective. C++ creates the
+per-flush group once and carries a `needsNewBindings` flag across draw batches,
+invalidating it only after pass restart or image state. Rust currently rebinds
+the same three direct-path groups for every draw. Item 119 ports that rule.
+
+The complete source-mapped checklist is
+`docs/renderer-r4-mechanism-inventory.md`.

@@ -5,7 +5,7 @@ use crate::gpu::{
     MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT, MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT,
     MIDPOINT_FAN_PATCH_INDEX_COUNT,
 };
-use wgpu::util::DeviceExt;
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) struct AtlasPipeline {
     fill: wgpu::RenderPipeline,
@@ -177,7 +177,7 @@ impl AtlasPipeline {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let flush = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let flush = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-flush-group"),
             layout: &self.flush_layout,
             entries: &[
@@ -191,7 +191,7 @@ impl AtlasPipeline {
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
-        let image = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let image = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-image-group"),
             layout: &self.image_layout,
             entries: &[
@@ -199,7 +199,7 @@ impl AtlasPipeline {
                 binding(14, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
-        let samplers = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let samplers = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
@@ -220,7 +220,7 @@ impl AtlasPipeline {
                 store: wgpu::StoreOp::Store,
             },
         })];
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-atlas-mask-pass"),
             color_attachments: &attachments,
             depth_stencil_attachment: None,
@@ -249,7 +249,7 @@ impl AtlasPipeline {
             MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
                 ..(MIDPOINT_FAN_PATCH_INDEX_COUNT + MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT) as u32
         };
-        pass.draw_indexed(
+        pass.draw_path_patches(
             index_range,
             0,
             base_instance..base_instance + instance_count,
@@ -277,7 +277,7 @@ fn upload<T: bytemuck::Pod>(
     label: &'static str,
     values: &[T],
 ) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(values),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE,

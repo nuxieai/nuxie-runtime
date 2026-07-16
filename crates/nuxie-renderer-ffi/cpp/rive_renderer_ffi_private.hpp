@@ -25,11 +25,13 @@ struct rive_ffi_context
     uint32_t height = 0;
     uint64_t drawCount = 0;
     uint64_t lastLogicalFlushCount = 0;
+    rive_ffi_backend_work_metrics lastBackendWorkMetrics = {};
 
     virtual ~rive_ffi_context() = default;
     virtual bool ensureTarget(uint32_t width, uint32_t height) = 0;
     virtual void beforeFlush(rive::gpu::RenderContext::FlushResources&) {}
     virtual bool afterFlush() { return true; }
+    virtual void beginBackendWorkMetrics(bool) {}
     virtual const char* adapterName() const { return ""; }
     virtual size_t readPixels(uint8_t*, size_t) { return 0; }
 };

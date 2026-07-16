@@ -1,7 +1,7 @@
 //! MSAA stencil reset translated from Rive's WebGPU renderer.
 
 use crate::gpu::{FlushUniforms, TriangleVertex};
-use wgpu::util::DeviceExt;
+use crate::work_metrics::CountedDeviceExt;
 
 pub(crate) struct MsaaStencilPipeline {
     pub clip_reset_pipeline: wgpu::RenderPipeline,
@@ -171,12 +171,12 @@ impl MsaaStencilPipeline {
         bounds: [f32; 4],
         z_index: u16,
     ) -> PreparedStencilDraw {
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let uniform_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-msaa-stencil-uniforms"),
             contents: bytemuck::bytes_of(uniforms),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        let flush_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-stencil-flush-group"),
             layout: &self.flush_layout,
             entries: &[wgpu::BindGroupEntry {
@@ -193,7 +193,7 @@ impl MsaaStencilPipeline {
             TriangleVertex::new([left, top], 0, z_index),
             TriangleVertex::new([right, top], 0, z_index),
         ];
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-msaa-stencil-vertices"),
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,

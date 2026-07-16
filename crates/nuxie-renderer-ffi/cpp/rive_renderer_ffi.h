@@ -37,6 +37,24 @@ typedef struct rive_ffi_adapter_identity
     char driver[256];
 } rive_ffi_adapter_identity;
 
+typedef struct rive_ffi_backend_work_metrics
+{
+    uint64_t command_encoders;
+    uint64_t render_passes;
+    uint64_t bind_groups_created;
+    uint64_t bind_group_sets;
+    uint64_t texture_bindings;
+    uint64_t buffer_upload_calls;
+    uint64_t buffer_upload_bytes;
+    uint64_t texture_upload_calls;
+    uint64_t texture_upload_bytes;
+    uint64_t queue_submissions;
+    uint64_t gpu_draw_calls;
+    uint64_t gpu_draw_instances;
+    uint64_t tessellation_spans;
+    uint64_t path_patches;
+} rive_ffi_backend_work_metrics;
+
 rive_ffi_context* rive_ffi_context_make_null(uint32_t width, uint32_t height);
 rive_ffi_context* rive_ffi_context_make_metal(uint32_t width, uint32_t height);
 rive_ffi_context* rive_ffi_context_make_dawn(uint32_t width, uint32_t height);
@@ -50,10 +68,19 @@ int rive_ffi_context_begin_frame_mode(rive_ffi_context*,
                                       uint32_t height,
                                       uint32_t clear_color,
                                       uint32_t mode);
+int rive_ffi_context_begin_frame_mode_metrics(rive_ffi_context*,
+                                              uint32_t width,
+                                              uint32_t height,
+                                              uint32_t clear_color,
+                                              uint32_t mode,
+                                              uint32_t collect_work_metrics);
 int rive_ffi_context_end_frame(rive_ffi_context*);
 size_t rive_ffi_context_read_pixels(rive_ffi_context*, uint8_t* out, size_t len);
 uint64_t rive_ffi_context_draw_count(const rive_ffi_context*);
 uint64_t rive_ffi_context_logical_flush_count(const rive_ffi_context*);
+void rive_ffi_context_backend_work_metrics(
+    const rive_ffi_context*,
+    rive_ffi_backend_work_metrics* out);
 size_t rive_ffi_context_adapter_name(const rive_ffi_context*,
                                      char* out,
                                      size_t len);

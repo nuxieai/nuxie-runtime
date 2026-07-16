@@ -2047,6 +2047,7 @@ fn recursive_edge_intersection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::work_metrics::{CountedDeviceExt, CountedQueueExt};
     use bytemuck::Zeroable;
 
     fn direct_grid_path() -> RawPath {
@@ -2414,13 +2415,11 @@ mod tests {
         assert_eq!([capture.tess_width, capture.tess_height], [2048, height]);
         let uniforms = crate::analytic_uniforms(1000, 1000, height);
         let paths = [crate::gpu::PathData::zeroed(), tessellation.path];
-        let mut encoder =
-            factory
-                .context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("nuxie-direct-flower-tessellation-encoder"),
-                });
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-direct-flower-tessellation-encoder"),
+            },
+        );
         let mut tessellation_uploads = factory
             .context
             .tessellator
@@ -2459,7 +2458,7 @@ mod tests {
             texture.size(),
         );
         tessellation_uploads.flush(&factory.context.queue);
-        factory.context.queue.submit(Some(encoder.finish()));
+        factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {

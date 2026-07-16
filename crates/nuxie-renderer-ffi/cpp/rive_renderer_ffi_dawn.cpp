@@ -5,11 +5,300 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
+#ifdef RIVE_FFI_PERF_COUNTERS
+#include <dawn/dawn_proc.h>
+#include <dawn/native/DawnNative.h>
+#endif
+
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <string_view>
+#ifdef RIVE_FFI_PERF_COUNTERS
+#include <unordered_map>
+#endif
 
 namespace
 {
+#ifdef RIVE_FFI_PERF_COUNTERS
+enum class PipelineKind
+{
+    other,
+    tessellation,
+    pathPatches,
+};
+
+DawnProcTable g_nativeProcs = {};
+DawnProcTable g_countingProcs = {};
+thread_local rive_ffi_backend_work_metrics* g_activeMetrics = nullptr;
+thread_local std::unordered_map<WGPURenderPipeline, PipelineKind>
+    g_pipelineKinds;
+thread_local std::unordered_map<WGPURenderPassEncoder, PipelineKind>
+    g_passKinds;
+
+std::string_view stringView(WGPUStringView value)
+{
+    if (value.data == nullptr)
+    {
+        return {};
+    }
+    const size_t length = value.length == WGPU_STRLEN
+                              ? std::strlen(value.data)
+                              : value.length;
+    return {value.data, length};
+}
+
+PipelineKind pipelineKind(const WGPURenderPipelineDescriptor* descriptor)
+{
+    if (descriptor == nullptr)
+    {
+        return PipelineKind::other;
+    }
+    const std::string_view label = stringView(descriptor->label);
+    if (label.find("Tessellate") != std::string_view::npos)
+    {
+        return PipelineKind::tessellation;
+    }
+    if (label.find("AtlasPipeline") != std::string_view::npos)
+    {
+        return PipelineKind::pathPatches;
+    }
+    constexpr std::string_view prefix = "RIVE_Draw{drawType=";
+    const size_t drawTypeStart = label.find(prefix);
+    if (drawTypeStart == std::string_view::npos)
+    {
+        return PipelineKind::other;
+    }
+    const size_t valueStart = drawTypeStart + prefix.size();
+    const size_t valueEnd = label.find(',', valueStart);
+    if (valueEnd == std::string_view::npos)
+    {
+        return PipelineKind::other;
+    }
+    unsigned drawType = 0;
+    for (char c : label.substr(valueStart, valueEnd - valueStart))
+    {
+        if (c < '0' || c > '9')
+        {
+            return PipelineKind::other;
+        }
+        drawType = drawType * 10 + static_cast<unsigned>(c - '0');
+    }
+    switch (drawType)
+    {
+        case 0:
+        case 1:
+        case 2:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 11:
+        case 12:
+        case 13:
+            return PipelineKind::pathPatches;
+        default:
+            return PipelineKind::other;
+    }
+}
+
+WGPUCommandEncoder countedDeviceCreateCommandEncoder(
+    WGPUDevice device,
+    const WGPUCommandEncoderDescriptor* descriptor)
+{
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->command_encoders;
+    }
+    return g_nativeProcs.deviceCreateCommandEncoder(device, descriptor);
+}
+
+WGPURenderPassEncoder countedCommandEncoderBeginRenderPass(
+    WGPUCommandEncoder encoder,
+    const WGPURenderPassDescriptor* descriptor)
+{
+    WGPURenderPassEncoder pass =
+        g_nativeProcs.commandEncoderBeginRenderPass(encoder, descriptor);
+    g_passKinds[pass] = PipelineKind::other;
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->render_passes;
+    }
+    return pass;
+}
+
+WGPUBindGroup countedDeviceCreateBindGroup(
+    WGPUDevice device,
+    const WGPUBindGroupDescriptor* descriptor)
+{
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->bind_groups_created;
+        if (descriptor != nullptr)
+        {
+            for (size_t i = 0; i < descriptor->entryCount; ++i)
+            {
+                g_activeMetrics->texture_bindings +=
+                    descriptor->entries[i].textureView != nullptr ? 1 : 0;
+            }
+        }
+    }
+    return g_nativeProcs.deviceCreateBindGroup(device, descriptor);
+}
+
+WGPURenderPipeline countedDeviceCreateRenderPipeline(
+    WGPUDevice device,
+    const WGPURenderPipelineDescriptor* descriptor)
+{
+    WGPURenderPipeline pipeline =
+        g_nativeProcs.deviceCreateRenderPipeline(device, descriptor);
+    g_pipelineKinds[pipeline] = pipelineKind(descriptor);
+    return pipeline;
+}
+
+void countedRenderPassEncoderSetPipeline(WGPURenderPassEncoder pass,
+                                         WGPURenderPipeline pipeline)
+{
+    auto found = g_pipelineKinds.find(pipeline);
+    g_passKinds[pass] = found == g_pipelineKinds.end()
+                            ? PipelineKind::other
+                            : found->second;
+    g_nativeProcs.renderPassEncoderSetPipeline(pass, pipeline);
+}
+
+void countedRenderPassEncoderSetBindGroup(WGPURenderPassEncoder pass,
+                                          uint32_t groupIndex,
+                                          WGPUBindGroup group,
+                                          size_t dynamicOffsetCount,
+                                          const uint32_t* dynamicOffsets)
+{
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->bind_group_sets;
+    }
+    g_nativeProcs.renderPassEncoderSetBindGroup(
+        pass, groupIndex, group, dynamicOffsetCount, dynamicOffsets);
+}
+
+void recordDraw(WGPURenderPassEncoder pass, uint32_t instanceCount)
+{
+    if (g_activeMetrics == nullptr)
+    {
+        return;
+    }
+    ++g_activeMetrics->gpu_draw_calls;
+    g_activeMetrics->gpu_draw_instances += instanceCount;
+    const auto found = g_passKinds.find(pass);
+    const PipelineKind kind = found == g_passKinds.end()
+                                  ? PipelineKind::other
+                                  : found->second;
+    if (kind == PipelineKind::tessellation)
+    {
+        g_activeMetrics->tessellation_spans += instanceCount;
+    }
+    else if (kind == PipelineKind::pathPatches)
+    {
+        g_activeMetrics->path_patches += instanceCount;
+    }
+}
+
+void countedRenderPassEncoderDraw(WGPURenderPassEncoder pass,
+                                  uint32_t vertexCount,
+                                  uint32_t instanceCount,
+                                  uint32_t firstVertex,
+                                  uint32_t firstInstance)
+{
+    recordDraw(pass, instanceCount);
+    g_nativeProcs.renderPassEncoderDraw(
+        pass, vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+void countedRenderPassEncoderDrawIndexed(WGPURenderPassEncoder pass,
+                                         uint32_t indexCount,
+                                         uint32_t instanceCount,
+                                         uint32_t firstIndex,
+                                         int32_t baseVertex,
+                                         uint32_t firstInstance)
+{
+    recordDraw(pass, instanceCount);
+    g_nativeProcs.renderPassEncoderDrawIndexed(pass,
+                                               indexCount,
+                                               instanceCount,
+                                               firstIndex,
+                                               baseVertex,
+                                               firstInstance);
+}
+
+void countedQueueWriteBuffer(WGPUQueue queue,
+                             WGPUBuffer buffer,
+                             uint64_t offset,
+                             const void* data,
+                             size_t size)
+{
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->buffer_upload_calls;
+        g_activeMetrics->buffer_upload_bytes += size;
+    }
+    g_nativeProcs.queueWriteBuffer(queue, buffer, offset, data, size);
+}
+
+void countedQueueWriteTexture(WGPUQueue queue,
+                              const WGPUTexelCopyTextureInfo* destination,
+                              const void* data,
+                              size_t dataSize,
+                              const WGPUTexelCopyBufferLayout* dataLayout,
+                              const WGPUExtent3D* writeSize)
+{
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->texture_upload_calls;
+        g_activeMetrics->texture_upload_bytes += dataSize;
+    }
+    g_nativeProcs.queueWriteTexture(
+        queue, destination, data, dataSize, dataLayout, writeSize);
+}
+
+void countedQueueSubmit(WGPUQueue queue,
+                        size_t commandCount,
+                        const WGPUCommandBuffer* commands)
+{
+    if (g_activeMetrics != nullptr)
+    {
+        ++g_activeMetrics->queue_submissions;
+    }
+    g_nativeProcs.queueSubmit(queue, commandCount, commands);
+}
+
+void installCountingProcs()
+{
+    static const bool installed = []() {
+        g_nativeProcs = dawn::native::GetProcs();
+        g_countingProcs = g_nativeProcs;
+        g_countingProcs.deviceCreateCommandEncoder =
+            countedDeviceCreateCommandEncoder;
+        g_countingProcs.commandEncoderBeginRenderPass =
+            countedCommandEncoderBeginRenderPass;
+        g_countingProcs.deviceCreateBindGroup = countedDeviceCreateBindGroup;
+        g_countingProcs.deviceCreateRenderPipeline =
+            countedDeviceCreateRenderPipeline;
+        g_countingProcs.renderPassEncoderSetPipeline =
+            countedRenderPassEncoderSetPipeline;
+        g_countingProcs.renderPassEncoderSetBindGroup =
+            countedRenderPassEncoderSetBindGroup;
+        g_countingProcs.renderPassEncoderDraw = countedRenderPassEncoderDraw;
+        g_countingProcs.renderPassEncoderDrawIndexed =
+            countedRenderPassEncoderDrawIndexed;
+        g_countingProcs.queueWriteBuffer = countedQueueWriteBuffer;
+        g_countingProcs.queueWriteTexture = countedQueueWriteTexture;
+        g_countingProcs.queueSubmit = countedQueueSubmit;
+        dawnProcSetProcs(&g_countingProcs);
+        return true;
+    }();
+    (void)installed;
+}
+#endif
+
 bool await(WGPUInstance instance, WGPUFuture future)
 {
     WGPUFutureWaitInfo futureWait = {};
@@ -86,6 +375,9 @@ public:
 
     bool init(uint32_t initialWidth, uint32_t initialHeight)
     {
+#ifdef RIVE_FFI_PERF_COUNTERS
+        installCountingProcs();
+#endif
         constexpr WGPUInstanceFeatureName kTimedWaitAny =
             WGPUInstanceFeatureName_TimedWaitAny;
         WGPUInstanceDescriptor instanceDesc = {};
@@ -202,17 +494,29 @@ public:
         resources.externalCommandBuffer = commandEncoder.Get();
     }
 
+    void beginBackendWorkMetrics(bool enabled) override
+    {
+        lastBackendWorkMetrics = {};
+#ifdef RIVE_FFI_PERF_COUNTERS
+        currentBackendWorkMetrics = {};
+        collectBackendWorkMetrics = enabled;
+        g_activeMetrics = enabled ? &currentBackendWorkMetrics : nullptr;
+#else
+        (void)enabled;
+#endif
+    }
+
     bool afterFlush() override
     {
         if (commandEncoder == nullptr)
         {
-            return false;
+            return finishBackendWorkMetrics(false);
         }
         wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
         commandEncoder = nullptr;
         if (commandBuffer == nullptr)
         {
-            return false;
+            return finishBackendWorkMetrics(false);
         }
         queue.Submit(1, &commandBuffer);
 
@@ -223,7 +527,8 @@ public:
         callback.userdata1 = &result;
         const WGPUFuture future =
             wgpuQueueOnSubmittedWorkDone(queue.Get(), callback);
-        return await(instance.Get(), future) && result.succeeded;
+        return finishBackendWorkMetrics(await(instance.Get(), future) &&
+                                        result.succeeded);
     }
 
     const char* adapterName() const override
@@ -232,6 +537,24 @@ public:
     }
 
 private:
+#ifdef RIVE_FFI_PERF_COUNTERS
+    bool finishBackendWorkMetrics(bool succeeded)
+    {
+        g_activeMetrics = nullptr;
+        if (collectBackendWorkMetrics)
+        {
+            lastBackendWorkMetrics = currentBackendWorkMetrics;
+        }
+        collectBackendWorkMetrics = false;
+        return succeeded;
+    }
+
+    rive_ffi_backend_work_metrics currentBackendWorkMetrics = {};
+    bool collectBackendWorkMetrics = false;
+#else
+    bool finishBackendWorkMetrics(bool succeeded) { return succeeded; }
+#endif
+
     wgpu::Instance instance;
     wgpu::Adapter adapter;
     wgpu::Device device;

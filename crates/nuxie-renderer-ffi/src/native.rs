@@ -61,6 +61,26 @@ pub struct FfiFrameMetrics {
     pub draw_calls: u64,
     pub logical_flushes: u64,
     pub atomic_strategy_partitions: u64,
+    pub backend_work: FfiBackendWorkMetrics,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FfiBackendWorkMetrics {
+    pub command_encoders: u64,
+    pub render_passes: u64,
+    pub bind_groups_created: u64,
+    pub bind_group_sets: u64,
+    pub texture_bindings: u64,
+    pub buffer_upload_calls: u64,
+    pub buffer_upload_bytes: u64,
+    pub texture_upload_calls: u64,
+    pub texture_upload_bytes: u64,
+    pub queue_submissions: u64,
+    pub gpu_draw_calls: u64,
+    pub gpu_draw_instances: u64,
+    pub tessellation_spans: u64,
+    pub path_patches: u64,
 }
 
 #[cfg(target_os = "macos")]
@@ -195,13 +215,23 @@ impl FfiFactory {
         clear_color: ColorInt,
         mode: FfiRenderMode,
     ) -> Result<FfiFrame, NativeRendererError> {
+        self.begin_frame_with_mode_and_metrics(clear_color, mode, false)
+    }
+
+    pub fn begin_frame_with_mode_and_metrics(
+        &mut self,
+        clear_color: ColorInt,
+        mode: FfiRenderMode,
+        collect_work_metrics: bool,
+    ) -> Result<FfiFrame, NativeRendererError> {
         let ok = unsafe {
-            ffi::rive_ffi_context_begin_frame_mode(
+            ffi::rive_ffi_context_begin_frame_mode_metrics(
                 self.context.as_ptr(),
                 self.width,
                 self.height,
                 clear_color,
                 mode as u32,
+                u32::from(collect_work_metrics),
             )
         };
         if ok == 0 {
@@ -382,6 +412,10 @@ impl FfiFrame {
         self.close_checked()?;
         let logical_flushes =
             unsafe { ffi::rive_ffi_context_logical_flush_count(self.context.as_ptr()) };
+        let mut backend_work = FfiBackendWorkMetrics::default();
+        unsafe {
+            ffi::rive_ffi_context_backend_work_metrics(self.context.as_ptr(), &mut backend_work)
+        };
         Ok(FfiFrameMetrics {
             draw_calls,
             logical_flushes,
@@ -390,6 +424,7 @@ impl FfiFrame {
             } else {
                 0
             },
+            backend_work,
         })
     }
 
@@ -833,7 +868,7 @@ impl From<Mat2D> for FfiMat2D {
 mod ffi {
     #[cfg(target_os = "macos")]
     use super::FfiAdapterIdentity;
-    use super::{FfiMat2D, FfiVec2D};
+    use super::{FfiBackendWorkMetrics, FfiMat2D, FfiVec2D};
     use std::ffi::c_void;
 
     pub type Context = c_void;
@@ -852,12 +887,13 @@ mod ffi {
         #[cfg(all(feature = "dawn", target_os = "macos"))]
         pub fn rive_ffi_context_make_dawn(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_delete(context: *mut Context);
-        pub fn rive_ffi_context_begin_frame_mode(
+        pub fn rive_ffi_context_begin_frame_mode_metrics(
             context: *mut Context,
             width: u32,
             height: u32,
             clear_color: u32,
             mode: u32,
+            collect_work_metrics: u32,
         ) -> i32;
         pub fn rive_ffi_context_end_frame(context: *mut Context) -> i32;
         pub fn rive_ffi_context_read_pixels(
@@ -867,6 +903,10 @@ mod ffi {
         ) -> usize;
         pub fn rive_ffi_context_draw_count(context: *mut Context) -> u64;
         pub fn rive_ffi_context_logical_flush_count(context: *mut Context) -> u64;
+        pub fn rive_ffi_context_backend_work_metrics(
+            context: *mut Context,
+            out: *mut FfiBackendWorkMetrics,
+        );
         #[cfg(all(feature = "dawn", target_os = "macos"))]
         pub fn rive_ffi_context_adapter_name(
             context: *mut Context,

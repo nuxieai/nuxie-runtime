@@ -171,6 +171,18 @@ extern "C" int rive_ffi_context_begin_frame_mode(rive_ffi_context* ctx,
                                                  uint32_t clearColor,
                                                  uint32_t mode)
 {
+    return rive_ffi_context_begin_frame_mode_metrics(
+        ctx, width, height, clearColor, mode, 0);
+}
+
+extern "C" int rive_ffi_context_begin_frame_mode_metrics(
+    rive_ffi_context* ctx,
+    uint32_t width,
+    uint32_t height,
+    uint32_t clearColor,
+    uint32_t mode,
+    uint32_t collectWorkMetrics)
+{
     if (ctx == nullptr || ctx->context == nullptr)
     {
         return 0;
@@ -198,6 +210,7 @@ extern "C" int rive_ffi_context_begin_frame_mode(rive_ffi_context* ctx,
         return 0;
     }
     ctx->context->beginFrame(desc);
+    ctx->beginBackendWorkMetrics(collectWorkMetrics != 0);
     ctx->renderer = std::make_unique<rive::RiveRenderer>(ctx->context.get());
     ctx->drawCount = 0;
     ctx->lastLogicalFlushCount = 0;
@@ -240,6 +253,17 @@ extern "C" uint64_t
 rive_ffi_context_logical_flush_count(const rive_ffi_context* ctx)
 {
     return ctx == nullptr ? 0 : ctx->lastLogicalFlushCount;
+}
+
+extern "C" void rive_ffi_context_backend_work_metrics(
+    const rive_ffi_context* ctx,
+    rive_ffi_backend_work_metrics* out)
+{
+    if (out != nullptr)
+    {
+        *out = ctx == nullptr ? rive_ffi_backend_work_metrics{}
+                              : ctx->lastBackendWorkMetrics;
+    }
 }
 
 extern "C" size_t

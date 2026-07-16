@@ -1,5 +1,7 @@
 //! Mipmap generation translated from Rive's WebGPU RenderContext implementation.
 
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
+
 pub(crate) struct MipmapPipeline {
     pipeline: wgpu::RenderPipeline,
     image_layout: wgpu::BindGroupLayout,
@@ -93,7 +95,7 @@ impl MipmapPipeline {
         if mip_level_count <= 1 {
             return;
         }
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut encoder = device.create_counted_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("nuxie-mipmap-encoder"),
         });
         for level in 1..mip_level_count {
@@ -109,7 +111,7 @@ impl MipmapPipeline {
                 mip_level_count: Some(1),
                 ..Default::default()
             });
-            let image = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let image = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-mipmap-image-group"),
                 layout: &self.image_layout,
                 entries: &[
@@ -132,7 +134,7 @@ impl MipmapPipeline {
                     store: wgpu::StoreOp::Store,
                 },
             })];
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nuxie-mipmap-pass"),
                 color_attachments: &attachments,
                 depth_stencil_attachment: None,
@@ -144,7 +146,7 @@ impl MipmapPipeline {
             pass.set_bind_group(1, &image, &[]);
             pass.draw(0..4, 0..1);
         }
-        queue.submit(Some(encoder.finish()));
+        queue.submit_counted(Some(encoder.finish()));
     }
 }
 

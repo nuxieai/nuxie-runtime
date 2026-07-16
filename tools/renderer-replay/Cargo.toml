@@ -9,6 +9,11 @@ default = []
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]
 perf-diagnostics = ["nuxie-renderer/perf-diagnostics"]
+perf-counters = [
+  "perf-dawn",
+  "nuxie-renderer/perf-counters",
+  "nuxie-renderer-ffi/perf-counters",
+]
 
 [dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }

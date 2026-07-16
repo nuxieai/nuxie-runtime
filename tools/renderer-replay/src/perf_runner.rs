@@ -1,7 +1,7 @@
 use nuxie_render_stream::RenderStream;
 use perf_compare::renderer_perf::{
-    validate_runner_request, AdapterIdentity, Mode, RunRequest, RunnerResponse, StructuralMetrics,
-    RUNNER_PROTOCOL,
+    validate_runner_request, AdapterIdentity, BackendWorkMetrics, Measurement, Mode, RunRequest,
+    RunnerResponse, StructuralMetrics, RUNNER_PROTOCOL,
 };
 use std::fs;
 use std::io;
@@ -23,6 +23,9 @@ pub fn run(kind: BackendKind) -> Result<(), String> {
     let request: RunRequest = serde_json::from_reader(io::stdin().lock())
         .map_err(|error| format!("invalid runner request JSON: {error}"))?;
     validate_request(&request)?;
+    if request.measurement == Measurement::Counters && !cfg!(feature = "perf-counters") {
+        return Err("counter requests require the perf-counters feature".to_owned());
+    }
     let stream = RenderStream::parse(
         &fs::read_to_string(&request.stream)
             .map_err(|error| format!("failed to read {}: {error}", request.stream))?,
@@ -56,34 +59,54 @@ pub fn run(kind: BackendKind) -> Result<(), String> {
         .checked_add(request.timing.measured_frames)
         .ok_or_else(|| "runner frame count overflow".to_owned())?;
     let mut measured = Vec::with_capacity(request.timing.measured_frames as usize);
-    let mut expected_metrics = None;
+    let mut expected_structural = None;
+    let mut expected_work = None;
     for frame_number in 0..total_frames {
         let start = Instant::now();
-        let metrics = backend.render(&stream, request.frame as usize, clear)?;
+        let metrics = backend.render(
+            &stream,
+            request.frame as usize,
+            clear,
+            request.measurement == Measurement::Counters,
+        )?;
         let elapsed_ns = u64::try_from(start.elapsed().as_nanos())
             .unwrap_or(u64::MAX)
             .max(1);
-        if let Some(expected) = expected_metrics {
-            if metrics != expected {
+        if let Some(expected) = expected_structural {
+            if metrics.structural != expected {
                 return Err(format!(
                     "frame {} structural metrics changed from {:?} to {:?}",
                     frame_number + 1,
                     expected,
-                    metrics
+                    metrics.structural
                 ));
             }
         } else {
-            if metrics.logical_flushes == 0 {
+            if metrics.structural.logical_flushes == 0 {
                 return Err("renderer reported zero logical flushes".to_owned());
             }
-            expected_metrics = Some(metrics);
+            expected_structural = Some(metrics.structural);
         }
         if frame_number >= request.timing.warmup_frames {
+            if request.measurement == Measurement::Counters {
+                if let Some(expected) = expected_work {
+                    if metrics.backend_work != expected {
+                        return Err(format!(
+                            "frame {} backend work changed from {:?} to {:?}",
+                            frame_number + 1,
+                            expected,
+                            metrics.backend_work
+                        ));
+                    }
+                } else {
+                    expected_work = Some(metrics.backend_work);
+                }
+            }
             measured.push(elapsed_ns);
         }
     }
     let measured_frame_median_ns = lower_median(&mut measured)?;
-    let metrics = expected_metrics.ok_or_else(|| "runner rendered no frames".to_owned())?;
+    let metrics = expected_structural.ok_or_else(|| "runner rendered no frames".to_owned())?;
     let response = RunnerResponse {
         protocol: request.protocol,
         release: request.release,
@@ -95,12 +118,14 @@ pub fn run(kind: BackendKind) -> Result<(), String> {
         width: request.width,
         height: request.height,
         adapter_selection: request.adapter_selection,
+        measurement: request.measurement,
         selected_adapter,
         timing: request.timing,
         measured_frame_median_ns,
         logical_flushes: metrics.logical_flushes,
         draws: metrics.draws,
         atomic_strategy_partitions: metrics.atomic_strategy_partitions,
+        backend_work: expected_work.unwrap_or_default(),
     };
     serde_json::to_writer(io::stdout().lock(), &response)
         .map_err(|error| format!("failed to encode runner response: {error}"))?;
@@ -148,7 +173,14 @@ trait LiveBackend {
         stream: &RenderStream,
         frame: usize,
         clear: u32,
-    ) -> Result<StructuralMetrics, String>;
+        collect_work_metrics: bool,
+    ) -> Result<LiveMetrics, String>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LiveMetrics {
+    structural: StructuralMetrics,
+    backend_work: BackendWorkMetrics,
 }
 
 struct RustBackend {
@@ -181,18 +213,39 @@ impl LiveBackend for RustBackend {
         stream: &RenderStream,
         frame_index: usize,
         clear: u32,
-    ) -> Result<StructuralMetrics, String> {
-        let mut frame = self.factory.begin_frame(clear);
+        collect_work_metrics: bool,
+    ) -> Result<LiveMetrics, String> {
+        let mut frame = self
+            .factory
+            .begin_frame_for_benchmark(clear, collect_work_metrics);
         stream
             .replay_frame(frame_index, &mut self.factory, &mut frame)
             .map_err(|error| format!("Rust stream replay failed: {error}"))?;
         let metrics = frame
             .finish_for_benchmark()
             .map_err(|error| format!("Rust renderer failed: {error}"))?;
-        Ok(StructuralMetrics {
-            logical_flushes: metrics.logical_flushes,
-            draws: metrics.draw_calls,
-            atomic_strategy_partitions: metrics.atomic_strategy_partitions,
+        Ok(LiveMetrics {
+            structural: StructuralMetrics {
+                logical_flushes: metrics.logical_flushes,
+                draws: metrics.draw_calls,
+                atomic_strategy_partitions: metrics.atomic_strategy_partitions,
+            },
+            backend_work: BackendWorkMetrics {
+                command_encoders: metrics.backend_work.command_encoders,
+                render_passes: metrics.backend_work.render_passes,
+                bind_groups_created: metrics.backend_work.bind_groups_created,
+                bind_group_sets: metrics.backend_work.bind_group_sets,
+                texture_bindings: metrics.backend_work.texture_bindings,
+                buffer_upload_calls: metrics.backend_work.buffer_upload_calls,
+                buffer_upload_bytes: metrics.backend_work.buffer_upload_bytes,
+                texture_upload_calls: metrics.backend_work.texture_upload_calls,
+                texture_upload_bytes: metrics.backend_work.texture_upload_bytes,
+                queue_submissions: metrics.backend_work.queue_submissions,
+                gpu_draw_calls: metrics.backend_work.gpu_draw_calls,
+                gpu_draw_instances: metrics.backend_work.gpu_draw_instances,
+                tessellation_spans: metrics.backend_work.tessellation_spans,
+                path_patches: metrics.backend_work.path_patches,
+            },
         })
     }
 }
@@ -232,10 +285,11 @@ impl LiveBackend for CppBackend {
         stream: &RenderStream,
         frame_index: usize,
         clear: u32,
-    ) -> Result<StructuralMetrics, String> {
+        collect_work_metrics: bool,
+    ) -> Result<LiveMetrics, String> {
         let mut frame = self
             .factory
-            .begin_frame_with_mode(clear, self.mode)
+            .begin_frame_with_mode_and_metrics(clear, self.mode, collect_work_metrics)
             .map_err(|error| format!("failed to begin C++ Dawn frame: {error}"))?;
         stream
             .replay_frame(frame_index, &mut self.factory, &mut frame)
@@ -243,10 +297,28 @@ impl LiveBackend for CppBackend {
         let metrics = frame
             .end_with_metrics()
             .map_err(|error| format!("C++ Dawn renderer failed: {error}"))?;
-        Ok(StructuralMetrics {
-            logical_flushes: metrics.logical_flushes,
-            draws: metrics.draw_calls,
-            atomic_strategy_partitions: metrics.atomic_strategy_partitions,
+        Ok(LiveMetrics {
+            structural: StructuralMetrics {
+                logical_flushes: metrics.logical_flushes,
+                draws: metrics.draw_calls,
+                atomic_strategy_partitions: metrics.atomic_strategy_partitions,
+            },
+            backend_work: BackendWorkMetrics {
+                command_encoders: metrics.backend_work.command_encoders,
+                render_passes: metrics.backend_work.render_passes,
+                bind_groups_created: metrics.backend_work.bind_groups_created,
+                bind_group_sets: metrics.backend_work.bind_group_sets,
+                texture_bindings: metrics.backend_work.texture_bindings,
+                buffer_upload_calls: metrics.backend_work.buffer_upload_calls,
+                buffer_upload_bytes: metrics.backend_work.buffer_upload_bytes,
+                texture_upload_calls: metrics.backend_work.texture_upload_calls,
+                texture_upload_bytes: metrics.backend_work.texture_upload_bytes,
+                queue_submissions: metrics.backend_work.queue_submissions,
+                gpu_draw_calls: metrics.backend_work.gpu_draw_calls,
+                gpu_draw_instances: metrics.backend_work.gpu_draw_instances,
+                tessellation_spans: metrics.backend_work.tessellation_spans,
+                path_patches: metrics.backend_work.path_patches,
+            },
         })
     }
 }

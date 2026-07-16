@@ -1,7 +1,7 @@
 //! Gradient-ramp rendering translated from `renderer/src/render_context.cpp`.
 
 use crate::gpu::{FlushUniforms, GradientSpan};
-use wgpu::util::DeviceExt;
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) const TEXTURE_WIDTH: u32 = 512;
 
@@ -101,17 +101,17 @@ impl GradientPipeline {
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
-        let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let uniform = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-gradient-uniforms"),
             contents: bytemuck::bytes_of(uniforms),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        let span_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let span_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("nuxie-gradient-spans"),
             contents: bytemuck::cast_slice(spans),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-gradient-group"),
             layout: &self.layout,
             entries: &[wgpu::BindGroupEntry {
@@ -128,7 +128,7 @@ impl GradientPipeline {
                 store: wgpu::StoreOp::Store,
             },
         })];
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-gradient-pass"),
             color_attachments: &attachments,
             depth_stencil_attachment: None,

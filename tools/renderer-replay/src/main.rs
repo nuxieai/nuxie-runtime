@@ -27,12 +27,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         "stub" => clear_pixels(width, height, clear),
         "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
         #[cfg(all(feature = "ffi", target_os = "macos"))]
-        "ffi-metal" => replay_ffi(&stream, options.frame, width, height, clear, &options.mode)?,
+        "ffi-metal" => {
+            replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?
+        }
+        #[cfg(all(feature = "perf-dawn", target_os = "macos"))]
+        "ffi-dawn" => replay_ffi_dawn(&stream, options.frame, width, height, clear, &options.mode)?,
         backend => {
             return Err(format!(
-                "backend `{backend}` is unavailable; use `stub`, `rust-wgpu`{}",
+                "backend `{backend}` is unavailable; use `stub`, `rust-wgpu`{}{}",
                 if cfg!(all(feature = "ffi", target_os = "macos")) {
                     " or `ffi-metal`"
+                } else {
+                    ""
+                },
+                if cfg!(all(feature = "perf-dawn", target_os = "macos")) {
+                    " or `ffi-dawn`"
                 } else {
                     ""
                 }
@@ -72,7 +81,7 @@ fn replay_wgpu(
 }
 
 #[cfg(all(feature = "ffi", target_os = "macos"))]
-fn replay_ffi(
+fn replay_ffi_metal(
     stream: &RenderStream,
     frame_index: usize,
     width: u32,
@@ -80,19 +89,43 @@ fn replay_ffi(
     clear: u32,
     mode: &str,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    use nuxie_renderer_ffi::{FfiFactory, FfiRenderMode};
+    let factory = nuxie_renderer_ffi::FfiFactory::new_metal(width, height)?;
+    let mut pixels = replay_ffi(stream, frame_index, factory, clear, mode)?;
+    flip_rows(&mut pixels, width, height);
+    Ok(pixels)
+}
+
+#[cfg(all(feature = "perf-dawn", target_os = "macos"))]
+fn replay_ffi_dawn(
+    stream: &RenderStream,
+    frame_index: usize,
+    width: u32,
+    height: u32,
+    clear: u32,
+    mode: &str,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let factory = nuxie_renderer_ffi::FfiFactory::new_dawn(width, height)?;
+    replay_ffi(stream, frame_index, factory, clear, mode)
+}
+
+#[cfg(all(feature = "ffi", target_os = "macos"))]
+fn replay_ffi(
+    stream: &RenderStream,
+    frame_index: usize,
+    mut factory: nuxie_renderer_ffi::FfiFactory,
+    clear: u32,
+    mode: &str,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    use nuxie_renderer_ffi::FfiRenderMode;
     let mode = match mode {
         "msaa" => FfiRenderMode::Msaa,
         "clockwise-atomic" => FfiRenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported renderer mode `{value}`").into()),
     };
-    let mut factory = FfiFactory::new_metal(width, height)?;
     let mut frame = factory.begin_frame_with_mode(clear, mode)?;
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;
     frame.end();
-    let mut pixels = factory.read_pixels()?;
-    flip_rows(&mut pixels, width, height);
-    Ok(pixels)
+    Ok(factory.read_pixels()?)
 }
 
 #[cfg(any(feature = "ffi", test))]
@@ -166,7 +199,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|ffi-metal] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]

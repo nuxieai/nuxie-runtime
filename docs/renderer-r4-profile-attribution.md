@@ -656,11 +656,37 @@ counter regression, grouped-versus-unbatched MSAA pixels, boundary tests, the
 1,409/0/59 corpus are the acceptance evidence. Sol found no implementation
 defect; its request for end-to-end row and boundary coverage is incorporated.
 
-The new top two rows are the same missing operation:
-`gm-bug339297{,_as_clip}-clockwise-atomic` emit exactly 200 excess path patches.
-C++ excludes strokes from clockwise borrowed coverage; Rust currently submits
-the stroke in both borrowed and main passes. Item 126 owns only that exclusion
-with targets 623->423 and 631->431 path patches.
+### Item 126 Update
+
+The apparent borrowed-stroke diagnosis was false. The +200 patches in each
+clockwise-atomic `bug339297` row are fill geometry emitted by Rust's bespoke
+single-contour ear triangulator. Production C++ sends the same contour through
+`GrInnerFanTriangulator` and prunes its two authored zero-length lines before
+interior preparation.
+
+Rust now routes every eligible contour through the ported global
+`InnerFanTriangulator`, applies C++ numeric point equality during fill
+preparation, and uses the equivalent wgpu face culling for C++ WebGPU's CW
+front-face convention. Path patches move 623->423 and 631->431, exact with
+C++ Dawn. The direct preparation oracle matches contour records, triangle
+order, and every `RGBA32Uint` tessellation texel. Full C++ Dawn frames differ
+at zero pixels beyond channel delta 2 with maximum delta 1, so the two primary
+references move from native Metal to same-tier C++ Dawn and their tolerance
+tightens from 2/1,280 to 2/32. Native Metal remains a cross-backend diagnostic:
+the old C++ Dawn frame differs at 1,837 pixels/max-33 and Rust at 1,839/max-33.
+
+This is a parity correction, not a blanket work reduction. Removing 400 wrong
+outer patches restores the real C++ interior topology: fixed-matrix Rust path
+patches move 4,666->4,266, while passes move 91->94, instances
+6,191->5,987, spans 1,514->1,708, and uploads 159,208->179,824 bytes. Ranked
+excess rows move 35->39 because the report counts every positive row equally,
+including small residuals exposed by restored work. The first one-frame matrix
+snapshot is 2.421x and is directional context only; no A-B-B-A campaign is
+warranted for this source- and oracle-defined correction. Sol reports no
+correctness findings.
+
+The new top rows are `gm-batchedconvexpaths` upload bytes and tessellation
+spans. Item 127 owns source attribution before another edit.
 
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

@@ -294,6 +294,22 @@ reconstructs the exact `RawPath` and transform, runs
 triangle records, dimensions, and every texture texel without tolerances.
 `build.sh` writes and validates it independently.
 
+`direct-bug339297-inputs.bin` isolates the large single-contour fill from
+`fixtures/renderer/streams/gm/bug339297.rive-stream`. It uses the stream's
+exact `640 x 480` frame, `[1,0,0,1,258,10365663]` transform, non-zero fill,
+and million-scale path coordinates, including its two authored zero-length
+lines. This is the counter-parity case where the local single-contour fallback
+emitted 200 excess patches; production C++ instead sends the contour through
+the global interior triangulator.
+
+The artifact uses `RIVED39` version 1 and the same direct-preparation layout as
+the grid, flower, and bad-skin captures. Its parser requires atomic interlock,
+one contour, a canonical initialize/outer/interior/resolve schedule, and a
+nonempty triangle count divisible by three. The configured Rust test compares
+the contour and triangle records in exact order and compares every generated
+`RGBA32Uint` tessellation texel. `build.sh` emits and validates the capture on
+every full oracle run.
+
 `atlas-blit.rgba`, `atlas-clipped-blit.rgba`,
 `atlas-path-clipped-blit.rgba`, `atlas-changing-path-clipped-blit.rgba`,
 `atlas-nested-path-clipped-blit.rgba`,

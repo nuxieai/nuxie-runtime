@@ -186,10 +186,31 @@ Fixed-matrix Rust draws move 161->151, instances 6,219->6,191, spans
 only as directional context; exact counters and unchanged pixels accept the
 slice.
 
-The new top rows are `gm-bug339297` and `gm-bug339297_as_clip` clockwise
-atomic path patches, each exactly +200. C++'s borrowed-coverage predicate is
-`!isStroke()`; Rust's specialized clockwise path currently draws the stroke in
-the borrowed pass. Item 126 owns that narrow exclusion.
+### Item 126 Update
+
+The +200 `bug339297` path-patch rows were misclassified as borrowed stroke
+coverage. They came from a local single-contour ear triangulator that bypassed
+C++'s global interior preparation. Rust now uses `InnerFanTriangulator` for all
+eligible contours, prunes authored zero-length fill lines with C++ numeric
+equality, and applies the physical counterclockwise-face cull implied by C++
+WebGPU's CW-front pipeline convention.
+
+Both target path-patch counts are exact at 423 and 431. A direct C++ oracle
+matches contour records, triangle ordering, and every tessellation texel, and
+the same-tier final frames are within the standard 2/32 contract at zero
+pixels beyond delta 2/max-1. The primary references therefore move from native
+Metal to C++ Dawn and the old 1,280-pixel allowances disappear.
+
+Restoring C++'s interior topology also restores legitimate work, so the fixed
+matrix is not uniformly smaller: path patches move 4,666->4,266 and instances
+6,191->5,987, while passes move 91->94, spans 1,514->1,708, uploads
+159,208->179,824 bytes, and ranked positive rows move 35->39. The 2.421x
+one-frame snapshot is context only. Exact preparation, exact target counters,
+same-tier pixels, the corpus ratchet, and the test floors accept the change;
+no A-B-B-A campaign was run. Sol reports no correctness findings.
+
+The new top rows are `gm-batchedconvexpaths` upload bytes and tessellation
+spans. Item 127 first classifies the excess span kinds against C++.
 
 ## Port Checklist
 
@@ -220,16 +241,22 @@ the borrowed pass. Item 126 owns that narrow exclusion.
 - `bind_group_sets` no longer owns the top row. Item 119 removed 141 repeated
   direct-MSAA sets; retain the remaining layout-bound sets until another
   source-matched redundancy is identified.
-- `render_passes` is closed for the fixed matrix at 91/91. Do not revisit the
-  direct-resolve path without a new counter or correctness regression.
-- `tessellation_spans` no longer owns the top row. Item 124 moves
-  `gm-bevel180strokes` from 120 to 63 in both modes, exact with C++ Dawn.
+- `render_passes` was exact at 91/91 before item 126 restored global interior
+  topology. Rust now reports 94 versus 91; the three residual passes are in
+  the two `bug339297` rows and remain below the current top-ranked work.
+- Item 124 keeps `gm-bevel180strokes` tessellation spans exact at 63 in both
+  modes. Item 126's restored topology makes `batchedconvexpaths` span layout
+  the next attribution target instead.
 - `gpu_draw_calls` no longer owns the top row. Item 125 moves
   `gm-OverStroke` to eight MSAA draws exactly and nine atomic draws versus ten;
   C++'s counted initialize operation explains the lower Rust value.
-- `path_patches` is next. Both clockwise-atomic `bug339297` variants emit
-  exactly 200 excess Rust patches because strokes incorrectly enter the
-  borrowed-coverage pass. Item 126 owns that exclusion.
+- `path_patches` no longer owns the top row. Item 126 moves both
+  clockwise-atomic `bug339297` variants to exact C++ counts at 423 and 431 by
+  matching global interior preparation.
+- `buffer_upload_bytes` and `tessellation_spans` are next.
+  `gm-batchedconvexpaths-msaa` reports 10,400/7,616 bytes and 105/78 spans
+  (Rust/C++); clockwise atomic reports 9,752/7,616 bytes and 101/78 spans.
+  Item 127 owns source attribution before reduction.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

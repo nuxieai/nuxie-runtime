@@ -2037,8 +2037,7 @@ impl WgpuFrame {
                             Vec::new(),
                         )
                     } else if let Some(tessellation) =
-                        (draw::should_use_interior_tessellation(raw_path, draw.state.transform)
-                            && (!use_clockwise_atomic_batch || contour_count(draw) > 1))
+                        draw::should_use_interior_tessellation(raw_path, draw.state.transform)
                             .then(|| {
                                 draw::build_interior_tessellation(
                                     raw_path,
@@ -8468,6 +8467,40 @@ mod tests {
         assert_eq!(work, [(9, 1005, 498), (8, 1004, 498)]);
     }
 
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn clockwise_atomic_large_single_contours_match_cpp_patch_counts() {
+        use nuxie_render_stream::RenderStream;
+
+        for (source, expected_path_patches) in [
+            (
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../fixtures/renderer/streams/gm/bug339297.rive-stream"
+                )),
+                423,
+            ),
+            (
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
+                )),
+                431,
+            ),
+        ] {
+            let stream = RenderStream::parse(source).unwrap();
+            let (width, height) = stream.frame_size.unwrap();
+            let mut factory =
+                WgpuFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic).unwrap();
+            let mut frame =
+                factory.begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true);
+            stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+            let full = frame.finish_for_benchmark().unwrap().backend_work;
+
+            assert_eq!(full.path_patches, expected_path_patches);
+        }
+    }
+
     #[test]
     fn overstroke_grouped_rows_match_unbatched_msaa_pixels() {
         use nuxie_render_stream::RenderStream;
@@ -10344,7 +10377,7 @@ mod tests {
     }
 
     #[test]
-    fn large_clip_falls_back_when_interior_triangulation_fails() {
+    fn large_clip_uses_global_interior_triangulation() {
         let factory = WgpuFactory::new_with_mode(640, 480, RenderMode::ClockwiseAtomic).unwrap();
         let mut clip_path = RawPath::new();
         clip_path.move_to(-469_515.0, -10_354_890.0);
@@ -10384,7 +10417,7 @@ mod tests {
             FillRule::NonZero,
             true,
         )
-        .is_none());
+        .is_some());
 
         let fill = rect_path([-1.0e9, -1.0e9, 1.0e9, 1.0e9], FillRule::NonZero);
         let mut frame = factory.begin_frame(0xffff_ffff);

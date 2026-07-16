@@ -55,6 +55,9 @@ constexpr uint32_t kDirectFlowerContourCount = 2;
 constexpr uint32_t kDirectBadSkinFrameWidth = 999;
 constexpr uint32_t kDirectBadSkinFrameHeight = 720;
 constexpr uint32_t kDirectBadSkinContourCount = 1;
+constexpr uint32_t kDirectBug339297FrameWidth = 640;
+constexpr uint32_t kDirectBug339297FrameHeight = 480;
+constexpr uint32_t kDirectBug339297ContourCount = 1;
 constexpr uint32_t kDirectStrokesRoundFrameSize = 400;
 constexpr float kDirectStrokesRoundThickness = 4.5f;
 constexpr uint32_t kDirectRawTextFrameWidth = 400;
@@ -805,6 +808,25 @@ void writeDirectBadSkinInputs(
                       kDirectBadSkinContourCount);
 }
 
+void writeDirectBug339297Inputs(
+    const char* output,
+    const rive::gpu::RenderContextWebGPUImpl::AtlasMaskOracleFacts& facts,
+    uint32_t tessWidth,
+    uint32_t tessHeight,
+    const uint8_t* paddedRows,
+    uint32_t paddedRowBytes)
+{
+    constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', '3', '9', '\0'};
+    writeDirectInputs(output,
+                      facts,
+                      tessWidth,
+                      tessHeight,
+                      paddedRows,
+                      paddedRowBytes,
+                      kMagic,
+                      kDirectBug339297ContourCount);
+}
+
 void addClockwiseNestedGrid(rive::RenderPath* path)
 {
     // Source citation: fixtures/renderer/streams/gm/
@@ -1077,6 +1099,8 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "direct-flower") == 0;
     const bool directBadSkinCase =
         argc > 4 && std::strcmp(argv[4], "direct-bad-skin") == 0;
+    const bool directBug339297Case =
+        argc > 4 && std::strcmp(argv[4], "direct-bug339297") == 0;
     const bool directStrokesRoundCase =
         argc > 4 && std::strcmp(argv[4], "direct-strokes-round") == 0;
     const bool directRawTextCase =
@@ -1126,7 +1150,8 @@ int main(int argc, char** argv)
     const bool anyAdvancedBlendCase =
         advancedBlendCase || atomicAdvancedBlendCase || atomicColorBurnPairCase;
     const bool directTriangulatedCase =
-        directGridCase || directFlowerCase || directBadSkinCase;
+        directGridCase || directFlowerCase || directBadSkinCase ||
+        directBug339297Case;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase ||
         directStrokesRoundCase || directRawTextCase ||
@@ -1199,7 +1224,7 @@ int main(int argc, char** argv)
         (msaaReferenceMode &&
          (msaaReference == nullptr || secondaryOutput == nullptr)))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|atomic-hunter-x-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-strokes-round|direct-rawtext|direct-degenerate-cubic] [auxiliary-output-or-case-id] [secondary-output-or-selector]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|atomic-hunter-x-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-bug339297|direct-strokes-round|direct-rawtext|direct-degenerate-cubic] [auxiliary-output-or-case-id] [secondary-output-or-selector]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1289,6 +1314,8 @@ int main(int argc, char** argv)
                                     ? kDirectStrokesRoundFrameSize
                                 : directBadSkinCase
                                     ? kDirectBadSkinFrameWidth
+                                : directBug339297Case
+                                    ? kDirectBug339297FrameWidth
                                 : atomicColorBurnPairCase
                                     ? kAtomicColorBurnPairFrameSize
                                 : atomicInterleavedFeatherFullCase
@@ -1311,6 +1338,8 @@ int main(int argc, char** argv)
                                      ? kDirectStrokesRoundFrameSize
                                  : directBadSkinCase
                                      ? kDirectBadSkinFrameHeight
+                                 : directBug339297Case
+                                     ? kDirectBug339297FrameHeight
                                  : atomicColorBurnPairCase
                                  ? kAtomicColorBurnPairFrameSize
                                  : atomicInterleavedFeatherFullCase
@@ -1484,6 +1513,30 @@ int main(int argc, char** argv)
                                        550.433167f,
                                        361.510925f));
         addBadSkinHair(path.get());
+    }
+    else if (directBug339297Case)
+    {
+        path->fillRule(rive::FillRule::nonZero);
+        renderer.transform(rive::Mat2D(1, 0, 0, 1, 258, 10365663));
+        path->moveTo(-469515, -10354890);
+        path->cubicTo(771919.625f,
+                      -10411179,
+                      2013360.12f,
+                      -10243774,
+                      3195542.75f,
+                      -9860664);
+        path->lineTo(3195550, -9860655);
+        path->lineTo(3195539, -9860652);
+        path->lineTo(3195539, -9860652);
+        path->lineTo(3195539, -9860652);
+        path->cubicTo(2013358.12f,
+                      -10243761,
+                      771919.25f,
+                      -10411166,
+                      -469513.844f,
+                      -10354877);
+        path->lineTo(-469515, -10354890);
+        path->close();
     }
     else if (emptyStrokeCase)
     {
@@ -2253,6 +2306,9 @@ int main(int argc, char** argv)
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)) ||
             (directBadSkinCase &&
              (facts.contours.size() != kDirectBadSkinContourCount ||
+              facts.triangles.empty() || facts.triangles.size() % 3 != 0)) ||
+            (directBug339297Case &&
+             (facts.contours.size() != kDirectBug339297ContourCount ||
               facts.triangles.empty() || facts.triangles.size() % 3 != 0)))
         {
             fail("direct oracle draw schedule does not match the selected mode");
@@ -2665,6 +2721,15 @@ int main(int argc, char** argv)
                                          tessHeight,
                                          tessellationBytes.data(),
                                          tessWidth * kTessBytesPerTexel);
+            }
+            else if (directBug339297Case)
+            {
+                writeDirectBug339297Inputs(inputsOutput,
+                                           facts,
+                                           tessWidth,
+                                           tessHeight,
+                                           tessellationBytes.data(),
+                                           tessWidth * kTessBytesPerTexel);
             }
             else
             {

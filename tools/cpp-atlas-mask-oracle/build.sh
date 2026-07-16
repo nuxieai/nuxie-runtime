@@ -60,6 +60,7 @@ direct_polyshark_inputs_output="${RIVE_DIRECT_POLYSHARK_INPUT_OUTPUT:-$script_di
 direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"
 direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"
 direct_bad_skin_inputs_output="${RIVE_DIRECT_BAD_SKIN_INPUT_OUTPUT:-$script_dir/out/direct-bad-skin-inputs.bin}"
+direct_bug339297_inputs_output="${RIVE_DIRECT_BUG339297_INPUT_OUTPUT:-$script_dir/out/direct-bug339297-inputs.bin}"
 direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"
 direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"
 direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"
@@ -440,6 +441,7 @@ mkdir -p "$injected_dir" \
     "$(dirname "$direct_grid_inputs_output")" \
     "$(dirname "$direct_flower_inputs_output")" \
     "$(dirname "$direct_bad_skin_inputs_output")" \
+    "$(dirname "$direct_bug339297_inputs_output")" \
     "$(dirname "$direct_strokes_round_inputs_output")" \
     "$(dirname "$direct_strokes_round_blit_output")" \
     "$(dirname "$direct_strokes_round_spans_output")" \
@@ -567,7 +569,7 @@ if [[ "$run_mode" == build-only ]]; then
     exit 0
 fi
 
-rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$empty_stroke_output" "$empty_stroke_inputs_output" "$empty_stroke_blit_output" "$empty_stroke_overlap_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$empty_stroke_output" "$empty_stroke_inputs_output" "$empty_stroke_blit_output" "$empty_stroke_overlap_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_bug339297_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -628,11 +630,13 @@ validate_spotify_artifacts
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_grid_inputs_output" /dev/null direct-grid
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_flower_inputs_output" /dev/null direct-flower
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_bad_skin_inputs_output" /dev/null direct-bad-skin
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_bug339297_inputs_output" /dev/null direct-bug339297
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" direct-rawtext "$direct_rawtext_spans_output"
 python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"
+python3 "$script_dir/format_test.py" --validate-direct-bug339297 "$direct_bug339297_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-cusp-coverage "$direct_cusp_coverage_output"
 python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair "$atomic_colorburn_pair_color_output"
 python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair-coverage "$atomic_colorburn_pair_coverage_output"
@@ -954,6 +958,7 @@ echo "direct polyshark inputs: $direct_polyshark_inputs_output"
 echo "direct grid inputs: $direct_grid_inputs_output"
 echo "direct flower inputs: $direct_flower_inputs_output"
 echo "direct bad-skin inputs: $direct_bad_skin_inputs_output"
+echo "direct bug339297 inputs: $direct_bug339297_inputs_output"
 echo "direct strokes-round inputs: $direct_strokes_round_inputs_output"
 echo "direct strokes-round blit: $direct_strokes_round_blit_output"
 echo "direct strokes-round spans: $direct_strokes_round_spans_output"

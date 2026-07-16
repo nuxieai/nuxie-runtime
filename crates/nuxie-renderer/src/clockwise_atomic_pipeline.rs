@@ -271,7 +271,7 @@ impl ClockwiseAtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(TriangleVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: cull_counterclockwise(),
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -292,7 +292,7 @@ impl ClockwiseAtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(TriangleVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: cull_counterclockwise(),
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -313,7 +313,7 @@ impl ClockwiseAtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(TriangleVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: cull_counterclockwise(),
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -334,7 +334,7 @@ impl ClockwiseAtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(PatchVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: cull_counterclockwise(),
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -356,7 +356,7 @@ impl ClockwiseAtomicPipeline {
                     compilation_options: Default::default(),
                     buffers: &[Some(PatchVertex::layout())],
                 },
-                primitive: wgpu::PrimitiveState::default(),
+                primitive: cull_counterclockwise(),
                 depth_stencil: None,
                 multisample: Default::default(),
                 fragment: Some(wgpu::FragmentState {
@@ -377,7 +377,7 @@ impl ClockwiseAtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(TriangleVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: cull_counterclockwise(),
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -399,7 +399,7 @@ impl ClockwiseAtomicPipeline {
                     compilation_options: Default::default(),
                     buffers: &[Some(TriangleVertex::layout())],
                 },
-                primitive: wgpu::PrimitiveState::default(),
+                primitive: cull_counterclockwise(),
                 depth_stencil: None,
                 multisample: Default::default(),
                 fragment: Some(wgpu::FragmentState {
@@ -930,6 +930,15 @@ fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> w
 fn options<'a>(constants: &'a [(&'a str, f64)]) -> wgpu::PipelineCompilationOptions<'a> {
     wgpu::PipelineCompilationOptions {
         constants,
+        ..Default::default()
+    }
+}
+
+fn cull_counterclockwise() -> wgpu::PrimitiveState {
+    // C++ WebGPU declares CW front and culls Back. wgpu defaults to CCW front,
+    // so culling Front preserves the same counterclockwise-face rejection.
+    wgpu::PrimitiveState {
+        cull_mode: Some(wgpu::Face::Front),
         ..Default::default()
     }
 }

@@ -1503,14 +1503,31 @@ Run `make renderer-golden`.
     1,542->1,514, uploads 160,744->159,208, and ranked excess rows 38->35.
     Production counters, grouped-versus-unbatched pixels, synthetic boundary
     cases, and Sol review are green.
-126. [ ] Suppress clockwise-atomic borrowed coverage for strokes. C++ defines
-    borrowed coverage as `!isStroke()` and schedules no stroke prepass. Rust's
-    specialized clockwise encoder currently submits each stroke's patches in
-    both borrowed and main passes. This exactly explains the two top rows:
-    `gm-bug339297` is 623 versus 423 path patches and
-    `gm-bug339297_as_clip` is 631 versus 431. Add the C++ predicate at the
-    prepared-draw boundary, preserve fill and clip borrowed coverage, and pin
-    both exact counter targets plus their existing pixel contracts.
+126. [x] Match C++'s global interior preparation for large single-contour
+    fills. The +200 path patches in each clockwise-atomic `bug339297` row are
+    fill geometry, not a duplicated stroke pass. Rust's local single-contour
+    ear triangulator bypasses C++'s `GrInnerFanTriangulator`; route every
+    eligible contour through the ported global triangulator, prune authored
+    zero-length fill lines with C++ numeric equality, and match C++ WebGPU's
+    physical counterclockwise-face cull convention. Pin exact path-patch
+    targets 623->423 and 631->431, direct preparation records/texels, and
+    same-tier C++ Dawn pixels before replacing the two cross-backend primary
+    references. Timing is one directional snapshot only. Both target counts
+    are exact, the direct contour/triangle/texel oracle matches record for
+    record, and same-tier final pixels are within 2/32 at zero pixels beyond
+    delta 2/max-1. Restoring real C++ topology moves the fixed matrix from
+    4,666 to 4,266 path patches and 6,191 to 5,987 instances while passes,
+    spans, and uploads rise to 94, 1,708, and 179,824; this is a parity
+    correction, not a blanket work reduction. Renderer
+    exact=1,409/diverges=0/gated=59, renderer features pass 275/39, V2 floors
+    remain 584/35, and the
+    workspace passes. No A-B-B-A campaign was run. Sol found no correctness
+    issue.
+127. [ ] Attribute the new top fixed-matrix rows before editing:
+    `gm-batchedconvexpaths-msaa` uploads 10,400 versus 7,616 bytes and emits
+    105 versus 78 tessellation spans; clockwise atomic emits 9,752 versus
+    7,616 bytes and 101 versus 78 spans. Classify the excess span kinds and
+    source-map C++'s layout before choosing the next bounded port.
 
 ## R2 Completion Record
 
@@ -2662,6 +2679,24 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
 
 ## Log
 
+- 2026-07-16: Closed R4 item 126 by replacing Rust's local single-contour ear
+  preparation with the C++-matched global interior triangulator. Source
+  inspection disproved the queued borrowed-stroke diagnosis: the two +200
+  rows were fill patches. `gm-bug339297` moves 623->423 path patches and
+  `gm-bug339297_as_clip` 631->431, both exact with C++ Dawn. A direct oracle
+  matches contours, triangle order, and every tessellation texel; generic Dawn
+  readback puts both final frames at zero pixels beyond delta 2/max-1. Their
+  primary references move from native Metal to same-tier C++ Dawn and tighten
+  from 2/1,280 to 2/32. The fixed matrix restores legitimate interior work:
+  path patches move 4,666->4,266 and instances 6,191->5,987, while passes
+  move 91->94, spans 1,514->1,708, uploads 159,208->179,824 bytes, and ranked
+  positive rows 35->39. The one-frame matrix snapshot is 2.421x directional
+  context; no A-B-B-A campaign was run. Renderer
+  exact=1,409/diverges=0/gated=59, the renderer feature suite passes 275/39,
+  normal/scripted V2 floors
+  remain 584/35, Dawn readback and the workspace pass, and Sol found no
+  correctness issue. Item 127 attributes the new `batchedconvexpaths` top rows.
+
 - 2026-07-16: Closed R4 item 125 by compacting and merging compatible direct
   strokes within the seven C++-matched intersection-board groups.
   `gm-OverStroke` moves 14->9 atomic draws and 13->8 MSAA draws; MSAA is exact
@@ -2674,8 +2709,9 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
   pass. The renderer corpus remains exact=1,409/diverges=0/gated=59. Sol found
   no implementation defect and its end-to-end coverage request is
   incorporated. The light snapshot is load-unmatched context only. Item 126
-  removes the exactly +200 borrowed stroke patches from both `bug339297`
-  atomic rows.
+  investigates the exactly +200 `bug339297` path-patch rows; the later source
+  audit identifies them as a single-contour interior-preparation mismatch,
+  not borrowed stroke coverage.
 
 - 2026-07-16: Closed R4 item 124 by replacing per-path plain-stroke midpoint
   padding with C++'s one flush-wide envelope in both modes. On

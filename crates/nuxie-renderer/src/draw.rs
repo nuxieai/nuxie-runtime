@@ -1201,43 +1201,13 @@ pub(crate) fn build_interior_tessellation(
     } else {
         fill_rule
     };
-    let (triangles, grout) = if cubic_contours.len() == 1 {
-        let points = cubic_contours[0]
-            .iter()
-            .map(|curve| curve[0])
-            .collect::<Vec<_>>();
-        let indices = triangulate_contour(&points)?;
-        let transformed = points
-            .iter()
-            .copied()
-            .map(|point| transform.transform_point(point))
-            .collect::<Vec<_>>();
-        let winding = if signed_area(&transformed) >= 0.0 {
-            -1
-        } else {
-            1
-        };
-        (
-            indices
-                .into_iter()
-                .map(|index| {
-                    let point = points[index as usize];
-                    TriangleVertex::new([point.x, point.y], winding, 1)
-                })
-                .collect(),
-            Vec::new(),
-        )
-    } else {
-        let mut triangulator =
-            InnerFanTriangulator::new(&scratch, transform, direction, effective_fill_rule);
-        if (determinant < 0.0) != negate_coverage {
-            triangulator.negate_winding();
-        }
-        (
-            triangulator.triangles(1, WindingFaces::All),
-            triangulator.grout_triangles().to_vec(),
-        )
-    };
+    let mut triangulator =
+        InnerFanTriangulator::new(&scratch, transform, direction, effective_fill_rule);
+    if (determinant < 0.0) != negate_coverage {
+        triangulator.negate_winding();
+    }
+    let triangles = triangulator.triangles(1, WindingFaces::All);
+    let grout = triangulator.grout_triangles().to_vec();
     let base = OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
     let curve_count = cubic_contours.iter().map(Vec::len).sum::<usize>();
     let patch_count = curve_count + grout.len();
@@ -1668,7 +1638,7 @@ fn fill_cubic_contours(path: &RawPath) -> Vec<Vec<StrokeCurve>> {
                   first: &mut Option<Vec2D>,
                   current: &mut Option<Vec2D>| {
         if let (Some(start), Some(end)) = (*first, *current) {
-            if !same_point(start, end) {
+            if !points_equal(start, end) {
                 curves.push(StrokeCurve {
                     cubic: line_cubic(end, start),
                     is_line: true,
@@ -1694,10 +1664,12 @@ fn fill_cubic_contours(path: &RawPath) -> Vec<Vec<StrokeCurve>> {
                 let end = path.points()[point_index];
                 point_index += 1;
                 if let Some(start) = current {
-                    curves.push(StrokeCurve {
-                        cubic: line_cubic(start, end),
-                        is_line: true,
-                    });
+                    if !points_equal(start, end) {
+                        curves.push(StrokeCurve {
+                            cubic: line_cubic(start, end),
+                            is_line: true,
+                        });
+                    }
                 }
                 current = Some(end);
             }
@@ -1733,7 +1705,7 @@ fn fill_cubic_contours(path: &RawPath) -> Vec<Vec<StrokeCurve>> {
             }
             PathVerb::Close => {
                 if let (Some(start), Some(end)) = (first, current) {
-                    if !same_point(start, end) {
+                    if !points_equal(start, end) {
                         curves.push(StrokeCurve {
                             cubic: line_cubic(end, start),
                             is_line: true,
@@ -2205,6 +2177,20 @@ mod tests {
     }
 
     #[test]
+    fn fill_preparation_prunes_numeric_zero_length_lines() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, -0.0);
+        path.line_to(-0.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.close();
+
+        let contours = fill_cubic_contours(&path);
+        assert_eq!(contours.len(), 1);
+        assert_eq!(contours[0].len(), 2);
+    }
+
+    #[test]
     fn removes_repeated_endpoint_from_closed_cubic_contour() {
         let mut path = RawPath::new();
         path.move_to(0.0, 0.0);
@@ -2376,7 +2362,7 @@ mod tests {
         assert_eq!(tessellation.base_instance, 1);
         assert_eq!(tessellation.instance_count, 8);
         assert_eq!(tessellation.triangles.len(), 6);
-        assert_eq!(tessellation.triangles[0].weight_path_id >> 16, -1);
+        assert_eq!(tessellation.triangles[0].weight_path_id >> 16, 1);
         assert_eq!(tessellation.triangles[0].weight_path_id as u16, 1);
         assert_eq!(tessellation.contours[0].vertex_index0, 85);
         assert_eq!(

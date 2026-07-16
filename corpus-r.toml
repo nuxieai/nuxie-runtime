@@ -217,12 +217,12 @@ max_different_pixels = 32
 id = "gm-bug339297-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/bug339297.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/bug339297-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-bug339297-clockwise-atomic.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 1280
+max_different_pixels = 32
 
 
 [[entry]]
@@ -241,12 +241,12 @@ max_different_pixels = 32
 id = "gm-bug339297_as_clip-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/bug339297_as_clip-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-bug339297_as_clip-clockwise-atomic.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
-max_different_pixels = 1280
+max_different_pixels = 32
 
 
 [[entry]]

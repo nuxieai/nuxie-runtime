@@ -3,6 +3,7 @@
 const GRID_MAGIC: [u8; 8] = *b"RIVEDGI\0";
 const FLOWER_MAGIC: [u8; 8] = *b"RIVEDFI\0";
 const BAD_SKIN_MAGIC: [u8; 8] = *b"RIVEDBI\0";
+const BUG339297_MAGIC: [u8; 8] = *b"RIVED39\0";
 const VERSION: u32 = 1;
 const HEADER_SIZE: usize = 64;
 const DRAW_STRIDE: usize = 20;
@@ -60,6 +61,10 @@ impl DirectGridInputs {
 
     pub(crate) fn parse_bad_skin(bytes: &[u8]) -> Result<Self, String> {
         Self::parse_contract(bytes, BAD_SKIN_MAGIC, 1)
+    }
+
+    pub(crate) fn parse_bug339297(bytes: &[u8]) -> Result<Self, String> {
+        Self::parse_contract(bytes, BUG339297_MAGIC, 1)
     }
 
     fn parse_contract(
@@ -295,6 +300,7 @@ fn read_u32(bytes: &[u8], offset: usize) -> u32 {
 mod tests {
     use super::*;
     use crate::work_metrics::{CountedDeviceExt, CountedQueueExt};
+    use bytemuck::Zeroable;
 
     fn canonical_triangles(records: &[TriangleRecord]) -> Vec<[(u32, u32, u32); 3]> {
         assert_eq!(records.len() % 3, 0);
@@ -309,6 +315,87 @@ mod tests {
             .collect::<Vec<_>>();
         triangles.sort_unstable();
         triangles
+    }
+
+    fn render_tessellation_texels(
+        tessellation: &crate::draw::InteriorTessellation,
+        width: u32,
+        height: u32,
+    ) -> Vec<[u32; 4]> {
+        let factory = crate::WgpuFactory::new(width, height).unwrap();
+        let texture_height = crate::draw::tessellation_texture_height(&tessellation.spans);
+        let uniforms = crate::analytic_uniforms(width, height, texture_height);
+        let paths = [crate::gpu::PathData::zeroed(), tessellation.path];
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-direct-interior-tessellation-encoder"),
+            },
+        );
+        let mut uploads = factory
+            .context
+            .tessellator
+            .begin_frame_uploads(&factory.context.device);
+        let texture = factory.context.tessellator.encode(
+            &factory.context.device,
+            &mut uploads,
+            &mut encoder,
+            &factory.context.feather_lut.view,
+            &tessellation.spans,
+            &uniforms,
+            &paths,
+            &tessellation.contours,
+            texture_height,
+        );
+        let bytes_per_row = texture.width() * TEXEL_STRIDE as u32;
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-direct-interior-tessellation-readback"),
+                size: u64::from(bytes_per_row) * u64::from(texture_height),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(texture_height),
+                },
+            },
+            texture.size(),
+        );
+        uploads.flush(&factory.context.queue);
+        factory.context.queue.submit_counted(Some(encoder.finish()));
+        let slice = readback.slice(..);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).unwrap()
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let texels = mapped
+            .chunks_exact(TEXEL_STRIDE)
+            .map(|texel| {
+                [
+                    u32::from_le_bytes(texel[0..4].try_into().unwrap()),
+                    u32::from_le_bytes(texel[4..8].try_into().unwrap()),
+                    u32::from_le_bytes(texel[8..12].try_into().unwrap()),
+                    u32::from_le_bytes(texel[12..16].try_into().unwrap()),
+                ]
+            })
+            .collect();
+        drop(mapped);
+        readback.unmap();
+        texels
     }
 
     fn fixture() -> DirectGridInputs {
@@ -529,6 +616,85 @@ mod tests {
         );
         path.close();
         path
+    }
+
+    fn bug339297_path() -> nuxie_render_api::RawPath {
+        let mut path = nuxie_render_api::RawPath::new();
+        path.move_to(-469_515.0, -10_354_890.0);
+        path.cubic_to(
+            771_919.625,
+            -10_411_179.0,
+            2_013_360.12,
+            -10_243_774.0,
+            3_195_542.75,
+            -9_860_664.0,
+        );
+        path.line_to(3_195_550.0, -9_860_655.0);
+        path.line_to(3_195_539.0, -9_860_652.0);
+        path.line_to(3_195_539.0, -9_860_652.0);
+        path.line_to(3_195_539.0, -9_860_652.0);
+        path.cubic_to(
+            2_013_358.12,
+            -10_243_761.0,
+            771_919.25,
+            -10_411_166.0,
+            -469_513.844,
+            -10_354_877.0,
+        );
+        path.line_to(-469_515.0, -10_354_890.0);
+        path.close();
+        path
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_BUG339297_INPUTS from the C++ WebGPU oracle"]
+    fn configured_cpp_bug339297_preparation_matches_record_for_record() {
+        use nuxie_render_api::{FillRule, Mat2D};
+
+        let artifact = std::env::var_os("RIVE_CPP_DIRECT_BUG339297_INPUTS")
+            .expect("RIVE_CPP_DIRECT_BUG339297_INPUTS is required");
+        let capture = DirectGridInputs::parse_bug339297(
+            &std::fs::read(&artifact).expect("C++ bug339297 artifact must be readable"),
+        )
+        .expect("C++ bug339297 artifact must be valid");
+        let tessellation = crate::draw::build_interior_tessellation(
+            &bug339297_path(),
+            Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0]),
+            FillRule::NonZero,
+            true,
+        )
+        .expect("bug339297 must prepare an interior tessellation");
+        let rust_contours = tessellation
+            .contours
+            .iter()
+            .map(|contour| ContourRecord {
+                midpoint_x_bits: contour.midpoint[0].to_bits(),
+                midpoint_y_bits: contour.midpoint[1].to_bits(),
+                path_id: contour.path_id,
+                vertex_index0: contour.vertex_index0,
+            })
+            .collect::<Vec<_>>();
+        let rust_triangles = tessellation
+            .triangles
+            .iter()
+            .map(|vertex| TriangleRecord {
+                x_bits: vertex.point[0].to_bits(),
+                y_bits: vertex.point[1].to_bits(),
+                weight_path_id: vertex.weight_path_id as u32,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(rust_contours, capture.contours);
+        assert_eq!(
+            render_tessellation_texels(&tessellation, 640, 480),
+            capture.texels
+        );
+        assert_eq!(rust_triangles.len(), capture.triangles.len());
+        assert_eq!(
+            canonical_triangles(&rust_triangles),
+            canonical_triangles(&capture.triangles)
+        );
+        assert_eq!(rust_triangles, capture.triangles);
     }
 
     #[test]

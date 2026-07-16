@@ -33,6 +33,7 @@ DIRECT_INPUT_HEADER_BYTES = 64
 DIRECT_GRID_MAGIC = b"RIVEDGI\0"
 DIRECT_FLOWER_MAGIC = b"RIVEDFI\0"
 DIRECT_BAD_SKIN_MAGIC = b"RIVEDBI\0"
+DIRECT_BUG339297_MAGIC = b"RIVED39\0"
 # Production enum and patch-layout values from
 # renderer/include/rive/renderer/gpu.hpp. The generated direct-grid artifact
 # records this same four-draw schedule.
@@ -61,6 +62,7 @@ RAWTEXT_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "rawtext.ri
 POLYSHARK_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "feather_polyshapes.rive-stream"
 FLOWER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "largeclippedpath_clockwise_nested.rive-stream"
 BAD_SKIN_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "riv" / "bad_skin.rive-stream"
+BUG339297_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "bug339297.rive-stream"
 INTERLEAVED_FEATHER_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "interleavedfeather.rive-stream"
 INTERLEAVED_FEATHER_SHA256 = "8868c228229b6708e4e46c947177bfd982c6e7a60ee9b1c3a7da43a7ec0ee17a"
 DSTREADSHUFFLE_STREAM = ROOT / "fixtures" / "renderer" / "streams" / "gm" / "dstreadshuffle.rive-stream"
@@ -340,6 +342,10 @@ def parse_direct_bad_skin_inputs(data: bytes) -> dict:
     return _parse_direct_inputs(data, DIRECT_BAD_SKIN_MAGIC, "RIVEDBI", 1)
 
 
+def parse_direct_bug339297_inputs(data: bytes) -> dict:
+    return _parse_direct_inputs(data, DIRECT_BUG339297_MAGIC, "RIVED39", 1)
+
+
 def _encode_direct_inputs(parsed: dict, magic: bytes) -> bytes:
     batches = parsed["batches"]
     contours = parsed["contours"]
@@ -365,6 +371,10 @@ def encode_direct_flower_inputs(parsed: dict) -> bytes:
 
 def encode_direct_bad_skin_inputs(parsed: dict) -> bytes:
     return _encode_direct_inputs(parsed, DIRECT_BAD_SKIN_MAGIC)
+
+
+def encode_direct_bug339297_inputs(parsed: dict) -> bytes:
+    return _encode_direct_inputs(parsed, DIRECT_BUG339297_MAGIC)
 
 
 def make_direct_grid_inputs() -> bytes:
@@ -419,6 +429,24 @@ def make_direct_bad_skin_inputs() -> bytes:
         "tessellation": bytes(32 * 16 * 16),
     }
     return encode_direct_bad_skin_inputs(parsed)
+
+
+def make_direct_bug339297_inputs() -> bytes:
+    parsed = {
+        "interlock_mode": DIRECT_INTERLOCK_ATOMICS,
+        "batches": [
+            (DRAW_TYPE_RENDER_PASS_INITIALIZE, 0, 1, 0, 1),
+            (DRAW_TYPE_OUTER_CURVE_PATCHES, 0x80, 1, 1, 20),
+            (DRAW_TYPE_INTERIOR_TRIANGULATION, 0x80, 1, 0, 6),
+            (DRAW_TYPE_RENDER_PASS_RESOLVE, 0, 1, 0, 1),
+        ],
+        "contours": [(0, 0, 1, 0)],
+        "triangles": [(0, 0, 0x00010001)] * 6,
+        "tess_width": 32,
+        "tess_height": 16,
+        "tessellation": bytes(32 * 16 * 16),
+    }
+    return encode_direct_bug339297_inputs(parsed)
 
 
 def parse_blit(data: bytes) -> dict:
@@ -956,6 +984,29 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "interior draw count"):
             parse_direct_bad_skin_inputs(bad_interior_count)
 
+    def test_direct_bug339297_format_round_trips_and_rejects_malformed_facts(self):
+        data = make_direct_bug339297_inputs()
+        parsed = parse_direct_bug339297_inputs(data)
+        self.assertEqual(parsed["interlock_mode"], DIRECT_INTERLOCK_ATOMICS)
+        self.assertEqual(len(parsed["batches"]), 4)
+        self.assertEqual(len(parsed["contours"]), 1)
+        self.assertEqual(len(parsed["triangles"]), 6)
+        self.assertEqual(encode_direct_bug339297_inputs(parsed), data)
+
+        bad_magic = bytearray(data)
+        bad_magic[6] = ord("I")
+        with self.assertRaisesRegex(ValueError, "RIVED39 magic"):
+            parse_direct_bug339297_inputs(bad_magic)
+        bad_contours = bytearray(data)
+        struct.pack_into("<I", bad_contours, 36, 2)
+        with self.assertRaisesRegex(ValueError, "1 contours"):
+            parse_direct_bug339297_inputs(bad_contours)
+        bad_interior_count = bytearray(data)
+        struct.pack_into("<I", bad_interior_count,
+                         DIRECT_INPUT_HEADER_BYTES + 2 * 20 + 16, 3)
+        with self.assertRaisesRegex(ValueError, "interior draw count"):
+            parse_direct_bug339297_inputs(bad_interior_count)
+
     def test_accepts_and_rejects_canonical_atlas_blit(self):
         data = BLIT_MAGIC + struct.pack("<3I", 1, 2, 1) + bytes(8)
         self.assertEqual(parse_blit(data), {"width": 2, "height": 1})
@@ -1029,7 +1080,8 @@ class FormatTests(unittest.TestCase):
             'argc > 4 && std::strcmp(argv[4], "advanced-blend") == 0;',
             'argc > 4 && std::strcmp(argv[4], "atomic-advanced-blend") == 0;',
             'argc > 4 && std::strcmp(argv[4], "msaa-intersection-groups") == 0;',
-            "directGridCase || directFlowerCase || directBadSkinCase;",
+            "directGridCase || directFlowerCase || directBadSkinCase ||\n"
+            "        directBug339297Case;",
             "nestedEvenOddPathClippedCase ||",
             "nestedClockwisePathClippedCase;",
             "constexpr uint32_t kIntersectionGroupBatchCount = 9;",
@@ -1413,6 +1465,64 @@ class FormatTests(unittest.TestCase):
         self.assertIn("renderer.transform(rive::Mat2D(1.00501573f,", source)
         self.assertIn(
             "if (fillCase && !directBadSkinCase)\n    {\n        path->fillRule(rive::FillRule::clockwise);",
+            source,
+        )
+
+    def test_direct_bug339297_provenance_matches_stream_fill(self):
+        stream_lines = BUG339297_STREAM.read_text().splitlines()
+        self.assertEqual(
+            stream_lines[6],
+            "transform matrix=[1,0,0,1,258,10365663]",
+        )
+        stream_path = re.search(
+            r"verbs=\[([^]]+)\],points=\[(.*)\]\}\} paint=",
+            stream_lines[8],
+        )
+        self.assertIsNotNone(stream_path)
+        expected_verbs = stream_path.group(1).split(",")
+        expected_points = re.findall(r"\(([^,]+),([^)]+)\)", stream_path.group(2))
+
+        def f32_bits(literal: str) -> int:
+            return struct.unpack("<I", struct.pack("<f", float(literal.rstrip("f"))))[0]
+
+        expected_point_bits = [
+            (f32_bits(x), f32_bits(y)) for x, y in expected_points
+        ]
+        source = EXPORTER.read_text()
+        block_start = source.index("else if (directBug339297Case)")
+        block_end = source.index("else if (emptyStrokeCase)", block_start)
+        block = source[block_start:block_end]
+        commands = re.findall(
+            r"path->(moveTo|lineTo|cubicTo|close)\((.*?)\);",
+            block,
+            re.DOTALL,
+        )
+        verb_name = {
+            "moveTo": "move",
+            "lineTo": "line",
+            "cubicTo": "cubic",
+            "close": "close",
+        }
+        self.assertEqual(
+            [verb_name[command] for command, _ in commands], expected_verbs
+        )
+        actual_point_bits = []
+        for command, argument_list in commands:
+            if command == "close":
+                self.assertEqual(argument_list.strip(), "")
+                continue
+            arguments = [part.strip() for part in argument_list.split(",")]
+            self.assertEqual(len(arguments), 6 if command == "cubicTo" else 2)
+            actual_point_bits.extend(
+                (f32_bits(arguments[index]), f32_bits(arguments[index + 1]))
+                for index in range(0, len(arguments), 2)
+            )
+        self.assertEqual(actual_point_bits, expected_point_bits)
+        self.assertIn("constexpr uint32_t kDirectBug339297FrameWidth = 640;", source)
+        self.assertIn("constexpr uint32_t kDirectBug339297FrameHeight = 480;", source)
+        self.assertIn("constexpr uint32_t kDirectBug339297ContourCount = 1;", source)
+        self.assertIn(
+            "constexpr char kMagic[8] = {'R', 'I', 'V', 'E', 'D', '3', '9', '\\0'};",
             source,
         )
 
@@ -2714,6 +2824,7 @@ frame
             'direct_grid_inputs_output="${RIVE_DIRECT_GRID_INPUT_OUTPUT:-$script_dir/out/direct-grid-inputs.bin}"',
             'direct_flower_inputs_output="${RIVE_DIRECT_FLOWER_INPUT_OUTPUT:-$script_dir/out/direct-flower-inputs.bin}"',
             'direct_bad_skin_inputs_output="${RIVE_DIRECT_BAD_SKIN_INPUT_OUTPUT:-$script_dir/out/direct-bad-skin-inputs.bin}"',
+            'direct_bug339297_inputs_output="${RIVE_DIRECT_BUG339297_INPUT_OUTPUT:-$script_dir/out/direct-bug339297-inputs.bin}"',
             'direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"',
             'direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"',
             'direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"',
@@ -2739,6 +2850,7 @@ frame
             '"$direct_grid_inputs_output" /dev/null direct-grid',
             '"$direct_flower_inputs_output" /dev/null direct-flower',
             '"$direct_bad_skin_inputs_output" /dev/null direct-bad-skin',
+            '"$direct_bug339297_inputs_output" /dev/null direct-bug339297',
             '"$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"',
             '"$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" direct-rawtext "$direct_rawtext_spans_output"',
             'nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-evenodd-path-clipped-blit.rgba}"',
@@ -2803,6 +2915,7 @@ frame
             'python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-bad-skin "$direct_bad_skin_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-bug339297 "$direct_bug339297_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-cusp-coverage "$direct_cusp_coverage_output"',
             'python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair "$atomic_colorburn_pair_color_output"',
             'python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair-coverage "$atomic_colorburn_pair_coverage_output"',
@@ -3083,6 +3196,8 @@ if __name__ == "__main__":
             ("direct-flower", "RIVEDFI", parse_direct_flower_inputs),
         "--validate-direct-bad-skin":
             ("direct-bad-skin", "RIVEDBI", parse_direct_bad_skin_inputs),
+        "--validate-direct-bug339297":
+            ("direct-bug339297", "RIVED39", parse_direct_bug339297_inputs),
         "--validate-direct-cusp-coverage":
             ("direct-cusp-coverage", "RIVEAPC", validate_direct_cusp_coverage),
         "--validate-atomic-colorburn-pair":

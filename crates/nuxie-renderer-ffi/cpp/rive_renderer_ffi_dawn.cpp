@@ -341,6 +341,27 @@ struct WorkDoneResult
     bool succeeded = false;
 };
 
+struct MapResult
+{
+    bool succeeded = false;
+};
+
+void onMap(WGPUMapAsyncStatus status,
+           WGPUStringView message,
+           void* userdata1,
+           void*)
+{
+    auto* result = static_cast<MapResult*>(userdata1);
+    result->succeeded = status == WGPUMapAsyncStatus_Success;
+    if (!result->succeeded)
+    {
+        std::fprintf(stderr,
+                     "rive-renderer-ffi: Dawn map failed: %.*s\n",
+                     static_cast<int>(message.length),
+                     message.data);
+    }
+}
+
 void onWorkDone(WGPUQueueWorkDoneStatus status,
                 WGPUStringView message,
                 void* userdata1,
@@ -534,6 +555,83 @@ public:
     const char* adapterName() const override
     {
         return adapterNameStorage.c_str();
+    }
+
+    size_t readPixels(uint8_t* out, size_t len) override
+    {
+        const size_t packedRowBytes = static_cast<size_t>(width) * 4;
+        const size_t expected = packedRowBytes * height;
+        if (out == nullptr || len < expected || targetTexture == nullptr ||
+            device == nullptr || queue == nullptr)
+        {
+            return 0;
+        }
+
+        constexpr size_t kCopyRowAlignment = 256;
+        const uint32_t paddedRowBytes = static_cast<uint32_t>(
+            (packedRowBytes + kCopyRowAlignment - 1) &
+            ~(kCopyRowAlignment - 1));
+        wgpu::BufferDescriptor readbackDesc = {};
+        readbackDesc.usage =
+            wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
+        readbackDesc.size =
+            static_cast<uint64_t>(paddedRowBytes) * height;
+        wgpu::Buffer readback = device.CreateBuffer(&readbackDesc);
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        if (readback == nullptr || encoder == nullptr)
+        {
+            return 0;
+        }
+
+        wgpu::TexelCopyTextureInfo source = {.texture = targetTexture};
+        wgpu::TexelCopyBufferInfo destination = {
+            .layout = {.offset = 0,
+                       .bytesPerRow = paddedRowBytes,
+                       .rowsPerImage = height},
+            .buffer = readback,
+        };
+        wgpu::Extent3D copySize = {
+            .width = width, .height = height, .depthOrArrayLayers = 1};
+        encoder.CopyTextureToBuffer(&source, &destination, &copySize);
+        wgpu::CommandBuffer commandBuffer = encoder.Finish();
+        if (commandBuffer == nullptr)
+        {
+            return 0;
+        }
+        queue.Submit(1, &commandBuffer);
+
+        MapResult mapResult;
+        WGPUBufferMapCallbackInfo callback = {};
+        callback.mode = WGPUCallbackMode_WaitAnyOnly;
+        callback.callback = onMap;
+        callback.userdata1 = &mapResult;
+        if (!await(instance.Get(),
+                   wgpuBufferMapAsync(readback.Get(),
+                                      WGPUMapMode_Read,
+                                      0,
+                                      readbackDesc.size,
+                                      callback)) ||
+            !mapResult.succeeded)
+        {
+            return 0;
+        }
+        const auto* mapped = static_cast<const uint8_t*>(
+            wgpuBufferGetConstMappedRange(readback.Get(),
+                                          0,
+                                          readbackDesc.size));
+        if (mapped == nullptr)
+        {
+            wgpuBufferUnmap(readback.Get());
+            return 0;
+        }
+        for (uint32_t y = 0; y != height; ++y)
+        {
+            std::memcpy(out + y * packedRowBytes,
+                        mapped + y * paddedRowBytes,
+                        packedRowBytes);
+        }
+        wgpuBufferUnmap(readback.Get());
+        return expected;
     }
 
 private:

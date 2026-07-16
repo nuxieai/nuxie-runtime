@@ -433,7 +433,9 @@ impl AtomicPipeline {
         );
         let advanced_outer_path = make_advanced_path(
             "nuxie-atomic-advanced-outer-path-pipeline",
-            Some(wgpu::Face::Back),
+            // C++ WebGPU declares CW front and culls Back (CCW). wgpu's
+            // default front face is CCW, so its equivalent is culling Front.
+            Some(wgpu::Face::Front),
             0.0,
             1.0,
         );
@@ -471,7 +473,10 @@ impl AtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(crate::gpu::TriangleVertex::layout())],
             },
-            primitive: Default::default(),
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -689,7 +694,7 @@ impl AtomicPipeline {
                 buffers: &[Some(PatchVertex::layout())],
             },
             primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: Some(wgpu::Face::Front),
                 ..Default::default()
             },
             depth_stencil: None,
@@ -861,7 +866,10 @@ impl AtomicPipeline {
                 compilation_options: Default::default(),
                 buffers: &[Some(crate::gpu::TriangleVertex::layout())],
             },
-            primitive: wgpu::PrimitiveState::default(),
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {

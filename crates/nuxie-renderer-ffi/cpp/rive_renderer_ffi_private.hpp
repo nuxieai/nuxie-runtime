@@ -13,6 +13,7 @@
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
+#include <string>
 #include <vector>
 
 struct rive_ffi_context
@@ -23,11 +24,13 @@ struct rive_ffi_context
     uint32_t width = 0;
     uint32_t height = 0;
     uint64_t drawCount = 0;
+    uint64_t lastLogicalFlushCount = 0;
 
     virtual ~rive_ffi_context() = default;
     virtual bool ensureTarget(uint32_t width, uint32_t height) = 0;
     virtual void beforeFlush(rive::gpu::RenderContext::FlushResources&) {}
-    virtual void afterFlush() {}
+    virtual bool afterFlush() { return true; }
+    virtual const char* adapterName() const { return ""; }
     virtual size_t readPixels(uint8_t*, size_t) { return 0; }
 };
 

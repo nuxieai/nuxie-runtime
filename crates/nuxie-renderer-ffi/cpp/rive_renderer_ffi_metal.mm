@@ -5,6 +5,8 @@
 
 #import <Metal/Metal.h>
 
+#include <stdio.h>
+
 namespace
 {
 class rive_ffi_metal_context : public rive_ffi_context
@@ -19,6 +21,7 @@ public:
             {
                 return false;
             }
+            adapterNameStorage = gpu.name.UTF8String;
             queue = [gpu newCommandQueue];
             if (queue == nil)
             {
@@ -93,18 +96,26 @@ public:
         }
     }
 
-    void afterFlush() override
+    bool afterFlush() override
     {
         @autoreleasepool
         {
             if (commandBuffer == nil)
             {
-                return;
+                return false;
             }
             [commandBuffer commit];
             [commandBuffer waitUntilCompleted];
+            const bool succeeded =
+                commandBuffer.status == MTLCommandBufferStatusCompleted;
             commandBuffer = nil;
+            return succeeded;
         }
+    }
+
+    const char* adapterName() const override
+    {
+        return adapterNameStorage.c_str();
     }
 
     size_t readPixels(uint8_t* out, size_t len) override
@@ -176,6 +187,7 @@ private:
     __strong id<MTLDevice> gpu = nil;
     __strong id<MTLCommandQueue> queue = nil;
     __strong id<MTLCommandBuffer> commandBuffer = nil;
+    std::string adapterNameStorage;
 };
 } // namespace
 
@@ -189,4 +201,43 @@ extern "C" rive_ffi_context* rive_ffi_context_make_metal(uint32_t width,
         return nullptr;
     }
     return ctx;
+}
+
+extern "C" int
+rive_ffi_metal_adapter_identity(rive_ffi_adapter_identity* out)
+{
+    if (out == nullptr)
+    {
+        return 0;
+    }
+    @autoreleasepool
+    {
+        id<MTLDevice> gpu = MTLCreateSystemDefaultDevice();
+        if (gpu == nil || gpu.name == nil)
+        {
+            return 0;
+        }
+        *out = {};
+        NSString* name = gpu.name;
+        NSString* vendor = @"unknown";
+        for (NSString* candidate in @[@"Apple", @"AMD", @"Intel", @"NVIDIA"])
+        {
+            if ([name hasPrefix:candidate])
+            {
+                vendor = candidate;
+                break;
+            }
+        }
+        snprintf(out->name, sizeof(out->name), "%s", name.UTF8String);
+        snprintf(out->vendor, sizeof(out->vendor), "%s", vendor.UTF8String);
+        snprintf(out->device,
+                 sizeof(out->device),
+                 "registry-id:0x%llx",
+                 static_cast<unsigned long long>(gpu.registryID));
+        snprintf(out->driver,
+                 sizeof(out->driver),
+                 "%s",
+                 NSProcessInfo.processInfo.operatingSystemVersionString.UTF8String);
+        return 1;
+    }
 }

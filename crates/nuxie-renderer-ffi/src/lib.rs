@@ -9,7 +9,10 @@
 mod native;
 
 #[cfg(feature = "native")]
-pub use native::{FfiFactory, FfiFrame, FfiRenderMode, NativeRendererError};
+pub use native::{FfiFactory, FfiFrame, FfiFrameMetrics, FfiRenderMode, NativeRendererError};
+
+#[cfg(all(feature = "native", target_os = "macos"))]
+pub use native::{MetalAdapterIdentity, metal_adapter_identity};
 
 #[cfg(feature = "decode-oracle")]
 #[doc(hidden)]
@@ -50,12 +53,31 @@ mod native_tests {
         let mut frame = factory.begin_frame(0x00000000).expect("native frame");
         frame.draw_path(path.as_ref(), paint.as_ref());
 
-        assert_eq!(frame.end(), 1);
+        let metrics = frame.end_with_metrics().expect("complete native frame");
+        assert_eq!(metrics.draw_calls, 1);
+        assert_eq!(metrics.logical_flushes, 1);
+        assert_eq!(metrics.atomic_strategy_partitions, 0);
+    }
+
+    #[test]
+    fn null_context_exposes_clockwise_atomic_strategy_count() {
+        let mut factory = FfiFactory::new_null(64, 64).expect("native context");
+        let frame = factory
+            .begin_frame_with_mode(0x00000000, super::FfiRenderMode::ClockwiseAtomic)
+            .expect("native frame");
+        let metrics = frame.end_with_metrics().expect("complete native frame");
+        assert_eq!(metrics.logical_flushes, 1);
+        assert_eq!(metrics.atomic_strategy_partitions, 1);
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn metal_context_produces_non_empty_pixels() {
+        let identity = super::metal_adapter_identity().expect("Metal adapter identity");
+        assert!(!identity.name.is_empty());
+        assert!(!identity.vendor.is_empty());
+        assert!(!identity.device.is_empty());
+        assert!(!identity.driver.is_empty());
         let Ok(mut factory) = FfiFactory::new_metal(64, 64) else {
             eprintln!("skipping Metal pixel test because the native Metal context is unavailable");
             return;

@@ -5,7 +5,11 @@ use nuxie_render_api::{
 };
 use std::any::Any;
 use std::error::Error;
+#[cfg(target_os = "macos")]
+use std::ffi::CStr;
 use std::fmt;
+#[cfg(target_os = "macos")]
+use std::os::raw::c_char;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
@@ -13,6 +17,8 @@ use std::rc::Rc;
 pub enum NativeRendererError {
     CreateContext,
     BeginFrame,
+    EndFrame,
+    AdapterIdentity,
     MissingRenderer,
     ReadPixels { expected: usize, actual: usize },
 }
@@ -22,6 +28,8 @@ impl fmt::Display for NativeRendererError {
         match self {
             Self::CreateContext => write!(f, "failed to create native renderer context"),
             Self::BeginFrame => write!(f, "failed to begin native renderer frame"),
+            Self::EndFrame => write!(f, "failed to complete native renderer frame"),
+            Self::AdapterIdentity => write!(f, "failed to query the native Metal adapter"),
             Self::MissingRenderer => write!(f, "native renderer frame is not open"),
             Self::ReadPixels { expected, actual } => write!(
                 f,
@@ -37,6 +45,42 @@ pub struct FfiFactory {
     context: Rc<ContextHandle>,
     width: u32,
     height: u32,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetalAdapterIdentity {
+    pub name: String,
+    pub vendor: String,
+    pub device: String,
+    pub driver: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FfiFrameMetrics {
+    pub draw_calls: u64,
+    pub logical_flushes: u64,
+    pub atomic_strategy_partitions: u64,
+}
+
+#[cfg(target_os = "macos")]
+pub fn metal_adapter_identity() -> Result<MetalAdapterIdentity, NativeRendererError> {
+    let mut identity = FfiAdapterIdentity::default();
+    let ok = unsafe { ffi::rive_ffi_metal_adapter_identity(&mut identity) };
+    if ok == 0 {
+        return Err(NativeRendererError::AdapterIdentity);
+    }
+    let field = |value: &[c_char]| {
+        unsafe { CStr::from_ptr(value.as_ptr()) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    Ok(MetalAdapterIdentity {
+        name: field(&identity.name),
+        vendor: field(&identity.vendor),
+        device: field(&identity.device),
+        driver: field(&identity.driver),
+    })
 }
 
 #[cfg(feature = "decode-oracle")]
@@ -117,6 +161,31 @@ impl FfiFactory {
         })
     }
 
+    #[cfg(all(feature = "dawn", target_os = "macos"))]
+    pub fn new_dawn(width: u32, height: u32) -> Result<Self, NativeRendererError> {
+        let context = unsafe { ffi::rive_ffi_context_make_dawn(width, height) };
+        let context = NonNull::new(context).ok_or(NativeRendererError::CreateContext)?;
+        Ok(Self {
+            context: Rc::new(ContextHandle(context)),
+            width,
+            height,
+        })
+    }
+
+    #[cfg(all(feature = "dawn", target_os = "macos"))]
+    pub fn adapter_name(&self) -> Result<String, NativeRendererError> {
+        let mut name = [0 as c_char; 256];
+        let required = unsafe {
+            ffi::rive_ffi_context_adapter_name(self.context.as_ptr(), name.as_mut_ptr(), name.len())
+        };
+        if required == 0 || required >= name.len() {
+            return Err(NativeRendererError::AdapterIdentity);
+        }
+        Ok(unsafe { CStr::from_ptr(name.as_ptr()) }
+            .to_string_lossy()
+            .into_owned())
+    }
+
     pub fn begin_frame(&mut self, clear_color: ColorInt) -> Result<FfiFrame, NativeRendererError> {
         self.begin_frame_with_mode(clear_color, FfiRenderMode::Default)
     }
@@ -144,6 +213,7 @@ impl FfiFactory {
             context: Rc::clone(&self.context),
             renderer,
             ended: false,
+            mode,
         })
     }
 
@@ -299,11 +369,28 @@ pub struct FfiFrame {
     context: Rc<ContextHandle>,
     renderer: NonNull<ffi::Renderer>,
     ended: bool,
+    mode: FfiRenderMode,
 }
 
 impl FfiFrame {
     pub fn draw_count(&self) -> u64 {
         unsafe { ffi::rive_ffi_context_draw_count(self.context.as_ptr()) }
+    }
+
+    pub fn end_with_metrics(mut self) -> Result<FfiFrameMetrics, NativeRendererError> {
+        let draw_calls = self.draw_count();
+        self.close_checked()?;
+        let logical_flushes =
+            unsafe { ffi::rive_ffi_context_logical_flush_count(self.context.as_ptr()) };
+        Ok(FfiFrameMetrics {
+            draw_calls,
+            logical_flushes,
+            atomic_strategy_partitions: if self.mode == FfiRenderMode::ClockwiseAtomic {
+                logical_flushes
+            } else {
+                0
+            },
+        })
     }
 
     pub fn end(mut self) -> u64 {
@@ -312,11 +399,20 @@ impl FfiFrame {
 
     fn close(&mut self) -> u64 {
         let count = self.draw_count();
+        let _ = self.close_checked();
+        count
+    }
+
+    fn close_checked(&mut self) -> Result<u64, NativeRendererError> {
+        let count = self.draw_count();
         if !self.ended {
             self.ended = true;
-            unsafe { ffi::rive_ffi_context_end_frame(self.context.as_ptr()) };
+            let succeeded = unsafe { ffi::rive_ffi_context_end_frame(self.context.as_ptr()) };
+            if succeeded == 0 {
+                return Err(NativeRendererError::EndFrame);
+            }
         }
-        count
+        Ok(count)
     }
 }
 
@@ -707,6 +803,27 @@ struct FfiMat2D {
     values: [f32; 6],
 }
 
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct FfiAdapterIdentity {
+    name: [c_char; 256],
+    vendor: [c_char; 64],
+    device: [c_char; 64],
+    driver: [c_char; 256],
+}
+
+#[cfg(target_os = "macos")]
+impl Default for FfiAdapterIdentity {
+    fn default() -> Self {
+        Self {
+            name: [0; 256],
+            vendor: [0; 64],
+            device: [0; 64],
+            driver: [0; 256],
+        }
+    }
+}
+
 impl From<Mat2D> for FfiMat2D {
     fn from(value: Mat2D) -> Self {
         Self { values: value.0 }
@@ -714,6 +831,8 @@ impl From<Mat2D> for FfiMat2D {
 }
 
 mod ffi {
+    #[cfg(target_os = "macos")]
+    use super::FfiAdapterIdentity;
     use super::{FfiMat2D, FfiVec2D};
     use std::ffi::c_void;
 
@@ -730,6 +849,8 @@ mod ffi {
     unsafe extern "C" {
         pub fn rive_ffi_context_make_null(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_make_metal(width: u32, height: u32) -> *mut Context;
+        #[cfg(all(feature = "dawn", target_os = "macos"))]
+        pub fn rive_ffi_context_make_dawn(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_delete(context: *mut Context);
         pub fn rive_ffi_context_begin_frame_mode(
             context: *mut Context,
@@ -738,13 +859,22 @@ mod ffi {
             clear_color: u32,
             mode: u32,
         ) -> i32;
-        pub fn rive_ffi_context_end_frame(context: *mut Context);
+        pub fn rive_ffi_context_end_frame(context: *mut Context) -> i32;
         pub fn rive_ffi_context_read_pixels(
             context: *mut Context,
             out: *mut u8,
             len: usize,
         ) -> usize;
         pub fn rive_ffi_context_draw_count(context: *mut Context) -> u64;
+        pub fn rive_ffi_context_logical_flush_count(context: *mut Context) -> u64;
+        #[cfg(all(feature = "dawn", target_os = "macos"))]
+        pub fn rive_ffi_context_adapter_name(
+            context: *mut Context,
+            out: *mut std::os::raw::c_char,
+            len: usize,
+        ) -> usize;
+        #[cfg(target_os = "macos")]
+        pub fn rive_ffi_metal_adapter_identity(identity: *mut FfiAdapterIdentity) -> i32;
         pub fn rive_ffi_context_renderer(context: *mut Context) -> *mut Renderer;
         pub fn rive_ffi_renderer_delete(renderer: *mut Renderer);
 

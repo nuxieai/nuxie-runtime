@@ -7,9 +7,22 @@ license = "MIT"
 [features]
 default = []
 ffi = ["dep:nuxie-renderer-ffi"]
+perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]
 
 [dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
 nuxie-renderer = { path = "../../crates/nuxie-renderer" }
 nuxie-renderer-ffi = { path = "../../crates/nuxie-renderer-ffi", features = ["native"], optional = true }
+perf-compare = { path = "../perf-compare" }
 pixel-compare = { path = "../pixel-compare" }
+serde_json = "1"
+
+[[bin]]
+name = "renderer-perf-rust-runner"
+path = "src/bin/renderer-perf-rust-runner.rs"
+required-features = ["ffi"]
+
+[[bin]]
+name = "renderer-perf-cpp-runner"
+path = "src/bin/renderer-perf-cpp-runner.rs"
+required-features = ["perf-dawn"]

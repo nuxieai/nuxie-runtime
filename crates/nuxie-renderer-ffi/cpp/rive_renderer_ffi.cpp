@@ -5,6 +5,16 @@
 #include "rive/renderer/rive_renderer.hpp"
 
 #include <algorithm>
+#include <cstring>
+
+class RenderContextTest
+{
+public:
+    static uint64_t logicalFlushCount(const rive::gpu::RenderContext* context)
+    {
+        return context == nullptr ? 0 : context->m_logicalFlushes.size();
+    }
+};
 
 namespace
 {
@@ -134,6 +144,13 @@ extern "C" rive_ffi_context* rive_ffi_context_make_metal(uint32_t, uint32_t)
 }
 #endif
 
+#if !defined(RIVE_FFI_HAS_DAWN)
+extern "C" rive_ffi_context* rive_ffi_context_make_dawn(uint32_t, uint32_t)
+{
+    return nullptr;
+}
+#endif
+
 extern "C" void rive_ffi_context_delete(rive_ffi_context* ctx) { delete ctx; }
 
 extern "C" int rive_ffi_context_begin_frame(rive_ffi_context* ctx,
@@ -183,21 +200,24 @@ extern "C" int rive_ffi_context_begin_frame_mode(rive_ffi_context* ctx,
     ctx->context->beginFrame(desc);
     ctx->renderer = std::make_unique<rive::RiveRenderer>(ctx->context.get());
     ctx->drawCount = 0;
+    ctx->lastLogicalFlushCount = 0;
     return 1;
 }
 
-extern "C" void rive_ffi_context_end_frame(rive_ffi_context* ctx)
+extern "C" int rive_ffi_context_end_frame(rive_ffi_context* ctx)
 {
     if (ctx == nullptr || ctx->context == nullptr)
     {
-        return;
+        return 0;
     }
     ctx->renderer.reset();
+    ctx->lastLogicalFlushCount =
+        RenderContextTest::logicalFlushCount(ctx->context.get());
     rive::gpu::RenderContext::FlushResources resources;
     resources.renderTarget = ctx->target.get();
     ctx->beforeFlush(resources);
     ctx->context->flush(resources);
-    ctx->afterFlush();
+    return ctx->afterFlush() ? 1 : 0;
 }
 
 extern "C" size_t rive_ffi_context_read_pixels(rive_ffi_context* ctx,
@@ -215,6 +235,36 @@ extern "C" uint64_t rive_ffi_context_draw_count(const rive_ffi_context* ctx)
 {
     return ctx == nullptr ? 0 : ctx->drawCount;
 }
+
+extern "C" uint64_t
+rive_ffi_context_logical_flush_count(const rive_ffi_context* ctx)
+{
+    return ctx == nullptr ? 0 : ctx->lastLogicalFlushCount;
+}
+
+extern "C" size_t
+rive_ffi_context_adapter_name(const rive_ffi_context* ctx,
+                              char* out,
+                              size_t len)
+{
+    const char* name = ctx == nullptr ? "" : ctx->adapterName();
+    const size_t required = std::strlen(name);
+    if (out != nullptr && len != 0)
+    {
+        const size_t copied = std::min(required, len - 1);
+        std::memcpy(out, name, copied);
+        out[copied] = '\0';
+    }
+    return required;
+}
+
+#if !defined(__APPLE__) || !defined(RIVE_FFI_HAS_METAL)
+extern "C" int
+rive_ffi_metal_adapter_identity(rive_ffi_adapter_identity*)
+{
+    return 0;
+}
+#endif
 
 extern "C" rive_ffi_renderer* rive_ffi_context_renderer(rive_ffi_context* ctx)
 {

@@ -1,12 +1,15 @@
 use std::env;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.cpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.h");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_private.hpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_metal.mm");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_dawn.cpp");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
+    println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
 
     if env::var_os("CARGO_FEATURE_NATIVE").is_none() {
         return;
@@ -15,13 +18,29 @@ fn main() {
     let target_is_macos = env::var("CARGO_CFG_TARGET_OS")
         .map(|target_os| target_os == "macos")
         .unwrap_or(false);
+    let has_dawn = env::var_os("CARGO_FEATURE_DAWN").is_some();
 
     let runtime_dir = env::var("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
 
     let profile = env::var("PROFILE").unwrap_or_else(|_| String::from("debug"));
-    let root_lib_dir = runtime_dir.join("out").join(&profile);
+    if has_dawn && (!target_is_macos || profile != "release") {
+        panic!("the Dawn renderer bridge requires a release build on macOS");
+    }
+    let renderer_out_dir = if has_dawn {
+        runtime_dir
+            .join("renderer")
+            .join("out")
+            .join("cpp-atlas-mask-oracle")
+    } else {
+        runtime_dir.join("renderer").join("out").join(&profile)
+    };
+    let root_lib_dir = if has_dawn {
+        renderer_out_dir.clone()
+    } else {
+        runtime_dir.join("out").join(&profile)
+    };
     let root_lib = root_lib_dir.join("librive.a");
     println!("cargo:rerun-if-changed={}", root_lib.display());
     if !root_lib.exists() {
@@ -33,13 +52,8 @@ fn main() {
         );
     }
 
-    let renderer_out_dir = runtime_dir.join("renderer").join("out").join(&profile);
     let generated_include_dir = renderer_out_dir.join("include");
-    let renderer_lib = runtime_dir
-        .join("renderer")
-        .join("out")
-        .join(&profile)
-        .join("librive_pls_renderer.a");
+    let renderer_lib = renderer_out_dir.join("librive_pls_renderer.a");
     println!("cargo:rerun-if-changed={}", renderer_lib.display());
     let has_metal_backend = target_is_macos && renderer_lib.exists();
 
@@ -104,22 +118,30 @@ fn main() {
         .flag_if_supported("-Wno-shorten-64-to-32");
 
     if renderer_lib.exists() {
-        for define in [
-            "RIVE_DESKTOP_GL",
-            "RIVE_ORE",
-            "ORE_BACKEND_METAL",
-            "ORE_BACKEND_GL",
-            "WITH_RIVE_TEXT",
-            "RIVE_CANVAS",
-            "WITH_RIVE_LAYOUT",
-            "RIVE_DECODERS",
-            "RIVE_KTX2",
-        ] {
-            build.define(define, None);
+        if has_dawn {
+            build
+                .define("RIVE_DESKTOP_GL", None)
+                .define("RIVE_DAWN", None);
+        } else {
+            for define in [
+                "RIVE_DESKTOP_GL",
+                "RIVE_ORE",
+                "ORE_BACKEND_METAL",
+                "ORE_BACKEND_GL",
+                "WITH_RIVE_TEXT",
+                "RIVE_CANVAS",
+                "WITH_RIVE_LAYOUT",
+                "RIVE_DECODERS",
+                "RIVE_KTX2",
+            ] {
+                build.define(define, None);
+            }
         }
         build.define("YOGA_EXPORT", Some(""));
         if profile == "debug" {
             build.define("DEBUG", None);
+        } else {
+            build.define("RELEASE", None).define("NDEBUG", None);
         }
         if target_is_macos {
             build.define("RIVE_MACOSX", None);
@@ -131,6 +153,16 @@ fn main() {
             .file("cpp/rive_renderer_ffi_metal.mm")
             .define("RIVE_FFI_HAS_METAL", None)
             .flag_if_supported("-fobjc-arc");
+    }
+
+    let dawn_dir = runtime_dir.join("renderer/dependencies/dawn");
+    let dawn_out_dir = dawn_dir.join("out/release");
+    if has_dawn {
+        build
+            .file("cpp/rive_renderer_ffi_dawn.cpp")
+            .include(dawn_dir.join("include"))
+            .include(dawn_out_dir.join("gen/include"))
+            .define("RIVE_FFI_HAS_DAWN", None);
     }
 
     if !renderer_lib.exists() {
@@ -185,6 +217,28 @@ fn main() {
         build.define("RIVE_FFI_DECODE_ORACLE", None);
     }
 
+    let clang_runtime_dir = has_dawn.then(|| {
+        let compiler = build.get_compiler();
+        let output = Command::new(compiler.path())
+            .arg("-print-resource-dir")
+            .output()
+            .expect("failed to query the C++ compiler resource directory");
+        if !output.status.success() {
+            panic!("the C++ compiler did not report its resource directory");
+        }
+        let directory = PathBuf::from(
+            String::from_utf8(output.stdout)
+                .expect("the C++ compiler resource directory was not UTF-8")
+                .trim(),
+        )
+        .join("lib/darwin");
+        let archive = directory.join("libclang_rt.osx.a");
+        if !archive.exists() {
+            panic!("missing compiler runtime archive {}", archive.display());
+        }
+        directory
+    });
+
     build.compile("nuxie_renderer_ffi");
 
     println!(
@@ -212,11 +266,39 @@ fn main() {
         }
     }
 
+    if has_dawn {
+        for directory in [
+            dawn_out_dir.join("obj/src/dawn"),
+            dawn_out_dir.join("obj/src/dawn/native"),
+            dawn_out_dir.join("obj/src/dawn/platform"),
+        ] {
+            println!("cargo:rustc-link-search=native={}", directory.display());
+        }
+        for lib in [
+            "webgpu_dawn",
+            "dawn_native_static",
+            "dawn_proc_static",
+            "dawn_platform_static",
+        ] {
+            println!("cargo:rustc-link-lib=static={lib}");
+        }
+        let clang_runtime_dir = clang_runtime_dir.expect("Dawn builds require the Clang runtime");
+        println!(
+            "cargo:rustc-link-search=native={}",
+            clang_runtime_dir.display()
+        );
+        println!("cargo:rustc-link-lib=static=clang_rt.osx");
+    }
+
     if target_is_macos {
         println!("cargo:rustc-link-lib=framework=Metal");
         println!("cargo:rustc-link-lib=framework=QuartzCore");
         println!("cargo:rustc-link-lib=framework=Cocoa");
         println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rustc-link-lib=framework=IOKit");
+        if has_dawn {
+            println!("cargo:rustc-link-lib=framework=IOSurface");
+            println!("cargo:rustc-link-lib=framework=Security");
+        }
     }
 }

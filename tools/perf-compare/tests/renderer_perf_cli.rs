@@ -20,7 +20,8 @@ r.update({{
     }},
     "measured_frame_median_ns": {median_ns},
     "logical_flushes": 3,
-    "draws": 11
+    "draws": 11,
+    "atomic_strategy_partitions": 2
 }})
 print(json.dumps(r))
 "#

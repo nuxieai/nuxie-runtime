@@ -1088,7 +1088,9 @@ dependencies = [
  "nuxie-render-stream",
  "nuxie-renderer",
  "nuxie-renderer-ffi",
+ "perf-compare",
  "pixel-compare",
+ "serde_json",
 ]
 
 [[package]]

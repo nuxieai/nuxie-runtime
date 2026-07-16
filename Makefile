@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -24,6 +24,12 @@ PERF_MAX_RATIO ?= 2.0
 PERF_BENCHMARK_REPEAT ?= 100
 PERF_JSON_OUT ?= $(CURDIR)/target/perf-compare.json
 PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-parse HEAD 2>/dev/null || echo unknown) --meta timestamp=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
+RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
+RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner
+RENDERER_PERF_MAX_RATIO ?= 2.0
+RENDERER_PERF_JSON ?= $(CURDIR)/target/renderer-perf.json
+RENDERER_PERF_MARKDOWN ?= $(CURDIR)/target/renderer-perf.md
 CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
 CC ?= cc
 
@@ -128,6 +134,12 @@ renderer-golden: renderer-replay
 
 renderer-stub-baseline: renderer-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --expect-all-fail
+
+renderer-perf-runners:
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_PERF_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-dawn --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
+
+renderer-perf: renderer-perf-runners
+	cargo run --quiet -p perf-compare --bin renderer-perf -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_PERF_CPP_RUNNER)" --candidate-runner "$(RENDERER_PERF_RUST_RUNNER)" --max-ratio "$(RENDERER_PERF_MAX_RATIO)" --json "$(RENDERER_PERF_JSON)" --markdown "$(RENDERER_PERF_MARKDOWN)"
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release

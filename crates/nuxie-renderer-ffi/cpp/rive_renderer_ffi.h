@@ -29,8 +29,17 @@ typedef struct rive_ffi_mat2d
     float values[6];
 } rive_ffi_mat2d;
 
+typedef struct rive_ffi_adapter_identity
+{
+    char name[256];
+    char vendor[64];
+    char device[64];
+    char driver[256];
+} rive_ffi_adapter_identity;
+
 rive_ffi_context* rive_ffi_context_make_null(uint32_t width, uint32_t height);
 rive_ffi_context* rive_ffi_context_make_metal(uint32_t width, uint32_t height);
+rive_ffi_context* rive_ffi_context_make_dawn(uint32_t width, uint32_t height);
 void rive_ffi_context_delete(rive_ffi_context*);
 int rive_ffi_context_begin_frame(rive_ffi_context*,
                                  uint32_t width,
@@ -41,9 +50,14 @@ int rive_ffi_context_begin_frame_mode(rive_ffi_context*,
                                       uint32_t height,
                                       uint32_t clear_color,
                                       uint32_t mode);
-void rive_ffi_context_end_frame(rive_ffi_context*);
+int rive_ffi_context_end_frame(rive_ffi_context*);
 size_t rive_ffi_context_read_pixels(rive_ffi_context*, uint8_t* out, size_t len);
 uint64_t rive_ffi_context_draw_count(const rive_ffi_context*);
+uint64_t rive_ffi_context_logical_flush_count(const rive_ffi_context*);
+size_t rive_ffi_context_adapter_name(const rive_ffi_context*,
+                                     char* out,
+                                     size_t len);
+int rive_ffi_metal_adapter_identity(rive_ffi_adapter_identity*);
 rive_ffi_renderer* rive_ffi_context_renderer(rive_ffi_context*);
 void rive_ffi_renderer_delete(rive_ffi_renderer*);
 

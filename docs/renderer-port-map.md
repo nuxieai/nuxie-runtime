@@ -339,6 +339,12 @@ Blocked by: #R-3.1
    GPU occupancy.
 3. Output a per-scene comparison report in CI so regressions are visible.
 
+The live baseline is now pinned to C++ Dawn and Rust wgpu over the same Metal
+adapter because native C++ Metal does not implement MSAA. The first complete
+fixed report has exact logical-flush, authored-draw, and atomic-strategy counts
+for all 16 variants. Its 26.37x aggregate and 93.80x worst-scene ratios make
+contiguous clockwise-atomic render-pass batching the first measured R4 task.
+
 ### Exit Criteria
 
 Frame times within an agreed factor of the C++ renderer per scene on the

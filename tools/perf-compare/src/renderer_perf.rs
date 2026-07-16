@@ -84,11 +84,12 @@ pub struct Scene {
     pub stream: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunRequest {
-    pub protocol: &'static str,
+    pub protocol: String,
     pub release: bool,
-    pub profile: &'static str,
+    pub profile: String,
     pub debug: bool,
     pub stream: String,
     pub frame: u32,
@@ -121,7 +122,7 @@ pub struct TimingMethod {
 }
 
 impl TimingMethod {
-    fn required() -> Self {
+    pub fn required() -> Self {
         Self {
             warmup_frames: WARMUP_FRAMES,
             measured_frames: MEASURED_FRAMES,
@@ -144,9 +145,9 @@ pub struct AdapterIdentity {
 impl RunRequest {
     fn for_scene(scene: &Scene, defaults: &Defaults, mode: Mode) -> Self {
         Self {
-            protocol: RUNNER_PROTOCOL,
+            protocol: RUNNER_PROTOCOL.to_owned(),
             release: true,
-            profile: "release",
+            profile: "release".to_owned(),
             debug: false,
             stream: scene.stream.clone(),
             frame: defaults.frame,
@@ -177,12 +178,14 @@ pub struct RunnerResponse {
     pub measured_frame_median_ns: u64,
     pub logical_flushes: u64,
     pub draws: u64,
+    pub atomic_strategy_partitions: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct StructuralMetrics {
     pub logical_flushes: u64,
     pub draws: u64,
+    pub atomic_strategy_partitions: u64,
 }
 
 impl From<&RunnerResponse> for StructuralMetrics {
@@ -190,8 +193,27 @@ impl From<&RunnerResponse> for StructuralMetrics {
         Self {
             logical_flushes: response.logical_flushes,
             draws: response.draws,
+            atomic_strategy_partitions: response.atomic_strategy_partitions,
         }
     }
+}
+
+pub fn validate_runner_request(request: &RunRequest) -> Result<(), String> {
+    if request.protocol != RUNNER_PROTOCOL
+        || !request.release
+        || request.profile != "release"
+        || request.debug
+        || request.frame != REQUIRED_FRAME
+        || request.width != REQUIRED_WIDTH
+        || request.height != REQUIRED_HEIGHT
+        || request.adapter_selection != REQUIRED_ADAPTER_SELECTION
+        || request.timing != TimingMethod::required()
+    {
+        return Err(format!(
+            "runner request must use protocol={RUNNER_PROTOCOL}, release profile, {REQUIRED_WIDTH}x{REQUIRED_HEIGHT} frame {REQUIRED_FRAME}, adapter_selection={REQUIRED_ADAPTER_SELECTION}, and the fenced timing method"
+        ));
+    }
+    Ok(())
 }
 
 pub trait Runner {
@@ -482,13 +504,15 @@ fn validate_structural(
     if let Some(expected) = expected {
         if actual != expected {
             return Err(format!(
-                "scene {} sample {} {runner} structural mismatch: expected logical_flushes={} draws={}, got logical_flushes={} draws={}",
+                "scene {} sample {} {runner} structural mismatch: expected logical_flushes={} draws={} atomic_strategy_partitions={}, got logical_flushes={} draws={} atomic_strategy_partitions={}",
                 scene_id,
                 sample + 1,
                 expected.logical_flushes,
                 expected.draws,
+                expected.atomic_strategy_partitions,
                 actual.logical_flushes,
-                actual.draws
+                actual.draws,
+                actual.atomic_strategy_partitions,
             ));
         }
     }
@@ -604,11 +628,11 @@ pub fn render_json(report: &Report) -> Result<String, String> {
 
 pub fn render_markdown(report: &Report) -> String {
     let mut markdown = String::from(
-        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | baseline min ns | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate min ns | candidate p50 ns | candidate p95 ns | candidate spread ns | ratio | logical flushes | draws |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | baseline min ns | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate min ns | candidate p50 ns | candidate p95 ns | candidate spread ns | ratio | logical flushes | draws | atomic strategy partitions |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
     );
     for scene in &report.scenes {
         markdown.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.6} | {} | {} |\n",
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.6} | {} | {} | {} |\n",
             scene.id,
             mode_name(scene.mode),
             scene.baseline.min_of_medians_ns,
@@ -622,6 +646,7 @@ pub fn render_markdown(report: &Report) -> String {
             scene.ratio,
             scene.structural.logical_flushes,
             scene.structural.draws,
+            scene.structural.atomic_strategy_partitions,
         ));
     }
     markdown.push_str(&format!(
@@ -703,6 +728,7 @@ mod tests {
             measured_frame_median_ns: median_ns,
             logical_flushes: 3,
             draws: 11,
+            atomic_strategy_partitions: 2,
         }
     }
 
@@ -759,6 +785,16 @@ mod tests {
         let error = validate_response("candidate", &scene.id, 0, &request, &response)
             .expect_err("timing method mismatch must fail");
         assert!(error.contains("fenced request"));
+    }
+
+    #[test]
+    fn live_runner_request_rejects_a_relaxed_measurement_count() {
+        let manifest = manifest();
+        let mut request =
+            RunRequest::for_scene(&manifest.scene[0], &manifest.defaults, manifest.modes[0]);
+        request.timing.measured_frames -= 1;
+        let error = validate_runner_request(&request).expect_err("relaxed fence must fail");
+        assert!(error.contains("fenced timing method"));
     }
 
     #[test]

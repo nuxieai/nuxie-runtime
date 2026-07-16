@@ -132,6 +132,7 @@ fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
 struct Context {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    adapter_info: WgpuAdapterInfo,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
     cover_pipeline: wgpu::RenderPipeline,
@@ -156,6 +157,23 @@ pub struct WgpuFactory {
     width: u32,
     height: u32,
     mode: RenderMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WgpuAdapterInfo {
+    pub backend: String,
+    pub name: String,
+    pub vendor: u32,
+    pub device: u32,
+    pub driver: String,
+    pub driver_info: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WgpuFrameMetrics {
+    pub draw_calls: u64,
+    pub logical_flushes: u64,
+    pub atomic_strategy_partitions: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,6 +202,15 @@ impl WgpuFactory {
             })
             .await
             .map_err(|error| RendererError::Adapter(error.to_string()))?;
+        let adapter_info = adapter.get_info();
+        let adapter_info = WgpuAdapterInfo {
+            backend: format!("{:?}", adapter_info.backend).to_ascii_lowercase(),
+            name: adapter_info.name,
+            vendor: adapter_info.vendor,
+            device: adapter_info.device,
+            driver: adapter_info.driver,
+            driver_info: adapter_info.driver_info,
+        };
         let adapter_limits = adapter.limits();
         validate_texture_extent(
             "render target",
@@ -336,6 +363,7 @@ impl WgpuFactory {
             context: Arc::new(Context {
                 device,
                 queue,
+                adapter_info,
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
                 cover_pipeline,
@@ -369,6 +397,7 @@ impl WgpuFactory {
             state: DrawState::default(),
             stack: Vec::new(),
             draws: Vec::new(),
+            draw_calls: 0,
             logical_flush: logical_flush::LogicalFlush::default(),
             logical_flush_allocations: LogicalFlushAllocations::default(),
             logical_flush_starts: vec![0],
@@ -379,6 +408,10 @@ impl WgpuFactory {
             unsupported: None,
             mode: self.mode,
         }
+    }
+
+    pub fn adapter_info(&self) -> &WgpuAdapterInfo {
+        &self.context.adapter_info
     }
 }
 
@@ -933,6 +966,7 @@ pub struct WgpuFrame {
     state: DrawState,
     stack: Vec<DrawState>,
     draws: Vec<SolidDraw>,
+    draw_calls: u64,
     logical_flush: logical_flush::LogicalFlush,
     logical_flush_allocations: LogicalFlushAllocations,
     logical_flush_starts: Vec<usize>,
@@ -1103,6 +1137,7 @@ impl Renderer for WgpuFrame {
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        self.draw_calls = self.draw_calls.saturating_add(1);
         if self.state.clip_is_empty {
             return;
         }
@@ -1182,6 +1217,7 @@ impl Renderer for WgpuFrame {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
+        self.draw_calls = self.draw_calls.saturating_add(1);
         if self.state.clip_is_empty {
             return;
         }
@@ -1246,6 +1282,7 @@ impl Renderer for WgpuFrame {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
+        self.draw_calls = self.draw_calls.saturating_add(1);
         if self.state.clip_is_empty {
             return;
         }
@@ -1564,22 +1601,60 @@ impl WgpuFrame {
         Some((updates, parent_id))
     }
 
+    fn metrics(&self) -> WgpuFrameMetrics {
+        let logical_flushes = u64::try_from(self.logical_flush_starts.len()).unwrap_or(u64::MAX);
+        let mut atomic_strategy_partitions = 0_u64;
+        if self.mode == RenderMode::ClockwiseAtomic {
+            for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
+                let flush_end = self
+                    .logical_flush_starts
+                    .get(flush_index + 1)
+                    .copied()
+                    .unwrap_or(self.draws.len());
+                let mut start = flush_start;
+                while start < flush_end {
+                    atomic_strategy_partitions = atomic_strategy_partitions.saturating_add(1);
+                    start = atomic_strategy_run_end(
+                        &self.draws,
+                        start,
+                        flush_end,
+                        self.width,
+                        self.height,
+                    );
+                }
+            }
+        }
+        WgpuFrameMetrics {
+            draw_calls: self.draw_calls,
+            logical_flushes,
+            atomic_strategy_partitions,
+        }
+    }
+
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false, true)
+        self.finish_internal(false, false, true, true)
             .map(|(pixels, _, _, _, _)| pixels)
+    }
+
+    /// Encodes the frame, submits all work, and waits for GPU completion
+    /// without copying the render target back to the CPU.
+    pub fn finish_for_benchmark(self) -> Result<WgpuFrameMetrics, RendererError> {
+        let metrics = self.metrics();
+        self.finish_internal(false, false, true, false)?;
+        Ok(metrics)
     }
 
     #[cfg(test)]
     fn finish_with_clockwise_atomic_coverage(
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
-        self.finish_internal(true, false, true)
+        self.finish_internal(true, false, true, true)
             .map(|(pixels, coverage, _, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
-        self.finish_internal(false, true, true)
+        self.finish_internal(false, true, true, true)
             .map(|(pixels, _, coverage, _, _)| (pixels, coverage))
     }
 
@@ -1587,13 +1662,13 @@ impl WgpuFrame {
     fn finish_with_atomic_planes(
         self,
     ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
-        self.finish_internal(false, true, true)
+        self.finish_internal(false, true, true, true)
             .map(|(pixels, _, coverage, clips, colors)| (pixels, coverage, clips, colors))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false, false)
+        self.finish_internal(false, false, false, true)
             .map(|(pixels, _, _, _, _)| pixels)
     }
 
@@ -1602,6 +1677,7 @@ impl WgpuFrame {
         capture_clockwise_atomic_coverage: bool,
         capture_atomic_planes: bool,
         schedule_msaa_draws: bool,
+        read_pixels: bool,
     ) -> Result<
         (
             Vec<u8>,
@@ -3799,23 +3875,13 @@ impl WgpuFrame {
                 let atomic = atomic_draw_is_eligible(&self.draws[start]);
                 let clockwise_atomic = atomic
                     && draw_requires_clockwise_atomic(&self.draws[start], self.width, self.height);
-                let advanced_clockwise_atomic =
-                    clockwise_atomic && draw_uses_advanced_blend(&self.draws[start]);
-                let mut end = start + 1;
-                while end < logical_flush_end
-                    && atomic_draw_is_eligible(&self.draws[end]) == atomic
-                    && (!atomic
-                        || draw_requires_clockwise_atomic(
-                            &self.draws[end],
-                            self.width,
-                            self.height,
-                        ) == clockwise_atomic)
-                    && (!clockwise_atomic
-                        || (!advanced_clockwise_atomic
-                            && !draw_uses_advanced_blend(&self.draws[end])))
-                {
-                    end += 1;
-                }
+                let end = atomic_strategy_run_end(
+                    &self.draws,
+                    start,
+                    logical_flush_end,
+                    self.width,
+                    self.height,
+                );
                 if atomic {
                     let has_clip_updates = self.draws[start..end]
                         .iter()
@@ -3908,6 +3974,16 @@ impl WgpuFrame {
                     }
                 }
             }
+        }
+
+        if !read_pixels {
+            debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
+            self.context.queue.submit(Some(encoder.finish()));
+            self.context
+                .device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .map_err(|error| RendererError::Map(error.to_string()))?;
+            return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
         }
 
         let unpadded_bytes_per_row = self.width * 4;
@@ -5095,6 +5171,29 @@ fn invert_clockwise_path(
         inverse_path.add_path(path, Mat2D::IDENTITY);
     }
     Some(inverse_path)
+}
+
+fn atomic_strategy_run_end(
+    draws: &[SolidDraw],
+    start: usize,
+    logical_flush_end: usize,
+    width: u32,
+    height: u32,
+) -> usize {
+    let atomic = atomic_draw_is_eligible(&draws[start]);
+    let clockwise_atomic = atomic && draw_requires_clockwise_atomic(&draws[start], width, height);
+    let advanced_clockwise_atomic = clockwise_atomic && draw_uses_advanced_blend(&draws[start]);
+    let mut end = start + 1;
+    while end < logical_flush_end
+        && atomic_draw_is_eligible(&draws[end]) == atomic
+        && (!atomic
+            || draw_requires_clockwise_atomic(&draws[end], width, height) == clockwise_atomic)
+        && (!clockwise_atomic
+            || (!advanced_clockwise_atomic && !draw_uses_advanced_blend(&draws[end])))
+    {
+        end += 1;
+    }
+    end
 }
 
 fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {

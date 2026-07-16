@@ -1270,13 +1270,25 @@ Run `make renderer-golden`.
     status, reference, or tolerance change. The rejected mixed artifact
     harness remains out of production; see
     `docs/renderer-rewards-command21-audit.md`.
-106. [ ] Start R4 by wiring the live release C++ and Rust renderer runners to
+106. [x] Start R4 by wiring the live release C++ and Rust renderer runners to
     the checked-in `rive-renderer-perf-runner-v1` protocol. The first vertical
     slice is one manifest scene in both modes with seven outer samples,
     submit-to-GPU-complete timing, identical adapter identity, and matching
     logical-flush/draw counters. The counters must expose atomic strategy
     partitions so R4's first batching task also owns the two-row retained
-    color-plane lifetime finding.
+    color-plane lifetime finding. Both runners now use WebGPU over Metal on
+    the same Apple M5 Max adapter and wait for GPU completion after every
+    frame. The required CubicStroke slice passes all structural fences in both
+    modes across seven alternating samples. The fixed 16-variant report also
+    completes without a structural mismatch.
+107. [ ] Collapse per-draw clockwise-atomic render-pass boundaries. The first
+    fixed report measures 26.37x aggregate Rust/C++ time: clockwise atomic
+    grows from 7.70x at one draw to 93.80x at 20 draws, while MSAA grows from
+    5.30x to 14.28x. Rust currently opens separate borrowed and main render
+    passes for nearly every clockwise draw even when attachments and phase are
+    shared. Batch those contiguous phases, preserve pixels and structural
+    counters, then rerun the identical 16-variant report before considering
+    target reuse or lower-level GPU work.
 
 ## R2 Completion Record
 
@@ -1488,6 +1500,16 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-15: R4 compares Rust wgpu against C++ Dawn WebGPU-on-Metal, not the
+  native C++ Metal renderer. Upstream native Metal explicitly rejects MSAA,
+  so it cannot provide the required two-mode control. Pin the C++ runner to
+  runtime `7c778d13c5d903b3b74eec1dd6bb68a811dea5f2` and Dawn
+  `211333b2e3e429c3508f25c81c547f602adf448c`; both runners select the same
+  Apple M5 Max and report submit-to-GPU-complete medians only after per-frame
+  completion. The initial fixed report is a baseline, not an acceptance
+  threshold: aggregate ratio 26.37x, worst ratio 93.80x, with exact logical
+  flush, authored draw, and atomic-strategy counts on every variant.
 
 - 2026-07-15: Close R3.1 with 57 reviewed backend/precision rows and one
   two-row executable Rust finding. Data Viz's full same-backend frame passes
@@ -2320,6 +2342,14 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-15: Wired release-only live performance runners through the pinned
+  protocol and corrected the invalid native-Metal baseline to C++ Dawn on the
+  same WebGPU/Metal layer as Rust. Seven alternating CubicStroke samples pass
+  adapter and structural parity in both modes. The full 8-scene x 2-mode x
+  seven-sample campaign completes all 112 runner invocations with no structural
+  mismatch and reports 26.37x aggregate time, directly queuing clockwise
+  render-pass batching as item 107.
 
 - 2026-07-14: Added and hardened the R4 renderer performance report scaffold.
   It validates the fixed 16 scene/mode variants, emits deterministic JSON and

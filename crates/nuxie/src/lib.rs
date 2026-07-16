@@ -219,6 +219,60 @@ impl<'a> ArtboardInstance<'a> {
             .geometry_world_transform(local_id, &mut self.geometry)
     }
 
+    /// Return the canonical downstream shaped Text caret in source-artboard
+    /// world space for one exact UTF-8 byte boundary.
+    ///
+    /// A boundary skipped with leading whitespace at a soft wrap snaps to the
+    /// next visual line. Static Text does not synthesize a caret after a
+    /// trailing newline or other static line separator. CRLF is one authored
+    /// separator, so the boundary between its two scalars has no geometry.
+    ///
+    /// Returns `None` for an offset past the source or inside a UTF-8 scalar;
+    /// an unknown local or non-Text object; missing or invalid font data for
+    /// the base style or any participating nonempty run; nonfinite layout,
+    /// transform, or modifier geometry; and unsupported or unknown overflow.
+    /// Geometry v1 supports only `Visible`, `Fit`, and `FitFontSize`; `Hidden`,
+    /// `Clipped`, and `Ellipsis` fail closed.
+    pub fn text_caret(&mut self, local_id: usize, byte_offset: usize) -> Option<CaretGeometry> {
+        let (top, bottom) =
+            self.raw
+                .geometry_text_caret(local_id, byte_offset, &mut self.geometry)?;
+        Some(CaretGeometry { top, bottom })
+    }
+
+    /// Return the nearest valid UTF-8 byte caret for one source-artboard
+    /// world-space point on shaped Text.
+    ///
+    /// Returns `None` for a nonfinite point; an unknown local or non-Text
+    /// object; unshapeable text; nonfinite layout, transform, or modifier
+    /// geometry; a singular/non-invertible world transform; and unsupported or
+    /// unknown overflow. Geometry v1 supports only `Visible`, `Fit`, and
+    /// `FitFontSize`.
+    pub fn text_hit(&mut self, local_id: usize, point: Vec2D) -> Option<usize> {
+        self.raw
+            .geometry_text_hit(local_id, point, &mut self.geometry)
+    }
+
+    /// Return one source-artboard world-space selection rectangle per shaped
+    /// line segment covered by an exact UTF-8 byte range.
+    ///
+    /// Returns an empty result when either endpoint is past the source or
+    /// inside a UTF-8 scalar, the range is empty or reversed, the local is
+    /// unknown or not Text, the text is unshapeable, layout geometry is
+    /// nonfinite, or overflow is unsupported or unknown. Selection starts use
+    /// downstream affinity and ends use upstream affinity, including source
+    /// whitespace omitted at soft wraps. A trailing static line separator does
+    /// not create a selectable final empty line. CRLF is treated as one
+    /// authored separator; its internal scalar boundary is not selectable.
+    pub fn text_selection_rects(
+        &mut self,
+        local_id: usize,
+        range: std::ops::Range<usize>,
+    ) -> Vec<Aabb> {
+        self.raw
+            .geometry_text_selection_rects(local_id, range, &mut self.geometry)
+    }
+
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
     }
@@ -481,6 +535,45 @@ impl OwnedArtboardInstance {
             .geometry_world_transform(local_id, &mut self.geometry)
     }
 
+    /// Return the canonical downstream shaped Text caret in source-artboard
+    /// world space for one exact UTF-8 byte boundary.
+    ///
+    /// This is the owning mirror of [`ArtboardInstance::text_caret`] and has
+    /// the same invalid-offset, target-kind, shaping, finite-geometry,
+    /// overflow, soft-wrap, and trailing-static-separator behavior.
+    pub fn text_caret(&mut self, local_id: usize, byte_offset: usize) -> Option<CaretGeometry> {
+        let (top, bottom) =
+            self.raw
+                .geometry_text_caret(local_id, byte_offset, &mut self.geometry)?;
+        Some(CaretGeometry { top, bottom })
+    }
+
+    /// Return the nearest valid UTF-8 byte caret for one source-artboard
+    /// world-space point on shaped Text.
+    ///
+    /// This is the owning mirror of [`ArtboardInstance::text_hit`] and has the
+    /// same nonfinite-point, target-kind, shaping, finite-geometry, and
+    /// unsupported-or-unknown-overflow failure behavior.
+    pub fn text_hit(&mut self, local_id: usize, point: Vec2D) -> Option<usize> {
+        self.raw
+            .geometry_text_hit(local_id, point, &mut self.geometry)
+    }
+
+    /// Return one source-artboard world-space selection rectangle per shaped
+    /// line segment covered by an exact UTF-8 byte range.
+    ///
+    /// This is the owning mirror of [`ArtboardInstance::text_selection_rects`]
+    /// and has the same invalid-range, target-kind, shaping, finite-geometry,
+    /// overflow, soft-wrap, and trailing-static-separator behavior.
+    pub fn text_selection_rects(
+        &mut self,
+        local_id: usize,
+        range: std::ops::Range<usize>,
+    ) -> Vec<Aabb> {
+        self.raw
+            .geometry_text_selection_rects(local_id, range, &mut self.geometry)
+    }
+
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
     }
@@ -729,6 +822,15 @@ mod owned_instance_tests {
         );
         assert_eq!(borrowed.world_bounds(0), owned.world_bounds(0));
         assert_eq!(borrowed.world_transform(0), owned.world_transform(0));
+        assert_eq!(borrowed.text_caret(0, 0), owned.text_caret(0, 0));
+        assert_eq!(
+            borrowed.text_hit(0, Vec2D::new(0.0, 0.0)),
+            owned.text_hit(0, Vec2D::new(0.0, 0.0))
+        );
+        assert_eq!(
+            borrowed.text_selection_rects(0, 0..1),
+            owned.text_selection_rects(0, 0..1)
+        );
     }
 
     #[test]

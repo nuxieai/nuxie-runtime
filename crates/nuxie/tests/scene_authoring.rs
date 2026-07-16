@@ -1695,6 +1695,7 @@ fn create_image_node(
             fit: 0,
             alignment_x: 0.0,
             alignment_y: 0.0,
+            crop: None,
         }),
     )
 }
@@ -1868,6 +1869,7 @@ fn image_origin_zero_is_the_sparse_schema_default() -> Result<()> {
                 fit: 0,
                 alignment_x: 0.0,
                 alignment_y: 0.0,
+                crop: None,
             }),
         )?;
         Ok(())

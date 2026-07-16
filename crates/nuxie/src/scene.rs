@@ -1759,6 +1759,8 @@ pub enum ExportedObjectKind {
     Text,
     TextValueRun,
     TextStylePaint,
+    Mesh,
+    MeshVertex,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1789,6 +1791,11 @@ pub enum ExportedProperty {
     ImageFit(u32),
     ImageAlignmentX(f32),
     ImageAlignmentY(f32),
+    MeshTriangleIndexBytes(Vec<u8>),
+    VertexX(f32),
+    VertexY(f32),
+    MeshVertexU(f32),
+    MeshVertexV(f32),
     PathWidth(f32),
     PathHeight(f32),
     RectangleCornerRadiusTopLeft(f32),
@@ -1843,6 +1850,11 @@ impl ExportedProperty {
             Self::ImageFit(_) => PROPERTY_IMAGE_FIT,
             Self::ImageAlignmentX(_) => PROPERTY_IMAGE_ALIGNMENT_X,
             Self::ImageAlignmentY(_) => PROPERTY_IMAGE_ALIGNMENT_Y,
+            Self::MeshTriangleIndexBytes(_) => PROPERTY_MESH_TRIANGLE_INDEX_BYTES,
+            Self::VertexX(_) => PROPERTY_VERTEX_X,
+            Self::VertexY(_) => PROPERTY_VERTEX_Y,
+            Self::MeshVertexU(_) => PROPERTY_MESH_VERTEX_U,
+            Self::MeshVertexV(_) => PROPERTY_MESH_VERTEX_V,
             Self::PathWidth(_) => PROPERTY_PATH_WIDTH,
             Self::PathHeight(_) => PROPERTY_PATH_HEIGHT,
             Self::RectangleCornerRadiusTopLeft(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_TL,
@@ -1881,7 +1893,9 @@ impl ExportedProperty {
             Self::ComponentName(value) | Self::AssetName(value) | Self::TextValueRunText(value) => {
                 AuthoringValue::String(value)
             }
-            Self::FileAssetContentsBytes(value) => AuthoringValue::Bytes(value),
+            Self::FileAssetContentsBytes(value) | Self::MeshTriangleIndexBytes(value) => {
+                AuthoringValue::Bytes(value)
+            }
             Self::ParentId(value)
             | Self::FileAssetId(value)
             | Self::NestedArtboardId(value)
@@ -1908,6 +1922,10 @@ impl ExportedProperty {
             | Self::ImageOriginY(value)
             | Self::ImageAlignmentX(value)
             | Self::ImageAlignmentY(value)
+            | Self::VertexX(value)
+            | Self::VertexY(value)
+            | Self::MeshVertexU(value)
+            | Self::MeshVertexV(value)
             | Self::PathWidth(value)
             | Self::PathHeight(value)
             | Self::RectangleCornerRadiusTopLeft(value)
@@ -1959,6 +1977,8 @@ impl ExportedRecord {
             ExportedObjectKind::Text => TYPE_TEXT,
             ExportedObjectKind::TextValueRun => TYPE_TEXT_VALUE_RUN,
             ExportedObjectKind::TextStylePaint => TYPE_TEXT_STYLE_PAINT,
+            ExportedObjectKind::Mesh => TYPE_MESH,
+            ExportedObjectKind::MeshVertex => TYPE_MESH_VERTEX,
         };
         AuthoringRecord {
             type_key,
@@ -3832,20 +3852,62 @@ fn lower_artboard(
         objects_by_local.push(Some(node.id));
     }
 
-    let exact_record_count = artboard.nodes.len().checked_add(1).ok_or_else(|| {
-        EditDiagnostic::new(
+    for node in &artboard.nodes {
+        let NodeSpec::Image(spec) = &node.spec else {
+            continue;
+        };
+        let Some(crop) = spec.crop else {
+            continue;
+        };
+        if !image_crop_requires_mesh(crop) {
+            continue;
+        }
+        let image_local_id = local_ids.get(&node.id).copied().ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        append_image_crop_mesh_records(
+            &mut records,
+            &mut objects_by_local,
+            image_local_id,
+            crop,
             fallback_operation_index,
-            vec![EditId::Artboard(artboard.id)],
-            EditReason::CapacityExceeded,
-        )
-    })?;
-    let exact_local_count = artboard.nodes.len().checked_add(1).ok_or_else(|| {
-        EditDiagnostic::new(
-            fallback_operation_index,
-            vec![EditId::Artboard(artboard.id)],
-            EditReason::CapacityExceeded,
-        )
-    })?;
+            artboard.id,
+        )?;
+    }
+
+    let synthetic_local_count = objects_by_local
+        .len()
+        .checked_sub(artboard.nodes.len().checked_add(1).ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?)
+        .ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+    let exact_record_count = artboard
+        .nodes
+        .len()
+        .checked_add(1)
+        .and_then(|count| count.checked_add(synthetic_local_count))
+        .ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+    let exact_local_count = exact_record_count;
     if records.len() != exact_record_count
         || objects.len() != artboard.nodes.len()
         || objects_by_local.len() != exact_local_count
@@ -3863,6 +3925,65 @@ fn lower_artboard(
         objects,
         objects_by_local,
     })
+}
+
+fn image_crop_requires_mesh(crop: ImageCropRect) -> bool {
+    crop.x != 0.0 || crop.y != 0.0 || crop.width != 1.0 || crop.height != 1.0
+}
+
+fn append_image_crop_mesh_records(
+    records: &mut Vec<ExportedRecord>,
+    objects_by_local: &mut Vec<Option<ObjectId>>,
+    image_local_id: usize,
+    crop: ImageCropRect,
+    fallback_operation_index: usize,
+    artboard_id: ArtboardId,
+) -> std::result::Result<(), EditDiagnostic> {
+    let mesh_local_id = records.len();
+    let mesh_parent_id = u32::try_from(image_local_id).map_err(|_| {
+        EditDiagnostic::new(
+            fallback_operation_index,
+            vec![EditId::Artboard(artboard_id)],
+            EditReason::CapacityExceeded,
+        )
+    })?;
+    let vertex_parent_id = u32::try_from(mesh_local_id).map_err(|_| {
+        EditDiagnostic::new(
+            fallback_operation_index,
+            vec![EditId::Artboard(artboard_id)],
+            EditReason::CapacityExceeded,
+        )
+    })?;
+    records.push(ExportedRecord {
+        kind: ExportedObjectKind::Mesh,
+        properties: vec![
+            ExportedProperty::ParentId(mesh_parent_id),
+            ExportedProperty::MeshTriangleIndexBytes(vec![0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 3, 0]),
+        ],
+    });
+    objects_by_local.push(None);
+
+    let right = crop.x + crop.width;
+    let bottom = crop.y + crop.height;
+    for (x, y, u, v) in [
+        (0.0, 0.0, crop.x, crop.y),
+        (1.0, 0.0, right, crop.y),
+        (1.0, 1.0, right, bottom),
+        (0.0, 1.0, crop.x, bottom),
+    ] {
+        records.push(ExportedRecord {
+            kind: ExportedObjectKind::MeshVertex,
+            properties: vec![
+                ExportedProperty::ParentId(vertex_parent_id),
+                ExportedProperty::VertexX(x),
+                ExportedProperty::VertexY(y),
+                ExportedProperty::MeshVertexU(u),
+                ExportedProperty::MeshVertexV(v),
+            ],
+        });
+        objects_by_local.push(None);
+    }
+    Ok(())
 }
 
 fn parent_edit_ids(parent: Parent) -> Vec<EditId> {
@@ -3952,6 +4073,28 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
             ] {
                 if !value.is_finite() {
                     return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+            if let Some(crop) = spec.crop {
+                for (property, value) in [
+                    ("crop.x", crop.x),
+                    ("crop.y", crop.y),
+                    ("crop.width", crop.width),
+                    ("crop.height", crop.height),
+                ] {
+                    if !value.is_finite() {
+                        return Err(EditReason::NonFiniteProperty { property });
+                    }
+                }
+                if crop.width <= 0.0 {
+                    return Err(EditReason::NonFiniteProperty {
+                        property: "crop.width",
+                    });
+                }
+                if crop.height <= 0.0 {
+                    return Err(EditReason::NonFiniteProperty {
+                        property: "crop.height",
+                    });
                 }
             }
         }
@@ -6149,6 +6292,12 @@ mod tests {
                     fit: 2,
                     alignment_x: -0.5,
                     alignment_y: 0.5,
+                    crop: Some(ImageCropRect {
+                        x: 0.25,
+                        y: 0.125,
+                        width: 0.5,
+                        height: 0.75,
+                    }),
                 }),
             )?;
             Ok(())
@@ -6194,6 +6343,51 @@ mod tests {
                 .contains(&ExportedProperty::ImageAlignmentY(0.5)),
             "image nodes export vertical crop alignment"
         );
+        let mesh = exported
+            .records()
+            .iter()
+            .find(|record| record.kind == ExportedObjectKind::Mesh)
+            .expect("cropped image export synthesizes a Rive mesh");
+        assert!(
+            mesh.properties
+                .contains(&ExportedProperty::MeshTriangleIndexBytes(vec![
+                    0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 3, 0,
+                ])),
+            "cropped image mesh exports two triangles"
+        );
+        let vertices = exported
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::MeshVertex)
+            .collect::<Vec<_>>();
+        assert_eq!(vertices.len(), 4, "cropped image export uses one quad mesh");
+        for (vertex, expected) in vertices.iter().zip([
+            (0.0, 0.0, 0.25, 0.125),
+            (1.0, 0.0, 0.75, 0.125),
+            (1.0, 1.0, 0.75, 0.875),
+            (0.0, 1.0, 0.25, 0.875),
+        ]) {
+            assert!(
+                vertex
+                    .properties
+                    .contains(&ExportedProperty::VertexX(expected.0))
+            );
+            assert!(
+                vertex
+                    .properties
+                    .contains(&ExportedProperty::VertexY(expected.1))
+            );
+            assert!(
+                vertex
+                    .properties
+                    .contains(&ExportedProperty::MeshVertexU(expected.2))
+            );
+            assert!(
+                vertex
+                    .properties
+                    .contains(&ExportedProperty::MeshVertexV(expected.3))
+            );
+        }
 
         let runtime = RuntimeFile::from_authoring_records(exported.into_authoring_records())?;
         assert_eq!(runtime.artboards().len(), 1);

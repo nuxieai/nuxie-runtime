@@ -794,3 +794,21 @@ Parallel attribution now feeds the serial tail:
 No fresh final-pixel capture is required. The only new artifact is the focused
 preparation oracle for `OVER-PATCH`; the final timing gate remains staged for
 the timing-defined R4 decision after deterministic rows are closed.
+
+### Item 131 Update
+
+`OVER-AENV` is closed as one structural cluster. Atomic OverStroke now shares
+one logical midpoint envelope across all direct-stroke groups while retaining
+the original render barriers. Spans move 506->489, instances 1,005->988, and
+uploads 43,496->42,472 bytes. The 1,024-byte reduction exactly matches sixteen
+removed 64-byte padding records, and the two positive counter rows disappear;
+the report moves 16->14.
+
+The current one-frame ratio is recorded only as directional context because
+host load was not controlled. It neither accepts nor rejects this slice. The
+deterministic counter delta and unchanged pixel contract are the evidence, and
+the remaining atomic OverStroke upload residue stays in `UPLOAD-DUP`.
+Final verification passes the renderer corpus at 1,409 exact, zero divergent,
+and 59 retained gates; normal/scripted V2 floors at 584/35 exact segments; the
+full workspace; formatting; and diff hygiene. Sol's read-only review passes
+with no findings.

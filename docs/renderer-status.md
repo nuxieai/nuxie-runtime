@@ -1588,11 +1588,22 @@ Run `make renderer-golden`.
     no A-B-B-A was run. Final verification passes renderer
     exact=1,409/diverges=0/gated=59, normal/scripted V2 floors at 584/35 exact
     segments, the full workspace, formatting, and diff hygiene.
-131. [ ] Close `OVER-AENV`. Replace atomic direct-stroke group-row padding with
-    one logical-flush midpoint envelope while preserving `draw_group_starts`
-    as semantic execution barriers. Target `gm-OverStroke` atomic spans
-    `506->490`, instances `1005->989`, and uploads `43,496->42,472` before the
-    independent patch correction.
+131. [x] Close `OVER-AENV`. Atomic direct strokes now use one logical-flush
+    midpoint address space while `draw_group_starts` remain semantic execution
+    barriers. `gm-OverStroke-clockwise-atomic` moves spans `506->489`,
+    instances `1005->988`, and uploads `43,496->42,472`; the exact 1,024-byte
+    reduction is sixteen removed 64-byte padding spans. Rust settles one span
+    and one instance below the raw C++ atomic counters: C++ atomic/MSAA
+    themselves report 490/489 spans for the same uploaded bytes, and C++
+    counts an initialize draw that Rust performs as a clear. No synthetic work
+    is added. Both positive rows disappear and the report moves 16->14. A
+    focused relocation regression preserves distinct reflected mappings, the
+    renderer perf-counter suite passes 285/39, and the light timing snapshot is
+    directional context only. Sol's read-only review passes with no findings
+    across eligibility, group barriers, relocation, wrapping, bounds, and
+    regression coverage. Final verification passes renderer
+    exact=1,409/diverges=0/gated=59, normal/scripted V2 floors at 584/35 exact
+    segments, the full workspace, formatting, and diff hygiene.
 132. [ ] Reuse tessellator-owned uniform, path, and contour upload slices in
     MSAA, then atomic. Regenerate the report after each mode-wide change and
     preserve actual written-byte accounting; do not hide arena padding.

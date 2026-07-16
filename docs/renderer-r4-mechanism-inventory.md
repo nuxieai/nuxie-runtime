@@ -296,6 +296,26 @@ payloads are uploaded once for tessellation and again for draw pipelines
 telemetry (`UPLOAD-LAYOUT`); and one shared OverStroke preparation patch remains
 oracle-first (`OVER-PATCH`).
 
+### Item 131 Update
+
+Atomic direct strokes now use the same one-envelope logical relocation as the
+other eligible flush-wide layouts. The tessellation texture is shared across
+the flush, but `draw_group_starts` still split render execution wherever the
+intersection board requires a barrier. The relocation dedup key also includes
+the canonical reflected source location, so equal forward spans with distinct
+reflections cannot collapse.
+
+`gm-OverStroke-clockwise-atomic` moves 506->489 spans, 1,005->988 instances,
+and 43,496->42,472 uploaded bytes. The exact 1,024-byte delta is sixteen
+removed 64-byte envelopes. Both `OVER-AENV` rows disappear and the report
+moves 16->14; the remaining 4,328 atomic upload-byte excess stays assigned to
+`UPLOAD-DUP`. The one-lower normalized Rust span/instance counts are retained
+because C++'s atomic/MSAA raw span counts differ despite equal upload bytes and
+C++ counts an initialize operation that Rust performs without a draw.
+Sol's independent read-only review passes with no findings across eligibility,
+execution barriers, logical relocation, reflection wrapping, texture bounds,
+and focused regression coverage.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -305,7 +325,7 @@ oracle-first (`OVER-PATCH`).
 | Logical-flush container reuse | `renderer/src/render_context.cpp:155-157`, `268-273`, `282-343`, `998-1004` | host allocation without changing GPU counters | Rust retains frame containers in several paths; audit only when profiles identify host churn. |
 | Resource-budget flush splitting | `renderer/src/render_context.cpp:497-573`, `663-725` | logical flushes and draws per flush | Rust preserves the 1,024-draw and resource fences; fixed corpus is structurally exact. |
 | Frame-wide layout, then upload and encode | `renderer/src/render_context.cpp:740-822`, `953-993` | command encoders, submissions, upload calls | Ported to one encoder and one submission per fixed variant; these counters are exact. |
-| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533`, `3150-3292` | tessellation spans, instances, upload bytes | Eligible MSAA clip/content and mixed atomic midpoint/outer layouts share one multi-row logical envelope. Atomic direct-stroke group rows remain in `OVER-AENV`. |
+| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533`, `3150-3292` | tessellation spans, instances, upload bytes | Eligible MSAA clip/content, mixed atomic midpoint/outer, and atomic direct-stroke layouts share one multi-row logical envelope while execution barriers remain separate. |
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
@@ -349,6 +369,10 @@ oracle-first (`OVER-PATCH`).
   `UPLOAD-LAYOUT`, or `OVER-PATCH` in
   `docs/renderer-r4-counter-tail-audit.md`. Work that does not close or narrow
   one of those finite rows is outside the counter-tail queue.
+- Item 131 closes both `OVER-AENV` rows and moves the report 16->14. The
+  remaining tail is eleven upload rows plus the three shared `OVER-PATCH`
+  rows; atomic OverStroke's residual 4,328 upload bytes belong to
+  `UPLOAD-DUP`.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

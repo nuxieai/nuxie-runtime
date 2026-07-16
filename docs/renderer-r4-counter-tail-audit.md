@@ -69,6 +69,28 @@ per-draw `RIVEATS` records, compare cumulative patch counts and raw 64-byte
 spans, and change only the first shared preparation branch that emits Rust's
 498th patch. Do not guess at implicit-close or join handling.
 
+## Item 131 Closure And Current Tail
+
+Item 131 closes both `OVER-AENV` rows. Atomic direct strokes now share one
+logical-flush midpoint address space while `draw_group_starts` continue to
+define execution barriers. `gm-OverStroke-clockwise-atomic` moves from 506 to
+489 tessellation spans, 1,005 to 988 draw instances, and 43,496 to 42,472
+uploaded bytes. The 1,024-byte reduction is exactly sixteen removed 64-byte
+padding spans.
+
+The normalized Rust structure is intentionally one span and one instance
+below the raw C++ atomic counters. C++'s atomic and MSAA runners themselves
+report 490 and 489 spans for the same 38,144 uploaded bytes, and C++ counts an
+initialize draw that Rust performs as a clear. Adding synthetic work to equal
+those raw counters would be a regression. Both positive `OVER-AENV` rows
+disappear, and the ranked tail moves from 16 to 14 rows:
+
+| Current owner | Unique rows | Concrete boundary |
+| --- | ---: | --- |
+| `UPLOAD-DUP` | 9 | Seven MSAA typed-payload rows, atomic bevel payload reuse, and the residual atomic OverStroke payload/layout row. |
+| `UPLOAD-LAYOUT` | 2 | The two `batchedconvexpaths` byte deltas need per-class attribution before being called duplicate payloads. |
+| `OVER-PATCH` | 3 | One shared stroke-preparation patch in both modes and the corresponding MSAA instance. |
+
 ## Source Map
 
 - `UC`: C++ typed resource uploads in
@@ -92,8 +114,8 @@ spans, and change only the first shared preparation branch that emits Rust's
 - `EC`: C++ wraps logical tessellation locations across texture rows in
   `renderer/src/render_context.cpp:3150-3292`.
 - `ER`: Rust's reusable logical relocation is in
-  `crates/nuxie-renderer/src/lib.rs`; item 130 uses it for mixed atomic work,
-  while the atomic direct-stroke group-row fence remains for `OVER-AENV`.
+  `crates/nuxie-renderer/src/lib.rs`; items 130 and 131 use it for mixed and
+  direct-stroke atomic work without merging execution groups.
 - `PC`: C++ stroke counting and preparation in
   `renderer/src/draw.cpp:1120-1175,1794-1935`.
 - `PR`: Rust stroke preparation in
@@ -136,9 +158,9 @@ class B: shared implementation work.
 ## Ordered Cluster Queue
 
 1. [x] `BUG-MIX`: all ten rows closed in item 130; report `26->16`.
-2. [ ] `OVER-AENV`: reuse logical multi-row relocation for atomic direct
-   strokes without merging draw groups. Deterministic first-order upload
-   reduction: 16 spans times 64 bytes, or 1,024 bytes.
+2. [x] `OVER-AENV`: item 131 reuses logical multi-row relocation for atomic
+   direct strokes without merging draw groups; report `16->14`, with exactly
+   1,024 fewer upload bytes.
 3. [ ] `UPLOAD-DUP`: reuse tessellator-created uniform/path/contour upload
    slices in MSAA, then atomic, while preserving true written-byte accounting.
 4. [ ] `UPLOAD-LAYOUT`: use per-class byte telemetry to resolve the two

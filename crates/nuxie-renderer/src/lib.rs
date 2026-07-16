@@ -2346,31 +2346,24 @@ impl WgpuFrame {
                         && align_to(end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32)
                             < gpu::TESS_TEXTURE_WIDTH as u32
                 });
-                let mut compact_stroke_group_keys = vec![0usize; prepared.len()];
-                for (group_index, &group_start) in draw_group_starts.iter().enumerate() {
-                    let group_end = draw_group_starts
-                        .get(group_index + 1)
-                        .copied()
-                        .unwrap_or(prepared.len());
-                    compact_stroke_group_keys[group_start..group_end].fill(group_index);
-                }
-                let compact_stroke_instance_ranges = prepared
-                    .iter()
-                    .map(|draw| (draw.base_instance, draw.instance_count))
-                    .collect::<Vec<_>>();
-                let compact_shared_stroke_groups = (share_midpoint_tessellation
-                    && prepared.iter().all(|draw| {
-                        draw.batchable_direct_stroke
-                            && midpoint_tessellation_single_row_width(&draw.spans).is_some()
-                    }))
+                let compact_shared_stroke_end = (share_midpoint_tessellation
+                    && prepared.iter().all(|draw| draw.batchable_direct_stroke))
                 .then(|| {
-                    compact_midpoint_groups(
-                        &compact_stroke_group_keys,
-                        &compact_stroke_instance_ranges,
-                        max_atlas_dimension,
-                    )
+                    prepared.iter().try_fold(midpoint_span, |end, draw| {
+                        draw.instance_count
+                            .checked_mul(midpoint_span)
+                            .and_then(|count| end.checked_add(count))
+                    })
                 })
-                .flatten();
+                .flatten()
+                .filter(|&geometry_end| {
+                    align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32)
+                        .checked_add(1)
+                        .is_some_and(|final_end| {
+                            final_end.div_ceil(gpu::TESS_TEXTURE_WIDTH as u32)
+                                <= max_atlas_dimension
+                        })
+                });
                 let outer_patch_range = (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
                     + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
                     as u32
@@ -2540,57 +2533,34 @@ impl WgpuFrame {
                     );
                     tessellation_span_batches.push(packed);
                     tessellation_heights.push(1);
-                } else if let Some(compact_groups) = compact_shared_stroke_groups {
+                } else if let Some(geometry_end) = compact_shared_stroke_end {
                     let mut packed = Vec::new();
-                    for (row, group) in compact_groups.iter().enumerate() {
-                        let row =
-                            u32::try_from(row).expect("compact atomic stroke group row fits u32");
-                        append_tessellation_padding_span_at_y(&mut packed, 0, midpoint_span, row);
-                        let mut next_base_instance = 1u32;
-                        for draw in &mut prepared[group.range.clone()] {
-                            let relocation = next_base_instance
-                                .checked_sub(draw.base_instance)
-                                .and_then(|instances| instances.checked_mul(midpoint_span))
-                                .expect("compact grouped atomic midpoint relocation overflow");
-                            draw.spans.retain(|span| {
-                                span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0
-                            });
-                            relocate_midpoint_tessellation(
-                                &mut draw.spans,
-                                &mut draw.base_instance,
-                                &mut contours[draw.contour_range.clone()],
-                                relocation,
-                                row,
-                            );
-                            packed.append(&mut draw.spans);
-                            next_base_instance = next_base_instance
-                                .checked_add(draw.instance_count)
-                                .expect("compact grouped atomic midpoint instance overflow");
-                            draw.tessellation_index = 0;
-                        }
-                        debug_assert_eq!(next_base_instance * midpoint_span, group.geometry_end);
-                        let outer_curve_start = align_to(
-                            group.geometry_end,
-                            gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32,
+                    append_tessellation_padding_span(&mut packed, 0, midpoint_span);
+                    let mut next_base_instance = 1u32;
+                    for draw in &mut prepared {
+                        draw.spans
+                            .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+                        relocate_tessellation_logically(
+                            &mut draw.spans,
+                            &mut draw.base_instance,
+                            &mut contours[draw.contour_range.clone()],
+                            next_base_instance,
+                            midpoint_span,
                         );
-                        append_tessellation_padding_span_at_y(
-                            &mut packed,
-                            group.geometry_end,
-                            outer_curve_start,
-                            row,
-                        );
-                        append_tessellation_padding_span_at_y(
-                            &mut packed,
-                            outer_curve_start,
-                            outer_curve_start + 1,
-                            row,
-                        );
+                        packed.append(&mut draw.spans);
+                        next_base_instance = next_base_instance
+                            .checked_add(draw.instance_count)
+                            .expect("compact atomic stroke instance range overflow");
+                        draw.tessellation_index = 0;
                     }
+                    debug_assert_eq!(next_base_instance * midpoint_span, geometry_end);
+                    let outer_curve_start =
+                        align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+                    append_tessellation_padding_span(&mut packed, geometry_end, outer_curve_start);
+                    let final_end = outer_curve_start + 1;
+                    append_tessellation_padding_span(&mut packed, outer_curve_start, final_end);
                     tessellation_span_batches.push(packed);
-                    tessellation_heights.push(
-                        u32::try_from(compact_groups.len())
-                            .expect("compact atomic stroke group count fits u32"),
-                    );
+                    tessellation_heights.push(final_end.div_ceil(gpu::TESS_TEXTURE_WIDTH as u32));
                 } else if share_midpoint_tessellation {
                     let mut packed = Vec::new();
                     let mut cursor_x = 0u32;
@@ -6876,6 +6846,7 @@ fn relocate_tessellation_logically(
         join_tangent: [u32; 2],
         logical_x0: i64,
         logical_x1: i64,
+        reflection_location: Option<u32>,
         segment_counts: u32,
         contour_id_with_flags: u32,
     }
@@ -6908,11 +6879,19 @@ fn relocate_tessellation_logically(
         let source_logical_x1 = source_logical_x0
             .checked_add(i64::from(vertex_count))
             .expect("tessellation source span end overflow");
+        let source_reflection_location = span.reflection_y.is_finite().then(|| {
+            debug_assert!(span.reflection_y >= 0.0 && span.reflection_y.fract() == 0.0);
+            let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
+            (span.reflection_y as u32)
+                .wrapping_mul(texture_width)
+                .wrapping_add_signed(source_reflection_x0)
+        });
         let key = SourceSpanKey {
             points: span.points.map(|point| point.map(f32::to_bits)),
             join_tangent: span.join_tangent.map(f32::to_bits),
             logical_x0: source_logical_x0,
             logical_x1: source_logical_x1,
+            reflection_location: source_reflection_location,
             segment_counts: span.segment_counts,
             contour_id_with_flags: span.contour_id_with_flags,
         };
@@ -6920,15 +6899,6 @@ fn relocate_tessellation_logically(
             continue;
         }
         previous_key = Some(key);
-
-        let reflection_location = span.reflection_y.is_finite().then(|| {
-            debug_assert!(span.reflection_y >= 0.0 && span.reflection_y.fract() == 0.0);
-            let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
-            (span.reflection_y as i64)
-                .checked_mul(i64::from(texture_width))
-                .and_then(|row| row.checked_add(i64::from(source_reflection_x0)))
-                .expect("tessellation source reflection location overflow")
-        });
 
         let logical_x0 = u32::try_from(source_logical_x0)
             .expect("tessellation span start must be non-negative")
@@ -6941,7 +6911,7 @@ fn relocate_tessellation_logically(
             .checked_add(vertex_count_i32)
             .expect("tessellation span end overflow");
 
-        if let Some(source_reflection_location) = reflection_location {
+        if let Some(source_reflection_location) = source_reflection_location {
             let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
             let source_reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
             debug_assert!(source_reflection_x0 >= source_reflection_x1);
@@ -6949,10 +6919,7 @@ fn relocate_tessellation_logically(
                 source_reflection_x0 - source_reflection_x1,
                 vertex_count_i32
             );
-            let reflection_location = u32::try_from(source_reflection_location)
-                .expect("tessellation reflection start must be non-negative")
-                .checked_add(relocation)
-                .expect("tessellation reflection relocation overflow");
+            let reflection_location = source_reflection_location.wrapping_add(relocation);
             let reflection_last = reflection_location.wrapping_sub(1);
             let mut reflection_y = reflection_last / texture_width;
             let mut reflection_x0 = i32::try_from(reflection_last % texture_width + 1)
@@ -8420,6 +8387,58 @@ mod tests {
     }
 
     #[test]
+    fn logical_relocation_keeps_distinct_reflection_mappings() {
+        let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let first = gpu::TessVertexSpan::new(
+            [[1.0; 2]; 4],
+            [2.0; 2],
+            0.0,
+            segment_span as i32,
+            segment_span as i32 * 2,
+            0.0,
+            segment_span as i32 * 3,
+            segment_span as i32 * 2,
+            1,
+            1,
+            0,
+            1,
+        );
+        let mut second = first;
+        second.set_ranges(
+            segment_span as i32,
+            segment_span as i32 * 2,
+            segment_span as i32 * 4,
+            segment_span as i32 * 3,
+            0.0,
+        );
+        let mut spans = vec![first, second];
+        let mut base_instance = 1;
+        let mut contours = [gpu::ContourData::new([0.0, 0.0], 1, segment_span)];
+
+        relocate_midpoint_tessellation_logically(&mut spans, &mut base_instance, &mut contours, 2);
+
+        assert_eq!(spans.len(), 2);
+        assert_eq!(
+            spans[0].x_range(),
+            (segment_span as i32 * 2, segment_span as i32 * 3)
+        );
+        assert_eq!(
+            spans[0].reflection_x0_x1 as i16 as i32,
+            segment_span as i32 * 4
+        );
+        assert_eq!(
+            spans[1].x_range(),
+            (segment_span as i32 * 2, segment_span as i32 * 3)
+        );
+        assert_eq!(
+            spans[1].reflection_x0_x1 as i16 as i32,
+            segment_span as i32 * 5
+        );
+        assert_eq!(base_instance, 2);
+        assert_eq!(contours[0].vertex_index0, segment_span * 2);
+    }
+
+    #[test]
     fn outer_tessellations_relocate_into_contiguous_batch_ranges() {
         let mut path = RawPath::new();
         append_oval(&mut path, [0.0, 0.0, 100.0, 100.0]);
@@ -8978,15 +8997,28 @@ mod tests {
             let mut frame =
                 factory.begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true);
             stream.replay_frame(0, &mut factory, &mut frame).unwrap();
-            let work = frame.finish_for_benchmark().unwrap().backend_work;
-            (
-                work.gpu_draw_calls,
-                work.gpu_draw_instances,
-                work.path_patches,
-            )
+            frame.finish_for_benchmark().unwrap().backend_work
         });
 
-        assert_eq!(work, [(9, 1005, 498), (8, 987, 498)]);
+        assert_eq!(
+            (
+                work[0].gpu_draw_calls,
+                work[0].gpu_draw_instances,
+                work[0].tessellation_spans,
+                work[0].path_patches,
+                work[0].buffer_upload_bytes,
+            ),
+            (9, 988, 489, 498, 42_472)
+        );
+        assert_eq!(
+            (
+                work[1].gpu_draw_calls,
+                work[1].gpu_draw_instances,
+                work[1].tessellation_spans,
+                work[1].path_patches,
+            ),
+            (8, 987, 489, 498)
+        );
     }
 
     #[cfg(feature = "perf-counters")]

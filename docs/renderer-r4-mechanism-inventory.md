@@ -236,6 +236,35 @@ bytes are separately ranked alignment or buffer-layout work.
 Item 128 next attributes `gm-bug339297_as_clip-msaa`, where Rust/C++ report
 3,704/2,816 upload bytes, 23/18 spans, 854/830 path patches, and 9/8 draws.
 
+### Item 128 Update
+
+The target combined three C++ mechanisms that Rust had modeled separately:
+
+- `renderer/src/draw.cpp:1155-1368` gives every authored line one segment;
+  transformed coordinate magnitude does not invoke cubic subdivision.
+- `renderer/src/rive_renderer.cpp:578-633` leaves stale stencil resident while
+  unclipped content draws and clears it only before an unrelated root clip.
+- `renderer/src/render_context.cpp:1128-1160,1516-1533,3150-3292` allocates one
+  logical midpoint range across texture rows for clip and content paths.
+
+Rust now follows all three. Its compact midpoint relocation accepts a global
+logical base, wraps forward and reflected spans across row boundaries, and
+emits one leading/inter-type/final padding envelope for the whole eligible
+MSAA logical flush. `gm-bug339297_as_clip-msaa` reaches exact bind sets, draws,
+instances, spans, and patches at 5/8/848/18/830. The only target residual is
+304 upload bytes. The same mechanism removes the 17-span `OverStroke` MSAA
+layout excess, proving this was a shared cause rather than a scene fix.
+
+Resident clip reuse now also mirrors `RiveRenderer::ClipElement`: equivalence
+uses matrix, fill rule, and the RawPath mutation snapshot. This distinguishes
+separately created paths with equal geometry, as required by the byte-exact
+`spotify_kids_demo` Dawn prefix, while preserving same-path reuse in item 128.
+
+The fixed matrix moves 1,658->1,634 spans, 5,937->5,885 instances,
+176,496->174,888 upload bytes, and 35->26 ranked positive rows. The 1.999x
+one-frame snapshot is directional only. The complete finite tail and its four
+cluster queue live in `docs/renderer-r4-counter-tail-audit.md`.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -245,7 +274,7 @@ Item 128 next attributes `gm-bug339297_as_clip-msaa`, where Rust/C++ report
 | Logical-flush container reuse | `renderer/src/render_context.cpp:155-157`, `268-273`, `282-343`, `998-1004` | host allocation without changing GPU counters | Rust retains frame containers in several paths; audit only when profiles identify host churn. |
 | Resource-budget flush splitting | `renderer/src/render_context.cpp:497-573`, `663-725` | logical flushes and draws per flush | Rust preserves the 1,024-draw and resource fences; fixed corpus is structurally exact. |
 | Frame-wide layout, then upload and encode | `renderer/src/render_context.cpp:740-822`, `953-993` | command encoders, submissions, upload calls | Ported to one encoder and one submission per fixed variant; these counters are exact. |
-| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533` | tessellation spans, instances, upload bytes | Plain stroke and homogeneous nonzero-fill midpoint layouts now emit one leading envelope and final sentinel per logical flush. |
+| Flush-wide tessellation padding | `renderer/src/render_context.cpp:1128-1160`, `1516-1533`, `3150-3292` | tessellation spans, instances, upload bytes | Eligible MSAA clip/content midpoint layouts now share one multi-row logical envelope; atomic mixed and multi-row layouts remain in the finite tail audit. |
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
@@ -281,9 +310,13 @@ Item 128 next attributes `gm-bug339297_as_clip-msaa`, where Rust/C++ report
 - `gm-batchedconvexpaths` retains 600 atomic and 992 MSAA excess upload bytes
   after item 127 makes its spans exact. Treat those as separate alignment or
   buffer-layout work; they are no longer the highest coherent row.
-- `gm-bug339297_as_clip-msaa` is next at 3,704/2,816 upload bytes, 23/18
-  spans, 854/830 path patches, and 9/8 draws (Rust/C++). Item 128 separates
-  clip-update work from content preparation before reduction.
+- Item 128 makes `gm-bug339297_as_clip-msaa` exact for bind sets, draws,
+  instances, spans, and patches. Its remaining 3,120/2,816 upload-byte row is
+  part of the shared `UPLOAD-DUP` cluster.
+- The post-item-128 report has 26 positive rows, all assigned to `BUG-MIX`,
+  `OVER-AENV`, `UPLOAD-DUP`, or `OVER-PATCH` in
+  `docs/renderer-r4-counter-tail-audit.md`. Work that does not close or narrow
+  one of those finite rows is outside the counter-tail queue.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

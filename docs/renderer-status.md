@@ -1543,10 +1543,39 @@ Run `make renderer-golden`.
     passes 276/39, normal/scripted V2 floors remain 584/35, and the workspace
     passes. The residual 600 atomic and 992 MSAA upload bytes are separate
     alignment or buffer-layout work, not part of this claim.
-128. [ ] Attribute `gm-bug339297_as_clip-msaa`, the new highest coherent
-    fixed-matrix row: Rust/C++ report 3,704/2,816 upload bytes, 23/18 spans,
-    854/830 path patches, and 9/8 draws. Split clip-update work from content
-    preparation and source-map the C++ path before editing.
+128. [x] Match C++'s line counting, lazy stencil lifetime, and multi-row
+    logical-flush tessellation layout for `gm-bug339297_as_clip-msaa`. Rust
+    treated transformed lines as cubics, eagerly cleared stale stencil before
+    unclipped content, and stopped shared midpoint padding at one texture row.
+    C++ gives each line one segment, retains stale stencil until an unrelated
+    clip replaces it, and allocates clip plus content tessellation in one
+    logical range across rows. Rust now does the same. Bind sets, draws,
+    instances, spans, and patches reach exact C++ Dawn values at
+    5/8/848/18/830; uploads move 3,704->3,120 against 2,816 and remain in the
+    shared upload cluster. The reusable layout also removes all 17 excess
+    `OverStroke` MSAA spans and 16 excess instances. Fixed-matrix spans move
+    1,658->1,634, instances 5,937->5,885, uploads 176,496->174,888 bytes,
+    and ranked positive rows 35->26. The 1.999x one-frame snapshot is
+    directional context only; exact work and strict Dawn pixels accept the
+    slice without A-B-B-A. The full corpus then exposed a clip-reentry case in
+    `spotify_kids_demo`: two paths had identical geometry but distinct C++
+    RawPath mutation IDs. Rust now carries the same globally unique mutation
+    snapshot and reuses resident stencil only for the same unchanged path;
+    the focused Dawn prefix is byte-exact while the item-128 counters remain
+    exact. The final full corpus remains exact=1,409/diverges=0/gated=59.
+129. [x] Triage the entire post-item-128 counter tail before another renderer
+    edit. `docs/renderer-r4-counter-tail-audit.md` classifies all 26 rows: zero
+    accounting-only Decisions, 26 shared-cause rows, and zero singletons.
+    They collapse to `BUG-MIX`, `OVER-AENV`, `UPLOAD-DUP`, and `OVER-PATCH`.
+    All final-pixel references already exist; only the final patch cluster
+    needs a preparation-stage oracle. Attribution can proceed in parallel,
+    while implementation and acceptance remain serial. A clean rebuild of
+    both counter runners confirms the fixed report has exactly 26 ranked
+    excess rows.
+130. [ ] Close `BUG-MIX`, the ten-row atomic `bug339297` cluster. Port C++'s
+    single mixed midpoint/outer logical-flush tessellation allocation and pass,
+    then regenerate the full report once. Keep C++'s counted initialize draw
+    normalized rather than adding fake Rust work.
 
 ## R2 Completion Record
 
@@ -2695,9 +2724,34 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    counters. A noisy directional sample alone does not trigger A-B-B-A for an
    objective work-elimination slice. Attribution of multiple corpus entries
    may run concurrently; timing acceptance stays serial and records load.
+E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
+   final timing gate pins immutable runner artifacts and runs A-B-B-A with a
+   same-leg C++ control inside every report. It normalizes each candidate leg
+   against that control, fences global control drift plus both normalized
+   repeat pairs, and samples host load only before and after synchronous timed
+   work. Behavioral tests prove the sampler cannot overlap a runner and that
+   a failing runner leaves no live child. Sol approved all five contracts.
+   Use this gate for the final timing-defined R4 decision or a genuinely
+   disputed timing claim; exact counter-parity slices continue to use D.
 
 ## Log
 
+- 2026-07-16: Closed R4 items 128-129 and replaced row-at-a-time tail work
+  with `docs/renderer-r4-counter-tail-audit.md`. Item 128 ports C++'s
+  one-segment line rule, lazy stale-stencil lifetime, and multi-row
+  logical-flush midpoint layout. The primary MSAA target reaches exact bind,
+  draw, instance, span, and patch counts; the shared layout also closes the
+  `OverStroke` MSAA span excess. Ranked rows fall 35->26. A Sol pass then
+  classifies every current row into four finite shared-cause clusters, with no
+  accounting-only closures and no singleton implementation tasks. A separate
+  capture inventory proves all final-pixel references already exist. The
+  final-source corpus remains exact=1,409/diverges=0/gated=59, and a clean
+  counter-runner rebuild confirms exactly 26 ranked excess rows. In the
+  orthogonal tooling lane, the final timing gate now performs per-leg C++
+  normalization, separate control/A/B repeat fences, pre/post-only host
+  sampling, foreground child collection, immutable runner checks, and
+  behavioral failure-path tests. The complete `perf-compare` suite passes and
+  Sol's second review reports no findings.
 - 2026-07-16: Closed R4 item 127 by sharing one flush-wide midpoint-padding
   envelope across the ten homogeneous translucent fills in
   `gm-batchedconvexpaths`. C++ source inspection shows one logical-flush

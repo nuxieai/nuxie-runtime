@@ -480,7 +480,12 @@ impl Factory for WgpuFactory {
         })
     }
 
-    fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+    fn make_render_path(
+        &mut self,
+        mut raw_path: RawPath,
+        fill_rule: FillRule,
+    ) -> Box<dyn RenderPath> {
+        raw_path.renew_mutation_id();
         Box::new(WgpuPath {
             raw_path,
             fill_rule,
@@ -861,7 +866,9 @@ struct ClipElement {
 
 impl ClipElement {
     fn is_equivalent(&self, matrix: Mat2D, path: &WgpuPath) -> bool {
-        self.matrix == matrix && self.path == *path
+        self.matrix == matrix
+            && self.path.raw_path.mutation_id() == path.raw_path.mutation_id()
+            && self.path.fill_rule == path.fill_rule
     }
 }
 
@@ -1406,17 +1413,7 @@ impl WgpuFrame {
         let previous_active = self.msaa_path_clips.last().cloned();
 
         if current_clips.is_empty() {
-            let mut scheduled = Vec::new();
-            if self.msaa_path_clip_id != 0 {
-                if let Some(active) = previous_active.as_ref() {
-                    scheduled.push(
-                        self.msaa_clip_reset_draw(active, MsaaClipResetAction::ClearPrevious),
-                    );
-                }
-            }
-            self.msaa_path_clips.clear();
-            self.msaa_path_clip_id = 0;
-            return Some((scheduled, 0));
+            return Some((Vec::new(), 0));
         }
 
         // This is RiveRenderer::applyClip's scan for the clip ID currently in
@@ -3111,7 +3108,8 @@ impl WgpuFrame {
                                 paint,
                                 paint_aux: gpu::PaintAuxData::zeroed(),
                                 image: None,
-                                compact_midpoint_layout: false,
+                                // C++ LogicalFlush shares padding across clip and content paths.
+                                compact_midpoint_layout: true,
                                 compact_midpoint_group: None,
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
@@ -3385,7 +3383,7 @@ impl WgpuFrame {
                             hsl_blend: blend_mode_uses_hsl(draw.paint.blend_mode),
                             batchable_midpoint_fill: draw.paint.style == RenderPaintStyle::Fill
                                 && draw.path.fill_rule == FillRule::NonZero
-                                && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                && matches!(draw.role, DrawRole::Content { .. })
                                 && !has_clip_rect
                                 && !advanced_blend
                                 && msaa_draw_has_opaque_paint(draw)
@@ -3492,13 +3490,13 @@ impl WgpuFrame {
                             let compact_midpoint_layout = (draw.paint.style
                                 == RenderPaintStyle::Fill
                                 && draw.path.fill_rule == FillRule::NonZero
-                                && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                && matches!(draw.role, DrawRole::Content { .. })
                                 && !has_clip_rect
                                 && !advanced_blend
                                 && image.is_none()
                                 && gradient.is_none())
                                 || (draw.paint.style == RenderPaintStyle::Stroke
-                                    && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                    && matches!(draw.role, DrawRole::Content { .. })
                                     && !has_clip_rect
                                     && !advanced_blend
                                     && image.is_none()
@@ -3586,9 +3584,13 @@ impl WgpuFrame {
                     })
                     .flatten()
                     .filter(|&end| {
-                        end <= gpu::TESS_TEXTURE_WIDTH as u32
-                            && align_to(end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32)
-                                < gpu::TESS_TEXTURE_WIDTH as u32
+                        max_height
+                            .checked_mul(gpu::TESS_TEXTURE_WIDTH as u32)
+                            .is_some_and(|capacity| {
+                                align_to(end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32)
+                                    .checked_add(1)
+                                    .is_some_and(|end| end <= capacity)
+                            })
                     });
                     let compact_group_keys = paths_in_flush
                         .iter()
@@ -3643,6 +3645,8 @@ impl WgpuFrame {
                             outer_curve_start,
                             outer_curve_start + 1,
                         );
+                        tessellation_height =
+                            outer_curve_start.div_euclid(gpu::TESS_TEXTURE_WIDTH as u32) + 1;
                     } else if let Some(compact_groups) = compact_groups {
                         tessellation_height = u32::try_from(compact_groups.len())
                             .expect("compact MSAA stroke group count fits u32");
@@ -6743,6 +6747,103 @@ fn relocate_midpoint_tessellation(
     );
 }
 
+fn relocate_midpoint_tessellation_logically(
+    spans: &mut Vec<gpu::TessVertexSpan>,
+    base_instance: &mut u32,
+    contours: &mut [gpu::ContourData],
+    next_base_instance: u32,
+) {
+    let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+    let texture_width = gpu::TESS_TEXTURE_WIDTH as u32;
+    let old_base = base_instance
+        .checked_mul(segment_span)
+        .expect("MSAA midpoint source location overflow");
+    let new_base = next_base_instance
+        .checked_mul(segment_span)
+        .expect("MSAA midpoint destination location overflow");
+    let relocation = new_base
+        .checked_sub(old_base)
+        .expect("compact MSAA midpoint layout must move forward");
+    let source = std::mem::take(spans);
+    spans.reserve(source.len());
+    for mut span in source {
+        let (source_x0, source_x1) = span.x_range();
+        debug_assert_eq!(span.y, 0.0);
+        debug_assert!(source_x0 >= 0 && source_x1 >= source_x0);
+        let vertex_count = u32::try_from(source_x1 - source_x0)
+            .expect("MSAA midpoint span width must be non-negative");
+        let vertex_count_i32 =
+            i32::try_from(vertex_count).expect("MSAA midpoint span width fits i32");
+        let logical_x0 = u32::try_from(source_x0)
+            .expect("MSAA midpoint span start must be non-negative")
+            .checked_add(relocation)
+            .expect("MSAA midpoint span relocation overflow");
+        let mut y = logical_x0 / texture_width;
+        let mut x0 =
+            i32::try_from(logical_x0 % texture_width).expect("MSAA midpoint span x must fit i32");
+        let mut x1 = x0
+            .checked_add(vertex_count_i32)
+            .expect("MSAA midpoint span end overflow");
+
+        if span.reflection_y.is_finite() {
+            debug_assert_eq!(span.reflection_y, 0.0);
+            let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
+            let source_reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
+            debug_assert!(source_reflection_x0 >= source_reflection_x1);
+            debug_assert_eq!(
+                source_reflection_x0 - source_reflection_x1,
+                vertex_count_i32
+            );
+            let reflection_location = u32::try_from(source_reflection_x0)
+                .expect("MSAA midpoint reflection start must be non-negative")
+                .checked_add(relocation)
+                .expect("MSAA midpoint reflection relocation overflow");
+            let reflection_last = reflection_location
+                .checked_sub(1)
+                .expect("MSAA midpoint reflection location must be positive");
+            let mut reflection_y = reflection_last / texture_width;
+            let mut reflection_x0 = i32::try_from(reflection_last % texture_width + 1)
+                .expect("MSAA midpoint reflection x must fit i32");
+            let mut reflection_x1 = reflection_x0 - vertex_count_i32;
+            loop {
+                span.y = y as f32;
+                span.set_ranges(x0, x1, reflection_x0, reflection_x1, reflection_y as f32);
+                spans.push(span);
+                if x1 <= gpu::TESS_TEXTURE_WIDTH && reflection_x1 >= 0 {
+                    break;
+                }
+                y += 1;
+                x0 -= gpu::TESS_TEXTURE_WIDTH;
+                x1 -= gpu::TESS_TEXTURE_WIDTH;
+                reflection_y = reflection_y
+                    .checked_sub(1)
+                    .expect("MSAA midpoint reflection row underflow");
+                reflection_x0 += gpu::TESS_TEXTURE_WIDTH;
+                reflection_x1 += gpu::TESS_TEXTURE_WIDTH;
+            }
+        } else {
+            loop {
+                span.y = y as f32;
+                span.set_ranges(x0, x1, -1, -1, f32::NAN);
+                spans.push(span);
+                if x1 <= gpu::TESS_TEXTURE_WIDTH {
+                    break;
+                }
+                y += 1;
+                x0 -= gpu::TESS_TEXTURE_WIDTH;
+                x1 -= gpu::TESS_TEXTURE_WIDTH;
+            }
+        }
+    }
+    *base_instance = next_base_instance;
+    for contour in contours {
+        contour.vertex_index0 = contour
+            .vertex_index0
+            .checked_add(relocation)
+            .expect("MSAA midpoint contour relocation overflow");
+    }
+}
+
 fn relocate_tessellation(
     spans: &mut [gpu::TessVertexSpan],
     base_instance: &mut u32,
@@ -6779,7 +6880,32 @@ fn relocate_tessellation(
 }
 
 fn append_tessellation_padding_span(spans: &mut Vec<gpu::TessVertexSpan>, x0: u32, x1: u32) {
-    append_tessellation_padding_span_at_y(spans, x0, x1, 0);
+    if x0 == x1 {
+        return;
+    }
+    let texture_width = gpu::TESS_TEXTURE_WIDTH as u32;
+    let mut y = x0 / texture_width;
+    let mut local_x0 = i32::try_from(x0 % texture_width).expect("padding x must fit i32");
+    let mut local_x1 = local_x0 + i32::try_from(x1 - x0).expect("padding span width must fit i32");
+    loop {
+        spans.push(gpu::TessVertexSpan::without_reflection(
+            [[0.0; 2]; 4],
+            [0.0; 2],
+            y as f32,
+            local_x0,
+            local_x1,
+            0,
+            0,
+            1,
+            0,
+        ));
+        if local_x1 <= gpu::TESS_TEXTURE_WIDTH {
+            break;
+        }
+        y += 1;
+        local_x0 -= gpu::TESS_TEXTURE_WIDTH;
+        local_x1 -= gpu::TESS_TEXTURE_WIDTH;
+    }
 }
 
 fn append_tessellation_padding_span_at_y(
@@ -6813,14 +6939,20 @@ fn append_compact_midpoint_tessellation_to_flush(
     contours: &mut Vec<gpu::ContourData>,
 ) -> u32 {
     let instance_count = tessellation.instance_count;
-    let relocation = next_base_instance
-        .checked_sub(tessellation.base_instance)
-        .and_then(|instances| instances.checked_mul(gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32))
-        .expect("compact MSAA midpoint relocation overflow");
     tessellation
         .spans
         .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
-    append_midpoint_tessellation_to_flush(tessellation, path_id, relocation, y, spans, contours);
+    let row_base_instance = y
+        .checked_mul(gpu::TESS_TEXTURE_WIDTH as u32 / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32)
+        .and_then(|base| base.checked_add(next_base_instance))
+        .expect("compact MSAA midpoint row base overflow");
+    relocate_midpoint_tessellation_logically(
+        &mut tessellation.spans,
+        &mut tessellation.base_instance,
+        &mut tessellation.contours,
+        row_base_instance,
+    );
+    append_midpoint_tessellation_data_to_flush(tessellation, path_id, spans, contours);
     next_base_instance
         .checked_add(instance_count)
         .expect("compact MSAA midpoint instance range overflow")
@@ -6841,6 +6973,15 @@ fn append_midpoint_tessellation_to_flush(
         x,
         y,
     );
+    append_midpoint_tessellation_data_to_flush(tessellation, path_id, spans, contours);
+}
+
+fn append_midpoint_tessellation_data_to_flush(
+    tessellation: &mut draw::FillTessellation,
+    path_id: u32,
+    spans: &mut Vec<gpu::TessVertexSpan>,
+    contours: &mut Vec<gpu::ContourData>,
+) {
     let contour_offset = u32::try_from(contours.len()).expect("MSAA contour offset overflow");
     let mut local_contour_ids = tessellation
         .spans
@@ -7937,6 +8078,95 @@ mod tests {
     }
 
     #[test]
+    fn compact_midpoint_tessellation_wraps_across_texture_rows() {
+        let mut path = RawPath::new();
+        append_oval(&mut path, [0.0, 0.0, 100.0, 100.0]);
+        let mut tessellation = draw::build_fill_tessellation(&path, Mat2D::IDENTITY).unwrap();
+        tessellation
+            .spans
+            .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+        let source_span_count = tessellation.spans.len();
+        let source_vertex_index = tessellation.contours[0].vertex_index0;
+        let instances_per_row =
+            gpu::TESS_TEXTURE_WIDTH as u32 / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let next_base_instance = instances_per_row - 1;
+
+        relocate_midpoint_tessellation_logically(
+            &mut tessellation.spans,
+            &mut tessellation.base_instance,
+            &mut tessellation.contours,
+            next_base_instance,
+        );
+
+        let relocation = (next_base_instance - 1) * gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        assert_eq!(tessellation.base_instance, next_base_instance);
+        assert_eq!(
+            tessellation.contours[0].vertex_index0,
+            source_vertex_index + relocation
+        );
+        assert!(tessellation.spans.len() > source_span_count);
+        assert!(tessellation.spans.iter().any(|span| span.y == 1.0));
+        assert!(tessellation.spans.iter().any(|span| span.x_range().0 < 0));
+    }
+
+    #[test]
+    fn compact_double_sided_tessellation_wraps_reflected_spans_across_rows() {
+        let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
+        let vertex_count = segment_span * 2;
+        let mut spans = vec![gpu::TessVertexSpan::new(
+            [[0.0; 2]; 4],
+            [0.0; 2],
+            0.0,
+            0,
+            vertex_count,
+            0.0,
+            vertex_count,
+            0,
+            1,
+            1,
+            0,
+            1,
+        )];
+        let mut base_instance = 0;
+        let mut contours = [];
+        let instances_per_row =
+            gpu::TESS_TEXTURE_WIDTH as u32 / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+
+        relocate_midpoint_tessellation_logically(
+            &mut spans,
+            &mut base_instance,
+            &mut contours,
+            instances_per_row - 1,
+        );
+
+        let texture_width = gpu::TESS_TEXTURE_WIDTH;
+        assert_eq!(base_instance, instances_per_row - 1);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].y, 0.0);
+        assert_eq!(
+            spans[0].x_range(),
+            (texture_width - segment_span, texture_width + segment_span)
+        );
+        assert_eq!(spans[0].reflection_y, 1.0);
+        assert_eq!(spans[0].reflection_x0_x1 as i16 as i32, segment_span);
+        assert_eq!(
+            (spans[0].reflection_x0_x1 >> 16) as i16 as i32,
+            -segment_span
+        );
+        assert_eq!(spans[1].y, 1.0);
+        assert_eq!(spans[1].x_range(), (-segment_span, segment_span));
+        assert_eq!(spans[1].reflection_y, 0.0);
+        assert_eq!(
+            spans[1].reflection_x0_x1 as i16 as i32,
+            texture_width + segment_span
+        );
+        assert_eq!(
+            (spans[1].reflection_x0_x1 >> 16) as i16 as i32,
+            texture_width - segment_span
+        );
+    }
+
+    #[test]
     fn outer_tessellations_relocate_into_contiguous_batch_ranges() {
         let mut path = RawPath::new();
         append_oval(&mut path, [0.0, 0.0, 100.0, 100.0]);
@@ -8503,7 +8733,7 @@ mod tests {
             )
         });
 
-        assert_eq!(work, [(9, 1005, 498), (8, 1004, 498)]);
+        assert_eq!(work, [(9, 1005, 498), (8, 987, 498)]);
     }
 
     #[cfg(feature = "perf-counters")]
@@ -8538,6 +8768,34 @@ mod tests {
 
             assert_eq!(full.path_patches, expected_path_patches);
         }
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn bug339297_msaa_clip_work_matches_cpp() {
+        use nuxie_render_stream::RenderStream;
+
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
+        )))
+        .unwrap();
+        let (width, height) = stream.frame_size.unwrap();
+        let mut factory = WgpuFactory::new_with_mode(width, height, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true);
+        stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+        let work = frame.finish_for_benchmark().unwrap().backend_work;
+
+        assert_eq!(
+            (
+                work.bind_group_sets,
+                work.gpu_draw_calls,
+                work.gpu_draw_instances,
+                work.tessellation_spans,
+                work.path_patches,
+            ),
+            (5, 8, 848, 18, 830)
+        );
     }
 
     #[test]
@@ -9531,9 +9789,10 @@ mod tests {
     }
 
     #[test]
-    fn msaa_clip_stack_clears_resident_clip_before_unclipped_content() {
+    fn msaa_clip_stack_reuses_only_the_same_path_snapshot() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let clip = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::NonZero);
+        let equivalent_geometry = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::NonZero);
         let mut frame = factory.begin_frame(0xff00_0000);
 
         frame.save();
@@ -9545,32 +9804,39 @@ mod tests {
 
         let (unclipped, clip_id) = frame.prepare_scheduled_clip_updates().unwrap();
         assert_eq!(clip_id, 0);
-        assert!(matches!(
-            unclipped.as_slice(),
-            [SolidDraw {
-                role: DrawRole::ClipReset {
-                    action: MsaaClipResetAction::ClearPrevious,
-                    ..
-                },
-                ..
-            }]
-        ));
-        assert_eq!(frame.msaa_path_clip_id, 0);
-        assert!(frame.msaa_path_clips.is_empty());
+        assert!(unclipped.is_empty());
+        assert_eq!(frame.msaa_path_clip_id, 1);
+        assert_eq!(frame.msaa_path_clips.len(), 1);
 
         frame.save();
         frame.clip_path(&clip);
         let (reentered, reentered_id) = frame.prepare_scheduled_clip_updates().unwrap();
-        assert_eq!(reentered_id, 2);
+        assert_eq!(reentered_id, 1);
+        assert!(reentered.is_empty());
+        frame.restore();
+
+        frame.save();
+        frame.clip_path(&equivalent_geometry);
+        let (replaced, replaced_id) = frame.prepare_scheduled_clip_updates().unwrap();
+        assert_eq!(replaced_id, 2);
         assert!(matches!(
-            reentered.as_slice(),
-            [SolidDraw {
-                role: DrawRole::ClipUpdate {
-                    replacement_id: 2,
-                    parent_id: 0
+            replaced.as_slice(),
+            [
+                SolidDraw {
+                    role: DrawRole::ClipReset {
+                        action: MsaaClipResetAction::ClearPrevious,
+                        ..
+                    },
+                    ..
                 },
-                ..
-            }]
+                SolidDraw {
+                    role: DrawRole::ClipUpdate {
+                        replacement_id: 2,
+                        parent_id: 0
+                    },
+                    ..
+                }
+            ]
         ));
     }
 
@@ -11187,6 +11453,18 @@ mod tests {
 
         assert_eq!(&actual.pixels()[offset..offset + 4], &[152, 156, 186, 255]);
     }
+
+    #[test]
+    fn spotify_distinct_equivalent_clip_reentry_matches_dawn_prefix() {
+        use sha2::Digest as _;
+
+        let actual = spotify_prefix_blit(7);
+        assert_eq!(
+            format!("{:x}", sha2::Sha256::digest(actual.pixels())),
+            "d986e99004c24ef06fd383b3d7c2180f05844e23b7c4de20f25823d938b46882"
+        );
+    }
+
     fn fixed_degenerate_cubic_draw(selector: &str) -> (WgpuPath, Mat2D, WgpuPaint) {
         let mut path = RawPath::new();
         let (transform, thickness) = match selector {

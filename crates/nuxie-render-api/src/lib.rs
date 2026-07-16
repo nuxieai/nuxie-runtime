@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_double, c_int};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type ColorInt = u32;
 
@@ -92,10 +93,23 @@ pub enum PathVerb {
     Close = 5,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+static NEXT_RAW_PATH_MUTATION_ID: AtomicU64 = AtomicU64::new(1);
+
+fn next_raw_path_mutation_id() -> u64 {
+    NEXT_RAW_PATH_MUTATION_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Debug, Clone)]
 pub struct RawPath {
     verbs: Vec<PathVerb>,
     points: Vec<Vec2D>,
+    mutation_id: u64,
+}
+
+impl PartialEq for RawPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.verbs == other.verbs && self.points == other.points
+    }
 }
 
 impl RawPath {
@@ -103,7 +117,18 @@ impl RawPath {
         Self {
             verbs: Vec::new(),
             points: Vec::new(),
+            mutation_id: next_raw_path_mutation_id(),
         }
+    }
+
+    /// Identifies the current geometry snapshot, matching C++ RawPath mutation IDs.
+    pub fn mutation_id(&self) -> u64 {
+        self.mutation_id
+    }
+
+    /// Assigns a new identity when this geometry becomes a distinct render-path object.
+    pub fn renew_mutation_id(&mut self) {
+        self.mark_mutated();
     }
 
     pub fn verbs(&self) -> &[PathVerb] {
@@ -115,6 +140,7 @@ impl RawPath {
     }
 
     pub fn rewind(&mut self) {
+        self.mark_mutated();
         self.verbs.clear();
         self.points.clear();
     }
@@ -125,18 +151,21 @@ impl RawPath {
     }
 
     pub fn move_to(&mut self, x: f32, y: f32) {
+        self.mark_mutated();
         self.verbs.push(PathVerb::Move);
         self.points.push(Vec2D::new(x, y));
     }
 
     pub fn line_to(&mut self, x: f32, y: f32) {
         self.inject_implicit_move_if_needed();
+        self.mark_mutated();
         self.verbs.push(PathVerb::Line);
         self.points.push(Vec2D::new(x, y));
     }
 
     pub fn quad_to(&mut self, ox: f32, oy: f32, x: f32, y: f32) {
         self.inject_implicit_move_if_needed();
+        self.mark_mutated();
         self.verbs.push(PathVerb::Quad);
         self.points.push(Vec2D::new(ox, oy));
         self.points.push(Vec2D::new(x, y));
@@ -144,6 +173,7 @@ impl RawPath {
 
     pub fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
         self.inject_implicit_move_if_needed();
+        self.mark_mutated();
         self.verbs.push(PathVerb::Cubic);
         self.points.push(Vec2D::new(ox, oy));
         self.points.push(Vec2D::new(ix, iy));
@@ -152,11 +182,16 @@ impl RawPath {
 
     pub fn close(&mut self) {
         if !self.verbs.is_empty() && self.verbs.last() != Some(&PathVerb::Close) {
+            self.mark_mutated();
             self.verbs.push(PathVerb::Close);
         }
     }
 
     pub fn add_path(&mut self, path: &RawPath, transform: Mat2D) {
+        if path.verbs.is_empty() {
+            return;
+        }
+        self.mark_mutated();
         self.verbs.extend_from_slice(&path.verbs);
         self.points.extend(
             path.points
@@ -170,6 +205,7 @@ impl RawPath {
         if path.verbs.is_empty() {
             return;
         }
+        self.mark_mutated();
 
         let initial_verb_count = self.verbs.len();
         let initial_point_count = self.points.len();
@@ -274,7 +310,12 @@ impl RawPath {
                 PathVerb::Close => {}
             }
         }
-        self.move_to(last_move.x, last_move.y);
+        self.verbs.push(PathVerb::Move);
+        self.points.push(last_move);
+    }
+
+    fn mark_mutated(&mut self) {
+        self.mutation_id = next_raw_path_mutation_id();
     }
 }
 
@@ -2133,6 +2174,27 @@ fn write_float(out: &mut String, value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_path_mutation_ids_track_object_snapshots() {
+        let mut first = RawPath::new();
+        let second = RawPath::new();
+        assert_ne!(first.mutation_id(), second.mutation_id());
+
+        first.move_to(1.0, 2.0);
+        let snapshot = first.clone();
+        assert_eq!(first.mutation_id(), snapshot.mutation_id());
+
+        first.reserve(8, 8);
+        assert_eq!(first.mutation_id(), snapshot.mutation_id());
+        first.line_to(3.0, 4.0);
+        assert_ne!(first.mutation_id(), snapshot.mutation_id());
+
+        let mut distinct_object = snapshot.clone();
+        distinct_object.renew_mutation_id();
+        assert_eq!(distinct_object, snapshot);
+        assert_ne!(distinct_object.mutation_id(), snapshot.mutation_id());
+    }
 
     fn assert_backwards_round_trip(path: &RawPath) {
         let mut backwards = RawPath::new();

@@ -719,3 +719,44 @@ edit.
 
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.
+
+### Item 128 Update
+
+`gm-bug339297_as_clip` combines three independent MSAA preparation effects.
+C++ counts authored lines as one tessellation segment regardless of transformed
+coordinate magnitude (`renderer/src/draw.cpp:1155-1368`), leaves stale stencil
+resident while unclipped content draws
+(`renderer/src/rive_renderer.cpp:578-633`), and allocates clip plus content
+tessellation in one logical coordinate range across texture rows
+(`renderer/src/render_context.cpp:1128-1160,1516-1533,3150-3292`). Rust
+subdivided the enormous covering rectangle as cubics, eagerly cleared the
+stencil, and stopped flush-wide compaction at one texture row.
+
+Rust now keeps lines at one segment, defers a resident stencil clear until an
+unrelated clip replaces it, and rebases eligible midpoint spans into one global
+multi-row logical-flush envelope. Forward and reflected spans split only when
+they cross a texture row, matching C++'s `TessellationWriter` contract.
+
+On `gm-bug339297_as_clip-msaa`, patches move 854->830, draws 9->8, spans
+23->18, and instances 878->848, all exact with C++ Dawn; bind-group sets move
+6->5 exactly. Upload bytes move 3,704->3,120 against C++'s 2,816, leaving a
+separate shared-resource upload row. The reusable multi-row path also removes
+all 17 excess `gm-OverStroke-msaa` spans and 16 of its 17 excess instances.
+
+The corpus regression probe also pinned C++ clip equivalence more precisely:
+it compares matrix, fill rule, and a globally unique RawPath mutation ID, not
+path geometry. `spotify_kids_demo` creates a distinct path with equivalent
+geometry and therefore clears and redraws its resident clip. Rust now carries
+that mutation snapshot; its seven-draw Spotify prefix hashes exactly to C++
+Dawn without giving back the `bug339297_as_clip` counter result.
+
+Across the fixed matrix, Rust spans move 1,658->1,634, instances
+5,937->5,885, uploads 176,496->174,888 bytes, and ranked positive rows
+35->26. The one-frame matrix snapshot is 1.999x and is directional context
+only. Exact counters and unchanged strict Dawn pixels accept this
+source-defined correction without A-B-B-A.
+
+The full remaining tail is classified once in
+`docs/renderer-r4-counter-tail-audit.md`: all 26 rows belong to four shared
+implementation clusters, no final-pixel capture is missing, and no row is
+closed as a counter-only accounting difference.

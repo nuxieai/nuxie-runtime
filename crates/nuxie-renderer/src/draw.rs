@@ -1577,7 +1577,12 @@ pub(crate) fn build_fill_tessellation(
         let segment_counts = curves
             .iter()
             .map(|curve| {
-                cubic_segment_count(curve.cubic.map(|point| transform.transform_point(point)))
+                // C++ PathDraw counts every line as exactly two tessellation vertices.
+                if curve.is_line {
+                    1
+                } else {
+                    cubic_segment_count(curve.cubic.map(|point| transform.transform_point(point)))
+                }
             })
             .collect::<Vec<_>>();
         let raw_vertex_count = segment_counts.iter().sum::<u32>() + curves.len() as u32;
@@ -2261,6 +2266,22 @@ mod tests {
         assert_eq!(geometry[0].x0_x1 as u32, 0x000c_0008);
         assert_eq!(geometry[2].x0_x1 as u32, 0x0010_000e);
         assert_post_contour_padding(&tessellation);
+    }
+
+    #[test]
+    fn fill_tessellation_does_not_subdivide_large_lines() {
+        let mut path = RawPath::new();
+        path.move_to(-1.0e9, -1.0e9);
+        path.line_to(1.0e9, -1.0e9);
+        path.line_to(1.0e9, 1.0e9);
+        path.line_to(-1.0e9, 1.0e9);
+        path.close();
+
+        let tessellation =
+            build_fill_tessellation(&path, Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0]))
+                .unwrap();
+
+        assert_eq!(tessellation.instance_count, 1);
     }
 
     #[test]

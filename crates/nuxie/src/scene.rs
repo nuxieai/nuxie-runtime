@@ -110,6 +110,25 @@ pub enum EditReason {
     InternalInvariant,
 }
 
+/// Durable authored object path reported by nested hit testing.
+///
+/// Direct hits contain one object. Hits inside nested artboards are prefixed
+/// with each authored `NestedArtboard` host on the descent path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SceneObjectPath {
+    objects: Vec<ObjectId>,
+}
+
+impl SceneObjectPath {
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.objects
+    }
+
+    pub fn into_objects(self) -> Vec<ObjectId> {
+        self.objects
+    }
+}
+
 /// Exact transaction operation and identities responsible for an edit failure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditDiagnostic {
@@ -522,7 +541,7 @@ impl DefinitionIndex {
     ) -> std::result::Result<ArtboardId, EditAbort> {
         match parent {
             Parent::Artboard(artboard) => {
-                if !matches!(child, NodeKind::Shape | NodeKind::Text) {
+                if !valid_artboard_child(child) {
                     return Err(EditAbort::new(
                         operation_index,
                         vec![EditId::Artboard(artboard)],
@@ -1370,8 +1389,21 @@ impl Hierarchy<'_> {
 
         // Validate references before following parent chains. Parent-kind
         // validation intentionally happens only after cycle detection.
+        let mut artboard_references = BTreeMap::<ArtboardId, Vec<(ArtboardId, ObjectId)>>::new();
         for artboard in &definitions.artboards {
             for node in &artboard.nodes {
+                if let NodeSpec::NestedArtboard(spec) = &node.spec {
+                    if !artboard_ids.contains(&spec.artboard) {
+                        return Err(abort(
+                            vec![EditId::Object(node.id), EditId::Artboard(spec.artboard)],
+                            EditReason::UnknownArtboard,
+                        ));
+                    }
+                    artboard_references
+                        .entry(artboard.id)
+                        .or_default()
+                        .push((spec.artboard, node.id));
+                }
                 match node.parent {
                     Parent::Artboard(parent) if parent == artboard.id => {}
                     Parent::Artboard(parent) if !artboard_ids.contains(&parent) => {
@@ -1408,6 +1440,22 @@ impl Hierarchy<'_> {
                         Some(_) => {}
                     },
                 }
+            }
+        }
+        for artboard in &definitions.artboards {
+            let mut path = Vec::new();
+            if let Some(cycle) =
+                first_artboard_reference_cycle(artboard.id, &artboard_references, &mut path)
+            {
+                return Err(abort(
+                    cycle
+                        .into_iter()
+                        .flat_map(|(artboard, node)| {
+                            [EditId::Artboard(artboard), EditId::Object(node)]
+                        })
+                        .collect(),
+                    EditReason::CycleDetected,
+                ));
             }
         }
 
@@ -1459,7 +1507,7 @@ impl Hierarchy<'_> {
                     Parent::Object(parent) => objects.get(&parent).map(|(_, kind)| *kind),
                 };
                 let valid = match parent_kind {
-                    None => matches!(child, NodeKind::Shape | NodeKind::Text),
+                    None => valid_artboard_child(child),
                     Some(parent) => valid_object_parent(parent, child),
                 };
                 if !valid {
@@ -1486,7 +1534,7 @@ impl Hierarchy<'_> {
                     .iter()
                     .enumerate()
                     .all(|(index, node)| match node.parent {
-                        Parent::Artboard(_) => true,
+                        Parent::Artboard(_) => valid_artboard_child(node.spec.kind()),
                         Parent::Object(parent) => positions
                             .get(&parent)
                             .is_some_and(|parent_index| *parent_index < index),
@@ -1616,6 +1664,7 @@ pub struct RemovedSubtree {
     nodes: Vec<RemovedNode>,
 }
 
+#[derive(Debug, Clone, Copy)]
 struct RuntimeSlot {
     local_id: usize,
     kind: NodeKind,
@@ -1624,7 +1673,8 @@ struct RuntimeSlot {
 struct MaterializedArtboard {
     file: Arc<File>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
-    objects_by_local: Vec<Option<ObjectId>>,
+    objects_by_artboard_local: BTreeMap<ArtboardId, Vec<Option<ObjectId>>>,
+    nested_artboard_targets: BTreeMap<ObjectId, ArtboardId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1674,6 +1724,7 @@ pub enum ExportedObjectKind {
     FileAssetContents,
     Artboard,
     Shape,
+    NestedArtboard,
     Rectangle,
     Fill,
     SolidColor,
@@ -1706,6 +1757,7 @@ pub enum ExportedProperty {
     Rotation(f32),
     ScaleX(f32),
     ScaleY(f32),
+    NestedArtboardId(u32),
     PathWidth(f32),
     PathHeight(f32),
     RectangleCornerRadiusTopLeft(f32),
@@ -1753,6 +1805,7 @@ impl ExportedProperty {
             Self::Rotation(_) => PROPERTY_ROTATION,
             Self::ScaleX(_) => PROPERTY_SCALE_X,
             Self::ScaleY(_) => PROPERTY_SCALE_Y,
+            Self::NestedArtboardId(_) => PROPERTY_NESTED_ARTBOARD_ID,
             Self::PathWidth(_) => PROPERTY_PATH_WIDTH,
             Self::PathHeight(_) => PROPERTY_PATH_HEIGHT,
             Self::RectangleCornerRadiusTopLeft(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_TL,
@@ -1794,6 +1847,7 @@ impl ExportedProperty {
             Self::FileAssetContentsBytes(value) => AuthoringValue::Bytes(value),
             Self::ParentId(value)
             | Self::FileAssetId(value)
+            | Self::NestedArtboardId(value)
             | Self::TextValueRunStyleId(value)
             | Self::TextStyleFontAssetId(value) => AuthoringValue::Uint(u64::from(value)),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
@@ -1850,6 +1904,7 @@ impl ExportedRecord {
             ExportedObjectKind::FileAssetContents => TYPE_FILE_ASSET_CONTENTS,
             ExportedObjectKind::Artboard => TYPE_ARTBOARD,
             ExportedObjectKind::Shape => TYPE_SHAPE,
+            ExportedObjectKind::NestedArtboard => TYPE_NESTED_ARTBOARD,
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::Fill => TYPE_FILL,
             ExportedObjectKind::SolidColor => TYPE_SOLID_COLOR,
@@ -2000,13 +2055,14 @@ impl Scene {
             .difference(&final_artboards)
             .copied()
             .collect::<BTreeSet<_>>();
-        let dirty_artboards = final_artboards
+        let directly_dirty_artboards = final_artboards
             .iter()
             .copied()
             .filter(|artboard| {
                 !previous_artboards.contains(artboard) || touched_artboards.contains_key(artboard)
             })
             .collect::<BTreeSet<_>>();
+        let dirty_artboards = expand_dirty_artboards(&definitions, &directly_dirty_artboards);
 
         // Prepare every dirty surviving artboard before publishing any of them. A later failure
         // therefore cannot partially replace definitions, files, instances, mounts, or caches.
@@ -2022,7 +2078,8 @@ impl Scene {
                 .unwrap_or(commit_operation_index);
             let materialized = MaterializedArtboard::build(
                 &definitions.font_assets,
-                artboard,
+                &definitions.artboards,
+                artboard.id,
                 commit_operation_index,
                 &spec_origins,
                 touched_operation_index,
@@ -2068,10 +2125,13 @@ impl Scene {
             if removed_artboards.contains(&instance.artboard) {
                 continue;
             }
-            let Some(touched_operation_index) = touched_artboards.get(&instance.artboard).copied()
-            else {
+            if !dirty_artboards.contains(&instance.artboard) {
                 continue;
-            };
+            }
+            let touched_operation_index = touched_artboards
+                .get(&instance.artboard)
+                .copied()
+                .unwrap_or(commit_operation_index);
             let involved_ids = vec![
                 EditId::Artboard(instance.artboard),
                 EditId::Instance(instance.id),
@@ -2264,9 +2324,10 @@ impl Scene {
     pub fn export_records(&self) -> ExportedDocument {
         let mut records = vec![backboard_record()];
         let origins = SpecOrigins::default();
+        let all_artboards = self.definitions.artboards.iter().collect::<Vec<_>>();
         let (font_records, font_asset_indices) = match ReferencedFontAssets::collect(
             &self.definitions.font_assets,
-            &self.definitions.artboards,
+            all_artboards.as_slice(),
         )
         .lower(0, &origins)
         {
@@ -2274,8 +2335,18 @@ impl Scene {
             Err(_) => std::process::abort(),
         };
         records.extend(font_records);
+        let artboard_indices = match artboard_indices(all_artboards.as_slice()) {
+            Ok(indices) => indices,
+            Err(_) => std::process::abort(),
+        };
         for artboard in &self.definitions.artboards {
-            let lowered = match lower_artboard(artboard, &font_asset_indices, 0, &origins) {
+            let lowered = match lower_artboard(
+                artboard,
+                &font_asset_indices,
+                &artboard_indices,
+                0,
+                &origins,
+            ) {
                 Ok(lowered) => lowered,
                 Err(_) => {
                     // Committed definitions have already passed this exact lowering path.
@@ -2650,6 +2721,13 @@ impl SceneTx<'_> {
     }
 }
 
+fn valid_artboard_child(child: NodeKind) -> bool {
+    matches!(
+        child,
+        NodeKind::Shape | NodeKind::NestedArtboard | NodeKind::Text
+    )
+}
+
 fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
     matches!(
         (parent, child),
@@ -2665,6 +2743,58 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
             )
             | (NodeKind::TextStylePaint, NodeKind::Fill | NodeKind::Stroke)
     )
+}
+
+fn artboard_references(definition: &ArtboardDefinition) -> impl Iterator<Item = ArtboardId> + '_ {
+    definition.nodes.iter().filter_map(|node| {
+        let NodeSpec::NestedArtboard(spec) = &node.spec else {
+            return None;
+        };
+        Some(spec.artboard)
+    })
+}
+
+fn first_artboard_reference_cycle(
+    artboard: ArtboardId,
+    references: &BTreeMap<ArtboardId, Vec<(ArtboardId, ObjectId)>>,
+    path: &mut Vec<(ArtboardId, ObjectId)>,
+) -> Option<Vec<(ArtboardId, ObjectId)>> {
+    let outgoing = references.get(&artboard)?;
+    for (referenced, node) in outgoing {
+        if let Some(cycle_start) = path.iter().position(|(ancestor, _)| ancestor == referenced) {
+            let mut cycle = path.get(cycle_start..).unwrap_or_default().to_vec();
+            cycle.push((artboard, *node));
+            return Some(cycle);
+        }
+        path.push((artboard, *node));
+        if let Some(cycle) = first_artboard_reference_cycle(*referenced, references, path) {
+            return Some(cycle);
+        }
+        path.pop();
+    }
+    None
+}
+
+fn expand_dirty_artboards(
+    definitions: &Definitions,
+    directly_dirty_artboards: &BTreeSet<ArtboardId>,
+) -> BTreeSet<ArtboardId> {
+    let mut dirty = directly_dirty_artboards.clone();
+    loop {
+        let previous_len = dirty.len();
+        for artboard in &definitions.artboards {
+            if dirty.contains(&artboard.id) {
+                continue;
+            }
+            if artboard_references(artboard).any(|referenced| dirty.contains(&referenced)) {
+                dirty.insert(artboard.id);
+            }
+        }
+        if dirty.len() == previous_len {
+            break;
+        }
+    }
+    dirty
 }
 
 /// World-space endpoints of one shaped Text caret line.
@@ -2769,13 +2899,27 @@ impl Frame<'_> {
 
     /// Return authored shapes under `point`, ordered front to back and deduplicated.
     pub fn hit_test(&mut self, instance: InstanceId, point: crate::Vec2D) -> Vec<ObjectId> {
+        self.hit_test_paths(instance, point)
+            .into_iter()
+            .filter_map(|path| path.into_objects().into_iter().last())
+            .collect()
+    }
+
+    /// Return authored object paths under `point`, ordered front to back and
+    /// deduplicated. Direct hits contain the hit object. Nested hits are
+    /// prefixed with each authored nested-artboard host.
+    pub fn hit_test_paths(
+        &mut self,
+        instance: InstanceId,
+        point: crate::Vec2D,
+    ) -> Vec<SceneObjectPath> {
         let Some((artboard, local_hits)) = self
             .scene
             .instances
             .iter_mut()
             .filter_map(Option::as_mut)
             .find(|candidate| candidate.id == instance)
-            .map(|live| (live.artboard, live.runtime.hit_test(point)))
+            .map(|live| (live.artboard, live.runtime.hit_test_paths(point)))
         else {
             return Vec::new();
         };
@@ -2784,13 +2928,7 @@ impl Frame<'_> {
         };
         local_hits
             .into_iter()
-            .filter_map(|local_id| {
-                materialized
-                    .objects_by_local
-                    .get(local_id)
-                    .copied()
-                    .flatten()
-            })
+            .filter_map(|local_path| materialized.resolve_object_path(artboard, &local_path))
             .collect()
     }
 
@@ -2953,44 +3091,96 @@ impl Frame<'_> {
 }
 
 impl MaterializedArtboard {
+    fn resolve_object_path(
+        &self,
+        root_artboard: ArtboardId,
+        local_path: &[usize],
+    ) -> Option<SceneObjectPath> {
+        let mut artboard = root_artboard;
+        let mut objects = Vec::with_capacity(local_path.len());
+        for (index, local_id) in local_path.iter().copied().enumerate() {
+            let object = self
+                .objects_by_artboard_local
+                .get(&artboard)?
+                .get(local_id)
+                .copied()
+                .flatten()?;
+            if index
+                .checked_add(1)
+                .is_some_and(|next| next < local_path.len())
+            {
+                artboard = *self.nested_artboard_targets.get(&object)?;
+            }
+            objects.push(object);
+        }
+        Some(SceneObjectPath { objects })
+    }
+
     fn build(
         font_assets: &[FontAssetDefinition],
-        definition: &ArtboardDefinition,
+        definitions: &[ArtboardDefinition],
+        root: ArtboardId,
         fallback_operation_index: usize,
         origins: &SpecOrigins,
         touched_operation_index: usize,
     ) -> std::result::Result<Self, EditDiagnostic> {
+        let closure = materialized_artboard_closure(definitions, root, touched_operation_index)?;
         let (font_records, font_asset_indices) =
-            ReferencedFontAssets::collect(font_assets, std::slice::from_ref(definition))
+            ReferencedFontAssets::collect(font_assets, closure.as_slice())
                 .lower(fallback_operation_index, origins)?;
-        let lowered = lower_artboard(
-            definition,
-            &font_asset_indices,
-            fallback_operation_index,
-            origins,
-        )?;
+        let artboard_indices = artboard_indices(closure.as_slice())
+            .map_err(|reason| EditDiagnostic::new(touched_operation_index, vec![], reason))?;
         let mut records = vec![backboard_record()];
         records.extend(font_records);
-        records.extend(lowered.records);
+        let mut root_objects = None;
+        let mut objects_by_artboard_local = BTreeMap::new();
+        let mut nested_artboard_targets = BTreeMap::new();
+        for definition in closure {
+            let lowered = lower_artboard(
+                definition,
+                &font_asset_indices,
+                &artboard_indices,
+                fallback_operation_index,
+                origins,
+            )?;
+            if definition.id == root {
+                root_objects = Some(lowered.objects.clone());
+            }
+            objects_by_artboard_local.insert(definition.id, lowered.objects_by_local);
+            nested_artboard_targets.extend(definition.nodes.iter().filter_map(|node| {
+                let NodeSpec::NestedArtboard(spec) = &node.spec else {
+                    return None;
+                };
+                Some((node.id, spec.artboard))
+            }));
+            records.extend(lowered.records);
+        }
         let authoring_records = ExportedDocument { records }.into_authoring_records();
         let runtime = RuntimeFile::from_authoring_records(authoring_records).map_err(|_| {
             EditDiagnostic::new(
                 touched_operation_index,
-                vec![EditId::Artboard(definition.id)],
+                vec![EditId::Artboard(root)],
                 EditReason::InternalInvariant,
             )
         })?;
         let file = Arc::new(File::from_runtime(runtime).map_err(|_| {
             EditDiagnostic::new(
                 touched_operation_index,
-                vec![EditId::Artboard(definition.id)],
+                vec![EditId::Artboard(root)],
                 EditReason::InternalInvariant,
             )
         })?);
         Ok(Self {
             file,
-            objects: lowered.objects,
-            objects_by_local: lowered.objects_by_local,
+            objects: root_objects.ok_or_else(|| {
+                EditDiagnostic::new(
+                    touched_operation_index,
+                    vec![EditId::Artboard(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?,
+            objects_by_artboard_local,
+            nested_artboard_targets,
         })
     }
 }
@@ -2999,6 +3189,86 @@ struct LoweredArtboard {
     records: Vec<ExportedRecord>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
     objects_by_local: Vec<Option<ObjectId>>,
+}
+
+fn artboard_indices(
+    definitions: &[&ArtboardDefinition],
+) -> std::result::Result<BTreeMap<ArtboardId, u32>, EditReason> {
+    definitions
+        .iter()
+        .enumerate()
+        .map(|(index, definition)| {
+            Ok((
+                definition.id,
+                u32::try_from(index).map_err(|_| EditReason::CapacityExceeded)?,
+            ))
+        })
+        .collect()
+}
+
+fn materialized_artboard_closure(
+    definitions: &[ArtboardDefinition],
+    root: ArtboardId,
+    operation_index: usize,
+) -> std::result::Result<Vec<&ArtboardDefinition>, EditDiagnostic> {
+    let definitions_by_id = definitions
+        .iter()
+        .map(|definition| (definition.id, definition))
+        .collect::<BTreeMap<_, _>>();
+    let mut ordered = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut stack = Vec::new();
+    collect_materialized_artboard_closure(
+        root,
+        &definitions_by_id,
+        &mut seen,
+        &mut stack,
+        &mut ordered,
+        operation_index,
+    )?;
+    Ok(ordered)
+}
+
+fn collect_materialized_artboard_closure<'a>(
+    artboard: ArtboardId,
+    definitions_by_id: &BTreeMap<ArtboardId, &'a ArtboardDefinition>,
+    seen: &mut BTreeSet<ArtboardId>,
+    stack: &mut Vec<ArtboardId>,
+    ordered: &mut Vec<&'a ArtboardDefinition>,
+    operation_index: usize,
+) -> std::result::Result<(), EditDiagnostic> {
+    if stack.contains(&artboard) {
+        return Err(EditDiagnostic::new(
+            operation_index,
+            vec![EditId::Artboard(artboard)],
+            EditReason::CycleDetected,
+        ));
+    }
+    if seen.contains(&artboard) {
+        return Ok(());
+    }
+    let definition = definitions_by_id.get(&artboard).copied().ok_or_else(|| {
+        EditDiagnostic::new(
+            operation_index,
+            vec![EditId::Artboard(artboard)],
+            EditReason::UnknownArtboard,
+        )
+    })?;
+    stack.push(artboard);
+    ordered.push(definition);
+    seen.insert(artboard);
+    for referenced in artboard_references(definition) {
+        collect_materialized_artboard_closure(
+            referenced,
+            definitions_by_id,
+            seen,
+            stack,
+            ordered,
+            operation_index,
+        )?;
+    }
+    stack.pop();
+    Ok(())
 }
 
 /// Canonical record-time view of the persistent font catalog.
@@ -3013,7 +3283,7 @@ struct ReferencedFontAssets<'a> {
 }
 
 impl<'a> ReferencedFontAssets<'a> {
-    fn collect(font_assets: &'a [FontAssetDefinition], artboards: &[ArtboardDefinition]) -> Self {
+    fn collect(font_assets: &'a [FontAssetDefinition], artboards: &[&ArtboardDefinition]) -> Self {
         let definitions = font_assets
             .iter()
             .map(|font| (font.id, font))
@@ -3146,6 +3416,7 @@ fn validate_font_asset(
 fn lower_artboard(
     artboard: &ArtboardDefinition,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
+    artboard_indices: &BTreeMap<ArtboardId, u32>,
     fallback_operation_index: usize,
     origins: &SpecOrigins,
 ) -> std::result::Result<LoweredArtboard, EditDiagnostic> {
@@ -3227,12 +3498,20 @@ fn lower_artboard(
                     ));
                 }
             }
+            NodeSpec::NestedArtboard(spec) => {
+                if !artboard_indices.contains_key(&spec.artboard) {
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::Artboard(spec.artboard)],
+                        EditReason::UnknownArtboard,
+                    ));
+                }
+            }
             _ => {}
         }
         let parent_id = match node.parent {
             Parent::Artboard(parent)
-                if parent == artboard.id
-                    && matches!(node.spec.kind(), NodeKind::Shape | NodeKind::Text) =>
+                if parent == artboard.id && valid_artboard_child(node.spec.kind()) =>
             {
                 0
             }
@@ -3293,7 +3572,14 @@ fn lower_artboard(
             }
         };
         records.push(
-            node_record(node, parent_id, &all_local_ids, font_asset_indices).map_err(|reason| {
+            node_record(
+                node,
+                parent_id,
+                &all_local_ids,
+                font_asset_indices,
+                artboard_indices,
+            )
+            .map_err(|reason| {
                 EditDiagnostic::new(
                     origins.object(node.id, fallback_operation_index),
                     vec![EditId::Object(node.id)],
@@ -3421,6 +3707,20 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 });
             }
         }
+        NodeSpec::NestedArtboard(spec) => {
+            for (property, value) in [
+                ("x", spec.x),
+                ("y", spec.y),
+                ("opacity", spec.opacity),
+                ("rotation", spec.rotation),
+                ("scale_x", spec.scale_x),
+                ("scale_y", spec.scale_y),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
         NodeSpec::Rectangle(spec) => {
             if !spec.width.is_finite() {
                 return Err(EditReason::NonFiniteProperty { property: "width" });
@@ -3513,6 +3813,7 @@ fn node_record(
     parent_id: usize,
     local_ids: &BTreeMap<ObjectId, usize>,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
+    artboard_indices: &BTreeMap<ArtboardId, u32>,
 ) -> std::result::Result<ExportedRecord, EditReason> {
     let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
     let mut properties = Vec::new();
@@ -3541,6 +3842,33 @@ fn node_record(
                 properties.push(ExportedProperty::ScaleY(spec.scale_y));
             }
             ExportedObjectKind::Shape
+        }
+        NodeSpec::NestedArtboard(spec) => {
+            let artboard_id = artboard_indices
+                .get(&spec.artboard)
+                .copied()
+                .ok_or(EditReason::UnknownArtboard)?;
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::NestedArtboardId(artboard_id));
+            if spec.x != 0.0 {
+                properties.push(ExportedProperty::TranslateX(spec.x));
+            }
+            if spec.y != 0.0 {
+                properties.push(ExportedProperty::TranslateY(spec.y));
+            }
+            if spec.opacity != 1.0 {
+                properties.push(ExportedProperty::WorldOpacity(spec.opacity));
+            }
+            if spec.rotation != 0.0 {
+                properties.push(ExportedProperty::Rotation(spec.rotation));
+            }
+            if spec.scale_x != 1.0 {
+                properties.push(ExportedProperty::ScaleX(spec.scale_x));
+            }
+            if spec.scale_y != 1.0 {
+                properties.push(ExportedProperty::ScaleY(spec.scale_y));
+            }
+            ExportedObjectKind::NestedArtboard
         }
         NodeSpec::Rectangle(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
@@ -3904,7 +4232,8 @@ mod tests {
             MaterializedArtboard {
                 file,
                 objects,
-                objects_by_local,
+                objects_by_artboard_local: BTreeMap::from([(artboard, objects_by_local.clone())]),
+                nested_artboard_targets: BTreeMap::new(),
             },
         );
         let instance = scene.instantiate(artboard)?;
@@ -4044,7 +4373,8 @@ mod tests {
             MaterializedArtboard {
                 file,
                 objects,
-                objects_by_local,
+                objects_by_artboard_local: BTreeMap::from([(artboard, objects_by_local.clone())]),
+                nested_artboard_targets: BTreeMap::new(),
             },
         );
         let instance = scene.instantiate(artboard)?;
@@ -4268,6 +4598,75 @@ mod tests {
         let runtime = RuntimeFile::from_authoring_records(records)?;
         let file = Arc::new(File::from_runtime(runtime)?);
         Ok(OwnedArtboardInstance::instantiate(file, 0)?)
+    }
+
+    fn create_colored_rect(
+        tx: &mut SceneTx<'_>,
+        artboard: ArtboardId,
+        name: &str,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: u32,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: format!("{name} Shape"),
+                x,
+                y,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new(
+                format!("{name} Rectangle"),
+                width,
+                height,
+            )),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: format!("{name} Fill"),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: format!("{name} Color"),
+                color,
+            }),
+        )?;
+        Ok(shape)
+    }
+
+    fn create_nested_artboard_host(
+        tx: &mut SceneTx<'_>,
+        parent: ArtboardId,
+        child: ArtboardId,
+        name: &str,
+        x: f32,
+        y: f32,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        tx.create(
+            Parent::Artboard(parent),
+            NodeSpec::NestedArtboard(NestedArtboardSpec {
+                name: name.into(),
+                x,
+                y,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                artboard: child,
+            }),
+        )
     }
 
     #[test]
@@ -5372,6 +5771,163 @@ mod tests {
             mount(&scene, second_instance),
             second_mount,
             "an unreferenced durable font definition must not remount another artboard"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nested_artboard_exports_semantic_target_as_runtime_artboard_index() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((parent, child, host, child_shape), _) = scene.edit(|tx| {
+            let parent = tx.create_artboard(ArtboardSpec {
+                name: "Parent".into(),
+                width: 200.0,
+                height: 120.0,
+            })?;
+            let child = tx.create_artboard(ArtboardSpec {
+                name: "Badge".into(),
+                width: 40.0,
+                height: 30.0,
+            })?;
+            let child_shape =
+                create_colored_rect(tx, child, "Badge", 0.0, 0.0, 40.0, 30.0, 0xff11_2233)?;
+            let host = create_nested_artboard_host(tx, parent, child, "Badge Host", 50.0, 20.0)?;
+            Ok((parent, child, host, child_shape))
+        })?;
+
+        let exported = scene.export_records();
+        let nested = exported
+            .records()
+            .iter()
+            .find(|record| record.kind == ExportedObjectKind::NestedArtboard)
+            .expect("export contains authored nested artboard host");
+        assert!(
+            nested
+                .properties
+                .contains(&ExportedProperty::NestedArtboardId(1))
+        );
+        assert!(
+            nested
+                .properties
+                .contains(&ExportedProperty::ComponentName("Badge Host".into()))
+        );
+
+        let runtime = RuntimeFile::from_authoring_records(exported.into_authoring_records())?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        assert_eq!(file.artboard_count(), 2);
+        let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let mut factory = RecordingFactory::new();
+        let mut cache = instance.new_render_cache(&mut factory);
+        let mut renderer = factory.make_renderer();
+        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        let stream = parse_single_frame(&factory.stream())?;
+        let commands = &stream.frames[0].commands;
+        assert!(
+            commands
+                .iter()
+                .any(|command| format!("{command:?}").contains("color: 4279312947")),
+            "the parent draw should include the nested child rectangle color: {commands:?}"
+        );
+
+        let _ = parent;
+        let _ = child;
+        let instance = scene.instantiate(parent)?;
+        let mut frame = scene.frame();
+        let paths = frame.hit_test_paths(instance, crate::Vec2D::new(50.0, 20.0));
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0].objects(), &[host, child_shape]);
+        assert_eq!(
+            frame.hit_test(instance, crate::Vec2D::new(50.0, 20.0)),
+            vec![child_shape]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nested_artboard_reference_failures_are_structural_edit_errors() -> Result<()> {
+        let mut scene = Scene::new();
+        let parent = scene
+            .edit(|tx| {
+                tx.create_artboard(ArtboardSpec {
+                    name: "Parent".into(),
+                    width: 200.0,
+                    height: 120.0,
+                })
+            })?
+            .0;
+        let missing = ArtboardId(u64::MAX);
+        let err = scene
+            .edit(|tx| {
+                create_nested_artboard_host(tx, parent, missing, "Missing Host", 0.0, 0.0)?;
+                Ok(())
+            })
+            .expect_err("unknown nested target artboard must reject the transaction");
+        assert_eq!(err.diagnostic().reason, EditReason::UnknownArtboard);
+
+        let mut scene = Scene::new();
+        let err = scene
+            .edit(|tx| {
+                let first = tx.create_artboard(ArtboardSpec {
+                    name: "First".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                let second = tx.create_artboard(ArtboardSpec {
+                    name: "Second".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                create_nested_artboard_host(tx, first, second, "First Host", 0.0, 0.0)?;
+                create_nested_artboard_host(tx, second, first, "Second Host", 0.0, 0.0)?;
+                Ok((first, second))
+            })
+            .expect_err("cyclic nested artboard references must reject the transaction");
+        assert_eq!(err.diagnostic().reason, EditReason::CycleDetected);
+        Ok(())
+    }
+
+    #[test]
+    fn editing_nested_child_artboard_remounts_live_parent_instances() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((parent, child), _) = scene.edit(|tx| {
+            let parent = tx.create_artboard(ArtboardSpec {
+                name: "Parent".into(),
+                width: 200.0,
+                height: 120.0,
+            })?;
+            let child = tx.create_artboard(ArtboardSpec {
+                name: "Badge".into(),
+                width: 40.0,
+                height: 30.0,
+            })?;
+            create_colored_rect(tx, child, "Badge", 0.0, 0.0, 40.0, 30.0, 0xff11_2233)?;
+            create_nested_artboard_host(tx, parent, child, "Badge Host", 50.0, 20.0)?;
+            Ok((parent, child))
+        })?;
+        let parent_instance = scene.instantiate(parent)?;
+        let parent_mount = scene
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|live| live.id == parent_instance)
+            .map(|live| live.mount)
+            .expect("parent instance has a live mount");
+
+        scene.edit(|tx| {
+            create_colored_rect(tx, child, "New Badge", 5.0, 5.0, 10.0, 10.0, 0xff44_5566)?;
+            Ok(())
+        })?;
+
+        let next_parent_mount = scene
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|live| live.id == parent_instance)
+            .map(|live| live.mount)
+            .expect("parent instance remains live");
+        assert_ne!(
+            next_parent_mount, parent_mount,
+            "editing a referenced child artboard must remount parent instances"
         );
         Ok(())
     }

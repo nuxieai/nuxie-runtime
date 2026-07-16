@@ -554,6 +554,24 @@ impl ArtboardInstance {
         self.geometry_hit_test_with_context(runtime, graph, point, cache)
     }
 
+    /// Settle pending writes and return visible shape local-id paths under
+    /// `point`, from front to back. A direct hit is a one-element path. A hit
+    /// inside a nested artboard is prefixed with each nested host local id.
+    pub fn geometry_hit_test_paths(
+        &mut self,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<Vec<usize>> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
+    }
+
     fn geometry_hit_test_with_context(
         &self,
         runtime: &RuntimeFile,
@@ -561,6 +579,19 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<usize> {
+        self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
+            .into_iter()
+            .filter_map(|path| path.into_iter().next())
+            .collect()
+    }
+
+    fn geometry_hit_test_paths_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<Vec<usize>> {
         // Geometry queries live in the artboard's unshifted world space. This
         // is the same clip rectangle used by drawing when the public origin
         // transform is not applied by the renderer-facing wrapper.
@@ -641,6 +672,90 @@ impl ArtboardInstance {
                 let _ = active_clips.pop();
                 continue;
             }
+            if matches!(
+                command.object_kind,
+                RuntimeDrawCommandObjectKind::NestedArtboard
+                    | RuntimeDrawCommandObjectKind::NestedArtboardLeaf
+                    | RuntimeDrawCommandObjectKind::NestedArtboardLayout
+            ) && !active_clips.iter().any(|contains| !contains)
+            {
+                let Some(host_local_id) = command.local_id else {
+                    continue;
+                };
+                let Some(nested) = self.nested_artboards.get(&host_local_id) else {
+                    continue;
+                };
+                let Some(child_graph) = nested.child.runtime_graph() else {
+                    continue;
+                };
+                let host_world = match command.object_kind {
+                    RuntimeDrawCommandObjectKind::NestedArtboardLayout => {
+                        cache.paths.component_world_transform_with_bounds(
+                            self,
+                            graph,
+                            host_local_id,
+                            layout_bounds,
+                        )
+                    }
+                    RuntimeDrawCommandObjectKind::NestedArtboardLeaf => {
+                        match runtime_nested_artboard_leaf_world_transform(
+                            self,
+                            graph,
+                            host_local_id,
+                            child_graph,
+                            Some(nested.child.as_ref()),
+                            layout_bounds,
+                            &mut cache.paths,
+                        ) {
+                            Ok(transform) => transform,
+                            Err(_) => continue,
+                        }
+                    }
+                    _ => cache.paths.component_world_transform_with_bounds(
+                        self,
+                        graph,
+                        host_local_id,
+                        layout_bounds,
+                    ),
+                };
+                let Some(inverse_host_world) = runtime_mat2d_invert(host_world) else {
+                    continue;
+                };
+                let (child_x, child_y) = inverse_host_world.transform_point(point.x, point.y);
+                let child_point = RenderVec2D::new(child_x, child_y);
+                if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
+                    let mut cloned = nested.child.as_ref().clone();
+                    if runtime_apply_nested_artboard_layout_child_bounds(
+                        &mut cloned,
+                        command,
+                        layout_bounds,
+                    )
+                    .is_err()
+                    {
+                        continue;
+                    }
+                    for mut path in cloned.geometry_hit_test_paths_with_context(
+                        runtime,
+                        child_graph,
+                        child_point,
+                        cache,
+                    ) {
+                        path.insert(0, host_local_id);
+                        back_to_front_hits.push(path);
+                    }
+                } else {
+                    for mut path in nested.child.geometry_hit_test_paths_with_context(
+                        runtime,
+                        child_graph,
+                        child_point,
+                        cache,
+                    ) {
+                        path.insert(0, host_local_id);
+                        back_to_front_hits.push(path);
+                    }
+                }
+                continue;
+            }
             if command.type_name != "Shape"
                 || command.shape_paints.is_empty()
                 || active_clips.iter().any(|contains| !contains)
@@ -661,7 +776,7 @@ impl ArtboardInstance {
             if command.shape_paints.iter().any(|paint| {
                 runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
             }) {
-                back_to_front_hits.push(local_id);
+                back_to_front_hits.push(vec![local_id]);
             }
         }
 
@@ -669,7 +784,7 @@ impl ArtboardInstance {
         back_to_front_hits
             .into_iter()
             .rev()
-            .filter(|local_id| seen.insert(*local_id))
+            .filter(|path| seen.insert(path.clone()))
             .collect()
     }
 

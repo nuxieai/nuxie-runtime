@@ -243,6 +243,27 @@ const OBJECTS: &[ObjectSpec] = &[
                 kind: FieldKind::Double,
                 inherited: false,
             },
+            FieldSpec {
+                rust_name: "fit",
+                schema_name: "fit",
+                declared_owner: "Image",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "alignment_x",
+                schema_name: "alignmentX",
+                declared_owner: "Image",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "alignment_y",
+                schema_name: "alignmentY",
+                declared_owner: "Image",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
         ],
         is_node: true,
     },
@@ -735,6 +756,11 @@ fn render_scene_schema() -> String {
         resolve_named_property("Image", "originX", "Image", FieldKind::Double, false);
     let image_origin_y =
         resolve_named_property("Image", "originY", "Image", FieldKind::Double, false);
+    let image_fit = resolve_named_property("Image", "fit", "Image", FieldKind::Uint, false);
+    let image_alignment_x =
+        resolve_named_property("Image", "alignmentX", "Image", FieldKind::Double, false);
+    let image_alignment_y =
+        resolve_named_property("Image", "alignmentY", "Image", FieldKind::Double, false);
     let path_width = resolve_named_property(
         "Rectangle",
         "width",
@@ -888,6 +914,9 @@ fn render_scene_schema() -> String {
         ("IMAGE_ASSET_ID", image_asset_id),
         ("IMAGE_ORIGIN_X", image_origin_x),
         ("IMAGE_ORIGIN_Y", image_origin_y),
+        ("IMAGE_FIT", image_fit),
+        ("IMAGE_ALIGNMENT_X", image_alignment_x),
+        ("IMAGE_ALIGNMENT_Y", image_alignment_y),
         ("PATH_WIDTH", path_width),
         ("PATH_HEIGHT", path_height),
         ("FILL_RULE", fill_rule),

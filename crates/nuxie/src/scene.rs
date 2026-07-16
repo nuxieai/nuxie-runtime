@@ -1786,6 +1786,9 @@ pub enum ExportedProperty {
     ImageAssetId(u32),
     ImageOriginX(f32),
     ImageOriginY(f32),
+    ImageFit(u32),
+    ImageAlignmentX(f32),
+    ImageAlignmentY(f32),
     PathWidth(f32),
     PathHeight(f32),
     RectangleCornerRadiusTopLeft(f32),
@@ -1837,6 +1840,9 @@ impl ExportedProperty {
             Self::ImageAssetId(_) => PROPERTY_IMAGE_ASSET_ID,
             Self::ImageOriginX(_) => PROPERTY_IMAGE_ORIGIN_X,
             Self::ImageOriginY(_) => PROPERTY_IMAGE_ORIGIN_Y,
+            Self::ImageFit(_) => PROPERTY_IMAGE_FIT,
+            Self::ImageAlignmentX(_) => PROPERTY_IMAGE_ALIGNMENT_X,
+            Self::ImageAlignmentY(_) => PROPERTY_IMAGE_ALIGNMENT_Y,
             Self::PathWidth(_) => PROPERTY_PATH_WIDTH,
             Self::PathHeight(_) => PROPERTY_PATH_HEIGHT,
             Self::RectangleCornerRadiusTopLeft(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_TL,
@@ -1880,6 +1886,7 @@ impl ExportedProperty {
             | Self::FileAssetId(value)
             | Self::NestedArtboardId(value)
             | Self::ImageAssetId(value)
+            | Self::ImageFit(value)
             | Self::TextValueRunStyleId(value)
             | Self::TextStyleFontAssetId(value) => AuthoringValue::Uint(u64::from(value)),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
@@ -1899,6 +1906,8 @@ impl ExportedProperty {
             | Self::ScaleY(value)
             | Self::ImageOriginX(value)
             | Self::ImageOriginY(value)
+            | Self::ImageAlignmentX(value)
+            | Self::ImageAlignmentY(value)
             | Self::PathWidth(value)
             | Self::PathHeight(value)
             | Self::RectangleCornerRadiusTopLeft(value)
@@ -4127,6 +4136,15 @@ fn node_record(
             if spec.origin_y != 0.0 {
                 properties.push(ExportedProperty::ImageOriginY(spec.origin_y));
             }
+            if spec.fit != 0 {
+                properties.push(ExportedProperty::ImageFit(spec.fit));
+            }
+            if spec.alignment_x != 0.0 {
+                properties.push(ExportedProperty::ImageAlignmentX(spec.alignment_x));
+            }
+            if spec.alignment_y != 0.0 {
+                properties.push(ExportedProperty::ImageAlignmentY(spec.alignment_y));
+            }
             ExportedObjectKind::Image
         }
         NodeSpec::Rectangle(spec) => {
@@ -6128,6 +6146,9 @@ mod tests {
                     image,
                     origin_x: 0.25,
                     origin_y: 0.75,
+                    fit: 2,
+                    alignment_x: -0.5,
+                    alignment_y: 0.5,
                 }),
             )?;
             Ok(())
@@ -6156,6 +6177,22 @@ mod tests {
                 .properties
                 .contains(&ExportedProperty::ImageAssetId(0)),
             "image nodes use the dense runtime-local asset id"
+        );
+        assert!(
+            image.properties.contains(&ExportedProperty::ImageFit(2)),
+            "image nodes export typed fit semantics"
+        );
+        assert!(
+            image
+                .properties
+                .contains(&ExportedProperty::ImageAlignmentX(-0.5)),
+            "image nodes export horizontal crop alignment"
+        );
+        assert!(
+            image
+                .properties
+                .contains(&ExportedProperty::ImageAlignmentY(0.5)),
+            "image nodes export vertical crop alignment"
         );
 
         let runtime = RuntimeFile::from_authoring_records(exported.into_authoring_records())?;

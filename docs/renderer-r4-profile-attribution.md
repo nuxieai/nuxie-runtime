@@ -411,8 +411,22 @@ directional only.
 The top row is `gm-bevel180strokes-msaa`: 63 Rust bind-group sets versus five
 in C++ Dawn. Source inspection makes the excess objective. C++ creates the
 per-flush group once and carries a `needsNewBindings` flag across draw batches,
-invalidating it only after pass restart or image state. Rust currently rebinds
-the same three direct-path groups for every draw. Item 119 ports that rule.
+restarting it after a new pass and rebinding for each image draw. Rust
+previously rebound the same three direct-path groups for every draw. Item 119
+ports that rule.
+
+Item 119 carries those bindings across compatible direct path, fill, and clip
+pipelines. Image draws update only group 1; pass restarts and foreign layouts
+require all direct-path groups again. Seven fixed MSAA variants remove 141
+sets, including `gm-bevel180strokes-msaa` at 63->6. Aggregate Rust work moves
+554->413 sets against C++ Dawn's 324. The light one-frame aggregate moves
+3.224x->2.033x, a directional smoke check consistent with the structural win.
+No repeated alternating timing campaign is required by the measurement fence.
+
+The refreshed report's highest row is
+`gm-bevel180strokes-clockwise-atomic` uploaded bytes at 54,696 versus 8,448.
+Item 120 first attributes those bytes to concrete buffers and reference
+lifetimes; byte-count changes require a C++-matched data explanation.
 
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

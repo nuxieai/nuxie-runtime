@@ -4,7 +4,7 @@ use crate::{
     atomic_pipeline::image_sampler,
     gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PatchVertex, PathData},
     tessellator::TessellationUploadFrame,
-    work_metrics::CountedDeviceExt,
+    work_metrics::{CountedDeviceExt, CountedRenderPass},
 };
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 
@@ -68,6 +68,21 @@ pub(crate) struct PreparedPathDraw {
     pub sampler_group: wgpu::BindGroup,
     pub base_instance: u32,
     pub instance_count: u32,
+    has_image: bool,
+}
+
+impl PreparedPathDraw {
+    pub(crate) fn bind_resources(&self, pass: &mut CountedRenderPass<'_>, bind_all: bool) {
+        if bind_all {
+            pass.set_bind_group(0, &self.flush_group, &[]);
+        }
+        if bind_all || self.has_image {
+            pass.set_bind_group(1, &self.image_group, &[]);
+        }
+        if bind_all {
+            pass.set_bind_group(3, &self.sampler_group, &[]);
+        }
+    }
 }
 
 pub(crate) struct PreparedPathResources {
@@ -852,6 +867,7 @@ impl PathPipeline {
         base_instance: u32,
         instance_count: u32,
     ) -> PreparedPathDraw {
+        let has_image = image.is_some();
         let image_group = image.map_or_else(
             || self.dummy_image_group.clone(),
             |(view, sampler)| {
@@ -876,6 +892,7 @@ impl PathPipeline {
             sampler_group: self.sampler_group.clone(),
             base_instance,
             instance_count,
+            has_image,
         }
     }
 }

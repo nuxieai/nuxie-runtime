@@ -1408,15 +1408,24 @@ Run `make renderer-golden`.
     16/16; Rust has 230 excess bind-group sets, 63 excess passes, 62 excess GPU
     draws, and 116,808 excess uploaded bytes. The source-mapped inventory is
     `docs/renderer-r4-mechanism-inventory.md`.
-119. [ ] Port C++ WebGPU's `needsNewBindings` rule for direct MSAA paths.
-    C++ binds stable per-flush/per-draw state once per pass and invalidates it
-    only after a pass restart or image draw. Rust currently binds the same
+119. [x] Port C++ WebGPU's `needsNewBindings` rule for direct MSAA paths.
+    C++ binds stable per-flush/per-draw state once per pass and rebinds only
+    after a pass restart or for an image draw. Rust previously bound the same
     flush, dummy-image, and sampler groups for every direct path, producing
     the report's top row: 63 sets versus five for
     `gm-bevel180strokes-msaa`. Carry binding state across compatible direct
     draws, rebind image state when required, and invalidate it on foreign
     pipeline layouts. Accept with the exact counter delta, unchanged pixels
-    and V2 floors, plus one directional timing snapshot.
+    and V2 floors, plus one directional timing snapshot. Rust bind-group sets
+    fall from 554 to 413 over the fixed matrix; `gm-bevel180strokes-msaa`
+    falls from 63 to six against C++ Dawn's five. The light aggregate snapshot
+    moves from 3.224x to 2.033x. Renderer exact=1,409/diverges=0/gated=59,
+    V2 floors 584/35, and the workspace suite remain green.
+120. [ ] Attribute the highest remaining deterministic excess: atomic upload
+    bytes on `gm-bevel180strokes-clockwise-atomic` are 54,696 in Rust versus
+    8,448 in C++ Dawn. Map the bytes to concrete buffers and C++ lifetimes
+    before changing representation; accept only a C++-matched reduction with
+    unchanged structural and pixel contracts plus a light directional check.
 
 ## R2 Completion Record
 
@@ -1628,6 +1637,12 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-16: R4 item 119 accepts objective renderer work reductions without
+  an A-B-B-A campaign. Direct MSAA path bindings remain live across compatible
+  path/fill/clip pipelines, image draws update only image state, and foreign
+  layouts invalidate the cache. Exact counters and correctness floors are the
+  primary evidence; the one-frame aggregate is a directional smoke check.
 
 - 2026-07-16: R4 item 118 makes deterministic backend work the discovery
   oracle. A feature-gated C++ Dawn proc table and Rust wgpu wrappers count
@@ -2560,6 +2575,17 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 119 by porting C++ WebGPU's binding-invalidation
+  rule to direct MSAA paths. Seven fixed MSAA variants remove 141 redundant
+  bind-group sets in total: `CubicStroke` 12->6, `OverStroke` 39->6,
+  `batchedconvexpaths` 33->6, `batchedtriangulations` 15->6,
+  `bevel180strokes` 63->6, `bug339297` 9->6, and `bug339297_as_clip` 13->7.
+  C++ Dawn remains at 324 aggregate sets while Rust moves 554->413. The light
+  aggregate snapshot moves 3.224x->2.033x; it is not threshold evidence.
+  Renderer exact=1,409/diverges=0/gated=59, V2 floors 584/35, and the full
+  workspace suite pass. Item 120 owns the newly highest-ranked atomic upload
+  byte excess.
 
 - 2026-07-16: Closed R4 item 118 with a cross-backend work-counter oracle and
   complete C++ performance-mechanism inventory. `make perf-counter-compare`

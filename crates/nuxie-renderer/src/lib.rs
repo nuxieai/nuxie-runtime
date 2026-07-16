@@ -3623,6 +3623,7 @@ impl WgpuFrame {
                         multiview_mask: None,
                     });
                     pass.set_stencil_reference(0);
+                    let mut direct_path_bindings_active = false;
                     for prepared in &prepared_draws[segment_start..segment_end.index] {
                         match prepared {
                             PreparedDraw::Stroke(draw, options) => {
@@ -3639,9 +3640,8 @@ impl WgpuFrame {
                                     options.advanced_blend,
                                     options.hsl_blend,
                                 ));
-                                pass.set_bind_group(0, &draw.flush_group, &[]);
-                                pass.set_bind_group(1, &draw.image_group, &[]);
-                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                draw.bind_resources(&mut pass, !direct_path_bindings_active);
+                                direct_path_bindings_active = true;
                                 pass.set_vertex_buffer(
                                     0,
                                     self.context.patch_vertex_buffer.slice(..),
@@ -3658,9 +3658,8 @@ impl WgpuFrame {
                             }
                             PreparedDraw::Fill(draw, fill_rule, options) => {
                                 pass.set_stencil_reference(0x80);
-                                pass.set_bind_group(0, &draw.flush_group, &[]);
-                                pass.set_bind_group(1, &draw.image_group, &[]);
-                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                draw.bind_resources(&mut pass, !direct_path_bindings_active);
+                                direct_path_bindings_active = true;
                                 pass.set_vertex_buffer(
                                     0,
                                     self.context.patch_vertex_buffer.slice(..),
@@ -3709,6 +3708,7 @@ impl WgpuFrame {
                                 }
                             }
                             PreparedDraw::ImageMesh(draw, options) => {
+                                direct_path_bindings_active = false;
                                 pass.set_stencil_reference(if options.path_clip {
                                     0x80
                                 } else {
@@ -3732,9 +3732,8 @@ impl WgpuFrame {
                             }
                             PreparedDraw::OutermostClipUpdate(draw, fill_rule) => {
                                 pass.set_stencil_reference(0x80);
-                                pass.set_bind_group(0, &draw.flush_group, &[]);
-                                pass.set_bind_group(1, &draw.image_group, &[]);
-                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                draw.bind_resources(&mut pass, !direct_path_bindings_active);
+                                direct_path_bindings_active = true;
                                 pass.set_vertex_buffer(
                                     0,
                                     self.context.patch_vertex_buffer.slice(..),
@@ -3798,9 +3797,8 @@ impl WgpuFrame {
                                 } else {
                                     &self.context.path_pipeline.nested_clip_pipeline
                                 });
-                                pass.set_bind_group(0, &draw.flush_group, &[]);
-                                pass.set_bind_group(1, &draw.image_group, &[]);
-                                pass.set_bind_group(3, &draw.sampler_group, &[]);
+                                draw.bind_resources(&mut pass, !direct_path_bindings_active);
+                                direct_path_bindings_active = true;
                                 pass.set_vertex_buffer(
                                     0,
                                     self.context.patch_vertex_buffer.slice(..),
@@ -3817,6 +3815,7 @@ impl WgpuFrame {
                                 );
                             }
                             PreparedDraw::ClipReset(draw, action) => {
+                                direct_path_bindings_active = false;
                                 let (reference, pipeline) = match action {
                                     MsaaClipResetAction::ClearPrevious => {
                                         (0, &self.context.msaa_stencil_pipeline.clip_reset_pipeline)
@@ -3850,6 +3849,7 @@ impl WgpuFrame {
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
                             PreparedDraw::Atlas(draw) => {
+                                direct_path_bindings_active = false;
                                 pass.set_stencil_reference(
                                     if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_path_clip(draw)
                                     {
@@ -3866,6 +3866,7 @@ impl WgpuFrame {
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
                             PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
+                                direct_path_bindings_active = false;
                                 pass.set_stencil_reference(0);
                                 pass.set_pipeline(match fill_rule {
                                     FillRule::EvenOdd => &self.context.even_odd_stencil_pipeline,

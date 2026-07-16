@@ -39,6 +39,20 @@ and uses `needsNewBindings` to rebind only after a restarted pass or an image
 draw. Rust currently sets the same flush, dummy-image, and sampler groups for
 every direct MSAA path. This is item 119.
 
+### Item 119 Update
+
+Rust now carries direct-path binding state until a pass restart or an
+incompatible pipeline layout, and image paths update only the image group.
+Aggregate Rust bind-group sets fall from 554 to 413; C++ Dawn remains at 324.
+`gm-bevel180strokes-msaa` falls from 63 to six, while the other affected fixed
+MSAA variants remove another 84 redundant sets. The light one-frame aggregate
+moves from 3.224x to 2.033x and remains directional only.
+
+The refreshed highest-ranked row is
+`gm-bevel180strokes-clockwise-atomic` uploaded bytes at 54,696 in Rust versus
+8,448 in C++ Dawn. Item 120 must map those bytes to concrete buffers and the
+C++ lifetime mechanism before reducing them.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -52,7 +66,7 @@ every direct MSAA path. This is item 119.
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
 | Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic flush-wide lifetime is ported. Remaining pass/draw excess is open. |
-| Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Open, highest-ranked item 119. |
+| Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
 | Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179` | per-frame texture creation and clears | Rust retains core MSAA and atomic backing. Audit destination/gradient/atlas textures by counter scene. |
@@ -65,8 +79,9 @@ every direct MSAA path. This is item 119.
 
 - `command_encoders` and `queue_submissions` are closed for the fixed matrix.
   Do not spend R4 work there without a new counter regression.
-- `bind_group_sets` is the first target because the top rows are repeated
-  identical state and C++ has an explicit matching rule.
+- `bind_group_sets` no longer owns the top row. Item 119 removed 141 repeated
+  direct-MSAA sets; retain the remaining layout-bound sets until another
+  source-matched redundancy is identified.
 - `render_passes` and `gpu_draw_calls` are next, but their remaining rows mix
   mandatory fill-rule subpasses with avoidable lifecycle boundaries. Split
   them by pipeline/pass class before changing scheduling.

@@ -8,6 +8,7 @@ use nuxie_graph::{
     ArtboardGraph, DataBindNode, PathGeometryNode, ShapePaintContainerNode, ShapePaintKind,
     ShapePaintPathKind, ShapePaintStateNode,
 };
+use nuxie_render_api::{Aabb as RenderAabb, Vec2D as RenderVec2D};
 use nuxie_schema::definition_by_name;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::pen::PathStyle;
@@ -32,6 +33,7 @@ const TEXT_SHAPE_SCALE_F32: f32 = TEXT_SHAPE_SCALE as f32;
 const TEXT_SIZING_AUTO_WIDTH: u64 = 0;
 const TEXT_SIZING_AUTO_HEIGHT: u64 = 1;
 const TEXT_SIZING_FIXED: u64 = 2;
+const TEXT_OVERFLOW_VISIBLE: u64 = 0;
 const TEXT_OVERFLOW_HIDDEN: u64 = 1;
 const TEXT_OVERFLOW_CLIPPED: u64 = 2;
 const TEXT_OVERFLOW_ELLIPSIS: u64 = 3;
@@ -136,6 +138,69 @@ pub(crate) fn static_text_clip_bounds(
         instance,
         layout_constraint,
     )
+}
+
+pub(crate) fn static_text_caret_geometry(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    text_world: Mat2D,
+    byte_offset: usize,
+) -> Option<(RenderVec2D, RenderVec2D)> {
+    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    if !slice.text_geometry_supported(runtime, instance).ok()? {
+        return None;
+    }
+    slice
+        .shaped_layout(runtime, instance, layout_constraint, text_world)
+        .ok()??
+        .caret(byte_offset)
+}
+
+pub(crate) fn static_text_hit(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    text_world: Mat2D,
+    point: RenderVec2D,
+) -> Option<usize> {
+    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    if !slice.text_geometry_supported(runtime, instance).ok()? {
+        return None;
+    }
+    slice
+        .shaped_layout(runtime, instance, layout_constraint, text_world)
+        .ok()??
+        .hit(point)
+}
+
+pub(crate) fn static_text_selection_rects(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    text_world: Mat2D,
+    range: std::ops::Range<usize>,
+) -> Vec<RenderAabb> {
+    let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local) else {
+        return Vec::new();
+    };
+    if !slice
+        .text_geometry_supported(runtime, instance)
+        .unwrap_or(false)
+    {
+        return Vec::new();
+    }
+    let Ok(Some(layout)) = slice.shaped_layout(runtime, instance, layout_constraint, text_world)
+    else {
+        return Vec::new();
+    };
+    layout.selection_rects(range)
 }
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -398,6 +463,8 @@ struct StaticTextLine<'a> {
     text: &'a str,
     char_start: usize,
     line_index: usize,
+    soft_wrap_skipped_start: Option<usize>,
+    terminal_soft_wrap_skipped_end: Option<usize>,
 }
 
 /// The authoritative vertical geometry for one shaped line.
@@ -442,6 +509,754 @@ struct StaticVerticalTrim {
 struct StaticTextRenderData {
     path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
     local_transform: Mat2D,
+}
+
+/// One authoritative shaping/layout result shared by drawing and editor reads.
+///
+/// Keeping caret, hit, and selection geometry on this exact path prevents the
+/// editor from growing an observation-side text layout that can drift from the
+/// glyphs the runtime draws.
+#[derive(Clone)]
+struct StaticShapedTextLayout {
+    text: String,
+    lines: Vec<StaticShapedTextLine>,
+    caret_boundaries: Option<Vec<StaticCaretBoundary>>,
+    local_transform: Mat2D,
+    shape_world: Mat2D,
+    has_geometric_modifiers: bool,
+    has_non_monotone_advances: bool,
+}
+
+#[derive(Clone)]
+struct StaticShapedTextLine {
+    line_index: usize,
+    char_start: usize,
+    char_end: usize,
+    soft_wrap_skipped_start: Option<usize>,
+    terminal_soft_wrap_skipped_end: Option<usize>,
+    start_x: f32,
+    end_x: f32,
+    top: f32,
+    baseline: f32,
+    bottom: f32,
+    glyphs: Vec<StaticPositionedTextGlyph>,
+}
+
+#[derive(Clone)]
+struct StaticPositionedTextGlyph {
+    glyph: StyledTextGlyph,
+    x: f32,
+    modifier_transform: Mat2D,
+    modifier_opacity: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StaticCaretAffinity {
+    Upstream,
+    Downstream,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StaticShapedTextPurpose {
+    Render,
+    Geometry,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct StaticCaretSegment {
+    top: RenderVec2D,
+    bottom: RenderVec2D,
+}
+
+#[derive(Debug, Clone)]
+struct StaticCaretBoundary {
+    byte_offset: usize,
+    upstream: Option<StaticCaretSegment>,
+    downstream: Option<StaticCaretSegment>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticPositionedTextCluster {
+    char_start: usize,
+    char_end: usize,
+    start_x: f32,
+    end_x: f32,
+    first_glyph: usize,
+    last_glyph: usize,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct StaticCaretBuildWork {
+    glyph_visits: usize,
+    boundary_visits: usize,
+}
+
+impl StaticCaretBoundary {
+    fn segment(&self, affinity: StaticCaretAffinity) -> Option<StaticCaretSegment> {
+        match affinity {
+            StaticCaretAffinity::Upstream => self.upstream,
+            StaticCaretAffinity::Downstream => self.downstream,
+        }
+    }
+}
+
+impl StaticShapedTextLayout {
+    fn caret(&self, byte_offset: usize) -> Option<(RenderVec2D, RenderVec2D)> {
+        if !self.geometry_is_finite() {
+            return None;
+        }
+        let char_index = self.char_index_at_byte(byte_offset)?;
+        self.caret_for_char_index(char_index, StaticCaretAffinity::Downstream)
+            .filter(|(top, bottom)| text_point_is_finite(*top) && text_point_is_finite(*bottom))
+    }
+
+    fn caret_for_char_index(
+        &self,
+        char_index: usize,
+        affinity: StaticCaretAffinity,
+    ) -> Option<(RenderVec2D, RenderVec2D)> {
+        let segment = self
+            .caret_boundaries
+            .as_ref()?
+            .get(char_index)?
+            .segment(affinity)?;
+        Some((segment.top, segment.bottom))
+    }
+
+    fn hit(&self, point: RenderVec2D) -> Option<usize> {
+        if !self.geometry_is_finite() || !text_point_is_finite(point) {
+            return None;
+        }
+        let determinant = self.shape_world.determinant();
+        if !determinant.is_finite() || determinant == 0.0 {
+            return None;
+        }
+        if self.has_geometric_modifiers || self.has_non_monotone_advances {
+            let mut best: Option<(f32, usize, StaticCaretAffinity)> = None;
+            for boundary in self.caret_boundaries.as_ref()? {
+                for affinity in [
+                    StaticCaretAffinity::Upstream,
+                    StaticCaretAffinity::Downstream,
+                ] {
+                    let Some(segment) = boundary.segment(affinity) else {
+                        continue;
+                    };
+                    let distance =
+                        point_segment_distance_squared(point, segment.top, segment.bottom);
+                    if !distance.is_finite() {
+                        continue;
+                    }
+                    if best.is_none_or(|best| {
+                        distance < best.0
+                            || (distance == best.0
+                                && text_hit_candidate_wins_tie(
+                                    boundary.byte_offset,
+                                    affinity,
+                                    best.1,
+                                    best.2,
+                                ))
+                    }) {
+                        best = Some((distance, boundary.byte_offset, affinity));
+                    }
+                }
+            }
+            return best.map(|(_, byte_offset, _)| byte_offset);
+        }
+        let inverse = self.shape_world.invert_or_identity();
+        let (x, y) = inverse.transform_point(point.x, point.y);
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let line_index = self
+            .lines
+            .iter()
+            .position(|line| y <= line.bottom)
+            .or_else(|| self.lines.len().checked_sub(1))?;
+        let line = self.lines.get(line_index)?;
+        let mut char_index = line.hit_char_index(x).min(self.text.chars().count());
+        if char_index == line.char_end
+            && let Some(next_line) = line_index
+                .checked_add(1)
+                .and_then(|next_line| self.lines.get(next_line))
+            && next_line.soft_wrap_skipped_start == Some(char_index)
+        {
+            char_index = next_line.char_start;
+        } else if char_index == line.char_end
+            && let Some(skipped_end) = line.terminal_soft_wrap_skipped_end
+        {
+            char_index = skipped_end;
+        }
+        Some(char_byte_index(&self.text, char_index))
+    }
+
+    fn selection_rects(&self, range: std::ops::Range<usize>) -> Vec<RenderAabb> {
+        if !self.geometry_is_finite() || range.is_empty() {
+            return Vec::new();
+        }
+        let Some(start) = self.char_index_at_byte(range.start) else {
+            return Vec::new();
+        };
+        let Some(end) = self.char_index_at_byte(range.end) else {
+            return Vec::new();
+        };
+        if start >= end {
+            return Vec::new();
+        }
+
+        let mut rects = Vec::new();
+        for line in &self.lines {
+            let selected_start = start.max(line.char_start);
+            let selected_end = end.min(line.char_end);
+            if selected_start >= selected_end {
+                continue;
+            }
+            if let Some(rect) = line.selection_rect(
+                selected_start,
+                selected_end,
+                self.shape_world,
+                self.has_geometric_modifiers,
+                self.has_non_monotone_advances
+                    && line
+                        .glyphs
+                        .iter()
+                        .any(|positioned| positioned.glyph.advance < 0.0),
+            ) {
+                rects.push(rect);
+            }
+        }
+        if rects.iter().all(|rect| text_aabb_is_finite(*rect)) {
+            rects
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn char_index_at_byte(&self, byte_offset: usize) -> Option<usize> {
+        self.caret_boundaries
+            .as_ref()?
+            .binary_search_by_key(&byte_offset, |boundary| boundary.byte_offset)
+            .ok()
+    }
+
+    fn geometry_is_finite(&self) -> bool {
+        self.local_transform.0.iter().all(|value| value.is_finite())
+            && self.shape_world.0.iter().all(|value| value.is_finite())
+            && self
+                .lines
+                .iter()
+                .all(StaticShapedTextLine::geometry_is_finite)
+            && self.caret_boundaries.as_ref().is_some_and(|boundaries| {
+                boundaries.iter().all(|boundary| {
+                    [boundary.upstream, boundary.downstream]
+                        .into_iter()
+                        .flatten()
+                        .all(|segment| {
+                            text_point_is_finite(segment.top)
+                                && text_point_is_finite(segment.bottom)
+                        })
+                })
+            })
+    }
+}
+
+fn build_static_caret_boundaries(
+    text: &str,
+    lines: &[StaticShapedTextLine],
+    shape_world: Mat2D,
+) -> (Vec<StaticCaretBoundary>, StaticCaretBuildWork) {
+    let mut boundaries = text
+        .char_indices()
+        .map(|(byte_offset, _)| StaticCaretBoundary {
+            byte_offset,
+            upstream: None,
+            downstream: None,
+        })
+        .chain(std::iter::once(StaticCaretBoundary {
+            byte_offset: text.len(),
+            upstream: None,
+            downstream: None,
+        }))
+        .collect::<Vec<_>>();
+    let mut work = StaticCaretBuildWork::default();
+    for line in lines {
+        line.write_caret_boundaries(shape_world, &mut boundaries, &mut work);
+    }
+
+    for (line_index, line) in lines.iter().enumerate() {
+        let Some(skipped_start) = line.soft_wrap_skipped_start else {
+            continue;
+        };
+        let Some(previous) = line_index
+            .checked_sub(1)
+            .and_then(|previous| lines.get(previous))
+        else {
+            continue;
+        };
+        let upstream = boundaries
+            .get(previous.char_end)
+            .and_then(|boundary| boundary.upstream);
+        let downstream = boundaries
+            .get(line.char_start)
+            .and_then(|boundary| boundary.downstream);
+        for char_index in skipped_start..=line.char_start {
+            work.boundary_visits = work.boundary_visits.saturating_add(1);
+            if let Some(boundary) = boundaries.get_mut(char_index) {
+                boundary.upstream = upstream;
+                boundary.downstream = downstream;
+            }
+        }
+    }
+
+    for line in lines {
+        let Some(skipped_end) = line.terminal_soft_wrap_skipped_end else {
+            continue;
+        };
+        let retained_end = boundaries
+            .get(line.char_end)
+            .and_then(|boundary| boundary.upstream.or(boundary.downstream));
+        for char_index in line.char_end..=skipped_end {
+            work.boundary_visits = work.boundary_visits.saturating_add(1);
+            if let Some(boundary) = boundaries.get_mut(char_index) {
+                boundary.upstream = retained_end;
+                boundary.downstream = retained_end;
+            }
+        }
+    }
+
+    let glyph_count = lines
+        .iter()
+        .map(|line| line.glyphs.len())
+        .fold(0usize, usize::saturating_add);
+    let source_boundaries = text.chars().count().saturating_add(1);
+    let linear_boundary_limit = source_boundaries
+        .saturating_mul(3)
+        .saturating_add(lines.len());
+    debug_assert!(work.glyph_visits <= glyph_count);
+    debug_assert!(work.boundary_visits <= linear_boundary_limit);
+    (boundaries, work)
+}
+
+fn text_hit_candidate_wins_tie(
+    candidate_byte: usize,
+    candidate_affinity: StaticCaretAffinity,
+    best_byte: usize,
+    best_affinity: StaticCaretAffinity,
+) -> bool {
+    candidate_byte > best_byte
+        || (candidate_byte == best_byte
+            && candidate_affinity == StaticCaretAffinity::Downstream
+            && best_affinity == StaticCaretAffinity::Upstream)
+}
+
+impl StaticShapedTextLine {
+    fn geometry_is_finite(&self) -> bool {
+        [
+            self.start_x,
+            self.end_x,
+            self.top,
+            self.baseline,
+            self.bottom,
+        ]
+        .into_iter()
+        .all(f32::is_finite)
+            && self.glyphs.iter().all(|positioned| {
+                positioned.x.is_finite()
+                    && positioned.glyph.advance.is_finite()
+                    && positioned.modifier_opacity.is_finite()
+                    && positioned
+                        .modifier_transform
+                        .0
+                        .iter()
+                        .all(|value| value.is_finite())
+            })
+    }
+
+    fn write_caret_boundaries(
+        &self,
+        shape_world: Mat2D,
+        boundaries: &mut [StaticCaretBoundary],
+        work: &mut StaticCaretBuildWork,
+    ) {
+        let clusters = self.positioned_clusters(work);
+        let mut x_cluster = 0;
+        let mut previous_cluster = None;
+        let mut previous_cursor = 0;
+        let mut next_cluster = 0;
+
+        for char_index in self.char_start..=self.char_end {
+            work.boundary_visits = work.boundary_visits.saturating_add(1);
+            while clusters
+                .get(x_cluster)
+                .is_some_and(|cluster| cluster.char_end < char_index)
+            {
+                x_cluster = x_cluster.saturating_add(1);
+            }
+            while clusters
+                .get(previous_cursor)
+                .is_some_and(|cluster| cluster.char_end <= char_index)
+            {
+                previous_cluster = Some(previous_cursor);
+                previous_cursor = previous_cursor.saturating_add(1);
+            }
+            while clusters
+                .get(next_cluster)
+                .is_some_and(|cluster| cluster.char_start < char_index)
+            {
+                next_cluster = next_cluster.saturating_add(1);
+            }
+
+            let current = clusters.get(x_cluster).copied();
+            let containing = current
+                .filter(|cluster| cluster.char_start < char_index && char_index < cluster.char_end);
+            let x = if char_index <= self.char_start {
+                self.start_x
+            } else if let Some(cluster) = current {
+                if char_index <= cluster.char_start {
+                    cluster.start_x
+                } else {
+                    cluster.end_x
+                }
+            } else {
+                self.end_x
+            };
+
+            let upstream_glyph = containing
+                .map(|cluster| cluster.last_glyph)
+                .or_else(|| {
+                    previous_cluster
+                        .and_then(|index| clusters.get(index))
+                        .map(|cluster| cluster.last_glyph)
+                })
+                .or_else(|| clusters.first().map(|cluster| cluster.first_glyph));
+            let downstream_glyph = containing
+                .map(|cluster| cluster.last_glyph)
+                .or_else(|| {
+                    clusters
+                        .get(next_cluster)
+                        .map(|cluster| cluster.first_glyph)
+                })
+                .or_else(|| clusters.last().map(|cluster| cluster.last_glyph));
+            let upstream = self.caret_segment(
+                x,
+                upstream_glyph.and_then(|index| self.glyphs.get(index)),
+                shape_world,
+            );
+            let downstream = self.caret_segment(
+                x,
+                downstream_glyph.and_then(|index| self.glyphs.get(index)),
+                shape_world,
+            );
+
+            if let Some(boundary) = boundaries.get_mut(char_index) {
+                boundary.upstream.get_or_insert(upstream);
+                boundary.downstream = Some(downstream);
+            }
+        }
+    }
+
+    fn positioned_clusters(
+        &self,
+        work: &mut StaticCaretBuildWork,
+    ) -> Vec<StaticPositionedTextCluster> {
+        let mut clusters = Vec::new();
+        let mut glyph_index = 0;
+        while let Some(first) = self.glyphs.get(glyph_index) {
+            work.glyph_visits = work.glyph_visits.saturating_add(1);
+            let char_start = first.glyph.char_index;
+            let char_end = char_start.saturating_add(first.glyph.char_len);
+            let first_glyph = glyph_index;
+            let mut last_glyph = glyph_index;
+            let mut end_x = first.x + first.glyph.advance;
+            glyph_index = glyph_index.saturating_add(1);
+            while let Some(next) = self.glyphs.get(glyph_index) {
+                let next_end = next.glyph.char_index.saturating_add(next.glyph.char_len);
+                if next.glyph.char_index != char_start || next_end != char_end {
+                    break;
+                }
+                work.glyph_visits = work.glyph_visits.saturating_add(1);
+                last_glyph = glyph_index;
+                // A cluster's caret follows its final logical cursor. Its
+                // visual extrema are retained separately by selection bounds.
+                end_x = next.x + next.glyph.advance;
+                glyph_index = glyph_index.saturating_add(1);
+            }
+            clusters.push(StaticPositionedTextCluster {
+                char_start,
+                char_end,
+                start_x: first.x,
+                end_x,
+                first_glyph,
+                last_glyph,
+            });
+        }
+        clusters
+    }
+
+    fn caret_segment(
+        &self,
+        x: f32,
+        glyph: Option<&StaticPositionedTextGlyph>,
+        shape_world: Mat2D,
+    ) -> StaticCaretSegment {
+        let map = |y| {
+            let (x, y) = glyph
+                .map(|glyph| glyph.modified_point(x, y, self.baseline))
+                .unwrap_or((x, y));
+            let (x, y) = shape_world.transform_point(x, y);
+            RenderVec2D::new(x, y)
+        };
+        StaticCaretSegment {
+            top: map(self.top),
+            bottom: map(self.bottom),
+        }
+    }
+
+    fn caret_points(
+        &self,
+        char_index: usize,
+        shape_world: Mat2D,
+        affinity: StaticCaretAffinity,
+    ) -> (RenderVec2D, RenderVec2D) {
+        let x = self.caret_x(char_index);
+        let glyph = self.caret_glyph(char_index, affinity);
+        let segment = self.caret_segment(x, glyph, shape_world);
+        (segment.top, segment.bottom)
+    }
+
+    fn selection_rect(
+        &self,
+        selected_start: usize,
+        selected_end: usize,
+        shape_world: Mat2D,
+        has_geometric_modifiers: bool,
+        has_non_monotone_advances: bool,
+    ) -> Option<RenderAabb> {
+        // A selected visual segment starts downstream and ends upstream.
+        // Combining clusters and ligatures still remain indivisible because
+        // both affinities snap internal source boundaries to the cluster end.
+        let start_x = self.caret_x(selected_start);
+        let end_x = self.caret_x(selected_end);
+        if !has_geometric_modifiers && !has_non_monotone_advances {
+            return (start_x != end_x).then(|| {
+                transformed_text_rect(
+                    shape_world,
+                    start_x.min(end_x),
+                    self.top,
+                    start_x.max(end_x),
+                    self.bottom,
+                )
+            });
+        }
+
+        let start_caret =
+            self.caret_points(selected_start, shape_world, StaticCaretAffinity::Downstream);
+        let end_caret = self.caret_points(selected_end, shape_world, StaticCaretAffinity::Upstream);
+        let mut bounds = None;
+        let mut has_selected_glyph_extent = false;
+        extend_text_bounds(&mut bounds, start_caret.0);
+        extend_text_bounds(&mut bounds, start_caret.1);
+        extend_text_bounds(&mut bounds, end_caret.0);
+        extend_text_bounds(&mut bounds, end_caret.1);
+        for positioned in &self.glyphs {
+            let glyph_start = positioned.glyph.char_index;
+            if glyph_start < selected_start || glyph_start >= selected_end {
+                continue;
+            }
+            let [top_left, top_right, bottom_right, bottom_left] = [
+                (positioned.x, self.top),
+                (positioned.x + positioned.glyph.advance, self.top),
+                (positioned.x + positioned.glyph.advance, self.bottom),
+                (positioned.x, self.bottom),
+            ]
+            .map(|(x, y)| {
+                let (x, y) = positioned.modified_point(x, y, self.baseline);
+                let (x, y) = shape_world.transform_point(x, y);
+                RenderVec2D::new(x, y)
+            });
+            has_selected_glyph_extent |= top_left != top_right || bottom_right != bottom_left;
+            for point in [top_left, top_right, bottom_right, bottom_left] {
+                extend_text_bounds(&mut bounds, point);
+            }
+        }
+        (start_caret != end_caret || has_selected_glyph_extent)
+            .then_some(bounds)
+            .flatten()
+    }
+
+    fn caret_glyph(
+        &self,
+        char_index: usize,
+        affinity: StaticCaretAffinity,
+    ) -> Option<&StaticPositionedTextGlyph> {
+        if let Some(containing) = self.glyphs.iter().find(|positioned| {
+            let start = positioned.glyph.char_index;
+            let end = start.saturating_add(positioned.glyph.char_len);
+            start < char_index && char_index < end
+        }) {
+            let start = containing.glyph.char_index;
+            let end = start.saturating_add(containing.glyph.char_len);
+            return self.glyphs.iter().rev().find(|positioned| {
+                positioned.glyph.char_index == start
+                    && positioned
+                        .glyph
+                        .char_index
+                        .saturating_add(positioned.glyph.char_len)
+                        == end
+            });
+        }
+        match affinity {
+            StaticCaretAffinity::Upstream => self
+                .glyphs
+                .iter()
+                .rev()
+                .find(|positioned| {
+                    positioned
+                        .glyph
+                        .char_index
+                        .saturating_add(positioned.glyph.char_len)
+                        <= char_index
+                })
+                .or_else(|| self.glyphs.first()),
+            StaticCaretAffinity::Downstream => self
+                .glyphs
+                .iter()
+                .find(|positioned| positioned.glyph.char_index >= char_index)
+                .or_else(|| self.glyphs.last()),
+        }
+    }
+
+    fn caret_x(&self, char_index: usize) -> f32 {
+        if char_index <= self.char_start {
+            return self.start_x;
+        }
+        let mut glyphs = self.glyphs.iter().peekable();
+        while let Some(positioned) = glyphs.next() {
+            let glyph_start = positioned.glyph.char_index;
+            let glyph_end = glyph_start.saturating_add(positioned.glyph.char_len);
+            let cluster_x = positioned.x;
+            let mut cluster_end_x = positioned.x + positioned.glyph.advance;
+            while glyphs.peek().is_some_and(|next| {
+                next.glyph.char_index == glyph_start
+                    && next.glyph.char_index.saturating_add(next.glyph.char_len) == glyph_end
+            }) {
+                if let Some(next) = glyphs.next() {
+                    // Preserve the final logical cursor even when glyphs in
+                    // one cluster backtrack. Selection tracks visual bounds.
+                    cluster_end_x = next.x + next.glyph.advance;
+                }
+            }
+            if char_index < glyph_start {
+                return cluster_x;
+            }
+            if char_index <= glyph_end && glyph_start < glyph_end {
+                return if char_index == glyph_start {
+                    cluster_x
+                } else {
+                    cluster_end_x
+                };
+            }
+        }
+        self.end_x
+    }
+
+    fn hit_char_index(&self, x: f32) -> usize {
+        if x <= self.start_x {
+            return self.char_start;
+        }
+        let mut glyphs = self.glyphs.iter().peekable();
+        while let Some(positioned) = glyphs.next() {
+            let glyph_start = positioned.glyph.char_index;
+            let glyph_end = glyph_start.saturating_add(positioned.glyph.char_len);
+            let cluster_x = positioned.x;
+            let mut cluster_end_x = positioned.x + positioned.glyph.advance;
+            while glyphs.peek().is_some_and(|next| {
+                next.glyph.char_index == glyph_start
+                    && next.glyph.char_index.saturating_add(next.glyph.char_len) == glyph_end
+            }) {
+                if let Some(next) = glyphs.next() {
+                    cluster_end_x = cluster_end_x.max(next.x + next.glyph.advance);
+                }
+            }
+            if x <= cluster_end_x {
+                let midpoint = cluster_x + (cluster_end_x - cluster_x) / 2.0;
+                return if x < midpoint { glyph_start } else { glyph_end };
+            }
+        }
+        self.char_end
+    }
+}
+
+impl StaticPositionedTextGlyph {
+    fn modified_point(&self, x: f32, y: f32, baseline: f32) -> (f32, f32) {
+        let center_x = self.x + self.glyph.advance * 0.5;
+        let (x, y) = self
+            .modifier_transform
+            .transform_point(x - center_x, y - baseline);
+        (center_x + x, baseline + y)
+    }
+}
+
+fn extend_text_bounds(bounds: &mut Option<RenderAabb>, point: RenderVec2D) {
+    *bounds = Some(match *bounds {
+        Some(bounds) => RenderAabb::new(
+            bounds.min_x.min(point.x),
+            bounds.min_y.min(point.y),
+            bounds.max_x.max(point.x),
+            bounds.max_y.max(point.y),
+        ),
+        None => RenderAabb::new(point.x, point.y, point.x, point.y),
+    });
+}
+
+fn text_point_is_finite(point: RenderVec2D) -> bool {
+    point.x.is_finite() && point.y.is_finite()
+}
+
+fn text_aabb_is_finite(bounds: RenderAabb) -> bool {
+    [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+        .into_iter()
+        .all(f32::is_finite)
+}
+
+fn transformed_text_rect(
+    transform: Mat2D,
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+) -> RenderAabb {
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for (x, y) in [
+        transform.transform_point(left, top),
+        transform.transform_point(right, top),
+        transform.transform_point(right, bottom),
+        transform.transform_point(left, bottom),
+    ] {
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x);
+        max_y = max_y.max(y);
+    }
+    RenderAabb::new(min_x, min_y, max_x, max_y)
+}
+
+fn point_segment_distance_squared(point: RenderVec2D, start: RenderVec2D, end: RenderVec2D) -> f32 {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length_squared = dx * dx + dy * dy;
+    let t = if length_squared == 0.0 {
+        0.0
+    } else {
+        (((point.x - start.x) * dx + (point.y - start.y) * dy) / length_squared).clamp(0.0, 1.0)
+    };
+    let nearest_x = start.x + dx * t;
+    let nearest_y = start.y + dy * t;
+    let distance_x = point.x - nearest_x;
+    let distance_y = point.y - nearest_y;
+    distance_x * distance_x + distance_y * distance_y
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -507,11 +1322,11 @@ struct StaticTextFollowPathPath {
 }
 
 #[derive(Debug, Clone)]
-struct StaticTextGlyphContext {
+struct StaticTextGlyphContext<'a> {
     origin_x: f32,
     origin_y: f32,
     line_index_in_paragraph: usize,
-    paragraph_baselines: Vec<f32>,
+    paragraph_baselines: &'a [f32],
     text_world_inverse: Mat2D,
 }
 
@@ -714,6 +1529,66 @@ impl StaticTextLayoutInfo {
 }
 
 impl<'a> StaticTextSlice<'a> {
+    fn text_geometry_supported(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<bool> {
+        let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
+        Ok(matches!(
+            overflow,
+            TEXT_OVERFLOW_VISIBLE | TEXT_OVERFLOW_FIT | TEXT_OVERFLOW_FIT_FONT_SIZE
+        ))
+    }
+
+    fn text_geometry_inputs_supported(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+        resolved_runs: &[StaticResolvedRun],
+    ) -> Result<bool> {
+        if !text_world.0.iter().all(|value| value.is_finite())
+            || layout_constraint.is_some_and(|constraint| {
+                !constraint.width.is_finite() || !constraint.height.is_finite()
+            })
+            || !self
+                .effective_width(runtime, instance, layout_constraint)?
+                .is_finite()
+            || !self
+                .effective_height(runtime, instance, layout_constraint)?
+                .is_finite()
+        {
+            return Ok(false);
+        }
+
+        let base_style = self.base_style()?;
+        let mut participating_style_locals = BTreeSet::from([base_style.local_id]);
+        for run in resolved_runs.iter().filter(|run| !run.text.is_empty()) {
+            participating_style_locals.insert(run.style_local);
+        }
+        for style in self
+            .styles
+            .iter()
+            .filter(|style| participating_style_locals.remove(&style.local_id))
+        {
+            if style.font_bytes(instance).is_none()
+                || !self.style_font_size(runtime, instance, style)?.is_finite()
+                || !self
+                    .style_line_height(runtime, instance, style)?
+                    .is_finite()
+                || !self
+                    .style_letter_spacing(runtime, instance, style)
+                    .is_finite()
+                || !style.variations.iter().all(|(_, value)| value.is_finite())
+            {
+                return Ok(false);
+            }
+        }
+        Ok(participating_style_locals.is_empty())
+    }
+
     fn from_graph(
         runtime: &'a RuntimeFile,
         graph: &'a ArtboardGraph,
@@ -1042,35 +1917,59 @@ impl<'a> StaticTextSlice<'a> {
         })
     }
 
-    fn render_data(
+    fn shaped_layout(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
         text_world: Mat2D,
-    ) -> Result<StaticTextRenderData> {
+    ) -> Result<Option<StaticShapedTextLayout>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
+        self.shaped_layout_from_resolved_runs(
+            runtime,
+            instance,
+            layout_constraint,
+            text_world,
+            &resolved_runs,
+            StaticShapedTextPurpose::Geometry,
+        )
+    }
+
+    fn shaped_layout_from_resolved_runs(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+        resolved_runs: &[StaticResolvedRun],
+        purpose: StaticShapedTextPurpose,
+    ) -> Result<Option<StaticShapedTextLayout>> {
+        if purpose == StaticShapedTextPurpose::Geometry
+            && !self.text_geometry_inputs_supported(
+                runtime,
+                instance,
+                layout_constraint,
+                text_world,
+                resolved_runs,
+            )?
+        {
+            return Ok(None);
+        }
         let text = resolved_runs
             .iter()
             .map(|run| run.text.as_str())
             .collect::<String>();
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        if text.is_empty() || font_size < 0.0 {
-            return Ok(StaticTextRenderData {
-                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
-                local_transform: Mat2D::IDENTITY,
-            });
+        if font_size < 0.0 {
+            return Ok(None);
         }
         let letter_spacing = self.letter_spacing(runtime, instance);
         let Some(font_bytes) = base_style.font_bytes(instance) else {
             // Mirrors src/importers/file_asset_importer.cpp: with no
             // FileAssetLoader and no in-band contents, a hosted FontAsset
             // resolves successfully but has no decoded font.
-            return Ok(StaticTextRenderData {
-                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
-                local_transform: Mat2D::IDENTITY,
-            });
+            return Ok(None);
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
@@ -1101,7 +2000,7 @@ impl<'a> StaticTextSlice<'a> {
             runtime,
             instance,
             layout_constraint,
-            &resolved_runs,
+            resolved_runs,
             &text,
             &shaper,
             disable_legacy_kern,
@@ -1121,10 +2020,10 @@ impl<'a> StaticTextSlice<'a> {
             letter_spacing,
         )?;
         let line_metrics =
-            self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+            self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
         let line_widths = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale))
+            .map(|line| self.styled_line_width(runtime, instance, line, resolved_runs, font_scale))
             .collect::<Result<Vec<_>>>()?;
         let measured_width = line_widths.iter().copied().fold(0.0f32, f32::max);
         let layout_info = self.static_layout_info(
@@ -1132,7 +2031,7 @@ impl<'a> StaticTextSlice<'a> {
             instance,
             &lines,
             &line_metrics,
-            &resolved_runs,
+            resolved_runs,
             measured_width,
             font_scale,
             apply_ellipsis,
@@ -1165,7 +2064,6 @@ impl<'a> StaticTextSlice<'a> {
             total_height,
             first_baseline,
         )?;
-        let text_world_inverse = text_world.invert_or_identity();
         let paragraph_baselines = line_metrics
             .iter()
             .map(|metrics| metrics.baseline + layout_info.min_y - layout_info.top_trim)
@@ -1174,15 +2072,19 @@ impl<'a> StaticTextSlice<'a> {
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let vertical_align = self.text_uint_property(runtime, instance, "verticalAlignValue")?;
         let fixed_height = self.effective_height(runtime, instance, layout_constraint)?;
-        let mut commands_by_style = vec![Vec::new(); self.styles.len()];
         let modifier_coverages = self
             .modifiers
             .iter()
             .map(|modifier| {
-                modifier.coverage_by_character(runtime, instance, &text, &resolved_runs, &lines)
+                modifier.coverage_by_character(runtime, instance, &text, resolved_runs, &lines)
             })
             .collect::<Result<Vec<_>>>()?;
+        let mut shaped_lines = Vec::new();
         for (line, metrics) in lines.into_iter().zip(line_metrics.iter().copied()) {
+            let char_end = line
+                .char_start
+                .checked_add(line.text.chars().count())
+                .context("static Text line character range overflow")?;
             if let Some(ellipsis_line) = layout_info.ellipsis_line {
                 if line.line_index > ellipsis_line {
                     break;
@@ -1201,11 +2103,8 @@ impl<'a> StaticTextSlice<'a> {
                 StaticTextLineIteration::Skip => continue,
                 StaticTextLineIteration::Stop => break,
             }
-            if line.text.is_empty() {
-                continue;
-            }
             let mut glyphs =
-                self.styled_line_glyphs(runtime, instance, &line, &resolved_runs, font_scale)?;
+                self.styled_line_glyphs(runtime, instance, &line, resolved_runs, font_scale)?;
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.effective_width(runtime, instance, layout_constraint)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
@@ -1213,7 +2112,7 @@ impl<'a> StaticTextSlice<'a> {
                     runtime,
                     instance,
                     "...",
-                    line.char_start + line.text.chars().count(),
+                    char_end,
                     ellipsis_style,
                     font_scale,
                 )?;
@@ -1245,29 +2144,119 @@ impl<'a> StaticTextSlice<'a> {
             let line_width = glyphs.iter().map(|glyph| glyph.advance).sum();
             let mut cursor_x = layout_info.line_start_x(line_width);
             let line_baseline = metrics.baseline + layout_info.min_y - layout_info.top_trim;
-            for glyph in &glyphs {
-                let mut glyph_transform = Mat2D::IDENTITY;
-                let mut glyph_opacity = 1.0;
-                let center_x = cursor_x + glyph.advance * 0.5;
+            let start_x = cursor_x;
+            let positioned_glyphs = glyphs
+                .into_iter()
+                .map(|glyph| {
+                    let positioned = StaticPositionedTextGlyph {
+                        glyph,
+                        x: cursor_x,
+                        modifier_transform: Mat2D::IDENTITY,
+                        modifier_opacity: 1.0,
+                    };
+                    cursor_x += positioned.glyph.advance;
+                    positioned
+                })
+                .collect();
+            shaped_lines.push(StaticShapedTextLine {
+                line_index: line.line_index,
+                char_start: line.char_start,
+                char_end,
+                soft_wrap_skipped_start: line.soft_wrap_skipped_start,
+                terminal_soft_wrap_skipped_end: line.terminal_soft_wrap_skipped_end,
+                start_x,
+                end_x: cursor_x,
+                top: metrics.top + layout_info.min_y - layout_info.top_trim,
+                baseline: line_baseline,
+                bottom: metrics.bottom + layout_info.min_y - layout_info.top_trim,
+                glyphs: positioned_glyphs,
+            });
+        }
+
+        let text_world_inverse = text_world.invert_or_identity();
+        let mut has_geometric_modifiers = false;
+        let mut has_non_monotone_advances = false;
+        for line in &mut shaped_lines {
+            for positioned in &mut line.glyphs {
+                let glyph = &positioned.glyph;
                 let glyph_context = StaticTextGlyphContext {
-                    origin_x: center_x,
-                    origin_y: line_baseline,
+                    origin_x: positioned.x + glyph.advance * 0.5,
+                    origin_y: line.baseline,
                     line_index_in_paragraph: line.line_index,
-                    paragraph_baselines: paragraph_baselines.clone(),
+                    paragraph_baselines: &paragraph_baselines,
                     text_world_inverse,
                 };
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
                     let amount = glyph_coverage(coverage, glyph.char_index, glyph.char_len);
                     if amount != 0.0 {
-                        glyph_transform = modifier
+                        positioned.modifier_transform = modifier
                             .transform(runtime, instance, amount, &glyph_context)?
-                            .multiply(glyph_transform);
+                            .multiply(positioned.modifier_transform);
                     }
                     if modifier.modifies_opacity(runtime, instance)? {
-                        glyph_opacity =
-                            modifier.opacity(runtime, instance, glyph_opacity, amount)?;
+                        positioned.modifier_opacity = modifier.opacity(
+                            runtime,
+                            instance,
+                            positioned.modifier_opacity,
+                            amount,
+                        )?;
                     }
                 }
+                has_geometric_modifiers |= positioned.modifier_transform != Mat2D::IDENTITY;
+                has_non_monotone_advances |= positioned.glyph.advance < 0.0;
+            }
+        }
+
+        let shape_world = text_world.multiply(local_transform);
+        let caret_boundaries = (purpose == StaticShapedTextPurpose::Geometry).then(|| {
+            let (boundaries, _caret_build_work) =
+                build_static_caret_boundaries(&text, &shaped_lines, shape_world);
+            boundaries
+        });
+        Ok(Some(StaticShapedTextLayout {
+            text,
+            lines: shaped_lines,
+            caret_boundaries,
+            local_transform,
+            shape_world,
+            has_geometric_modifiers,
+            has_non_monotone_advances,
+        }))
+    }
+
+    fn render_data(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+    ) -> Result<StaticTextRenderData> {
+        let resolved_runs = self.resolved_runs(runtime, instance)?;
+        if resolved_runs.iter().all(|run| run.text.is_empty()) {
+            return Ok(StaticTextRenderData {
+                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                local_transform: Mat2D::IDENTITY,
+            });
+        }
+        let Some(layout) = self.shaped_layout_from_resolved_runs(
+            runtime,
+            instance,
+            layout_constraint,
+            text_world,
+            &resolved_runs,
+            StaticShapedTextPurpose::Render,
+        )?
+        else {
+            return Ok(StaticTextRenderData {
+                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                local_transform: Mat2D::IDENTITY,
+            });
+        };
+        let mut commands_by_style = vec![Vec::new(); self.styles.len()];
+        for line in &layout.lines {
+            for positioned in &line.glyphs {
+                let glyph = &positioned.glyph;
+                let center_x = positioned.x + glyph.advance * 0.5;
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 let style = &self.styles[glyph.style_index];
                 if let Some(style_font_bytes) = style.font_bytes(instance) {
@@ -1287,12 +2276,12 @@ impl<'a> StaticTextSlice<'a> {
                     let location_ref = LocationRef::from(&location);
                     if let Some(outline) = outlines.get(glyph_id) {
                         let mut pen = TextOutlinePen::new(
-                            cursor_x,
-                            line_baseline,
+                            positioned.x,
+                            line.baseline,
                             glyph.scale,
                             center_x,
-                            line_baseline,
-                            glyph_transform,
+                            line.baseline,
+                            positioned.modifier_transform,
                         );
                         // C++ `src/text/font_hb.cpp` records static glyf contours
                         // at the font's authored start points; Skrifa's
@@ -1310,18 +2299,17 @@ impl<'a> StaticTextSlice<'a> {
                             .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
                         append_opacity_bucket(
                             &mut commands_by_style[glyph.style_index],
-                            glyph_opacity,
+                            positioned.modifier_opacity,
                             pen.commands,
                         );
                     }
                 }
-                cursor_x += glyph.advance;
             }
         }
 
         Ok(StaticTextRenderData {
             path_buckets_by_style: commands_by_style,
-            local_transform,
+            local_transform: layout.local_transform,
         })
     }
 
@@ -2098,9 +3086,15 @@ impl<'a> StaticTextSlice<'a> {
             let mid = lo + (hi - lo) / 2;
             if fits(mid)? {
                 best = mid;
-                lo = mid + 1;
+                let Some(next) = mid.checked_add(1) else {
+                    break;
+                };
+                lo = next;
             } else {
-                hi = mid - 1;
+                let Some(previous) = mid.checked_sub(1) else {
+                    break;
+                };
+                hi = previous;
             }
         }
         Ok(best as f32 / max_size)
@@ -2639,6 +3633,8 @@ impl<'a> StaticTextSlice<'a> {
                     text: authored_line.text,
                     char_start: authored_line.char_start,
                     line_index,
+                    soft_wrap_skipped_start: None,
+                    terminal_soft_wrap_skipped_end: None,
                 });
                 line_index += 1;
                 continue;
@@ -2646,6 +3642,7 @@ impl<'a> StaticTextSlice<'a> {
 
             let mut remaining = authored_line.text;
             let mut char_start = authored_line.char_start;
+            let mut soft_wrap_skipped_start = None;
             while !remaining.is_empty() {
                 let glyphs = shape_text_glyphs(shaper, remaining, disable_legacy_kern);
                 let glyph_end = self.first_static_wrapped_line_end(
@@ -2667,10 +3664,13 @@ impl<'a> StaticTextSlice<'a> {
                 }
 
                 let line_text = &remaining[..byte_end];
+                let char_end = char_start + line_text.chars().count();
                 lines.push(StaticTextLine {
                     text: line_text,
                     char_start,
                     line_index,
+                    soft_wrap_skipped_start,
+                    terminal_soft_wrap_skipped_end: None,
                 });
                 line_index += 1;
 
@@ -2680,6 +3680,13 @@ impl<'a> StaticTextSlice<'a> {
                 let skipped = leading_whitespace_bytes(&remaining[byte_end..]);
                 char_start += remaining[..byte_end + skipped].chars().count();
                 remaining = &remaining[byte_end + skipped..];
+                if remaining.is_empty()
+                    && skipped > 0
+                    && let Some(line) = lines.last_mut()
+                {
+                    line.terminal_soft_wrap_skipped_end = Some(char_start);
+                }
+                soft_wrap_skipped_start = (!remaining.is_empty()).then_some(char_end);
             }
         }
 
@@ -3167,7 +4174,7 @@ impl StaticTextModifierGroup {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         amount: f32,
-        glyph: &StaticTextGlyphContext,
+        glyph: &StaticTextGlyphContext<'_>,
     ) -> Result<Mat2D> {
         let flags = runtime_uint_property(
             runtime,
@@ -3415,7 +4422,7 @@ impl StaticTextFollowPathModifier {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         current: StaticFollowPathGlyphTransform,
-        glyph: &StaticTextGlyphContext,
+        glyph: &StaticTextGlyphContext<'_>,
         offset: (f32, f32),
     ) -> Result<StaticFollowPathGlyphTransform> {
         let path_measure = self.path_measure(instance, glyph.text_world_inverse);
@@ -4161,6 +5168,8 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
             text: &text[line_start_byte..byte_index],
             char_start: line_start_char,
             line_index,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
         });
 
         let mut next_start_byte = byte_index + ch.len_utf8();
@@ -4178,11 +5187,16 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
         line_index += 1;
     }
 
+    // Static Text matches Rive's line-break contract: a trailing separator
+    // does not create another paragraph/GlyphLine. Editable RawTextInput adds
+    // its own U+200B sentinel; that is a separate future geometry surface.
     if line_start_byte < text.len() || lines.is_empty() {
         lines.push(StaticTextLine {
             text: &text[line_start_byte..],
             char_start: line_start_char,
             line_index,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
         });
     }
     lines
@@ -4917,5 +5931,151 @@ mod tests {
 
         assert_close(measured.2, 80.0);
         assert_close(controlled.2, 200.0);
+    }
+
+    #[test]
+    fn caret_candidate_index_visits_each_glyph_and_boundary_once_for_one_line() {
+        const CHARACTER_COUNT: usize = 4_096;
+        let text = "a".repeat(CHARACTER_COUNT);
+        let glyphs = (0..CHARACTER_COUNT)
+            .map(|char_index| StaticPositionedTextGlyph {
+                glyph: StyledTextGlyph {
+                    glyph_id: 1,
+                    char_index,
+                    char_len: 1,
+                    style_index: 0,
+                    advance: 1.0,
+                    scale: 1.0,
+                },
+                x: char_index as f32,
+                modifier_transform: Mat2D::IDENTITY,
+                modifier_opacity: 1.0,
+            })
+            .collect();
+        let lines = vec![StaticShapedTextLine {
+            line_index: 0,
+            char_start: 0,
+            char_end: CHARACTER_COUNT,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
+            start_x: 0.0,
+            end_x: CHARACTER_COUNT as f32,
+            top: 0.0,
+            baseline: 10.0,
+            bottom: 12.0,
+            glyphs,
+        }];
+
+        let (boundaries, work) = build_static_caret_boundaries(&text, &lines, Mat2D::IDENTITY);
+        assert_eq!(work.glyph_visits, CHARACTER_COUNT);
+        assert_eq!(work.boundary_visits, CHARACTER_COUNT + 1);
+        assert_eq!(boundaries.len(), CHARACTER_COUNT + 1);
+        assert!(
+            boundaries
+                .iter()
+                .all(|boundary| { boundary.upstream.is_some() && boundary.downstream.is_some() })
+        );
+    }
+
+    #[test]
+    fn backtracking_cluster_uses_final_cursor_and_retains_visual_extrema() {
+        let glyph = |x, advance| StaticPositionedTextGlyph {
+            glyph: StyledTextGlyph {
+                glyph_id: 1,
+                char_index: 0,
+                char_len: 2,
+                style_index: 0,
+                advance,
+                scale: 1.0,
+            },
+            x,
+            modifier_transform: Mat2D::IDENTITY,
+            modifier_opacity: 1.0,
+        };
+        let line = StaticShapedTextLine {
+            line_index: 0,
+            char_start: 0,
+            char_end: 2,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
+            start_x: 4.0,
+            end_x: 9.0,
+            top: 0.0,
+            baseline: 10.0,
+            bottom: 12.0,
+            glyphs: vec![glyph(4.0, 8.0), glyph(12.0, -3.0)],
+        };
+
+        assert_close(line.caret_x(1), 9.0);
+        assert_close(line.caret_x(2), 9.0);
+        let selection = line
+            .selection_rect(0, 2, Mat2D::IDENTITY, false, true)
+            .expect("the whole cluster has visual geometry");
+        assert_close(selection.min_x, 4.0);
+        assert_close(selection.max_x, 12.0);
+
+        let (boundaries, _) = build_static_caret_boundaries("ab", &[line], Mat2D::IDENTITY);
+        let internal = boundaries[1]
+            .downstream
+            .expect("the internal cluster boundary has a caret");
+        let end = boundaries[2]
+            .downstream
+            .expect("the cluster end has a caret");
+        assert_close(internal.top.x, 9.0);
+        assert_eq!(internal, end);
+    }
+
+    #[test]
+    fn render_layout_does_not_materialize_the_geometry_candidate_index() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let runs = slice
+            .resolved_runs(&runtime, &instance)
+            .expect("Text runs resolve");
+
+        let render = slice
+            .shaped_layout_from_resolved_runs(
+                &runtime,
+                &instance,
+                None,
+                Mat2D::IDENTITY,
+                &runs,
+                StaticShapedTextPurpose::Render,
+            )
+            .expect("render layout shapes")
+            .expect("render layout exists");
+        let geometry = slice
+            .shaped_layout_from_resolved_runs(
+                &runtime,
+                &instance,
+                None,
+                Mat2D::IDENTITY,
+                &runs,
+                StaticShapedTextPurpose::Geometry,
+            )
+            .expect("geometry layout shapes")
+            .expect("geometry layout exists");
+
+        assert!(render.caret_boundaries.is_none());
+        assert!(geometry.caret_boundaries.is_some());
+    }
+
+    #[test]
+    fn glyph_modifier_context_borrows_shared_paragraph_baselines() {
+        let baselines = vec![10.0, 30.0, 50.0];
+        let context = StaticTextGlyphContext {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            line_index_in_paragraph: 1,
+            paragraph_baselines: &baselines,
+            text_world_inverse: Mat2D::IDENTITY,
+        };
+
+        assert!(std::ptr::eq(
+            context.paragraph_baselines,
+            baselines.as_slice()
+        ));
     }
 }

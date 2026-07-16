@@ -121,6 +121,45 @@ fn overflow_text_scene_with_line_height(
     content: &str,
     line_height: f32,
 ) -> Result<(Scene, ArtboardId, ObjectId)> {
+    text_geometry_scene(
+        overflow,
+        width,
+        height,
+        content,
+        line_height,
+        SceneTextAlign::Left,
+    )
+}
+
+fn text_geometry_scene(
+    overflow: SceneTextOverflow,
+    width: f32,
+    height: f32,
+    content: &str,
+    line_height: f32,
+    align: SceneTextAlign,
+) -> Result<(Scene, ArtboardId, ObjectId)> {
+    text_geometry_scene_with_letter_spacing(
+        overflow,
+        width,
+        height,
+        content,
+        line_height,
+        align,
+        0.0,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn text_geometry_scene_with_letter_spacing(
+    overflow: SceneTextOverflow,
+    width: f32,
+    height: f32,
+    content: &str,
+    line_height: f32,
+    align: SceneTextAlign,
+    letter_spacing: f32,
+) -> Result<(Scene, ArtboardId, ObjectId)> {
     let mut scene = Scene::new();
     let ((artboard, text), _) = scene.edit(|tx| {
         let font = tx.create_font_asset(FontAssetSpec {
@@ -145,7 +184,7 @@ fn overflow_text_scene_with_line_height(
                 sizing: SceneTextSizing::Fixed,
                 width,
                 height,
-                align: SceneTextAlign::Left,
+                align,
                 wrap: SceneTextWrap::NoWrap,
                 overflow,
             }),
@@ -156,7 +195,7 @@ fn overflow_text_scene_with_line_height(
                 name: "Overflow Style".into(),
                 font_size: 20.0,
                 line_height,
-                letter_spacing: 0.0,
+                letter_spacing,
                 font,
             }),
         )?;
@@ -184,6 +223,1006 @@ fn overflow_text_scene_with_line_height(
         Ok((artboard, text))
     })?;
     Ok((scene, artboard, text))
+}
+
+fn wrapped_text_geometry_scene(content: &str, width: f32) -> Result<(Scene, ArtboardId, ObjectId)> {
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Wrap".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Wrapped Text".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width,
+                height: 80.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Wrap Style".into(),
+                font_size: 20.0,
+                line_height: 24.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Wrap Run".into(),
+                text: content.into(),
+                style,
+            }),
+        )?;
+        Ok((artboard, text))
+    })?;
+    Ok((scene, artboard, text))
+}
+
+fn backtracking_multi_run_text_geometry_scene() -> Result<(Scene, ArtboardId, ObjectId)> {
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Backtracking advances".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Backtracking Text".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 80.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let forward = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Forward".into(),
+                font_size: 20.0,
+                line_height: 20.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        let backward = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Backward".into(),
+                font_size: 20.0,
+                line_height: 20.0,
+                letter_spacing: -25.0,
+                font,
+            }),
+        )?;
+        for (name, content, style) in [
+            ("Forward A", "a", forward),
+            ("Backward B", "b", backward),
+            ("Forward C", "c", forward),
+        ] {
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: name.into(),
+                    text: content.into(),
+                    style,
+                }),
+            )?;
+        }
+        Ok((artboard, text))
+    })?;
+    Ok((scene, artboard, text))
+}
+
+#[test]
+fn shaped_horizontal_alignment_moves_caret_hit_and_selection_geometry_with_the_glyphs() -> Result<()>
+{
+    let mut layouts = Vec::new();
+    for align in [
+        SceneTextAlign::Left,
+        SceneTextAlign::Center,
+        SceneTextAlign::Right,
+    ] {
+        let (mut scene, artboard, text) =
+            text_geometry_scene(SceneTextOverflow::Visible, 80.0, 40.0, "aa", 20.0, align)?;
+        let instance = scene.instantiate(artboard)?;
+        let mut frame = scene.frame();
+        let start = frame
+            .text_caret(instance, text, 0)
+            .expect("aligned shaped text has a start caret");
+        let end = frame
+            .text_caret(instance, text, 2)
+            .expect("aligned shaped text has an end caret");
+        let selection = frame.text_selection_rects(instance, text, 0..2);
+        assert_eq!(selection.len(), 1);
+        let selection = selection[0];
+        let midpoint = Vec2D::new(
+            (start.top.x + end.top.x) / 2.0,
+            (start.top.y + start.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, midpoint), Some(1));
+        layouts.push((start, end, selection));
+    }
+
+    let [
+        (left_start, left_end, left_selection),
+        (center_start, center_end, center_selection),
+        (right_start, right_end, right_selection),
+    ] = layouts.as_slice()
+    else {
+        panic!("all three horizontal alignments were measured");
+    };
+    let glyph_width = left_end.top.x - left_start.top.x;
+    let center_shift = center_start.top.x - left_start.top.x;
+    let right_shift = right_start.top.x - left_start.top.x;
+    assert!((center_shift - (80.0 - glyph_width) / 2.0).abs() <= 0.001);
+    assert!((right_shift - (80.0 - glyph_width)).abs() <= 0.001);
+    assert!((center_end.top.x - left_end.top.x - center_shift).abs() <= 0.001);
+    assert!((right_end.top.x - left_end.top.x - right_shift).abs() <= 0.001);
+    assert!((center_selection.min_x - left_selection.min_x - center_shift).abs() <= 0.001);
+    assert!((right_selection.max_x - left_selection.max_x - right_shift).abs() <= 0.001);
+    Ok(())
+}
+
+#[test]
+fn shaped_fit_uniformly_scales_caret_hit_and_selection_geometry_into_the_text_box() -> Result<()> {
+    let (mut visible, visible_artboard, visible_text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 30.0, 40.0, "aaaaaaaa")?;
+    let visible_instance = visible.instantiate(visible_artboard)?;
+    let mut visible_frame = visible.frame();
+    let visible_start = visible_frame
+        .text_caret(visible_instance, visible_text, 0)
+        .expect("visible text has a start caret");
+    let visible_end = visible_frame
+        .text_caret(visible_instance, visible_text, 8)
+        .expect("visible text has an end caret");
+    let visible_selection = visible_frame
+        .text_selection_rects(visible_instance, visible_text, 0..8)
+        .into_iter()
+        .next()
+        .expect("visible text has one selected line segment");
+
+    let (mut fit, fit_artboard, fit_text) =
+        overflow_text_scene(SceneTextOverflow::Fit, 30.0, 40.0, "aaaaaaaa")?;
+    let fit_instance = fit.instantiate(fit_artboard)?;
+    let mut fit_frame = fit.frame();
+    let fit_start = fit_frame
+        .text_caret(fit_instance, fit_text, 0)
+        .expect("fit text has a start caret");
+    let fit_middle = fit_frame
+        .text_caret(fit_instance, fit_text, 4)
+        .expect("fit text has a middle caret");
+    let fit_end = fit_frame
+        .text_caret(fit_instance, fit_text, 8)
+        .expect("fit text has an end caret");
+    let fit_selection = fit_frame
+        .text_selection_rects(fit_instance, fit_text, 0..8)
+        .into_iter()
+        .next()
+        .expect("fit text has one selected line segment");
+
+    let visible_width = visible_end.top.x - visible_start.top.x;
+    let fit_width = fit_end.top.x - fit_start.top.x;
+    let scale = fit_width / visible_width;
+    assert!(scale > 0.0 && scale < 1.0, "fit scale was {scale}");
+    assert!((fit_start.top.x - 10.0).abs() <= 0.001);
+    assert!((fit_end.top.x - 40.0).abs() <= 0.001);
+    let visible_caret_height = visible_start.bottom.y - visible_start.top.y;
+    let fit_caret_height = fit_start.bottom.y - fit_start.top.y;
+    assert!((fit_caret_height / visible_caret_height - scale).abs() <= 0.001);
+    assert!((fit_selection.width() / visible_selection.width() - scale).abs() <= 0.001);
+    assert!((fit_selection.height() / visible_selection.height() - scale).abs() <= 0.001);
+    assert!((fit_selection.min_x - fit_start.top.x).abs() <= 0.001);
+    assert!((fit_selection.max_x - fit_end.bottom.x).abs() <= 0.001);
+
+    for (expected, caret) in [(0, fit_start), (4, fit_middle), (8, fit_end)] {
+        let midpoint = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(
+            fit_frame.text_hit(fit_instance, fit_text, midpoint),
+            Some(expected)
+        );
+    }
+    assert_eq!(
+        fit_frame.text_hit(fit_instance, fit_text, Vec2D::new(-1_000.0, 20.0)),
+        Some(0)
+    );
+    assert_eq!(
+        fit_frame.text_hit(fit_instance, fit_text, Vec2D::new(1_000.0, 20.0)),
+        Some(8)
+    );
+    Ok(())
+}
+
+#[test]
+fn visibility_filtering_overflow_modes_fail_closed_for_all_public_text_geometry() -> Result<()> {
+    for overflow in [
+        SceneTextOverflow::Hidden,
+        SceneTextOverflow::Clipped,
+        SceneTextOverflow::Ellipsis,
+    ] {
+        let (mut scene, artboard, text) = overflow_text_scene(overflow, 80.0, 40.0, "aa")?;
+        let instance = scene.instantiate(artboard)?;
+        let mut frame = scene.frame();
+        assert_eq!(
+            frame.text_caret(instance, text, 0),
+            None,
+            "{overflow:?} caret geometry is unsupported in v1"
+        );
+        assert_eq!(
+            frame.text_hit(instance, text, Vec2D::new(10.0, 20.0)),
+            None,
+            "{overflow:?} hit geometry is unsupported in v1"
+        );
+        assert!(
+            frame.text_selection_rects(instance, text, 0..2).is_empty(),
+            "{overflow:?} selection geometry is unsupported in v1"
+        );
+    }
+
+    for overflow in [SceneTextOverflow::Visible, SceneTextOverflow::Fit] {
+        let (mut scene, artboard, text) = overflow_text_scene(overflow, 80.0, 40.0, "aa")?;
+        let instance = scene.instantiate(artboard)?;
+        let mut frame = scene.frame();
+        let caret = frame
+            .text_caret(instance, text, 0)
+            .unwrap_or_else(|| panic!("{overflow:?} remains supported in v1"));
+        let midpoint = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, midpoint), Some(0));
+        assert_eq!(frame.text_selection_rects(instance, text, 0..2).len(), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn shaped_text_carets_and_hits_round_trip_utf8_byte_offsets_in_world_space() -> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 40.0, "aé")?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let start = frame
+        .text_caret(instance, text, 0)
+        .expect("the start of shaped text has a caret");
+    let between = frame
+        .text_caret(instance, text, 1)
+        .expect("the UTF-8 boundary between glyphs has a caret");
+    let end = frame
+        .text_caret(instance, text, 3)
+        .expect("the end of shaped text has a caret");
+
+    assert_eq!(start.top.y, between.top.y);
+    assert_eq!(start.bottom.y, between.bottom.y);
+    assert!(start.top.x < between.top.x && between.top.x < end.top.x);
+    assert!(
+        start.top.x >= 10.0,
+        "the authored Text transform is applied"
+    );
+    assert_eq!(frame.text_caret(instance, text, 2), None);
+    assert_eq!(frame.text_caret(instance, text, 4), None);
+    assert_eq!(
+        frame.text_hit(instance, text, Vec2D::new(f32::NAN, 0.0)),
+        None
+    );
+    for (expected, caret) in [(0, start), (1, between), (3, end)] {
+        let midpoint = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, midpoint), Some(expected));
+    }
+    Ok(())
+}
+
+#[test]
+fn shaped_empty_text_run_exposes_only_caret_zero_without_changing_logical_bounds() -> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 40.0, "")?;
+    let instance = scene.instantiate(artboard)?;
+    let mut frame = scene.frame();
+    let caret = frame
+        .text_caret(instance, text, 0)
+        .expect("an empty styled TextValueRun has its insertion caret");
+    assert_eq!(frame.text_caret(instance, text, 1), None);
+    assert!(frame.text_selection_rects(instance, text, 0..0).is_empty());
+    assert_eq!(
+        frame.world_bounds(instance, text),
+        Some(Aabb::new(10.0, 10.0, 90.0, 50.0)),
+        "empty fixed Text keeps its authored logical bounds"
+    );
+    let midpoint = Vec2D::new(
+        (caret.top.x + caret.bottom.x) / 2.0,
+        (caret.top.y + caret.bottom.y) / 2.0,
+    );
+    assert_eq!(frame.text_hit(instance, text, midpoint), Some(0));
+    Ok(())
+}
+
+#[test]
+fn shaped_text_geometry_rejects_non_text_unknown_and_unshapeable_targets() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, unshapeable_text), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Invalid geometry targets".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Not Text".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let unshapeable_text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "No style or run".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 80.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        Ok((artboard, shape, unshapeable_text))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    let (mut other_scene, other_artboard, other_text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 40.0, "a")?;
+    let other_instance = other_scene.instantiate(other_artboard)?;
+
+    let mut frame = scene.frame();
+    for object in [shape, unshapeable_text, other_text] {
+        assert_eq!(frame.text_caret(instance, object, 0), None);
+        assert_eq!(frame.text_hit(instance, object, Vec2D::new(0.0, 0.0)), None);
+        assert!(
+            frame
+                .text_selection_rects(instance, object, 0..1)
+                .is_empty()
+        );
+    }
+    assert_eq!(frame.text_caret(other_instance, unshapeable_text, 0), None);
+    assert_eq!(
+        frame.text_hit(other_instance, unshapeable_text, Vec2D::new(0.0, 0.0)),
+        None
+    );
+    assert!(
+        frame
+            .text_selection_rects(other_instance, unshapeable_text, 0..1)
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
+fn shaped_text_selection_returns_one_world_rect_for_one_contiguous_line_segment() -> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 40.0, "aé")?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    assert!(
+        frame.text_selection_rects(instance, text, 1..1).is_empty(),
+        "a collapsed selection has no highlight"
+    );
+    assert!(
+        frame.text_selection_rects(instance, text, 1..2).is_empty(),
+        "an invalid UTF-8 endpoint has no selection geometry"
+    );
+    assert!(
+        frame.text_selection_rects(instance, text, 3..1).is_empty(),
+        "a reversed source range has no selection geometry"
+    );
+    assert!(
+        frame.text_selection_rects(instance, text, 0..4).is_empty(),
+        "a range ending past the source has no selection geometry"
+    );
+    let start = frame
+        .text_caret(instance, text, 1)
+        .expect("the selection start is a valid UTF-8 boundary");
+    let end = frame
+        .text_caret(instance, text, 3)
+        .expect("the selection end is a valid UTF-8 boundary");
+    assert_eq!(
+        frame.text_selection_rects(instance, text, 1..3),
+        vec![Aabb::new(
+            start.top.x,
+            start.top.y,
+            end.bottom.x,
+            end.bottom.y,
+        )]
+    );
+    Ok(())
+}
+
+#[test]
+fn shaped_multiline_selection_returns_one_world_rect_per_selected_line_segment() -> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 80.0, "a\na")?;
+    let instance = scene.instantiate(artboard)?;
+    let mut frame = scene.frame();
+
+    let first_start = frame
+        .text_caret(instance, text, 0)
+        .expect("first line has a start caret");
+    let first_end = frame
+        .text_caret(instance, text, 1)
+        .expect("first line has an end caret");
+    let second_start = frame
+        .text_caret(instance, text, 2)
+        .expect("second line has a start caret");
+    let second_end = frame
+        .text_caret(instance, text, 3)
+        .expect("second line has an end caret");
+
+    assert_eq!(
+        frame.text_selection_rects(instance, text, 0..3),
+        vec![
+            Aabb::new(
+                first_start.top.x,
+                first_start.top.y,
+                first_end.bottom.x,
+                first_end.bottom.y,
+            ),
+            Aabb::new(
+                second_start.top.x,
+                second_start.top.y,
+                second_end.bottom.x,
+                second_end.bottom.y,
+            ),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn shaped_text_runs_share_one_public_utf8_byte_offset_space() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Runs".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Runs Text".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 100.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Runs Style".into(),
+                font_size: 20.0,
+                line_height: 24.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        for (name, value) in [("First", "a"), ("Second", "éb")] {
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: name.into(),
+                    text: value.into(),
+                    style,
+                }),
+            )?;
+        }
+        Ok((artboard, text))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let carets: Vec<nuxie::CaretGeometry> = [0, 1, 3, 4]
+        .into_iter()
+        .map(|byte_offset| {
+            frame
+                .text_caret(instance, text, byte_offset)
+                .expect("every concatenated UTF-8 boundary has a public caret")
+        })
+        .collect();
+    assert_eq!(frame.text_caret(instance, text, 2), None);
+    for (byte_offset, caret) in [0, 1, 3, 4].into_iter().zip(carets) {
+        let midpoint = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        let hit: Option<usize> = frame.text_hit(instance, text, midpoint);
+        assert_eq!(hit, Some(byte_offset));
+    }
+    Ok(())
+}
+
+#[test]
+fn shaped_combining_cluster_snaps_internal_utf8_boundary_to_the_cluster_end() -> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 40.0, "a\u{0301}")?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let start = frame
+        .text_caret(instance, text, 0)
+        .expect("the cluster start is a valid UTF-8 boundary");
+    let before_mark = frame
+        .text_caret(instance, text, 1)
+        .expect("the boundary before the combining mark remains addressable");
+    let end = frame
+        .text_caret(instance, text, 3)
+        .expect("the cluster end is a valid UTF-8 boundary");
+
+    assert!(start.top.x < end.top.x);
+    assert_eq!(before_mark, end);
+    assert_eq!(
+        frame.text_selection_rects(instance, text, 0..1),
+        vec![Aabb::new(
+            start.top.x,
+            start.top.y,
+            end.bottom.x,
+            end.bottom.y,
+        )],
+        "selection ends at the same snapped cluster edge as its caret"
+    );
+    assert!(
+        frame.text_selection_rects(instance, text, 1..3).is_empty(),
+        "two source boundaries snapped to the same cluster edge have no visual segment"
+    );
+    let midpoint = Vec2D::new(
+        (end.top.x + end.bottom.x) / 2.0,
+        (end.top.y + end.bottom.y) / 2.0,
+    );
+    assert_eq!(frame.text_hit(instance, text, midpoint), Some(3));
+    Ok(())
+}
+
+#[test]
+fn shaped_backtracking_multi_run_advances_preserve_visual_extrema_and_caret_hits() -> Result<()> {
+    let (mut scene, artboard, text) = backtracking_multi_run_text_geometry_scene()?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let carets = (0..=3)
+        .map(|byte_offset| {
+            frame
+                .text_caret(instance, text, byte_offset)
+                .unwrap_or_else(|| panic!("byte boundary {byte_offset} has a caret"))
+        })
+        .collect::<Vec<_>>();
+    assert!(carets[1].top.x > carets[3].top.x);
+    let selection = frame.text_selection_rects(instance, text, 0..3);
+    assert_eq!(selection.len(), 1);
+    assert!(
+        selection[0].max_x >= carets[1].top.x,
+        "selection must retain the intermediate forward extent before the negative advance"
+    );
+    for (byte_offset, caret) in carets.into_iter().enumerate() {
+        let point = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, point), Some(byte_offset));
+    }
+    Ok(())
+}
+
+#[test]
+fn shaped_combining_cluster_stays_indivisible_with_negative_spacing() -> Result<()> {
+    let (mut scene, artboard, text) = text_geometry_scene_with_letter_spacing(
+        SceneTextOverflow::Visible,
+        80.0,
+        40.0,
+        "a\u{0301}",
+        20.0,
+        SceneTextAlign::Left,
+        -2.0,
+    )?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let internal = frame
+        .text_caret(instance, text, 1)
+        .expect("the internal scalar boundary remains addressable");
+    let end = frame
+        .text_caret(instance, text, 3)
+        .expect("the combining cluster has an end caret");
+    assert_eq!(internal, end);
+    let point = Vec2D::new(
+        (end.top.x + end.bottom.x) / 2.0,
+        (end.top.y + end.bottom.y) / 2.0,
+    );
+    assert_eq!(frame.text_hit(instance, text, point), Some(3));
+    Ok(())
+}
+
+#[test]
+fn shaped_explicit_newlines_keep_both_carets_without_synthesizing_a_trailing_static_line()
+-> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 80.0, "a\nb\n")?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let first_start = frame
+        .text_caret(instance, text, 0)
+        .expect("the first line has a start caret");
+    let before_first_newline = frame
+        .text_caret(instance, text, 1)
+        .expect("the first newline has a preceding caret");
+    let after_first_newline = frame
+        .text_caret(instance, text, 2)
+        .expect("the first newline has a following caret");
+    let before_trailing_newline = frame
+        .text_caret(instance, text, 3)
+        .expect("the trailing newline has a preceding caret");
+
+    assert_eq!(before_first_newline.top.y, first_start.top.y);
+    assert!(after_first_newline.top.y > before_first_newline.top.y);
+    assert_eq!(after_first_newline.top.x, first_start.top.x);
+    assert_eq!(before_trailing_newline.top.y, after_first_newline.top.y);
+    assert_eq!(
+        frame.text_caret(instance, text, 4),
+        None,
+        "static Text does not synthesize an editable trailing-empty paragraph"
+    );
+    assert!(
+        frame.text_selection_rects(instance, text, 3..4).is_empty(),
+        "the unshaped post-newline offset has no visual selection segment"
+    );
+
+    for (byte_offset, caret) in [
+        (1, before_first_newline),
+        (2, after_first_newline),
+        (3, before_trailing_newline),
+    ] {
+        let midpoint = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, midpoint), Some(byte_offset));
+    }
+    assert_eq!(
+        frame.text_hit(instance, text, Vec2D::new(1_000.0, 1_000.0)),
+        Some(3),
+        "hit testing clamps to the last retained static glyph line, not the unshaped post-newline offset"
+    );
+    Ok(())
+}
+
+#[test]
+fn shaped_crlf_is_one_authored_separator_with_no_internal_caret() -> Result<()> {
+    let (mut scene, artboard, text) =
+        overflow_text_scene(SceneTextOverflow::Visible, 80.0, 80.0, "a\r\nb")?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let before = frame
+        .text_caret(instance, text, 1)
+        .expect("the CRLF pair has a preceding caret");
+    let after = frame
+        .text_caret(instance, text, 3)
+        .expect("the CRLF pair has a following caret");
+    assert_eq!(frame.text_caret(instance, text, 2), None);
+    assert!(after.top.y > before.top.y);
+    assert!(frame.text_selection_rects(instance, text, 1..2).is_empty());
+    assert!(frame.text_selection_rects(instance, text, 2..3).is_empty());
+    for (byte_offset, caret) in [(1, before), (3, after)] {
+        let point = Vec2D::new(
+            (caret.top.x + caret.bottom.x) / 2.0,
+            (caret.top.y + caret.bottom.y) / 2.0,
+        );
+        assert_eq!(frame.text_hit(instance, text, point), Some(byte_offset));
+    }
+    Ok(())
+}
+
+#[test]
+fn shaped_soft_wrap_boundary_uses_downstream_caret_affinity() -> Result<()> {
+    let (mut scene, artboard, text) = wrapped_text_geometry_scene("aa", 8.0)?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let start = frame
+        .text_caret(instance, text, 0)
+        .expect("the first visual line has a start caret");
+    let boundary = frame
+        .text_caret(instance, text, 1)
+        .expect("the soft-wrap boundary has a canonical caret");
+    let end = frame
+        .text_caret(instance, text, 2)
+        .expect("the second visual line has an end caret");
+    assert_eq!(boundary.top.x, start.top.x);
+    assert!(boundary.top.y > start.top.y);
+    assert_eq!(end.top.y, boundary.top.y);
+    assert!(end.top.x > boundary.top.x);
+
+    let first_line = frame.text_selection_rects(instance, text, 0..1);
+    assert_eq!(first_line.len(), 1);
+    let first_line = first_line
+        .first()
+        .expect("the selected first visual line has one rectangle");
+    let upstream_end = Vec2D::new(
+        first_line.max_x,
+        (first_line.min_y + first_line.max_y) / 2.0,
+    );
+    let downstream_start = Vec2D::new(
+        (boundary.top.x + boundary.bottom.x) / 2.0,
+        (boundary.top.y + boundary.bottom.y) / 2.0,
+    );
+    for point in [
+        upstream_end,
+        downstream_start,
+        upstream_end,
+        downstream_start,
+    ] {
+        assert_eq!(frame.text_hit(instance, text, point), Some(1));
+    }
+    Ok(())
+}
+
+#[test]
+fn shaped_soft_wrap_preserves_skipped_ascii_and_multibyte_whitespace_boundaries() -> Result<()> {
+    let content = "a  \u{2003}a";
+    let (mut scene, artboard, text) = wrapped_text_geometry_scene(content, 8.0)?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let next_line_start = frame
+        .text_caret(instance, text, 6)
+        .expect("the boundary before the retained second-line glyph has a caret");
+    let first_glyph_selection = frame.text_selection_rects(instance, text, 0..1);
+    assert_eq!(first_glyph_selection.len(), 1);
+
+    for byte_offset in [1, 2, 3, 6] {
+        assert_eq!(
+            frame.text_caret(instance, text, byte_offset),
+            Some(next_line_start),
+            "downstream affinity snaps every skipped whitespace boundary to the next-line start"
+        );
+        assert_eq!(
+            frame.text_selection_rects(instance, text, 0..byte_offset),
+            first_glyph_selection,
+            "upstream selection affinity snaps every skipped whitespace boundary to the previous-line end"
+        );
+    }
+    assert_eq!(frame.text_caret(instance, text, 4), None);
+    assert_eq!(frame.text_caret(instance, text, 5), None);
+    assert_eq!(
+        frame.text_selection_rects(instance, text, 1..7),
+        frame.text_selection_rects(instance, text, 6..7),
+        "a selection beginning in skipped whitespace starts at the retained next-line glyph"
+    );
+    Ok(())
+}
+
+#[test]
+fn shaped_soft_wrap_preserves_terminal_skipped_whitespace_boundaries_without_a_new_line()
+-> Result<()> {
+    let (mut scene, artboard, text) = wrapped_text_geometry_scene("a   ", 8.0)?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let retained_end = frame
+        .text_caret(instance, text, 1)
+        .expect("the retained glyph has an end caret");
+    for byte_offset in [1, 2, 3, 4] {
+        assert_eq!(
+            frame.text_caret(instance, text, byte_offset),
+            Some(retained_end),
+            "terminal skipped whitespace shares the retained previous-line end"
+        );
+    }
+    assert!(frame.text_selection_rects(instance, text, 1..4).is_empty());
+    let shared_end = Vec2D::new(
+        (retained_end.top.x + retained_end.bottom.x) / 2.0,
+        (retained_end.top.y + retained_end.bottom.y) / 2.0,
+    );
+    assert_eq!(frame.text_hit(instance, text, shared_end), Some(4));
+    Ok(())
+}
+
+#[test]
+fn shaped_text_geometry_applies_the_authored_non_uniform_world_transform() -> Result<()> {
+    const LOCAL_ADVANCE: f32 = 10.878_906;
+    const LOCAL_CARET_HEIGHT: f32 = 22.721_35;
+    const TRANSLATE_X: f32 = 30.0;
+    const TRANSLATE_Y: f32 = 40.0;
+    const ROTATION: f32 = std::f32::consts::FRAC_PI_2;
+    const SCALE_X: f32 = 2.0;
+    const SCALE_Y: f32 = 0.5;
+
+    let mut scene = Scene::new();
+    let ((artboard, text), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Transform".into(),
+            width: 200.0,
+            height: 120.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Transformed Text".into(),
+                x: TRANSLATE_X,
+                y: TRANSLATE_Y,
+                opacity: 1.0,
+                rotation: ROTATION,
+                scale_x: SCALE_X,
+                scale_y: SCALE_Y,
+                sizing: SceneTextSizing::Fixed,
+                width: 80.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Transform Style".into(),
+                font_size: 20.0,
+                line_height: 20.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Transform Run".into(),
+                text: "a".into(),
+                style,
+            }),
+        )?;
+        Ok((artboard, text))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    let transform = |point: Vec2D| {
+        let (sin, cos) = ROTATION.sin_cos();
+        Vec2D::new(
+            cos * SCALE_X * point.x - sin * SCALE_Y * point.y + TRANSLATE_X,
+            sin * SCALE_X * point.x + cos * SCALE_Y * point.y + TRANSLATE_Y,
+        )
+    };
+    let expected_start_top = transform(Vec2D::new(0.0, 0.0));
+    let expected_start_bottom = transform(Vec2D::new(0.0, LOCAL_CARET_HEIGHT));
+    let expected_end_top = transform(Vec2D::new(LOCAL_ADVANCE, 0.0));
+    let expected_end_bottom = transform(Vec2D::new(LOCAL_ADVANCE, LOCAL_CARET_HEIGHT));
+    let assert_point = |actual: Vec2D, expected: Vec2D| {
+        assert!(
+            (actual.x - expected.x).abs() <= 0.001,
+            "{actual:?} != {expected:?}"
+        );
+        assert!(
+            (actual.y - expected.y).abs() <= 0.001,
+            "{actual:?} != {expected:?}"
+        );
+    };
+
+    let mut frame = scene.frame();
+    let start = frame
+        .text_caret(instance, text, 0)
+        .expect("the transformed glyph has a start caret");
+    let end = frame
+        .text_caret(instance, text, 1)
+        .expect("the transformed glyph has an end caret");
+    assert_point(start.top, expected_start_top);
+    assert_point(start.bottom, expected_start_bottom);
+    assert_point(end.top, expected_end_top);
+    assert_point(end.bottom, expected_end_bottom);
+
+    let midpoint = Vec2D::new(
+        (end.top.x + end.bottom.x) / 2.0,
+        (end.top.y + end.bottom.y) / 2.0,
+    );
+    assert_eq!(frame.text_hit(instance, text, midpoint), Some(1));
+    let rects = frame.text_selection_rects(instance, text, 0..1);
+    assert_eq!(rects.len(), 1);
+    let rect = rects
+        .first()
+        .expect("one selected line segment has one world AABB");
+    let expected_points = [
+        expected_start_top,
+        expected_start_bottom,
+        expected_end_top,
+        expected_end_bottom,
+    ];
+    let expected = Aabb::new(
+        expected_points
+            .iter()
+            .map(|point| point.x)
+            .fold(f32::INFINITY, f32::min),
+        expected_points
+            .iter()
+            .map(|point| point.y)
+            .fold(f32::INFINITY, f32::min),
+        expected_points
+            .iter()
+            .map(|point| point.x)
+            .fold(f32::NEG_INFINITY, f32::max),
+        expected_points
+            .iter()
+            .map(|point| point.y)
+            .fold(f32::NEG_INFINITY, f32::max),
+    );
+    assert!((rect.min_x - expected.min_x).abs() <= 0.001);
+    assert!((rect.min_y - expected.min_y).abs() <= 0.001);
+    assert!((rect.max_x - expected.max_x).abs() <= 0.001);
+    assert!((rect.max_y - expected.max_y).abs() <= 0.001);
+    Ok(())
 }
 
 #[test]

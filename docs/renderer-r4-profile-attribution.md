@@ -581,5 +581,47 @@ Rust relocates each standalone stroke into the shared texture but retains its
 three local padding spans; C++ emits the three padding spans once per logical
 flush. Item 124 owns that compact shared-stroke layout.
 
+## Item 124: Flush-Wide Plain-Stroke Padding
+
+C++ emits the leading midpoint padding, aligned outer-curve transition, and
+final sentinel once around all compatible stroke geometry in a logical flush
+(`renderer/src/render_context.cpp:1128-1179,1516-1534`). Rust already shared
+the texture lifetime, but it copied each standalone path's three zero-contour
+padding spans into that texture.
+
+Both Rust paths now strip those local padding spans, relocate only real contour
+geometry into contiguous base-instance ranges, and emit one flush-wide padding
+envelope. Eligibility is deliberately narrow: multiple plain solid SrcOver
+strokes, no clip, image, gradient, advanced blend, destination read, or
+multi-row tessellation, with the complete aligned layout fitting one 2,048-wide
+row. All other draws keep the prior layout.
+
+On `gm-bevel180strokes`, both modes move from 120 to 63 tessellation spans,
+exactly matching C++ Dawn. MSAA instances move 160->103, exact; atomic moves
+161->104 against C++'s 105 because C++ counts an explicit initialize draw while
+Rust clears the attachment. Path patches remain 40. The same mechanism makes
+`gm-CubicStroke` exact at nine spans in both modes.
+
+Across the fixed matrix, Rust spans move 1,668->1,542, instances
+6,345->6,219, uploaded bytes 168,424->160,744, and ranked excess rows 47->38.
+C++ Dawn reports 1,615 spans, 5,872 instances, and 156,832 uploaded bytes. The
+light candidate snapshot reports 1.186x on the atomic target, 3.882x on the
+MSAA target, and 1.889x in aggregate. It overlapped the full renderer pixel
+sweep, so these are contaminated directional context only and are not compared
+with prior timing. Exact work reduction and unchanged output are the acceptance
+evidence; no A-B-B-A campaign is warranted by the measurement fence.
+
+The focused mode-paired regression, renderer feature suite, workspace suite,
+normal and scripted V2 floors, and full renderer corpus pass. An independent
+review found no issue in the eligibility fences, relocation arithmetic,
+contour IDs, logical-flush boundaries, or texture-width limits.
+
+The refreshed top excess is direct-stroke draw condensation on `gm-OverStroke`.
+C++ emits seven compatible stroke batches plus shared setup/resolve work; Rust
+emits one draw per each of twelve strokes. Item 125 owns the narrow contiguous
+direct-stroke merge: MSAA targets 13->8 exactly, while atomic targets 14->9
+under Rust's zero-draw attachment clear (C++ reports 10 with its initialize
+draw).
+
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

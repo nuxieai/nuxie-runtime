@@ -2312,6 +2312,34 @@ impl WgpuFrame {
                                     + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
                                     as u32
                     });
+                let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+                // C++ RenderContext::LogicalFlush emits midpoint padding once around the flush.
+                let compact_shared_stroke_end = (share_midpoint_tessellation
+                    && prepared.len() > 1
+                    && gradient_batch.draws.iter().all(Option::is_none)
+                    && draws.iter().all(|draw| {
+                        matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                            && draw.state.clip_rect.is_none()
+                            && draw.paint.blend_mode == BlendMode::SrcOver
+                    })
+                    && prepared.iter().all(|draw| {
+                        draw.is_stroke
+                            && draw.base_instance == 1
+                            && midpoint_tessellation_single_row_width(&draw.spans).is_some()
+                    }))
+                .then(|| {
+                    prepared.iter().try_fold(midpoint_span, |end, draw| {
+                        draw.instance_count
+                            .checked_mul(midpoint_span)
+                            .and_then(|count| end.checked_add(count))
+                    })
+                })
+                .flatten()
+                .filter(|&end| {
+                    end <= gpu::TESS_TEXTURE_WIDTH as u32
+                        && align_to(end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32)
+                            < gpu::TESS_TEXTURE_WIDTH as u32
+                });
                 let outer_patch_range = (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
                     + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
                     as u32
@@ -2349,7 +2377,42 @@ impl WgpuFrame {
                 let mut tessellation_span_batches = Vec::new();
                 let mut tessellation_heights = Vec::new();
                 let mut needs_dummy_tessellation = false;
-                if share_midpoint_tessellation {
+                if let Some(geometry_end) = compact_shared_stroke_end {
+                    let mut packed = Vec::new();
+                    append_tessellation_padding_span(&mut packed, 0, midpoint_span);
+                    let mut next_base_instance = 1u32;
+                    for draw in &mut prepared {
+                        let relocation = next_base_instance
+                            .checked_sub(draw.base_instance)
+                            .and_then(|instances| instances.checked_mul(midpoint_span))
+                            .expect("compact atomic midpoint relocation overflow");
+                        draw.spans
+                            .retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+                        relocate_midpoint_tessellation(
+                            &mut draw.spans,
+                            &mut draw.base_instance,
+                            &mut contours[draw.contour_range.clone()],
+                            relocation,
+                            0,
+                        );
+                        packed.append(&mut draw.spans);
+                        next_base_instance = next_base_instance
+                            .checked_add(draw.instance_count)
+                            .expect("compact atomic midpoint instance range overflow");
+                        draw.tessellation_index = 0;
+                    }
+                    debug_assert_eq!(next_base_instance * midpoint_span, geometry_end);
+                    let outer_curve_start =
+                        align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+                    append_tessellation_padding_span(&mut packed, geometry_end, outer_curve_start);
+                    append_tessellation_padding_span(
+                        &mut packed,
+                        outer_curve_start,
+                        outer_curve_start + 1,
+                    );
+                    tessellation_span_batches.push(packed);
+                    tessellation_heights.push(1);
+                } else if share_midpoint_tessellation {
                     let mut packed = Vec::new();
                     let mut cursor_x = 0u32;
                     let mut cursor_y = 0u32;
@@ -2849,7 +2912,7 @@ impl WgpuFrame {
                     paint: gpu::PaintData,
                     paint_aux: gpu::PaintAuxData,
                     image: Option<(wgpu::TextureView, ImageSampler)>,
-                    batchable_midpoint_fill: bool,
+                    compact_midpoint_layout: bool,
                     logical_flush: usize,
                     prepared: Option<path_pipeline::PreparedPathDraw>,
                 }
@@ -2960,7 +3023,7 @@ impl WgpuFrame {
                                 paint,
                                 paint_aux: gpu::PaintAuxData::zeroed(),
                                 image: None,
-                                batchable_midpoint_fill: false,
+                                compact_midpoint_layout: false,
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
                             });
@@ -3333,13 +3396,20 @@ impl WgpuFrame {
                                 clip_rect_paint_aux(draw.state.clip_rect)
                             };
                             let path_index = pending_paths.len();
+                            let compact_midpoint_layout = options.batchable_midpoint_fill
+                                || (draw.paint.style == RenderPaintStyle::Stroke
+                                    && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                    && !has_clip_rect
+                                    && !advanced_blend
+                                    && image.is_none()
+                                    && gradient.is_none());
                             pending_paths.push(PendingPathDraw {
                                 tessellation,
                                 paint,
                                 paint_aux,
                                 image: image
                                     .map(|image| (image.texture.view.clone(), image.sampler)),
-                                batchable_midpoint_fill: options.batchable_midpoint_fill,
+                                compact_midpoint_layout,
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
                             });
@@ -3397,7 +3467,7 @@ impl WgpuFrame {
                     let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
                     let compact_geometry_end = (paths_in_flush.len() > 1
                         && paths_in_flush.iter().all(|path| {
-                            path.batchable_midpoint_fill
+                            path.compact_midpoint_layout
                                 && path.tessellation.base_instance == 1
                                 && midpoint_tessellation_single_row_width(&path.tessellation.spans)
                                     .is_some()
@@ -8024,6 +8094,44 @@ mod tests {
         let scheduled = make_frame().finish().unwrap();
         let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
         assert_eq!(scheduled, serialized);
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn plain_strokes_use_one_flush_wide_midpoint_padding_envelope() {
+        let work = [RenderMode::ClockwiseAtomic, RenderMode::Msaa].map(|mode| {
+            let factory = WgpuFactory::new_with_mode(300, 300, mode).unwrap();
+            let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
+            frame.transform(Mat2D([141.5, 0.0, 0.0, 141.5, 150.0, 150.0]));
+            for index in 0..20 {
+                let theta = std::f32::consts::TAU * index as f32 / 20.0;
+                let mut raw_path = RawPath::new();
+                raw_path.line_to(theta.cos(), theta.sin());
+                raw_path.line_to(0.0, 0.0);
+                frame.draw_path(
+                    &WgpuPath {
+                        raw_path,
+                        fill_rule: FillRule::NonZero,
+                    },
+                    &WgpuPaint {
+                        style: RenderPaintStyle::Stroke,
+                        color: 0xff80_8080 | index,
+                        thickness: 15.0 / 141.5,
+                        join: StrokeJoin::Bevel,
+                        cap: StrokeCap::Butt,
+                        ..WgpuPaint::default()
+                    },
+                );
+            }
+            let work = frame.finish_for_benchmark().unwrap().backend_work;
+            (
+                work.tessellation_spans,
+                work.gpu_draw_instances,
+                work.path_patches,
+            )
+        });
+
+        assert_eq!(work, [(63, 104, 40), (63, 103, 40)]);
     }
 
     #[test]

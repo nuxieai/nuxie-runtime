@@ -152,6 +152,25 @@ retaining three standalone padding spans for each of twenty strokes instead of
 emitting three padding spans once for the shared logical-flush texture. Item
 124 owns that compaction.
 
+### Item 124 Update
+
+Compatible plain strokes now share C++'s flush-wide midpoint padding envelope
+in both modes. `gm-bevel180strokes` moves 120->63 spans in atomic and MSAA,
+exactly matching C++ Dawn; MSAA instances move 160->103 exactly, while atomic
+moves 161->104 against C++'s 105 counted-initialize convention. The fixed Rust
+matrix moves from 1,668 to 1,542 spans, 6,345 to 6,219 instances, and 168,424 to
+160,744 uploaded bytes. Ranked excess rows fall 47->38.
+
+The candidate's one-frame target ratios are 1.186x atomic and 3.882x MSAA,
+with a 1.889x matrix sum. The snapshot overlapped the full pixel sweep and is
+therefore contaminated directional context only. Exact counter reduction and
+unchanged pixels are the acceptance evidence.
+
+The new highest row is `gm-OverStroke-msaa` GPU draws at 13 versus eight;
+atomic reports 14 versus ten. C++ condenses twelve authored strokes into seven
+compatible contiguous low-level batches. Item 125 owns the same narrow
+direct-stroke range merge in both Rust modes.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -164,7 +183,7 @@ emitting three padding spans once for the shared logical-flush texture. Item
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
-| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic interior fills and compatible MSAA nonzero fills now use contiguous role/subpass batches while retaining required barriers. |
+| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Fill ranges use contiguous role/subpass batches while retaining required barriers. Item 125 owns the remaining compatible direct-stroke range merge. |
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
@@ -183,9 +202,12 @@ emitting three padding spans once for the shared logical-flush texture. Item
   source-matched redundancy is identified.
 - `render_passes` is closed for the fixed matrix at 91/91. Do not revisit the
   direct-resolve path without a new counter or correctness regression.
-- `tessellation_spans` is next. `gm-bevel180strokes` reports 120 Rust spans
-  versus 63 in C++ Dawn in both modes because the shared Rust texture retains
-  per-path padding. Item 124 owns the C++-matched flush-wide padding layout.
+- `tessellation_spans` no longer owns the top row. Item 124 moves
+  `gm-bevel180strokes` from 120 to 63 in both modes, exact with C++ Dawn.
+- `gpu_draw_calls` is next. `gm-OverStroke` reports 13 Rust draws versus eight
+  in C++ Dawn for MSAA and 14 versus ten for atomic. Five missing compatible
+  direct-stroke merges explain both modes; C++'s counted atomic initialize draw
+  offsets the reported atomic excess by one. Item 125 owns that merge.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

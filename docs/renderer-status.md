@@ -1473,7 +1473,7 @@ Run `make renderer-golden`.
     advanced-blend, mixed atomic/fallback, and translucent split-submission
     regressions pass. Renderer exact=1,409/diverges=0/gated=59, V2 floors are
     584/35, the renderer feature suite passes 267/38, and the workspace passes.
-124. [ ] Compact shared plain-stroke midpoint tessellation to C++'s flush-wide
+124. [x] Compact shared plain-stroke midpoint tessellation to C++'s flush-wide
     padding layout. `gm-bevel180strokes` emits 120 Rust spans versus 63 in C++
     Dawn in both modes. Rust relocates twenty standalone stroke layouts but
     retains each layout's three padding spans; C++ writes three padding spans
@@ -1482,6 +1482,22 @@ Run `make renderer-golden`.
     preserve contour IDs and geometry order. The target is 120->63 spans in
     both modes; MSAA instances should move 160->103 exactly, while atomic moves
     161->104 versus C++'s 105 because C++ emits an explicit initialize draw.
+    Both targets are met. Fixed-matrix Rust spans move 1,668->1,542, instances
+    6,345->6,219, uploaded bytes 168,424->160,744, and ranked excess rows
+    47->38. The focused regression, renderer feature/workspace suites, full
+    renderer corpus, and V2 floors pass. The light timing snapshot overlapped
+    the pixel sweep and is retained only as contaminated directional context.
+125. [ ] Condense compatible direct-stroke ranges in both renderer modes.
+    `gm-OverStroke` contains twelve opaque, unclipped, solid SrcOver strokes.
+    C++ condenses them to seven low-level stroke batches; Rust issues twelve.
+    Merge only strokes in the same logical flush, scheduled draw group,
+    prepass polarity, pipeline, shared tessellation resource, and contiguous
+    base-instance range. Clip/clip-rect, transparent, image, gradient, feather,
+    advanced-blend, binding, pipeline, schedule, or range changes end a batch.
+    Target MSAA draws 13->8 exactly and atomic 14->9 (C++ reports ten because
+    its explicit initialize operation is a draw; Rust's attachment clear is
+    not). Pin the production stream plus synthetic positive and negative
+    boundary cases before broadening eligibility.
 
 ## R2 Completion Record
 
@@ -2631,6 +2647,20 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 124 by replacing per-path plain-stroke midpoint
+  padding with C++'s one flush-wide envelope in both modes. On
+  `gm-bevel180strokes`, spans fall 120->63 in atomic and MSAA, exact with C++;
+  MSAA instances fall 160->103 exactly and atomic 161->104 against C++'s 105
+  counted-initialize convention. Fixed-matrix Rust spans move 1,668->1,542,
+  instances 6,345->6,219, uploaded bytes 168,424->160,744, and ranked excess
+  rows 47->38. The focused test, 268-test renderer feature suite, workspace,
+  renderer corpus, and V2 floors 584/35 pass. Sol found no issue in the fences,
+  relocation, IDs, flush boundaries, or width limits. The one-frame snapshot
+  overlapped the renderer sweep and is recorded only as contaminated
+  directional context; exact counters and unchanged output are the acceptance
+  evidence. Item 125 owns the newly attributed five-range direct-stroke merge
+  on `gm-OverStroke`.
 
 - 2026-07-16: Closed R4 item 123 by resolving clear-owned ordinary MSAA runs
   directly into the final target. Preserve-target chunks keep fallback

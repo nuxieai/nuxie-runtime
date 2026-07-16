@@ -2490,6 +2490,42 @@ Run `make renderer-golden`.
   cancellation, so this is a Metal-versus-wgpu precision difference rather
   than missing fill or clip geometry.
 
+## R4 Addendum (coordinator, 2026-07-16 — fold into the item queue as
+priority work; rationale recorded here so no session re-derives it)
+
+A. **Mode-ladder decomposition FIRST (highest priority, ~one session).**
+   Benchmark the C++ renderer against ITSELF on the perf corpus across
+   its mode/backend ladder: native-Metal raster-order vs native-Metal
+   atomic vs Dawn-WebGPU clockwise-atomic. This decomposes the current
+   5.05x into (i) mode/API tax wgpu structurally cannot close, (ii)
+   Dawn-vs-wgpu overhead, (iii) the real implementation gap that is
+   R4's job. Then RECORD THE GATE as a Decision: parity target defined
+   against C++ Dawn clockwise-atomic (same capability tier — the M7
+   shipping-config-vs-shipping-config rule), with the native-Metal ratio
+   reported as informational only. Do not run further optimization items
+   until the gate is defined against the fair denominator.
+B. **Counter-parity harness (perf-counter-compare).** Deterministic
+   per-stream counters on BOTH renderers — flushes, draws/flush,
+   tessellation spans, patch counts, uploaded bytes, texture binds,
+   encoder rows — diffed per perf-corpus entry and ranked by excess
+   ratio. Zero timing noise; every excess row is a located inefficiency
+   with a C++ site to read. Structural-counter checking is currently
+   defensive; make it the primary offensive attribution tool. Excess-row
+   fixes are bounded, oracle-gated, and delegable to workers.
+C. **Perf-mechanism inventory scout (proactive port list).** One scout
+   enumerates EVERY pooling/ring/budget/reuse/coalescing mechanism in
+   render_context.cpp + backend buffer management (the render-side
+   analog of V2's dirt-gating audit). Remaining R4 items become 'port
+   the checklist' verified by counters + brackets, with profiling as
+   confirmation rather than discovery.
+D. **Parallel exploration, serial acceptance.** Attribution/profiling of
+   multiple perf-corpus entries runs as concurrent read-only scouts
+   producing ranked tables; the A-B-B-A acceptance bracket protocol
+   stays serial on the main loop and is the only path to accepting a
+   change. Formalize the quiet-machine fence: brackets are valid only
+   under a recorded load threshold (M7 rule), queued to idle windows
+   instead of retried ad hoc.
+
 ## Log
 
 - 2026-07-16: Closed R4 item 115 with feature-gated command-encoding

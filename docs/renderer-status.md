@@ -1281,14 +1281,31 @@ Run `make renderer-golden`.
     frame. The required CubicStroke slice passes all structural fences in both
     modes across seven alternating samples. The fixed 16-variant report also
     completes without a structural mismatch.
-107. [ ] Collapse per-draw clockwise-atomic render-pass boundaries. The first
+107. [x] Test collapsing per-draw clockwise-atomic render-pass boundaries. The first
     fixed report measures 26.37x aggregate Rust/C++ time: clockwise atomic
     grows from 7.70x at one draw to 93.80x at 20 draws, while MSAA grows from
     5.30x to 14.28x. Rust currently opens separate borrowed and main render
     passes for nearly every clockwise draw even when attachments and phase are
-    shared. Batch those contiguous phases, preserve pixels and structural
-    counters, then rerun the identical 16-variant report before considering
-    target reuse or lower-level GPU work.
+    shared. A controlled old-Rust/current-Rust A/B over all 16 variants rejects
+    the merge: aggregate Rust time regresses by 23.95%, every clockwise scene
+    slows by 10.5%-35.2%, and MSAA remains flat. The full pixel corpus stays
+    green, but no production code is retained from the experiment.
+108. [x] Test packing non-shared clockwise tessellation spans into shared
+    vertical textures. Broad packing exposed real clip, interior-triangle, and
+    advanced-blend ordering constraints, so the measured candidate was narrowed
+    to source-over, triangle-free draws without clip updates. It preserved the
+    complete pixel corpus at exact=1,409/diverges=0/gated=59, but the alternating
+    old-Rust/current-Rust report rejected it at a 1.2225x aggregate regression.
+    Every targeted clockwise scene slowed: `OverStroke` 1.31x,
+    `batchedconvexpaths` 1.43x, and `bevel180strokes` 1.17x. No production code
+    is retained from the experiment.
+109. [ ] Attribute the fixed R4 gap before attempting another optimization.
+    Capture paired CPU and GPU profiles for the one-draw `bug5099` control and
+    the 20-draw `bevel180strokes` case in both live runners. Separate resource
+    creation, command encoding, queue submission, and GPU execution/wait time;
+    name the first dominant Rust-only site and its C++ counterpart, then queue
+    a port or adaptation at that measured site. Structural multiplicity alone
+    is no longer sufficient evidence after two controlled regressions.
 
 ## R2 Completion Record
 
@@ -1500,6 +1517,15 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-15: R4 optimization acceptance uses an alternating old-Rust versus
+  current-Rust A/B when the C++ control drifts under machine load. Controlled
+  experiments rejected both merging specialized clockwise borrowed/main
+  passes (1.2395x aggregate regression) and vertically packing simple
+  clockwise tessellation textures (1.2225x regression). Both candidates kept
+  the pixel corpus green and were removed. Stop inferring the hot path from
+  structural multiplicity alone; paired CPU/GPU attribution is required before
+  the next optimization. No pixel, corpus, reference, or tolerance changed.
 
 - 2026-07-15: R4 compares Rust wgpu against C++ Dawn WebGPU-on-Metal, not the
   native C++ Metal renderer. Upstream native Metal explicitly rejects MSAA,
@@ -2342,6 +2368,21 @@ Run `make renderer-golden`.
   than missing fill or clip geometry.
 
 ## Log
+
+- 2026-07-15: Closed R4 queue item 108 as a measured rejection. Safe vertical
+  tessellation packing preserved exact=1,409/diverges=0/gated=59, but lost
+  22.25% aggregate against the immutable old-Rust runner and slowed every
+  targeted clockwise scene. The implementation and its tests were removed.
+  Queue item 109 now requires paired one-draw/20-draw CPU and GPU attribution
+  before choosing another optimization site.
+
+- 2026-07-15: Closed R4 queue item 107 as a measured rejection. The unchanged
+  baseline runner at commit `762327cc` beats the borrowed/main pass-merge
+  candidate by 23.95% aggregate across the fixed 16 variants; all eight
+  clockwise scenes regress and MSAA is flat. The candidate still passed the
+  complete 1,468-row pixel corpus, but was removed. Queue item 108 now targets
+  the per-draw tessellation texture/pass multiplicity exposed by the same
+  benchmark scenes.
 
 - 2026-07-15: Wired release-only live performance runners through the pinned
   protocol and corrected the invalid native-Metal baseline to C++ Dawn on the

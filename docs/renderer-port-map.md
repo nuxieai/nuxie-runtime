@@ -342,8 +342,14 @@ Blocked by: #R-3.1
 The live baseline is now pinned to C++ Dawn and Rust wgpu over the same Metal
 adapter because native C++ Metal does not implement MSAA. The first complete
 fixed report has exact logical-flush, authored-draw, and atomic-strategy counts
-for all 16 variants. Its 26.37x aggregate and 93.80x worst-scene ratios make
-contiguous clockwise-atomic render-pass batching the first measured R4 task.
+for all 16 variants. Its 26.37x aggregate and 93.80x worst-scene ratios first
+implicated per-draw clockwise render passes, but controlled Rust-only A/Bs
+rejected both merging borrowed/main passes (23.95% aggregate regression) and
+vertically packing safe simple-draw tessellation textures (22.25% regression).
+Both candidates preserved the full pixel corpus and were removed. The next
+task captures paired CPU and GPU profiles for one-draw and 20-draw controls,
+then ports or adapts the first measured Rust-only hot site instead of inferring
+it from structural multiplicity.
 
 ### Exit Criteria
 

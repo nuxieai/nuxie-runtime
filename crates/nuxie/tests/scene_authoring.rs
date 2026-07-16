@@ -2,11 +2,11 @@ use anyhow::Result;
 use nuxie::{
     Aabb, ArtboardId, ArtboardSpec, ChildIndex, DashPathSpec, DashSpec, EditAbort, EditErrorKind,
     EditId, EditReason, ExportedObjectKind, ExportedProperty, FillSpec, FontAssetId, FontAssetSpec,
-    NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RecordingFactory, RectangleCornerRadii,
-    RectangleSpec, ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin,
-    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ShapeSpec,
-    SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec, TextStylePaintSpec,
-    TextValueRunSpec, Vec2D, props,
+    ImageAssetId, ImageAssetSpec, ImageSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind,
+    RecordingFactory, RectangleCornerRadii, RectangleSpec, ResolveError, Scene, SceneEvent,
+    SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow, SceneTextSizing,
+    SceneTextWrap, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch,
+    TextSpec, TextStylePaintSpec, TextValueRunSpec, Vec2D, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -1670,6 +1670,259 @@ fn font_assets_are_explicit_distinct_durable_scene_definitions() -> Result<()> {
         2,
         "stable font identities remain usable after unrelated edits"
     );
+    Ok(())
+}
+
+fn create_image_node(
+    tx: &mut SceneTx<'_>,
+    artboard: ArtboardId,
+    name: &str,
+    image: ImageAssetId,
+) -> std::result::Result<ObjectId, EditAbort> {
+    tx.create(
+        Parent::Artboard(artboard),
+        NodeSpec::Image(ImageSpec {
+            name: name.into(),
+            x: 10.0,
+            y: 20.0,
+            opacity: 0.75,
+            rotation: 0.25,
+            scale_x: 1.5,
+            scale_y: 2.0,
+            image,
+            origin_x: 0.25,
+            origin_y: 0.75,
+        }),
+    )
+}
+
+#[test]
+fn image_assets_are_explicit_distinct_durable_scene_definitions() -> Result<()> {
+    let mut scene = Scene::new();
+    let (first, _) = scene.edit(|tx| {
+        tx.create_image_asset(ImageAssetSpec {
+            name: "Shared".into(),
+            bytes: b"first png bytes".to_vec(),
+        })
+    })?;
+    let (second, _) = scene.edit(|tx| {
+        tx.create_image_asset(ImageAssetSpec {
+            name: "Shared".into(),
+            bytes: b"second png bytes".to_vec(),
+        })
+    })?;
+
+    assert_ne!(
+        first, second,
+        "image creation does not implicitly deduplicate"
+    );
+    let (artboard, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Later Edit".into(),
+            width: 100.0,
+            height: 100.0,
+        })
+    })?;
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::ImageAsset)
+            .count(),
+        0,
+        "record export omits persistent images until the authored graph references them"
+    );
+    scene.edit(|tx| {
+        create_image_node(tx, artboard, "First Image", first)?;
+        create_image_node(tx, artboard, "Second Image", second)?;
+        Ok(())
+    })?;
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::ImageAsset)
+            .count(),
+        2,
+        "stable image identities remain usable after unrelated edits"
+    );
+    Ok(())
+}
+
+#[test]
+fn image_export_order_and_asset_ids_follow_current_first_use_not_add_history() -> Result<()> {
+    let mut historical = Scene::new();
+    let (old_first, _) = historical.edit(|tx| {
+        tx.create_image_asset(ImageAssetSpec {
+            name: "Old First".into(),
+            bytes: b"old first bytes".to_vec(),
+        })
+    })?;
+    let (old_second, _) = historical.edit(|tx| {
+        tx.create_image_asset(ImageAssetSpec {
+            name: "Old Second".into(),
+            bytes: b"old second bytes".to_vec(),
+        })
+    })?;
+    historical.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Images".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_image_node(tx, artboard, "Second Image", old_second)?;
+        create_image_node(tx, artboard, "First Image", old_first)?;
+        Ok(())
+    })?;
+
+    let mut fresh = Scene::new();
+    fresh.edit(|tx| {
+        let new_second = tx.create_image_asset(ImageAssetSpec {
+            name: "Old Second".into(),
+            bytes: b"old second bytes".to_vec(),
+        })?;
+        let new_first = tx.create_image_asset(ImageAssetSpec {
+            name: "Old First".into(),
+            bytes: b"old first bytes".to_vec(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Images".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_image_node(tx, artboard, "Second Image", new_second)?;
+        create_image_node(tx, artboard, "First Image", new_first)?;
+        Ok(())
+    })?;
+
+    let historical_records = historical.export_records();
+    assert_eq!(historical_records, fresh.export_records());
+    assert_eq!(
+        historical_records
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::ImageAsset)
+            .map(|record| record.properties.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            vec![
+                ExportedProperty::AssetName("Old Second".into()),
+                ExportedProperty::FileAssetId(0),
+            ],
+            vec![
+                ExportedProperty::AssetName("Old First".into()),
+                ExportedProperty::FileAssetId(1),
+            ],
+        ]
+    );
+    let image_asset_ids = historical_records
+        .records()
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::Image)
+        .map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::ImageAssetId(id) => Some(*id),
+                    _ => None,
+                })
+                .expect("every exported image references a local image asset")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(image_asset_ids, vec![0, 1]);
+    Ok(())
+}
+
+#[test]
+fn image_origin_zero_is_the_sparse_schema_default() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let image = tx.create_image_asset(ImageAssetSpec {
+            name: "Default Origin".into(),
+            bytes: b"default origin bytes".to_vec(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Images".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Image(ImageSpec {
+                name: "Default Origin Image".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                image,
+                origin_x: 0.0,
+                origin_y: 0.0,
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records();
+    let image = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::Image)
+        .expect("image node is exported");
+    assert_eq!(
+        image.properties,
+        vec![
+            ExportedProperty::ComponentName("Default Origin Image".into()),
+            ExportedProperty::ImageAssetId(0),
+        ],
+        "Image origin follows the Rive schema default of 0.0, not a UI-center default"
+    );
+    Ok(())
+}
+
+#[test]
+fn image_rejects_an_asset_identity_owned_by_another_scene_atomically() -> Result<()> {
+    let mut source = Scene::new();
+    let (foreign_image, _) = source.edit(|tx| {
+        tx.create_image_asset(ImageAssetSpec {
+            name: "Foreign".into(),
+            bytes: b"foreign bytes".to_vec(),
+        })
+    })?;
+    let mut target = Scene::new();
+    let mut image = None;
+
+    let error = target
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Target".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            image = Some(create_image_node(
+                tx,
+                artboard,
+                "Foreign Image",
+                foreign_image,
+            )?);
+            Ok(())
+        })
+        .expect_err("foreign image asset must fail during commit");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownImageAsset);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Object(image.expect("create returns a speculative object before commit")),
+            EditId::ImageAsset(foreign_image),
+        ]
+    );
+    assert_eq!(target.export_records().records().len(), 1);
     Ok(())
 }
 

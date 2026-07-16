@@ -27,6 +27,10 @@ pub struct ObjectId(u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FontAssetId(u64);
 
+/// Stable identity of an embedded image owned by the authored scene.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ImageAssetId(u64);
+
 /// Stable identity of a live artboard instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InstanceId(u64);
@@ -68,6 +72,7 @@ pub enum EditId {
     Artboard(ArtboardId),
     Object(ObjectId),
     FontAsset(FontAssetId),
+    ImageAsset(ImageAssetId),
     Instance(InstanceId),
 }
 
@@ -83,6 +88,7 @@ pub enum EditReason {
     UnknownArtboard,
     UnknownObject,
     UnknownFontAsset,
+    UnknownImageAsset,
     EmptyFontAsset,
     InvalidFontAsset,
     CycleDetected,
@@ -421,6 +427,7 @@ pub struct EditReceipt {
 #[derive(Debug, Clone, Default)]
 struct Definitions {
     font_assets: Vec<FontAssetDefinition>,
+    image_assets: Vec<ImageAssetDefinition>,
     artboards: Vec<ArtboardDefinition>,
 }
 
@@ -485,6 +492,7 @@ struct IndexedObject {
 #[derive(Default)]
 struct DefinitionIndex {
     font_assets: BTreeMap<FontAssetId, usize>,
+    image_assets: BTreeMap<ImageAssetId, usize>,
     artboards: BTreeMap<ArtboardId, usize>,
     objects: BTreeMap<ObjectId, IndexedObject>,
     children: BTreeMap<Parent, Vec<ObjectId>>,
@@ -505,6 +513,9 @@ impl DefinitionIndex {
         let mut index = Self::default();
         for (font_index, font) in definitions.font_assets.iter().enumerate() {
             index.font_assets.insert(font.id, font_index);
+        }
+        for (image_index, image) in definitions.image_assets.iter().enumerate() {
+            index.image_assets.insert(image.id, image_index);
         }
         for (artboard_index, artboard) in definitions.artboards.iter().enumerate() {
             index.artboards.insert(artboard.id, artboard_index);
@@ -589,6 +600,7 @@ impl DefinitionIndex {
 #[derive(Default)]
 struct SpecOrigins {
     font_assets: BTreeMap<FontAssetId, usize>,
+    image_assets: BTreeMap<ImageAssetId, usize>,
     artboard_specs: BTreeMap<ArtboardId, usize>,
     nodes: BTreeMap<ObjectId, usize>,
     relationships: BTreeMap<ObjectId, usize>,
@@ -597,6 +609,10 @@ struct SpecOrigins {
 impl SpecOrigins {
     fn font_asset(&self, id: FontAssetId, fallback: usize) -> usize {
         self.font_assets.get(&id).copied().unwrap_or(fallback)
+    }
+
+    fn image_asset(&self, id: ImageAssetId, fallback: usize) -> usize {
+        self.image_assets.get(&id).copied().unwrap_or(fallback)
     }
 
     fn artboard(&self, id: ArtboardId, fallback: usize) -> usize {
@@ -626,6 +642,12 @@ impl SpecOrigins {
 struct FontAssetDefinition {
     id: FontAssetId,
     spec: FontAssetSpec,
+}
+
+#[derive(Debug, Clone)]
+struct ImageAssetDefinition {
+    id: ImageAssetId,
+    spec: ImageAssetSpec,
 }
 
 #[derive(Debug, Clone)]
@@ -1698,6 +1720,7 @@ static NEXT_SCENE_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_ARTBOARD_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_OBJECT_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_FONT_ASSET_ID: AtomicU64 = AtomicU64::new(0);
+static NEXT_IMAGE_ASSET_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Render resources retained for one mount of one live authored instance.
@@ -1721,10 +1744,12 @@ pub struct SceneRenderCache {
 pub enum ExportedObjectKind {
     Backboard,
     FontAsset,
+    ImageAsset,
     FileAssetContents,
     Artboard,
     Shape,
     NestedArtboard,
+    Image,
     Rectangle,
     Fill,
     SolidColor,
@@ -1758,6 +1783,9 @@ pub enum ExportedProperty {
     ScaleX(f32),
     ScaleY(f32),
     NestedArtboardId(u32),
+    ImageAssetId(u32),
+    ImageOriginX(f32),
+    ImageOriginY(f32),
     PathWidth(f32),
     PathHeight(f32),
     RectangleCornerRadiusTopLeft(f32),
@@ -1806,6 +1834,9 @@ impl ExportedProperty {
             Self::ScaleX(_) => PROPERTY_SCALE_X,
             Self::ScaleY(_) => PROPERTY_SCALE_Y,
             Self::NestedArtboardId(_) => PROPERTY_NESTED_ARTBOARD_ID,
+            Self::ImageAssetId(_) => PROPERTY_IMAGE_ASSET_ID,
+            Self::ImageOriginX(_) => PROPERTY_IMAGE_ORIGIN_X,
+            Self::ImageOriginY(_) => PROPERTY_IMAGE_ORIGIN_Y,
             Self::PathWidth(_) => PROPERTY_PATH_WIDTH,
             Self::PathHeight(_) => PROPERTY_PATH_HEIGHT,
             Self::RectangleCornerRadiusTopLeft(_) => PROPERTY_RECTANGLE_CORNER_RADIUS_TL,
@@ -1848,6 +1879,7 @@ impl ExportedProperty {
             Self::ParentId(value)
             | Self::FileAssetId(value)
             | Self::NestedArtboardId(value)
+            | Self::ImageAssetId(value)
             | Self::TextValueRunStyleId(value)
             | Self::TextStyleFontAssetId(value) => AuthoringValue::Uint(u64::from(value)),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
@@ -1865,6 +1897,8 @@ impl ExportedProperty {
             | Self::Rotation(value)
             | Self::ScaleX(value)
             | Self::ScaleY(value)
+            | Self::ImageOriginX(value)
+            | Self::ImageOriginY(value)
             | Self::PathWidth(value)
             | Self::PathHeight(value)
             | Self::RectangleCornerRadiusTopLeft(value)
@@ -1901,10 +1935,12 @@ impl ExportedRecord {
         let type_key = match self.kind {
             ExportedObjectKind::Backboard => TYPE_BACKBOARD,
             ExportedObjectKind::FontAsset => TYPE_FONT_ASSET,
+            ExportedObjectKind::ImageAsset => TYPE_IMAGE_ASSET,
             ExportedObjectKind::FileAssetContents => TYPE_FILE_ASSET_CONTENTS,
             ExportedObjectKind::Artboard => TYPE_ARTBOARD,
             ExportedObjectKind::Shape => TYPE_SHAPE,
             ExportedObjectKind::NestedArtboard => TYPE_NESTED_ARTBOARD,
+            ExportedObjectKind::Image => TYPE_IMAGE,
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::Fill => TYPE_FILL,
             ExportedObjectKind::SolidColor => TYPE_SOLID_COLOR,
@@ -2045,6 +2081,12 @@ impl Scene {
             &spec_origins,
         )
         .map_err(EditError::commit)?;
+        validate_image_assets(
+            &definitions.image_assets,
+            commit_operation_index,
+            &spec_origins,
+        )
+        .map_err(EditError::commit)?;
 
         let final_artboards = definitions
             .artboards
@@ -2078,6 +2120,7 @@ impl Scene {
                 .unwrap_or(commit_operation_index);
             let materialized = MaterializedArtboard::build(
                 &definitions.font_assets,
+                &definitions.image_assets,
                 &definitions.artboards,
                 artboard.id,
                 commit_operation_index,
@@ -2335,6 +2378,16 @@ impl Scene {
             Err(_) => std::process::abort(),
         };
         records.extend(font_records);
+        let (image_records, image_asset_indices) = match ReferencedImageAssets::collect(
+            &self.definitions.image_assets,
+            all_artboards.as_slice(),
+        )
+        .lower(0, &origins)
+        {
+            Ok(lowered) => lowered,
+            Err(_) => std::process::abort(),
+        };
+        records.extend(image_records);
         let artboard_indices = match artboard_indices(all_artboards.as_slice()) {
             Ok(indices) => indices,
             Err(_) => std::process::abort(),
@@ -2343,6 +2396,7 @@ impl Scene {
             let lowered = match lower_artboard(
                 artboard,
                 &font_asset_indices,
+                &image_asset_indices,
                 &artboard_indices,
                 0,
                 &origins,
@@ -2398,6 +2452,32 @@ impl SceneTx<'_> {
             .push(FontAssetDefinition { id, spec });
         self.definition_index.font_assets.insert(id, font_index);
         self.spec_origins.font_assets.insert(id, operation_index);
+        Ok(id)
+    }
+
+    /// Add one embedded image to the scene and return its stable semantic identity.
+    ///
+    /// Each call creates a distinct asset. Callers retain and reuse the returned
+    /// identity when multiple image nodes share one source. The asset remains
+    /// part of the scene's durable definitions across later edits, even while no
+    /// image node references it. Runtime files and export records omit it until
+    /// it is referenced.
+    pub fn create_image_asset(
+        &mut self,
+        spec: ImageAssetSpec,
+    ) -> std::result::Result<ImageAssetId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let id = ImageAssetId(
+            allocate_global_identity(&NEXT_IMAGE_ASSET_ID).ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?,
+        );
+        let image_index = self.definitions.image_assets.len();
+        self.definitions
+            .image_assets
+            .push(ImageAssetDefinition { id, spec });
+        self.definition_index.image_assets.insert(id, image_index);
+        self.spec_origins.image_assets.insert(id, operation_index);
         Ok(id)
     }
 
@@ -2724,7 +2804,7 @@ impl SceneTx<'_> {
 fn valid_artboard_child(child: NodeKind) -> bool {
     matches!(
         child,
-        NodeKind::Shape | NodeKind::NestedArtboard | NodeKind::Text
+        NodeKind::Shape | NodeKind::NestedArtboard | NodeKind::Image | NodeKind::Text
     )
 }
 
@@ -3118,6 +3198,7 @@ impl MaterializedArtboard {
 
     fn build(
         font_assets: &[FontAssetDefinition],
+        image_assets: &[ImageAssetDefinition],
         definitions: &[ArtboardDefinition],
         root: ArtboardId,
         fallback_operation_index: usize,
@@ -3128,10 +3209,14 @@ impl MaterializedArtboard {
         let (font_records, font_asset_indices) =
             ReferencedFontAssets::collect(font_assets, closure.as_slice())
                 .lower(fallback_operation_index, origins)?;
+        let (image_records, image_asset_indices) =
+            ReferencedImageAssets::collect(image_assets, closure.as_slice())
+                .lower(fallback_operation_index, origins)?;
         let artboard_indices = artboard_indices(closure.as_slice())
             .map_err(|reason| EditDiagnostic::new(touched_operation_index, vec![], reason))?;
         let mut records = vec![backboard_record()];
         records.extend(font_records);
+        records.extend(image_records);
         let mut root_objects = None;
         let mut objects_by_artboard_local = BTreeMap::new();
         let mut nested_artboard_targets = BTreeMap::new();
@@ -3139,6 +3224,7 @@ impl MaterializedArtboard {
             let lowered = lower_artboard(
                 definition,
                 &font_asset_indices,
+                &image_asset_indices,
                 &artboard_indices,
                 fallback_operation_index,
                 origins,
@@ -3408,6 +3494,118 @@ fn validate_font_asset(
     Ok(())
 }
 
+/// Canonical record-time view of the persistent image catalog.
+///
+/// `ImageAssetId` definitions remain stable and append-only so typed handles
+/// are never invalidated. Runtime files and export records include only assets
+/// referenced by current `Image` nodes, ordered by their first occurrence in
+/// canonical artboard/node order. This mirrors font lowering and owns stale
+/// exclusion plus the dense local `assetId` remap used by every consumer.
+struct ReferencedImageAssets<'a> {
+    ordered: Vec<&'a ImageAssetDefinition>,
+}
+
+impl<'a> ReferencedImageAssets<'a> {
+    fn collect(
+        image_assets: &'a [ImageAssetDefinition],
+        artboards: &[&ArtboardDefinition],
+    ) -> Self {
+        let definitions = image_assets
+            .iter()
+            .map(|image| (image.id, image))
+            .collect::<BTreeMap<_, _>>();
+        let mut seen = BTreeSet::new();
+        let mut ordered = Vec::new();
+        for artboard in artboards {
+            for node in &artboard.nodes {
+                let NodeSpec::Image(spec) = &node.spec else {
+                    continue;
+                };
+                if seen.insert(spec.image) {
+                    if let Some(image) = definitions.get(&spec.image).copied() {
+                        ordered.push(image);
+                    }
+                }
+            }
+        }
+        Self { ordered }
+    }
+
+    fn lower(
+        self,
+        fallback_operation_index: usize,
+        origins: &SpecOrigins,
+    ) -> std::result::Result<(Vec<ExportedRecord>, BTreeMap<ImageAssetId, u32>), EditDiagnostic>
+    {
+        let record_capacity = self.ordered.len().checked_mul(2).ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                Vec::new(),
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        let mut records = Vec::with_capacity(record_capacity);
+        let mut indices = BTreeMap::new();
+        for (index, image) in self.ordered.into_iter().enumerate() {
+            let operation_index = origins.image_asset(image.id, fallback_operation_index);
+            let file_asset_id = u32::try_from(index).map_err(|_| {
+                EditDiagnostic::new(
+                    operation_index,
+                    vec![EditId::ImageAsset(image.id)],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            if indices.insert(image.id, file_asset_id).is_some() {
+                return Err(EditDiagnostic::new(
+                    operation_index,
+                    vec![EditId::ImageAsset(image.id)],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::ImageAsset,
+                properties: vec![
+                    ExportedProperty::AssetName(image.spec.name.clone()),
+                    ExportedProperty::FileAssetId(file_asset_id),
+                ],
+            });
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::FileAssetContents,
+                properties: vec![ExportedProperty::FileAssetContentsBytes(
+                    image.spec.bytes.clone(),
+                )],
+            });
+        }
+        Ok((records, indices))
+    }
+}
+
+fn validate_image_assets(
+    image_assets: &[ImageAssetDefinition],
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    let mut identities = BTreeSet::new();
+    for (index, image) in image_assets.iter().enumerate() {
+        let operation_index = origins.image_asset(image.id, fallback_operation_index);
+        u32::try_from(index).map_err(|_| {
+            EditDiagnostic::new(
+                operation_index,
+                vec![EditId::ImageAsset(image.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        if !identities.insert(image.id) {
+            return Err(EditDiagnostic::new(
+                operation_index,
+                vec![EditId::ImageAsset(image.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Lower exactly one durable artboard into one runtime-file record stream.
 ///
 /// Preview materialization uses this function today; deterministic export can reuse the same
@@ -3416,6 +3614,7 @@ fn validate_font_asset(
 fn lower_artboard(
     artboard: &ArtboardDefinition,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
+    image_asset_indices: &BTreeMap<ImageAssetId, u32>,
     artboard_indices: &BTreeMap<ArtboardId, u32>,
     fallback_operation_index: usize,
     origins: &SpecOrigins,
@@ -3507,6 +3706,15 @@ fn lower_artboard(
                     ));
                 }
             }
+            NodeSpec::Image(spec) => {
+                if !image_asset_indices.contains_key(&spec.image) {
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::ImageAsset(spec.image)],
+                        EditReason::UnknownImageAsset,
+                    ));
+                }
+            }
             _ => {}
         }
         let parent_id = match node.parent {
@@ -3577,6 +3785,7 @@ fn lower_artboard(
                 parent_id,
                 &all_local_ids,
                 font_asset_indices,
+                image_asset_indices,
                 artboard_indices,
             )
             .map_err(|reason| {
@@ -3721,6 +3930,22 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 }
             }
         }
+        NodeSpec::Image(spec) => {
+            for (property, value) in [
+                ("x", spec.x),
+                ("y", spec.y),
+                ("opacity", spec.opacity),
+                ("rotation", spec.rotation),
+                ("scale_x", spec.scale_x),
+                ("scale_y", spec.scale_y),
+                ("origin_x", spec.origin_x),
+                ("origin_y", spec.origin_y),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
         NodeSpec::Rectangle(spec) => {
             if !spec.width.is_finite() {
                 return Err(EditReason::NonFiniteProperty { property: "width" });
@@ -3813,6 +4038,7 @@ fn node_record(
     parent_id: usize,
     local_ids: &BTreeMap<ObjectId, usize>,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
+    image_asset_indices: &BTreeMap<ImageAssetId, u32>,
     artboard_indices: &BTreeMap<ArtboardId, u32>,
 ) -> std::result::Result<ExportedRecord, EditReason> {
     let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
@@ -3869,6 +4095,39 @@ fn node_record(
                 properties.push(ExportedProperty::ScaleY(spec.scale_y));
             }
             ExportedObjectKind::NestedArtboard
+        }
+        NodeSpec::Image(spec) => {
+            let image_asset_id = image_asset_indices
+                .get(&spec.image)
+                .copied()
+                .ok_or(EditReason::UnknownImageAsset)?;
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::ImageAssetId(image_asset_id));
+            if spec.x != 0.0 {
+                properties.push(ExportedProperty::TranslateX(spec.x));
+            }
+            if spec.y != 0.0 {
+                properties.push(ExportedProperty::TranslateY(spec.y));
+            }
+            if spec.opacity != 1.0 {
+                properties.push(ExportedProperty::WorldOpacity(spec.opacity));
+            }
+            if spec.rotation != 0.0 {
+                properties.push(ExportedProperty::Rotation(spec.rotation));
+            }
+            if spec.scale_x != 1.0 {
+                properties.push(ExportedProperty::ScaleX(spec.scale_x));
+            }
+            if spec.scale_y != 1.0 {
+                properties.push(ExportedProperty::ScaleY(spec.scale_y));
+            }
+            if spec.origin_x != 0.0 {
+                properties.push(ExportedProperty::ImageOriginX(spec.origin_x));
+            }
+            if spec.origin_y != 0.0 {
+                properties.push(ExportedProperty::ImageOriginY(spec.origin_y));
+            }
+            ExportedObjectKind::Image
         }
         NodeSpec::Rectangle(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
@@ -5839,6 +6098,76 @@ mod tests {
         assert_eq!(
             frame.hit_test(instance, crate::Vec2D::new(50.0, 20.0)),
             vec![child_shape]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn image_export_remaps_semantic_asset_and_reimports_as_runtime_file() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let image = tx.create_image_asset(ImageAssetSpec {
+                name: "Photo".into(),
+                bytes: b"opaque image bytes".to_vec(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Images".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Image(ImageSpec {
+                    name: "Hero".into(),
+                    x: 10.0,
+                    y: 20.0,
+                    opacity: 0.75,
+                    rotation: 0.25,
+                    scale_x: 1.5,
+                    scale_y: 2.0,
+                    image,
+                    origin_x: 0.25,
+                    origin_y: 0.75,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        let exported = scene.export_records();
+        let image_asset = exported
+            .records()
+            .iter()
+            .find(|record| record.kind == ExportedObjectKind::ImageAsset)
+            .expect("exported records contain the referenced image asset");
+        assert_eq!(
+            image_asset.properties,
+            vec![
+                ExportedProperty::AssetName("Photo".into()),
+                ExportedProperty::FileAssetId(0),
+            ]
+        );
+        let image = exported
+            .records()
+            .iter()
+            .find(|record| record.kind == ExportedObjectKind::Image)
+            .expect("exported records contain the authored image node");
+        assert!(
+            image
+                .properties
+                .contains(&ExportedProperty::ImageAssetId(0)),
+            "image nodes use the dense runtime-local asset id"
+        );
+
+        let runtime = RuntimeFile::from_authoring_records(exported.into_authoring_records())?;
+        assert_eq!(runtime.artboards().len(), 1);
+        assert!(
+            runtime
+                .artboard_local_object_slots(0)
+                .expect("artboard has validated local objects")
+                .iter()
+                .flatten()
+                .any(|object| object.type_name == "Image"),
+            "the binary importer keeps the image as an artboard-local object"
         );
         Ok(())
     }

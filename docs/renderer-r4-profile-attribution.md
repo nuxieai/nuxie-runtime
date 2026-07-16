@@ -364,11 +364,13 @@ R4 performance decisions use these controls:
 
 1. Match evidence intensity to uncertainty. A deterministic reduction in
    redundant work is primarily proved by exact structural counters plus
-   unchanged output/contracts. One light fixed timing snapshot is enough to
-   catch a contradictory gross regression.
+   unchanged output/contracts. Record one light fixed timing snapshot as
+   directional context, but do not turn a load-unmatched sample into an
+   acceptance gate for counter-defined work.
 2. Use immutable repeated alternating reports and load-matched A-B-B-A when
-   the claimed benefit is defined by timing, the effect is disputed, or the
-   directional snapshot contradicts the structural oracle.
+   the claimed benefit is defined by timing, the effect is disputed, or exact
+   counters do not locate the claimed benefit. A noisy directional sample by
+   itself does not trigger A-B-B-A for an objective work-elimination slice.
 3. For timing-defined work, treat end-to-end submit-to-GPU-complete frame time
    as primary. Trace intervals are diagnostic and may veto only a reproducible
    material regression, not a one-off absolute-duration change.
@@ -622,6 +624,43 @@ emits one draw per each of twelve strokes. Item 125 owns the narrow contiguous
 direct-stroke merge: MSAA targets 13->8 exactly, while atomic targets 14->9
 under Rust's zero-draw attachment clear (C++ reports 10 with its initialize
 draw).
+
+## Item 125: Compatible Direct-Stroke Batches
+
+C++ sorts the twelve `gm-OverStroke` strokes into seven non-overlap groups and
+merges adjacent `msaaStrokes` ranges until a draw-batch, pipeline, resource, or
+element-range break. Rust already produced the same seven intersection-board
+groups, but encoded every stroke separately. Its shared texture shelf also
+left the grouped base-instance ranges noncontiguous when the whole flush could
+not fit one row.
+
+Rust now admits only opaque, unclipped, solid SrcOver direct strokes with no
+image, gradient, feather, or opacity modulation. Each established draw group
+gets one compact texture row when all member layouts and the final padding
+sentinel fit the device contract. Atomic and MSAA then merge only identical
+pipeline/schedule ranges with contiguous relocated instances. All other draws
+retain the old shelf and draw cadence.
+
+On `gm-OverStroke`, atomic draws move 14->9 and MSAA 13->8. MSAA is exact;
+C++ Dawn reports ten atomic draws because it counts the initialize operation
+that Rust performs with an attachment clear. Path patches remain 498 in Rust
+versus 497 in C++, while removing redundant row padding lowers fixed-matrix
+Rust spans 1,542->1,514, instances 6,219->6,191, uploads
+160,744->159,208 bytes, and draws 161->151. Ranked excess rows fall 38->35.
+
+The one-frame snapshot reports 3.507x atomic, 3.455x MSAA, and 2.372x across
+the matrix. It is load-unmatched directional context only and neither proves
+nor vetoes this counter-defined change. Exact work counters, the production
+counter regression, grouped-versus-unbatched MSAA pixels, boundary tests, the
+273/38 renderer feature suite, the workspace suite, and the unchanged
+1,409/0/59 corpus are the acceptance evidence. Sol found no implementation
+defect; its request for end-to-end row and boundary coverage is incorporated.
+
+The new top two rows are the same missing operation:
+`gm-bug339297{,_as_clip}-clockwise-atomic` emit exactly 200 excess path patches.
+C++ excludes strokes from clockwise borrowed coverage; Rust currently submits
+the stroke in both borrowed and main passes. Item 126 owns only that exclusion
+with targets 623->423 and 631->431 path patches.
 
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

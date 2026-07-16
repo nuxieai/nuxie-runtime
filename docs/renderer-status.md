@@ -1487,7 +1487,7 @@ Run `make renderer-golden`.
     47->38. The focused regression, renderer feature/workspace suites, full
     renderer corpus, and V2 floors pass. The light timing snapshot overlapped
     the pixel sweep and is retained only as contaminated directional context.
-125. [ ] Condense compatible direct-stroke ranges in both renderer modes.
+125. [x] Condense compatible direct-stroke ranges in both renderer modes.
     `gm-OverStroke` contains twelve opaque, unclipped, solid SrcOver strokes.
     C++ condenses them to seven low-level stroke batches; Rust issues twelve.
     Merge only strokes in the same logical flush, scheduled draw group,
@@ -1496,8 +1496,21 @@ Run `make renderer-golden`.
     advanced-blend, binding, pipeline, schedule, or range changes end a batch.
     Target MSAA draws 13->8 exactly and atomic 14->9 (C++ reports ten because
     its explicit initialize operation is a draw; Rust's attachment clear is
-    not). Pin the production stream plus synthetic positive and negative
-    boundary cases before broadening eligibility.
+    not). Both targets are met. Per-group compact rows preserve contiguous
+    ranges when the full flush exceeds one row; opacity, clip, gradient, image,
+    feather, pipeline, schedule, flush, and overlap boundaries retain separate
+    draws. Fixed-matrix draws move 161->151, instances 6,219->6,191, spans
+    1,542->1,514, uploads 160,744->159,208, and ranked excess rows 38->35.
+    Production counters, grouped-versus-unbatched pixels, synthetic boundary
+    cases, and Sol review are green.
+126. [ ] Suppress clockwise-atomic borrowed coverage for strokes. C++ defines
+    borrowed coverage as `!isStroke()` and schedules no stroke prepass. Rust's
+    specialized clockwise encoder currently submits each stroke's patches in
+    both borrowed and main passes. This exactly explains the two top rows:
+    `gm-bug339297` is 623 versus 423 path patches and
+    `gm-bug339297_as_clip` is 631 versus 431. Add the C++ predicate at the
+    prepared-draw boundary, preserve fill and clip borrowed coverage, and pin
+    both exact counter targets plus their existing pixel contracts.
 
 ## R2 Completion Record
 
@@ -2640,13 +2653,29 @@ C. **Perf-mechanism inventory scout (proactive port list).** One scout
 D. **Evidence proportional to uncertainty.** A deterministic reduction in
    redundant work, such as twenty equivalent passes becoming one, is accepted
    with exact structural counters, unchanged pixels/contracts, and a light
-   directional timing snapshot. Repeated alternating reports and load-matched
-   A-B-B-A are reserved for timing-defined candidates, disputed effects, or a
-   directional result that contradicts the structural oracle. Attribution of
-   multiple corpus entries may run concurrently; noisy timing acceptance stays
-   serial and records machine load.
+   directional timing snapshot that is context, not a load-unmatched gate.
+   Repeated alternating reports and load-matched A-B-B-A are reserved for
+   timing-defined candidates, disputed effects, or claims not located by exact
+   counters. A noisy directional sample alone does not trigger A-B-B-A for an
+   objective work-elimination slice. Attribution of multiple corpus entries
+   may run concurrently; timing acceptance stays serial and records load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 125 by compacting and merging compatible direct
+  strokes within the seven C++-matched intersection-board groups.
+  `gm-OverStroke` moves 14->9 atomic draws and 13->8 MSAA draws; MSAA is exact
+  and atomic is one below C++ because Rust clears instead of drawing an
+  initialize operation. Fixed-matrix Rust draws move 161->151, instances
+  6,219->6,191, spans 1,542->1,514, uploads 160,744->159,208 bytes, and ranked
+  excess rows 38->35. The production counter test, grouped-versus-unbatched
+  pixel regression, synthetic boundary tests, renderer feature suite (273/38),
+  workspace suite, normal 584-segment floor, and scripted 35-segment floor
+  pass. The renderer corpus remains exact=1,409/diverges=0/gated=59. Sol found
+  no implementation defect and its end-to-end coverage request is
+  incorporated. The light snapshot is load-unmatched context only. Item 126
+  removes the exactly +200 borrowed stroke patches from both `bug339297`
+  atomic rows.
 
 - 2026-07-16: Closed R4 item 124 by replacing per-path plain-stroke midpoint
   padding with C++'s one flush-wide envelope in both modes. On

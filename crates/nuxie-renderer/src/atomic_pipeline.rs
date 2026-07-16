@@ -167,6 +167,7 @@ pub(crate) struct AtomicDraw<'a> {
     pub atlas_blit_vertices: &'a [TriangleVertex],
     pub is_stroke: bool,
     pub is_feather: bool,
+    pub batchable_direct_stroke: bool,
     pub hsl_blend: bool,
     pub image: Option<&'a wgpu::TextureView>,
     pub image_sampler: ImageSampler,
@@ -1446,7 +1447,8 @@ impl AtomicPipeline {
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
                 let group_draws = &draws[group_start..group_end];
                 let first_draw = &group_draws[0];
-                let batch_paths = shared_triangle_buffer.is_some()
+                let batch_paths = (shared_triangle_buffer.is_some()
+                    || group_draws.iter().all(|draw| draw.batchable_direct_stroke))
                     && group_draws.iter().all(|draw| {
                         draw.patch_index_range == first_draw.patch_index_range
                             && draw.is_feather == first_draw.is_feather

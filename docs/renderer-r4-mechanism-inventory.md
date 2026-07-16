@@ -171,6 +171,26 @@ atomic reports 14 versus ten. C++ condenses twelve authored strokes into seven
 compatible contiguous low-level batches. Item 125 owns the same narrow
 direct-stroke range merge in both Rust modes.
 
+### Item 125 Update
+
+Compatible direct strokes now use the existing seven intersection-board groups
+as their batch boundaries. When a whole flush cannot fit one texture row, each
+group receives a compact row so its base-instance ranges remain contiguous;
+the encoders merge only matching pipeline, schedule, resource, and range
+contracts. `gm-OverStroke` moves 14->9 atomic draws and 13->8 MSAA draws, with
+MSAA exact and atomic one below C++ because Rust has no initialize draw.
+
+Fixed-matrix Rust draws move 161->151, instances 6,219->6,191, spans
+1,542->1,514, and uploads 160,744->159,208 bytes. Ranked excess rows fall
+38->35. The load-unmatched one-frame matrix snapshot is 2.372x and is recorded
+only as directional context; exact counters and unchanged pixels accept the
+slice.
+
+The new top rows are `gm-bug339297` and `gm-bug339297_as_clip` clockwise
+atomic path patches, each exactly +200. C++'s borrowed-coverage predicate is
+`!isStroke()`; Rust's specialized clockwise path currently draws the stroke in
+the borrowed pass. Item 126 owns that narrow exclusion.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -183,7 +203,7 @@ direct-stroke range merge in both Rust modes.
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
-| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Fill ranges use contiguous role/subpass batches while retaining required barriers. Item 125 owns the remaining compatible direct-stroke range merge. |
+| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Compatible fill and direct-stroke ranges now merge across C++-matched group and barrier boundaries. |
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
@@ -204,10 +224,12 @@ direct-stroke range merge in both Rust modes.
   direct-resolve path without a new counter or correctness regression.
 - `tessellation_spans` no longer owns the top row. Item 124 moves
   `gm-bevel180strokes` from 120 to 63 in both modes, exact with C++ Dawn.
-- `gpu_draw_calls` is next. `gm-OverStroke` reports 13 Rust draws versus eight
-  in C++ Dawn for MSAA and 14 versus ten for atomic. Five missing compatible
-  direct-stroke merges explain both modes; C++'s counted atomic initialize draw
-  offsets the reported atomic excess by one. Item 125 owns that merge.
+- `gpu_draw_calls` no longer owns the top row. Item 125 moves
+  `gm-OverStroke` to eight MSAA draws exactly and nine atomic draws versus ten;
+  C++'s counted initialize operation explains the lower Rust value.
+- `path_patches` is next. Both clockwise-atomic `bug339297` variants emit
+  exactly 200 excess Rust patches because strokes incorrectly enter the
+  borrowed-coverage pass. Item 126 owns that exclusion.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

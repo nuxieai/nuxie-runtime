@@ -1421,11 +1421,27 @@ Run `make renderer-golden`.
     falls from 63 to six against C++ Dawn's five. The light aggregate snapshot
     moves from 3.224x to 2.033x. Renderer exact=1,409/diverges=0/gated=59,
     V2 floors 584/35, and the workspace suite remain green.
-120. [ ] Attribute the highest remaining deterministic excess: atomic upload
-    bytes on `gm-bevel180strokes-clockwise-atomic` are 54,696 in Rust versus
-    8,448 in C++ Dawn. Map the bytes to concrete buffers and C++ lifetimes
-    before changing representation; accept only a C++-matched reduction with
-    unchanged structural and pixel contracts plus a light directional check.
+120. [x] Share plain-stroke midpoint tessellation across the generic-atomic
+    flush. Attribution split the 54,696-byte target into 3,432 bytes of static
+    frame data and 51,264 bytes of tessellation-arena writes: Rust rebuilt the
+    same packed texture lifetime for each of twenty non-feather strokes, while
+    C++ lays out the flush once. Extending the existing shared midpoint layout
+    to plain strokes reduces `gm-bevel180strokes-clockwise-atomic` from 42 to
+    23 passes (matching C++), 54,696 to 13,224 uploaded bytes, and 41 to 22 GPU
+    draws. The fixed-matrix Rust totals move from 154 to 116 passes, 273,640 to
+    172,008 uploaded bytes, and 220 to 187 GPU draws. A first broad candidate
+    failed seven advanced-blend rows; loaded-destination-color runs now retain
+    their prior per-draw lifetime. The corrected renderer corpus is
+    exact=1,409/diverges=0/gated=59, V2 floors are 584/35, and the workspace
+    suite passes. The four affected Rust directional frames sum to 4.124 ms
+    from 6.937 ms; no load-controlled timing claim is attached.
+121. [ ] Attribute the new mode-paired top excess on
+    `gm-batchedtriangulations`: MSAA emits 14 GPU draws versus four in C++
+    Dawn, while clockwise atomic emits 14 passes and 13 draws versus five and
+    five. Split those rows by pipeline/pass role and map each avoidable
+    boundary to C++ draw-batch merge rules before changing scheduling. Accept
+    only source-matched structural reductions with unchanged correctness floors
+    and a light directional snapshot.
 
 ## R2 Completion Record
 
@@ -2575,6 +2591,20 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    serial and records machine load.
 
 ## Log
+
+- 2026-07-16: Closed R4 item 120 by admitting plain strokes to the existing
+  flush-wide midpoint tessellation layout. On the target scene, passes fall
+  42->23, uploaded bytes 54,696->13,224, and draws 41->22; C++ reports
+  23/8,448/23. Across the fixed matrix, Rust passes move 154->116, bind groups
+  created 133->67, bind-group sets 413->332, texture bindings 278->113,
+  uploaded bytes 273,640->172,008, and GPU draws 220->187. The first broad
+  eligibility rule regressed seven advanced-blend rows, proving loaded
+  destination color is a semantic boundary; fencing that path restores all
+  1,468 corpus outcomes. The four affected Rust directional frames sum to
+  4.124 ms from 6.937 ms while their C++ controls remain 2.930 ms from
+  3.029 ms. This is a light snapshot, not a cross-window load claim. Renderer
+  exact=1,409/diverges=0/gated=59, V2 floors 584/35, and the workspace suite
+  pass. Item 121 owns the refreshed `batchedtriangulations` pass/draw excess.
 
 - 2026-07-16: Closed R4 item 119 by porting C++ WebGPU's binding-invalidation
   rule to direct MSAA paths. Seven fixed MSAA variants remove 141 redundant

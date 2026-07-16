@@ -423,10 +423,39 @@ sets, including `gm-bevel180strokes-msaa` at 63->6. Aggregate Rust work moves
 3.224x->2.033x, a directional smoke check consistent with the structural win.
 No repeated alternating timing campaign is required by the measurement fence.
 
-The refreshed report's highest row is
-`gm-bevel180strokes-clockwise-atomic` uploaded bytes at 54,696 versus 8,448.
-Item 120 first attributes those bytes to concrete buffers and reference
-lifetimes; byte-count changes require a C++-matched data explanation.
+Item 120 attributes the target's 54,696 bytes before changing code. Static
+uniform, path, paint, paint-aux, and contour data account for only 3,432 bytes.
+The tessellation arena writes 51,264 bytes across eighty packed uploads, with
+46,080 bytes of payload. The existing shared midpoint layout admitted simple
+fills but excluded compatible plain strokes, so twenty strokes rebuilt the
+texture/pass lifetime that C++ lays out once per logical flush.
+
+Plain non-feather strokes now enter that shared layout when the run has no
+image, triangle mesh, atlas, clip update, forced specialized clockwise batch,
+or loaded destination color. The last condition is evidence-driven: the first
+broad candidate failed `overstroke_blendmodes`, `xfermodes2`, and all five
+`fix_rectangle` clockwise-atomic frames. Those advanced-blend runs load prior
+color and require their old per-draw lifetime. Adding the fence restores the
+full renderer corpus to exact=1,409/diverges=0/gated=59.
+
+On `gm-bevel180strokes-clockwise-atomic`, Rust moves from 42 to 23 passes,
+54,696 to 13,224 uploaded bytes, and 41 to 22 GPU draws. C++ Dawn reports 23,
+8,448, and 23. Across all sixteen variants, Rust moves from 154 to 116 passes,
+133 to 67 created bind groups, 413 to 332 bind-group sets, 278 to 113 texture
+bindings, 273,640 to 172,008 uploaded bytes, and 220 to 187 GPU draws. The
+ranked excess count falls from 92 to 81.
+
+The light directional snapshot is favorable on every affected Rust row; their
+sum falls from 6.937 to 4.124 ms while the C++ controls move from 3.029 to
+2.930 ms. The full aggregate ratio is intentionally not compared across these
+windows because unrelated MSAA controls changed with machine load. Exact work
+counters and unchanged output are the acceptance evidence. Both V2 floors
+remain 584/35 and the full workspace suite passes.
+
+The refreshed top mode-paired excess is `gm-batchedtriangulations`: MSAA emits
+14 GPU draws versus four in C++ Dawn, while clockwise atomic emits 14 passes
+and 13 draws versus five and five. Item 121 attributes those pass roles and
+C++ batch boundaries before another scheduling change.
 
 The complete source-mapped checklist is
 `docs/renderer-r4-mechanism-inventory.md`.

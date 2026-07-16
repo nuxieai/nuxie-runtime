@@ -2297,7 +2297,8 @@ impl WgpuFrame {
                 let atlas_physical_size =
                     atlas_physical_size(atlas_content_size, max_atlas_dimension);
                 let [atlas_width, atlas_height] = atlas_content_size;
-                let share_midpoint_tessellation = !force_clockwise_atomic_batch
+                let share_midpoint_tessellation = load_color.is_none()
+                    && !force_clockwise_atomic_batch
                     && draws
                         .iter()
                         .all(|draw| !matches!(draw.role, DrawRole::ClipUpdate { .. }))
@@ -2305,7 +2306,6 @@ impl WgpuFrame {
                         draw.image.is_none()
                             && draw.triangles.is_empty()
                             && draw.atlas.is_none()
-                            && !draw.is_stroke
                             && !draw.is_feather
                             && draw.patch_index_range.end
                                 <= (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
@@ -7266,6 +7266,46 @@ mod tests {
             vertex_index0 + logical_offset
         );
         assert!(tessellation.spans.iter().all(|span| span.y == 2.0));
+    }
+
+    #[test]
+    fn stroke_midpoint_tessellation_relocates_for_shared_atomic_texture() {
+        let path = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let mut tessellation = draw::build_stroke_tessellation(
+            &path.raw_path,
+            Mat2D::IDENTITY,
+            2.0,
+            StrokeJoin::Bevel,
+            StrokeCap::Butt,
+        )
+        .unwrap();
+        let base_instance = tessellation.base_instance;
+        let vertex_indices = tessellation
+            .contours
+            .iter()
+            .map(|contour| contour.vertex_index0)
+            .collect::<Vec<_>>();
+        let x = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let y = 2;
+
+        relocate_midpoint_tessellation(
+            &mut tessellation.spans,
+            &mut tessellation.base_instance,
+            &mut tessellation.contours,
+            x,
+            y,
+        );
+
+        let logical_offset = y * gpu::TESS_TEXTURE_WIDTH as u32 + x;
+        assert_eq!(
+            tessellation.base_instance,
+            base_instance + logical_offset / gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
+        );
+        assert!(tessellation
+            .contours
+            .iter()
+            .zip(vertex_indices)
+            .all(|(contour, original)| contour.vertex_index0 == original + logical_offset));
     }
 
     #[test]

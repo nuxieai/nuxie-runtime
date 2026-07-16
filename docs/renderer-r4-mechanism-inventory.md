@@ -53,6 +53,41 @@ The refreshed highest-ranked row is
 8,448 in C++ Dawn. Item 120 must map those bytes to concrete buffers and the
 C++ lifetime mechanism before reducing them.
 
+### Item 120 Update
+
+Attribution found only 3,432 bytes of static frame uploads on the target. The
+remaining 51,264 bytes were eighty tessellation-arena writes with 46,080 bytes
+of payload. Rust's existing shared midpoint layout excluded every stroke, so
+twenty compatible plain strokes each paid a texture-layout and pass lifetime;
+C++ lays out the logical flush once.
+
+Plain non-feather strokes now use the shared layout when the run has no image,
+triangle, atlas, clip update, forced specialized clockwise batch, or loaded
+destination color. A first candidate omitted that last boundary and regressed
+seven advanced-blend corpus rows; destination-read runs therefore preserve
+their prior per-draw lifetime.
+
+The fixed-matrix Rust totals change as follows:
+
+| counter | item 119 | item 120 | C++ Dawn |
+| --- | ---: | ---: | ---: |
+| render passes | 154 | 116 | 91 |
+| bind groups created | 133 | 67 | 115 |
+| bind-group sets | 413 | 332 | 324 |
+| texture bindings | 278 | 113 | 171 |
+| buffer upload bytes | 273,640 | 172,008 | 156,832 |
+| GPU draw calls | 220 | 187 | 158 |
+
+`gm-bevel180strokes-clockwise-atomic` moves from 42 to 23 passes, 54,696 to
+13,224 uploaded bytes, and 41 to 22 draws; C++ reports 23, 8,448, and 23. The
+four affected Rust directional frames sum to 4.124 ms from 6.937 ms. Their C++
+controls remain close at 2.930 ms from 3.029 ms, but this is still a light
+cross-window snapshot rather than load-controlled timing evidence.
+
+The refreshed top rows belong to `gm-batchedtriangulations`: MSAA has 14 GPU
+draws versus four, while clockwise atomic has 14 passes and 13 draws versus
+five and five. Item 121 owns the mode-paired batch-boundary attribution.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -65,7 +100,7 @@ C++ lifetime mechanism before reducing them.
 | Retained allocation high-water marks | `renderer/src/render_context.cpp:837-938`, `2562-2910` | allocation churn and upload capacity | Persistent atomic backing and frame upload arenas are ported. The 125% growth and five-second trim policy are not yet copied wholesale. |
 | Gradient content deduplication | `renderer/src/render_context.cpp:575-662` | gradient rows, texture work, draw calls | Functional gradient batching exists; no texture uploads occur in the warm fixed matrix. Revisit with a gradient-heavy counter scene. |
 | Skyline feather-atlas packing | `renderer/src/render_context.cpp:663-724`, `2205-2290` | atlas passes, patch instances, texture dimensions | Functional atlas batching is ported; retained atlas allocation policy remains counter-led. |
-| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic flush-wide lifetime is ported. Remaining pass/draw excess is open. |
+| Draw-batch merge and explicit barrier breaks | `renderer/src/render_context.cpp:3364-3770` | render passes, GPU draw calls, instances | Atomic flush-wide lifetime and plain-stroke midpoint sharing are ported. Item 121 attributes the remaining `batchedtriangulations` excess. |
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
@@ -82,15 +117,16 @@ C++ lifetime mechanism before reducing them.
 - `bind_group_sets` no longer owns the top row. Item 119 removed 141 repeated
   direct-MSAA sets; retain the remaining layout-bound sets until another
   source-matched redundancy is identified.
-- `render_passes` and `gpu_draw_calls` are next, but their remaining rows mix
-  mandatory fill-rule subpasses with avoidable lifecycle boundaries. Split
-  them by pipeline/pass class before changing scheduling.
+- `render_passes` and `gpu_draw_calls` are next. The top mode-paired scene is
+  `gm-batchedtriangulations`; split it by pipeline/pass class before changing
+  scheduling because mandatory fill-rule work and avoidable boundaries share
+  the aggregate counters.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.
 - Lower Rust upload-call count is not automatically a win: Rust coalesces into
-  fewer writes while currently uploading more bytes. Byte volume is the open
-  signal.
+  fewer writes. Item 120 reduced the byte excess from 116,808 to 15,176 with a
+  source-matched shared layout; the residual is no longer the highest row.
 
 Regenerate the ranked artifact with `make perf-counter-compare`. The JSON and
 Markdown outputs live under `target/` and are intentionally not checked in.

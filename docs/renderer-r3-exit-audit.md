@@ -18,6 +18,67 @@ The corpus manifest has no renderer-selection field separate from its status:
 `status = "exact"` is the production Rust-renderer ratchet, while
 `status = "gated"` retains the documented boundary.
 
+## R3.1 Completion Verdict (2026-07-15)
+
+R3.1 is complete at `exact=1,409`, `diverges=0`, `gated=59`,
+`total=1,468`. Strict gradient-paint and render-buffer replay cover every
+registered Dawn case, no row remains behind a harness placeholder, and the
+last three provisional clockwise-atomic findings now have full-stream
+same-backend evidence.
+
+The active retained taxonomy is:
+
+| Count | Diagnostic |
+| ---: | --- |
+| 53 | `metal-webgpu-subpixel-edge-coverage` |
+| 2 | `metal-webgpu-atomic-intermediate-precision` |
+| 2 | `rust-wgpu-atomic-color-plane-lifetime-parity` |
+| 1 | `dawn-wgpu-msaa-interleaved-feather-color-precision` |
+| 1 | `metal-webgpu-fixed-function-color-output` |
+| **59** | **Total** |
+
+Fifty-seven rows are reviewed backend or intermediate-precision boundaries.
+The other two are one concrete Rust architecture finding: crossing between
+the specialized clockwise and general atomic strategies resolves the packed
+color plane to RGBA8 and reloads it, while C++ retains one packed color plane
+through the logical flush. That finding has an executable owner in R4's first
+batching/flush task. No reference, tolerance, or status was changed to reach
+this verdict; R4 is unblocked.
+
+### Final Data Viz Adjudication
+
+The corrected flush-wide dither contract brings the complete C++ Dawn/Rust
+wgpu frame to 22 pixels over delta 2/max delta 3, inside the unchanged `2/32`
+contract. Its remaining native C++ Metal/Rust wgpu comparison is 2,054/max
+delta 99 and therefore carries the already-reviewed
+`metal-webgpu-subpixel-edge-coverage` boundary. It is no longer an
+advanced-feather parity hypothesis.
+
+### Final Echo Show Adjudication
+
+The complete 511-command C++ Dawn/Rust wgpu frame differs at 96 pixels over
+delta 2/max delta 3. Command 462 passes; the first failure is command 463, an
+unfeathered NonZero Screen fill. The C++ and Rust coverage transitions touch
+the exact same 230,896 packed words, while Rust partitions the work across
+specialized-clockwise and general-atomic runs and C++ keeps one packed color
+plane across the flush. This rules out the prior clip-edge and
+advanced-feather hypotheses and narrows the row to
+`rust-wgpu-atomic-color-plane-lifetime-parity`.
+
+### Final Car Widgets Adjudication
+
+The complete C++ Dawn/Rust wgpu frame differs at 10,872 pixels over delta 2/
+max delta 13. Prefix bisection finds two strategy-boundary amplifiers. At
+command 435, 72,899 of 73,041 shared coverage words are bit-exact and the
+remaining 142 differ by one; all 68 newly bad covered pixels lie inside that
+shared mask. At command 2,830, the clip planes agree at 253,163 of 253,171
+words and 17,433 bad pixels lie inside the shared clip/coverage region. The
+terminal draws are respectively ColorDodge and Multiply general-atomic fills
+immediately after specialized clockwise work. Routing complex paths away from
+the specialized pipeline fixes the first prefix but catastrophically regresses
+the second, so no topology heuristic is admitted. Car Widgets retains the
+same `rust-wgpu-atomic-color-plane-lifetime-parity` finding as Echo Show.
+
 ## Entry Gates
 
 - The GPU semantic-trap audit is closed. Shader provenance, clip-plane routing,

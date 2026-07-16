@@ -276,12 +276,17 @@ retained set:
    `gm-cliprectintersections-msaa`, and `gm-beziers-msaa`. Use same-backend
    evidence to distinguish a Rust defect from a platform boundary before
    reclassification.
-   `riv-bullet_man-frame-0-clockwise-atomic`, `gm-beziers-msaa`, and
+   `riv-bullet_man-frame-0-clockwise-atomic`, `gm-beziers-msaa`,
    `gm-cliprectintersections-msaa`, and `bankcard` are complete. Later
    same-hardware artifact comparisons reclassified `coin`, `hunter_x_demo`,
-   and `rewards_demo` to the reviewed Metal/WebGPU subpixel-edge boundary;
-   `car_widgets_v01`, `data_viz_demo`, and Echo's separate clip/composite
-   finding remain actionable.
+   `rewards_demo`, and `data_viz_demo` to the reviewed Metal/WebGPU
+   subpixel-edge boundary. Full-stream C++ Dawn/Rust wgpu replay passes Data
+   Viz's unchanged contract at 22 pixels/max delta 3. Car Widgets and Echo
+   Show are narrowed by same-backend command-prefix and packed-plane oracles
+   to `rust-wgpu-atomic-color-plane-lifetime-parity`: their raster/clip facts
+   agree, while Rust resolves the packed color plane to RGBA8 when execution
+   crosses the specialized-clockwise/general-atomic strategy boundary. That
+   concrete two-row finding is owned by R4's first batching/flush task.
    All seven now have fresh native-Metal references and execute to pixels after
    aligning off-frame draw culling, expanded atomic coverage bounds, and
    singular nested-clip handling with C++. `coin` is adjudicated as the
@@ -308,9 +313,10 @@ retained set:
    stroke, feather, advanced-blend, and edge-residual queues. The image-mesh
    port promotes two rows; same-backend prefix capture proves the third clears
    every mesh and retains only a later image-rectangle dither-precision gate.
-3. Keep the 56 reviewed platform limitations parked unless new same-backend
-   evidence identifies a Rust defect: 55 backend/decoder/precision rows plus
-   the native C++ Metal MSAA limitation.
+3. Keep the 57 reviewed backend/precision rows parked unless new same-backend
+   evidence identifies a Rust defect. The other two retained rows are the
+   executable atomic color-plane lifetime finding above, not platform
+   limitations.
 
 ### Exit Criteria
 

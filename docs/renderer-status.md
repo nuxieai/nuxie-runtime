@@ -381,7 +381,7 @@ Run `make renderer-golden`.
   bootstrap coverage, one GM stream, and one real `.riv` stream are exact.
 - [x] R2: Algorithm core.
 - [x] R3: Corpus convergence.
-- [ ] R3.1: Retained gate burn-down.
+- [x] R3.1: Retained gate burn-down.
 - [ ] R4: Performance parity.
 - [ ] R5: Native fast paths and extensions; demand-gated after R4.
 
@@ -1109,7 +1109,7 @@ Run `make renderer-golden`.
     not clip-intersection rasterization. The current probe passes the unchanged
     `2/32` contract and advances the ratchet to
     exact=1,356/diverges=0/gated=112.
-90. [ ] Adjudicate the seven
+90. [x] Adjudicate the seven
     `native-clockwise-atomic-advanced-feather-parity` rows with full-stream C++
     Dawn clockwise-atomic references. Port any same-backend Rust defect; only
     reclassify a row after the full stream passes its unchanged contract. The
@@ -1148,9 +1148,13 @@ Run `make renderer-golden`.
     artifact comparison then proved all 254 visible isolated differences are
     exactly on its sparse clip-plane edge differences, while the unclipped
     control passes. Rewards is reclassified to the reviewed subpixel-edge
-    boundary. Current actionable probes are `car_widgets_v01` 65,522/96,
-    `data_viz_demo` 12,118/99, and `echo_show_demo` 67,301/54; all three remain
-    open under unchanged contracts.
+    boundary. The final corrected-dither campaign closes the remaining three
+    classifications. Full C++ Dawn/Rust wgpu Data Viz passes `2/32` at
+    22/max 3 and moves to the reviewed Metal/WebGPU edge boundary. Car Widgets
+    (10,872/max 13) and Echo Show (96/max 3) retain matching raster/clip facts
+    but cross a specialized-clockwise/general-atomic RGBA8 resolve/reload
+    boundary that C++ avoids by retaining one packed color plane. Both move to
+    the executable `rust-wgpu-atomic-color-plane-lifetime-parity` finding.
 91. [x] Complete strict gradient-paint and render-buffer replay, capture the 46
     newly comparable rows, and promote or enqueue every result. R4 runner
     wiring resumes only after the R3.1 exit criteria hold. Strict linear and
@@ -1230,17 +1234,30 @@ Run `make renderer-golden`.
     identities, so adding one case requires no bulk provenance rewrite or
     filesystem transaction. Focused C++ Dawn/Rust wgpu comparison is byte-exact
     at 0/max 0; the ratchet advances to exact=1,409/diverges=0/gated=59.
-102. [ ] Capture a full same-backend C++ Dawn/Rust wgpu Car Widgets frame after
+102. [x] Capture a full same-backend C++ Dawn/Rust wgpu Car Widgets frame after
     the advanced-flush dither fix. If it passes, reclassify only the residual
     native Metal/WebGPU pixels; otherwise isolate the first failing prefix.
-103. [ ] Capture Data Viz commands 16, 17, and 22 with the corrected dither
+    The 3,288-command frame is 10,872/max 13. Prefix bisection isolates
+    command 435 ColorDodge and command 2,830 Multiply amplifiers immediately
+    after specialized clockwise work. Their shared coverage values are exact
+    or off by one and the latter clip plane agrees at 253,163/253,171 words;
+    the bad pixels lie inside the shared masks. The row moves to
+    `rust-wgpu-atomic-color-plane-lifetime-parity`.
+103. [x] Capture Data Viz commands 16, 17, and 22 with the corrected dither
     contract, then compare the first still-failing production schedule,
     tessellation span, payload, and coverage field against an independent C++
-    oracle. Do not substitute or reorder production inputs.
-104. [ ] Extend the exact Echo C++ Dawn/Rust wgpu prefix comparison through the
+    oracle. Do not substitute or reorder production inputs. The complete
+    production frame passes the unchanged same-backend contract at 22/max 3,
+    superseding a prefix-only failure hunt; the native residual moves to
+    `metal-webgpu-subpixel-edge-coverage`.
+104. [x] Extend the exact Echo C++ Dawn/Rust wgpu prefix comparison through the
     full command stream. Commands 39 and 104 now pass at 0/max 1 after enabling
     C++'s flush-wide atomic dither feature; only a later failing prefix may
-    justify more production code.
+    justify more production code. The 511-command frame is 96/max 3. Command
+    462 passes and command 463 is the first failure; C++ and Rust touch the
+    exact same 230,896 coverage words, leaving only the color-plane lifetime
+    difference across strategy partitions. Echo moves to
+    `rust-wgpu-atomic-color-plane-lifetime-parity`.
 105. [x] Close Rewards' remaining command-21 clipped residual with a fresh
     cross-language payload/plane oracle. An empty-directory recapture from the
     pinned C++ Dawn executable reproduced all nine artifact hashes. CPU spans
@@ -1253,6 +1270,13 @@ Run `make renderer-golden`.
     status, reference, or tolerance change. The rejected mixed artifact
     harness remains out of production; see
     `docs/renderer-rewards-command21-audit.md`.
+106. [ ] Start R4 by wiring the live release C++ and Rust renderer runners to
+    the checked-in `rive-renderer-perf-runner-v1` protocol. The first vertical
+    slice is one manifest scene in both modes with seven outer samples,
+    submit-to-GPU-complete timing, identical adapter identity, and matching
+    logical-flush/draw counters. The counters must expose atomic strategy
+    partitions so R4's first batching task also owns the two-row retained
+    color-plane lifetime finding.
 
 ## R2 Completion Record
 
@@ -1464,6 +1488,17 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-15: Close R3.1 with 57 reviewed backend/precision rows and one
+  two-row executable Rust finding. Data Viz's full same-backend frame passes
+  its unchanged contract; Car Widgets and Echo Show have matching raster/clip
+  evidence but Rust resolves and reloads RGBA8 when execution crosses atomic
+  strategies. Name that finding
+  `rust-wgpu-atomic-color-plane-lifetime-parity`, keep both rows gated without
+  changing references or tolerances, and make retained color plus structural
+  strategy counters the first R4 batching/flush responsibility. This satisfies
+  R3.1's written exit condition without pretending the two rows are platform
+  limitations.
 
 - 2026-07-14: Pre-stage R4 as a report/protocol scaffold only; live runner
   wiring remains blocked on R3. The fixed 8-scene x 2-mode manifest pins
@@ -3906,3 +3941,16 @@ Run `make renderer-golden`.
   deltas remain 96, 99, and 54. No reference, tolerance, status, or corpus
   count changes yet. Queue items 102-104 now require full or first-failing
   same-backend evidence before another renderer change.
+- 2026-07-15: Closed R3.1 queue items 90 and 102-104 with full-stream C++
+  Dawn/Rust wgpu evidence. Data Viz passes `2/32` at 22/max 3 and joins the
+  reviewed Metal/WebGPU edge boundary. Echo's 511-command frame is 96/max 3;
+  its first failing command has an exact 230,896-word coverage transition.
+  Car Widgets is 10,872/max 13; both isolated cliffs retain matching coverage
+  or clip masks. Car and Echo therefore share the concrete
+  `rust-wgpu-atomic-color-plane-lifetime-parity` finding. No renderer code,
+  reference, tolerance, or status changed; the honest ratchet remains
+  exact=1,409/diverges=0/gated=59. All R3.1 exit criteria now hold and queue
+  item 106 starts R4's live same-backend benchmark runner slice. The closing
+  verification passes the full renderer corpus, normal V2 floor at 584 exact
+  segments, scripted V2 floor at 35 exact segments, and
+  `cargo test --workspace`.

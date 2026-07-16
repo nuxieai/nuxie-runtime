@@ -116,6 +116,30 @@ remains part of the regression floor. SDK binary size (`make size-report`)
 is a tracked release criterion — the renderer's size impact is measured,
 not guessed.
 
+The **R4 Addendum (2026-07-16)** in `docs/renderer-status.md` is binding
+and sequences R4 as follows:
+
+1. **Mode-ladder decomposition FIRST.** Before further optimization items,
+   benchmark C++ against itself across the mode ladder (native-Metal
+   raster-order vs native-Metal atomic vs Dawn-WebGPU clockwise-atomic) to
+   split the current gap into mode/API tax vs genuine implementation gap.
+   Record the R4 gate as a Decision measured against **C++ Dawn
+   clockwise-atomic** — the same capability tier we ported. Native-Metal
+   numbers are reported as informational context, never as the gate.
+2. **Attribute by counter parity, not profiles, where possible.** The
+   counter-parity harness (deterministic per-stream work counters from
+   both implementations, diffed and ranked) is the primary attribution
+   tool: it is noise-free, needs no load fence, and its output is
+   Terra-delegable. Profile only what counters cannot see.
+3. **Port from the mechanism inventory.** The perf-mechanism inventory
+   (pooling, rings, coalescing, reuse in `render_context.cpp` and
+   friends) turns discovery into checklist-porting: prefer porting the
+   C++ mechanism at the same site over inventing an optimization.
+4. **Explore in parallel, accept serially.** Scouts/profiling may run
+   concurrently, but bench acceptance is one-at-a-time A-B-B-A
+   load-matched brackets under the recorded load fence; measured
+   rejections are recorded, not retried until they pass.
+
 ## Weeds tripwires — check at every commit
 
 If ANY of these fire, stop, write a one-line confession in the status-file

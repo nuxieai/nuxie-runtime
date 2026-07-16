@@ -208,6 +208,13 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
+    /// Return visible runtime shape local-id paths under `point`, front to
+    /// back. Direct hits contain one local id; nested hits are prefixed with
+    /// their nested-host local ids.
+    pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
+        self.raw.geometry_hit_test_paths(point, &mut self.geometry)
+    }
+
     /// Return exact logical world bounds for one runtime-local object.
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         self.raw.geometry_world_bounds(local_id, &mut self.geometry)
@@ -522,6 +529,13 @@ impl OwnedArtboardInstance {
     /// Return visible runtime shape locals under `point`, front to back.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
+    }
+
+    /// Return visible runtime shape local-id paths under `point`, front to
+    /// back. Direct hits contain one local id; nested hits are prefixed with
+    /// their nested-host local ids.
+    pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
+        self.raw.geometry_hit_test_paths(point, &mut self.geometry)
     }
 
     /// Return exact logical world bounds for one runtime-local object.

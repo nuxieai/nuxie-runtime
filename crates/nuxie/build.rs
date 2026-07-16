@@ -176,6 +176,77 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "Image",
+        schema_name: "Image",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "WorldTransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "rotation",
+                schema_name: "rotation",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_x",
+                schema_name: "scaleX",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_y",
+                schema_name: "scaleY",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "image",
+                schema_name: "assetId",
+                declared_owner: "Image",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "origin_x",
+                schema_name: "originX",
+                declared_owner: "Image",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "origin_y",
+                schema_name: "originY",
+                declared_owner: "Image",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "Rectangle",
         schema_name: "Rectangle",
         fields: &[
@@ -489,6 +560,12 @@ const OBJECTS: &[ObjectSpec] = &[
         fields: &[ASSET_NAME],
         is_node: false,
     },
+    ObjectSpec {
+        rust_name: "ImageAsset",
+        schema_name: "ImageAsset",
+        fields: &[ASSET_NAME],
+        is_node: false,
+    },
 ];
 
 // The first cursor surface is deliberately narrower than the structural
@@ -652,6 +729,12 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         false,
     );
+    let image_asset_id =
+        resolve_named_property("Image", "assetId", "Image", FieldKind::Uint, false);
+    let image_origin_x =
+        resolve_named_property("Image", "originX", "Image", FieldKind::Double, false);
+    let image_origin_y =
+        resolve_named_property("Image", "originY", "Image", FieldKind::Double, false);
     let path_width = resolve_named_property(
         "Rectangle",
         "width",
@@ -802,6 +885,9 @@ fn render_scene_schema() -> String {
         ("SCALE_X", scale_x),
         ("SCALE_Y", scale_y),
         ("NESTED_ARTBOARD_ID", nested_artboard_id),
+        ("IMAGE_ASSET_ID", image_asset_id),
+        ("IMAGE_ORIGIN_X", image_origin_x),
+        ("IMAGE_ORIGIN_Y", image_origin_y),
         ("PATH_WIDTH", path_width),
         ("PATH_HEIGHT", path_height),
         ("FILL_RULE", fill_rule),
@@ -963,7 +1049,7 @@ fn render_scene_schema() -> String {
         if object.rust_name == "Rectangle" {
             output.push_str("    pub corner_radii: Option<RectangleCornerRadii>,\n");
         }
-        if object.rust_name == "FontAsset" {
+        if object.rust_name == "FontAsset" || object.rust_name == "ImageAsset" {
             output.push_str("    pub bytes: Vec<u8>,\n");
         }
         output.push_str("}\n\n");
@@ -1313,6 +1399,7 @@ fn public_field_rust_type(
         ("TextValueRun", "style") => "ObjectId",
         ("TextStylePaint", "font") => "FontAssetId",
         ("NestedArtboard", "artboard") => "ArtboardId",
+        ("Image", "image") => "ImageAssetId",
         _ => rust_type(runtime_type),
     }
 }

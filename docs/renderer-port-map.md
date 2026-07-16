@@ -347,13 +347,16 @@ implicated per-draw clockwise render passes, but controlled Rust-only A/Bs
 rejected both merging borrowed/main passes (23.95% aggregate regression) and
 vertically packing safe simple-draw tessellation textures (22.25% regression).
 Both candidates preserved the full pixel corpus and were removed. Paired
-one-draw/20-draw Time Profiler and Metal traces now identify the first hot
-site: Rust interleaves initialized buffer uploads with tessellation passes,
-forcing approximately one wgpu pending-write submission per draw and 59.72 ms
-of upload encoder time in the 20-draw case. C++ maps flush-wide buffer rings
-before encoding and submits one command buffer. The next task adapts that
-upload-before-encode ordering while preserving separate textures and passes;
-see `docs/renderer-r4-profile-attribution.md`.
+one-draw/20-draw Time Profiler and Metal traces identify approximately one
+wgpu pending-write submission per tessellation draw and 59.72 ms of encoder
+time in the 20-draw case. A controlled preparation-order candidate and a
+packed shared-buffer candidate both retained approximately 20 submissions per
+frame and failed timing acceptance, proving initialized-buffer ordering was
+not the boundary. Each submission immediately precedes first use of a newly
+allocated per-draw tessellation texture, while C++ retains tessellation
+resources across frames. The next task ports completed-frame texture reuse
+while preserving separate textures and passes; see
+`docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

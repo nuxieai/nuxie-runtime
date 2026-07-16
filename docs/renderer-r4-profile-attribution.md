@@ -89,11 +89,21 @@ creates one command encoder before `RenderContext::flush` and submits one
 command buffer afterward. Atomic PLS backing buffers are persistent and only
 resized when dimensions change.
 
-Rust currently interleaves upload and encoding. Each
-`Tessellator::encode` creates four initialized buffers and immediately begins a
-render pass. Beginning the pass forces wgpu to flush those writes, producing
-approximately one `PendingWrites` command buffer per draw. Later atomic
-metadata uploads repeat the same pattern. This is the measured hot site.
+Rust creates one tessellation output texture per draw and recreates those
+textures every frame. Each `Tessellator::encode` also creates four initialized
+buffers immediately before its render pass. The first profile proved that a
+`PendingWrites` command buffer precedes almost every tessellation pass, but it
+did not by itself distinguish buffer upload from first-use texture work.
+
+A controlled follow-up made that distinction. Merely preparing all buffers
+before encoding left 19.99 pending-write submissions/frame. Packing every span
+into one buffer and sharing one uniform/path/contour bind group still left
+19.85/frame, with each event immediately preceding the next distinct
+tessellation texture's first pass. The packed-buffer candidate also changed
+the 20-draw median from 69.644 ms to 70.463 ms. The only per-draw resource left
+unchanged by both candidates was the newly allocated output texture, so the
+trace supports first-use texture initialization as the submission boundary.
+Both candidates were removed.
 
 Authoritative source sites:
 
@@ -109,18 +119,19 @@ Authoritative source sites:
 
 ## Next Port
 
-First adapt C++'s flush-wide preparation order without changing geometry or
+First adapt C++'s persistent resource lifetime without changing geometry or
 GPU pass semantics:
 
-1. Split Rust tessellation resource preparation from render-pass encoding.
-2. Prepare all draw uploads in an atomic run before beginning its first
-   tessellation pass, allowing wgpu to coalesce pending writes.
+1. Check out size-compatible tessellation textures from a bounded pool.
+2. Hold checked-out textures until the frame's GPU-completion fence passes,
+   then return them for a later frame.
 3. Preserve one tessellation texture per draw, existing indices, pass order,
    and every shader input. Do not revive vertical packing or pass merging.
-4. Accept only if the twenty-draw trace collapses pending-write submissions
-   from approximately twenty per frame to one or a small constant, the fixed
-   old-Rust/current-Rust A/B improves, and the 1,468-row corpus remains
+4. Cover concurrent/in-flight frames and bounded retention explicitly.
+5. Accept only if the steady-state twenty-draw trace collapses pending-write
+   submissions from approximately twenty per frame to a small constant, the
+   fixed old-Rust/current-Rust A/B improves, and the 1,468-row corpus remains
    exact=1,409/diverges=0/gated=59.
 
 Persistent buffer rings and atomic backing-plane reuse remain subsequent
-measured work if this ordering port does not close enough of the gap.
+measured work if texture reuse does not close enough of the gap.

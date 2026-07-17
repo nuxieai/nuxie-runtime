@@ -290,7 +290,10 @@ fn callback_event_for_keyed_property(
     Some(StateMachineReportedEvent {
         event_local_index: target_local_id,
         event_core_type: u32::from(target.type_key),
-        name: target.string_property("name").map(ToOwned::to_owned),
+        name: target
+            .string_property("name")
+            .filter(|name| !name.is_empty())
+            .map(ToOwned::to_owned),
         seconds_delay: 0.0,
     })
 }

@@ -1110,7 +1110,10 @@ impl RuntimeStateMachineFireAction {
                     event: StateMachineReportedEvent {
                         event_local_index: action.event_local_index?,
                         event_core_type: u32::from(event.type_key),
-                        name: event.string_property("name").map(ToOwned::to_owned),
+                        name: event
+                            .string_property("name")
+                            .filter(|name| !name.is_empty())
+                            .map(ToOwned::to_owned),
                         seconds_delay: 0.0,
                     },
                 })
@@ -1754,7 +1757,10 @@ impl RuntimeScheduledListenerAction {
                     event: StateMachineReportedEvent {
                         event_local_index: action.event_local_index?,
                         event_core_type: u32::from(event.type_key),
-                        name: event.string_property("name").map(ToOwned::to_owned),
+                        name: event
+                            .string_property("name")
+                            .filter(|name| !name.is_empty())
+                            .map(ToOwned::to_owned),
                         seconds_delay: 0.0,
                     },
                 })

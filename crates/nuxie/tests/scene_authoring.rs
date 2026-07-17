@@ -2844,7 +2844,7 @@ fn authored_linear_animation_exports_canonical_records_and_scrubs_the_live_insta
 #[test]
 fn authored_trigger_machine_exports_one_canonical_executable_record_graph() -> Result<()> {
     let mut scene = Scene::new();
-    scene.edit(|tx| {
+    let ((artboard, machine), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
             name: "Canvas".into(),
             width: 100.0,
@@ -2899,7 +2899,7 @@ fn authored_trigger_machine_exports_one_canonical_executable_record_graph() -> R
         let transition = machines.create_transition(any, active_state)?;
         machines.add_trigger_condition(transition, go)?;
         machines.add_fire_event(active_state, reached, FireEventOccurs::AtStart)?;
-        Ok(())
+        Ok((artboard, machine))
     })?;
 
     assert_eq!(
@@ -3064,6 +3064,23 @@ fn authored_trigger_machine_exports_one_canonical_executable_record_graph() -> R
             },
         ]
     );
+
+    let instance = scene.instantiate(artboard)?;
+    let input = scene.machine_input(instance, machine, "Go")?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    scene.frame().fire(input)?;
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(events.len(), 1);
+    match &events[0] {
+        SceneEvent::Authored { name, .. } => {
+            assert_eq!(
+                name, &None,
+                "an omitted event name stays semantically absent"
+            );
+        }
+        _ => panic!("authored machine must emit an authored event"),
+    }
     Ok(())
 }
 

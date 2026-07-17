@@ -1133,6 +1133,7 @@ impl AtomicPipeline {
         backing: &mut AtomicBackingFrame<'_>,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        initial_target_clear: Option<wgpu::Color>,
         load_color: Option<&wgpu::TextureView>,
         feather_lut: &wgpu::TextureView,
         gradient: Option<&wgpu::TextureView>,
@@ -1155,6 +1156,12 @@ impl AtomicPipeline {
         assert!(draw_group_starts
             .last()
             .is_some_and(|start| *start < draws.len()));
+        let mut initial_target_clear = initial_target_clear;
+        let mut next_target_load = || {
+            initial_target_clear
+                .take()
+                .map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear)
+        };
         #[cfg(feature = "perf-diagnostics")]
         let total_started = Instant::now();
         #[cfg(feature = "perf-diagnostics")]
@@ -1519,7 +1526,7 @@ impl AtomicPipeline {
             let load_color_group = load_color_group
                 .as_ref()
                 .expect("advanced atomic blending requires a destination-color copy");
-            let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+            let attachments = [color_attachment(target, next_target_load())];
             #[cfg(feature = "perf-diagnostics")]
             {
                 backing.diagnostics.render_passes =
@@ -1555,7 +1562,7 @@ impl AtomicPipeline {
                     .get(group_index + 1)
                     .copied()
                     .unwrap_or(draws.len());
-                let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                let attachments = [color_attachment(target, next_target_load())];
                 #[cfg(feature = "perf-diagnostics")]
                 {
                     backing.diagnostics.render_passes =
@@ -1627,9 +1634,12 @@ impl AtomicPipeline {
                             backing.diagnostics.render_passes =
                                 backing.diagnostics.render_passes.saturating_add(1);
                         }
-                        let mut interior_pass = encoder.begin_counted_render_pass(
-                            &render_pass_descriptor("nuxie-atomic-interior-pass", &attachments),
-                        );
+                        let interior_attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                        let mut interior_pass =
+                            encoder.begin_counted_render_pass(&render_pass_descriptor(
+                                "nuxie-atomic-interior-pass",
+                                &interior_attachments,
+                            ));
                         interior_pass.set_pipeline(if advanced_blend {
                             &self.advanced_interior
                         } else if use_unclipped_pipelines {
@@ -1649,7 +1659,7 @@ impl AtomicPipeline {
         } else {
             for (draw_index, draw) in draws.iter().enumerate() {
                 if draw.atlas.is_some() {
-                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let attachments = [color_attachment(target, next_target_load())];
                     #[cfg(feature = "perf-diagnostics")]
                     {
                         backing.diagnostics.render_passes =
@@ -1679,7 +1689,7 @@ impl AtomicPipeline {
                     continue;
                 }
                 if let Some(mesh) = draw.image_mesh {
-                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let attachments = [color_attachment(target, next_target_load())];
                     #[cfg(feature = "perf-diagnostics")]
                     {
                         backing.diagnostics.render_passes =
@@ -1706,7 +1716,7 @@ impl AtomicPipeline {
                     continue;
                 }
                 if draw.image.is_some() {
-                    let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                    let attachments = [color_attachment(target, next_target_load())];
                     #[cfg(feature = "perf-diagnostics")]
                     {
                         backing.diagnostics.render_passes =
@@ -1734,7 +1744,7 @@ impl AtomicPipeline {
                     pass.draw_indexed(0..crate::gpu::IMAGE_RECT_INDICES.len() as u32, 0, 0..1);
                     continue;
                 }
-                let attachments = [color_attachment(target, wgpu::LoadOp::Load)];
+                let attachments = [color_attachment(target, next_target_load())];
                 #[cfg(feature = "perf-diagnostics")]
                 {
                     backing.diagnostics.render_passes =

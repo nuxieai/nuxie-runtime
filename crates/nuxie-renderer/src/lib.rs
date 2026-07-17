@@ -2041,25 +2041,6 @@ impl WgpuFrame {
 
                 validate_atomic_path_count(draws.len())?;
 
-                if clear_target {
-                    let attachments = [Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(color(self.clear_color)),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })];
-                    let _pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("nuxie-atomic-frame-clear"),
-                        color_attachments: &attachments,
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
-                }
                 let padded_width = align_to(self.width, 32);
                 let padded_height = align_to(self.height, 32);
                 let contour_count = |draw: &SolidDraw| {
@@ -2099,6 +2080,31 @@ impl WgpuFrame {
                 let use_clockwise_atomic_batch = force_clockwise_atomic_batch
                     || homogeneous_global_fill
                     || clockwise_atomic_clip_run;
+                // C++ AtomicDrawRenderPass applies colorLoadAction to its
+                // renderPassInitialize pass. Generic fixed-color atomics can
+                // do the same; specialized and destination-read paths retain
+                // their established clear ordering.
+                let clear_in_generic_atomic_pass =
+                    clear_target && !use_clockwise_atomic_batch && load_color.is_none();
+                if clear_target && !clear_in_generic_atomic_pass {
+                    let attachments = [Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(color(self.clear_color)),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })];
+                    let _pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nuxie-atomic-frame-clear"),
+                        color_attachments: &attachments,
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                }
                 if load_color.is_some()
                     && use_clockwise_atomic_batch
                     && draws
@@ -3215,6 +3221,7 @@ impl WgpuFrame {
                         atomic_backing,
                         encoder,
                         &view,
+                        clear_in_generic_atomic_pass.then(|| color(self.clear_color)),
                         load_color,
                         &self.context.feather_lut.view,
                         gradient_texture.as_ref().map(|texture| &texture.view),
@@ -9364,14 +9371,14 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
                 )),
-                (8, 8, 556, 121, 431),
+                (7, 8, 556, 121, 431),
             ),
             (
                 include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/renderer/streams/gm/bug339297.rive-stream"
                 )),
-                (6, 6, 543, 117, 423),
+                (5, 6, 543, 117, 423),
             ),
         ] {
             let stream = RenderStream::parse(source).unwrap();

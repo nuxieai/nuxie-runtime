@@ -940,3 +940,22 @@ and the selected-pair worst row is `gm-OverStroke-clockwise-atomic` at
 `gm-batchedconvexpaths-clockwise-atomic` near or above 2.0x. The trace is
 therefore useful evidence of a clockwise-atomic timing cluster, not a host-idle
 rejection and not an R4 pass.
+
+### Item 145 Update
+
+Source comparison found a fixed pass-level mismatch in every generic atomic
+frame. C++ Dawn applies the target clear through `colorLoadAction` on its
+initial atomic render pass; Rust opened an otherwise empty clear-only render
+pass and then loaded the target in the first atomic pass. Rust now carries that
+clear into the first eligible generic pass. Specialized clockwise,
+destination-read, and advanced paths keep their existing pass ordering.
+
+The counter regression records `bug339297` at five rather than six passes and
+`bug339297_as_clip` at seven rather than eight, with draws, instances, spans,
+and patches unchanged. The 1,468-row renderer corpus stays at 1,409 exact, zero
+divergent, and 59 gated. Adjacent ordinary reports move from 1.8696x to 1.6676x
+aggregate (-10.8%). Generic atomic Rust p50 improves 14.3% for
+`batchedtriangulations`, 13.6% for `bevel180strokes`, 13.1% for `bug339297`,
+and 12.1% for `batchedconvexpaths`. The current selected-pair worst row remains
+`gm-OverStroke-clockwise-atomic` at 2.8241x, so this deterministic correction
+closes item 145 but does not close the timing-defined item 135.

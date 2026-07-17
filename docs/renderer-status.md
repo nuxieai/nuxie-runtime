@@ -1762,6 +1762,21 @@ Run `make renderer-golden`.
     `batchedconvexpaths` (-3.2%). The normalized aggregate moves
     1.6678x->1.6907x (+1.4%), so this is directional shader-cost evidence,
     not a formal item-135 gate result.
+145. [x] Fold the frame clear into the first generic atomic render pass,
+    matching C++ Dawn's `colorLoadAction` on `renderPassInitialize`. Generic
+    atomic scenes now issue one fewer render pass per frame: `bug339297`
+    moves `6->5` and `bug339297_as_clip` moves `8->7`, while draws,
+    instances, spans, and patches remain unchanged. Specialized clockwise,
+    destination-read, and advanced atomic paths retain their established
+    ordering. The full renderer corpus remains exact=1,409/diverges=0/gated=59;
+    ordinary runtime parity remains 263 files/584 segments and scripted parity
+    remains 27 files/35 segments. In adjacent ordinary reports, the aggregate
+    moves 1.8696x->1.6676x (-10.8%). Rust p50 improves 0.465->0.399 ms for
+    `batchedtriangulations` (-14.3%), 1.313->1.134 ms for `bevel180strokes`
+    (-13.6%), 0.518->0.451 ms for `bug339297` (-13.1%), and 0.829->0.728 ms
+    for `batchedconvexpaths` (-12.1%). The current selected-pair worst row is
+    still `gm-OverStroke-clockwise-atomic` at 2.8241x, so item 135 remains
+    open and that row is the next timing-only target.
 
 ## R2 Completion Record
 
@@ -2955,6 +2970,11 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-17: Closed R4 item 145 by applying the target clear as the first
+  generic atomic pass load operation, eliminating one render pass per affected
+  frame with unchanged deterministic draw work and pixels. The adjacent
+  aggregate improves 10.8%, four representative Rust medians improve
+  12.1%-14.3%, and item 135 remains open on `OverStroke` at 2.8241x.
 - 2026-07-17: Closed R4 item 144. Generic atomic unclipped flushes now use
   C++-style shader specialization with clipping and clip-rectangle branches
   disabled. Focused pixels and the full 1,409/0/59 renderer corpus pass; all

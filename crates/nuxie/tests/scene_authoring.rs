@@ -3523,6 +3523,55 @@ fn view_model_cursors_are_fenced_and_same_schema_remounts_carry_live_numbers() -
 }
 
 #[test]
+fn unoverridden_view_model_number_uses_a_new_authored_default_after_remount() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
+    let instance = scene.instantiate(fixture.artboard)?;
+    let old = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(scene.frame().get_vm(old)?, 0.0);
+
+    scene.edit(|tx| {
+        tx.view_models()
+            .set_number(fixture.defaults, fixture.duration, 250.0)?;
+        Ok(())
+    })?;
+
+    assert_eq!(scene.frame().get_vm(old), Err(StaleCursor));
+    let fresh = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(
+        scene.frame().get_vm(fresh)?,
+        250.0,
+        "an untouched live slot must adopt the edited authored default"
+    );
+    Ok(())
+}
+
+#[test]
+fn explicit_noop_view_model_write_remains_an_override_after_remount() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
+    let instance = scene.instantiate(fixture.artboard)?;
+    let old = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(scene.frame().get_vm(old)?, 0.0);
+    assert_eq!(scene.frame().set_vm(old, 0.0), Ok(false));
+
+    scene.edit(|tx| {
+        tx.view_models()
+            .set_number(fixture.defaults, fixture.duration, 250.0)?;
+        Ok(())
+    })?;
+
+    assert_eq!(scene.frame().get_vm(old), Err(StaleCursor));
+    let fresh = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(
+        scene.frame().get_vm(fresh)?,
+        0.0,
+        "a finite explicit write is an override even when the value was unchanged"
+    );
+    Ok(())
+}
+
+#[test]
 fn changing_the_authored_default_instance_does_not_cross_carry_live_values() -> Result<()> {
     let mut scene = Scene::new();
     let (fixture, _) = scene.edit(create_view_model_duration_machine)?;

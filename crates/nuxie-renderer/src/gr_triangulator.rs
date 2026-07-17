@@ -2424,8 +2424,10 @@ mod tests {
             .context
             .tessellator
             .begin_frame_uploads(&factory.context.device);
+        let mut tessellation_textures = factory.context.tessellator.begin_frame_textures();
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_textures,
             &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,

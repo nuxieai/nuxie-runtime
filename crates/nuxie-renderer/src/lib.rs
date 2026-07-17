@@ -1971,6 +1971,8 @@ impl WgpuFrame {
                 .tessellator
                 .begin_frame_uploads(&self.context.device),
         );
+        let tessellation_texture_frame =
+            RefCell::new(self.context.tessellator.begin_frame_textures());
         let atomic_backing = RefCell::new(None);
         let submit_and_wait = |encoder: &mut wgpu::CommandEncoder| {
             let next_encoder = self.context.device.create_counted_command_encoder(
@@ -2915,6 +2917,7 @@ impl WgpuFrame {
                     {
                         self.context.tessellator.encode_with_flush_resources(
                             &self.context.device,
+                            &mut tessellation_texture_frame.borrow_mut(),
                             &mut tessellation_uploads.borrow_mut(),
                             encoder,
                             &self.context.feather_lut.view,
@@ -2925,6 +2928,7 @@ impl WgpuFrame {
                     } else {
                         let encoding = self.context.tessellator.encode_with_new_flush_resources(
                             &self.context.device,
+                            &mut tessellation_texture_frame.borrow_mut(),
                             &mut tessellation_uploads.borrow_mut(),
                             encoder,
                             &self.context.feather_lut.view,
@@ -2950,22 +2954,11 @@ impl WgpuFrame {
                     });
                 if needs_dummy_tessellation {
                     let dummy_index = tessellation_textures.len();
-                    tessellation_textures.push(self.context.device.create_texture(
-                        &wgpu::TextureDescriptor {
-                            label: Some("nuxie-dummy-tessellation-data"),
-                            size: wgpu::Extent3d {
-                                width: 1,
-                                height: 1,
-                                depth_or_array_layers: 1,
-                            },
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Rgba32Uint,
-                            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-                            view_formats: &[],
-                        },
-                    ));
+                    tessellation_textures.push(
+                        tessellation_texture_frame
+                            .borrow_mut()
+                            .checkout(&self.context.device, 1),
+                    );
                     for draw in &mut prepared {
                         if draw.tessellation_index == usize::MAX {
                             draw.tessellation_index = dummy_index;
@@ -2974,7 +2967,7 @@ impl WgpuFrame {
                 }
                 let tessellation_views = tessellation_textures
                     .iter()
-                    .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()))
+                    .map(|texture| texture.view.clone())
                     .collect::<Vec<_>>();
                 let gradient_texture = self.context.gradient_pipeline.encode(
                     &self.context.device,
@@ -3588,6 +3581,7 @@ impl WgpuFrame {
                             ];
                             let tessellation_texture = self.context.tessellator.encode(
                                 &self.context.device,
+                                &mut tessellation_texture_frame.borrow_mut(),
                                 &mut tessellation_uploads.borrow_mut(),
                                 encoder,
                                 &self.context.feather_lut.view,
@@ -3597,8 +3591,7 @@ impl WgpuFrame {
                                 &tessellation.contours,
                                 tessellation_height,
                             );
-                            let tessellation_view = tessellation_texture
-                                .create_view(&wgpu::TextureViewDescriptor::default());
+                            let tessellation_view = tessellation_texture.view.clone();
                             let atlas_texture =
                                 self.context
                                     .device
@@ -4052,6 +4045,7 @@ impl WgpuFrame {
                         u32::try_from(paths.len() - 1).expect("MSAA path ID overflow");
                     let tessellation = self.context.tessellator.encode_with_new_flush_resources(
                         &self.context.device,
+                        &mut tessellation_texture_frame.borrow_mut(),
                         &mut tessellation_uploads.borrow_mut(),
                         encoder,
                         &self.context.feather_lut.view,
@@ -4061,9 +4055,7 @@ impl WgpuFrame {
                         &contours,
                         tessellation_height,
                     );
-                    let tessellation_view = tessellation
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
+                    let tessellation_view = tessellation.texture.view.clone();
                     let resources = self.context.path_pipeline.prepare_resources(
                         &self.context.device,
                         &mut tessellation_uploads.borrow_mut(),
@@ -4976,6 +4968,7 @@ impl WgpuFrame {
             tessellation_uploads.borrow_mut().flush(&self.context.queue);
             self.context.queue.submit_counted(Some(encoder.finish()));
             wait_for_submitted_work(&self.context).await?;
+            tessellation_texture_frame.borrow_mut().recycle();
             #[cfg(feature = "perf-diagnostics")]
             {
                 let diagnostics = tessellation_uploads.borrow().diagnostics();
@@ -5106,6 +5099,7 @@ impl WgpuFrame {
             read_atomic_snapshots(&pending_atomic_coverage_readbacks).await?;
         let atomic_clip_snapshots = read_atomic_snapshots(&pending_atomic_clip_readbacks).await?;
         let atomic_color_snapshots = read_atomic_snapshots(&pending_atomic_color_readbacks).await?;
+        tessellation_texture_frame.borrow_mut().recycle();
         let backend_work = self.work_recorder.snapshot();
         self.context
             .frame_attachments
@@ -9748,6 +9742,59 @@ mod tests {
     }
 
     #[test]
+    fn tessellation_texture_is_reused_after_gpu_completion() {
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let factory = WgpuFactory::new_with_mode(32, 32, mode).unwrap();
+            let render = || {
+                let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, false);
+                frame.draw_path(
+                    &rect_path([4.0, 4.0, 28.0, 28.0], FillRule::NonZero),
+                    &WgpuPaint {
+                        color: 0xffff_0000,
+                        ..WgpuPaint::default()
+                    },
+                );
+                frame.finish_for_benchmark().unwrap();
+            };
+
+            assert!(factory.context.tessellator.cached_texture().is_none());
+            render();
+            let first = factory.context.tessellator.cached_texture().unwrap();
+            render();
+            let second = factory.context.tessellator.cached_texture().unwrap();
+            assert!(Arc::ptr_eq(&first, &second));
+        }
+    }
+
+    #[test]
+    fn tessellation_texture_pool_drops_concurrent_overflow() {
+        let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::Msaa).unwrap();
+        let mut first_frame = factory.context.tessellator.begin_frame_textures();
+        let first = first_frame.checkout(&factory.context.device, 1);
+        let mut second_frame = factory.context.tessellator.begin_frame_textures();
+        let second = second_frame.checkout(&factory.context.device, 1);
+        assert!(!Arc::ptr_eq(&first, &second));
+
+        first_frame.recycle();
+        second_frame.recycle();
+        assert_eq!(factory.context.tessellator.cached_texture_len(), 1);
+    }
+
+    #[test]
+    fn tessellation_texture_pool_retains_the_largest_frame_lease() {
+        let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::Msaa).unwrap();
+        let mut frame = factory.context.tessellator.begin_frame_textures();
+        frame.checkout(&factory.context.device, 4);
+        frame.checkout(&factory.context.device, 1);
+        frame.recycle();
+
+        assert_eq!(
+            factory.context.tessellator.cached_texture().unwrap().height,
+            4
+        );
+    }
+
+    #[test]
     fn msaa_intersection_board_reordering_preserves_overlapping_source_order() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let make_frame = || {
@@ -11757,8 +11804,10 @@ mod tests {
             .context
             .tessellator
             .begin_frame_uploads(&factory.context.device);
+        let mut tessellation_textures = factory.context.tessellator.begin_frame_textures();
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_textures,
             &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,
@@ -11982,8 +12031,10 @@ mod tests {
             .context
             .tessellator
             .begin_frame_uploads(&factory.context.device);
+        let mut tessellation_textures = factory.context.tessellator.begin_frame_textures();
         let texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_textures,
             &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,
@@ -12504,8 +12555,10 @@ mod tests {
             .context
             .tessellator
             .begin_frame_uploads(&factory.context.device);
+        let mut tessellation_textures = factory.context.tessellator.begin_frame_textures();
         let tessellation_texture = factory.context.tessellator.encode(
             &factory.context.device,
+            &mut tessellation_textures,
             &mut tessellation_uploads,
             &mut encoder,
             &factory.context.feather_lut.view,

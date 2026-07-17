@@ -7,15 +7,17 @@ use bytemuck::Zeroable;
 use std::time::Instant;
 use std::{
     num::NonZeroU64,
+    ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Mutex, MutexGuard,
+        Arc, Mutex, MutexGuard,
     },
 };
 
 // Mirrors C++ `gpu::kBufferRingSize`; the frame guard owns its slot through GPU completion.
 const BUFFER_RING_SIZE: usize = 3;
 const MIN_UPLOAD_CAPACITY: u64 = 4 * 1024;
+const MAX_CACHED_TESSELLATION_TEXTURES: usize = 1;
 
 #[cfg(feature = "perf-diagnostics")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -40,6 +42,7 @@ pub(crate) struct Tessellator {
     sampler_group: wgpu::BindGroup,
     upload_slots: [Mutex<TessellationUploadSlot>; BUFFER_RING_SIZE],
     next_upload_slot: AtomicUsize,
+    texture_pool: TessellationTexturePool,
 }
 
 impl Tessellator {
@@ -156,6 +159,7 @@ impl Tessellator {
             sampler_group,
             upload_slots: std::array::from_fn(|_| Mutex::new(TessellationUploadSlot::new(&limits))),
             next_upload_slot: AtomicUsize::new(0),
+            texture_pool: TessellationTexturePool::default(),
         }
     }
 
@@ -170,9 +174,27 @@ impl Tessellator {
         TessellationUploadFrame { slot }
     }
 
+    pub(crate) fn begin_frame_textures(&self) -> TessellationTextureFrame<'_> {
+        TessellationTextureFrame {
+            pool: &self.texture_pool,
+            checked_out: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cached_texture(&self) -> Option<Arc<TessellationTexture>> {
+        self.texture_pool.cached()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cached_texture_len(&self) -> usize {
+        self.texture_pool.cached_len()
+    }
+
     pub(crate) fn encode(
         &self,
         device: &wgpu::Device,
+        textures: &mut TessellationTextureFrame<'_>,
         uploads: &mut TessellationUploadFrame<'_>,
         encoder: &mut wgpu::CommandEncoder,
         feather_lut: &wgpu::TextureView,
@@ -181,9 +203,10 @@ impl Tessellator {
         paths: &[PathData],
         contours: &[ContourData],
         height: u32,
-    ) -> wgpu::Texture {
+    ) -> Arc<TessellationTexture> {
         self.encode_with_new_flush_resources(
             device,
+            textures,
             uploads,
             encoder,
             feather_lut,
@@ -200,6 +223,7 @@ impl Tessellator {
     pub(crate) fn encode_with_new_flush_resources(
         &self,
         device: &wgpu::Device,
+        textures: &mut TessellationTextureFrame<'_>,
         uploads: &mut TessellationUploadFrame<'_>,
         encoder: &mut wgpu::CommandEncoder,
         feather_lut: &wgpu::TextureView,
@@ -214,6 +238,7 @@ impl Tessellator {
         let flush_resources = uploads.upload_flush_resources(device, uniforms, paths, contours);
         let texture = self.encode_uploaded(
             device,
+            textures,
             encoder,
             feather_lut,
             &span_buffer,
@@ -230,17 +255,19 @@ impl Tessellator {
     pub(crate) fn encode_with_flush_resources(
         &self,
         device: &wgpu::Device,
+        textures: &mut TessellationTextureFrame<'_>,
         uploads: &mut TessellationUploadFrame<'_>,
         encoder: &mut wgpu::CommandEncoder,
         feather_lut: &wgpu::TextureView,
         spans: &[TessVertexSpan],
         flush_resources: &TessellationFlushResources,
         height: u32,
-    ) -> wgpu::Texture {
+    ) -> Arc<TessellationTexture> {
         assert!(!spans.is_empty());
         let span_buffer = uploads.upload_spans(device, bytemuck::cast_slice(spans));
         self.encode_uploaded(
             device,
+            textures,
             encoder,
             feather_lut,
             &span_buffer,
@@ -254,13 +281,14 @@ impl Tessellator {
     fn encode_uploaded(
         &self,
         device: &wgpu::Device,
+        textures: &mut TessellationTextureFrame<'_>,
         encoder: &mut wgpu::CommandEncoder,
         feather_lut: &wgpu::TextureView,
         span_buffer: &UploadSlice,
         flush_resources: &TessellationFlushResources,
         span_count: usize,
         height: u32,
-    ) -> wgpu::Texture {
+    ) -> Arc<TessellationTexture> {
         let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-flush-group"),
             layout: &self.flush_layout,
@@ -271,27 +299,11 @@ impl Tessellator {
                 binding(10, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nuxie-tessellation-data"),
-            size: wgpu::Extent3d {
-                width: 2048,
-                height: height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Uint,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let texture = textures.checkout(device, height);
         let mut pass = encoder.begin_counted_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nuxie-tessellation-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
+                view: &texture.view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -312,6 +324,125 @@ impl Tessellator {
         pass.draw_tessellation_spans(0..12, 0, 0..span_count as u32);
         drop(pass);
         texture
+    }
+}
+
+pub(crate) struct TessellationTexture {
+    pub(crate) texture: wgpu::Texture,
+    pub(crate) view: wgpu::TextureView,
+    pub(crate) height: u32,
+}
+
+impl TessellationTexture {
+    fn new(device: &wgpu::Device, height: u32) -> Self {
+        let height = height.max(1);
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-tessellation-data"),
+            size: wgpu::Extent3d {
+                width: 2048,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Uint,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        Self {
+            texture,
+            view,
+            height,
+        }
+    }
+}
+
+impl Deref for TessellationTexture {
+    type Target = wgpu::Texture;
+
+    fn deref(&self) -> &Self::Target {
+        &self.texture
+    }
+}
+
+#[derive(Default)]
+struct TessellationTexturePool {
+    available: Mutex<Vec<Arc<TessellationTexture>>>,
+}
+
+impl TessellationTexturePool {
+    fn checkout(&self, device: &wgpu::Device, height: u32) -> Arc<TessellationTexture> {
+        let height = height.max(1);
+        let mut available = self
+            .available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(index) = available
+            .iter()
+            .position(|texture| texture.height == height)
+        {
+            return available.swap_remove(index);
+        }
+        available.clear();
+        Arc::new(TessellationTexture::new(device, height))
+    }
+
+    fn recycle(&self, texture: Arc<TessellationTexture>) {
+        let mut available = self
+            .available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if available.len() < MAX_CACHED_TESSELLATION_TEXTURES {
+            available.push(texture);
+        }
+    }
+
+    #[cfg(test)]
+    fn cached(&self) -> Option<Arc<TessellationTexture>> {
+        self.available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .last()
+            .cloned()
+    }
+
+    #[cfg(test)]
+    fn cached_len(&self) -> usize {
+        self.available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len()
+    }
+}
+
+pub(crate) struct TessellationTextureFrame<'a> {
+    pool: &'a TessellationTexturePool,
+    checked_out: Vec<Arc<TessellationTexture>>,
+}
+
+impl TessellationTextureFrame<'_> {
+    pub(crate) fn checkout(
+        &mut self,
+        device: &wgpu::Device,
+        height: u32,
+    ) -> Arc<TessellationTexture> {
+        let texture = self.pool.checkout(device, height);
+        self.checked_out.push(Arc::clone(&texture));
+        texture
+    }
+
+    pub(crate) fn recycle(&mut self) {
+        if let Some(texture) = self
+            .checked_out
+            .drain(..)
+            .max_by_key(|texture| texture.height)
+        {
+            self.pool.recycle(texture);
+        }
     }
 }
 
@@ -612,7 +743,7 @@ impl TessellationFlushResources {
 }
 
 pub(crate) struct TessellationEncoding {
-    pub(crate) texture: wgpu::Texture,
+    pub(crate) texture: Arc<TessellationTexture>,
     pub(crate) flush_resources: TessellationFlushResources,
 }
 

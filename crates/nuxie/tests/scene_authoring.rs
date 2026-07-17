@@ -1,14 +1,15 @@
 use anyhow::Result;
 use nuxie::{
     Aabb, ArtboardId, ArtboardSpec, ChildIndex, ColorInt, DashPathSpec, DashSpec, DrawError,
-    EditAbort, EditErrorKind, EditId, EditReason, ExportedObjectKind, ExportedProperty, Factory,
-    FillRule, FillSpec, FontAssetId, FontAssetSpec, ImageAssetId, ImageAssetSpec, ImageDecodeError,
-    ImageSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath, RecordingFactory,
-    RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene, SceneEvent,
-    SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow, SceneTextSizing,
-    SceneTextWrap, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch,
-    TextSpec, TextStylePaintSpec, TextValueRunSpec, Vec2D, props,
+    EditAbort, EditErrorKind, EditId, EditReason, ExportedObjectKind, ExportedProperty,
+    ExportedRecord, Factory, FillRule, FillSpec, FontAssetId, FontAssetSpec, ImageAssetId,
+    ImageAssetSpec, ImageDecodeError, ImageSpec, NodeKind, NodeSpec, ObjectId, Parent,
+    PropValueKind, RawPath, RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader,
+    ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign,
+    SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
+    ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
+    StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, Vec2D, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -4893,6 +4894,199 @@ fn export_records_are_sparse_canonical_and_compose_one_backboard() -> Result<()>
             ExportedProperty::WorldOpacity(0.4),
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn typed_scripted_drawable_exports_raw_script_and_shader_payloads_with_one_envelope() -> Result<()>
+{
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let script = tx.create_script_asset(ScriptAssetSpec {
+            name: "node".into(),
+            is_module: false,
+            bytes: vec![0x1b, b'L', b'u', b'a', b'u'],
+        })?;
+        tx.create_shader_asset(ShaderAssetSpec {
+            name: "fill".into(),
+            bytes: b"RSTB".to_vec(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Scripted".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
+                name: "Canvas".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                script,
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records();
+    assert_eq!(
+        records
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::ScriptAsset,
+            ExportedObjectKind::FileAssetContents,
+            ExportedObjectKind::ShaderAsset,
+            ExportedObjectKind::FileAssetContents,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::ScriptedDrawable,
+        ]
+    );
+    assert_eq!(
+        records.records()[1].properties,
+        vec![
+            ExportedProperty::AssetName("node".into()),
+            ExportedProperty::FileAssetId(0),
+        ],
+        "the protocol-script default isModule=false remains sparse"
+    );
+    assert_eq!(
+        records.records()[2].properties,
+        vec![ExportedProperty::FileAssetContentsBytes(vec![
+            0x00, 0x1b, b'L', b'u', b'a', b'u',
+        ])],
+        "Scene adds exactly one unsigned text-asset envelope to raw Luau bytecode"
+    );
+    assert_eq!(
+        records.records()[3].properties,
+        vec![
+            ExportedProperty::AssetName("fill".into()),
+            ExportedProperty::FileAssetId(1),
+        ]
+    );
+    assert_eq!(
+        records.records()[4].properties,
+        vec![ExportedProperty::FileAssetContentsBytes(b"\0RSTB".to_vec())],
+        "Scene adds exactly one unsigned text-asset envelope to raw RSTB"
+    );
+    assert_eq!(
+        records.records()[6].properties,
+        vec![
+            ExportedProperty::ComponentName("Canvas".into()),
+            ExportedProperty::ScriptedDrawableScriptAssetId(0),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn empty_script_and_shader_payloads_are_structurally_preserved_as_unsigned_envelopes() -> Result<()>
+{
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        tx.create_script_asset(ScriptAssetSpec {
+            name: String::new(),
+            is_module: false,
+            bytes: Vec::new(),
+        })?;
+        tx.create_shader_asset(ShaderAssetSpec {
+            name: String::new(),
+            bytes: Vec::new(),
+        })?;
+        Ok(())
+    })?;
+
+    assert_eq!(
+        scene.export_records().records(),
+        &[
+            ExportedRecord {
+                kind: ExportedObjectKind::Backboard,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ScriptAsset,
+                properties: vec![
+                    ExportedProperty::AssetName(String::new()),
+                    ExportedProperty::FileAssetId(0),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::FileAssetContents,
+                properties: vec![ExportedProperty::FileAssetContentsBytes(vec![0x00])],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ShaderAsset,
+                properties: vec![
+                    ExportedProperty::AssetName(String::new()),
+                    ExportedProperty::FileAssetId(1),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::FileAssetContents,
+                properties: vec![ExportedProperty::FileAssetContentsBytes(vec![0x00])],
+            },
+        ],
+        "Scene owns the unsigned text-asset envelope; payload/name validity belongs to the scripting and renderer consumers"
+    );
+    Ok(())
+}
+
+#[test]
+fn scripted_drawable_rejects_a_script_identity_owned_by_another_scene_atomically() -> Result<()> {
+    let mut source = Scene::new();
+    let (foreign_script, _) = source.edit(|tx| {
+        tx.create_script_asset(ScriptAssetSpec {
+            name: "foreign".into(),
+            is_module: false,
+            bytes: b"foreign bytecode".to_vec(),
+        })
+    })?;
+    let mut target = Scene::new();
+    let records_before = target.export_records();
+    let mut drawable = None;
+
+    let error = target
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Target".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            drawable = Some(tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
+                    name: "Foreign Script".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    script: foreign_script,
+                }),
+            )?);
+            Ok(())
+        })
+        .expect_err("a script identity is meaningful only in its owning scene");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownScriptAsset);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Object(drawable.expect("the transaction allocated the drawable")),
+            EditId::ScriptAsset(foreign_script),
+        ]
+    );
+    assert_eq!(target.epoch(), StructureEpoch::INITIAL);
+    assert_eq!(target.export_records(), records_before);
     Ok(())
 }
 

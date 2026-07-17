@@ -15,6 +15,7 @@ use nuxie_binary::{
     RuntimeDataConverterUnbindEffect, RuntimeDataConverterUpdateEffect, RuntimeDataType,
     RuntimeFile, RuntimeImportDropReason, RuntimeImportStatus, RuntimeReadErrorKind, SkipReason,
     SkippedBitmaskPassthrough, read_runtime_file, read_runtime_file_with_error_kind,
+    read_runtime_file_with_scripting,
 };
 use nuxie_schema::definition_by_name;
 use std::path::{Path, PathBuf};
@@ -170,6 +171,40 @@ fn header_field_id(field: HeaderFieldKind) -> u8 {
         HeaderFieldKind::Double => 2,
         HeaderFieldKind::Color => 3,
     }
+}
+
+#[test]
+fn scripting_reader_gives_script_and_shader_contents_their_file_asset_importers() {
+    let bytes = synthetic_runtime_file(4400, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "ScriptAsset");
+        push_empty_object(bytes, "FileAssetContents");
+        push_empty_object(bytes, "ShaderAsset");
+        push_empty_object(bytes, "FileAssetContents");
+    });
+
+    let conformance = read_runtime_file(&bytes).expect("read with non-scripting C++ profile");
+    assert_eq!(
+        conformance.import_statuses,
+        vec![
+            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Dropped {
+                reason: RuntimeImportDropReason::MissingObject,
+            },
+            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Dropped {
+                reason: RuntimeImportDropReason::MissingObject,
+            },
+        ]
+    );
+
+    let scripting = read_runtime_file_with_scripting(&bytes)
+        .expect("read with scripting-enabled FileAsset importers");
+    assert_eq!(
+        scripting.import_statuses,
+        vec![RuntimeImportStatus::Imported; 5]
+    );
 }
 
 #[test]

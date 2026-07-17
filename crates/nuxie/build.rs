@@ -268,6 +268,63 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "ScriptedDrawable",
+        schema_name: "ScriptedDrawable",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "WorldTransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "rotation",
+                schema_name: "rotation",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_x",
+                schema_name: "scaleX",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_y",
+                schema_name: "scaleY",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "script",
+                schema_name: "scriptAssetId",
+                declared_owner: "ScriptedDrawable",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "Rectangle",
         schema_name: "Rectangle",
         fields: &[
@@ -587,6 +644,27 @@ const OBJECTS: &[ObjectSpec] = &[
         fields: &[ASSET_NAME],
         is_node: false,
     },
+    ObjectSpec {
+        rust_name: "ScriptAsset",
+        schema_name: "ScriptAsset",
+        fields: &[
+            ASSET_NAME,
+            FieldSpec {
+                rust_name: "is_module",
+                schema_name: "isModule",
+                declared_owner: "ScriptAsset",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+        ],
+        is_node: false,
+    },
+    ObjectSpec {
+        rust_name: "ShaderAsset",
+        schema_name: "ShaderAsset",
+        fields: &[ASSET_NAME],
+        is_node: false,
+    },
 ];
 
 // The first cursor surface is deliberately narrower than the structural
@@ -775,6 +853,13 @@ fn render_scene_schema() -> String {
         resolve_named_property("Image", "alignmentX", "Image", FieldKind::Double, false);
     let image_alignment_y =
         resolve_named_property("Image", "alignmentY", "Image", FieldKind::Double, false);
+    let scripted_drawable_script_asset_id = resolve_named_property(
+        "ScriptedDrawable",
+        "scriptAssetId",
+        "ScriptedDrawable",
+        FieldKind::Uint,
+        false,
+    );
     let path_width = resolve_named_property(
         "Rectangle",
         "width",
@@ -864,6 +949,13 @@ fn render_scene_schema() -> String {
         "FileAssetContents",
         FieldKind::Bytes,
     );
+    let script_asset_is_module = resolve_named_property(
+        "ScriptAsset",
+        "isModule",
+        "ScriptAsset",
+        FieldKind::Bool,
+        false,
+    );
     let text_sizing = resolve_named_property("Text", "sizingValue", "Text", FieldKind::Uint, false);
     let text_align = resolve_named_property("Text", "alignValue", "Text", FieldKind::Uint, false);
     let text_width = resolve_named_property("Text", "width", "Text", FieldKind::Double, false);
@@ -939,6 +1031,10 @@ fn render_scene_schema() -> String {
         ("IMAGE_FIT", image_fit),
         ("IMAGE_ALIGNMENT_X", image_alignment_x),
         ("IMAGE_ALIGNMENT_Y", image_alignment_y),
+        (
+            "SCRIPTED_DRAWABLE_SCRIPT_ASSET_ID",
+            scripted_drawable_script_asset_id,
+        ),
         ("PATH_WIDTH", path_width),
         ("PATH_HEIGHT", path_height),
         ("FILL_RULE", fill_rule),
@@ -962,6 +1058,7 @@ fn render_scene_schema() -> String {
         ("ASSET_NAME", asset_name),
         ("FILE_ASSET_ID", file_asset_id),
         ("FILE_ASSET_CONTENTS_BYTES", file_asset_contents_bytes),
+        ("SCRIPT_ASSET_IS_MODULE", script_asset_is_module),
         ("TEXT_SIZING", text_sizing),
         ("TEXT_ALIGN", text_align),
         ("TEXT_WIDTH", text_width),
@@ -1115,7 +1212,10 @@ fn render_scene_schema() -> String {
         if object.rust_name == "Image" {
             output.push_str("    pub crop: Option<ImageCropRect>,\n");
         }
-        if object.rust_name == "FontAsset" || object.rust_name == "ImageAsset" {
+        if matches!(
+            object.rust_name,
+            "FontAsset" | "ImageAsset" | "ScriptAsset" | "ShaderAsset"
+        ) {
             output.push_str("    pub bytes: Vec<u8>,\n");
         }
         output.push_str("}\n\n");
@@ -1466,6 +1566,7 @@ fn public_field_rust_type(
         ("TextStylePaint", "font") => "FontAssetId",
         ("NestedArtboard", "artboard") => "ArtboardId",
         ("Image", "image") => "ImageAssetId",
+        ("ScriptedDrawable", "script") => "ScriptAssetId",
         _ => rust_type(runtime_type),
     }
 }

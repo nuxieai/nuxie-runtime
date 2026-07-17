@@ -4195,6 +4195,22 @@ impl RuntimeOwnedViewModelInstance {
         self.number_value_by_property_index(property_index)
     }
 
+    /// Resolve a schema property ordinal to its dense numeric-value slot.
+    ///
+    /// Callers that retain the returned slot may subsequently read and write
+    /// the number in O(1) without repeating a name or property scan. The slot
+    /// is meaningful only for this view-model schema.
+    pub fn number_slot_by_property_index(&self, property_index: usize) -> Option<usize> {
+        self.numbers
+            .iter()
+            .position(|number| number.property_index == property_index)
+    }
+
+    /// Read a number through a previously resolved dense numeric-value slot.
+    pub fn number_value_by_slot(&self, number_slot: usize) -> Option<f32> {
+        self.numbers.get(number_slot).map(|number| number.value)
+    }
+
     pub fn string_value_by_property_name(&self, property_name: &str) -> Option<&[u8]> {
         let property_index = self.property_index_by_name(property_name)?;
         self.string_value_by_property_index(property_index)
@@ -4384,6 +4400,23 @@ impl RuntimeOwnedViewModelInstance {
             .iter_mut()
             .find(|number| number.property_index == property_index)
         else {
+            return false;
+        };
+        if number.value == value {
+            return false;
+        }
+        number.value = value;
+        self.mark_mutated();
+        true
+    }
+
+    /// Write a number through a previously resolved dense numeric-value slot.
+    ///
+    /// This is the direct hot-path counterpart to
+    /// [`Self::number_slot_by_property_index`]. It performs no allocation or
+    /// schema/name lookup.
+    pub fn set_number_by_slot(&mut self, number_slot: usize, value: f32) -> bool {
+        let Some(number) = self.numbers.get_mut(number_slot) else {
             return false;
         };
         if number.value == value {

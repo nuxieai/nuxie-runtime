@@ -13,6 +13,7 @@ perf-counters = []
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
 futures-channel = "0.3"
+image-webp = "0.2.4"
 jpeg-decoder = { version = "0.3", default-features = false }
 moxcms = "0.8.1"
 nuxie-render-api = { path = "../nuxie-render-api" }

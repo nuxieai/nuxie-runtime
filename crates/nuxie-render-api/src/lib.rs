@@ -6,7 +6,6 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::os::raw::{c_char, c_double, c_int};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -2157,10 +2156,6 @@ fn read_le_u16(bytes: &[u8], offset: usize) -> Option<u16> {
     ))
 }
 
-unsafe extern "C" {
-    fn snprintf(buffer: *mut c_char, size: usize, format: *const c_char, ...) -> c_int;
-}
-
 fn float_to_string(value: f32) -> String {
     let mut out = String::new();
     write_float(&mut out, value);
@@ -2168,23 +2163,87 @@ fn float_to_string(value: f32) -> String {
 }
 
 fn write_float(out: &mut String, value: f32) {
-    let mut buffer = [0 as c_char; 64];
-    let format = b"%.9g\0";
     // C++ RecordingRenderer uses iostream defaultfloat with float max_digits10.
-    // C's %.9g produces the same significant-digit spelling for finite f32s.
-    let written = unsafe {
-        snprintf(
-            buffer.as_mut_ptr(),
-            buffer.len(),
-            format.as_ptr().cast(),
-            value as c_double,
-        )
-    };
-    assert!(written >= 0 && (written as usize) < buffer.len());
-    let bytes =
-        unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), written as usize) };
-    let formatted = std::str::from_utf8(bytes).expect("snprintf emitted UTF-8 float digits");
-    out.push_str(formatted);
+    // Nine significant digits round-trip every f32. Formatting one digit before
+    // the decimal and eight after it first also pins the rounding carry before
+    // applying defaultfloat's fixed/scientific threshold and zero trimming.
+    if value.is_nan() {
+        out.push_str("nan");
+        return;
+    }
+    if value == f32::INFINITY {
+        out.push_str("inf");
+        return;
+    }
+    if value == f32::NEG_INFINITY {
+        out.push_str("-inf");
+        return;
+    }
+
+    let scientific = format!("{value:.8e}");
+    let (mantissa, exponent) = scientific
+        .split_once('e')
+        .expect("Rust scientific float formatting always emits an exponent");
+    let exponent = exponent
+        .parse::<i32>()
+        .expect("Rust scientific float formatting emits a decimal exponent");
+    let negative = mantissa.starts_with('-');
+    let mantissa = mantissa.strip_prefix('-').unwrap_or(mantissa);
+    let mut digits = mantissa
+        .bytes()
+        .filter(|byte| *byte != b'.')
+        .collect::<Vec<_>>();
+    while digits.len() > 1 && digits.last() == Some(&b'0') {
+        digits.pop();
+    }
+
+    if negative {
+        out.push('-');
+    }
+    if (-4..9).contains(&exponent) {
+        if exponent < 0 {
+            out.push_str("0.");
+            for _ in 0..(-exponent - 1) {
+                out.push('0');
+            }
+            for digit in digits {
+                out.push(char::from(digit));
+            }
+        } else {
+            let integer_digits =
+                usize::try_from(exponent + 1).expect("nonnegative decimal exponent fits usize");
+            for (index, digit) in digits.iter().enumerate() {
+                if index == integer_digits {
+                    out.push('.');
+                }
+                out.push(char::from(*digit));
+            }
+            if digits.len() < integer_digits {
+                for _ in digits.len()..integer_digits {
+                    out.push('0');
+                }
+            }
+        }
+    } else {
+        out.push(char::from(digits[0]));
+        if digits.len() > 1 {
+            out.push('.');
+            for digit in &digits[1..] {
+                out.push(char::from(*digit));
+            }
+        }
+        out.push('e');
+        if exponent < 0 {
+            out.push('-');
+        } else {
+            out.push('+');
+        }
+        let magnitude = exponent.unsigned_abs();
+        if magnitude < 10 {
+            out.push('0');
+        }
+        write!(out, "{magnitude}").expect("writing to a String cannot fail");
+    }
 }
 
 #[cfg(test)]
@@ -2555,9 +2614,96 @@ mod tests {
     }
 
     #[test]
-    fn c_style_float_formatter_matches_cpp_significant_digits() {
-        assert_eq!(float_to_string(0.05000000074505806), "0.0500000007");
-        assert_eq!(float_to_string(-0.0), "-0");
-        assert_eq!(float_to_string(384.37109375), "384.371094");
+    fn pure_rust_float_formatter_pins_cpp_defaultfloat_boundaries() {
+        let cases = [
+            (0x0000_0000, "0"),
+            (0x8000_0000, "-0"),
+            (0x3dcc_cccd, "0.100000001"),
+            (0x0000_0001, "1.40129846e-45"),
+            (0x007f_ffff, "1.17549421e-38"),
+            (0x0080_0000, "1.17549435e-38"),
+            (0x7f7f_ffff, "3.40282347e+38"),
+            (0x38d1_b716, "9.99999902e-05"),
+            (0x38d1_b717, "9.99999975e-05"),
+            (0x38d1_b718, "0.000100000005"),
+            (0x4e6e_6b27, "999999936"),
+            (0x4e6e_6b28, "1e+09"),
+            (0x4e6e_6b29, "1.00000006e+09"),
+            (0x411f_ffff, "9.99999905"),
+            (0x3d4c_cccd, "0.0500000007"),
+            (0x43c0_2f80, "384.371094"),
+            (0x7f80_0000, "inf"),
+            (0xff80_0000, "-inf"),
+            (0x7fc0_0000, "nan"),
+            (0xffc0_0000, "nan"),
+        ];
+        for (bits, expected) in cases {
+            assert_eq!(float_to_string(f32::from_bits(bits)), expected);
+        }
+    }
+
+    #[test]
+    fn pure_rust_float_formatter_matches_c_oracle_corpus_digest() {
+        let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+        let mut count = 0_u64;
+        for_float_formatter_corpus(|value| {
+            let formatted = float_to_string(value);
+            for byte in formatted.bytes().chain(std::iter::once(0xff)) {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            count += 1;
+        });
+        assert_eq!(count, 1_050_928);
+        assert_eq!(hash, 0x3e76_805d_71c7_9904);
+    }
+
+    fn for_float_formatter_corpus(mut visit: impl FnMut(f32)) {
+        let boundary_bits = [
+            0x0000_0000,
+            0x8000_0000,
+            0x0000_0001,
+            0x007f_ffff,
+            0x0080_0000,
+            0x3dcc_cccd,
+            0x7f7f_ffff,
+            0xff7f_ffff,
+            0x7f80_0000,
+            0xff80_0000,
+            0x7fc0_0000,
+            0xffc0_0000,
+        ];
+        for bits in boundary_bits {
+            visit(f32::from_bits(bits));
+        }
+
+        for center in [
+            1e-5_f32,
+            1e-4_f32,
+            0.1_f32,
+            1.0_f32,
+            9.999_999_f32,
+            1e8_f32,
+            1e9_f32,
+            f32::MIN_POSITIVE,
+            f32::MAX,
+        ] {
+            let center = center.to_bits();
+            for distance in 0..=64 {
+                let below = center.saturating_sub(distance);
+                let above = center.saturating_add(distance);
+                visit(f32::from_bits(below));
+                visit(f32::from_bits(above));
+                visit(f32::from_bits(below | 0x8000_0000));
+                visit(f32::from_bits(above | 0x8000_0000));
+            }
+        }
+
+        let mut bits = 0x243f_6a88_u32;
+        for _ in 0..1_048_576 {
+            bits ^= bits << 13;
+            bits ^= bits >> 17;
+            bits ^= bits << 5;
+            visit(f32::from_bits(bits));
+        }
     }
 }

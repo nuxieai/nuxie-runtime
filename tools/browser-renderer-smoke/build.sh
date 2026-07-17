@@ -25,3 +25,7 @@ fi
   "$ROOT/target/wasm32-unknown-unknown/release/browser_renderer_smoke.wasm" \
   --out-dir "$ROOT/tools/browser-renderer-smoke/pkg" \
   --target web
+
+node "$ROOT/tools/browser-renderer-smoke/verify-wasm-imports.cjs" \
+  "$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke.js" \
+  "$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke_bg.wasm"

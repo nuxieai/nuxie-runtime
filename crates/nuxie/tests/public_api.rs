@@ -7,11 +7,12 @@
 )]
 
 use nuxie::{
-    AnimationId, ArtboardSpec, BlendMode, ColorInt, ExportedAnimatableProperty, ExportedObjectKind,
-    ExportedProperty, Factory, File, FillRule, ImageDecodeError, LinearAnimationSpec, NodeSpec,
-    ObjectId, Parent, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, Scene,
-    ShapeSpec, StateMachineInputKind, StrokeCap, StrokeJoin, props,
+    AnimationId, ArtboardSpec, BlendMode, ColorInt, EditErrorKind, EditId, EditReason,
+    ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, Factory, File, FillRule,
+    ImageDecodeError, LinearAnimationSpec, NodeSpec, ObjectId, Parent, RawPath, RecordingFactory,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, Scene, ShapeSpec, StateMachineInputKind, StrokeCap,
+    StrokeJoin, props,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -74,6 +75,93 @@ fn scene_animation_authoring_surface_is_typed_key_free_and_upsert_shaped() {
         )],
         "the public record vocabulary remains semantic and exposes no numeric Rive key"
     );
+}
+
+#[test]
+fn scene_rejects_zero_fps_when_creating_a_linear_animation_atomically() {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene
+        .edit(|tx| {
+            tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })
+        })
+        .expect("baseline artboard must commit");
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Invalid".into(),
+                    fps: 0,
+                    duration: 60,
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("zero fps must reject at the public animation authoring seam");
+
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().operation_index, 0);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Artboard(artboard)]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::NonPositiveProperty { property: "fps" }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+}
+
+#[test]
+fn scene_rejects_zero_fps_at_commit_and_rolls_back_the_animation() {
+    let mut scene = Scene::new();
+    let (animation, _) = scene
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Fade".into(),
+                    fps: 60,
+                    duration: 60,
+                },
+            )
+        })
+        .expect("baseline animation must commit");
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            tx.set(animation.object_id(), props::ANIMATION_DURATION, 120)?;
+            tx.set(animation.object_id(), props::ANIMATION_FPS, 0)
+        })
+        .expect_err("zero fps must reject during scene commit validation");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().operation_index, 1);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Object(animation.object_id())]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::NonPositiveProperty { property: "fps" }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
 }
 
 struct DropTrackedRenderImage {

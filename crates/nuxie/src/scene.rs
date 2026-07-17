@@ -149,6 +149,9 @@ pub enum EditReason {
     NonFiniteProperty {
         property: &'static str,
     },
+    NonPositiveProperty {
+        property: &'static str,
+    },
     EmptyScene,
     CapacityExceeded,
     RuntimeRejected,
@@ -733,6 +736,7 @@ struct SpecOrigins {
     shader_assets: BTreeMap<ShaderAssetId, usize>,
     artboard_specs: BTreeMap<ArtboardId, usize>,
     nodes: BTreeMap<ObjectId, usize>,
+    properties: BTreeMap<(ObjectId, &'static str), usize>,
     relationships: BTreeMap<ObjectId, usize>,
 }
 
@@ -759,6 +763,13 @@ impl SpecOrigins {
 
     fn object(&self, id: ObjectId, fallback: usize) -> usize {
         self.nodes.get(&id).copied().unwrap_or(fallback)
+    }
+
+    fn property(&self, id: ObjectId, property: &'static str, fallback: usize) -> usize {
+        self.properties
+            .get(&(id, property))
+            .copied()
+            .unwrap_or_else(|| self.object(id, fallback))
     }
 
     fn relationship(&self, first: ObjectId, second: ObjectId, fallback: usize) -> usize {
@@ -914,7 +925,7 @@ impl RecordSpec {
 
 /// Definition-time shape of one linear timeline. Playback behavior not
 /// represented here stays at the Rive schema defaults (speed 1, one-shot,
-/// full duration, and no quantization).
+/// full duration, and no quantization). `fps` must be strictly positive.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinearAnimationSpec {
     pub name: String,
@@ -3456,12 +3467,16 @@ impl SceneTx<'_> {
         value: T,
     ) -> std::result::Result<(), EditAbort> {
         let operation_index = self.begin_operation()?;
+        let property_name = property.schema_name();
         let artboard_id = Hierarchy {
             definitions: self.definitions,
             index: &self.definition_index,
             operation_index,
         }
         .set(object, property, value)?;
+        self.spec_origins
+            .properties
+            .insert((object, property_name), operation_index);
         self.touched_artboards.insert(artboard_id, operation_index);
         Ok(())
     }
@@ -3501,6 +3516,9 @@ impl SceneTx<'_> {
         self.spec_origins
             .nodes
             .retain(|id, _| self.definition_index.contains_object(*id));
+        self.spec_origins
+            .properties
+            .retain(|(id, _), _| self.definition_index.contains_object(*id));
     }
 }
 
@@ -3538,6 +3556,9 @@ impl AnimTx<'_> {
                     EditReason::UnknownArtboard,
                 )
             })?;
+        validate_linear_animation_spec(&spec).map_err(|reason| {
+            EditAbort::new(operation_index, vec![EditId::Artboard(artboard)], reason)
+        })?;
         let id = ObjectId(allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
             EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
         })?);
@@ -4943,7 +4964,16 @@ fn validate_animation_definitions(
             };
             let operation_index = origins.object(record.id, fallback_operation_index);
             match animation_record {
-                AnimationRecordSpec::LinearAnimation(_) => {}
+                AnimationRecordSpec::LinearAnimation(spec) => {
+                    let operation_index = origins.property(record.id, "fps", operation_index);
+                    validate_linear_animation_spec(spec).map_err(|reason| {
+                        EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            reason,
+                        )
+                    })?;
+                }
                 AnimationRecordSpec::KeyedObject { animation, target } => {
                     let owner = records_by_id.get(animation).copied().ok_or_else(|| {
                         let reason = match objects.get(animation) {
@@ -5648,6 +5678,15 @@ fn validate_artboard_spec(spec: &ArtboardSpec) -> std::result::Result<(), EditRe
     }
     if !spec.height.is_finite() {
         return Err(EditReason::NonFiniteProperty { property: "height" });
+    }
+    Ok(())
+}
+
+fn validate_linear_animation_spec(
+    spec: &LinearAnimationSpec,
+) -> std::result::Result<(), EditReason> {
+    if spec.fps == 0 {
+        return Err(EditReason::NonPositiveProperty { property: "fps" });
     }
     Ok(())
 }

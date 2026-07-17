@@ -6,7 +6,11 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use nuxie_binary::{RuntimeFile, read_runtime_file};
+use nuxie_binary::RuntimeFile;
+#[cfg(not(feature = "scripting"))]
+use nuxie_binary::read_runtime_file as read_runtime_file_for_facade;
+#[cfg(feature = "scripting")]
+use nuxie_binary::read_runtime_file_with_scripting as read_runtime_file_for_facade;
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache,
@@ -44,7 +48,7 @@ pub struct File {
 impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
     pub fn import(bytes: &[u8]) -> Result<Self> {
-        let runtime = read_runtime_file(bytes).context("failed to import Rive file")?;
+        let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
         Self::from_runtime(runtime)
     }
 

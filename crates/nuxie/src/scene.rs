@@ -31,6 +31,14 @@ pub struct FontAssetId(u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ImageAssetId(u64);
 
+/// Stable identity of compiled Luau bytecode owned by the authored scene.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ScriptAssetId(u64);
+
+/// Stable identity of a compiled Rive shader table owned by the authored scene.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ShaderAssetId(u64);
+
 /// Stable identity of a live artboard instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InstanceId(u64);
@@ -73,6 +81,8 @@ pub enum EditId {
     Object(ObjectId),
     FontAsset(FontAssetId),
     ImageAsset(ImageAssetId),
+    ScriptAsset(ScriptAssetId),
+    ShaderAsset(ShaderAssetId),
     Instance(InstanceId),
 }
 
@@ -89,6 +99,7 @@ pub enum EditReason {
     UnknownObject,
     UnknownFontAsset,
     UnknownImageAsset,
+    UnknownScriptAsset,
     EmptyFontAsset,
     InvalidFontAsset,
     CycleDetected,
@@ -430,6 +441,8 @@ pub struct EditReceipt {
 struct Definitions {
     font_assets: Vec<FontAssetDefinition>,
     image_assets: Vec<ImageAssetDefinition>,
+    script_assets: Vec<ScriptAssetDefinition>,
+    shader_assets: Vec<ShaderAssetDefinition>,
     artboards: Vec<ArtboardDefinition>,
 }
 
@@ -495,6 +508,8 @@ struct IndexedObject {
 struct DefinitionIndex {
     font_assets: BTreeMap<FontAssetId, usize>,
     image_assets: BTreeMap<ImageAssetId, usize>,
+    script_assets: BTreeMap<ScriptAssetId, usize>,
+    shader_assets: BTreeMap<ShaderAssetId, usize>,
     artboards: BTreeMap<ArtboardId, usize>,
     objects: BTreeMap<ObjectId, IndexedObject>,
     children: BTreeMap<Parent, Vec<ObjectId>>,
@@ -518,6 +533,12 @@ impl DefinitionIndex {
         }
         for (image_index, image) in definitions.image_assets.iter().enumerate() {
             index.image_assets.insert(image.id, image_index);
+        }
+        for (script_index, script) in definitions.script_assets.iter().enumerate() {
+            index.script_assets.insert(script.id, script_index);
+        }
+        for (shader_index, shader) in definitions.shader_assets.iter().enumerate() {
+            index.shader_assets.insert(shader.id, shader_index);
         }
         for (artboard_index, artboard) in definitions.artboards.iter().enumerate() {
             index.artboards.insert(artboard.id, artboard_index);
@@ -603,6 +624,8 @@ impl DefinitionIndex {
 struct SpecOrigins {
     font_assets: BTreeMap<FontAssetId, usize>,
     image_assets: BTreeMap<ImageAssetId, usize>,
+    script_assets: BTreeMap<ScriptAssetId, usize>,
+    shader_assets: BTreeMap<ShaderAssetId, usize>,
     artboard_specs: BTreeMap<ArtboardId, usize>,
     nodes: BTreeMap<ObjectId, usize>,
     relationships: BTreeMap<ObjectId, usize>,
@@ -615,6 +638,14 @@ impl SpecOrigins {
 
     fn image_asset(&self, id: ImageAssetId, fallback: usize) -> usize {
         self.image_assets.get(&id).copied().unwrap_or(fallback)
+    }
+
+    fn script_asset(&self, id: ScriptAssetId, fallback: usize) -> usize {
+        self.script_assets.get(&id).copied().unwrap_or(fallback)
+    }
+
+    fn shader_asset(&self, id: ShaderAssetId, fallback: usize) -> usize {
+        self.shader_assets.get(&id).copied().unwrap_or(fallback)
     }
 
     fn artboard(&self, id: ArtboardId, fallback: usize) -> usize {
@@ -650,6 +681,18 @@ struct FontAssetDefinition {
 struct ImageAssetDefinition {
     id: ImageAssetId,
     spec: ImageAssetSpec,
+}
+
+#[derive(Debug, Clone)]
+struct ScriptAssetDefinition {
+    id: ScriptAssetId,
+    spec: ScriptAssetSpec,
+}
+
+#[derive(Debug, Clone)]
+struct ShaderAssetDefinition {
+    id: ShaderAssetId,
+    spec: ShaderAssetSpec,
 }
 
 #[derive(Debug, Clone)]
@@ -1059,7 +1102,10 @@ impl Hierarchy<'_> {
         }
 
         let parent_is_valid = match parent_kind {
-            None => matches!(child_kind, NodeKind::Shape | NodeKind::Text),
+            None => matches!(
+                child_kind,
+                NodeKind::Shape | NodeKind::Text | NodeKind::ScriptedDrawable
+            ),
             Some(parent) => valid_object_parent(parent, child_kind),
         };
         if !parent_is_valid {
@@ -1302,7 +1348,10 @@ impl Hierarchy<'_> {
                 }
             };
             let valid = match parent_kind {
-                None => matches!(child, NodeKind::Shape | NodeKind::Text),
+                None => matches!(
+                    child,
+                    NodeKind::Shape | NodeKind::Text | NodeKind::ScriptedDrawable
+                ),
                 Some(parent) => valid_object_parent(parent, child),
             };
             if !valid {
@@ -1391,6 +1440,11 @@ impl Hierarchy<'_> {
         let abort = |involved_ids, reason| EditAbort::new(operation_index, involved_ids, reason);
         let mut artboard_ids = BTreeSet::new();
         let mut objects = BTreeMap::new();
+        let script_asset_ids = definitions
+            .script_assets
+            .iter()
+            .map(|script| script.id)
+            .collect::<BTreeSet<_>>();
         for artboard in &definitions.artboards {
             if !artboard_ids.insert(artboard.id) {
                 return Err(abort(
@@ -1427,6 +1481,14 @@ impl Hierarchy<'_> {
                         .entry(artboard.id)
                         .or_default()
                         .push((spec.artboard, node.id));
+                }
+                if let NodeSpec::ScriptedDrawable(spec) = &node.spec
+                    && !script_asset_ids.contains(&spec.script)
+                {
+                    return Err(abort(
+                        vec![EditId::Object(node.id), EditId::ScriptAsset(spec.script)],
+                        EditReason::UnknownScriptAsset,
+                    ));
                 }
                 match node.parent {
                     Parent::Artboard(parent) if parent == artboard.id => {}
@@ -1723,6 +1785,8 @@ static NEXT_ARTBOARD_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_OBJECT_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_FONT_ASSET_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_IMAGE_ASSET_ID: AtomicU64 = AtomicU64::new(0);
+static NEXT_SCRIPT_ASSET_ID: AtomicU64 = AtomicU64::new(0);
+static NEXT_SHADER_ASSET_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Render resources retained for one mount of one live authored instance.
@@ -1748,11 +1812,14 @@ pub enum ExportedObjectKind {
     Backboard,
     FontAsset,
     ImageAsset,
+    ScriptAsset,
+    ShaderAsset,
     FileAssetContents,
     Artboard,
     Shape,
     NestedArtboard,
     Image,
+    ScriptedDrawable,
     Rectangle,
     Fill,
     SolidColor,
@@ -1794,6 +1861,8 @@ pub enum ExportedProperty {
     ImageFit(u32),
     ImageAlignmentX(f32),
     ImageAlignmentY(f32),
+    ScriptAssetIsModule(bool),
+    ScriptedDrawableScriptAssetId(u32),
     MeshTriangleIndexBytes(Vec<u8>),
     VertexX(f32),
     VertexY(f32),
@@ -1853,6 +1922,8 @@ impl ExportedProperty {
             Self::ImageFit(_) => PROPERTY_IMAGE_FIT,
             Self::ImageAlignmentX(_) => PROPERTY_IMAGE_ALIGNMENT_X,
             Self::ImageAlignmentY(_) => PROPERTY_IMAGE_ALIGNMENT_Y,
+            Self::ScriptAssetIsModule(_) => PROPERTY_SCRIPT_ASSET_IS_MODULE,
+            Self::ScriptedDrawableScriptAssetId(_) => PROPERTY_SCRIPTED_DRAWABLE_SCRIPT_ASSET_ID,
             Self::MeshTriangleIndexBytes(_) => PROPERTY_MESH_TRIANGLE_INDEX_BYTES,
             Self::VertexX(_) => PROPERTY_VERTEX_X,
             Self::VertexY(_) => PROPERTY_VERTEX_Y,
@@ -1903,6 +1974,7 @@ impl ExportedProperty {
             | Self::FileAssetId(value)
             | Self::NestedArtboardId(value)
             | Self::ImageAssetId(value)
+            | Self::ScriptedDrawableScriptAssetId(value)
             | Self::ImageFit(value)
             | Self::TextValueRunStyleId(value)
             | Self::TextStyleFontAssetId(value) => AuthoringValue::Uint(u64::from(value)),
@@ -1946,7 +2018,8 @@ impl ExportedProperty {
             Self::RectangleLinkCornerRadius(value)
             | Self::StrokeTransformAffectsStroke(value)
             | Self::DashOffsetIsPercentage(value)
-            | Self::DashLengthIsPercentage(value) => AuthoringValue::Bool(value),
+            | Self::DashLengthIsPercentage(value)
+            | Self::ScriptAssetIsModule(value) => AuthoringValue::Bool(value),
             Self::ColorValue(value) => AuthoringValue::Color(value),
         };
         AuthoringProperty { key, value }
@@ -1966,11 +2039,14 @@ impl ExportedRecord {
             ExportedObjectKind::Backboard => TYPE_BACKBOARD,
             ExportedObjectKind::FontAsset => TYPE_FONT_ASSET,
             ExportedObjectKind::ImageAsset => TYPE_IMAGE_ASSET,
+            ExportedObjectKind::ScriptAsset => TYPE_SCRIPT_ASSET,
+            ExportedObjectKind::ShaderAsset => TYPE_SHADER_ASSET,
             ExportedObjectKind::FileAssetContents => TYPE_FILE_ASSET_CONTENTS,
             ExportedObjectKind::Artboard => TYPE_ARTBOARD,
             ExportedObjectKind::Shape => TYPE_SHAPE,
             ExportedObjectKind::NestedArtboard => TYPE_NESTED_ARTBOARD,
             ExportedObjectKind::Image => TYPE_IMAGE,
+            ExportedObjectKind::ScriptedDrawable => TYPE_SCRIPTED_DRAWABLE,
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::Fill => TYPE_FILL,
             ExportedObjectKind::SolidColor => TYPE_SOLID_COLOR,
@@ -2119,6 +2195,18 @@ impl Scene {
             &spec_origins,
         )
         .map_err(EditError::commit)?;
+        validate_script_assets(
+            &definitions.script_assets,
+            commit_operation_index,
+            &spec_origins,
+        )
+        .map_err(EditError::commit)?;
+        validate_shader_assets(
+            &definitions.shader_assets,
+            commit_operation_index,
+            &spec_origins,
+        )
+        .map_err(EditError::commit)?;
 
         let final_artboards = definitions
             .artboards
@@ -2151,9 +2239,7 @@ impl Scene {
                 .copied()
                 .unwrap_or(commit_operation_index);
             let materialized = MaterializedArtboard::build(
-                &definitions.font_assets,
-                &definitions.image_assets,
-                &definitions.artboards,
+                &definitions,
                 artboard.id,
                 commit_operation_index,
                 &spec_origins,
@@ -2398,15 +2484,18 @@ impl Scene {
     ///
     /// Export reads authored definitions, not ephemeral instance values written through
     /// [`Frame::set`]. Clients replay those values after a structural remount when needed.
-    /// Persistent font and image identities are projected to only the currently referenced
-    /// assets in semantic first-use order, with one dense record-local file-asset id namespace.
+    /// Referenced fonts/images are followed by all scripts and all shaders in canonical asset
+    /// phases. One dense record-local file-asset ordinal spans the phases, and every asset record
+    /// is adjacent to its contents record.
     pub fn export_records(&self) -> ExportedDocument {
         let mut records = vec![backboard_record()];
         let origins = SpecOrigins::default();
         let all_artboards = self.definitions.artboards.iter().collect::<Vec<_>>();
-        let referenced_assets = match ReferencedFileAssets::collect(
+        let referenced_assets = match CanonicalFileAssets::collect(
             &self.definitions.font_assets,
             &self.definitions.image_assets,
+            &self.definitions.script_assets,
+            &self.definitions.shader_assets,
             all_artboards.as_slice(),
         )
         .lower(0, &origins)
@@ -2424,6 +2513,7 @@ impl Scene {
                 artboard,
                 &referenced_assets.font_indices,
                 &referenced_assets.image_indices,
+                &referenced_assets.script_indices,
                 &artboard_indices,
                 0,
                 &origins,
@@ -2505,6 +2595,64 @@ impl SceneTx<'_> {
             .push(ImageAssetDefinition { id, spec });
         self.definition_index.image_assets.insert(id, image_index);
         self.spec_origins.image_assets.insert(id, operation_index);
+        Ok(id)
+    }
+
+    /// Add raw compiled Luau bytecode and return its stable semantic identity.
+    ///
+    /// `spec.bytes` is the compiler payload, not Rive's signed-content framing.
+    /// Scene lowering adds one unsigned version-zero envelope. Script assets are
+    /// emitted into every materialized file so by-name module dependencies remain
+    /// available even when they are not referenced by a retained node. Rive's
+    /// module namespace is file-global and order-sensitive. Scene preserves
+    /// empty payloads, empty names, and duplicate names without validating Luau;
+    /// the compiler boundary must provide valid bytecode and unambiguous runtime
+    /// names when scripts use by-name lookup.
+    pub fn create_script_asset(
+        &mut self,
+        spec: ScriptAssetSpec,
+    ) -> std::result::Result<ScriptAssetId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let id = ScriptAssetId(allocate_global_identity(&NEXT_SCRIPT_ASSET_ID).ok_or_else(
+            || EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted),
+        )?);
+        let script_index = self.definitions.script_assets.len();
+        self.definitions
+            .script_assets
+            .push(ScriptAssetDefinition { id, spec });
+        self.definition_index.script_assets.insert(id, script_index);
+        self.spec_origins.script_assets.insert(id, operation_index);
+        for artboard in &self.definitions.artboards {
+            self.touched_artboards.insert(artboard.id, operation_index);
+        }
+        Ok(id)
+    }
+
+    /// Add raw compiled RSTB shader bytes and return their stable semantic identity.
+    ///
+    /// `spec.bytes` excludes Rive's signed-content framing. Scene lowering adds
+    /// one unsigned version-zero envelope and emits every shader because script
+    /// shader lookup is dynamic and name based. Scene preserves empty payloads,
+    /// empty names, and duplicate names without validating RSTB. Native lookup
+    /// returns the first file-global name match, so the compiler boundary must
+    /// provide valid bytes and unambiguous runtime names.
+    pub fn create_shader_asset(
+        &mut self,
+        spec: ShaderAssetSpec,
+    ) -> std::result::Result<ShaderAssetId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let id = ShaderAssetId(allocate_global_identity(&NEXT_SHADER_ASSET_ID).ok_or_else(
+            || EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted),
+        )?);
+        let shader_index = self.definitions.shader_assets.len();
+        self.definitions
+            .shader_assets
+            .push(ShaderAssetDefinition { id, spec });
+        self.definition_index.shader_assets.insert(id, shader_index);
+        self.spec_origins.shader_assets.insert(id, operation_index);
+        for artboard in &self.definitions.artboards {
+            self.touched_artboards.insert(artboard.id, operation_index);
+        }
         Ok(id)
     }
 
@@ -2831,7 +2979,11 @@ impl SceneTx<'_> {
 fn valid_artboard_child(child: NodeKind) -> bool {
     matches!(
         child,
-        NodeKind::Shape | NodeKind::NestedArtboard | NodeKind::Image | NodeKind::Text
+        NodeKind::Shape
+            | NodeKind::NestedArtboard
+            | NodeKind::Image
+            | NodeKind::Text
+            | NodeKind::ScriptedDrawable
     )
 }
 
@@ -3233,18 +3385,22 @@ impl MaterializedArtboard {
     }
 
     fn build(
-        font_assets: &[FontAssetDefinition],
-        image_assets: &[ImageAssetDefinition],
-        definitions: &[ArtboardDefinition],
+        definitions: &Definitions,
         root: ArtboardId,
         fallback_operation_index: usize,
         origins: &SpecOrigins,
         touched_operation_index: usize,
     ) -> std::result::Result<Self, EditDiagnostic> {
-        let closure = materialized_artboard_closure(definitions, root, touched_operation_index)?;
-        let referenced_assets =
-            ReferencedFileAssets::collect(font_assets, image_assets, closure.as_slice())
-                .lower(fallback_operation_index, origins)?;
+        let closure =
+            materialized_artboard_closure(&definitions.artboards, root, touched_operation_index)?;
+        let referenced_assets = CanonicalFileAssets::collect(
+            &definitions.font_assets,
+            &definitions.image_assets,
+            &definitions.script_assets,
+            &definitions.shader_assets,
+            closure.as_slice(),
+        )
+        .lower(fallback_operation_index, origins)?;
         let artboard_indices = artboard_indices(closure.as_slice())
             .map_err(|reason| EditDiagnostic::new(touched_operation_index, vec![], reason))?;
         let mut records = vec![backboard_record()];
@@ -3257,6 +3413,7 @@ impl MaterializedArtboard {
                 definition,
                 &referenced_assets.font_indices,
                 &referenced_assets.image_indices,
+                &referenced_assets.script_indices,
                 &artboard_indices,
                 fallback_operation_index,
                 origins,
@@ -3389,33 +3546,38 @@ fn collect_materialized_artboard_closure<'a>(
     Ok(())
 }
 
-/// One referenced file asset in canonical authored-node first-use order.
-enum ReferencedFileAsset<'a> {
+/// One file asset in the canonical runtime record phase.
+enum CanonicalFileAsset<'a> {
     Font(&'a FontAssetDefinition),
     Image(&'a ImageAssetDefinition),
+    Script(&'a ScriptAssetDefinition),
+    Shader(&'a ShaderAssetDefinition),
 }
 
-/// Canonical record-time view of both persistent file-asset catalogs.
+/// Canonical record-time view of every persistent file-asset catalog.
 ///
-/// Durable font and image identities stay typed and append-only. Runtime files
-/// and export records project only currently referenced assets, but Rive's
-/// record-local `assetId` is one shared namespace across both asset kinds. This
-/// seam therefore walks canonical artboard/node order once, excludes stale
-/// definitions, and owns the single dense ordinal used by every consumer.
-struct ReferencedFileAssets<'a> {
-    ordered: Vec<ReferencedFileAsset<'a>>,
+/// Rive's record-local `assetId` is one shared ordinal namespace. To preserve
+/// existing font/image records while making dynamic script dependencies sound,
+/// the canonical phases are: referenced fonts and images in authored-node
+/// first-use order, every script in authored order, then every shader in authored
+/// order. Each asset record is immediately followed by its contents record.
+struct CanonicalFileAssets<'a> {
+    ordered: Vec<CanonicalFileAsset<'a>>,
 }
 
-struct LoweredReferencedFileAssets {
+struct LoweredFileAssets {
     records: Vec<ExportedRecord>,
     font_indices: BTreeMap<FontAssetId, u32>,
     image_indices: BTreeMap<ImageAssetId, u32>,
+    script_indices: BTreeMap<ScriptAssetId, u32>,
 }
 
-impl<'a> ReferencedFileAssets<'a> {
+impl<'a> CanonicalFileAssets<'a> {
     fn collect(
         font_assets: &'a [FontAssetDefinition],
         image_assets: &'a [ImageAssetDefinition],
+        script_assets: &'a [ScriptAssetDefinition],
+        shader_assets: &'a [ShaderAssetDefinition],
         artboards: &[&ArtboardDefinition],
     ) -> Self {
         let fonts = font_assets
@@ -3437,18 +3599,20 @@ impl<'a> ReferencedFileAssets<'a> {
                         // lower_artboard reports the owning object and asset
                         // together with its established diagnostic.
                         if let Some(font) = fonts.get(&style.font).copied() {
-                            ordered.push(ReferencedFileAsset::Font(font));
+                            ordered.push(CanonicalFileAsset::Font(font));
                         }
                     }
                     NodeSpec::Image(spec) if seen_images.insert(spec.image) => {
                         if let Some(image) = images.get(&spec.image).copied() {
-                            ordered.push(ReferencedFileAsset::Image(image));
+                            ordered.push(CanonicalFileAsset::Image(image));
                         }
                     }
                     _ => {}
                 }
             }
         }
+        ordered.extend(script_assets.iter().map(CanonicalFileAsset::Script));
+        ordered.extend(shader_assets.iter().map(CanonicalFileAsset::Shader));
         Self { ordered }
     }
 
@@ -3456,7 +3620,7 @@ impl<'a> ReferencedFileAssets<'a> {
         self,
         fallback_operation_index: usize,
         origins: &SpecOrigins,
-    ) -> std::result::Result<LoweredReferencedFileAssets, EditDiagnostic> {
+    ) -> std::result::Result<LoweredFileAssets, EditDiagnostic> {
         let record_capacity = self.ordered.len().checked_mul(2).ok_or_else(|| {
             EditDiagnostic::new(
                 fallback_operation_index,
@@ -3467,22 +3631,31 @@ impl<'a> ReferencedFileAssets<'a> {
         let mut records = Vec::with_capacity(record_capacity);
         let mut font_indices = BTreeMap::new();
         let mut image_indices = BTreeMap::new();
+        let mut script_indices = BTreeMap::new();
         for (index, asset) in self.ordered.into_iter().enumerate() {
             let file_asset_id = u32::try_from(index).map_err(|_| {
                 let (operation_index, involved_ids) = match &asset {
-                    ReferencedFileAsset::Font(font) => (
+                    CanonicalFileAsset::Font(font) => (
                         origins.font_asset(font.id, fallback_operation_index),
                         vec![EditId::FontAsset(font.id)],
                     ),
-                    ReferencedFileAsset::Image(image) => (
+                    CanonicalFileAsset::Image(image) => (
                         origins.image_asset(image.id, fallback_operation_index),
                         vec![EditId::ImageAsset(image.id)],
+                    ),
+                    CanonicalFileAsset::Script(script) => (
+                        origins.script_asset(script.id, fallback_operation_index),
+                        vec![EditId::ScriptAsset(script.id)],
+                    ),
+                    CanonicalFileAsset::Shader(shader) => (
+                        origins.shader_asset(shader.id, fallback_operation_index),
+                        vec![EditId::ShaderAsset(shader.id)],
                     ),
                 };
                 EditDiagnostic::new(operation_index, involved_ids, EditReason::CapacityExceeded)
             })?;
-            let (kind, name, bytes) = match asset {
-                ReferencedFileAsset::Font(font) => {
+            let (kind, name, bytes, is_module) = match asset {
+                CanonicalFileAsset::Font(font) => {
                     validate_font_asset(font, fallback_operation_index, origins)?;
                     let operation_index = origins.font_asset(font.id, fallback_operation_index);
                     if font_indices.insert(font.id, file_asset_id).is_some() {
@@ -3496,9 +3669,10 @@ impl<'a> ReferencedFileAssets<'a> {
                         ExportedObjectKind::FontAsset,
                         font.spec.name.clone(),
                         font.spec.bytes.clone(),
+                        None,
                     )
                 }
-                ReferencedFileAsset::Image(image) => {
+                CanonicalFileAsset::Image(image) => {
                     let operation_index = origins.image_asset(image.id, fallback_operation_index);
                     if image_indices.insert(image.id, file_asset_id).is_some() {
                         return Err(EditDiagnostic::new(
@@ -3511,25 +3685,56 @@ impl<'a> ReferencedFileAssets<'a> {
                         ExportedObjectKind::ImageAsset,
                         image.spec.name.clone(),
                         image.spec.bytes.clone(),
+                        None,
+                    )
+                }
+                CanonicalFileAsset::Script(script) => {
+                    let operation_index = origins.script_asset(script.id, fallback_operation_index);
+                    if script_indices.insert(script.id, file_asset_id).is_some() {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::ScriptAsset(script.id)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    let mut bytes = script.spec.bytes.clone();
+                    bytes.insert(0, 0);
+                    (
+                        ExportedObjectKind::ScriptAsset,
+                        script.spec.name.clone(),
+                        bytes,
+                        Some(script.spec.is_module),
+                    )
+                }
+                CanonicalFileAsset::Shader(shader) => {
+                    let mut bytes = shader.spec.bytes.clone();
+                    bytes.insert(0, 0);
+                    (
+                        ExportedObjectKind::ShaderAsset,
+                        shader.spec.name.clone(),
+                        bytes,
+                        None,
                     )
                 }
             };
-            records.push(ExportedRecord {
-                kind,
-                properties: vec![
-                    ExportedProperty::AssetName(name),
-                    ExportedProperty::FileAssetId(file_asset_id),
-                ],
-            });
+            let mut properties = vec![
+                ExportedProperty::AssetName(name),
+                ExportedProperty::FileAssetId(file_asset_id),
+            ];
+            if is_module == Some(true) {
+                properties.push(ExportedProperty::ScriptAssetIsModule(true));
+            }
+            records.push(ExportedRecord { kind, properties });
             records.push(ExportedRecord {
                 kind: ExportedObjectKind::FileAssetContents,
                 properties: vec![ExportedProperty::FileAssetContentsBytes(bytes)],
             });
         }
-        Ok(LoweredReferencedFileAssets {
+        Ok(LoweredFileAssets {
             records,
             font_indices,
             image_indices,
+            script_indices,
         })
     }
 }
@@ -3610,6 +3815,58 @@ fn validate_image_assets(
     Ok(())
 }
 
+fn validate_script_assets(
+    script_assets: &[ScriptAssetDefinition],
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    let mut identities = BTreeSet::new();
+    for (index, script) in script_assets.iter().enumerate() {
+        let operation_index = origins.script_asset(script.id, fallback_operation_index);
+        u32::try_from(index).map_err(|_| {
+            EditDiagnostic::new(
+                operation_index,
+                vec![EditId::ScriptAsset(script.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        if !identities.insert(script.id) {
+            return Err(EditDiagnostic::new(
+                operation_index,
+                vec![EditId::ScriptAsset(script.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_shader_assets(
+    shader_assets: &[ShaderAssetDefinition],
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    let mut identities = BTreeSet::new();
+    for (index, shader) in shader_assets.iter().enumerate() {
+        let operation_index = origins.shader_asset(shader.id, fallback_operation_index);
+        u32::try_from(index).map_err(|_| {
+            EditDiagnostic::new(
+                operation_index,
+                vec![EditId::ShaderAsset(shader.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        if !identities.insert(shader.id) {
+            return Err(EditDiagnostic::new(
+                operation_index,
+                vec![EditId::ShaderAsset(shader.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Lower exactly one durable artboard into one runtime-file record stream.
 ///
 /// Preview materialization uses this function today; deterministic export can reuse the same
@@ -3619,6 +3876,7 @@ fn lower_artboard(
     artboard: &ArtboardDefinition,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
     image_asset_indices: &BTreeMap<ImageAssetId, u32>,
+    script_asset_indices: &BTreeMap<ScriptAssetId, u32>,
     artboard_indices: &BTreeMap<ArtboardId, u32>,
     fallback_operation_index: usize,
     origins: &SpecOrigins,
@@ -3719,6 +3977,15 @@ fn lower_artboard(
                     ));
                 }
             }
+            NodeSpec::ScriptedDrawable(spec) => {
+                if !script_asset_indices.contains_key(&spec.script) {
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::ScriptAsset(spec.script)],
+                        EditReason::UnknownScriptAsset,
+                    ));
+                }
+            }
             _ => {}
         }
         let parent_id = match node.parent {
@@ -3790,6 +4057,7 @@ fn lower_artboard(
                 &all_local_ids,
                 font_asset_indices,
                 image_asset_indices,
+                script_asset_indices,
                 artboard_indices,
             )
             .map_err(|reason| {
@@ -4078,6 +4346,20 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 }
             }
         }
+        NodeSpec::ScriptedDrawable(spec) => {
+            for (property, value) in [
+                ("x", spec.x),
+                ("y", spec.y),
+                ("opacity", spec.opacity),
+                ("rotation", spec.rotation),
+                ("scale_x", spec.scale_x),
+                ("scale_y", spec.scale_y),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
         NodeSpec::Rectangle(spec) => {
             if !spec.width.is_finite() {
                 return Err(EditReason::NonFiniteProperty { property: "width" });
@@ -4171,6 +4453,7 @@ fn node_record(
     local_ids: &BTreeMap<ObjectId, usize>,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
     image_asset_indices: &BTreeMap<ImageAssetId, u32>,
+    script_asset_indices: &BTreeMap<ScriptAssetId, u32>,
     artboard_indices: &BTreeMap<ArtboardId, u32>,
 ) -> std::result::Result<ExportedRecord, EditReason> {
     let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
@@ -4269,6 +4552,35 @@ fn node_record(
                 properties.push(ExportedProperty::ImageAlignmentY(spec.alignment_y));
             }
             ExportedObjectKind::Image
+        }
+        NodeSpec::ScriptedDrawable(spec) => {
+            let script_asset_id = script_asset_indices
+                .get(&spec.script)
+                .copied()
+                .ok_or(EditReason::UnknownScriptAsset)?;
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::ScriptedDrawableScriptAssetId(
+                script_asset_id,
+            ));
+            if spec.x != 0.0 {
+                properties.push(ExportedProperty::TranslateX(spec.x));
+            }
+            if spec.y != 0.0 {
+                properties.push(ExportedProperty::TranslateY(spec.y));
+            }
+            if spec.opacity != 1.0 {
+                properties.push(ExportedProperty::WorldOpacity(spec.opacity));
+            }
+            if spec.rotation != 0.0 {
+                properties.push(ExportedProperty::Rotation(spec.rotation));
+            }
+            if spec.scale_x != 1.0 {
+                properties.push(ExportedProperty::ScaleX(spec.scale_x));
+            }
+            if spec.scale_y != 1.0 {
+                properties.push(ExportedProperty::ScaleY(spec.scale_y));
+            }
+            ExportedObjectKind::ScriptedDrawable
         }
         NodeSpec::Rectangle(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
@@ -6392,6 +6704,275 @@ mod tests {
             imported_mesh.mesh_triangle_indices(),
             Some(vec![0, 1, 2, 0, 2, 3]),
             "the authored varuint stream must round-trip as two nondegenerate triangles",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mixed_file_assets_share_one_dense_ordinal_and_script_defaults_survive_import() -> Result<()>
+    {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let image = tx.create_image_asset(ImageAssetSpec {
+                name: "Photo".into(),
+                bytes: b"image bytes".to_vec(),
+            })?;
+            tx.create_script_asset(ScriptAssetSpec {
+                name: "helpers".into(),
+                is_module: true,
+                bytes: b"module bytecode".to_vec(),
+            })?;
+            let protocol = tx.create_script_asset(ScriptAssetSpec {
+                name: "node".into(),
+                is_module: false,
+                bytes: b"node bytecode".to_vec(),
+            })?;
+            tx.create_shader_asset(ShaderAssetSpec {
+                name: "fill".into(),
+                bytes: b"RSTB bytes".to_vec(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Mixed assets".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Image(ImageSpec {
+                    name: "Image first".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    image,
+                    origin_x: 0.0,
+                    origin_y: 0.0,
+                    fit: 0,
+                    alignment_x: 0.0,
+                    alignment_y: 0.0,
+                    crop: None,
+                }),
+            )?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Text second".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 80.0,
+                    height: 30.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::Wrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Style".into(),
+                    font_size: 16.0,
+                    line_height: 20.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
+                    name: "Scripted".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    script: protocol,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        let exported = scene.export_records();
+        let [
+            backboard,
+            image_asset,
+            image_contents,
+            font_asset,
+            font_contents,
+            module_asset,
+            module_contents,
+            protocol_asset,
+            protocol_contents,
+            shader_asset,
+            shader_contents,
+            ..,
+        ] = exported.records()
+        else {
+            panic!("mixed scene must contain the complete asset phase");
+        };
+        assert_eq!(
+            [
+                backboard,
+                image_asset,
+                image_contents,
+                font_asset,
+                font_contents,
+                module_asset,
+                module_contents,
+                protocol_asset,
+                protocol_contents,
+                shader_asset,
+                shader_contents,
+            ]
+            .into_iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+            vec![
+                ExportedObjectKind::Backboard,
+                ExportedObjectKind::ImageAsset,
+                ExportedObjectKind::FileAssetContents,
+                ExportedObjectKind::FontAsset,
+                ExportedObjectKind::FileAssetContents,
+                ExportedObjectKind::ScriptAsset,
+                ExportedObjectKind::FileAssetContents,
+                ExportedObjectKind::ScriptAsset,
+                ExportedObjectKind::FileAssetContents,
+                ExportedObjectKind::ShaderAsset,
+                ExportedObjectKind::FileAssetContents,
+            ],
+            "each phase uses adjacent asset/contents records before the artboard phase"
+        );
+        let asset_records = exported
+            .records()
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.kind,
+                    ExportedObjectKind::FontAsset
+                        | ExportedObjectKind::ImageAsset
+                        | ExportedObjectKind::ScriptAsset
+                        | ExportedObjectKind::ShaderAsset
+                )
+            })
+            .collect::<Vec<_>>();
+        let [
+            image_asset,
+            font_asset,
+            module_asset,
+            protocol_asset,
+            shader_asset,
+        ] = asset_records.as_slice()
+        else {
+            panic!("mixed scene must export exactly five file assets");
+        };
+        assert_eq!(
+            [
+                *image_asset,
+                *font_asset,
+                *module_asset,
+                *protocol_asset,
+                *shader_asset,
+            ]
+            .into_iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+            vec![
+                ExportedObjectKind::ImageAsset,
+                ExportedObjectKind::FontAsset,
+                ExportedObjectKind::ScriptAsset,
+                ExportedObjectKind::ScriptAsset,
+                ExportedObjectKind::ShaderAsset,
+            ],
+            "referenced font/image first-use is followed by authored scripts, then authored shaders"
+        );
+        for (expected, record) in [
+            *image_asset,
+            *font_asset,
+            *module_asset,
+            *protocol_asset,
+            *shader_asset,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(record.properties.contains(&ExportedProperty::FileAssetId(
+                u32::try_from(expected).expect("five assets fit in u32")
+            )));
+        }
+        assert!(
+            module_asset
+                .properties
+                .contains(&ExportedProperty::ScriptAssetIsModule(true))
+        );
+        assert!(
+            !protocol_asset
+                .properties
+                .contains(&ExportedProperty::ScriptAssetIsModule(false)),
+            "isModule=false stays implicit at its schema default"
+        );
+
+        let runtime =
+            RuntimeFile::from_authoring_records(exported.clone().into_authoring_records())?;
+        assert_eq!(
+            runtime
+                .file_assets()
+                .iter()
+                .map(|asset| asset.type_name)
+                .collect::<Vec<_>>(),
+            vec![
+                "ImageAsset",
+                "FontAsset",
+                "ScriptAsset",
+                "ScriptAsset",
+                "ShaderAsset",
+            ]
+        );
+        let imported_scripts = runtime
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "ScriptAsset")
+            .collect::<Vec<_>>();
+        let [imported_module, imported_protocol] = imported_scripts.as_slice() else {
+            panic!("both authored scripts must import");
+        };
+        assert_eq!(imported_module.bool_property("isModule"), Some(true));
+        assert_eq!(imported_protocol.bool_property("isModule"), Some(false));
+        for script in [*imported_module, *imported_protocol] {
+            assert_eq!(
+                script.uint_property("serializedImplementedMethods"),
+                Some(2_097_151),
+                "the omitted implemented-methods mask imports at the compatibility default"
+            );
+        }
+        let imported_drawable = runtime
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "ScriptedDrawable")
+            .expect("the scripted drawable survives record import");
+        assert_eq!(imported_drawable.uint_property("scriptAssetId"), Some(3));
+        assert_eq!(
+            runtime
+                .resolved_file_asset_for_referencer(imported_drawable)
+                .map(|asset| asset.string_property("name")),
+            Some(Some("node"))
+        );
+        File::from_runtime(runtime)?;
+        assert_eq!(
+            scene.export_records(),
+            exported,
+            "export is a record fixpoint"
         );
         Ok(())
     }

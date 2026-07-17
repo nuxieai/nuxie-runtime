@@ -447,7 +447,12 @@ impl RuntimeFile {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let file = finalize_runtime_file(
+        // Authoring can deliberately construct the scripting-enabled record
+        // vocabulary even when the external C++ conformance reader was built
+        // without WITH_RIVE_SCRIPTING. Keep byte-file import on the conformance
+        // profile while giving authored ScriptAsset/ShaderAsset contents their
+        // real FileAsset importer context.
+        let file = finalize_runtime_file_with_script_assets(
             RuntimeHeader {
                 major_version: SUPPORTED_MAJOR_VERSION,
                 minor_version: SUPPORTED_MINOR_VERSION,
@@ -455,6 +460,7 @@ impl RuntimeFile {
                 property_field_ids,
             },
             objects,
+            true,
         )?;
         validate_authoring_import_statuses(&file)?;
         validate_authoring_artboard_local_objects(&file)?;
@@ -4352,9 +4358,7 @@ impl RuntimeFile {
                 continue;
             };
 
-            if file_asset_creates_importer(definition.name)
-                || (script_assets_create_importers && definition.name == "ScriptAsset")
-            {
+            if file_asset_creates_importer(definition.name, script_assets_create_importers) {
                 latest_file_asset = Some(object);
                 if definition.name == "ManifestAsset" {
                     manifest = Some(RuntimeManifest::default());
@@ -8262,6 +8266,17 @@ pub fn read_runtime_file(bytes: &[u8]) -> Result<RuntimeFile> {
     read_runtime_file_with_error_kind(bytes).map_err(anyhow::Error::new)
 }
 
+/// Reads a runtime file with the FileAsset importers provided by a
+/// scripting-enabled Rive build.
+///
+/// [`read_runtime_file`] deliberately remains the non-scripting C++
+/// conformance profile. Callers that will execute scripts must opt into this
+/// profile so adjacent `FileAssetContents` records are retained for
+/// `ScriptAsset` and `ShaderAsset` records.
+pub fn read_runtime_file_with_scripting(bytes: &[u8]) -> Result<RuntimeFile> {
+    read_runtime_file_with_profile(bytes, true).map_err(anyhow::Error::new)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeReadErrorKind {
     UnsupportedVersion,
@@ -8309,6 +8324,13 @@ impl std::error::Error for RuntimeReadError {}
 pub fn read_runtime_file_with_error_kind(
     bytes: &[u8],
 ) -> std::result::Result<RuntimeFile, RuntimeReadError> {
+    read_runtime_file_with_profile(bytes, false)
+}
+
+fn read_runtime_file_with_profile(
+    bytes: &[u8],
+    script_assets_create_importers: bool,
+) -> std::result::Result<RuntimeFile, RuntimeReadError> {
     let mut reader = BinaryReader::new(bytes);
     let header = RuntimeHeader::read(&mut reader).map_err(RuntimeReadError::malformed)?;
 
@@ -8331,7 +8353,8 @@ pub fn read_runtime_file_with_error_kind(
         objects.push(object);
     }
 
-    finalize_runtime_file(header, objects).map_err(RuntimeReadError::malformed)
+    finalize_runtime_file_with_script_assets(header, objects, script_assets_create_importers)
+        .map_err(RuntimeReadError::malformed)
 }
 
 fn authoring_record_to_runtime_object(
@@ -8505,11 +8528,12 @@ fn header_field_kind_for_property(
     Ok(header_kind)
 }
 
-fn finalize_runtime_file(
+fn finalize_runtime_file_with_script_assets(
     header: RuntimeHeader,
     mut objects: Vec<Option<RuntimeObject>>,
+    script_assets_create_importers: bool,
 ) -> Result<RuntimeFile> {
-    let import_statuses = compute_import_statuses(&objects);
+    let import_statuses = compute_import_statuses(&objects, script_assets_create_importers);
     validate_cpp_import_resolution(&objects, &import_statuses)?;
     apply_cpp_import_mutations(&mut objects, &import_statuses);
 
@@ -8710,7 +8734,10 @@ impl ImportStackKey {
     }
 }
 
-fn compute_import_statuses(objects: &[Option<RuntimeObject>]) -> Vec<RuntimeImportStatus> {
+fn compute_import_statuses(
+    objects: &[Option<RuntimeObject>],
+    script_assets_create_importers: bool,
+) -> Vec<RuntimeImportStatus> {
     let mut context = ImportContext::default();
     objects
         .iter()
@@ -8729,7 +8756,12 @@ fn compute_import_statuses(objects: &[Option<RuntimeObject>]) -> Vec<RuntimeImpo
                 return RuntimeImportStatus::Dropped { reason };
             }
 
-            update_import_context(object, definition, &mut context);
+            update_import_context(
+                object,
+                definition,
+                &mut context,
+                script_assets_create_importers,
+            );
             RuntimeImportStatus::Imported
         })
         .collect()
@@ -8917,6 +8949,7 @@ fn update_import_context(
     object: &RuntimeObject,
     definition: &'static Definition,
     context: &mut ImportContext,
+    script_assets_create_importers: bool,
 ) {
     match definition.name {
         "Backboard" => context.make_latest(ImportStackKey::Backboard),
@@ -8950,7 +8983,7 @@ fn update_import_context(
         _ => {}
     }
 
-    if file_asset_creates_importer(definition.name) {
+    if file_asset_creates_importer(definition.name, script_assets_create_importers) {
         context.make_latest(ImportStackKey::FileAsset);
     }
     if definition.is_a("StateMachineLayerComponent") {
@@ -8990,11 +9023,11 @@ fn update_import_context(
     let _ = object;
 }
 
-fn file_asset_creates_importer(type_name: &str) -> bool {
+fn file_asset_creates_importer(type_name: &str, script_assets_create_importers: bool) -> bool {
     matches!(
         type_name,
         "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
-    )
+    ) || (script_assets_create_importers && matches!(type_name, "ScriptAsset" | "ShaderAsset"))
 }
 
 fn cpp_file_assets_contains(object: &RuntimeObject) -> bool {

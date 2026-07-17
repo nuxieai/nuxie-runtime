@@ -1777,6 +1777,21 @@ Run `make renderer-golden`.
     for `batchedconvexpaths` (-12.1%). The current selected-pair worst row is
     still `gm-OverStroke-clockwise-atomic` at 2.8241x, so item 135 remains
     open and that row is the next timing-only target.
+146. [x] Retain generic atomic fallback texture and sampler resources for the
+    pipeline lifetime, matching C++ Dawn's null texture view and image-sampler
+    ownership. Generic atomic frames no longer create a one-pixel texture,
+    texture view, and linear sampler on every submission. Focused diagnostics
+    move generic encode time from 134.8 to 39.5 microseconds for
+    `bevel180strokes` (-70.7%) and from 53.7 to 32.4 microseconds for
+    `OverStroke` (-39.6%); both per-frame resource-creation rows reach zero.
+    The adjacent fixed-matrix aggregate moves 1.7470x->1.4204x (-18.7%).
+    `OverStroke` falls to 1.8070x selected-pair/1.7718x p50, while
+    `bevel180strokes` remains the worst row at 2.0451x selected-pair and
+    1.9960x p50. Deterministic work remains favorable to Rust: exact draws and
+    geometry with fewer passes, bind groups, and uploads for both scenes. The
+    full renderer corpus stays exact=1,409/diverges=0/gated=59. A proposed
+    MSAA substitution is rejected because the bevel outputs differ at 5,297
+    pixels; item 135 remains open on the atomic bevel pass-cost tail.
 
 ## R2 Completion Record
 
@@ -2970,6 +2985,11 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-17: Closed R4 item 146 by reusing pipeline-lifetime generic atomic
+  fallback resources. Per-frame dummy texture/view and sampler creation reach
+  zero, focused encode time improves 39.6%-70.7%, and the adjacent aggregate
+  moves 1.7470x->1.4204x. The renderer corpus remains 1,409/0/59. The remaining
+  timing tail is `bevel180strokes` at 2.0451x selected-pair/1.9960x p50.
 - 2026-07-17: Closed R4 item 145 by applying the target clear as the first
   generic atomic pass load operation, eliminating one render pass per affected
   frame with unchanged deterministic draw work and pixels. The adjacent

@@ -53,7 +53,7 @@ pub(crate) struct AtomicPipeline {
     atomic_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
     _dummy_image_texture: wgpu::Texture,
-    _dummy_image_view: wgpu::TextureView,
+    dummy_image_view: wgpu::TextureView,
     dummy_image_uniforms: wgpu::Buffer,
     dummy_image_group: wgpu::BindGroup,
     image_samplers: Vec<wgpu::Sampler>,
@@ -1066,7 +1066,7 @@ impl AtomicPipeline {
             atomic_layout,
             sampler_layout,
             _dummy_image_texture: dummy_image_texture,
-            _dummy_image_view: dummy_image_view,
+            dummy_image_view,
             dummy_image_uniforms,
             dummy_image_group,
             image_samplers,
@@ -1310,40 +1310,7 @@ impl AtomicPipeline {
                 .buffer_upload_ns
                 .saturating_add(elapsed_ns(triangle_upload_started));
         }
-        #[cfg(feature = "perf-diagnostics")]
-        let dummy_texture_started = Instant::now();
-        let dummy = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nuxie-atomic-dummy-texture"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let dummy_view = dummy.create_view(&Default::default());
-        #[cfg(feature = "perf-diagnostics")]
-        {
-            backing.diagnostics.dummy_texture_ns = backing
-                .diagnostics
-                .dummy_texture_ns
-                .saturating_add(elapsed_ns(dummy_texture_started));
-        }
-        #[cfg(feature = "perf-diagnostics")]
-        let sampler_create_started = Instant::now();
-        let sampler = device.create_sampler(&linear_sampler());
-        #[cfg(feature = "perf-diagnostics")]
-        {
-            backing.diagnostics.sampler_create_ns = backing
-                .diagnostics
-                .sampler_create_ns
-                .saturating_add(elapsed_ns(sampler_create_started));
-        }
+        let sampler = &self.image_samplers[0];
         #[cfg(feature = "perf-diagnostics")]
         let image_uniform_upload_started = Instant::now();
         let image_uniform_buffers = draws
@@ -1386,12 +1353,16 @@ impl AtomicPipeline {
                     binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
                     binding(
                         9,
-                        wgpu::BindingResource::TextureView(gradient.unwrap_or(&dummy_view)),
+                        wgpu::BindingResource::TextureView(
+                            gradient.unwrap_or(&self.dummy_image_view),
+                        ),
                     ),
                     binding(10, wgpu::BindingResource::TextureView(feather_lut)),
                     binding(
                         11,
-                        wgpu::BindingResource::TextureView(draw.atlas.unwrap_or(&dummy_view)),
+                        wgpu::BindingResource::TextureView(
+                            draw.atlas.unwrap_or(&self.dummy_image_view),
+                        ),
                     ),
                 ],
             })
@@ -1506,9 +1477,9 @@ impl AtomicPipeline {
             label: Some("nuxie-atomic-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
-                binding(9, wgpu::BindingResource::Sampler(&sampler)),
-                binding(10, wgpu::BindingResource::Sampler(&sampler)),
-                binding(11, wgpu::BindingResource::Sampler(&sampler)),
+                binding(9, wgpu::BindingResource::Sampler(sampler)),
+                binding(10, wgpu::BindingResource::Sampler(sampler)),
+                binding(11, wgpu::BindingResource::Sampler(sampler)),
             ],
         });
         #[cfg(feature = "perf-diagnostics")]
@@ -2013,15 +1984,6 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         count: None,
     }
 }
-fn linear_sampler() -> wgpu::SamplerDescriptor<'static> {
-    wgpu::SamplerDescriptor {
-        label: Some("nuxie-atomic-linear-sampler"),
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        ..Default::default()
-    }
-}
-
 #[cfg(feature = "perf-diagnostics")]
 fn elapsed_ns(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)

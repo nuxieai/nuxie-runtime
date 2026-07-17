@@ -959,3 +959,28 @@ aggregate (-10.8%). Generic atomic Rust p50 improves 14.3% for
 and 12.1% for `batchedconvexpaths`. The current selected-pair worst row remains
 `gm-OverStroke-clockwise-atomic` at 2.8241x, so this deterministic correction
 closes item 145 but does not close the timing-defined item 135.
+
+### Item 146 Update
+
+Generic atomic encoding recreated a one-pixel fallback texture, its view, and
+a linear sampler on every frame even though `AtomicPipeline` already retained
+descriptor-equivalent null texture and bilinear-clamp sampler resources. C++
+Dawn likewise owns its null texture view and image samplers at context
+lifetime. Rust now reuses those pipeline resources for absent gradients and
+atlases.
+
+Focused diagnostics remove both per-frame creation rows. Generic encode time
+moves 134.8->39.5 microseconds for `bevel180strokes` (-70.7%) and
+53.7->32.4 microseconds for `OverStroke` (-39.6%). An adjacent seven-sample
+fixed-matrix report moves 1.7470x->1.4204x aggregate (-18.7%). `OverStroke`
+is 1.8070x by its selected pair and 1.7718x by repeated p50;
+`bevel180strokes` is the remaining worst row at 2.0451x selected-pair and
+1.9960x p50. Rust already performs fewer passes, bind groups, and uploads than
+C++ on both scenes while matching draws, instances, spans, and patches, so no
+deterministic excess-work row remains.
+
+The full renderer corpus passes at 1,409 exact, zero divergent, and 59 retained
+gates. Replacing the bevel atomic route with MSAA is not pixel-compatible:
+the two current outputs differ at 5,297 pixels (normalized RMSE 0.0172). That
+experiment is rejected, and item 135 remains open on generic atomic bevel
+pass cost rather than resource creation or command volume.

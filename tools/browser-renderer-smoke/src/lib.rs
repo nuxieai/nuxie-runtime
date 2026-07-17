@@ -2,7 +2,7 @@
 mod wasm {
     use nuxie::{
         BlendMode, BrowserBackendPreference, BrowserFactory, Factory, FillRule, ImageFilter,
-        ImageSampler, ImageWrap, Mat2D, Renderer,
+        ImageSampler, ImageWrap, Mat2D, RecordingFactory, Renderer,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -75,6 +75,13 @@ mod wasm {
             "backend={selected} fallback={fallback} checksum={:016x}",
             fnv1a64(&pixels)
         ))
+    }
+
+    #[wasm_bindgen]
+    pub fn recording_float_probe() -> String {
+        let mut factory = RecordingFactory::new();
+        factory.add_sample(0.1);
+        factory.stream()
     }
 
     #[wasm_bindgen]
@@ -414,4 +421,4 @@ mod wasm {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm::{assert_webgl2_fail_closed, run_backend, run_stream_case};
+pub use wasm::{assert_webgl2_fail_closed, recording_float_probe, run_backend, run_stream_case};

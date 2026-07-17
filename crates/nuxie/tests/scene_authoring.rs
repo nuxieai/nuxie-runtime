@@ -1,15 +1,17 @@
 use anyhow::Result;
 use nuxie::{
-    Aabb, ArtboardId, ArtboardSpec, ChildIndex, ColorInt, DashPathSpec, DashSpec, DrawError,
-    EditAbort, EditErrorKind, EditId, EditReason, ExportedAnimatableProperty, ExportedObjectKind,
-    ExportedProperty, ExportedRecord, Factory, FillRule, FillSpec, FontAssetId, FontAssetSpec,
-    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec, NodeKind,
-    NodeSpec, ObjectId, Parent, PropValueKind, RawPath, RecordingFactory, RectangleCornerRadii,
-    RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPath, RenderShader, ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin,
-    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
-    ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
-    StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, Vec2D, props,
+    Aabb, AnimationId, AnimationStateSpec, ArtboardId, ArtboardSpec, ChildIndex, ColorInt,
+    DashPathSpec, DashSpec, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId,
+    EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord,
+    Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, ImageAssetId,
+    ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec, MachineId, MachineInputId,
+    MachineLayerSpec, MachineSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
+    RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
+    SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
+    SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec, ScriptedDrawableSpec,
+    ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
+    TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -2836,6 +2838,922 @@ fn authored_linear_animation_exports_canonical_records_and_scrubs_the_live_insta
         transparent_draw, opaque_draw,
         "scrubbed state is consumed by draw on the same retained InstanceId"
     );
+    Ok(())
+}
+
+#[test]
+fn authored_trigger_machine_exports_one_canonical_executable_record_graph() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+        let mut machines = tx.machines();
+        let reached = machines.create_event(artboard, EventSpec { name: None })?;
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let go = machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        let any = machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let idle_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+        let active_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+        machines.create_transition(entry, idle_state)?;
+        let transition = machines.create_transition(any, active_state)?;
+        machines.add_trigger_condition(transition, go)?;
+        machines.add_fire_event(active_state, reached, FireEventOccurs::AtStart)?;
+        Ok(())
+    })?;
+
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::Shape,
+            ExportedObjectKind::Event,
+            ExportedObjectKind::LinearAnimation,
+            ExportedObjectKind::KeyedObject,
+            ExportedObjectKind::KeyedProperty,
+            ExportedObjectKind::KeyFrameDouble,
+            ExportedObjectKind::LinearAnimation,
+            ExportedObjectKind::KeyedObject,
+            ExportedObjectKind::KeyedProperty,
+            ExportedObjectKind::KeyFrameDouble,
+            ExportedObjectKind::StateMachine,
+            ExportedObjectKind::StateMachineTrigger,
+            ExportedObjectKind::StateMachineLayer,
+            ExportedObjectKind::EntryState,
+            ExportedObjectKind::StateTransition,
+            ExportedObjectKind::AnyState,
+            ExportedObjectKind::StateTransition,
+            ExportedObjectKind::TransitionTriggerCondition,
+            ExportedObjectKind::ExitState,
+            ExportedObjectKind::AnimationState,
+            ExportedObjectKind::AnimationState,
+            ExportedObjectKind::StateMachineFireEvent,
+        ]
+    );
+    assert_eq!(
+        &scene.export_records().records()[3..],
+        &[
+            ExportedRecord {
+                kind: ExportedObjectKind::Event,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::LinearAnimation,
+                properties: vec![
+                    ExportedProperty::AnimationName("Idle".into()),
+                    ExportedProperty::AnimationDuration(1),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyedObject,
+                properties: vec![ExportedProperty::KeyedObjectId(1)],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyedProperty,
+                properties: vec![ExportedProperty::KeyedProperty(
+                    ExportedAnimatableProperty::WorldOpacity,
+                )],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyFrameDouble,
+                properties: vec![
+                    ExportedProperty::KeyFrame(0),
+                    ExportedProperty::KeyFrameInterpolationLinear,
+                    ExportedProperty::KeyFrameDoubleValue(0.2),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::LinearAnimation,
+                properties: vec![
+                    ExportedProperty::AnimationName("Active".into()),
+                    ExportedProperty::AnimationDuration(1),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyedObject,
+                properties: vec![ExportedProperty::KeyedObjectId(1)],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyedProperty,
+                properties: vec![ExportedProperty::KeyedProperty(
+                    ExportedAnimatableProperty::WorldOpacity,
+                )],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyFrameDouble,
+                properties: vec![
+                    ExportedProperty::KeyFrame(0),
+                    ExportedProperty::KeyFrameInterpolationLinear,
+                    ExportedProperty::KeyFrameDoubleValue(0.8),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::StateMachine,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::StateMachineTrigger,
+                properties: vec![ExportedProperty::StateMachineComponentName("Go".into())],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::StateMachineLayer,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::EntryState,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::StateTransition,
+                properties: vec![
+                    ExportedProperty::StateToId(3),
+                    ExportedProperty::StateTransitionFlags(0),
+                    ExportedProperty::StateTransitionDuration(0),
+                    ExportedProperty::StateTransitionExitTime(0),
+                    ExportedProperty::StateTransitionRandomWeight(1),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::AnyState,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::StateTransition,
+                properties: vec![
+                    ExportedProperty::StateToId(4),
+                    ExportedProperty::StateTransitionFlags(0),
+                    ExportedProperty::StateTransitionDuration(0),
+                    ExportedProperty::StateTransitionExitTime(0),
+                    ExportedProperty::StateTransitionRandomWeight(1),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::TransitionTriggerCondition,
+                properties: vec![ExportedProperty::StateMachineInputId(0)],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ExitState,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::AnimationState,
+                properties: vec![
+                    ExportedProperty::StateAnimationId(0),
+                    ExportedProperty::StateSpeed(1.0),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::AnimationState,
+                properties: vec![
+                    ExportedProperty::StateAnimationId(1),
+                    ExportedProperty::StateSpeed(1.0),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::StateMachineFireEvent,
+                properties: vec![
+                    ExportedProperty::EventId(2),
+                    ExportedProperty::FireEventOccurs(FireEventOccurs::AtStart),
+                ],
+            },
+        ]
+    );
+    Ok(())
+}
+
+fn append_authored_trigger_machine(
+    tx: &mut SceneTx<'_>,
+    artboard: ArtboardId,
+    idle: AnimationId,
+    active: AnimationId,
+    machine_name: &str,
+    trigger_name: &str,
+    event_name: &str,
+) -> std::result::Result<(MachineId, MachineInputId, EventId), EditAbort> {
+    let mut machines = tx.machines();
+    let event = machines.create_event(
+        artboard,
+        EventSpec {
+            name: Some(event_name.into()),
+        },
+    )?;
+    let machine = machines.create_machine(
+        artboard,
+        MachineSpec {
+            name: Some(machine_name.into()),
+        },
+    )?;
+    let trigger = machines.create_trigger_input(
+        machine,
+        TriggerInputSpec {
+            name: trigger_name.into(),
+        },
+    )?;
+    let layer = machines.create_layer(
+        machine,
+        MachineLayerSpec {
+            name: Some("Main".into()),
+        },
+    )?;
+    let entry = machines.create_entry_state(layer)?;
+    let any = machines.create_any_state(layer)?;
+    machines.create_exit_state(layer)?;
+    let idle_state =
+        machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+    let active_state =
+        machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+    machines.create_transition(entry, idle_state)?;
+    let transition = machines.create_transition(any, active_state)?;
+    machines.add_trigger_condition(transition, trigger)?;
+    machines.add_fire_event(active_state, event, FireEventOccurs::AtStart)?;
+    Ok((machine, trigger, event))
+}
+
+fn create_authored_trigger_machine(
+    tx: &mut SceneTx<'_>,
+) -> std::result::Result<(ArtboardId, ObjectId, MachineId, MachineInputId, EventId), EditAbort> {
+    let artboard = tx.create_artboard(ArtboardSpec {
+        name: "Canvas".into(),
+        width: 100.0,
+        height: 100.0,
+    })?;
+    let shape = tx.create(
+        Parent::Artboard(artboard),
+        NodeSpec::Shape(ShapeSpec {
+            name: "Fader".into(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        }),
+    )?;
+    let idle = tx.animations().create_linear(
+        artboard,
+        LinearAnimationSpec {
+            name: "Idle".into(),
+            fps: 60,
+            duration: 1,
+        },
+    )?;
+    tx.animations()
+        .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+    let active = tx.animations().create_linear(
+        artboard,
+        LinearAnimationSpec {
+            name: "Active".into(),
+            fps: 60,
+            duration: 1,
+        },
+    )?;
+    tx.animations()
+        .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+    let (machine, trigger, event) = append_authored_trigger_machine(
+        tx,
+        artboard,
+        idle,
+        active,
+        "Switcher",
+        "Go",
+        "Reached active",
+    )?;
+    Ok((artboard, shape, machine, trigger, event))
+}
+
+#[test]
+fn trigger_machine_changes_visual_state_and_reports_one_semantic_event() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, machine, _, event), _) = scene.edit(create_authored_trigger_machine)?;
+    let instance = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let go = scene.machine_input(instance, machine, "Go")?;
+    let mut events = Vec::new();
+
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.2);
+    assert!(events.is_empty());
+
+    scene.frame().fire(go)?;
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+    assert_eq!(
+        events,
+        vec![SceneEvent::Authored {
+            event,
+            name: Some("Reached active".into()),
+            seconds_delay: 0.0,
+        }]
+    );
+
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty(), "events are scoped to one advance call");
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+
+    let second_instance = scene.instantiate(artboard)?;
+    let second_opacity = scene.cursor(second_instance, shape, props::WORLD_OPACITY)?;
+    assert!(scene.frame().advance(second_instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(second_opacity)?, 0.2);
+    assert!(
+        events.is_empty(),
+        "machine state is isolated per live instance"
+    );
+    Ok(())
+}
+
+#[test]
+fn multiple_machines_advance_once_and_report_events_in_authored_order() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, first_machine, first_event, second_machine, second_event), _) =
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Fader".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let idle = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Idle".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+            let active = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Active".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+            let (first_machine, _, first_event) = append_authored_trigger_machine(
+                tx,
+                artboard,
+                idle,
+                active,
+                "First",
+                "First go",
+                "First event",
+            )?;
+            let (second_machine, _, second_event) = append_authored_trigger_machine(
+                tx,
+                artboard,
+                idle,
+                active,
+                "Second",
+                "Second go",
+                "Second event",
+            )?;
+            Ok((
+                artboard,
+                first_machine,
+                first_event,
+                second_machine,
+                second_event,
+            ))
+        })?;
+    let instance = scene.instantiate(artboard)?;
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+
+    let second = scene.machine_input(instance, second_machine, "Second go")?;
+    let first = scene.machine_input(instance, first_machine, "First go")?;
+    scene.frame().fire(second)?;
+    scene.frame().fire(first)?;
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| match event {
+                SceneEvent::Authored { event, .. } => *event,
+                _ => unreachable!("bounded runtime event family"),
+            })
+            .collect::<Vec<_>>(),
+        vec![first_event, second_event],
+        "event order follows authored runtime machine order, not trigger call order"
+    );
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn factory_advance_executes_retained_machine_and_reports_semantic_event() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, machine, _, event), _) = scene.edit(create_authored_trigger_machine)?;
+    let instance = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let go = scene.machine_input(instance, machine, "Go")?;
+    let mut events = Vec::new();
+    let mut factory = RecordingFactory::new();
+
+    assert!(
+        scene
+            .frame()
+            .try_advance_with_factory(instance, 0.0, &mut events, &mut factory,)?
+    );
+    assert_eq!(scene.frame().get(opacity)?, 0.2);
+    assert!(events.is_empty());
+
+    scene.frame().fire(go)?;
+    assert!(
+        scene
+            .frame()
+            .try_advance_with_factory(instance, 0.0, &mut events, &mut factory,)?
+    );
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+    assert_eq!(
+        events,
+        vec![SceneEvent::Authored {
+            event,
+            name: Some("Reached active".into()),
+            seconds_delay: 0.0,
+        }]
+    );
+
+    scene
+        .frame()
+        .try_advance_with_factory(instance, 0.0, &mut events, &mut factory)?;
+    assert!(
+        events.is_empty(),
+        "events are scoped to one factory advance"
+    );
+    Ok(())
+}
+
+#[test]
+fn machine_input_resolution_and_fire_are_fenced_by_artboard_epoch_and_instance() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, _, machine, _, _), _) = scene.edit(create_authored_trigger_machine)?;
+    let (other_artboard, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Other".into(),
+            width: 10.0,
+            height: 10.0,
+        })
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let other_instance = scene.instantiate(other_artboard)?;
+
+    assert!(matches!(
+        scene.machine_input(instance, machine, "missing"),
+        Err(ResolveError::UnknownMachineInput)
+    ));
+    assert!(matches!(
+        scene.machine_input(other_instance, machine, "Go"),
+        Err(ResolveError::DifferentArtboard)
+    ));
+
+    let stale_after_edit = scene.machine_input(instance, machine, "Go")?;
+    scene.edit(|tx| {
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Structural edit".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        Ok(())
+    })?;
+    assert_eq!(scene.frame().fire(stale_after_edit), Err(StaleCursor));
+
+    let stale_after_drop = scene.machine_input(instance, machine, "Go")?;
+    scene.drop_instance(instance);
+    assert_eq!(scene.frame().fire(stale_after_drop), Err(StaleCursor));
+    assert!(matches!(
+        scene.machine_input(instance, machine, "Go"),
+        Err(ResolveError::UnknownInstance)
+    ));
+
+    let replacement = scene.instantiate(artboard)?;
+    scene.edit(|tx| tx.remove(machine.object_id()).map(|_| ()))?;
+    assert!(matches!(
+        scene.machine_input(replacement, machine, "Go"),
+        Err(ResolveError::UnknownMachine)
+    ));
+    Ok(())
+}
+
+#[test]
+fn machine_authoring_rejects_cross_machine_and_cross_artboard_references_atomically() -> Result<()>
+{
+    let mut scene = Scene::new();
+    let ((artboard, _, _, _, event), _) = scene.edit(create_authored_trigger_machine)?;
+    let (other_artboard, _) = scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Other".into(),
+            width: 10.0,
+            height: 10.0,
+        })
+    })?;
+
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+    let cross_machine = scene
+        .edit(|tx| {
+            let mut machines = tx.machines();
+            let input_machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Inputs".into()),
+                },
+            )?;
+            let foreign = machines.create_trigger_input(
+                input_machine,
+                TriggerInputSpec {
+                    name: "Foreign".into(),
+                },
+            )?;
+            let transition_machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Transitions".into()),
+                },
+            )?;
+            let layer = machines.create_layer(
+                transition_machine,
+                MachineLayerSpec {
+                    name: Some("Layer".into()),
+                },
+            )?;
+            machines.create_any_state(layer)?;
+            let entry = machines.create_entry_state(layer)?;
+            let exit = machines.create_exit_state(layer)?;
+            let transition = machines.create_transition(entry, exit)?;
+            machines.add_trigger_condition(transition, foreign)?;
+            Ok(())
+        })
+        .expect_err("a transition cannot consume another machine's input");
+    assert_eq!(cross_machine.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        cross_machine.diagnostic().reason,
+        EditReason::InvalidMachineReference
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+
+    let cross_artboard = scene
+        .edit(|tx| {
+            let mut machines = tx.machines();
+            let machine = machines.create_machine(
+                other_artboard,
+                MachineSpec {
+                    name: Some("Other machine".into()),
+                },
+            )?;
+            let layer = machines.create_layer(
+                machine,
+                MachineLayerSpec {
+                    name: Some("Other layer".into()),
+                },
+            )?;
+            let entry = machines.create_entry_state(layer)?;
+            machines.add_fire_event(entry, event, FireEventOccurs::AtStart)?;
+            Ok(())
+        })
+        .expect_err("a state cannot fire an event owned by another artboard");
+    assert_eq!(cross_artboard.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        cross_artboard.diagnostic().reason,
+        EditReason::CrossArtboardReference {
+            source: other_artboard,
+            target: artboard,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    Ok(())
+}
+
+#[test]
+fn machine_topology_rejects_missing_or_duplicate_required_states_atomically() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((machine, layer, entry), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        Ok((machine, layer, entry))
+    })?;
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+
+    let missing_entry = scene
+        .edit(|tx| tx.remove(entry.object_id()).map(|_| ()))
+        .expect_err("removing the only Entry state must reject at commit");
+    assert_eq!(missing_entry.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        missing_entry.diagnostic().reason,
+        EditReason::InvalidMachineTopology {
+            requirement: "exactly one entry state per layer",
+            actual: 0,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let duplicate_entry = scene
+        .edit(|tx| tx.machines().create_entry_state(layer).map(|_| ()))
+        .expect_err("a second Entry state must reject at commit");
+    assert_eq!(duplicate_entry.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        duplicate_entry.diagnostic().reason,
+        EditReason::InvalidMachineTopology {
+            requirement: "exactly one entry state per layer",
+            actual: 2,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let missing_layer = scene
+        .edit(|tx| tx.remove(layer.object_id()).map(|_| ()))
+        .expect_err("removing the only layer must reject at commit");
+    assert_eq!(missing_layer.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        missing_layer.diagnostic().reason,
+        EditReason::InvalidMachineTopology {
+            requirement: "at least one state-machine layer",
+            actual: 0,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+    assert!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .any(|record| record.kind == ExportedObjectKind::StateMachine)
+    );
+    let _ = machine;
+    Ok(())
+}
+
+#[test]
+fn machine_names_match_semantic_lowering_whitespace_rules() -> Result<()> {
+    let mut scene = Scene::new();
+    let (machine, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let mut machines = tx.machines();
+        let event = machines.create_event(
+            artboard,
+            EventSpec {
+                name: Some("   ".into()),
+            },
+        )?;
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("\t".into()),
+            },
+        )?;
+        machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        let layer = machines.create_layer(
+            machine,
+            MachineLayerSpec {
+                name: Some("\n".into()),
+            },
+        )?;
+        machines.create_entry_state(layer)?;
+        machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let _ = event;
+        Ok(machine)
+    })?;
+
+    let normalized_records = scene.export_records();
+    for kind in [
+        ExportedObjectKind::Event,
+        ExportedObjectKind::StateMachine,
+        ExportedObjectKind::StateMachineLayer,
+    ] {
+        let record = normalized_records
+            .records()
+            .iter()
+            .find(|record| record.kind == kind)
+            .expect("normalized machine-family record");
+        assert!(
+            record.properties.iter().all(|property| !matches!(
+                property,
+                ExportedProperty::AnimationName(_)
+                    | ExportedProperty::StateMachineComponentName(_)
+                    | ExportedProperty::ComponentName(_)
+            )),
+            "whitespace-only optional names normalize to an omitted property"
+        );
+    }
+
+    let records = scene.export_records();
+    let epoch = scene.epoch();
+    let error = scene
+        .edit(|tx| {
+            tx.machines()
+                .create_trigger_input(machine, TriggerInputSpec { name: "   ".into() })?;
+            Ok(())
+        })
+        .expect_err("whitespace-only trigger names cannot be runtime resolution keys");
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().reason, EditReason::EmptyMachineInputName);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+    Ok(())
+}
+
+#[test]
+fn dangling_machine_reference_rejects_at_commit_without_staling_live_input() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, _, machine, _, event), _) = scene.edit(create_authored_trigger_machine)?;
+    let instance = scene.instantiate(artboard)?;
+    let go = scene.machine_input(instance, machine, "Go")?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| tx.remove(event.object_id()).map(|_| ()))
+        .expect_err("removing a referenced authored event must reject atomically");
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownObject);
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+    scene.frame().fire(go)?;
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(
+        events.len(),
+        1,
+        "failed edits leave retained machines usable"
+    );
+    Ok(())
+}
+
+#[test]
+fn duplicate_machine_input_name_rejects_without_ambiguous_resolution() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, _, machine, _, _), _) = scene.edit(create_authored_trigger_machine)?;
+    let instance = scene.instantiate(artboard)?;
+    let (spare, _) = scene.edit(|tx| {
+        tx.machines().create_trigger_input(
+            machine,
+            TriggerInputSpec {
+                name: "Spare".into(),
+            },
+        )
+    })?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            tx.machines()
+                .create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+            Ok(())
+        })
+        .expect_err("machine input names are the runtime resolution key");
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::DuplicateMachineInputName
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    assert!(scene.machine_input(instance, machine, "Go").is_ok());
+
+    let (removed, _) = scene.edit(|tx| tx.remove(spare.object_id()))?;
+    scene.edit(|tx| {
+        tx.machines().create_trigger_input(
+            machine,
+            TriggerInputSpec {
+                name: "Spare".into(),
+            },
+        )?;
+        Ok(())
+    })?;
+    let epoch_before_restore = scene.epoch();
+    let records_before_restore = scene.export_records();
+    let error = scene
+        .edit(|tx| tx.restore(removed).map(|_| ()))
+        .expect_err("restoring an input cannot bypass the uniqueness invariant");
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::DuplicateMachineInputName
+    );
+    assert_eq!(scene.epoch(), epoch_before_restore);
+    assert_eq!(scene.export_records(), records_before_restore);
+    assert!(scene.machine_input(instance, machine, "Spare").is_ok());
+    Ok(())
+}
+
+#[test]
+fn machine_remove_restore_preserves_uniform_record_identity_and_rebuilds_live_state() -> Result<()>
+{
+    let mut scene = Scene::new();
+    let ((artboard, _, machine, _, _), _) = scene.edit(create_authored_trigger_machine)?;
+    let records_before = scene.export_records();
+    let instance = scene.instantiate(artboard)?;
+    let old_input = scene.machine_input(instance, machine, "Go")?;
+
+    let (removed, _) = scene.edit(|tx| tx.remove(machine.object_id()))?;
+    assert_eq!(scene.frame().fire(old_input), Err(StaleCursor));
+    assert!(matches!(
+        scene.machine_input(instance, machine, "Go"),
+        Err(ResolveError::UnknownMachine)
+    ));
+    assert!(
+        !scene
+            .export_records()
+            .records()
+            .iter()
+            .any(|record| record.kind == ExportedObjectKind::StateMachine)
+    );
+
+    let (restored, _) = scene.edit(|tx| tx.restore(removed))?;
+    assert_eq!(restored, machine.object_id());
+    assert_eq!(scene.export_records(), records_before);
+    let refreshed = scene.machine_input(instance, machine, "Go")?;
+    assert!(scene.frame().fire(refreshed).is_ok());
     Ok(())
 }
 

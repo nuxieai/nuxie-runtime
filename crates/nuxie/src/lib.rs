@@ -1105,6 +1105,22 @@ impl<'a> ArtboardInstance<'a> {
         state_machine: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_with_state_machines(std::slice::from_mut(state_machine), elapsed_seconds)
+    }
+
+    /// Batched state-machine advance for one retained artboard instance.
+    ///
+    /// Root scripts, nested artboards, data binds, and the update pass run
+    /// once for the frame; only the authored machines themselves advance in
+    /// caller order.
+    pub fn advance_with_state_machines(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+    ) -> bool {
+        if state_machines.is_empty() {
+            return self.advance(elapsed_seconds);
+        }
         let mut changed = false;
         #[cfg(feature = "scripting")]
         {
@@ -1117,14 +1133,7 @@ impl<'a> ArtboardInstance<'a> {
         }
         changed |= self
             .raw
-            .advance_state_machine_instance(state_machine, elapsed_seconds);
-        if self
-            .raw
-            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
-        {
-            self.raw.advance_state_machine_instance(state_machine, 0.0);
-            changed = true;
-        }
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -1139,23 +1148,36 @@ impl<'a> ArtboardInstance<'a> {
         elapsed_seconds: f32,
         factory: &mut dyn Factory,
     ) -> Result<bool> {
-        #[cfg(feature = "scripting")]
-        let _ = queue_root_script_advance(
-            self.file,
-            self.artboard().graph(),
-            &mut self.raw,
+        self.try_advance_with_state_machines_and_factory(
+            std::slice::from_mut(state_machine),
             elapsed_seconds,
-        );
-        let mut changed = self
-            .raw
-            .advance_state_machine_instance(state_machine, elapsed_seconds);
-        if self
-            .raw
-            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
-        {
-            self.raw.advance_state_machine_instance(state_machine, 0.0);
-            changed = true;
+            factory,
+        )
+    }
+
+    /// Factory-bearing mirror of [`Self::advance_with_state_machines`].
+    pub fn try_advance_with_state_machines_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            return self.try_advance_with_factory(factory, elapsed_seconds);
         }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -1514,6 +1536,18 @@ impl OwnedArtboardInstance {
         state_machine: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_with_state_machines(std::slice::from_mut(state_machine), elapsed_seconds)
+    }
+
+    /// Owning mirror of [`ArtboardInstance::advance_with_state_machines`].
+    pub fn advance_with_state_machines(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+    ) -> bool {
+        if state_machines.is_empty() {
+            return self.advance(elapsed_seconds);
+        }
         let mut changed = false;
         #[cfg(feature = "scripting")]
         if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
@@ -1522,14 +1556,7 @@ impl OwnedArtboardInstance {
         }
         changed |= self
             .raw
-            .advance_state_machine_instance(state_machine, elapsed_seconds);
-        if self
-            .raw
-            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
-        {
-            self.raw.advance_state_machine_instance(state_machine, 0.0);
-            changed = true;
-        }
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -1545,6 +1572,25 @@ impl OwnedArtboardInstance {
         elapsed_seconds: f32,
         factory: &mut dyn Factory,
     ) -> Result<bool> {
+        self.try_advance_with_state_machines_and_factory(
+            std::slice::from_mut(state_machine),
+            elapsed_seconds,
+            factory,
+        )
+    }
+
+    /// Owning mirror of
+    /// [`ArtboardInstance::try_advance_with_state_machines_and_factory`].
+    pub fn try_advance_with_state_machines_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            return self.try_advance_with_factory(factory, elapsed_seconds);
+        }
+        let mut changed = false;
         #[cfg(feature = "scripting")]
         let artboard = self
             .file
@@ -1553,17 +1599,13 @@ impl OwnedArtboardInstance {
             .get(self.artboard_index)
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
-        let _ = queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        let mut changed = self
-            .raw
-            .advance_state_machine_instance(state_machine, elapsed_seconds);
-        if self
-            .raw
-            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
         {
-            self.raw.advance_state_machine_instance(state_machine, 0.0);
-            changed = true;
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
         }
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);

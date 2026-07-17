@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 
 class RenderContextTest
 {
@@ -578,8 +579,13 @@ extern "C" rive_ffi_render_image* rive_ffi_decode_image(rive_ffi_context* ctx,
     {
         return nullptr;
     }
-    return new rive_ffi_render_image{
-        ctx->context->decodeImage(rive::Span<const uint8_t>(bytes, len))};
+    auto image =
+        ctx->context->decodeImage(rive::Span<const uint8_t>(bytes, len));
+    if (image == nullptr)
+    {
+        return nullptr;
+    }
+    return new rive_ffi_render_image{std::move(image)};
 }
 
 extern "C" void rive_ffi_render_image_delete(rive_ffi_render_image* image)

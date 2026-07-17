@@ -1,17 +1,19 @@
 use anyhow::Result;
 use nuxie::{
     Aabb, AnimationId, AnimationStateSpec, ArtboardId, ArtboardSpec, ChildIndex, ColorInt,
-    DashPathSpec, DashSpec, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId,
-    EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord,
-    Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, ImageAssetId,
-    ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec, MachineId, MachineInputId,
-    MachineLayerSpec, MachineSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
-    RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
-    SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
-    SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec, ScriptedDrawableSpec,
-    ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
-    TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, props,
+    DashPathSpec, DashSpec, DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason,
+    EventId, EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty,
+    ExportedRecord, Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec,
+    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec, MachineId,
+    MachineInputId, MachineLayerSpec, MachineSpec, MachineTransitionId, NodeKind, NodeSpec,
+    ObjectId, Parent, PropValueKind, RawPath, RecordingFactory, RectangleCornerRadii,
+    RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPath, RenderShader, ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin,
+    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
+    ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
+    StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
+    ViewModelId, ViewModelInstanceId, ViewModelInstanceSpec, ViewModelNumberId,
+    ViewModelNumberSpec, ViewModelSpec, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -3081,6 +3083,535 @@ fn authored_trigger_machine_exports_one_canonical_executable_record_graph() -> R
         }
         _ => panic!("authored machine must emit an authored event"),
     }
+    Ok(())
+}
+
+#[test]
+fn authored_view_model_number_binds_state_transition_duration_records() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+        let (transition, go) = {
+            let mut machines = tx.machines();
+            let machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Switcher".into()),
+                },
+            )?;
+            let go =
+                machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+            let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+            let entry = machines.create_entry_state(layer)?;
+            let any = machines.create_any_state(layer)?;
+            machines.create_exit_state(layer)?;
+            let idle_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+            let active_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+            machines.create_transition(entry, idle_state)?;
+            let transition = machines.create_transition(any, active_state)?;
+            (transition, go)
+        };
+
+        {
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                name: "Playback".into(),
+            })?;
+            let duration = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "Duration".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, duration, 0.0)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_transition_duration(transition, duration)?;
+        }
+        tx.machines().add_trigger_condition(transition, go)?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records();
+    assert_eq!(
+        &records.records()[..5],
+        &[
+            ExportedRecord {
+                kind: ExportedObjectKind::Backboard,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModel,
+                properties: vec![ExportedProperty::ViewModelName("Playback".into())],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModelPropertyNumber,
+                properties: vec![ExportedProperty::ViewModelName("Duration".into())],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModelInstance,
+                properties: vec![
+                    ExportedProperty::ComponentName("Defaults".into()),
+                    ExportedProperty::ViewModelId(0),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModelInstanceNumber,
+                properties: vec![
+                    ExportedProperty::ViewModelPropertyId(0),
+                    ExportedProperty::ViewModelNumberValue(0.0),
+                ],
+            },
+        ]
+    );
+    let artboard = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::Artboard)
+        .expect("artboard record");
+    assert!(
+        artboard
+            .properties
+            .contains(&ExportedProperty::ArtboardViewModelId(0))
+    );
+
+    let transition = records
+        .records()
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::StateTransition)
+        .expect("entry transition");
+    let bound_transition = records
+        .records()
+        .iter()
+        .enumerate()
+        .skip(transition + 1)
+        .find(|(_, record)| record.kind == ExportedObjectKind::StateTransition)
+        .map(|(index, _)| index)
+        .expect("bound transition");
+    assert_eq!(
+        records.records().get(bound_transition + 1),
+        Some(&ExportedRecord {
+            kind: ExportedObjectKind::DataBindContext,
+            properties: vec![
+                ExportedProperty::DataBindPropertyKey(158),
+                ExportedProperty::DataBindFlags(0),
+                ExportedProperty::DataBindSourcePath(vec![0, 0]),
+            ],
+        })
+    );
+    assert_eq!(
+        records
+            .records()
+            .get(bound_transition + 2)
+            .map(|record| record.kind),
+        Some(ExportedObjectKind::TransitionTriggerCondition),
+        "the transition-owned data bind precedes conditions"
+    );
+    Ok(())
+}
+
+#[test]
+fn unnamed_view_model_instance_omits_the_optional_component_name_record() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let mut view_models = tx.view_models();
+        let model = view_models.create(ViewModelSpec {
+            name: "Playback".into(),
+        })?;
+        let duration = view_models.create_number(
+            model,
+            ViewModelNumberSpec {
+                name: "Duration".into(),
+            },
+        )?;
+        let unnamed = view_models.create_instance(model, ViewModelInstanceSpec { name: None })?;
+        view_models.set_number(unnamed, duration, 0.0)?;
+        Ok(())
+    })?;
+
+    assert_eq!(
+        scene.export_records().into_records(),
+        vec![
+            ExportedRecord {
+                kind: ExportedObjectKind::Backboard,
+                properties: vec![],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModel,
+                properties: vec![ExportedProperty::ViewModelName("Playback".into())],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModelPropertyNumber,
+                properties: vec![ExportedProperty::ViewModelName("Duration".into())],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModelInstance,
+                properties: vec![ExportedProperty::ViewModelId(0)],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::ViewModelInstanceNumber,
+                properties: vec![
+                    ExportedProperty::ViewModelPropertyId(0),
+                    ExportedProperty::ViewModelNumberValue(0.0),
+                ],
+            },
+        ]
+    );
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct ViewModelDurationFixture {
+    artboard: ArtboardId,
+    shape: ObjectId,
+    machine: MachineId,
+    transition: MachineTransitionId,
+    model: ViewModelId,
+    defaults: ViewModelInstanceId,
+    duration: ViewModelNumberId,
+    bind: DataBindId,
+}
+
+fn create_view_model_duration_machine(
+    tx: &mut SceneTx<'_>,
+) -> std::result::Result<ViewModelDurationFixture, EditAbort> {
+    let artboard = tx.create_artboard(ArtboardSpec {
+        name: "Canvas".into(),
+        width: 100.0,
+        height: 100.0,
+    })?;
+    let shape = tx.create(
+        Parent::Artboard(artboard),
+        NodeSpec::Shape(ShapeSpec {
+            name: "Fader".into(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        }),
+    )?;
+    let idle = tx.animations().create_linear(
+        artboard,
+        LinearAnimationSpec {
+            name: "Idle".into(),
+            fps: 60,
+            duration: 1,
+        },
+    )?;
+    tx.animations()
+        .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+    let active = tx.animations().create_linear(
+        artboard,
+        LinearAnimationSpec {
+            name: "Active".into(),
+            fps: 60,
+            duration: 1,
+        },
+    )?;
+    tx.animations()
+        .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+    let (machine, transition, go) = {
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Switcher".into()),
+            },
+        )?;
+        let go = machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        let any = machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let idle_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+        let active_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+        machines.create_transition(entry, idle_state)?;
+        let transition = machines.create_transition(any, active_state)?;
+        (machine, transition, go)
+    };
+
+    let (model, duration, defaults, bind) = {
+        let mut view_models = tx.view_models();
+        let model = view_models.create(ViewModelSpec {
+            name: "Playback".into(),
+        })?;
+        let duration = view_models.create_number(
+            model,
+            ViewModelNumberSpec {
+                name: "Duration".into(),
+            },
+        )?;
+        let defaults = view_models.create_instance(
+            model,
+            ViewModelInstanceSpec {
+                name: Some("Defaults".into()),
+            },
+        )?;
+        view_models.set_number(defaults, duration, 0.0)?;
+        view_models.set_artboard_default(artboard, defaults)?;
+        let bind = view_models.bind_transition_duration(transition, duration)?;
+        (model, duration, defaults, bind)
+    };
+    tx.machines().add_trigger_condition(transition, go)?;
+    Ok(ViewModelDurationFixture {
+        artboard,
+        shape,
+        machine,
+        transition,
+        model,
+        defaults,
+        duration,
+        bind,
+    })
+}
+
+#[test]
+fn live_view_model_numbers_drive_transition_duration_without_recompiling() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
+    let first = scene.instantiate(fixture.artboard)?;
+    let second = scene.instantiate(fixture.artboard)?;
+    let first_duration = scene.vm_cursor(first, fixture.defaults, fixture.duration)?;
+    let second_duration = scene.vm_cursor(second, fixture.defaults, fixture.duration)?;
+    let first_opacity = scene.cursor(first, fixture.shape, props::WORLD_OPACITY)?;
+    let second_opacity = scene.cursor(second, fixture.shape, props::WORLD_OPACITY)?;
+    let first_go = scene.machine_input(first, fixture.machine, "Go")?;
+    let second_go = scene.machine_input(second, fixture.machine, "Go")?;
+    let epoch = scene.epoch();
+    let records = scene.export_records().into_records();
+    let mut events = Vec::new();
+
+    assert_eq!(scene.frame().get_vm(first_duration)?, 0.0);
+    assert_eq!(scene.frame().get_vm(second_duration)?, 0.0);
+    let _ = scene.frame().advance(first, 0.0, &mut events);
+    let _ = scene.frame().advance(second, 0.0, &mut events);
+    assert_eq!(scene.frame().get(first_opacity)?, 0.2);
+    assert_eq!(scene.frame().get(second_opacity)?, 0.2);
+
+    assert!(scene.frame().set_vm(first_duration, 1_000.0)?);
+    assert!(!scene.frame().set_vm(first_duration, 1_000.0)?);
+    assert_eq!(scene.frame().get_vm(first_duration)?, 1_000.0);
+    assert_eq!(scene.frame().get_vm(second_duration)?, 0.0);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records().into_records(), records);
+
+    scene.frame().fire(first_go)?;
+    let _ = scene.frame().advance(first, 0.0, &mut events);
+    assert_eq!(scene.frame().get(first_opacity)?, 0.2);
+    let _ = scene.frame().advance(first, 0.5, &mut events);
+    assert!((scene.frame().get(first_opacity)? - 0.5).abs() <= 0.001);
+    let _ = scene.frame().advance(first, 0.5, &mut events);
+    assert!((scene.frame().get(first_opacity)? - 0.8).abs() <= 0.001);
+
+    scene.frame().fire(second_go)?;
+    let _ = scene.frame().advance(second, 0.0, &mut events);
+    assert_eq!(scene.frame().get(second_opacity)?, 0.8);
+    assert_eq!(scene.frame().get_vm(second_duration)?, 0.0);
+    Ok(())
+}
+
+#[test]
+fn view_model_cursors_are_fenced_and_same_schema_remounts_carry_live_numbers() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
+    let instance = scene.instantiate(fixture.artboard)?;
+    let cursor = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    let epoch = scene.epoch();
+    let records = scene.export_records().into_records();
+
+    assert!(scene.frame().set_vm(cursor, 625.0)?);
+    assert_eq!(scene.frame().set_vm(cursor, f32::NAN), Ok(false));
+    assert_eq!(scene.frame().set_vm(cursor, f32::INFINITY), Ok(false));
+    assert_eq!(scene.frame().get_vm(cursor)?, 625.0);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records().into_records(), records);
+
+    let mut foreign = Scene::new();
+    let (foreign_fixture, _) = foreign.edit(create_view_model_duration_machine)?;
+    let foreign_instance = foreign.instantiate(foreign_fixture.artboard)?;
+    assert_eq!(foreign.frame().set_vm(cursor, 100.0), Err(StaleCursor));
+    assert!(matches!(
+        scene.vm_cursor(instance, foreign_fixture.defaults, fixture.duration),
+        Err(ResolveError::UnknownViewModelInstance)
+    ));
+    assert!(matches!(
+        scene.vm_cursor(instance, fixture.defaults, foreign_fixture.duration),
+        Err(ResolveError::UnknownViewModelNumber)
+    ));
+    assert_eq!(
+        foreign
+            .vm_cursor(
+                foreign_instance,
+                foreign_fixture.defaults,
+                foreign_fixture.duration,
+            )
+            .map(|_| ()),
+        Ok(())
+    );
+
+    scene.edit(|tx| tx.set(fixture.shape, props::TRANSLATE_X, 12.0))?;
+    assert_eq!(scene.frame().get_vm(cursor), Err(StaleCursor));
+    let carried = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(scene.frame().get_vm(carried)?, 625.0);
+
+    scene.edit(|tx| {
+        tx.view_models()
+            .set_number_name(fixture.duration, "Renamed duration".into())?;
+        Ok(())
+    })?;
+    assert_eq!(scene.frame().get_vm(carried), Err(StaleCursor));
+    let renamed = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(
+        scene.frame().get_vm(renamed)?,
+        0.0,
+        "a schema rename must start from the authored default"
+    );
+
+    scene.drop_instance(instance);
+    assert_eq!(scene.frame().get_vm(renamed), Err(StaleCursor));
+    assert_eq!(scene.frame().set_vm(renamed, 10.0), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
+fn changing_the_authored_default_instance_does_not_cross_carry_live_values() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
+    let instance = scene.instantiate(fixture.artboard)?;
+    let old = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert!(scene.frame().set_vm(old, 900.0)?);
+
+    let (replacement, _) = scene.edit(|tx| {
+        let mut view_models = tx.view_models();
+        let replacement = view_models.create_instance(
+            fixture.model,
+            ViewModelInstanceSpec {
+                name: Some("Alternate defaults".into()),
+            },
+        )?;
+        view_models.set_number(replacement, fixture.duration, 250.0)?;
+        view_models.set_artboard_default(fixture.artboard, replacement)?;
+        Ok(replacement)
+    })?;
+
+    assert_eq!(scene.frame().get_vm(old), Err(StaleCursor));
+    assert!(matches!(
+        scene.vm_cursor(instance, fixture.defaults, fixture.duration),
+        Err(ResolveError::UnknownViewModelInstance)
+    ));
+    let replacement_cursor = scene.vm_cursor(instance, replacement, fixture.duration)?;
+    assert_eq!(scene.frame().get_vm(replacement_cursor)?, 250.0);
+    Ok(())
+}
+
+#[test]
+fn view_model_catalog_replacement_is_atomic_and_burns_runtime_identities() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
+    let instance = scene.instantiate(fixture.artboard)?;
+    let old = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert!(scene.frame().set_vm(old, 875.0)?);
+    let epoch = scene.epoch();
+    let records = scene.export_records().into_records();
+
+    let rejected = scene.edit(|tx| {
+        tx.view_models().clear_catalog()?;
+        Ok(())
+    });
+    assert!(
+        rejected.is_err(),
+        "dangling defaults and binds reject commit"
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records().into_records(), records);
+    assert_eq!(scene.frame().get_vm(old)?, 875.0);
+
+    let ((new_defaults, new_duration), _) = scene.edit(|tx| {
+        let mut view_models = tx.view_models();
+        view_models.remove_transition_duration_bind(fixture.bind)?;
+        view_models.clear_artboard_default(fixture.artboard)?;
+        view_models.clear_catalog()?;
+        let model = view_models.create(ViewModelSpec {
+            name: "Replacement playback".into(),
+        })?;
+        let duration = view_models.create_number(
+            model,
+            ViewModelNumberSpec {
+                name: "Duration".into(),
+            },
+        )?;
+        let defaults = view_models.create_instance(
+            model,
+            ViewModelInstanceSpec {
+                name: Some("Replacement defaults".into()),
+            },
+        )?;
+        view_models.set_number(defaults, duration, 125.0)?;
+        view_models.set_artboard_default(fixture.artboard, defaults)?;
+        view_models.bind_transition_duration(fixture.transition, duration)?;
+        Ok((defaults, duration))
+    })?;
+
+    assert_eq!(scene.frame().get_vm(old), Err(StaleCursor));
+    assert!(matches!(
+        scene.vm_cursor(instance, fixture.defaults, fixture.duration),
+        Err(ResolveError::UnknownViewModelInstance)
+    ));
+    let replacement = scene.vm_cursor(instance, new_defaults, new_duration)?;
+    assert_eq!(
+        scene.frame().get_vm(replacement)?,
+        125.0,
+        "clear/recreate has new runtime identities and starts from authored defaults"
+    );
     Ok(())
 }
 

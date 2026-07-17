@@ -3,13 +3,17 @@
 The execution contract is `docs/renderer-port-map.md`. This file records only
 current evidence, open gates, and decisions needed by the next session.
 
-**State: complete.** R0-R5 are closed. Phase S has not started.
+**State: R0-R5 complete.** The post-R exactness follow-up is active. Phase S
+has not started.
 
 ## Metric
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,409, diverges=0, gated=59, total=1,468.
+- Rust wgpu: exact=1,464, byte-exact=756, diverges=0, gated=4,
+  total=1,468.
+- Contract exactness remains the release gate. Decoded-RGBA byte identity is a
+  secondary, non-gating health metric; see `docs/renderer-exactness-map.md`.
 - Stub baseline: exact=0 for every active entry.
 - Exact: `first-light-rectangle-msaa`,
   `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
@@ -393,6 +397,20 @@ Run `make renderer-golden`.
   are complete; neither optional native fast paths nor RSTB assets triggered.
 
 ## Next
+
+### Post-R Exactness
+
+1. [x] Replace all 59 retained native-Metal comparisons with provenance-bound
+   same-tier C++ Dawn WebGPU references. Promote the 55 unchanged-contract
+   passes and retain only the four observed implementation failures.
+2. [ ] Fix the shared atomic color-plane lifetime finding, using Echo Show as
+   the short reproduction and Car Widgets as the full-cluster acceptance row.
+3. [ ] Fix MSAA Interleaved Feather color precision against C++ Dawn.
+4. [ ] Diagnose DstReadShuffle's small repeat-to-repeat count variation, then
+   close its clockwise-atomic advanced-blend intermediate mismatch.
+
+The hard stop is `exact=1,468`, `diverges=0`, `gated=0` without tolerance
+widening. Universal byte identity is not part of that stop condition.
 
 1. [x] Build the R3 renderer fuzz-replay harness for both C++ and Rust with
    NaN/huge transforms, zero-area paths, absurd stroke widths, deep clip
@@ -2014,6 +2032,14 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-17: Renderer release exactness remains the reviewed per-row decoded
+  pixel contract. `renderer-golden` now also reports decoded-RGBA byte identity
+  as a non-gating health metric. A same-tier C++ Dawn campaign replaces all 59
+  retained comparisons: 55 pass unchanged and four remain concrete Rust/Dawn
+  implementation gates. Current evidence is exact=1,464, byte-exact=756,
+  diverges=0, gated=4. The finite queue and `1,468/0/0` stop condition are in
+  `docs/renderer-exactness-map.md`.
 
 - 2026-07-17: At the user's direction, the R4 timing gate no longer requires
   any absolute host-idle percentage. Stable low-idle brackets are admissible;

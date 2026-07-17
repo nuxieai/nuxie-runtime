@@ -1036,6 +1036,7 @@ dependencies = [
  "nuxie-render-stream",
  "png",
  "serde",
+ "sha2",
  "toml",
 ]
 

@@ -21,10 +21,8 @@ struct Manifest {
 #[derive(Debug, Deserialize)]
 struct Entry {
     id: String,
-    kind: String,
     stream: PathBuf,
     reference: PathBuf,
-    backend: String,
     status: String,
     #[serde(default)]
     frame: usize,
@@ -68,8 +66,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     if !options.probe_gated.is_empty() {
         writeln!(
             stdout,
-            "renderer-corpus-probe passes={} diverges={} total={}",
+            "renderer-corpus-probe passes={} byte-exact={} diverges={} total={}",
             counts.exact,
+            counts.byte_exact,
             counts.diverges,
             entries.len()
         )?;
@@ -77,8 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     writeln!(
         stdout,
-        "renderer-corpus exact={} diverges={} gated={} total={}",
+        "renderer-corpus exact={} byte-exact={} diverges={} gated={} total={}",
         counts.exact,
+        counts.byte_exact,
         counts.diverges,
         counts.gated,
         entries.len()
@@ -104,8 +104,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[derive(Debug)]
 enum EntryOutcome {
-    Gated { diagnostic: String },
-    Compared { report: DiffReport },
+    Gated {
+        diagnostic: String,
+    },
+    Compared {
+        report: DiffReport,
+        byte_exact: bool,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -123,6 +128,7 @@ struct EntryExecution {
 #[derive(Default)]
 struct Counts {
     exact: usize,
+    byte_exact: usize,
     diverges: usize,
     gated: usize,
 }
@@ -213,92 +219,17 @@ fn compare_entry(
             .and_then(|artifact| artifact.write_png(&artifact_path))
             .map_err(|error| error.to_string())?;
     }
-    Ok(EntryOutcome::Compared { report })
-}
-
-struct ReferenceRewrite {
-    id: &'static str,
-    kind: &'static str,
-    stream: &'static str,
-    source: &'static str,
-    target: &'static str,
-    mode: &'static str,
-    backend: &'static str,
-}
-
-const REFERENCE_REWRITES: [ReferenceRewrite; 2] = [
-    ReferenceRewrite {
-        id: "gm-dstreadshuffle-clockwise-atomic",
-        kind: "upstream-gm-stream",
-        stream: "fixtures/renderer/streams/gm/dstreadshuffle.rive-stream",
-        source: "fixtures/renderer/reference/metal/gm/dstreadshuffle-clockwise-atomic.png",
-        target: "fixtures/renderer/reference/metal/gm/dstreadshuffle.png",
-        mode: "clockwise-atomic",
-        backend: "metal",
-    },
-    ReferenceRewrite {
-        id: "gm-interleavedfeather-clockwise-atomic",
-        kind: "upstream-gm-stream",
-        stream: "fixtures/renderer/streams/gm/interleavedfeather.rive-stream",
-        source: "fixtures/renderer/reference/metal/gm/interleavedfeather-clockwise-atomic.png",
-        target: "fixtures/renderer/reference/metal/gm/interleavedfeather.png",
-        mode: "clockwise-atomic",
-        backend: "metal",
-    },
-];
-
-fn resolved_reference_target(entry: &Entry) -> Result<PathBuf, String> {
-    let Some(rewrite) = REFERENCE_REWRITES
-        .iter()
-        .find(|rewrite| entry.id == rewrite.id)
-        .or_else(|| {
-            REFERENCE_REWRITES
-                .iter()
-                .find(|rewrite| entry.reference.as_os_str() == std::ffi::OsStr::new(rewrite.source))
-        })
-    else {
-        return Ok(entry.reference.clone());
-    };
-
-    let mismatch = if entry.id != rewrite.id {
-        Some(("entry id", entry.id.as_str(), rewrite.id))
-    } else if entry.kind != rewrite.kind {
-        Some(("source kind", entry.kind.as_str(), rewrite.kind))
-    } else if entry.stream.as_os_str() != std::ffi::OsStr::new(rewrite.stream) {
-        Some((
-            "stream",
-            entry.stream.to_str().unwrap_or("<non-UTF-8>"),
-            rewrite.stream,
-        ))
-    } else if entry.reference.as_os_str() != std::ffi::OsStr::new(rewrite.source) {
-        Some((
-            "reference",
-            entry.reference.to_str().unwrap_or("<non-UTF-8>"),
-            rewrite.source,
-        ))
-    } else if entry.mode != rewrite.mode {
-        Some(("mode", entry.mode.as_str(), rewrite.mode))
-    } else if entry.backend != rewrite.backend {
-        Some(("backend", entry.backend.as_str(), rewrite.backend))
-    } else {
-        None
-    };
-    if let Some((field, actual, expected)) = mismatch {
-        return Err(format!(
-            "reference rewrite identity mismatch for {}: {field} is `{actual}`, expected `{expected}`",
-            entry.reference.display()
-        ));
-    }
-
-    Ok(PathBuf::from(rewrite.target))
+    Ok(EntryOutcome::Compared {
+        report,
+        byte_exact: expected == actual_image,
+    })
 }
 
 fn resolve_reference(base: &Path, entry: &Entry) -> Result<PathBuf, String> {
-    let target = resolved_reference_target(entry)?;
-    let physical = if target.is_absolute() {
-        target
+    let physical = if entry.reference.is_absolute() {
+        entry.reference.clone()
     } else {
-        base.join(target)
+        base.join(&entry.reference)
     };
     if physical.is_file() {
         Ok(physical)
@@ -338,19 +269,21 @@ fn emit_entry(
             writeln!(stdout, "gated {}: {diagnostic}", entry.id)
                 .map_err(|error| error.to_string())?;
         }
-        EntryOutcome::Compared { report } if report.within_tolerance => {
+        EntryOutcome::Compared { report, byte_exact } if report.within_tolerance => {
             counts.exact += 1;
+            counts.byte_exact += usize::from(byte_exact);
             writeln!(
                 stdout,
-                "{} {}: different-pixels={} max-channel-delta={}",
+                "{} {}: byte-exact={} different-pixels={} max-channel-delta={}",
                 if probing { "probe-pass" } else { "exact" },
                 entry.id,
+                byte_exact,
                 report.different_pixels,
                 report.max_channel_delta
             )
             .map_err(|error| error.to_string())?;
         }
-        EntryOutcome::Compared { report } => {
+        EntryOutcome::Compared { report, .. } => {
             counts.diverges += 1;
             let artifact_path = output_dir.join(format!("{}-diff.png", entry.id));
             writeln!(
@@ -598,16 +531,12 @@ fn validate_entry_ids(entries: &[Entry]) -> Result<(), String> {
 }
 
 fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), String> {
-    let resolved = entries
-        .iter()
-        .map(resolved_reference_target)
-        .collect::<Result<Vec<_>, _>>()?;
     let mut owners = HashMap::<PathBuf, (&str, &Path)>::new();
-    for (entry, reference) in entries.iter().zip(&resolved) {
-        let physical = if reference.is_absolute() {
-            reference.clone()
+    for entry in entries {
+        let physical = if entry.reference.is_absolute() {
+            entry.reference.clone()
         } else {
-            base.join(reference)
+            base.join(&entry.reference)
         };
         let physical = physical.canonicalize().unwrap_or(physical);
         if let Some((previous_id, previous_reference)) =
@@ -615,7 +544,7 @@ fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), Str
         {
             if previous_reference != entry.reference {
                 return Err(format!(
-                    "manifest entries {previous_id} ({}) and {} ({}) resolve to the same physical reference {}; path rewrites must remain unique",
+                    "manifest entries {previous_id} ({}) and {} ({}) resolve to the same physical reference {}; reference paths must remain unique",
                     previous_reference.display(),
                     entry.id,
                     entry.reference.display(),
@@ -627,16 +556,13 @@ fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), Str
 
     validate_reference_identities(
         base,
-        entries
-            .iter()
-            .zip(&resolved)
-            .map(|(entry, reference)| ReferenceIdentity {
-                id: &entry.id,
-                stream: &entry.stream,
-                frame: entry.frame,
-                mode: &entry.mode,
-                reference,
-            }),
+        entries.iter().map(|entry| ReferenceIdentity {
+            id: &entry.id,
+            stream: &entry.stream,
+            frame: entry.frame,
+            mode: &entry.mode,
+            reference: &entry.reference,
+        }),
     )
 }
 
@@ -716,10 +642,8 @@ mod tests {
     fn entry(id: &str, mode: &str, reference: &str) -> Entry {
         Entry {
             id: id.to_owned(),
-            kind: "upstream-gm-stream".to_owned(),
             stream: PathBuf::from("fixture.rive-stream"),
             reference: PathBuf::from(reference),
-            backend: "metal".to_owned(),
             status: "gated".to_owned(),
             frame: 0,
             max_channel_delta: 2,
@@ -727,26 +651,6 @@ mod tests {
             gated: Some("algorithm-core".to_owned()),
             mode: mode.to_owned(),
         }
-    }
-
-    fn dstreadshuffle_alias_entry() -> Entry {
-        let mut entry = entry(
-            "gm-dstreadshuffle-clockwise-atomic",
-            "clockwise-atomic",
-            "fixtures/renderer/reference/metal/gm/dstreadshuffle-clockwise-atomic.png",
-        );
-        entry.stream = PathBuf::from("fixtures/renderer/streams/gm/dstreadshuffle.rive-stream");
-        entry
-    }
-
-    fn interleavedfeather_alias_entry() -> Entry {
-        let mut entry = entry(
-            "gm-interleavedfeather-clockwise-atomic",
-            "clockwise-atomic",
-            "fixtures/renderer/reference/metal/gm/interleavedfeather-clockwise-atomic.png",
-        );
-        entry.stream = PathBuf::from("fixtures/renderer/streams/gm/interleavedfeather.rive-stream");
-        entry
     }
 
     #[test]
@@ -769,91 +673,6 @@ mod tests {
     }
 
     #[test]
-    fn resolves_exactly_the_two_approved_manifest_reference_paths() {
-        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .unwrap();
-        for (entry, target) in [
-            (
-                dstreadshuffle_alias_entry(),
-                "fixtures/renderer/reference/metal/gm/dstreadshuffle.png",
-            ),
-            (
-                interleavedfeather_alias_entry(),
-                "fixtures/renderer/reference/metal/gm/interleavedfeather.png",
-            ),
-        ] {
-            assert_eq!(
-                resolve_reference(&repo_root, &entry).unwrap(),
-                repo_root.join(target)
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_rewrite_for_wrong_entry_id() {
-        let mut entry = dstreadshuffle_alias_entry();
-        entry.id = "gm-not-dstreadshuffle-clockwise-atomic".to_owned();
-        let error = resolved_reference_target(&entry).unwrap_err();
-        assert!(error.contains("entry id"));
-    }
-
-    #[test]
-    fn rejects_rewrite_for_wrong_corpus_source_kind() {
-        let mut entry = dstreadshuffle_alias_entry();
-        entry.kind = "riv-stream".to_owned();
-        let error = resolved_reference_target(&entry).unwrap_err();
-        assert!(error.contains("source kind"));
-    }
-
-    #[test]
-    fn rejects_rewrite_for_wrong_stream() {
-        let mut entry = dstreadshuffle_alias_entry();
-        entry.stream = PathBuf::from("fixtures/renderer/streams/gm/interleavedfeather.rive-stream");
-        let error = resolved_reference_target(&entry).unwrap_err();
-        assert!(error.contains("stream"));
-    }
-
-    #[test]
-    fn rejects_rewrite_for_wrong_mode() {
-        let mut entry = dstreadshuffle_alias_entry();
-        entry.mode = "msaa".to_owned();
-        let error = resolved_reference_target(&entry).unwrap_err();
-        assert!(error.contains("mode"));
-    }
-
-    #[test]
-    fn rejects_rewrite_for_wrong_backend() {
-        let mut entry = dstreadshuffle_alias_entry();
-        entry.backend = "dawn-webgpu-metal".to_owned();
-        let error = resolved_reference_target(&entry).unwrap_err();
-        assert!(error.contains("backend"));
-    }
-
-    #[test]
-    fn approved_alias_id_with_direct_reference_fails_before_replay() {
-        let mut entry = dstreadshuffle_alias_entry();
-        entry.reference = PathBuf::from("fixtures/renderer/reference/metal/gm/dstreadshuffle.png");
-        let options = Options {
-            manifest: PathBuf::from("unused.toml"),
-            replay: PathBuf::from("replay-must-not-run"),
-            backend: "rust-wgpu".to_owned(),
-            output_dir: PathBuf::from("unused-output"),
-            jobs: 1,
-            expect_all_fail: false,
-            probe_gated: vec![entry.id.clone()],
-        };
-
-        let execution = run_entry(&entry, &options, Path::new("/repo"));
-        let error = execution.outcome.unwrap_err();
-        assert!(error.contains("reference rewrite identity mismatch"));
-        assert!(error.contains("reference"));
-        assert!(execution.diagnostics.stdout.is_empty());
-        assert!(execution.diagnostics.stderr.is_empty());
-    }
-
-    #[test]
     fn rejects_an_unapproved_missing_clockwise_atomic_reference() {
         static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
         let root = std::env::temp_dir().join(format!(
@@ -870,23 +689,6 @@ mod tests {
         let error = resolve_reference(&root, &entry).unwrap_err();
         assert!(error.contains("missing and has no existing approved target"));
         fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn rejects_collisions_after_reference_path_resolution() {
-        let entries = [
-            dstreadshuffle_alias_entry(),
-            entry(
-                "direct",
-                "clockwise-atomic",
-                "fixtures/renderer/reference/metal/gm/dstreadshuffle.png",
-            ),
-        ];
-        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let error = validate_reference_identity(&repo_root, &entries).unwrap_err();
-        assert!(error.contains("resolve to the same physical reference"));
-        assert!(error.contains("gm-dstreadshuffle-clockwise-atomic"));
-        assert!(error.contains("direct"));
     }
 
     #[test]
@@ -1132,6 +934,46 @@ mod tests {
 
         assert_eq!(stdout, b"out-0\nout-1\nout-2\n");
         assert_eq!(stderr, b"err-0\nerr-1\nerr-2\n");
+    }
+
+    #[test]
+    fn byte_exact_is_reported_without_redefining_the_tolerance_contract() {
+        let mut entry = entry("within-contract", "clockwise-atomic", "reference.png");
+        entry.status = "exact".to_owned();
+        let execution = EntryExecution {
+            diagnostics: ChildDiagnostics::default(),
+            outcome: Ok(EntryOutcome::Compared {
+                report: DiffReport {
+                    width: 1,
+                    height: 1,
+                    different_pixels: 0,
+                    max_channel_delta: 1,
+                    within_tolerance: true,
+                },
+                byte_exact: false,
+            }),
+        };
+        let mut counts = Counts::default();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        emit_entry(
+            &entry,
+            execution,
+            false,
+            Path::new("output"),
+            &mut counts,
+            &mut stdout,
+            &mut stderr,
+        )
+        .unwrap();
+
+        assert_eq!(counts.exact, 1);
+        assert_eq!(counts.byte_exact, 0);
+        assert_eq!(counts.diverges, 0);
+        assert!(String::from_utf8(stdout)
+            .unwrap()
+            .contains("exact within-contract: byte-exact=false"));
     }
 
     #[test]

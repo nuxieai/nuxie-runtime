@@ -476,15 +476,29 @@ is proven; and every evidence-gated extension has either shipped or a recorded
 no-trigger decision. R5 met these criteria; R4 then resumed and closed on the
 final counter and directional timing evidence above.
 
+## Post-R Exactness Follow-up
+
+The finite follow-up is defined in `docs/renderer-exactness-map.md`. Release
+correctness remains the reviewed per-row pixel contract; decoded-RGBA byte
+identity is reported separately and does not redefine existing contracts.
+
+The former 59 retained rows now use same-tier C++ Dawn WebGPU references.
+Fifty-five pass unchanged, leaving four implementation gates: the shared
+Car Widgets/Echo atomic color-plane lifetime cluster, MSAA Interleaved Feather
+color precision, and clockwise-atomic DstReadShuffle advanced-blend
+intermediate parity. Completion is `1,468 exact / 0 divergent / 0 gated`
+without tolerance widening.
+
 ## Long-Tail Strategy (renderer edition)
 
 Identical philosophy to V2, with the GPU-specific amendments:
 
 1. Pixel goldens are the oracle; GM streams cover renderer features the
    `.riv` corpus never reaches.
-2. Never chase bit-exactness across GPUs, backends, or draw modes —
-   tolerance config plus a Decision entry is the correct fix for a vendor
-   difference; a per-behavior pin is not.
+2. Do not impose universal byte identity across GPUs, backends, or draw modes.
+   Keep reviewed pixel contracts as the release gate, report decoded-RGBA byte
+   identity as a secondary health metric, and tighten stable same-tier rows
+   individually.
 3. The escalation ladder ends in a single-patch reproduction, not a contract
    doc.
 4. Unsupported render features fail loudly with a named diagnostic in

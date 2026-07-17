@@ -23,13 +23,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .frame_size
         .ok_or("recorded stream does not declare frameSize")?;
     let clear = options.clear.or(stream.clear_color).unwrap_or(0);
-    let pixels = match options.backend.as_str() {
-        "stub" => clear_pixels(width, height, clear),
-        "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
+    let (pixels, adapter): (Vec<u8>, Option<String>) = match options.backend.as_str() {
+        "stub" => (clear_pixels(width, height, clear), None),
+        "rust-wgpu" => (
+            replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
+            None,
+        ),
         #[cfg(all(feature = "ffi", target_os = "macos"))]
-        "ffi-metal" => {
-            replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?
-        }
+        "ffi-metal" => (
+            replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?,
+            None,
+        ),
         #[cfg(all(feature = "perf-dawn", target_os = "macos"))]
         "ffi-dawn" => replay_ffi_dawn(&stream, options.frame, width, height, clear, &options.mode)?,
         backend => {
@@ -50,6 +54,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     RgbaImage::new(width, height, pixels)?.write_png(&options.output)?;
+    if let Some(adapter) = adapter {
+        println!("adapter={adapter}");
+    }
     println!(
         "backend={} frame={} size={}x{} output={}",
         options.backend,
@@ -103,9 +110,13 @@ fn replay_ffi_dawn(
     height: u32,
     clear: u32,
     mode: &str,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let factory = nuxie_renderer_ffi::FfiFactory::new_dawn(width, height)?;
-    replay_ffi(stream, frame_index, factory, clear, mode)
+    let adapter = factory.adapter_name()?;
+    Ok((
+        replay_ffi(stream, frame_index, factory, clear, mode)?,
+        Some(adapter),
+    ))
 }
 
 #[cfg(all(feature = "ffi", target_os = "macos"))]

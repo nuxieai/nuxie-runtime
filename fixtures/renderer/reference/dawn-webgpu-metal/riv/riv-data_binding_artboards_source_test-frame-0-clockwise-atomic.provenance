@@ -1,0 +1,16 @@
+provenance_schema=1
+backend=metal
+renderer_implementation=cpp-dawn-webgpu
+capture_tool=renderer-replay-ffi-dawn
+adapter_device=Apple M5 Max
+case_id=riv-data_binding_artboards_source_test-frame-0-clockwise-atomic
+stream_sha256=cb6edf464338bbd4e3df11c8b47d8c0a934acaf602297e60e811f627641a5d76
+runtime_revision=7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
+dawn_revision=211333b2e3e429c3508f25c81c547f602adf448c
+replay_sha256=e2b2d5f03c7a934e9b95da689838336c2ac54f2fcf129090f18386973eacf353
+png_sha256=5b4da902edcff95ac513dd9188d5ee08c3b7273c6fb57d22cc08849c58c4639c
+frame_width=215
+frame_height=81
+frame=0
+mode=clockwise-atomic
+sample_count=1

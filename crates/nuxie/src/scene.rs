@@ -23,6 +23,26 @@ pub struct ArtboardId(u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ObjectId(u64);
 
+/// Stable typed identity of an authored linear animation.
+///
+/// Animation records share the ordinary [`ObjectId`] identity space. This
+/// newtype is vocabulary only; it does not introduce a second allocator or a
+/// second record mechanism.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AnimationId(ObjectId);
+
+impl AnimationId {
+    pub const fn object_id(self) -> ObjectId {
+        self.0
+    }
+}
+
+impl From<AnimationId> for ObjectId {
+    fn from(animation: AnimationId) -> Self {
+        animation.object_id()
+    }
+}
+
 /// Stable identity of an embedded font owned by the authored scene.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FontAssetId(u64);
@@ -97,6 +117,7 @@ pub enum EditReason {
     OperationLimitExceeded,
     UnknownArtboard,
     UnknownObject,
+    NonVisualObject,
     UnknownFontAsset,
     UnknownImageAsset,
     UnknownScriptAsset,
@@ -113,9 +134,17 @@ pub enum EditReason {
         expected: NodeKind,
         actual: Option<NodeKind>,
     },
+    CrossArtboardReference {
+        source: ArtboardId,
+        target: ArtboardId,
+    },
     PropertyOwnerMismatch {
         property: &'static str,
         actual: NodeKind,
+    },
+    RecordPropertyOwnerMismatch {
+        property: &'static str,
+        actual: AuthoredObjectKind,
     },
     NonFiniteProperty {
         property: &'static str,
@@ -248,7 +277,7 @@ pub struct Prop<T> {
     value_kind: PropValueKind,
     declared_owner: &'static str,
     is_available_on: fn(NodeKind) -> bool,
-    apply_to_definition: fn(&mut NodeSpec, T) -> std::result::Result<(), EditReason>,
+    apply_to_definition: fn(&mut RecordSpec, T) -> std::result::Result<(), EditReason>,
     apply_to_runtime: fn(&mut RuntimeArtboardInstance, usize, u16, T) -> bool,
     read_from_runtime: fn(&RuntimeArtboardInstance, usize, u16) -> Option<T>,
     marker: PhantomData<fn(T)>,
@@ -393,6 +422,7 @@ impl std::error::Error for InstanceError {}
 pub enum ResolveError {
     UnknownInstance,
     UnknownObject,
+    NonVisualObject,
     DifferentArtboard,
     UnsupportedProperty,
 }
@@ -402,6 +432,7 @@ impl std::fmt::Display for ResolveError {
         formatter.write_str(match self {
             Self::UnknownInstance => "unknown scene instance",
             Self::UnknownObject => "unknown authored object",
+            Self::NonVisualObject => "authored object is not a visual runtime target",
             Self::DifferentArtboard => "authored object belongs to a different artboard",
             Self::UnsupportedProperty => "property is not valid for the authored object type",
         })
@@ -515,8 +546,17 @@ impl Definitions {
 struct IndexedObject {
     artboard: ArtboardId,
     artboard_index: usize,
-    node_index: usize,
-    kind: NodeKind,
+    record_index: usize,
+    kind: AuthoredObjectKind,
+}
+
+impl IndexedObject {
+    const fn visual_kind(self) -> Option<NodeKind> {
+        match self.kind {
+            AuthoredObjectKind::Visual(kind) => Some(kind),
+            _ => None,
+        }
+    }
 }
 
 /// Transaction-local identity and parent lookup. Structural operations may do
@@ -531,6 +571,10 @@ struct DefinitionIndex {
     artboards: BTreeMap<ArtboardId, usize>,
     objects: BTreeMap<ObjectId, IndexedObject>,
     children: BTreeMap<Parent, Vec<ObjectId>>,
+    owned: BTreeMap<ObjectId, Vec<ObjectId>>,
+    keyed_objects: BTreeMap<(ObjectId, ObjectId), ObjectId>,
+    keyed_properties: BTreeMap<(ObjectId, ExportedAnimatableProperty), ObjectId>,
+    key_frames: BTreeMap<(ObjectId, u32), ObjectId>,
 }
 
 impl DefinitionIndex {
@@ -542,7 +586,7 @@ impl DefinitionIndex {
                 .artboards
                 .iter()
                 .fold(work.definition_index_node_visits, |visits, artboard| {
-                    visits.saturating_add(artboard.nodes.len())
+                    visits.saturating_add(artboard.records.len())
                 });
         });
         let mut index = Self::default();
@@ -564,21 +608,57 @@ impl DefinitionIndex {
                 .children
                 .entry(Parent::Artboard(artboard.id))
                 .or_default();
-            for (node_index, node) in artboard.nodes.iter().enumerate() {
+            for (record_index, record) in artboard.records.iter().enumerate() {
                 index.objects.insert(
-                    node.id,
+                    record.id,
                     IndexedObject {
                         artboard: artboard.id,
                         artboard_index,
-                        node_index,
-                        kind: node.spec.kind(),
+                        record_index,
+                        kind: record.spec.kind(),
                     },
                 );
-                index.children.entry(node.parent).or_default().push(node.id);
-                index.children.entry(Parent::Object(node.id)).or_default();
+                index.owned.entry(record.id).or_default();
+                if let Some(owner) = record.spec.owner() {
+                    index.owned.entry(owner).or_default().push(record.id);
+                }
+                match &record.spec {
+                    RecordSpec::Visual { parent, .. } => {
+                        index.children.entry(*parent).or_default().push(record.id);
+                        index.children.entry(Parent::Object(record.id)).or_default();
+                    }
+                    RecordSpec::Animation(AnimationRecordSpec::KeyedObject {
+                        animation,
+                        target,
+                    }) => {
+                        index.keyed_objects.insert((*animation, *target), record.id);
+                    }
+                    RecordSpec::Animation(AnimationRecordSpec::KeyedProperty {
+                        keyed_object,
+                        property,
+                    }) => {
+                        index
+                            .keyed_properties
+                            .insert((*keyed_object, *property), record.id);
+                    }
+                    RecordSpec::Animation(AnimationRecordSpec::KeyFrameDouble {
+                        keyed_property,
+                        frame,
+                        ..
+                    }) => {
+                        index
+                            .key_frames
+                            .insert((*keyed_property, *frame), record.id);
+                    }
+                    RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_)) => {}
+                }
             }
         }
         index
+    }
+
+    fn contains_object(&self, object: ObjectId) -> bool {
+        self.objects.contains_key(&object)
     }
 
     fn rebuild(&mut self, definitions: &Definitions) {
@@ -622,12 +702,19 @@ impl DefinitionIndex {
                         EditReason::UnknownObject,
                     ));
                 };
-                if !valid_object_parent(parent.kind, child) {
+                let Some(parent_kind) = parent.visual_kind() else {
+                    return Err(EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(object)],
+                        EditReason::NonVisualObject,
+                    ));
+                };
+                if !valid_object_parent(parent_kind, child) {
                     return Err(EditAbort::new(
                         operation_index,
                         vec![EditId::Object(object)],
                         EditReason::InvalidParent {
-                            parent: Some(parent.kind),
+                            parent: Some(parent_kind),
                             child,
                         },
                     ));
@@ -717,14 +804,151 @@ struct ShaderAssetDefinition {
 struct ArtboardDefinition {
     id: ArtboardId,
     spec: ArtboardSpec,
-    nodes: Vec<NodeDefinition>,
+    records: Vec<RecordDefinition>,
+}
+
+#[derive(Clone, Copy)]
+struct VisualRecordRef<'a> {
+    id: ObjectId,
+    parent: Parent,
+    spec: &'a NodeSpec,
+}
+
+impl ArtboardDefinition {
+    fn visual_records(&self) -> impl Iterator<Item = VisualRecordRef<'_>> {
+        self.records.iter().filter_map(|record| {
+            record.visual().map(|(parent, spec)| VisualRecordRef {
+                id: record.id,
+                parent,
+                spec,
+            })
+        })
+    }
+
+    fn animation_views(&self) -> impl Iterator<Item = (&RecordDefinition, &AnimationRecordSpec)> {
+        self.records
+            .iter()
+            .filter_map(|record| record.animation().map(|spec| (record, spec)))
+    }
+
+    fn visual_record_count(&self) -> usize {
+        self.visual_records().count()
+    }
 }
 
 #[derive(Debug, Clone)]
-struct NodeDefinition {
+struct RecordDefinition {
     id: ObjectId,
-    parent: Parent,
-    spec: NodeSpec,
+    spec: RecordSpec,
+}
+
+impl RecordDefinition {
+    const fn visual(&self) -> Option<(Parent, &NodeSpec)> {
+        self.spec.visual()
+    }
+
+    const fn animation(&self) -> Option<&AnimationRecordSpec> {
+        match &self.spec {
+            RecordSpec::Animation(spec) => Some(spec),
+            RecordSpec::Visual { .. } => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum RecordSpec {
+    Visual { parent: Parent, node: NodeSpec },
+    Animation(AnimationRecordSpec),
+}
+
+/// Semantic kind of any ordinary authored record in the shared ObjectId space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthoredObjectKind {
+    Visual(NodeKind),
+    LinearAnimation,
+    KeyedObject,
+    KeyedProperty,
+    KeyFrameDouble,
+}
+
+impl RecordSpec {
+    const fn kind(&self) -> AuthoredObjectKind {
+        match self {
+            Self::Visual { node, .. } => AuthoredObjectKind::Visual(node.kind()),
+            Self::Animation(AnimationRecordSpec::LinearAnimation(_)) => {
+                AuthoredObjectKind::LinearAnimation
+            }
+            Self::Animation(AnimationRecordSpec::KeyedObject { .. }) => {
+                AuthoredObjectKind::KeyedObject
+            }
+            Self::Animation(AnimationRecordSpec::KeyedProperty { .. }) => {
+                AuthoredObjectKind::KeyedProperty
+            }
+            Self::Animation(AnimationRecordSpec::KeyFrameDouble { .. }) => {
+                AuthoredObjectKind::KeyFrameDouble
+            }
+        }
+    }
+
+    const fn owner(&self) -> Option<ObjectId> {
+        match self {
+            Self::Visual {
+                parent: Parent::Object(parent),
+                ..
+            } => Some(*parent),
+            Self::Visual {
+                parent: Parent::Artboard(_),
+                ..
+            } => None,
+            Self::Animation(spec) => spec.owner(),
+        }
+    }
+
+    const fn visual(&self) -> Option<(Parent, &NodeSpec)> {
+        match self {
+            Self::Visual { parent, node } => Some((*parent, node)),
+            Self::Animation(_) => None,
+        }
+    }
+}
+
+/// Definition-time shape of one linear timeline. Playback behavior not
+/// represented here stays at the Rive schema defaults (speed 1, one-shot,
+/// full duration, and no quantization).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearAnimationSpec {
+    pub name: String,
+    pub fps: u32,
+    pub duration: u32,
+}
+
+#[derive(Debug, Clone)]
+enum AnimationRecordSpec {
+    LinearAnimation(LinearAnimationSpec),
+    KeyedObject {
+        animation: ObjectId,
+        target: ObjectId,
+    },
+    KeyedProperty {
+        keyed_object: ObjectId,
+        property: ExportedAnimatableProperty,
+    },
+    KeyFrameDouble {
+        keyed_property: ObjectId,
+        frame: u32,
+        value: f32,
+    },
+}
+
+impl AnimationRecordSpec {
+    const fn owner(&self) -> Option<ObjectId> {
+        match self {
+            Self::LinearAnimation(_) => None,
+            Self::KeyedObject { animation, .. } => Some(*animation),
+            Self::KeyedProperty { keyed_object, .. } => Some(*keyed_object),
+            Self::KeyFrameDouble { keyed_property, .. } => Some(*keyed_property),
+        }
+    }
 }
 
 /// Deep private seam for every authored hierarchy invariant. A transaction
@@ -778,7 +1002,7 @@ impl Hierarchy<'_> {
                     EditReason::InternalInvariant,
                 )
             })?;
-        definition.nodes.clear();
+        definition.records.clear();
         Ok(())
     }
 
@@ -820,7 +1044,7 @@ impl Hierarchy<'_> {
         property: Prop<T>,
         value: T,
     ) -> std::result::Result<ArtboardId, EditAbort> {
-        let (artboard_index, node_index) = self
+        let (artboard_index, record_index) = self
             .object_location(object)
             .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
         let definition = self
@@ -835,29 +1059,18 @@ impl Hierarchy<'_> {
                 )
             })?;
         let artboard_id = definition.id;
-        let node = definition.nodes.get_mut(node_index).ok_or_else(|| {
+        let record = definition.records.get_mut(record_index).ok_or_else(|| {
             EditAbort::new(
                 self.operation_index,
                 vec![EditId::Object(object)],
                 EditReason::InternalInvariant,
             )
         })?;
-        let actual = node.spec.kind();
-        if !property.is_available_on(actual) {
-            return Err(EditAbort::new(
-                self.operation_index,
-                vec![EditId::Object(object)],
-                EditReason::PropertyOwnerMismatch {
-                    property: property.schema_name,
-                    actual,
-                },
-            ));
-        }
-        let mut candidate = node.spec.clone();
+        let mut candidate = record.spec.clone();
         (property.apply_to_definition)(&mut candidate, value).map_err(|reason| {
             EditAbort::new(self.operation_index, vec![EditId::Object(object)], reason)
         })?;
-        node.spec = candidate;
+        record.spec = candidate;
         Ok(artboard_id)
     }
 
@@ -897,12 +1110,15 @@ impl Hierarchy<'_> {
         let indexed = self
             .indexed_object(object)
             .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        if indexed.visual_kind().is_none() {
+            return Err(self.abort(vec![EditId::Object(object)], EditReason::NonVisualObject));
+        }
         let parent = self
             .definitions
             .artboards
             .get(indexed.artboard_index)
-            .and_then(|artboard| artboard.nodes.get(indexed.node_index))
-            .map(|node| node.parent)
+            .and_then(|artboard| artboard.records.get(indexed.record_index))
+            .and_then(|record| record.spec.visual().map(|(parent, _)| parent))
             .ok_or_else(|| {
                 self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
             })?;
@@ -935,6 +1151,11 @@ impl Hierarchy<'_> {
                 let indexed = self.indexed_object(object).ok_or_else(|| {
                     self.abort(vec![EditId::Object(object)], EditReason::UnknownObject)
                 })?;
+                if indexed.visual_kind().is_none() {
+                    return Err(
+                        self.abort(vec![EditId::Object(object)], EditReason::NonVisualObject)
+                    );
+                }
                 (indexed.artboard, indexed.artboard_index)
             }
         };
@@ -949,12 +1170,15 @@ impl Hierarchy<'_> {
             let indexed = self.indexed_object(*child).ok_or_else(|| {
                 self.abort(vec![EditId::Object(*child)], EditReason::UnknownObject)
             })?;
+            if indexed.visual_kind().is_none() {
+                return Err(self.abort(vec![EditId::Object(*child)], EditReason::NonVisualObject));
+            }
             let actual_parent = self
                 .definitions
                 .artboards
                 .get(indexed.artboard_index)
-                .and_then(|artboard| artboard.nodes.get(indexed.node_index))
-                .map(|node| node.parent)
+                .and_then(|artboard| artboard.records.get(indexed.record_index))
+                .and_then(|record| record.spec.visual().map(|(parent, _)| parent))
                 .ok_or_else(|| {
                     self.abort(vec![EditId::Object(*child)], EditReason::InternalInvariant)
                 })?;
@@ -1004,7 +1228,7 @@ impl Hierarchy<'_> {
             .get(artboard_index)
             .ok_or_else(|| self.abort(parent_edit_ids(parent), EditReason::InternalInvariant))?;
         let grouped_node_count = artboard
-            .nodes
+            .records
             .iter()
             .filter(|node| subtree_owner.contains_key(&node.id))
             .count();
@@ -1025,14 +1249,14 @@ impl Hierarchy<'_> {
             .artboards
             .get_mut(artboard_index)
             .expect("preflighted child-order artboard exists");
-        let nodes = std::mem::take(&mut artboard.nodes);
-        let mut remaining = Vec::with_capacity(nodes.len().saturating_sub(grouped_node_count));
+        let records = std::mem::take(&mut artboard.records);
+        let mut remaining = Vec::with_capacity(records.len().saturating_sub(grouped_node_count));
         let mut groups = (0..ordered_children.len())
             .map(|_| Vec::new())
-            .collect::<Vec<Vec<NodeDefinition>>>();
+            .collect::<Vec<Vec<RecordDefinition>>>();
         let mut insertion_index = None;
-        for node in nodes {
-            if let Some(owner) = subtree_owner.get(&node.id) {
+        for record in records {
+            if let Some(owner) = subtree_owner.get(&record.id) {
                 insertion_index.get_or_insert(remaining.len());
                 let rank = rank_by_root
                     .get(owner)
@@ -1041,15 +1265,15 @@ impl Hierarchy<'_> {
                 groups
                     .get_mut(rank)
                     .expect("preflighted subtree rank has a group")
-                    .push(node);
+                    .push(record);
             } else {
-                remaining.push(node);
+                remaining.push(record);
             }
         }
         let ordered_nodes = groups.into_iter().flatten().collect::<Vec<_>>();
         let insertion_index = insertion_index.unwrap_or(remaining.len());
         remaining.splice(insertion_index..insertion_index, ordered_nodes);
-        artboard.nodes = remaining;
+        artboard.records = remaining;
         Ok(artboard_id)
     }
 
@@ -1075,12 +1299,14 @@ impl Hierarchy<'_> {
             .definitions
             .artboards
             .get(source.artboard_index)
-            .and_then(|artboard| artboard.nodes.get(source.node_index))
-            .map(|node| node.parent)
+            .and_then(|artboard| artboard.records.get(source.record_index))
+            .and_then(|record| record.spec.visual().map(|(parent, _)| parent))
             .ok_or_else(|| {
                 self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
             })?;
-        let child_kind = source.kind;
+        let child_kind = source
+            .visual_kind()
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::NonVisualObject))?;
         let (target_index, parent_kind) = match new_parent {
             Parent::Artboard(artboard) => {
                 let target = self
@@ -1100,7 +1326,16 @@ impl Hierarchy<'_> {
                 let indexed = self.indexed_object(parent).ok_or_else(|| {
                     self.abort(vec![EditId::Object(parent)], EditReason::UnknownObject)
                 })?;
-                (indexed.artboard_index, Some(indexed.kind))
+                let parent_kind = indexed.visual_kind().ok_or_else(|| {
+                    self.abort(
+                        vec![EditId::Object(parent)],
+                        EditReason::InvalidParent {
+                            parent: None,
+                            child: child_kind,
+                        },
+                    )
+                })?;
+                (indexed.artboard_index, Some(parent_kind))
             }
         };
 
@@ -1174,9 +1409,13 @@ impl Hierarchy<'_> {
                         EditReason::InternalInvariant,
                     )
                 })?;
-            let subtree =
-                detach_preflighted_subtree(&mut definition.nodes, &subtree_ids, object, new_parent);
-            attach_preflighted_subtree(&mut definition.nodes, new_parent, final_index, subtree);
+            let subtree = detach_preflighted_subtree(
+                &mut definition.records,
+                &subtree_ids,
+                object,
+                new_parent,
+            );
+            attach_preflighted_subtree(&mut definition.records, new_parent, final_index, subtree);
         } else {
             let [source_definition, target_definition] = self
                 .definitions
@@ -1190,13 +1429,13 @@ impl Hierarchy<'_> {
                     )
                 })?;
             let subtree = detach_preflighted_subtree(
-                &mut source_definition.nodes,
+                &mut source_definition.records,
                 &subtree_ids,
                 object,
                 new_parent,
             );
             attach_preflighted_subtree(
-                &mut target_definition.nodes,
+                &mut target_definition.records,
                 new_parent,
                 final_index,
                 subtree,
@@ -1209,7 +1448,7 @@ impl Hierarchy<'_> {
         self.index
             .objects
             .get(&object)
-            .map(|object| (object.artboard_index, object.node_index))
+            .map(|object| (object.artboard_index, object.record_index))
     }
 
     fn indexed_object(&self, object: ObjectId) -> Option<IndexedObject> {
@@ -1220,7 +1459,7 @@ impl Hierarchy<'_> {
         let mut subtree = BTreeSet::from([root]);
         let mut frontier = vec![root];
         while let Some(parent) = frontier.pop() {
-            if let Some(children) = self.index.children.get(&Parent::Object(parent)) {
+            if let Some(children) = self.index.owned.get(&parent) {
                 for child in children {
                     if subtree.insert(*child) {
                         frontier.push(*child);
@@ -1250,14 +1489,15 @@ impl Hierarchy<'_> {
                     EditReason::InternalInvariant,
                 )
             })?;
-        let mut nodes = Vec::with_capacity(subtree_ids.len());
+        let mut records = Vec::with_capacity(subtree_ids.len());
         let mut remaining =
-            Vec::with_capacity(artboard.nodes.len().saturating_sub(subtree_ids.len()));
-        for (original_index, definition) in
-            std::mem::take(&mut artboard.nodes).into_iter().enumerate()
+            Vec::with_capacity(artboard.records.len().saturating_sub(subtree_ids.len()));
+        for (original_index, definition) in std::mem::take(&mut artboard.records)
+            .into_iter()
+            .enumerate()
         {
             if subtree_ids.contains(&definition.id) {
-                nodes.push(RemovedNode {
+                records.push(RemovedRecord {
                     original_index,
                     definition,
                 });
@@ -1265,12 +1505,12 @@ impl Hierarchy<'_> {
                 remaining.push(definition);
             }
         }
-        debug_assert!(!nodes.is_empty());
-        artboard.nodes = remaining;
+        debug_assert!(!records.is_empty());
+        artboard.records = remaining;
         Ok(RemovedSubtree {
             artboard: artboard.id,
             root: object,
-            nodes,
+            records,
         })
     }
 
@@ -1281,9 +1521,9 @@ impl Hierarchy<'_> {
         let RemovedSubtree {
             artboard: artboard_id,
             root,
-            nodes,
+            records,
         } = removed;
-        if nodes.is_empty() || !nodes.iter().any(|node| node.definition.id == root) {
+        if records.is_empty() || !records.iter().any(|record| record.definition.id == root) {
             return Err(self.abort(vec![EditId::Object(root)], EditReason::InternalInvariant));
         }
         let artboard_index = self
@@ -1298,88 +1538,171 @@ impl Hierarchy<'_> {
                 )
             })?;
         let mut restored_kinds = BTreeMap::new();
-        for removed_node in &nodes {
-            let id = removed_node.definition.id;
+        for removed_record in &records {
+            let id = removed_record.definition.id;
             if self.object_location(id).is_some() {
                 return Err(self.abort(vec![EditId::Object(id)], EditReason::IdentityCollision));
             }
             if restored_kinds
-                .insert(id, removed_node.definition.spec.kind())
+                .insert(id, removed_record.definition.spec.kind())
                 .is_some()
             {
                 return Err(self.abort(vec![EditId::Object(id)], EditReason::IdentityCollision));
             }
         }
 
-        for removed_node in &nodes {
-            let child = removed_node.definition.spec.kind();
-            let parent_kind = match removed_node.definition.parent {
-                Parent::Artboard(parent) if parent == artboard_id => None,
-                Parent::Artboard(parent) if !self.index.artboards.contains_key(&parent) => {
-                    return Err(self.abort(
-                        vec![
-                            EditId::Object(removed_node.definition.id),
-                            EditId::Artboard(parent),
-                        ],
-                        EditReason::UnknownArtboard,
-                    ));
-                }
-                Parent::Artboard(parent) => {
-                    return Err(self.abort(
-                        vec![
-                            EditId::Object(removed_node.definition.id),
-                            EditId::Artboard(parent),
-                        ],
-                        EditReason::InvalidParent {
-                            parent: None,
-                            child,
-                        },
-                    ));
-                }
-                Parent::Object(parent) => {
-                    if let Some(kind) = restored_kinds.get(&parent).copied() {
-                        Some(kind)
-                    } else {
-                        let Some(indexed) = self.index.objects.get(&parent).copied() else {
+        let resolve_kind = |id: ObjectId| {
+            restored_kinds
+                .get(&id)
+                .copied()
+                .or_else(|| self.index.objects.get(&id).map(|indexed| indexed.kind))
+        };
+        let resolve_artboard = |id: ObjectId| {
+            restored_kinds
+                .contains_key(&id)
+                .then_some(artboard_id)
+                .or_else(|| self.index.objects.get(&id).map(|indexed| indexed.artboard))
+        };
+        for removed_record in &records {
+            let id = removed_record.definition.id;
+            match &removed_record.definition.spec {
+                RecordSpec::Visual { parent, node } => {
+                    let child = node.kind();
+                    let parent_kind = match parent {
+                        Parent::Artboard(parent) if *parent == artboard_id => None,
+                        Parent::Artboard(parent) if !self.index.artboards.contains_key(parent) => {
                             return Err(self.abort(
-                                vec![
-                                    EditId::Object(removed_node.definition.id),
-                                    EditId::Object(parent),
-                                ],
-                                EditReason::UnknownObject,
+                                vec![EditId::Object(id), EditId::Artboard(*parent)],
+                                EditReason::UnknownArtboard,
                             ));
-                        };
-                        if indexed.artboard != artboard_id {
+                        }
+                        Parent::Artboard(parent) => {
                             return Err(self.abort(
-                                vec![
-                                    EditId::Object(removed_node.definition.id),
-                                    EditId::Object(parent),
-                                ],
-                                EditReason::InvalidParent {
-                                    parent: None,
-                                    child,
+                                vec![EditId::Object(id), EditId::Artboard(*parent)],
+                                EditReason::CrossArtboardReference {
+                                    source: artboard_id,
+                                    target: *parent,
                                 },
                             ));
                         }
-                        Some(indexed.kind)
+                        Parent::Object(parent) => {
+                            let Some(kind) = resolve_kind(*parent) else {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(*parent)],
+                                    EditReason::UnknownObject,
+                                ));
+                            };
+                            let Some(parent_artboard) = resolve_artboard(*parent) else {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(*parent)],
+                                    EditReason::UnknownObject,
+                                ));
+                            };
+                            if parent_artboard != artboard_id {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(*parent)],
+                                    EditReason::CrossArtboardReference {
+                                        source: artboard_id,
+                                        target: parent_artboard,
+                                    },
+                                ));
+                            }
+                            let AuthoredObjectKind::Visual(kind) = kind else {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(*parent)],
+                                    EditReason::NonVisualObject,
+                                ));
+                            };
+                            Some(kind)
+                        }
+                    };
+                    let valid = match parent_kind {
+                        None => valid_artboard_child(child),
+                        Some(parent) => valid_object_parent(parent, child),
+                    };
+                    if !valid {
+                        return Err(self.abort(
+                            parent_edit_ids(*parent),
+                            EditReason::InvalidParent {
+                                parent: parent_kind,
+                                child,
+                            },
+                        ));
                     }
                 }
-            };
-            let valid = match parent_kind {
-                None => matches!(
-                    child,
-                    NodeKind::Shape | NodeKind::Text | NodeKind::ScriptedDrawable
-                ),
-                Some(parent) => valid_object_parent(parent, child),
-            };
-            if !valid {
-                return Err(self.abort(
-                    parent_edit_ids(removed_node.definition.parent),
-                    EditReason::InvalidParent {
-                        parent: parent_kind,
-                        child,
-                    },
-                ));
+                RecordSpec::Animation(spec) => {
+                    if let Some(owner) = spec.owner() {
+                        let Some(owner_kind) = resolve_kind(owner) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        let Some(owner_artboard) = resolve_artboard(owner) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        if owner_artboard != artboard_id {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::CrossArtboardReference {
+                                    source: artboard_id,
+                                    target: owner_artboard,
+                                },
+                            ));
+                        }
+                        let valid_owner = matches!(
+                            (spec, owner_kind),
+                            (
+                                AnimationRecordSpec::KeyedObject { .. },
+                                AuthoredObjectKind::LinearAnimation
+                            ) | (
+                                AnimationRecordSpec::KeyedProperty { .. },
+                                AuthoredObjectKind::KeyedObject
+                            ) | (
+                                AnimationRecordSpec::KeyFrameDouble { .. },
+                                AuthoredObjectKind::KeyedProperty
+                            )
+                        );
+                        if !valid_owner {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::InternalInvariant,
+                            ));
+                        }
+                    }
+                    if let AnimationRecordSpec::KeyedObject { target, .. } = spec {
+                        let Some(target_kind) = resolve_kind(*target) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(*target)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        let Some(target_artboard) = resolve_artboard(*target) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(*target)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        if target_artboard != artboard_id {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(*target)],
+                                EditReason::CrossArtboardReference {
+                                    source: artboard_id,
+                                    target: target_artboard,
+                                },
+                            ));
+                        }
+                        if !matches!(target_kind, AuthoredObjectKind::Visual(_)) {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(*target)],
+                                EditReason::NonVisualObject,
+                            ));
+                        }
+                    }
+                }
             }
         }
 
@@ -1387,24 +1710,24 @@ impl Hierarchy<'_> {
             .definitions
             .artboards
             .get(artboard_index)
-            .map(|artboard| artboard.nodes.len())
+            .map(|artboard| artboard.records.len())
             .ok_or_else(|| {
                 self.abort(
                     vec![EditId::Artboard(artboard_id), EditId::Object(root)],
                     EditReason::InternalInvariant,
                 )
             })?;
-        let mut insertions = Vec::with_capacity(nodes.len());
+        let mut insertions = Vec::with_capacity(records.len());
         let mut last_position = None;
-        for (offset, removed_node) in nodes.into_iter().enumerate() {
-            let position = removed_node
+        for (offset, removed_record) in records.into_iter().enumerate() {
+            let position = removed_record
                 .original_index
                 .min(existing_len.saturating_add(offset));
             if last_position.is_some_and(|last| position <= last) {
                 return Err(self.abort(vec![EditId::Object(root)], EditReason::InternalInvariant));
             }
             last_position = Some(position);
-            insertions.push((position, removed_node.definition));
+            insertions.push((position, removed_record.definition));
         }
         let restored = insertions
             .iter()
@@ -1431,7 +1754,7 @@ impl Hierarchy<'_> {
                     EditReason::InternalInvariant,
                 )
             })?;
-        let existing = std::mem::take(&mut artboard.nodes);
+        let existing = std::mem::take(&mut artboard.records);
         let mut existing = existing.into_iter();
         let mut insertions = insertions.into_iter().peekable();
         let mut merged = Vec::with_capacity(final_len);
@@ -1447,7 +1770,7 @@ impl Hierarchy<'_> {
         }
         debug_assert!(existing.next().is_none());
         debug_assert!(insertions.next().is_none());
-        artboard.nodes = merged;
+        artboard.records = merged;
         Ok((artboard_id, root, restored))
     }
 
@@ -1470,13 +1793,16 @@ impl Hierarchy<'_> {
                     EditReason::IdentityCollision,
                 ));
             }
-            for node in &artboard.nodes {
+            for record in &artboard.records {
+                let Some((_, node)) = record.visual() else {
+                    continue;
+                };
                 if objects
-                    .insert(node.id, (artboard.id, node.spec.kind()))
+                    .insert(record.id, (artboard.id, node.kind()))
                     .is_some()
                 {
                     return Err(abort(
-                        vec![EditId::Object(node.id)],
+                        vec![EditId::Object(record.id)],
                         EditReason::IdentityCollision,
                     ));
                 }
@@ -1487,57 +1813,60 @@ impl Hierarchy<'_> {
         // validation intentionally happens only after cycle detection.
         let mut artboard_references = BTreeMap::<ArtboardId, Vec<(ArtboardId, ObjectId)>>::new();
         for artboard in &definitions.artboards {
-            for node in &artboard.nodes {
-                if let NodeSpec::NestedArtboard(spec) = &node.spec {
+            for record in &artboard.records {
+                let Some((parent, node)) = record.visual() else {
+                    continue;
+                };
+                if let NodeSpec::NestedArtboard(spec) = node {
                     if !artboard_ids.contains(&spec.artboard) {
                         return Err(abort(
-                            vec![EditId::Object(node.id), EditId::Artboard(spec.artboard)],
+                            vec![EditId::Object(record.id), EditId::Artboard(spec.artboard)],
                             EditReason::UnknownArtboard,
                         ));
                     }
                     artboard_references
                         .entry(artboard.id)
                         .or_default()
-                        .push((spec.artboard, node.id));
+                        .push((spec.artboard, record.id));
                 }
-                if let NodeSpec::ScriptedDrawable(spec) = &node.spec
+                if let NodeSpec::ScriptedDrawable(spec) = node
                     && !script_asset_ids.contains(&spec.script)
                 {
                     return Err(abort(
-                        vec![EditId::Object(node.id), EditId::ScriptAsset(spec.script)],
+                        vec![EditId::Object(record.id), EditId::ScriptAsset(spec.script)],
                         EditReason::UnknownScriptAsset,
                     ));
                 }
-                match node.parent {
+                match parent {
                     Parent::Artboard(parent) if parent == artboard.id => {}
                     Parent::Artboard(parent) if !artboard_ids.contains(&parent) => {
                         return Err(abort(
-                            vec![EditId::Object(node.id), EditId::Artboard(parent)],
+                            vec![EditId::Object(record.id), EditId::Artboard(parent)],
                             EditReason::UnknownArtboard,
                         ));
                     }
                     Parent::Artboard(parent) => {
                         return Err(abort(
-                            vec![EditId::Object(node.id), EditId::Artboard(parent)],
-                            EditReason::InvalidParent {
-                                parent: None,
-                                child: node.spec.kind(),
+                            vec![EditId::Object(record.id), EditId::Artboard(parent)],
+                            EditReason::CrossArtboardReference {
+                                source: artboard.id,
+                                target: parent,
                             },
                         ));
                     }
                     Parent::Object(parent) => match objects.get(&parent) {
                         None => {
                             return Err(abort(
-                                vec![EditId::Object(node.id), EditId::Object(parent)],
+                                vec![EditId::Object(record.id), EditId::Object(parent)],
                                 EditReason::UnknownObject,
                             ));
                         }
                         Some((parent_artboard, _)) if *parent_artboard != artboard.id => {
                             return Err(abort(
-                                vec![EditId::Object(node.id), EditId::Object(parent)],
-                                EditReason::InvalidParent {
-                                    parent: None,
-                                    child: node.spec.kind(),
+                                vec![EditId::Object(record.id), EditId::Object(parent)],
+                                EditReason::CrossArtboardReference {
+                                    source: artboard.id,
+                                    target: *parent_artboard,
                                 },
                             ));
                         }
@@ -1565,25 +1894,32 @@ impl Hierarchy<'_> {
 
         for artboard in &definitions.artboards {
             let nodes = artboard
-                .nodes
+                .records
                 .iter()
-                .map(|node| (node.id, node))
+                .filter_map(|record| {
+                    record
+                        .visual()
+                        .map(|(parent, node)| (record.id, (parent, node)))
+                })
                 .collect::<BTreeMap<_, _>>();
             let mut complete = BTreeSet::new();
-            for node in &artboard.nodes {
-                if complete.contains(&node.id) {
+            for record in &artboard.records {
+                let Some(_) = record.visual() else {
+                    continue;
+                };
+                if complete.contains(&record.id) {
                     continue;
                 }
                 let mut path = Vec::new();
                 let mut path_ids = BTreeSet::new();
-                let mut cursor = node.id;
+                let mut cursor = record.id;
                 loop {
                     if complete.contains(&cursor) {
                         break;
                     }
                     if !path_ids.insert(cursor) {
                         return Err(abort(
-                            vec![EditId::Object(node.id), EditId::Object(cursor)],
+                            vec![EditId::Object(record.id), EditId::Object(cursor)],
                             EditReason::CycleDetected,
                         ));
                     }
@@ -1594,7 +1930,7 @@ impl Hierarchy<'_> {
                             EditReason::InternalInvariant,
                         ));
                     };
-                    match current.parent {
+                    match current.0 {
                         Parent::Artboard(_) => break,
                         Parent::Object(parent) => cursor = parent,
                     }
@@ -1604,9 +1940,12 @@ impl Hierarchy<'_> {
         }
 
         for artboard in &definitions.artboards {
-            for node in &artboard.nodes {
-                let child = node.spec.kind();
-                let parent_kind = match node.parent {
+            for record in &artboard.records {
+                let Some((parent, node)) = record.visual() else {
+                    continue;
+                };
+                let child = node.kind();
+                let parent_kind = match parent {
                     Parent::Artboard(_) => None,
                     Parent::Object(parent) => objects.get(&parent).map(|(_, kind)| *kind),
                 };
@@ -1616,7 +1955,7 @@ impl Hierarchy<'_> {
                 };
                 if !valid {
                     return Err(abort(
-                        parent_edit_ids(node.parent),
+                        parent_edit_ids(parent),
                         EditReason::InvalidParent {
                             parent: parent_kind,
                             child,
@@ -1627,65 +1966,89 @@ impl Hierarchy<'_> {
         }
 
         for artboard in &mut definitions.artboards {
-            let nodes = std::mem::take(&mut artboard.nodes);
-            let positions = nodes
+            let records = std::mem::take(&mut artboard.records);
+            let visual_records = records
+                .iter()
+                .filter(|record| record.visual().is_some())
+                .cloned()
+                .collect::<Vec<_>>();
+            let positions = visual_records
                 .iter()
                 .enumerate()
-                .map(|(index, node)| (node.id, index))
+                .map(|(index, record)| (record.id, index))
                 .collect::<BTreeMap<_, _>>();
             let already_parent_before_child =
-                nodes
-                    .iter()
-                    .enumerate()
-                    .all(|(index, node)| match node.parent {
-                        Parent::Artboard(_) => valid_artboard_child(node.spec.kind()),
-                        Parent::Object(parent) => positions
+                visual_records.iter().enumerate().all(|(index, record)| {
+                    match record.visual().map(|(parent, _)| parent) {
+                        Some(Parent::Artboard(_)) => true,
+                        Some(Parent::Object(parent)) => positions
                             .get(&parent)
                             .is_some_and(|parent_index| *parent_index < index),
-                    });
+                        None => false,
+                    }
+                });
             if already_parent_before_child {
-                artboard.nodes = nodes;
+                artboard.records = records;
                 continue;
             }
 
             // Preserve authored record order whenever it is already valid. If
             // a reparent makes a parent appear after its child, use the
-            // original record index as Kahn's ready-queue priority. This is the
-            // smallest stable repair: parent references become importable
-            // without turning the record stream into hierarchy preorder or
-            // changing the order of same-parent siblings.
+            // original visual-record rank as Kahn's ready-queue priority. The
+            // repaired visual order is written back into the same visual slots,
+            // leaving ordinary nonvisual records in their authored positions.
             let mut ready = BTreeSet::new();
             let mut children: BTreeMap<ObjectId, Vec<usize>> = BTreeMap::new();
-            for (index, node) in nodes.iter().enumerate() {
-                match node.parent {
-                    Parent::Artboard(_) => {
+            for (index, record) in visual_records.iter().enumerate() {
+                match record.visual().map(|(parent, _)| parent) {
+                    Some(Parent::Artboard(_)) => {
                         ready.insert(index);
                     }
-                    Parent::Object(parent) => children.entry(parent).or_default().push(index),
+                    Some(Parent::Object(parent)) => children.entry(parent).or_default().push(index),
+                    None => {
+                        return Err(EditAbort::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
                 }
             }
-            let mut stable = Vec::with_capacity(nodes.len());
+            let mut stable = Vec::with_capacity(visual_records.len());
             while let Some(index) = ready.pop_first() {
-                let Some(node) = nodes.get(index).cloned() else {
+                let Some(record) = visual_records.get(index).cloned() else {
                     return Err(EditAbort::new(
                         operation_index,
                         vec![EditId::Artboard(artboard.id)],
                         EditReason::InternalInvariant,
                     ));
                 };
-                if let Some(child_indices) = children.get(&node.id) {
+                if let Some(child_indices) = children.get(&record.id) {
                     ready.extend(child_indices.iter().copied());
                 }
-                stable.push(node);
+                stable.push(record);
             }
-            if stable.len() != nodes.len() {
+            if stable.len() != visual_records.len() {
                 return Err(EditAbort::new(
                     operation_index,
                     vec![EditId::Artboard(artboard.id)],
                     EditReason::InternalInvariant,
                 ));
             }
-            artboard.nodes = stable;
+            let mut stable = stable.into_iter();
+            artboard.records = records
+                .into_iter()
+                .map(|record| {
+                    if record.visual().is_some() {
+                        stable
+                            .next()
+                            .expect("validated visual order has exact length")
+                    } else {
+                        record
+                    }
+                })
+                .collect();
+            debug_assert!(stable.next().is_none());
         }
         Ok(())
     }
@@ -1710,21 +2073,24 @@ fn resolve_child_index(index: ChildIndex, sibling_count: usize, inserting: bool)
 }
 
 fn detach_preflighted_subtree(
-    source: &mut Vec<NodeDefinition>,
+    source: &mut Vec<RecordDefinition>,
     subtree_ids: &BTreeSet<ObjectId>,
     root: ObjectId,
     new_parent: Parent,
-) -> Vec<NodeDefinition> {
+) -> Vec<RecordDefinition> {
     let mut subtree = Vec::with_capacity(subtree_ids.len());
     let mut remaining = Vec::with_capacity(source.len().saturating_sub(subtree_ids.len()));
-    for mut node in std::mem::take(source) {
-        if subtree_ids.contains(&node.id) {
-            if node.id == root {
-                node.parent = new_parent;
+    for mut record in std::mem::take(source) {
+        if subtree_ids.contains(&record.id) {
+            if record.id == root {
+                let RecordSpec::Visual { parent, .. } = &mut record.spec else {
+                    unreachable!("hierarchy operations preflight a visual root");
+                };
+                *parent = new_parent;
             }
-            subtree.push(node);
+            subtree.push(record);
         } else {
-            remaining.push(node);
+            remaining.push(record);
         }
     }
     *source = remaining;
@@ -1732,15 +2098,20 @@ fn detach_preflighted_subtree(
 }
 
 fn attach_preflighted_subtree(
-    target: &mut Vec<NodeDefinition>,
+    target: &mut Vec<RecordDefinition>,
     parent: Parent,
     final_index: usize,
-    subtree: Vec<NodeDefinition>,
+    subtree: Vec<RecordDefinition>,
 ) {
     let siblings = target
         .iter()
-        .filter(|node| node.parent == parent)
-        .map(|node| node.id)
+        .filter_map(|record| match &record.spec {
+            RecordSpec::Visual {
+                parent: record_parent,
+                ..
+            } if *record_parent == parent => Some(record.id),
+            _ => None,
+        })
         .collect::<Vec<_>>();
     let insertion_index = siblings
         .get(final_index)
@@ -1750,9 +2121,9 @@ fn attach_preflighted_subtree(
 }
 
 #[derive(Debug, Clone)]
-struct RemovedNode {
+struct RemovedRecord {
     original_index: usize,
-    definition: NodeDefinition,
+    definition: RecordDefinition,
 }
 
 /// Opaque ownership token for an authored object and all of its descendants.
@@ -1765,7 +2136,7 @@ struct RemovedNode {
 pub struct RemovedSubtree {
     artboard: ArtboardId,
     root: ObjectId,
-    nodes: Vec<RemovedNode>,
+    records: Vec<RemovedRecord>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1777,6 +2148,7 @@ struct RuntimeSlot {
 struct MaterializedArtboard {
     file: Arc<File>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
+    animations: BTreeMap<AnimationId, usize>,
     objects_by_artboard_local: BTreeMap<ArtboardId, Vec<Option<ObjectId>>>,
     nested_artboard_targets: BTreeMap<ObjectId, ArtboardId>,
 }
@@ -1849,11 +2221,66 @@ pub enum ExportedObjectKind {
     TextStylePaint,
     Mesh,
     MeshVertex,
+    LinearAnimation,
+    KeyedObject,
+    KeyedProperty,
+    KeyFrameDouble,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportedFillRule {
     NonZero,
+}
+
+/// Key-free semantic property selected by an authored animation track.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExportedAnimatableProperty {
+    PathWidth,
+    WorldOpacity,
+    TranslateX,
+    TranslateY,
+    Rotation,
+    ScaleX,
+    ScaleY,
+}
+
+impl ExportedAnimatableProperty {
+    fn from_double_prop(property: Prop<f32>) -> Option<Self> {
+        match property.key {
+            PROPERTY_PATH_WIDTH => Some(Self::PathWidth),
+            PROPERTY_WORLD_OPACITY => Some(Self::WorldOpacity),
+            PROPERTY_TRANSLATE_X => Some(Self::TranslateX),
+            PROPERTY_TRANSLATE_Y => Some(Self::TranslateY),
+            PROPERTY_ROTATION => Some(Self::Rotation),
+            PROPERTY_SCALE_X => Some(Self::ScaleX),
+            PROPERTY_SCALE_Y => Some(Self::ScaleY),
+            _ => None,
+        }
+    }
+
+    const fn schema_key(self) -> u16 {
+        match self {
+            Self::PathWidth => PROPERTY_PATH_WIDTH,
+            Self::WorldOpacity => PROPERTY_WORLD_OPACITY,
+            Self::TranslateX => PROPERTY_TRANSLATE_X,
+            Self::TranslateY => PROPERTY_TRANSLATE_Y,
+            Self::Rotation => PROPERTY_ROTATION,
+            Self::ScaleX => PROPERTY_SCALE_X,
+            Self::ScaleY => PROPERTY_SCALE_Y,
+        }
+    }
+
+    fn is_available_on(self, kind: NodeKind) -> bool {
+        match self {
+            Self::PathWidth => props::PATH_WIDTH.is_available_on(kind),
+            Self::WorldOpacity => props::WORLD_OPACITY.is_available_on(kind),
+            Self::TranslateX => props::TRANSLATE_X.is_available_on(kind),
+            Self::TranslateY => props::TRANSLATE_Y.is_available_on(kind),
+            Self::Rotation => props::ROTATION.is_available_on(kind),
+            Self::ScaleX => props::SCALE_X.is_available_on(kind),
+            Self::ScaleY => props::SCALE_Y.is_available_on(kind),
+        }
+    }
 }
 
 /// Typed properties in a deterministic exported scene record.
@@ -1915,6 +2342,20 @@ pub enum ExportedProperty {
     TextStyleLineHeight(f32),
     TextStyleLetterSpacing(f32),
     TextStyleFontAssetId(u32),
+    AnimationName(String),
+    AnimationFps(u32),
+    AnimationDuration(u32),
+    AnimationSpeed(f32),
+    AnimationLoop(u32),
+    AnimationWorkStart(u32),
+    AnimationWorkEnd(u32),
+    AnimationEnableWorkArea(bool),
+    AnimationQuantize(bool),
+    KeyedObjectId(u32),
+    KeyedProperty(ExportedAnimatableProperty),
+    KeyFrame(u32),
+    KeyFrameInterpolationLinear,
+    KeyFrameDoubleValue(f32),
 }
 
 impl ExportedProperty {
@@ -1976,15 +2417,30 @@ impl ExportedProperty {
             Self::TextStyleLineHeight(_) => PROPERTY_TEXT_STYLE_LINE_HEIGHT,
             Self::TextStyleLetterSpacing(_) => PROPERTY_TEXT_STYLE_LETTER_SPACING,
             Self::TextStyleFontAssetId(_) => PROPERTY_TEXT_STYLE_FONT_ASSET_ID,
+            Self::AnimationName(_) => PROPERTY_ANIMATION_NAME,
+            Self::AnimationFps(_) => PROPERTY_ANIMATION_FPS,
+            Self::AnimationDuration(_) => PROPERTY_ANIMATION_DURATION,
+            Self::AnimationSpeed(_) => PROPERTY_ANIMATION_SPEED,
+            Self::AnimationLoop(_) => PROPERTY_ANIMATION_LOOP,
+            Self::AnimationWorkStart(_) => PROPERTY_ANIMATION_WORK_START,
+            Self::AnimationWorkEnd(_) => PROPERTY_ANIMATION_WORK_END,
+            Self::AnimationEnableWorkArea(_) => PROPERTY_ANIMATION_ENABLE_WORK_AREA,
+            Self::AnimationQuantize(_) => PROPERTY_ANIMATION_QUANTIZE,
+            Self::KeyedObjectId(_) => PROPERTY_KEYED_OBJECT_ID,
+            Self::KeyedProperty(_) => PROPERTY_KEYED_PROPERTY_KEY,
+            Self::KeyFrame(_) => PROPERTY_KEY_FRAME,
+            Self::KeyFrameInterpolationLinear => PROPERTY_KEY_FRAME_INTERPOLATION_TYPE,
+            Self::KeyFrameDoubleValue(_) => PROPERTY_KEY_FRAME_DOUBLE_VALUE,
         }
     }
 
     fn into_authoring_property(self) -> AuthoringProperty {
         let key = self.schema_key();
         let value = match self {
-            Self::ComponentName(value) | Self::AssetName(value) | Self::TextValueRunText(value) => {
-                AuthoringValue::String(value)
-            }
+            Self::ComponentName(value)
+            | Self::AssetName(value)
+            | Self::TextValueRunText(value)
+            | Self::AnimationName(value) => AuthoringValue::String(value),
             Self::FileAssetContentsBytes(value) | Self::MeshTriangleIndexBytes(value) => {
                 AuthoringValue::Bytes(value)
             }
@@ -1995,7 +2451,16 @@ impl ExportedProperty {
             | Self::ScriptedDrawableScriptAssetId(value)
             | Self::ImageFit(value)
             | Self::TextValueRunStyleId(value)
-            | Self::TextStyleFontAssetId(value) => AuthoringValue::Uint(u64::from(value)),
+            | Self::TextStyleFontAssetId(value)
+            | Self::AnimationFps(value)
+            | Self::AnimationDuration(value)
+            | Self::AnimationLoop(value)
+            | Self::AnimationWorkStart(value)
+            | Self::AnimationWorkEnd(value)
+            | Self::KeyedObjectId(value)
+            | Self::KeyFrame(value) => AuthoringValue::Uint(u64::from(value)),
+            Self::KeyedProperty(property) => AuthoringValue::Uint(u64::from(property.schema_key())),
+            Self::KeyFrameInterpolationLinear => AuthoringValue::Uint(1),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
             Self::TextSizing(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::TextAlign(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
@@ -2032,12 +2497,16 @@ impl ExportedProperty {
             | Self::TextHeight(value)
             | Self::TextStyleFontSize(value)
             | Self::TextStyleLineHeight(value)
-            | Self::TextStyleLetterSpacing(value) => AuthoringValue::Double(value),
+            | Self::TextStyleLetterSpacing(value)
+            | Self::AnimationSpeed(value)
+            | Self::KeyFrameDoubleValue(value) => AuthoringValue::Double(value),
             Self::RectangleLinkCornerRadius(value)
             | Self::StrokeTransformAffectsStroke(value)
             | Self::DashOffsetIsPercentage(value)
             | Self::DashLengthIsPercentage(value)
-            | Self::ScriptAssetIsModule(value) => AuthoringValue::Bool(value),
+            | Self::ScriptAssetIsModule(value)
+            | Self::AnimationEnableWorkArea(value)
+            | Self::AnimationQuantize(value) => AuthoringValue::Bool(value),
             Self::ColorValue(value) => AuthoringValue::Color(value),
         };
         AuthoringProperty { key, value }
@@ -2076,6 +2545,10 @@ impl ExportedRecord {
             ExportedObjectKind::TextStylePaint => TYPE_TEXT_STYLE_PAINT,
             ExportedObjectKind::Mesh => TYPE_MESH,
             ExportedObjectKind::MeshVertex => TYPE_MESH_VERTEX,
+            ExportedObjectKind::LinearAnimation => TYPE_LINEAR_ANIMATION,
+            ExportedObjectKind::KeyedObject => TYPE_KEYED_OBJECT,
+            ExportedObjectKind::KeyedProperty => TYPE_KEYED_PROPERTY,
+            ExportedObjectKind::KeyFrameDouble => TYPE_KEY_FRAME_DOUBLE,
         };
         AuthoringRecord {
             type_key,
@@ -2186,7 +2659,7 @@ impl Scene {
                         work.receipt_membership_checks =
                             work.receipt_membership_checks.saturating_add(1);
                     });
-                    transaction.definition_index.objects.contains_key(id)
+                    transaction.definition_index.contains_object(*id)
                 })
                 .collect();
             (
@@ -2201,6 +2674,8 @@ impl Scene {
         definitions
             .canonicalize_and_validate(commit_operation_index)
             .map_err(|abort| EditError::commit(abort.diagnostic))?;
+        validate_animation_definitions(&definitions, commit_operation_index, &spec_origins)
+            .map_err(EditError::commit)?;
         validate_font_assets(
             &definitions.font_assets,
             commit_operation_index,
@@ -2445,7 +2920,7 @@ impl Scene {
                     .map(|candidate| (slot, candidate))
             })
             .ok_or(ResolveError::UnknownInstance)?;
-        let (slot_artboard, slot) = self
+        let slot = self
             .materialized
             .iter()
             .find_map(|(artboard, materialized)| {
@@ -2453,8 +2928,19 @@ impl Scene {
                     .objects
                     .get(&object)
                     .map(|slot| (*artboard, slot))
-            })
-            .ok_or(ResolveError::UnknownObject)?;
+            });
+        let Some((slot_artboard, slot)) = slot else {
+            let known_nonvisual = self.definitions.artboards.iter().any(|artboard| {
+                artboard.records.iter().any(|record| {
+                    record.id == object && !matches!(record.spec, RecordSpec::Visual { .. })
+                })
+            });
+            return Err(if known_nonvisual {
+                ResolveError::NonVisualObject
+            } else {
+                ResolveError::UnknownObject
+            });
+        };
         if live.artboard != slot_artboard {
             return Err(ResolveError::DifferentArtboard);
         }
@@ -2560,6 +3046,19 @@ pub struct SceneTx<'a> {
 }
 
 impl SceneTx<'_> {
+    /// Enter the animation vocabulary over the same durable record store and
+    /// ordinary [`ObjectId`] identity space as visual authoring.
+    pub fn animations(&mut self) -> AnimTx<'_> {
+        AnimTx {
+            definitions: self.definitions,
+            definition_index: &mut self.definition_index,
+            next_operation_index: &mut self.next_operation_index,
+            created_objects: &mut self.created_objects,
+            touched_artboards: &mut self.touched_artboards,
+            spec_origins: &mut self.spec_origins,
+        }
+    }
+
     /// Add one embedded font to the scene and return its stable semantic identity.
     ///
     /// Each call creates a distinct asset. Callers retain and reuse the returned
@@ -2686,7 +3185,7 @@ impl SceneTx<'_> {
         self.definitions.artboards.push(ArtboardDefinition {
             id,
             spec,
-            nodes: Vec::new(),
+            records: Vec::new(),
         });
         self.definition_index.artboards.insert(id, artboard_index);
         self.definition_index
@@ -2808,17 +3307,28 @@ impl SceneTx<'_> {
                     EditReason::InternalInvariant,
                 )
             })?;
-        let node_index = artboard.nodes.len();
-        artboard.nodes.push(NodeDefinition { id, parent, spec });
+        let record_index = artboard.records.len();
+        artboard.records.push(RecordDefinition {
+            id,
+            spec: RecordSpec::Visual { parent, node: spec },
+        });
         self.definition_index.objects.insert(
             id,
             IndexedObject {
                 artboard: artboard_id,
                 artboard_index,
-                node_index,
-                kind,
+                record_index,
+                kind: AuthoredObjectKind::Visual(kind),
             },
         );
+        self.definition_index.owned.entry(id).or_default();
+        if let Parent::Object(owner) = parent {
+            self.definition_index
+                .owned
+                .entry(owner)
+                .or_default()
+                .push(id);
+        }
         self.definition_index
             .children
             .entry(parent)
@@ -2912,10 +3422,10 @@ impl SceneTx<'_> {
         }
         .detach_subtree(object)?;
         self.refresh_definition_index();
-        for removed_node in &removed.nodes {
+        for removed_record in &removed.records {
             self.spec_origins
                 .relationships
-                .insert(removed_node.definition.id, operation_index);
+                .insert(removed_record.definition.id, operation_index);
         }
         self.touched_artboards
             .insert(removed.artboard, operation_index);
@@ -2990,7 +3500,431 @@ impl SceneTx<'_> {
             .retain(|id, _| self.definition_index.artboards.contains_key(id));
         self.spec_origins
             .nodes
-            .retain(|id, _| self.definition_index.objects.contains_key(id));
+            .retain(|id, _| self.definition_index.contains_object(*id));
+    }
+}
+
+/// Invariant-enforcing animation vocabulary over a [`SceneTx`].
+///
+/// This is not a separate graph. Every record created here has an ordinary
+/// [`ObjectId`] and is committed, removed, restored, exported, and
+/// materialized by the same scene transaction.
+pub struct AnimTx<'a> {
+    definitions: &'a mut Definitions,
+    definition_index: &'a mut DefinitionIndex,
+    next_operation_index: &'a mut usize,
+    created_objects: &'a mut Vec<ObjectId>,
+    touched_artboards: &'a mut BTreeMap<ArtboardId, usize>,
+    spec_origins: &'a mut SpecOrigins,
+}
+
+impl AnimTx<'_> {
+    /// Create one linear timeline owned by `artboard`.
+    pub fn create_linear(
+        &mut self,
+        artboard: ArtboardId,
+        spec: LinearAnimationSpec,
+    ) -> std::result::Result<AnimationId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_index = self
+            .definition_index
+            .artboards
+            .get(&artboard)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::UnknownArtboard,
+                )
+            })?;
+        let id = ObjectId(allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+            EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+        })?);
+        let definition = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let record_index = definition.records.len();
+        definition.records.push(RecordDefinition {
+            id,
+            spec: RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(spec)),
+        });
+        self.definition_index.objects.insert(
+            id,
+            IndexedObject {
+                artboard,
+                artboard_index,
+                record_index,
+                kind: AuthoredObjectKind::LinearAnimation,
+            },
+        );
+        self.definition_index.owned.entry(id).or_default();
+        self.created_objects.push(id);
+        self.touched_artboards.insert(artboard, operation_index);
+        self.spec_origins.nodes.insert(id, operation_index);
+        Ok(AnimationId(id))
+    }
+
+    /// Upsert one linearly interpolated f32 key at `(target, property, frame)`.
+    ///
+    /// Missing keyed-object/property records are created automatically. The
+    /// returned identity is the ordinary [`ObjectId`] of the keyframe record;
+    /// setting the same frame again preserves that identity.
+    pub fn set_key(
+        &mut self,
+        animation: AnimationId,
+        target: ObjectId,
+        property: Prop<f32>,
+        frame: u32,
+        value: f32,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        if !value.is_finite() {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(animation.object_id())],
+                EditReason::NonFiniteProperty {
+                    property: "key_frame_value",
+                },
+            ));
+        }
+        let Some(animation_location) = self
+            .definition_index
+            .objects
+            .get(&animation.object_id())
+            .copied()
+        else {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(animation.object_id())],
+                EditReason::UnknownObject,
+            ));
+        };
+        if animation_location.kind != AuthoredObjectKind::LinearAnimation {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(animation.object_id())],
+                EditReason::RecordPropertyOwnerMismatch {
+                    property: "animation",
+                    actual: animation_location.kind,
+                },
+            ));
+        }
+        let target_index = self
+            .definition_index
+            .objects
+            .get(&target)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(target)],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        let target_kind = target_index.visual_kind().ok_or_else(|| {
+            EditAbort::new(
+                operation_index,
+                vec![EditId::Object(target)],
+                EditReason::NonVisualObject,
+            )
+        })?;
+        if target_index.artboard != animation_location.artboard {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(animation.object_id()),
+                    EditId::Object(target),
+                ],
+                EditReason::CrossArtboardReference {
+                    source: animation_location.artboard,
+                    target: target_index.artboard,
+                },
+            ));
+        }
+        if !property.is_available_on(target_kind) {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(target)],
+                EditReason::PropertyOwnerMismatch {
+                    property: property.schema_name,
+                    actual: target_kind,
+                },
+            ));
+        }
+        let semantic_property =
+            ExportedAnimatableProperty::from_double_prop(property).ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(target)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+
+        let artboard = animation_location.artboard;
+        let artboard_index = target_index.artboard_index;
+        let (keyed_object_id, keyed_property_id, existing_key_frame_id) = {
+            let authored_artboard =
+                self.definitions
+                    .artboards
+                    .get(artboard_index)
+                    .ok_or_else(|| {
+                        EditAbort::new(
+                            operation_index,
+                            vec![EditId::Artboard(artboard)],
+                            EditReason::InternalInvariant,
+                        )
+                    })?;
+            let authored_animation = authored_artboard
+                .records
+                .get(animation_location.record_index)
+                .filter(|record| record.id == animation.object_id())
+                .ok_or_else(|| {
+                    EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(animation.object_id())],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            if !matches!(
+                &authored_animation.spec,
+                RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_))
+            ) {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(animation.object_id())],
+                    EditReason::InternalInvariant,
+                ));
+            }
+            let keyed_object_id = self
+                .definition_index
+                .keyed_objects
+                .get(&(animation.object_id(), target))
+                .copied();
+            let keyed_property_id = keyed_object_id.and_then(|keyed_object| {
+                self.definition_index
+                    .keyed_properties
+                    .get(&(keyed_object, semantic_property))
+                    .copied()
+            });
+            let existing_key_frame_id = keyed_property_id.and_then(|keyed_property| {
+                self.definition_index
+                    .key_frames
+                    .get(&(keyed_property, frame))
+                    .copied()
+            });
+            (keyed_object_id, keyed_property_id, existing_key_frame_id)
+        };
+
+        if let Some(key_frame_id) = existing_key_frame_id {
+            let key_frame_location = self
+                .definition_index
+                .objects
+                .get(&key_frame_id)
+                .copied()
+                .ok_or_else(|| {
+                    EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(key_frame_id)],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            let key_frame = self
+                .definitions
+                .artboards
+                .get_mut(key_frame_location.artboard_index)
+                .and_then(|artboard| artboard.records.get_mut(key_frame_location.record_index))
+                .ok_or_else(|| {
+                    EditAbort::new(
+                        operation_index,
+                        vec![EditId::Object(animation.object_id())],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            let RecordSpec::Animation(AnimationRecordSpec::KeyFrameDouble {
+                value: key_frame_value,
+                ..
+            }) = &mut key_frame.spec
+            else {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(key_frame_id)],
+                    EditReason::InternalInvariant,
+                ));
+            };
+            *key_frame_value = value;
+            self.touched_artboards.insert(artboard, operation_index);
+            self.spec_origins
+                .nodes
+                .insert(key_frame_id, operation_index);
+            return Ok(key_frame_id);
+        }
+
+        let new_keyed_object = keyed_object_id
+            .is_none()
+            .then(|| allocate_global_identity(&NEXT_OBJECT_ID).map(ObjectId));
+        let new_keyed_property = keyed_property_id
+            .is_none()
+            .then(|| allocate_global_identity(&NEXT_OBJECT_ID).map(ObjectId));
+        let key_frame_id = allocate_global_identity(&NEXT_OBJECT_ID).map(ObjectId);
+        let allocated = [
+            new_keyed_object.flatten(),
+            new_keyed_property.flatten(),
+            key_frame_id,
+        ];
+        if allocated
+            .iter()
+            .enumerate()
+            .any(|(index, id)| index == 2 && id.is_none())
+            || (keyed_object_id.is_none() && allocated[0].is_none())
+            || (keyed_property_id.is_none() && allocated[1].is_none())
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                Vec::new(),
+                EditReason::IdentityExhausted,
+            ));
+        }
+        let key_frame_id = allocated[2].ok_or_else(|| {
+            EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+        })?;
+        let authored_artboard = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(animation.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let keyed_object_id = if let Some(id) = keyed_object_id {
+            id
+        } else {
+            let id = allocated[0].ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?;
+            let record_index = authored_artboard.records.len();
+            authored_artboard.records.push(RecordDefinition {
+                id,
+                spec: RecordSpec::Animation(AnimationRecordSpec::KeyedObject {
+                    animation: animation.object_id(),
+                    target,
+                }),
+            });
+            self.definition_index.objects.insert(
+                id,
+                IndexedObject {
+                    artboard,
+                    artboard_index,
+                    record_index,
+                    kind: AuthoredObjectKind::KeyedObject,
+                },
+            );
+            self.definition_index
+                .owned
+                .entry(animation.object_id())
+                .or_default()
+                .push(id);
+            self.definition_index.owned.entry(id).or_default();
+            self.definition_index
+                .keyed_objects
+                .insert((animation.object_id(), target), id);
+            self.created_objects.push(id);
+            self.spec_origins.nodes.insert(id, operation_index);
+            id
+        };
+        let keyed_property_id = if let Some(id) = keyed_property_id {
+            id
+        } else {
+            let id = allocated[1].ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?;
+            let record_index = authored_artboard.records.len();
+            authored_artboard.records.push(RecordDefinition {
+                id,
+                spec: RecordSpec::Animation(AnimationRecordSpec::KeyedProperty {
+                    keyed_object: keyed_object_id,
+                    property: semantic_property,
+                }),
+            });
+            self.definition_index.objects.insert(
+                id,
+                IndexedObject {
+                    artboard,
+                    artboard_index,
+                    record_index,
+                    kind: AuthoredObjectKind::KeyedProperty,
+                },
+            );
+            self.definition_index
+                .owned
+                .entry(keyed_object_id)
+                .or_default()
+                .push(id);
+            self.definition_index.owned.entry(id).or_default();
+            self.definition_index
+                .keyed_properties
+                .insert((keyed_object_id, semantic_property), id);
+            self.created_objects.push(id);
+            self.spec_origins.nodes.insert(id, operation_index);
+            id
+        };
+        let key_frame_record_index = authored_artboard.records.len();
+        authored_artboard.records.push(RecordDefinition {
+            id: key_frame_id,
+            spec: RecordSpec::Animation(AnimationRecordSpec::KeyFrameDouble {
+                keyed_property: keyed_property_id,
+                frame,
+                value,
+            }),
+        });
+        self.definition_index.objects.insert(
+            key_frame_id,
+            IndexedObject {
+                artboard,
+                artboard_index,
+                record_index: key_frame_record_index,
+                kind: AuthoredObjectKind::KeyFrameDouble,
+            },
+        );
+        self.definition_index
+            .owned
+            .entry(keyed_property_id)
+            .or_default()
+            .push(key_frame_id);
+        self.definition_index.owned.entry(key_frame_id).or_default();
+        self.definition_index
+            .key_frames
+            .insert((keyed_property_id, frame), key_frame_id);
+        self.created_objects.push(key_frame_id);
+        self.spec_origins
+            .nodes
+            .insert(key_frame_id, operation_index);
+        self.touched_artboards.insert(artboard, operation_index);
+        Ok(key_frame_id)
+    }
+
+    fn begin_operation(&mut self) -> std::result::Result<usize, EditAbort> {
+        let operation_index = *self.next_operation_index;
+        let Some(next) = operation_index.checked_add(1) else {
+            return Err(EditAbort::new(
+                operation_index,
+                Vec::new(),
+                EditReason::OperationLimitExceeded,
+            ));
+        };
+        *self.next_operation_index = next;
+        Ok(operation_index)
     }
 }
 
@@ -3023,8 +3957,8 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
 }
 
 fn artboard_references(definition: &ArtboardDefinition) -> impl Iterator<Item = ArtboardId> + '_ {
-    definition.nodes.iter().filter_map(|node| {
-        let NodeSpec::NestedArtboard(spec) = &node.spec else {
+    definition.records.iter().filter_map(|record| {
+        let Some((_, NodeSpec::NestedArtboard(spec))) = record.visual() else {
             return None;
         };
         Some(spec.artboard)
@@ -3151,6 +4085,49 @@ impl Frame<'_> {
             cursor.property.key,
             value,
         ))
+    }
+
+    /// Apply one authored linear animation at an absolute time in seconds to
+    /// one existing live instance.
+    ///
+    /// The animation is resolved through the instance's current materialized
+    /// file. A removed animation, a foreign/dropped instance, or a nonfinite
+    /// time is stale. Scrubbing mutates only runtime visual state; it does not
+    /// change durable definitions or the scene epoch.
+    pub fn scrub(
+        &mut self,
+        instance: InstanceId,
+        animation: AnimationId,
+        time: f32,
+    ) -> std::result::Result<(), StaleCursor> {
+        if !time.is_finite() {
+            return Err(StaleCursor);
+        }
+        let (artboard, animation_index) = self
+            .scene
+            .materialized
+            .iter()
+            .find_map(|(artboard, materialized)| {
+                materialized
+                    .animations
+                    .get(&animation)
+                    .copied()
+                    .map(|index| (*artboard, index))
+            })
+            .ok_or(StaleCursor)?;
+        let live = self
+            .scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)
+            .ok_or(StaleCursor)?;
+        let _ = live
+            .runtime
+            .raw_mut()
+            .apply_linear_animation(animation_index, time, 1.0);
+        let _ = live.runtime.raw_mut().update_pass();
+        Ok(())
     }
 
     /// Advance one live instance and settle its runtime-driven visual state.
@@ -3449,6 +4426,7 @@ impl MaterializedArtboard {
         let mut records = vec![backboard_record()];
         records.extend(referenced_assets.records);
         let mut root_objects = None;
+        let mut root_animations = None;
         let mut objects_by_artboard_local = BTreeMap::new();
         let mut nested_artboard_targets = BTreeMap::new();
         for definition in closure {
@@ -3463,13 +4441,14 @@ impl MaterializedArtboard {
             )?;
             if definition.id == root {
                 root_objects = Some(lowered.objects.clone());
+                root_animations = Some(lowered.animations.clone());
             }
             objects_by_artboard_local.insert(definition.id, lowered.objects_by_local);
-            nested_artboard_targets.extend(definition.nodes.iter().filter_map(|node| {
-                let NodeSpec::NestedArtboard(spec) = &node.spec else {
+            nested_artboard_targets.extend(definition.records.iter().filter_map(|record| {
+                let Some((_, NodeSpec::NestedArtboard(spec))) = record.visual() else {
                     return None;
                 };
-                Some((node.id, spec.artboard))
+                Some((record.id, spec.artboard))
             }));
             records.extend(lowered.records);
         }
@@ -3500,6 +4479,13 @@ impl MaterializedArtboard {
                     EditReason::InternalInvariant,
                 )
             })?,
+            animations: root_animations.ok_or_else(|| {
+                EditDiagnostic::new(
+                    touched_operation_index,
+                    vec![EditId::Artboard(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?,
             objects_by_artboard_local,
             nested_artboard_targets,
         })
@@ -3509,6 +4495,7 @@ impl MaterializedArtboard {
 struct LoweredArtboard {
     records: Vec<ExportedRecord>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
+    animations: BTreeMap<AnimationId, usize>,
     objects_by_local: Vec<Option<ObjectId>>,
 }
 
@@ -3638,8 +4625,11 @@ impl<'a> CanonicalFileAssets<'a> {
         let mut seen_images = BTreeSet::new();
         let mut ordered = Vec::new();
         for artboard in artboards {
-            for node in &artboard.nodes {
-                match &node.spec {
+            for record in &artboard.records {
+                let Some((_, node)) = record.visual() else {
+                    continue;
+                };
+                match node {
                     NodeSpec::TextStylePaint(style) if seen_fonts.insert(style.font) => {
                         // Unknown semantic identities remain absent so
                         // lower_artboard reports the owning object and asset
@@ -3913,6 +4903,223 @@ fn validate_shader_assets(
     Ok(())
 }
 
+fn validate_animation_definitions(
+    definitions: &Definitions,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    let mut identities = BTreeSet::new();
+    let mut objects = BTreeMap::new();
+    for artboard in &definitions.artboards {
+        for record in &artboard.records {
+            if !identities.insert(record.id) {
+                return Err(EditDiagnostic::new(
+                    origins.object(record.id, fallback_operation_index),
+                    vec![EditId::Object(record.id)],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            objects.insert(record.id, (artboard.id, record.spec.kind()));
+        }
+    }
+
+    for artboard in &definitions.artboards {
+        let visual_kinds = artboard
+            .records
+            .iter()
+            .filter_map(|record| record.visual().map(|(_, node)| (record.id, node.kind())))
+            .collect::<BTreeMap<_, _>>();
+        let records_by_id = artboard
+            .records
+            .iter()
+            .map(|record| (record.id, record))
+            .collect::<BTreeMap<_, _>>();
+        let mut keyed_targets = BTreeSet::new();
+        let mut keyed_properties = BTreeSet::new();
+        let mut keyed_frames = BTreeSet::new();
+        for record in &artboard.records {
+            let Some(animation_record) = record.animation() else {
+                continue;
+            };
+            let operation_index = origins.object(record.id, fallback_operation_index);
+            match animation_record {
+                AnimationRecordSpec::LinearAnimation(_) => {}
+                AnimationRecordSpec::KeyedObject { animation, target } => {
+                    let owner = records_by_id.get(animation).copied().ok_or_else(|| {
+                        let reason = match objects.get(animation) {
+                            Some((owner_artboard, _)) if *owner_artboard != artboard.id => {
+                                EditReason::CrossArtboardReference {
+                                    source: artboard.id,
+                                    target: *owner_artboard,
+                                }
+                            }
+                            _ => EditReason::UnknownObject,
+                        };
+                        EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*animation)],
+                            reason,
+                        )
+                    })?;
+                    if !matches!(
+                        &owner.spec,
+                        RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_))
+                    ) {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*animation)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
+                    if !keyed_targets.insert((*animation, *target)) {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    if !visual_kinds.contains_key(target) {
+                        let reason = match objects.get(target) {
+                            Some((target_artboard, _)) if *target_artboard != artboard.id => {
+                                EditReason::CrossArtboardReference {
+                                    source: artboard.id,
+                                    target: *target_artboard,
+                                }
+                            }
+                            Some((_, AuthoredObjectKind::Visual(_))) => {
+                                EditReason::InternalInvariant
+                            }
+                            Some((_, _)) => EditReason::NonVisualObject,
+                            None => EditReason::UnknownObject,
+                        };
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*target)],
+                            reason,
+                        ));
+                    }
+                }
+                AnimationRecordSpec::KeyedProperty {
+                    keyed_object,
+                    property,
+                } => {
+                    let owner = records_by_id.get(keyed_object).copied().ok_or_else(|| {
+                        let reason = match objects.get(keyed_object) {
+                            Some((owner_artboard, _)) if *owner_artboard != artboard.id => {
+                                EditReason::CrossArtboardReference {
+                                    source: artboard.id,
+                                    target: *owner_artboard,
+                                }
+                            }
+                            _ => EditReason::UnknownObject,
+                        };
+                        EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*keyed_object)],
+                            reason,
+                        )
+                    })?;
+                    let RecordSpec::Animation(AnimationRecordSpec::KeyedObject { target, .. }) =
+                        &owner.spec
+                    else {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*keyed_object)],
+                            EditReason::InternalInvariant,
+                        ));
+                    };
+                    if !keyed_properties.insert((*keyed_object, *property)) {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    let target_kind = visual_kinds.get(target).copied().ok_or_else(|| {
+                        let reason = match objects.get(target) {
+                            Some((target_artboard, _)) if *target_artboard != artboard.id => {
+                                EditReason::CrossArtboardReference {
+                                    source: artboard.id,
+                                    target: *target_artboard,
+                                }
+                            }
+                            Some((_, AuthoredObjectKind::Visual(_))) => {
+                                EditReason::InternalInvariant
+                            }
+                            Some((_, _)) => EditReason::NonVisualObject,
+                            None => EditReason::UnknownObject,
+                        };
+                        EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*target)],
+                            reason,
+                        )
+                    })?;
+                    if !property.is_available_on(target_kind) {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*target)],
+                            EditReason::PropertyOwnerMismatch {
+                                property: "animated_property",
+                                actual: target_kind,
+                            },
+                        ));
+                    }
+                }
+                AnimationRecordSpec::KeyFrameDouble {
+                    keyed_property,
+                    frame,
+                    value,
+                } => {
+                    let owner = records_by_id.get(keyed_property).copied().ok_or_else(|| {
+                        let reason = match objects.get(keyed_property) {
+                            Some((owner_artboard, _)) if *owner_artboard != artboard.id => {
+                                EditReason::CrossArtboardReference {
+                                    source: artboard.id,
+                                    target: *owner_artboard,
+                                }
+                            }
+                            _ => EditReason::UnknownObject,
+                        };
+                        EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*keyed_property)],
+                            reason,
+                        )
+                    })?;
+                    if !matches!(
+                        &owner.spec,
+                        RecordSpec::Animation(AnimationRecordSpec::KeyedProperty { .. })
+                    ) {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id), EditId::Object(*keyed_property)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
+                    if !keyed_frames.insert((*keyed_property, *frame)) {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    if !value.is_finite() {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            EditReason::NonFiniteProperty {
+                                property: "key_frame_value",
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Lower exactly one durable artboard into one runtime-file record stream.
 ///
 /// Preview materialization uses this function today; deterministic export can reuse the same
@@ -3939,7 +5146,7 @@ fn lower_artboard(
     let mut all_kinds = BTreeMap::new();
     let mut all_parents = BTreeMap::new();
     let mut all_local_ids = BTreeMap::new();
-    for (node_index, node) in artboard.nodes.iter().enumerate() {
+    for (node_index, node) in artboard.visual_records().enumerate() {
         if all_kinds.insert(node.id, node.spec.kind()).is_some() {
             return Err(EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -3961,7 +5168,7 @@ fn lower_artboard(
     let mut local_ids = BTreeMap::new();
     let mut objects = BTreeMap::new();
     let mut objects_by_local = vec![None];
-    for (node_index, node) in artboard.nodes.iter().enumerate() {
+    for (node_index, node) in artboard.visual_records().enumerate() {
         let local_id = node_index.checked_add(1).ok_or_else(|| {
             EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -3969,14 +5176,14 @@ fn lower_artboard(
                 EditReason::CapacityExceeded,
             )
         })?;
-        validate_node_spec(&node.spec).map_err(|reason| {
+        validate_node_spec(node.spec).map_err(|reason| {
             EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
                 vec![EditId::Object(node.id)],
                 reason,
             )
         })?;
-        match &node.spec {
+        match node.spec {
             NodeSpec::TextValueRun(spec) => {
                 let actual = all_kinds.get(&spec.style).copied();
                 if actual != Some(NodeKind::TextStylePaint)
@@ -4141,8 +5348,8 @@ fn lower_artboard(
         objects_by_local.push(Some(node.id));
     }
 
-    for node in &artboard.nodes {
-        let NodeSpec::Image(spec) = &node.spec else {
+    for node in artboard.visual_records() {
+        let NodeSpec::Image(spec) = node.spec else {
             continue;
         };
         let Some(crop) = spec.crop else {
@@ -4170,13 +5377,18 @@ fn lower_artboard(
 
     let synthetic_local_count = objects_by_local
         .len()
-        .checked_sub(artboard.nodes.len().checked_add(1).ok_or_else(|| {
-            EditDiagnostic::new(
-                fallback_operation_index,
-                vec![EditId::Artboard(artboard.id)],
-                EditReason::CapacityExceeded,
-            )
-        })?)
+        .checked_sub(
+            artboard
+                .visual_record_count()
+                .checked_add(1)
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        fallback_operation_index,
+                        vec![EditId::Artboard(artboard.id)],
+                        EditReason::CapacityExceeded,
+                    )
+                })?,
+        )
         .ok_or_else(|| {
             EditDiagnostic::new(
                 fallback_operation_index,
@@ -4185,8 +5397,7 @@ fn lower_artboard(
             )
         })?;
     let exact_record_count = artboard
-        .nodes
-        .len()
+        .visual_record_count()
         .checked_add(1)
         .and_then(|count| count.checked_add(synthetic_local_count))
         .ok_or_else(|| {
@@ -4198,7 +5409,7 @@ fn lower_artboard(
         })?;
     let exact_local_count = exact_record_count;
     if records.len() != exact_record_count
-        || objects.len() != artboard.nodes.len()
+        || objects.len() != artboard.visual_record_count()
         || objects_by_local.len() != exact_local_count
     {
         return Err(EditDiagnostic::new(
@@ -4208,12 +5419,143 @@ fn lower_artboard(
         ));
     }
 
+    let animations = append_animation_export_records(
+        &mut records,
+        artboard,
+        &all_local_ids,
+        fallback_operation_index,
+        origins,
+    )?;
     canonicalize_exported_records(&mut records);
     Ok(LoweredArtboard {
         records,
         objects,
+        animations,
         objects_by_local,
     })
+}
+
+fn append_animation_export_records(
+    records: &mut Vec<ExportedRecord>,
+    artboard: &ArtboardDefinition,
+    local_ids: &BTreeMap<ObjectId, usize>,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<BTreeMap<AnimationId, usize>, EditDiagnostic> {
+    let mut animation_indices = BTreeMap::new();
+    let mut animations = Vec::new();
+    let mut owned = BTreeMap::<ObjectId, Vec<(&RecordDefinition, &AnimationRecordSpec)>>::new();
+    for (record, spec) in artboard.animation_views() {
+        if let AnimationRecordSpec::LinearAnimation(linear) = spec {
+            animations.push((record, linear));
+        }
+        if let Some(owner) = spec.owner() {
+            owned.entry(owner).or_default().push((record, spec));
+        }
+    }
+    for (animation_index, (animation, spec)) in animations.into_iter().enumerate() {
+        let animation_id = AnimationId(animation.id);
+        if animation_indices
+            .insert(animation_id, animation_index)
+            .is_some()
+        {
+            return Err(EditDiagnostic::new(
+                origins.object(animation.id, fallback_operation_index),
+                vec![EditId::Object(animation.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+        let mut properties = vec![
+            ExportedProperty::AnimationName(spec.name.clone()),
+            ExportedProperty::AnimationDuration(spec.duration),
+        ];
+        if spec.fps != 60 {
+            properties.push(ExportedProperty::AnimationFps(spec.fps));
+        }
+        records.push(ExportedRecord {
+            kind: ExportedObjectKind::LinearAnimation,
+            properties,
+        });
+
+        let mut keyed_objects = owned
+            .get(&animation.id)
+            .into_iter()
+            .flatten()
+            .filter_map(|(record, spec)| match spec {
+                AnimationRecordSpec::KeyedObject {
+                    animation: owner,
+                    target,
+                } if *owner == animation.id => Some((record, *target)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        keyed_objects.sort_by_key(|(_, target)| local_ids.get(target).copied());
+        for (keyed_object, target) in keyed_objects {
+            let target_local_id = local_ids.get(&target).copied().ok_or_else(|| {
+                EditDiagnostic::new(
+                    origins.object(keyed_object.id, fallback_operation_index),
+                    vec![EditId::Object(keyed_object.id), EditId::Object(target)],
+                    EditReason::UnknownObject,
+                )
+            })?;
+            let target_local_id = u32::try_from(target_local_id).map_err(|_| {
+                EditDiagnostic::new(
+                    origins.object(keyed_object.id, fallback_operation_index),
+                    vec![EditId::Object(keyed_object.id)],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::KeyedObject,
+                properties: vec![ExportedProperty::KeyedObjectId(target_local_id)],
+            });
+
+            let mut keyed_properties = owned
+                .get(&keyed_object.id)
+                .into_iter()
+                .flatten()
+                .filter_map(|(record, spec)| match spec {
+                    AnimationRecordSpec::KeyedProperty {
+                        keyed_object: owner,
+                        property,
+                    } if *owner == keyed_object.id => Some((record, *property)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            keyed_properties.sort_by_key(|(_, property)| property.schema_key());
+            for (keyed_property, property) in keyed_properties {
+                records.push(ExportedRecord {
+                    kind: ExportedObjectKind::KeyedProperty,
+                    properties: vec![ExportedProperty::KeyedProperty(property)],
+                });
+                let mut key_frames = owned
+                    .get(&keyed_property.id)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|(_, spec)| match spec {
+                        AnimationRecordSpec::KeyFrameDouble {
+                            keyed_property: owner,
+                            frame,
+                            value,
+                        } if *owner == keyed_property.id => Some((*frame, *value)),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                key_frames.sort_by_key(|(frame, _)| *frame);
+                for (frame, value) in key_frames {
+                    records.push(ExportedRecord {
+                        kind: ExportedObjectKind::KeyFrameDouble,
+                        properties: vec![
+                            ExportedProperty::KeyFrame(frame),
+                            ExportedProperty::KeyFrameInterpolationLinear,
+                            ExportedProperty::KeyFrameDoubleValue(value),
+                        ],
+                    });
+                }
+            }
+        }
+    }
+    Ok(animation_indices)
 }
 
 fn image_crop_requires_mesh(crop: ImageCropRect) -> bool {
@@ -4494,7 +5836,7 @@ fn artboard_record(spec: &ArtboardSpec) -> ExportedRecord {
 }
 
 fn node_record(
-    node: &NodeDefinition,
+    node: VisualRecordRef<'_>,
     parent_id: usize,
     local_ids: &BTreeMap<ObjectId, usize>,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
@@ -4507,7 +5849,7 @@ fn node_record(
     if parent_id != 0 {
         properties.push(ExportedProperty::ParentId(parent_id));
     }
-    let kind = match &node.spec {
+    let kind = match node.spec {
         NodeSpec::Shape(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
             if spec.x != 0.0 {
@@ -4992,6 +6334,7 @@ mod tests {
             MaterializedArtboard {
                 file,
                 objects,
+                animations: BTreeMap::new(),
                 objects_by_artboard_local: BTreeMap::from([(artboard, objects_by_local.clone())]),
                 nested_artboard_targets: BTreeMap::new(),
             },
@@ -5133,6 +6476,7 @@ mod tests {
             MaterializedArtboard {
                 file,
                 objects,
+                animations: BTreeMap::new(),
                 objects_by_artboard_local: BTreeMap::from([(artboard, objects_by_local.clone())]),
                 nested_artboard_targets: BTreeMap::new(),
             },
@@ -7504,6 +8848,170 @@ mod tests {
             scale_x: 1.0,
             scale_y: 1.0,
         })
+    }
+
+    #[test]
+    fn all_record_kinds_share_one_store_index_and_remove_restore_token() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, shape, animation), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(Parent::Artboard(artboard), work_test_shape("Shape"))?;
+            tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Rect", 50.0, 50.0)),
+            )?;
+            let animation = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Fade".into(),
+                    fps: 60,
+                    duration: 60,
+                },
+            )?;
+            tx.animations()
+                .set_key(animation, shape, props::WORLD_OPACITY, 0, 0.0)?;
+            Ok((artboard, shape, animation))
+        })?;
+
+        scene.edit(|tx| {
+            let removed_animation = tx.remove(animation.object_id())?;
+            assert_eq!(removed_animation.records.len(), 4);
+            assert!(
+                removed_animation
+                    .records
+                    .iter()
+                    .all(|record| matches!(record.definition.spec, RecordSpec::Animation(_)))
+            );
+
+            let visual_records = tx.remove(shape)?;
+            assert_eq!(visual_records.records.len(), 2);
+            assert!(
+                visual_records
+                    .records
+                    .iter()
+                    .all(|record| matches!(record.definition.spec, RecordSpec::Visual { .. }))
+            );
+
+            assert_eq!(tx.restore(visual_records)?, shape);
+            assert_eq!(tx.restore(removed_animation)?, animation.object_id());
+            Ok(())
+        })?;
+
+        let definition = scene
+            .definitions
+            .artboards
+            .iter()
+            .find(|candidate| candidate.id == artboard)
+            .expect("artboard definition");
+        let index = DefinitionIndex::build(&scene.definitions);
+        assert_eq!(definition.records.len(), 6);
+        assert_eq!(index.objects.len(), definition.records.len());
+        assert_eq!(index.owned.get(&shape).map(Vec::len), Some(1));
+        assert_eq!(
+            index.owned.get(&animation.object_id()).map(Vec::len),
+            Some(1)
+        );
+        Ok(())
+    }
+
+    fn rejected_bulk_animation_keys_work(key_count: usize) -> Result<SceneWork> {
+        let mut scene = Scene::new();
+        let duration = u32::try_from(key_count)?;
+        let ((artboard, shape, animation), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(Parent::Artboard(artboard), work_test_shape("Shape"))?;
+            let animation = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Fade".into(),
+                    fps: 60,
+                    duration,
+                },
+            )?;
+            Ok((artboard, shape, animation))
+        })?;
+
+        reset_scene_work();
+        scene
+            .edit(|tx| {
+                tx.set_artboard(
+                    artboard,
+                    ArtboardSpec {
+                        name: "Reject after indexed animation authoring".into(),
+                        width: f32::NAN,
+                        height: 100.0,
+                    },
+                )?;
+                for frame in 0..duration {
+                    tx.animations()
+                        .set_key(animation, shape, props::WORLD_OPACITY, frame, 0.5)?;
+                }
+                Ok(())
+            })
+            .expect_err("invalid artboard rejects after animation authoring work");
+        Ok(scene_work())
+    }
+
+    #[test]
+    fn bulk_animation_key_upserts_do_not_rebuild_or_rescan_the_growing_record_store() -> Result<()>
+    {
+        for key_count in [1_024, 2_048] {
+            assert_eq!(
+                rejected_bulk_animation_keys_work(key_count)?,
+                SceneWork {
+                    definition_index_builds: 1,
+                    definition_index_node_visits: 2,
+                    receipt_membership_checks: key_count + 2,
+                }
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn definition_index_work_counts_visual_and_nonvisual_ordinary_records() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Main".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(Parent::Artboard(artboard), work_test_shape("Shape"))?;
+            let animation = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Fade".into(),
+                    fps: 60,
+                    duration: 60,
+                },
+            )?;
+            tx.animations()
+                .set_key(animation, shape, props::WORLD_OPACITY, 0, 0.0)?;
+            Ok(())
+        })?;
+
+        reset_scene_work();
+        scene
+            .edit(|tx| Err::<(), _>(tx.abort("count the initial record index")))
+            .expect_err("requested abort");
+        assert_eq!(
+            scene_work(),
+            SceneWork {
+                definition_index_builds: 1,
+                definition_index_node_visits: 5,
+                receipt_membership_checks: 0,
+            }
+        );
+        Ok(())
     }
 
     fn child_order_scene(names: &[&str]) -> Result<(Scene, ArtboardId, Vec<ObjectId>)> {

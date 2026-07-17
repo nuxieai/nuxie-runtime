@@ -7,13 +7,74 @@
 )]
 
 use nuxie::{
-    BlendMode, ColorInt, Factory, File, FillRule, ImageDecodeError, RawPath, RecordingFactory,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StateMachineInputKind, StrokeCap, StrokeJoin,
+    AnimationId, ArtboardSpec, BlendMode, ColorInt, ExportedAnimatableProperty, ExportedObjectKind,
+    ExportedProperty, Factory, File, FillRule, ImageDecodeError, LinearAnimationSpec, NodeSpec,
+    ObjectId, Parent, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, Scene,
+    ShapeSpec, StateMachineInputKind, StrokeCap, StrokeJoin, props,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
+
+#[test]
+fn scene_animation_authoring_surface_is_typed_key_free_and_upsert_shaped() {
+    let mut scene = Scene::new();
+    let ((animation, first_key), _) = scene
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Fader".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let animation: AnimationId = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Fade".into(),
+                    fps: 60,
+                    duration: 60,
+                },
+            )?;
+            let first_key: ObjectId =
+                tx.animations()
+                    .set_key(animation, shape, props::WORLD_OPACITY, 30, 0.25)?;
+            let upserted_key =
+                tx.animations()
+                    .set_key(animation, shape, props::WORLD_OPACITY, 30, 0.5)?;
+            assert_eq!(upserted_key, first_key);
+            Ok((animation, first_key))
+        })
+        .expect("typed animation authoring must commit");
+
+    let animation_object: ObjectId = animation.into();
+    assert_eq!(animation_object, animation.object_id());
+    assert_ne!(animation_object, first_key);
+    let keyed_property = scene
+        .export_records()
+        .into_records()
+        .into_iter()
+        .find(|record| record.kind == ExportedObjectKind::KeyedProperty)
+        .expect("typed property record");
+    assert_eq!(
+        keyed_property.properties,
+        vec![ExportedProperty::KeyedProperty(
+            ExportedAnimatableProperty::WorldOpacity,
+        )],
+        "the public record vocabulary remains semantic and exposes no numeric Rive key"
+    );
+}
 
 struct DropTrackedRenderImage {
     inner: Box<dyn RenderImage>,

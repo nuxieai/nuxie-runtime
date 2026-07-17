@@ -386,15 +386,25 @@ and 0.8164x, and a load-matched Metal A-B-B-A reduces encoder rows from 11,221
 to 4,951 over 110 frames without changing pixels or structural counters. The
 next paired profile localizes MSAA's largest host site to per-draw path buffer,
 null-texture, and sampler preparation. Porting C++'s flush-lifetime resources
-reduces repeated old-Rust/current-Rust reports to 0.9089x and 0.9124x and
-removes 2,199 encoder rows in a load-matched twenty-draw trace. Flush-wide MSAA
-tessellation then reduces 2,641 encoder rows to 551 and exactly collapses
-twenty tessellation passes per frame to one. Light directional old/current
-reports improve to 0.9236x and 0.9140x. The same-capability C++ Dawn/Rust wgpu
-report is now 4.1442x aggregate with a 5.76x worst scene, so R4 remains open.
-The next step is a deterministic per-stream counter-parity report and complete
-C++ performance-mechanism inventory before another timing-led optimization;
-see `docs/renderer-r4-profile-attribution.md`.
+removes 2,199 encoder rows, and flush-wide MSAA tessellation reduces 2,641
+encoder rows to 551 while exactly collapsing twenty tessellation passes per
+frame to one.
+
+The deterministic C++/Rust counter report then replaced row-at-a-time timing
+work. A full-tail audit clustered all 35 ranked rows, and source-matched fixes
+for logical layouts, typed-resource ownership, and Wang segment semantics
+reduce that finite report to zero excess rows. No final-pixel capture was
+missing. With structural parity closed, an exploratory timing bracket exposed
+a separate per-frame lifetime mismatch: Rust recreated the final color,
+four-sample color, and stencil attachments while C++ Dawn retained them.
+Factory-owned completed-frame reuse improves every old/current row in a light
+snapshot: 0.5038x aggregate, 0.8320x clockwise atomic, and 0.2887x MSAA. The
+corresponding same-capability C++ Dawn/current snapshot is 1.4057x aggregate
+with a 2.0175x worst row. R4 remains open pending the staged immutable A-B-B-A
+gate: it must reproduce a post-tail worst-scene ratio at or below 2.0x under
+its host-idle and repeat-drift fences, or identify the next timing-only
+bottleneck. Load-rejected attempts are not evidence. See
+`docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 

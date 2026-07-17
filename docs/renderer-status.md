@@ -1644,6 +1644,25 @@ Run `make renderer-golden`.
     post-tail runner artifacts. Treat exact counter parity as complete; use
     the A-B-B-A harness only to decide whether the same-capability C++ Dawn
     timing threshold passes or identifies the next timing-only bottleneck.
+    The first formal attempts were rejected before acceptance because host
+    idle fell below the 70% fence (observed boundaries include 69.63%, 68.48%,
+    69.67%, and 65.41%). A deliberately exploratory 60%-idle bracket is also
+    invalid for acceptance: C++ control drift was 1.1893x and A repeat drift
+    was 1.1928x. It is retained only as attribution evidence for a roughly
+    one-millisecond fixed Rust frame cost across every MSAA row.
+136. [x] Retain the final color, four-sample color, and four-sample stencil
+    attachments at C++ context lifetime instead of recreating all three on
+    every frame. One factory-owned set is checked out per frame and recycled
+    only after blocking GPU completion and diagnostic readback. Concurrent
+    overflow gets a distinct set, but the completed-frame cache is capped at
+    one so retained GPU memory cannot grow to the concurrency high-water mark.
+    Focused tests prove serial identity reuse in both modes and the overflow
+    bound; Sol's final lifetime review passes with no findings. The ranked
+    counter report remains empty. A light seven-sample snapshot improves all
+    sixteen old/current rows: aggregate 0.5038x, clockwise atomic 0.8320x,
+    and MSAA 0.2887x. The corresponding C++ Dawn/current snapshot is 1.4057x
+    aggregate, 1.3816x atomic, and 1.4497x MSAA; its 2.0175x worst row is
+    directional only and does not close item 135.
 
 ## R2 Completion Record
 

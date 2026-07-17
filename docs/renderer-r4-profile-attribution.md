@@ -851,3 +851,44 @@ unchanged pixels accept the correction without A-B-B-A. The next evidence is
 the already-staged timing-defined R4 gate. Sol's final read-only review passes
 after the raw segment words, per-prefix span and instance accounting, and a
 near-boundary skew transform were added to the regression surface.
+
+### Item 135 Update
+
+The final gate now separates permissive capture from final acceptance: the
+pre-tail A artifact may exceed the 2.0x shipping threshold, while only both
+post-tail B reports must satisfy it. Comparator tests pin that distinction.
+The first real runs did not produce an acceptance result because host idle
+crossed below the 70% admission fence. An explicitly exploratory run lowered
+only that fence to 60%; it completed, but C++ control drift was 1.1893x and A
+repeat drift was 1.1928x, so its aggregate result is rejected rather than
+interpreted as a candidate verdict.
+
+The invalid trace was still useful for attribution. Every MSAA row carried a
+large fixed Rust frame floor even after deterministic command work reached
+parity. Source comparison found that Rust created the final color texture, the
+four-sample color texture, and the four-sample stencil texture inside every
+`finish_internal`, while C++ Dawn's `ensureTarget` and render-target state
+retain same-size attachments at context lifetime.
+
+### Item 136 Update
+
+`FrameAttachmentPool` now owns one factory-created attachment set. A frame
+checks it out and returns it only after `device.poll(wait_indefinitely())` and
+all requested readbacks complete. Overlapping frames allocate independent
+attachments, but only one completed set is retained; overflow is dropped.
+This matches C++ steady-state lifetime without making concurrent GPU use alias
+the same target or retaining an unbounded resource high-water mark.
+
+Two focused tests pin serial identity reuse in both render modes and the
+one-entry overflow invariant. Sol's final review passes GPU completion,
+readback ordering, early-error behavior, concurrent ownership, cache bounds,
+and benchmark fairness. `make perf-counter-compare` remains at zero excess
+rows, as expected for a resource-lifetime optimization.
+
+The proportional timing evidence is a light seven-sample directional report,
+not a gate. All sixteen old/current rows improve: aggregate 0.5038x,
+clockwise atomic 0.8320x, and MSAA 0.2887x. A separate C++ Dawn/current report
+is 1.4057x aggregate, 1.3816x atomic, and 1.4497x MSAA. Its worst row,
+`gm-bug339297-clockwise-atomic`, is 2.0175x. That last value is close enough to
+motivate the final load-admissible gate, but it is not accepted threshold
+evidence by itself.

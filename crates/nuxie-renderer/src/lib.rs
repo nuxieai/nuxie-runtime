@@ -47,7 +47,7 @@ use std::error::Error;
 use std::ffi::c_void;
 use std::fmt;
 use std::io::Cursor;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
 #[derive(Debug)]
@@ -98,6 +98,7 @@ const FEATHER_ATLAS_PADDING: u32 = 2;
 // the current per-draw tessellation resources. Reuse that twofold safety
 // fence while the shared C++ logical-flush resource layout is translated.
 const MAX_DRAWS_PER_SUBMISSION: usize = 1_024;
+const MAX_CACHED_FRAME_ATTACHMENTS: usize = 1;
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
@@ -134,6 +135,7 @@ fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
 struct Context {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    frame_attachments: FrameAttachmentPool,
     adapter_info: WgpuAdapterInfo,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
@@ -152,6 +154,118 @@ struct Context {
     msaa_image_mesh_pipeline: msaa_image_mesh_pipeline::MsaaImageMeshPipeline,
     msaa_stencil_pipeline: msaa_stencil_pipeline::MsaaStencilPipeline,
     feather_lut: feather_lut::FeatherLut,
+}
+
+struct FrameAttachments {
+    target_texture: wgpu::Texture,
+    target_view: wgpu::TextureView,
+    multisample_view: wgpu::TextureView,
+    stencil_view: wgpu::TextureView,
+}
+
+impl FrameAttachments {
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let target_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-offscreen-target"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let target_view = target_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let multisample_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-multisample-target"),
+            size,
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let multisample_view =
+            multisample_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let stencil_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-stencil-target"),
+            size,
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth24PlusStencil8,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        Self {
+            target_texture,
+            target_view,
+            multisample_view,
+            stencil_view,
+        }
+    }
+}
+
+struct FrameAttachmentPool {
+    width: u32,
+    height: u32,
+    available: Mutex<Vec<Arc<FrameAttachments>>>,
+}
+
+impl FrameAttachmentPool {
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            available: Mutex::new(vec![Arc::new(FrameAttachments::new(device, width, height))]),
+        }
+    }
+
+    fn checkout(&self, device: &wgpu::Device) -> Arc<FrameAttachments> {
+        self.available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .pop()
+            .unwrap_or_else(|| Arc::new(FrameAttachments::new(device, self.width, self.height)))
+    }
+
+    fn recycle(&self, attachments: Arc<FrameAttachments>) {
+        let mut available = self
+            .available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if available.len() < MAX_CACHED_FRAME_ATTACHMENTS {
+            available.push(attachments);
+        }
+    }
+
+    #[cfg(test)]
+    fn cached(&self) -> Arc<FrameAttachments> {
+        Arc::clone(
+            self.available
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .last()
+                .expect("frame attachment pool is empty outside frame execution"),
+        )
+    }
+
+    #[cfg(test)]
+    fn cached_len(&self) -> usize {
+        self.available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len()
+    }
 }
 
 pub struct WgpuFactory {
@@ -366,10 +480,12 @@ impl WgpuFactory {
             msaa_image_mesh_pipeline::MsaaImageMeshPipeline::new(&device);
         let msaa_stencil_pipeline = msaa_stencil_pipeline::MsaaStencilPipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
+        let frame_attachments = FrameAttachmentPool::new(&device, width, height);
         Ok(Self {
             context: Arc::new(Context {
                 device,
                 queue,
+                frame_attachments,
                 adapter_info,
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
@@ -1700,55 +1816,14 @@ impl WgpuFrame {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
-        let texture = self
+        let frame_attachments = self
             .context
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("nuxie-offscreen-target"),
-                size: wgpu::Extent3d {
-                    width: self.width,
-                    height: self.height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let multisample_texture = self
-            .context
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("nuxie-multisample-target"),
-                size: texture.size(),
-                mip_level_count: 1,
-                sample_count: 4,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-        let multisample_view =
-            multisample_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let stencil_texture = self
-            .context
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("nuxie-stencil-target"),
-                size: texture.size(),
-                mip_level_count: 1,
-                sample_count: 4,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth24PlusStencil8,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-        let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
+            .frame_attachments
+            .checkout(&self.context.device);
+        let texture = frame_attachments.target_texture.clone();
+        let view = frame_attachments.target_view.clone();
+        let multisample_view = frame_attachments.multisample_view.clone();
+        let stencil_view = frame_attachments.stencil_view.clone();
         let mut encoder =
             self.context
                 .device
@@ -4804,13 +4879,17 @@ impl WgpuFrame {
                     );
                 }
             }
+            let backend_work = self.work_recorder.snapshot();
+            self.context
+                .frame_attachments
+                .recycle(Arc::clone(&frame_attachments));
             return Ok((
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
-                self.work_recorder.snapshot(),
+                backend_work,
             ));
         }
 
@@ -4892,13 +4971,17 @@ impl WgpuFrame {
             .iter()
             .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
             .collect::<Result<Vec<_>, _>>()?;
+        let backend_work = self.work_recorder.snapshot();
+        self.context
+            .frame_attachments
+            .recycle(Arc::clone(&frame_attachments));
         Ok((
             pixels,
             coverage_snapshots,
             atomic_coverage_snapshots,
             atomic_clip_snapshots,
             atomic_color_snapshots,
-            self.work_recorder.snapshot(),
+            backend_work,
         ))
     }
 }
@@ -9252,6 +9335,46 @@ mod tests {
         for pixel in pixels.chunks_exact(4) {
             assert_eq!(pixel, [32, 16, 8, 128]);
         }
+    }
+
+    #[test]
+    fn frame_attachments_are_reused_after_gpu_completion() {
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let factory = WgpuFactory::new_with_mode(8, 8, mode).unwrap();
+            let initial = factory.context.frame_attachments.cached();
+
+            factory
+                .begin_frame_for_benchmark(0xff00_0000, false)
+                .finish_for_benchmark()
+                .unwrap();
+            let after_first = factory.context.frame_attachments.cached();
+            assert!(Arc::ptr_eq(&initial, &after_first));
+
+            factory
+                .begin_frame_for_benchmark(0xff00_0000, false)
+                .finish_for_benchmark()
+                .unwrap();
+            let after_second = factory.context.frame_attachments.cached();
+            assert!(Arc::ptr_eq(&initial, &after_second));
+        }
+    }
+
+    #[test]
+    fn frame_attachment_pool_drops_concurrent_overflow() {
+        let factory = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa).unwrap();
+        let first = factory
+            .context
+            .frame_attachments
+            .checkout(&factory.context.device);
+        let second = factory
+            .context
+            .frame_attachments
+            .checkout(&factory.context.device);
+        assert!(!Arc::ptr_eq(&first, &second));
+
+        factory.context.frame_attachments.recycle(first);
+        factory.context.frame_attachments.recycle(second);
+        assert_eq!(factory.context.frame_attachments.cached_len(), 1);
     }
 
     #[test]

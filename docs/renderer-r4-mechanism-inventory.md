@@ -345,6 +345,17 @@ feather, fill, and outer-cubic preparation. The direct OverStroke draw-3
 reaches exact 497-patch parity in both modes plus 986 MSAA instances. The
 ranked deterministic report is empty (`3->0`).
 
+### Item 136 Update
+
+C++ Dawn retains same-size frame targets through `ensureTarget` and the render
+target state. Rust previously recreated the final color, four-sample color,
+and four-sample stencil attachments during every frame finish. The Rust
+factory now owns a one-entry completed-frame pool. Checkout prevents
+concurrent aliasing, recycling waits for GPU completion and readback, and the
+one-entry cap drops overflow rather than retaining peak concurrency. The
+deterministic report remains at zero excess rows; the directional old/current
+aggregate is 0.5038x, led by MSAA at 0.2887x.
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -363,7 +374,7 @@ ranked deterministic report is empty (`3->0`).
 | Bind only on changed state | `renderer/src/webgpu/render_context_webgpu_impl.cpp:4265-4358` | bind-group sets and created groups | Ported for direct MSAA path-compatible layouts in item 119; fixed Rust sets fall 554->413. |
 | Lazy pipeline-layout and render-pipeline caches | `renderer/src/webgpu/render_context_webgpu_impl.cpp:451-791`, `1268-1733`, `4440-4463` | frame-time pipeline creation | Rust pipelines are factory-owned. Counter recording begins after warmup and correctly excludes construction. |
 | Factory-owned samplers, null resources, and static geometry | `renderer/src/webgpu/render_context_webgpu_impl.cpp:1845-2037` | bind groups created, texture bindings, initialized buffers | Samplers/null resources/static patch geometry are ported for active paths. |
-| Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179`, `3660-3794` | per-frame texture creation, clears, render passes | Rust retains core MSAA and atomic backing. Clear-owned ordinary MSAA now resolves directly into the final target; preserve-target runs retain fallback composition. |
+| Retained transient render-target textures | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2051-2179`, `3660-3794`; C++ FFI `ensureTarget` | per-frame texture creation, clears, render passes | The final color, four-sample color, and stencil attachments are factory-owned and recycled after GPU completion with a one-entry retained cap. Atomic backing is separately guarded. Clear-owned ordinary MSAA resolves directly into the final target; preserve-target runs retain fallback composition. |
 | Lazily retained atomic PLS buffers | `renderer/src/webgpu/render_context_webgpu_impl.cpp:2867-2909` | initialized-buffer and pending-write work | Ported as guarded persistent slots in item 114. |
 | Optional gradient, tessellation, and atlas passes | `renderer/src/webgpu/render_context_webgpu_impl.cpp:3981-4137` | render passes and GPU draws | Flush-wide MSAA tessellation is ported. Gradient/atlas cadence remains report-driven. |
 | Barrier-aware render-pass restart | `renderer/src/webgpu/render_context_webgpu_impl.cpp:3280-3800`, `4275-4290` | pass count and mandatory rebinding | Atomic group barriers are preserved. Rust should carry binding invalidation with the same restart boundary. |

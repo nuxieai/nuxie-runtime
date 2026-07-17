@@ -19,10 +19,10 @@ mod scene;
 pub use scene::*;
 
 pub use nuxie_render_api::{
-    Aabb, BlendMode, ColorInt, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D,
-    PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
-    StrokeJoin, Vec2D,
+    Aabb, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler,
+    ImageWrap, Mat2D, PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 pub use nuxie_runtime::{
     ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
@@ -166,12 +166,31 @@ pub struct ArtboardInstance<'a> {
 
 /// Render resources retained across draws of one [`ArtboardInstance`].
 ///
-/// Create this from [`ArtboardInstance::new_render_cache`] with the same
-/// factory that will back subsequent draws. The factory's render resources
-/// remain owned by this cache until it is dropped.
+/// Create this renderer-neutral handle from [`ArtboardInstance::new_render_cache`].
+/// The first draw lazily allocates resources from its factory. A failed image
+/// decode discards that candidate allocation so a later draw with the same
+/// cache can retry; successfully created resources remain owned until drop.
 pub struct ArtboardRenderCache {
-    paint: RuntimeRenderPaintCache,
+    paint: Option<RuntimeRenderPaintCache>,
     path: RuntimeRenderPathCache,
+}
+
+fn render_paint_cache_for_draw<'a>(
+    retained: &'a mut Option<RuntimeRenderPaintCache>,
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn Factory,
+) -> std::result::Result<&'a mut RuntimeRenderPaintCache, ImageDecodeError> {
+    if let Some(cache) = retained {
+        return Ok(cache);
+    }
+    let candidate =
+        preallocate_render_paint_cache_for_artboard_tree(runtime, artboard, artboards, factory);
+    if let Some(error) = candidate.image_decode_error() {
+        return Err(error);
+    }
+    Ok(retained.insert(candidate))
 }
 
 impl<'a> ArtboardInstance<'a> {
@@ -376,42 +395,55 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
-        let mut cache = self.new_render_cache(factory);
+        let mut cache = self.new_render_cache();
         self.draw_with_render_cache(factory, renderer, &mut cache)
     }
 
-    /// Allocate the render resources retained by [`Self::draw_with_render_cache`].
-    pub fn new_render_cache(&self, factory: &mut dyn Factory) -> ArtboardRenderCache {
+    /// Create a renderer-neutral cache for [`Self::draw_with_render_cache`].
+    ///
+    /// Render resources and image decoding are deferred until draw. Failed
+    /// candidate resources are discarded, leaving this cache reusable. After
+    /// the first successful draw, subsequent draws must use a compatible
+    /// factory and renderer for the retained resources.
+    pub fn new_render_cache(&self) -> ArtboardRenderCache {
         ArtboardRenderCache {
-            paint: preallocate_render_paint_cache_for_artboard_tree(
-                &self.file.runtime,
-                self.artboard().graph(),
-                &self.file.graph.artboards,
-                factory,
-            ),
+            paint: None,
             path: RuntimeRenderPathCache::default(),
         }
     }
 
     /// Draw while retaining paint and path handles across frames.
     ///
-    /// `cache` must have been created by this instance with a factory backed
-    /// by the same renderer integration.
+    /// `cache` must have been created by this instance. Once a draw succeeds,
+    /// later draws must use a factory and renderer backed by the same renderer
+    /// integration as the retained resources.
     pub fn draw_with_render_cache(
         &mut self,
         factory: &mut dyn Factory,
         renderer: &mut dyn Renderer,
         cache: &mut ArtboardRenderCache,
     ) -> Result<()> {
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("artboard instance graph is unavailable")?;
+        let paint = render_paint_cache_for_draw(
+            &mut cache.paint,
+            &self.file.runtime,
+            artboard,
+            &self.file.graph.artboards,
+            factory,
+        )?;
         self.raw.update_pass();
-        let artboard = self.artboard().graph();
         self.raw
             .prepare_static_artboard_tree_paints(
                 &self.file.runtime,
                 artboard,
                 &self.file.graph.artboards,
                 factory,
-                &mut cache.paint,
+                paint,
                 &mut cache.path,
             )
             .context("failed to prepare Rive paints")?;
@@ -422,7 +454,7 @@ impl<'a> ArtboardInstance<'a> {
                 &self.file.graph.artboards,
                 factory,
                 renderer,
-                &mut cache.paint,
+                paint,
                 &mut cache.path,
             )
             .context("failed to draw Rive artboard")
@@ -664,19 +696,14 @@ impl OwnedArtboardInstance {
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
-        let mut cache = self.new_render_cache(factory);
+        let mut cache = self.new_render_cache();
         self.draw_with_render_cache(factory, renderer, &mut cache)
     }
 
     /// See [`ArtboardInstance::new_render_cache`].
-    pub fn new_render_cache(&self, factory: &mut dyn Factory) -> ArtboardRenderCache {
+    pub fn new_render_cache(&self) -> ArtboardRenderCache {
         ArtboardRenderCache {
-            paint: preallocate_render_paint_cache_for_artboard_tree(
-                &self.file.runtime,
-                self.artboard().graph(),
-                &self.file.graph.artboards,
-                factory,
-            ),
+            paint: None,
             path: RuntimeRenderPathCache::default(),
         }
     }
@@ -688,15 +715,27 @@ impl OwnedArtboardInstance {
         renderer: &mut dyn Renderer,
         cache: &mut ArtboardRenderCache,
     ) -> Result<()> {
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        let paint = render_paint_cache_for_draw(
+            &mut cache.paint,
+            &self.file.runtime,
+            artboard,
+            &self.file.graph.artboards,
+            factory,
+        )?;
         self.raw.update_pass();
-        let artboard = self.artboard().graph();
         self.raw
             .prepare_static_artboard_tree_paints(
                 &self.file.runtime,
                 artboard,
                 &self.file.graph.artboards,
                 factory,
-                &mut cache.paint,
+                paint,
                 &mut cache.path,
             )
             .context("failed to prepare Rive paints")?;
@@ -707,7 +746,7 @@ impl OwnedArtboardInstance {
                 &self.file.graph.artboards,
                 factory,
                 renderer,
-                &mut cache.paint,
+                paint,
                 &mut cache.path,
             )
             .context("failed to draw Rive artboard")

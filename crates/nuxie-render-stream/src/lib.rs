@@ -1,8 +1,9 @@
 //! Typed parsing and renderer-neutral replay for `rive-golden-stream-v1`.
 
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, RawPath,
-    RenderBufferFlags, RenderBufferType, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap,
+    Mat2D, RawPath, RenderBufferFlags, RenderBufferType, RenderPaintStyle, Renderer, StrokeCap,
+    StrokeJoin,
 };
 use std::collections::HashMap;
 use std::error::Error;
@@ -319,7 +320,10 @@ impl RenderStream {
                     );
                 }
                 Resource::Image { id, data } => {
-                    images.insert(*id, factory.decode_image(data));
+                    let image = factory
+                        .decode_image(data)
+                        .map_err(|source| ReplayError::ImageDecode { id: *id, source })?;
+                    images.insert(*id, image);
                 }
                 Resource::Buffer {
                     id,
@@ -410,6 +414,7 @@ impl RenderStream {
 pub enum ReplayError {
     MissingFrame(usize),
     MissingResource(&'static str, u64),
+    ImageDecode { id: u64, source: ImageDecodeError },
 }
 
 impl fmt::Display for ReplayError {
@@ -417,11 +422,19 @@ impl fmt::Display for ReplayError {
         match self {
             Self::MissingFrame(index) => write!(f, "render stream has no frame {index}"),
             Self::MissingResource(kind, id) => write!(f, "missing {kind} resource {id}"),
+            Self::ImageDecode { id, .. } => write!(f, "failed to decode image resource {id}"),
         }
     }
 }
 
-impl Error for ReplayError {}
+impl Error for ReplayError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::ImageDecode { source, .. } => Some(source),
+            Self::MissingFrame(_) | Self::MissingResource(_, _) => None,
+        }
+    }
+}
 
 fn split_stops(stops: &[GradientStop]) -> (Vec<ColorInt>, Vec<f32>) {
     stops.iter().map(|stop| (stop.color, stop.offset)).unzip()

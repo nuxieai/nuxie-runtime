@@ -10,7 +10,7 @@ use std::{
 };
 
 use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
-use nuxie_render_api::{Factory, Renderer};
+use nuxie_render_api::{Factory, ImageDecodeError, Renderer};
 use nuxie_runtime::{ArtboardInstance as RuntimeArtboardInstance, embedded_font_is_parseable};
 
 use crate::{ArtboardRenderCache, File, OwnedArtboardInstance};
@@ -403,6 +403,7 @@ impl std::error::Error for ResolveError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DrawError {
     UnknownInstance,
+    ImageDecode,
     RuntimeRejected,
 }
 
@@ -410,6 +411,7 @@ impl std::fmt::Display for DrawError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::UnknownInstance => "unknown scene instance",
+            Self::ImageDecode => "failed to decode authored scene image",
             Self::RuntimeRejected => "runtime rejected authored scene draw",
         })
     }
@@ -1726,13 +1728,14 @@ static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(0);
 /// Render resources retained for one mount of one live authored instance.
 ///
 /// The wrapper detects a remount of its artboard (and accidental reuse with another scene or
-/// instance) and recreates its underlying runtime cache before the next draw. Structural edits to
-/// another artboard do not invalidate this cache.
+/// instance) and recreates its underlying runtime cache during the next draw. Structural edits to
+/// another artboard do not invalidate this cache. Failed candidate caches are discarded so a
+/// decode error never poisons this cache or the authored scene.
 pub struct SceneRenderCache {
     scene_identity: Arc<SceneIdentity>,
     instance: InstanceId,
     mount: MountId,
-    inner: ArtboardRenderCache,
+    inner: Option<ArtboardRenderCache>,
 }
 
 /// Schema-backed object kinds in the deterministic publish record stream.
@@ -2364,10 +2367,14 @@ impl Scene {
         })
     }
 
+    /// Create a renderer-neutral cache handle for one authored instance.
+    ///
+    /// Render resources, including lazily decoded images, are allocated on the first
+    /// [`Frame::draw`]. This keeps decode failures at the draw interface and permits retrying
+    /// with the same scene and cache after a recoverable adapter failure.
     pub fn new_render_cache(
         &self,
         instance: InstanceId,
-        factory: &mut dyn Factory,
     ) -> std::result::Result<SceneRenderCache, ResolveError> {
         let live = self
             .instances
@@ -2379,7 +2386,7 @@ impl Scene {
             scene_identity: Arc::clone(&self.identity),
             instance,
             mount: live.mount,
-            inner: live.runtime.new_render_cache(factory),
+            inner: None,
         })
     }
 
@@ -2391,23 +2398,14 @@ impl Scene {
     ///
     /// Export reads authored definitions, not ephemeral instance values written through
     /// [`Frame::set`]. Clients replay those values after a structural remount when needed.
-    /// Persistent font identities are projected to only the currently referenced assets in
-    /// semantic first-use order, with dense record-local asset ids.
+    /// Persistent font and image identities are projected to only the currently referenced
+    /// assets in semantic first-use order, with one dense record-local file-asset id namespace.
     pub fn export_records(&self) -> ExportedDocument {
         let mut records = vec![backboard_record()];
         let origins = SpecOrigins::default();
         let all_artboards = self.definitions.artboards.iter().collect::<Vec<_>>();
-        let (font_records, font_asset_indices) = match ReferencedFontAssets::collect(
+        let referenced_assets = match ReferencedFileAssets::collect(
             &self.definitions.font_assets,
-            all_artboards.as_slice(),
-        )
-        .lower(0, &origins)
-        {
-            Ok(lowered) => lowered,
-            Err(_) => std::process::abort(),
-        };
-        records.extend(font_records);
-        let (image_records, image_asset_indices) = match ReferencedImageAssets::collect(
             &self.definitions.image_assets,
             all_artboards.as_slice(),
         )
@@ -2416,7 +2414,7 @@ impl Scene {
             Ok(lowered) => lowered,
             Err(_) => std::process::abort(),
         };
-        records.extend(image_records);
+        records.extend(referenced_assets.records);
         let artboard_indices = match artboard_indices(all_artboards.as_slice()) {
             Ok(indices) => indices,
             Err(_) => std::process::abort(),
@@ -2424,8 +2422,8 @@ impl Scene {
         for artboard in &self.definitions.artboards {
             let lowered = match lower_artboard(
                 artboard,
-                &font_asset_indices,
-                &image_asset_indices,
+                &referenced_assets.font_indices,
+                &referenced_assets.image_indices,
                 &artboard_indices,
                 0,
                 &origins,
@@ -3186,16 +3184,25 @@ impl Frame<'_> {
             .ok_or(DrawError::UnknownInstance)?;
         let needs_refresh = !Arc::ptr_eq(&cache.scene_identity, &self.scene.identity)
             || cache.instance != instance
-            || cache.mount != live.mount;
+            || cache.mount != live.mount
+            || cache.inner.is_none();
         if needs_refresh {
-            cache.inner = live.runtime.new_render_cache(factory);
+            let candidate = live.runtime.new_render_cache();
             cache.scene_identity = Arc::clone(&self.scene.identity);
             cache.instance = instance;
             cache.mount = live.mount;
+            cache.inner = Some(candidate);
         }
+        let inner = cache.inner.as_mut().ok_or(DrawError::RuntimeRejected)?;
         live.runtime
-            .draw_with_render_cache(factory, renderer, &mut cache.inner)
-            .map_err(|_| DrawError::RuntimeRejected)
+            .draw_with_render_cache(factory, renderer, inner)
+            .map_err(|error| {
+                if error.downcast_ref::<ImageDecodeError>().is_some() {
+                    DrawError::ImageDecode
+                } else {
+                    DrawError::RuntimeRejected
+                }
+            })
     }
 }
 
@@ -3235,25 +3242,21 @@ impl MaterializedArtboard {
         touched_operation_index: usize,
     ) -> std::result::Result<Self, EditDiagnostic> {
         let closure = materialized_artboard_closure(definitions, root, touched_operation_index)?;
-        let (font_records, font_asset_indices) =
-            ReferencedFontAssets::collect(font_assets, closure.as_slice())
-                .lower(fallback_operation_index, origins)?;
-        let (image_records, image_asset_indices) =
-            ReferencedImageAssets::collect(image_assets, closure.as_slice())
+        let referenced_assets =
+            ReferencedFileAssets::collect(font_assets, image_assets, closure.as_slice())
                 .lower(fallback_operation_index, origins)?;
         let artboard_indices = artboard_indices(closure.as_slice())
             .map_err(|reason| EditDiagnostic::new(touched_operation_index, vec![], reason))?;
         let mut records = vec![backboard_record()];
-        records.extend(font_records);
-        records.extend(image_records);
+        records.extend(referenced_assets.records);
         let mut root_objects = None;
         let mut objects_by_artboard_local = BTreeMap::new();
         let mut nested_artboard_targets = BTreeMap::new();
         for definition in closure {
             let lowered = lower_artboard(
                 definition,
-                &font_asset_indices,
-                &image_asset_indices,
+                &referenced_assets.font_indices,
+                &referenced_assets.image_indices,
                 &artboard_indices,
                 fallback_operation_index,
                 origins,
@@ -3386,37 +3389,63 @@ fn collect_materialized_artboard_closure<'a>(
     Ok(())
 }
 
-/// Canonical record-time view of the persistent font catalog.
-///
-/// `FontAssetId` definitions remain stable and append-only so typed handles are
-/// never invalidated. Runtime files and export records instead include only
-/// assets referenced by current TextStylePaint definitions, ordered by their
-/// first occurrence in canonical artboard/node order. This one seam owns stale
-/// exclusion and the dense local `assetId` remap used by every consumer.
-struct ReferencedFontAssets<'a> {
-    ordered: Vec<&'a FontAssetDefinition>,
+/// One referenced file asset in canonical authored-node first-use order.
+enum ReferencedFileAsset<'a> {
+    Font(&'a FontAssetDefinition),
+    Image(&'a ImageAssetDefinition),
 }
 
-impl<'a> ReferencedFontAssets<'a> {
-    fn collect(font_assets: &'a [FontAssetDefinition], artboards: &[&ArtboardDefinition]) -> Self {
-        let definitions = font_assets
+/// Canonical record-time view of both persistent file-asset catalogs.
+///
+/// Durable font and image identities stay typed and append-only. Runtime files
+/// and export records project only currently referenced assets, but Rive's
+/// record-local `assetId` is one shared namespace across both asset kinds. This
+/// seam therefore walks canonical artboard/node order once, excludes stale
+/// definitions, and owns the single dense ordinal used by every consumer.
+struct ReferencedFileAssets<'a> {
+    ordered: Vec<ReferencedFileAsset<'a>>,
+}
+
+struct LoweredReferencedFileAssets {
+    records: Vec<ExportedRecord>,
+    font_indices: BTreeMap<FontAssetId, u32>,
+    image_indices: BTreeMap<ImageAssetId, u32>,
+}
+
+impl<'a> ReferencedFileAssets<'a> {
+    fn collect(
+        font_assets: &'a [FontAssetDefinition],
+        image_assets: &'a [ImageAssetDefinition],
+        artboards: &[&ArtboardDefinition],
+    ) -> Self {
+        let fonts = font_assets
             .iter()
             .map(|font| (font.id, font))
             .collect::<BTreeMap<_, _>>();
-        let mut seen = BTreeSet::new();
+        let images = image_assets
+            .iter()
+            .map(|image| (image.id, image))
+            .collect::<BTreeMap<_, _>>();
+        let mut seen_fonts = BTreeSet::new();
+        let mut seen_images = BTreeSet::new();
         let mut ordered = Vec::new();
         for artboard in artboards {
             for node in &artboard.nodes {
-                let NodeSpec::TextStylePaint(style) = &node.spec else {
-                    continue;
-                };
-                if seen.insert(style.font) {
-                    // Unknown semantic identities remain absent from this
-                    // projection so lower_artboard can report the owning style
-                    // and font together with its established diagnostic.
-                    if let Some(font) = definitions.get(&style.font).copied() {
-                        ordered.push(font);
+                match &node.spec {
+                    NodeSpec::TextStylePaint(style) if seen_fonts.insert(style.font) => {
+                        // Unknown semantic identities remain absent so
+                        // lower_artboard reports the owning object and asset
+                        // together with its established diagnostic.
+                        if let Some(font) = fonts.get(&style.font).copied() {
+                            ordered.push(ReferencedFileAsset::Font(font));
+                        }
                     }
+                    NodeSpec::Image(spec) if seen_images.insert(spec.image) => {
+                        if let Some(image) = images.get(&spec.image).copied() {
+                            ordered.push(ReferencedFileAsset::Image(image));
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -3427,8 +3456,7 @@ impl<'a> ReferencedFontAssets<'a> {
         self,
         fallback_operation_index: usize,
         origins: &SpecOrigins,
-    ) -> std::result::Result<(Vec<ExportedRecord>, BTreeMap<FontAssetId, u32>), EditDiagnostic>
-    {
+    ) -> std::result::Result<LoweredReferencedFileAssets, EditDiagnostic> {
         let record_capacity = self.ordered.len().checked_mul(2).ok_or_else(|| {
             EditDiagnostic::new(
                 fallback_operation_index,
@@ -3437,39 +3465,72 @@ impl<'a> ReferencedFontAssets<'a> {
             )
         })?;
         let mut records = Vec::with_capacity(record_capacity);
-        let mut indices = BTreeMap::new();
-        for (index, font) in self.ordered.into_iter().enumerate() {
-            validate_font_asset(font, fallback_operation_index, origins)?;
-            let operation_index = origins.font_asset(font.id, fallback_operation_index);
+        let mut font_indices = BTreeMap::new();
+        let mut image_indices = BTreeMap::new();
+        for (index, asset) in self.ordered.into_iter().enumerate() {
             let file_asset_id = u32::try_from(index).map_err(|_| {
-                EditDiagnostic::new(
-                    operation_index,
-                    vec![EditId::FontAsset(font.id)],
-                    EditReason::CapacityExceeded,
-                )
+                let (operation_index, involved_ids) = match &asset {
+                    ReferencedFileAsset::Font(font) => (
+                        origins.font_asset(font.id, fallback_operation_index),
+                        vec![EditId::FontAsset(font.id)],
+                    ),
+                    ReferencedFileAsset::Image(image) => (
+                        origins.image_asset(image.id, fallback_operation_index),
+                        vec![EditId::ImageAsset(image.id)],
+                    ),
+                };
+                EditDiagnostic::new(operation_index, involved_ids, EditReason::CapacityExceeded)
             })?;
-            if indices.insert(font.id, file_asset_id).is_some() {
-                return Err(EditDiagnostic::new(
-                    operation_index,
-                    vec![EditId::FontAsset(font.id)],
-                    EditReason::IdentityCollision,
-                ));
-            }
+            let (kind, name, bytes) = match asset {
+                ReferencedFileAsset::Font(font) => {
+                    validate_font_asset(font, fallback_operation_index, origins)?;
+                    let operation_index = origins.font_asset(font.id, fallback_operation_index);
+                    if font_indices.insert(font.id, file_asset_id).is_some() {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::FontAsset(font.id)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    (
+                        ExportedObjectKind::FontAsset,
+                        font.spec.name.clone(),
+                        font.spec.bytes.clone(),
+                    )
+                }
+                ReferencedFileAsset::Image(image) => {
+                    let operation_index = origins.image_asset(image.id, fallback_operation_index);
+                    if image_indices.insert(image.id, file_asset_id).is_some() {
+                        return Err(EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::ImageAsset(image.id)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    (
+                        ExportedObjectKind::ImageAsset,
+                        image.spec.name.clone(),
+                        image.spec.bytes.clone(),
+                    )
+                }
+            };
             records.push(ExportedRecord {
-                kind: ExportedObjectKind::FontAsset,
+                kind,
                 properties: vec![
-                    ExportedProperty::AssetName(font.spec.name.clone()),
+                    ExportedProperty::AssetName(name),
                     ExportedProperty::FileAssetId(file_asset_id),
                 ],
             });
             records.push(ExportedRecord {
                 kind: ExportedObjectKind::FileAssetContents,
-                properties: vec![ExportedProperty::FileAssetContentsBytes(
-                    font.spec.bytes.clone(),
-                )],
+                properties: vec![ExportedProperty::FileAssetContentsBytes(bytes)],
             });
         }
-        Ok((records, indices))
+        Ok(LoweredReferencedFileAssets {
+            records,
+            font_indices,
+            image_indices,
+        })
     }
 }
 
@@ -3521,92 +3582,6 @@ fn validate_font_asset(
         ));
     }
     Ok(())
-}
-
-/// Canonical record-time view of the persistent image catalog.
-///
-/// `ImageAssetId` definitions remain stable and append-only so typed handles
-/// are never invalidated. Runtime files and export records include only assets
-/// referenced by current `Image` nodes, ordered by their first occurrence in
-/// canonical artboard/node order. This mirrors font lowering and owns stale
-/// exclusion plus the dense local `assetId` remap used by every consumer.
-struct ReferencedImageAssets<'a> {
-    ordered: Vec<&'a ImageAssetDefinition>,
-}
-
-impl<'a> ReferencedImageAssets<'a> {
-    fn collect(
-        image_assets: &'a [ImageAssetDefinition],
-        artboards: &[&ArtboardDefinition],
-    ) -> Self {
-        let definitions = image_assets
-            .iter()
-            .map(|image| (image.id, image))
-            .collect::<BTreeMap<_, _>>();
-        let mut seen = BTreeSet::new();
-        let mut ordered = Vec::new();
-        for artboard in artboards {
-            for node in &artboard.nodes {
-                let NodeSpec::Image(spec) = &node.spec else {
-                    continue;
-                };
-                if seen.insert(spec.image) {
-                    if let Some(image) = definitions.get(&spec.image).copied() {
-                        ordered.push(image);
-                    }
-                }
-            }
-        }
-        Self { ordered }
-    }
-
-    fn lower(
-        self,
-        fallback_operation_index: usize,
-        origins: &SpecOrigins,
-    ) -> std::result::Result<(Vec<ExportedRecord>, BTreeMap<ImageAssetId, u32>), EditDiagnostic>
-    {
-        let record_capacity = self.ordered.len().checked_mul(2).ok_or_else(|| {
-            EditDiagnostic::new(
-                fallback_operation_index,
-                Vec::new(),
-                EditReason::CapacityExceeded,
-            )
-        })?;
-        let mut records = Vec::with_capacity(record_capacity);
-        let mut indices = BTreeMap::new();
-        for (index, image) in self.ordered.into_iter().enumerate() {
-            let operation_index = origins.image_asset(image.id, fallback_operation_index);
-            let file_asset_id = u32::try_from(index).map_err(|_| {
-                EditDiagnostic::new(
-                    operation_index,
-                    vec![EditId::ImageAsset(image.id)],
-                    EditReason::CapacityExceeded,
-                )
-            })?;
-            if indices.insert(image.id, file_asset_id).is_some() {
-                return Err(EditDiagnostic::new(
-                    operation_index,
-                    vec![EditId::ImageAsset(image.id)],
-                    EditReason::IdentityCollision,
-                ));
-            }
-            records.push(ExportedRecord {
-                kind: ExportedObjectKind::ImageAsset,
-                properties: vec![
-                    ExportedProperty::AssetName(image.spec.name.clone()),
-                    ExportedProperty::FileAssetId(file_asset_id),
-                ],
-            });
-            records.push(ExportedRecord {
-                kind: ExportedObjectKind::FileAssetContents,
-                properties: vec![ExportedProperty::FileAssetContentsBytes(
-                    image.spec.bytes.clone(),
-                )],
-            });
-        }
-        Ok((records, indices))
-    }
 }
 
 fn validate_image_assets(
@@ -5946,7 +5921,7 @@ mod tests {
 
     fn owned_draw_stream(instance: &mut OwnedArtboardInstance) -> Result<String> {
         let mut factory = RecordingFactory::new();
-        let mut cache = instance.new_render_cache(&mut factory);
+        let mut cache = instance.new_render_cache();
         let mut renderer = factory.make_renderer();
         instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
         Ok(factory.stream())
@@ -6003,7 +5978,7 @@ mod tests {
         );
 
         let mut retained_factory = RecordingFactory::new();
-        let mut retained_cache = external.new_render_cache(&mut retained_factory);
+        let mut retained_cache = external.new_render_cache();
         let mut retained_renderer = retained_factory.make_renderer();
         external.draw_with_render_cache(
             &mut retained_factory,
@@ -6242,7 +6217,7 @@ mod tests {
         assert_eq!(file.artboard_count(), 2);
         let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
         let mut factory = RecordingFactory::new();
-        let mut cache = instance.new_render_cache(&mut factory);
+        let mut cache = instance.new_render_cache();
         let mut renderer = factory.make_renderer();
         instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
         let stream = parse_single_frame(&factory.stream())?;
@@ -6567,7 +6542,7 @@ mod tests {
             .into_iter()
             .map(|instance| {
                 let mut factory = RecordingFactory::new();
-                let mut cache = scene.new_render_cache(instance, &mut factory)?;
+                let mut cache = scene.new_render_cache(instance)?;
                 let mut renderer = factory.make_renderer();
                 scene
                     .frame()
@@ -6583,7 +6558,7 @@ mod tests {
         for (index, expected) in live_streams.iter().enumerate() {
             let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), index)?;
             let mut factory = RecordingFactory::new();
-            let mut cache = instance.new_render_cache(&mut factory);
+            let mut cache = instance.new_render_cache();
             let mut renderer = factory.make_renderer();
             instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
             let imported = parse_single_frame(&factory.stream())?;
@@ -6712,7 +6687,7 @@ mod tests {
         })?;
         let instance = scene.instantiate(artboard)?;
         let mut live_factory = RecordingFactory::new();
-        let mut live_cache = scene.new_render_cache(instance, &mut live_factory)?;
+        let mut live_cache = scene.new_render_cache(instance)?;
         let mut live_renderer = live_factory.make_renderer();
         scene.frame().draw(
             instance,
@@ -6872,7 +6847,7 @@ mod tests {
         let file = Arc::new(File::from_runtime(runtime)?);
         let mut imported = OwnedArtboardInstance::instantiate(file, 0)?;
         let mut imported_factory = RecordingFactory::new();
-        let mut imported_cache = imported.new_render_cache(&mut imported_factory);
+        let mut imported_cache = imported.new_render_cache();
         let mut imported_renderer = imported_factory.make_renderer();
         imported.draw_with_render_cache(
             &mut imported_factory,

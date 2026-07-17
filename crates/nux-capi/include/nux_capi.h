@@ -208,6 +208,7 @@ typedef struct NuxRenderCallbacks
                                    uint8_t buffer_type,
                                    uint8_t flags,
                                    size_t size_in_bytes);
+    /* Return 0 when the encoded bytes are invalid or unsupported. */
     uint64_t (*decode_image)(void* user_data,
                              const uint8_t* bytes,
                              size_t len,
@@ -341,8 +342,10 @@ NuxStatus nux_artboard_instance_draw(
     NuxArtboardInstance* instance,
     const NuxRenderCallbacks* callbacks);
 
-/* Create a cache that retains render handles across frames. The callbacks and
- * their user_data must remain usable until the cache is freed. */
+/* Create a cache that retains render handles across frames. Resource creation
+ * and image decoding begin on the first cached draw; a failed candidate is
+ * released so the same cache can retry. The callbacks and their user_data must
+ * remain usable until the cache is freed. */
 NuxStatus nux_render_cache_new(
     const NuxArtboardInstance* instance,
     const NuxRenderCallbacks* callbacks,

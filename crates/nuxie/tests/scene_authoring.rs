@@ -1,9 +1,11 @@
 use anyhow::Result;
 use nuxie::{
-    Aabb, ArtboardId, ArtboardSpec, ChildIndex, DashPathSpec, DashSpec, EditAbort, EditErrorKind,
-    EditId, EditReason, ExportedObjectKind, ExportedProperty, FillSpec, FontAssetId, FontAssetSpec,
-    ImageAssetId, ImageAssetSpec, ImageSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind,
-    RecordingFactory, RectangleCornerRadii, RectangleSpec, ResolveError, Scene, SceneEvent,
+    Aabb, ArtboardId, ArtboardSpec, ChildIndex, ColorInt, DashPathSpec, DashSpec, DrawError,
+    EditAbort, EditErrorKind, EditId, EditReason, ExportedObjectKind, ExportedProperty, Factory,
+    FillRule, FillSpec, FontAssetId, FontAssetSpec, ImageAssetId, ImageAssetSpec, ImageDecodeError,
+    ImageSpec, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath, RecordingFactory,
+    RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene, SceneEvent,
     SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow, SceneTextSizing,
     SceneTextWrap, SceneTx, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch,
     TextSpec, TextStylePaintSpec, TextValueRunSpec, Vec2D, props,
@@ -43,7 +45,7 @@ fn fixture_font_bytes() -> Vec<u8> {
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
     let mut factory = RecordingFactory::new();
-    let mut cache = scene.new_render_cache(instance, &mut factory)?;
+    let mut cache = scene.new_render_cache(instance)?;
     let mut renderer = factory.make_renderer();
     scene
         .frame()
@@ -53,7 +55,7 @@ fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String>
 
 fn canonical_draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
     let mut factory = RecordingFactory::new();
-    let mut cache = scene.new_render_cache(instance, &mut factory)?;
+    let mut cache = scene.new_render_cache(instance)?;
     let mut renderer = factory.make_renderer();
     scene
         .frame()
@@ -1700,6 +1702,312 @@ fn create_image_node(
     )
 }
 
+struct FailFirstImageDecodeFactory {
+    inner: RecordingFactory,
+    fail_next_image_decode: bool,
+}
+
+impl FailFirstImageDecodeFactory {
+    fn new() -> Self {
+        Self {
+            inner: RecordingFactory::new(),
+            fail_next_image_decode: true,
+        }
+    }
+}
+
+impl Factory for FailFirstImageDecodeFactory {
+    fn make_render_buffer(
+        &mut self,
+        buffer_type: RenderBufferType,
+        flags: RenderBufferFlags,
+        size_in_bytes: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.inner
+            .make_render_buffer(buffer_type, flags, size_in_bytes)
+    }
+
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.inner
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.inner
+            .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+
+    fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+        self.inner.make_render_path(raw_path, fill_rule)
+    }
+
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.inner.make_empty_render_path()
+    }
+
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        self.inner.make_render_paint()
+    }
+
+    fn decode_image(
+        &mut self,
+        data: &[u8],
+    ) -> std::result::Result<Box<dyn RenderImage>, ImageDecodeError> {
+        if std::mem::take(&mut self.fail_next_image_decode) {
+            Err(ImageDecodeError)
+        } else {
+            self.inner.decode_image(data)
+        }
+    }
+}
+
+#[test]
+fn image_decode_failure_is_draw_typed_and_the_same_scene_cache_can_recover() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, image), _) = scene.edit(|tx| {
+        let asset = tx.create_image_asset(ImageAssetSpec {
+            name: "Malformed Image".into(),
+            bytes: b"not an encoded image".to_vec(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Images".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let image = create_image_node(tx, artboard, "Recoverable Image", asset)?;
+        Ok((artboard, image))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let x = scene.cursor(instance, image, props::TRANSLATE_X)?;
+    let mut cache = scene.new_render_cache(instance)?;
+    let mut factory = FailFirstImageDecodeFactory::new();
+    let mut renderer = factory.inner.make_renderer();
+
+    assert_eq!(
+        scene
+            .frame()
+            .draw(instance, &mut factory, &mut renderer, &mut cache),
+        Err(DrawError::ImageDecode)
+    );
+    assert_eq!(scene.frame().get(x)?, 10.0);
+    assert!(scene.frame().set(x, 42.0)?);
+
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+    assert_eq!(scene.frame().get(x)?, 42.0);
+    assert!(factory.inner.stream().contains("decodeImage"));
+    Ok(())
+}
+
+fn create_mixed_file_asset_nodes(
+    tx: &mut SceneTx<'_>,
+    artboard: ArtboardId,
+    first_image: ImageAssetId,
+    font: FontAssetId,
+    second_image: ImageAssetId,
+) -> std::result::Result<(), EditAbort> {
+    create_image_node(tx, artboard, "First Image", first_image)?;
+    create_font_test_text(tx, artboard, &[("Font", font)])?;
+    create_image_node(tx, artboard, "Second Image", second_image)?;
+    Ok(())
+}
+
+#[test]
+fn mixed_file_assets_share_one_global_first_use_ordinal() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Font".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let second_image = tx.create_image_asset(ImageAssetSpec {
+            name: "Second Image".into(),
+            bytes: b"second image bytes".to_vec(),
+        })?;
+        let first_image = tx.create_image_asset(ImageAssetSpec {
+            name: "First Image".into(),
+            bytes: b"first image bytes".to_vec(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Mixed Assets".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_mixed_file_asset_nodes(tx, artboard, first_image, font, second_image)?;
+        Ok(artboard)
+    })?;
+
+    let exported = scene.export_records();
+    assert_eq!(
+        exported
+            .records()
+            .iter()
+            .skip(1)
+            .take(6)
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::ImageAsset,
+            ExportedObjectKind::FileAssetContents,
+            ExportedObjectKind::FontAsset,
+            ExportedObjectKind::FileAssetContents,
+            ExportedObjectKind::ImageAsset,
+            ExportedObjectKind::FileAssetContents,
+        ],
+        "file assets and their contents follow canonical node first use"
+    );
+    assert_eq!(
+        exported
+            .records()
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.kind,
+                    ExportedObjectKind::FontAsset | ExportedObjectKind::ImageAsset
+                )
+            })
+            .map(|record| {
+                (
+                    record.kind,
+                    record
+                        .properties
+                        .iter()
+                        .find_map(|property| match property {
+                            ExportedProperty::FileAssetId(id) => Some(*id),
+                            _ => None,
+                        })
+                        .expect("every file asset has one global record-local id"),
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            (ExportedObjectKind::ImageAsset, 0),
+            (ExportedObjectKind::FontAsset, 1),
+            (ExportedObjectKind::ImageAsset, 2),
+        ]
+    );
+    assert_eq!(
+        exported
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::Image)
+            .map(|record| {
+                record
+                    .properties
+                    .iter()
+                    .find_map(|property| match property {
+                        ExportedProperty::ImageAssetId(id) => Some(*id),
+                        _ => None,
+                    })
+                    .expect("every image references its typed image asset")
+            })
+            .collect::<Vec<_>>(),
+        vec![0, 2]
+    );
+    let style = exported
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::TextStylePaint)
+        .expect("mixed scene exports its text style");
+    assert!(
+        style
+            .properties
+            .contains(&ExportedProperty::TextStyleFontAssetId(1))
+    );
+
+    scene.instantiate(artboard)?;
+    Ok(())
+}
+
+#[test]
+fn mixed_file_asset_export_converges_from_historical_and_fresh_scenes() -> Result<()> {
+    let mut historical = Scene::new();
+    let ((historical_artboard, historical_font, historical_first, historical_second), _) =
+        historical.edit(|tx| {
+            let historical_first = tx.create_image_asset(ImageAssetSpec {
+                name: "First Image".into(),
+                bytes: b"first image bytes".to_vec(),
+            })?;
+            let historical_font = tx.create_font_asset(FontAssetSpec {
+                name: "Font".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let historical_second = tx.create_image_asset(ImageAssetSpec {
+                name: "Second Image".into(),
+                bytes: b"second image bytes".to_vec(),
+            })?;
+            let historical_artboard = tx.create_artboard(ArtboardSpec {
+                name: "Mixed Assets".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            create_mixed_file_asset_nodes(
+                tx,
+                historical_artboard,
+                historical_second,
+                historical_font,
+                historical_first,
+            )?;
+            Ok((
+                historical_artboard,
+                historical_font,
+                historical_first,
+                historical_second,
+            ))
+        })?;
+    historical.edit(|tx| {
+        tx.clear_artboard(historical_artboard)?;
+        create_mixed_file_asset_nodes(
+            tx,
+            historical_artboard,
+            historical_first,
+            historical_font,
+            historical_second,
+        )
+    })?;
+
+    let mut fresh = Scene::new();
+    fresh.edit(|tx| {
+        let fresh_second = tx.create_image_asset(ImageAssetSpec {
+            name: "Second Image".into(),
+            bytes: b"second image bytes".to_vec(),
+        })?;
+        let fresh_first = tx.create_image_asset(ImageAssetSpec {
+            name: "First Image".into(),
+            bytes: b"first image bytes".to_vec(),
+        })?;
+        let fresh_font = tx.create_font_asset(FontAssetSpec {
+            name: "Font".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let fresh_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Mixed Assets".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_mixed_file_asset_nodes(tx, fresh_artboard, fresh_first, fresh_font, fresh_second)
+    })?;
+
+    assert_eq!(historical.export_records(), fresh.export_records());
+    Ok(())
+}
+
 #[test]
 fn image_assets_are_explicit_distinct_durable_scene_definitions() -> Result<()> {
     let mut scene = Scene::new();
@@ -2603,7 +2911,7 @@ fn same_artboard_reparent_preserves_subtree_ids_parent_ids_preorder_and_fresh_re
     let instance = scene.instantiate(artboard)?;
     let stale_color = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
     let mut held_factory = RecordingFactory::new();
-    let mut held_cache = scene.new_render_cache(instance, &mut held_factory)?;
+    let mut held_cache = scene.new_render_cache(instance)?;
     let mut held_renderer = held_factory.make_renderer();
     scene.frame().draw(
         instance,
@@ -2794,7 +3102,7 @@ fn rejected_structural_moves_are_strict_typed_and_preserve_all_live_state() -> R
     let color_cursor = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
     assert!(scene.frame().set(color_cursor, 0xffaa_bbcc)?);
     let mut factory = RecordingFactory::new();
-    let mut cache = scene.new_render_cache(instance, &mut factory)?;
+    let mut cache = scene.new_render_cache(instance)?;
     let mut renderer = factory.make_renderer();
     scene
         .frame()
@@ -2935,13 +3243,13 @@ fn set_artboard_remounts_only_the_touched_artboard_and_retains_instance_identity
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut cache_a = scene.new_render_cache(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -3016,7 +3324,7 @@ fn reorder_artboards_changes_export_order_without_remounting_instances_or_caches
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut cache_a = scene.new_render_cache(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
@@ -3027,7 +3335,7 @@ fn reorder_artboards_changes_export_order_without_remounting_instances_or_caches
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let a_before = factory_a.stream();
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -3091,13 +3399,13 @@ fn remove_artboard_drops_only_its_materialization_and_instances() -> Result<()> 
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut cache_a = scene.new_render_cache(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -3161,7 +3469,7 @@ fn deleting_the_last_artboard_exports_only_backboard_and_allows_recreation() -> 
         vec![ExportedObjectKind::Backboard]
     );
     assert!(matches!(
-        scene.new_render_cache(removed_instance, &mut RecordingFactory::new()),
+        scene.new_render_cache(removed_instance),
         Err(ResolveError::UnknownInstance)
     ));
 
@@ -3201,7 +3509,7 @@ fn removing_one_artboard_with_an_invalid_retained_candidate_publishes_nothing() 
     assert!(scene.frame().set(cursor_a, 0xffaa_bbcc)?);
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut cache_a = scene.new_render_cache(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
@@ -3212,7 +3520,7 @@ fn removing_one_artboard_with_an_invalid_retained_candidate_publishes_nothing() 
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let a_before = factory_a.stream();
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -4016,7 +4324,7 @@ fn removing_from_one_artboard_preserves_another_artboards_hot_state_and_held_cac
     assert!(scene.frame().set(old_cursor_b, 0xff556677)?);
 
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -5202,7 +5510,7 @@ fn render_cache_held_across_a_structural_remount_matches_a_fresh_cache() -> Resu
     let instance = scene.instantiate(artboard)?;
 
     let mut original_factory = RecordingFactory::new();
-    let mut held_cache = scene.new_render_cache(instance, &mut original_factory)?;
+    let mut held_cache = scene.new_render_cache(instance)?;
     let mut original_renderer = original_factory.make_renderer();
     scene.frame().draw(
         instance,
@@ -5226,7 +5534,7 @@ fn render_cache_held_across_a_structural_remount_matches_a_fresh_cache() -> Resu
     )?;
 
     let mut fresh_factory = RecordingFactory::new();
-    let mut fresh_cache = scene.new_render_cache(instance, &mut fresh_factory)?;
+    let mut fresh_cache = scene.new_render_cache(instance)?;
     let mut fresh_renderer = fresh_factory.make_renderer();
     scene.frame().draw(
         instance,
@@ -5322,7 +5630,7 @@ fn editing_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -
     assert!(scene.frame().set(cursor_b, 0xff445566)?);
 
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -5380,7 +5688,7 @@ fn failed_multi_artboard_materialization_publishes_nothing_before_a_valid_commit
     assert!(scene.frame().set(cursor_b, 0xff667788)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a, &mut factory_a)?;
+    let mut cache_a = scene.new_render_cache(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
@@ -5392,7 +5700,7 @@ fn failed_multi_artboard_materialization_publishes_nothing_before_a_valid_commit
     let a_before = factory_a.stream();
 
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b, &mut factory_b)?;
+    let mut cache_b = scene.new_render_cache(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()

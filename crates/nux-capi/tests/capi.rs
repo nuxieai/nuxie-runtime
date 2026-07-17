@@ -206,6 +206,8 @@ struct RenderCounters {
     next_handle: u64,
     made: usize,
     released: usize,
+    image_decode_attempts: usize,
+    draw_images: usize,
     paint_colors: usize,
     draw_paths: usize,
     saves: usize,
@@ -266,6 +268,59 @@ unsafe extern "C" fn counting_restore(user_data: *mut c_void) {
 unsafe extern "C" fn counting_transform(user_data: *mut c_void, transform: *const f32) {
     assert!(!transform.is_null());
     unsafe { counters(user_data) }.transforms += 1;
+}
+
+unsafe extern "C" fn fail_first_decode_image(
+    user_data: *mut c_void,
+    bytes: *const u8,
+    len: usize,
+    out_width: *mut u32,
+    out_height: *mut u32,
+) -> u64 {
+    assert!(!bytes.is_null());
+    assert!(len > 0);
+    assert!(!out_width.is_null());
+    assert!(!out_height.is_null());
+    let counters = unsafe { counters(user_data) };
+    counters.image_decode_attempts += 1;
+    if counters.image_decode_attempts == 1 {
+        return 0;
+    }
+    unsafe {
+        *out_width = 4;
+        *out_height = 2;
+    }
+    counters.made += 1;
+    counters.next_handle += 1;
+    counters.next_handle
+}
+
+unsafe extern "C" fn counting_draw_image(
+    user_data: *mut c_void,
+    image: u64,
+    _sampler: nux_capi::NuxImageSampler,
+    _blend_mode: u8,
+    _opacity: f32,
+) {
+    assert_ne!(image, 0);
+    unsafe { counters(user_data) }.draw_images += 1;
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe extern "C" fn counting_draw_image_mesh(
+    user_data: *mut c_void,
+    image: u64,
+    _sampler: nux_capi::NuxImageSampler,
+    _vertices: u64,
+    _uv_coords: u64,
+    _indices: u64,
+    _vertex_count: u32,
+    _index_count: u32,
+    _blend_mode: u8,
+    _opacity: f32,
+) {
+    assert_ne!(image, 0);
+    unsafe { counters(user_data) }.draw_images += 1;
 }
 
 #[test]
@@ -375,6 +430,78 @@ fn c_api_retained_draw_reuses_and_releases_render_handles() {
 
     unsafe { nux_render_cache_free(cache) };
     assert_eq!(counters_data.released, counters_data.made);
+    unsafe {
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn c_api_retained_cache_retries_a_failed_image_decode_without_poisoning() {
+    let bytes = fixture_bytes("in_band_asset.riv");
+    let mut file: *mut NuxFile = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        NuxStatus::Ok
+    );
+    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut instance) },
+        NuxStatus::Ok
+    );
+
+    let mut counters_data = RenderCounters::default();
+    let callbacks = NuxRenderCallbacks {
+        user_data: (&mut counters_data as *mut RenderCounters).cast::<c_void>(),
+        make_render_path: Some(counting_make_render_path),
+        make_empty_render_path: Some(counting_make_handle),
+        make_render_paint: Some(counting_make_handle),
+        release_render_path: Some(counting_release),
+        release_render_paint: Some(counting_release),
+        release_render_shader: Some(counting_release),
+        decode_image: Some(fail_first_decode_image),
+        release_render_image: Some(counting_release),
+        render_paint_color: Some(counting_paint_color),
+        draw_path: Some(counting_draw_path),
+        draw_image: Some(counting_draw_image),
+        draw_image_mesh: Some(counting_draw_image_mesh),
+        ..NuxRenderCallbacks::default()
+    };
+    let mut cache: *mut NuxRenderCache = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_render_cache_new(instance, &callbacks, &mut cache) },
+        NuxStatus::Ok
+    );
+    assert!(!cache.is_null());
+    assert_eq!(
+        counters_data.image_decode_attempts, 0,
+        "retained C cache creation must be renderer-neutral"
+    );
+
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw_cached(instance, cache) },
+        NuxStatus::RuntimeError
+    );
+    assert_eq!(counters_data.image_decode_attempts, 1);
+    assert!(
+        counters_data.made > 0,
+        "the failed candidate should exercise owned render handles"
+    );
+    assert_eq!(counters_data.made, counters_data.released);
+
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw_cached(instance, cache) },
+        NuxStatus::Ok
+    );
+    assert!(counters_data.image_decode_attempts >= 2);
+    assert!(counters_data.draw_images > 0);
+    assert!(counters_data.made > counters_data.released);
+
+    unsafe { nux_render_cache_free(cache) };
+    assert_eq!(
+        counters_data.made, counters_data.released,
+        "all successful image handles release exactly once"
+    );
     unsafe {
         nux_artboard_instance_free(instance);
         nux_file_free(file);

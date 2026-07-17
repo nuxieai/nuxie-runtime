@@ -5812,6 +5812,8 @@ fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
         decode_png_rgba(data)
     } else if data.starts_with(&[0xff, 0xd8]) {
         decode_jpeg_rgba(data)
+    } else if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        decode_webp_rgba(data)
     } else {
         None
     }
@@ -6015,6 +6017,28 @@ fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     }
     premultiply_rgba(&mut pixels);
     Some((info.width, info.height, pixels))
+}
+
+fn decode_webp_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let mut decoder = image_webp::WebPDecoder::new(Cursor::new(data)).ok()?;
+    let (width, height) = decoder.dimensions();
+    let has_alpha = decoder.has_alpha();
+    let icc_profile = decoder.icc_profile().ok()?;
+    let mut decoded = vec![0; decoder.output_buffer_size()?];
+    decoder.read_image(&mut decoded).ok()?;
+    let mut pixels = if has_alpha {
+        decoded
+    } else {
+        decoded
+            .chunks_exact(3)
+            .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
+            .collect()
+    };
+    if let Some(profile) = icc_profile {
+        convert_icc_rgba_to_srgb(&mut pixels, width, &profile);
+    }
+    premultiply_rgba(&mut pixels);
+    Some((width, height, pixels))
 }
 
 fn convert_icc_rgba_to_srgb(pixels: &mut [u8], width: u32, icc_profile: &[u8]) {
@@ -7787,6 +7811,63 @@ mod tests {
         assert_eq!((width, height), (278, 278));
         assert_eq!(rgba.len(), 278 * 278 * 4);
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+    }
+
+    #[test]
+    fn decodes_lossless_webp_to_premultiplied_rgba() {
+        let source = [240, 120, 60, 128, 10, 20, 30, 255];
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(&source, 2, 1, image_webp::ColorType::Rgba8)
+            .unwrap();
+
+        let (width, height, rgba) = decode_image_rgba(&encoded).expect("WebP must decode");
+
+        assert_eq!((width, height), (2, 1));
+        assert_eq!(rgba, [120, 60, 30, 128, 10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn decodes_opaque_webp_to_rgba() {
+        let source = [1, 2, 3, 254, 128, 64];
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(&source, 2, 1, image_webp::ColorType::Rgb8)
+            .unwrap();
+
+        let (width, height, rgba) = decode_image_rgba(&encoded).expect("WebP must decode");
+
+        assert_eq!((width, height), (2, 1));
+        assert_eq!(rgba, [1, 2, 3, 255, 254, 128, 64, 255]);
+    }
+
+    #[test]
+    fn decodes_lossy_webp_to_opaque_rgba() {
+        let encoded = [
+            0x52, 0x49, 0x46, 0x46, 0x3c, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50,
+            0x38, 0x20, 0x30, 0x00, 0x00, 0x00, 0xd0, 0x01, 0x00, 0x9d, 0x01, 0x2a, 0x02, 0x00,
+            0x02, 0x00, 0x02, 0x00, 0x34, 0x25, 0xa0, 0x02, 0x74, 0xba, 0x01, 0xf8, 0x00, 0x03,
+            0xb0, 0x00, 0xfe, 0xf0, 0xc4, 0x0b, 0xff, 0x20, 0xb9, 0x61, 0x75, 0xc8, 0xd7, 0xff,
+            0x20, 0x3f, 0xe4, 0x07, 0xfc, 0x80, 0xff, 0xf8, 0xf2, 0x00, 0x00, 0x00,
+        ];
+
+        let (width, height, rgba) = decode_image_rgba(&encoded).expect("WebP must decode");
+
+        assert_eq!((width, height), (2, 2));
+        assert_eq!(rgba.len(), 2 * 2 * 4);
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[0] > pixel[1]));
+    }
+
+    #[test]
+    fn truncated_webp_fails_closed() {
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(&[240, 120, 60, 128], 1, 1, image_webp::ColorType::Rgba8)
+            .unwrap();
+        encoded.truncate(encoded.len() / 2);
+
+        assert!(decode_image_rgba(&encoded).is_none());
     }
 
     #[cfg(target_os = "macos")]

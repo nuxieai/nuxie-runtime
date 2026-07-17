@@ -79,7 +79,9 @@ fn cli_emits_reports_before_a_threshold_failure() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("threshold failed"));
     let report: Value = serde_json::from_str(&std::fs::read_to_string(&json).unwrap()).unwrap();
-    assert_eq!(report["aggregate"]["ratio"], 2.0);
+    assert_eq!(report["schema"], "rive-renderer-perf-v2");
+    assert_eq!(report["estimator"], "cpp-control-min-paired-v1");
+    assert_eq!(report["aggregate"]["candidate_over_cpp"], 2.0);
     assert_eq!(report["scenes"][0]["structural"]["logical_flushes"], 3);
     let markdown = std::fs::read_to_string(markdown).unwrap();
     assert!(markdown.contains("logical flushes"));

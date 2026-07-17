@@ -398,12 +398,16 @@ missing. With structural parity closed, an exploratory timing bracket exposed
 a separate per-frame lifetime mismatch: Rust recreated the final color,
 four-sample color, and stencil attachments while C++ Dawn retained them.
 Factory-owned completed-frame reuse improves every old/current row in a light
-snapshot: 0.5038x aggregate, 0.8320x clockwise atomic, and 0.2887x MSAA. The
-corresponding same-capability C++ Dawn/current snapshot is 1.4057x aggregate
-with a 2.0175x worst row. R4 remains open pending the staged immutable A-B-B-A
-gate: it must reproduce a post-tail worst-scene ratio at or below 2.0x under
-its host-idle and repeat-drift fences, or identify the next timing-only
-bottleneck. Load-rejected attempts are not evidence. See
+snapshot. Recomputing its vectors by selecting the candidate paired with each
+row's minimum C++ control gives 0.5414x aggregate, 0.8741x clockwise atomic,
+and 0.3233x MSAA. The corresponding same-capability C++ Dawn/current view is
+1.4809x aggregate with a 2.0277x worst row. These artifacts used fixed call
+order and remain directional. The staged v2 gate now counterbalances order,
+uses control-selected pairs, pins all inputs, and emits a distinct environment
+or renderer decision. R4 remains open until a fresh post-tail worst-scene
+ratio is at or below 2.0x under the host-idle and repeat-drift fences, or the
+gate identifies the next timing-only bottleneck. Load-rejected attempts are
+not evidence. See
 `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria

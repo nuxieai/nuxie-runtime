@@ -28,7 +28,7 @@ usage: r4-timing-gate.sh [--dry-run] [--output-dir path]
 
 Runs the fixed `renderer-perf` executable A-B-B-A with the pinned runner paths
 R4_TIMING_GATE_BASELINE_RUNNER, R4_TIMING_GATE_A_RUNNER, and
-R4_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v1 report, then
+R4_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v2 report, then
 requires both post-tail B reports to meet R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO
 and requires B/A candidate timing plus symmetric C++ control drift to meet
 their configured limits. R4_TIMING_GATE_CAPTURE_MAX_RATIO is only a permissive
@@ -102,21 +102,68 @@ phase="initialization"
 failure_reason=""
 gate_status="running"
 comparison_path="$output_dir/comparison.json"
+decision_path="$output_dir/gate-decision.json"
+idle_spread=""
+
+write_decision() {
+    local status="$1"
+    GATE_DECISION_STATUS="$status" \
+    GATE_DECISION_PHASE="$phase" \
+    GATE_DECISION_REASON="$failure_reason" \
+    GATE_DECISION_COMPARISON="$comparison_path" \
+    GATE_DECISION_HOST_IDLE="$output_dir/host-idle.tsv" \
+    GATE_DECISION_IDLE_SPREAD="$idle_spread" \
+    python3 - "$decision_path" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+comparison = pathlib.Path(os.environ["GATE_DECISION_COMPARISON"])
+idle_spread = os.environ["GATE_DECISION_IDLE_SPREAD"]
+decision = {
+    "schema": "rive-r4-timing-gate-decision-v1",
+    "status": os.environ["GATE_DECISION_STATUS"],
+    "phase": os.environ["GATE_DECISION_PHASE"],
+    "reason": os.environ["GATE_DECISION_REASON"] or None,
+    "comparison_path": str(comparison),
+    "comparison_available": comparison.is_file() and comparison.stat().st_size > 0,
+    "host_idle_path": os.environ["GATE_DECISION_HOST_IDLE"],
+    "idle_spread_percent": float(idle_spread) if idle_spread else None,
+}
+with open(sys.argv[1], "w", encoding="utf-8") as output:
+    json.dump(decision, output, indent=2, sort_keys=True)
+    output.write("\n")
+PY
+}
 
 finalize_metadata() {
     local exit_status=$?
     trap - EXIT
+    set +e
+    local final_status="fail"
     if [[ "$exit_status" -eq 0 && "$gate_status" == "pass" ]]; then
-        printf 'status=pass\n' >>"$metadata"
+        final_status="pass"
     else
         [[ -n "$failure_reason" ]] || failure_reason="exit status $exit_status"
-        printf 'status=fail\n' >>"$metadata"
+    fi
+    write_decision "$final_status"
+    local decision_status=$?
+    if [[ "$decision_status" -ne 0 ]]; then
+        exit_status=1
+        final_status="fail"
+        phase="write-decision"
+        failure_reason="could not write $decision_path"
+    fi
+    printf 'status=%s\n' "$final_status" >>"$metadata"
+    if [[ "$final_status" == "fail" ]]; then
         printf 'failure_phase=%q\n' "$phase" >>"$metadata"
         printf 'failure_reason=%q\n' "$failure_reason" >>"$metadata"
     fi
     printf 'utc_finished=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$metadata"
     printf 'artifact_dir=%q\n' "$output_dir" >>"$metadata"
     printf 'comparison_path=%q\n' "$comparison_path" >>"$metadata"
+    printf 'decision_path=%q\n' "$decision_path" >>"$metadata"
     exit "$exit_status"
 }
 trap finalize_metadata EXIT
@@ -201,14 +248,17 @@ baseline_runner="$(pin_executable baseline "$baseline_runner")" || fail "pin-run
 a_runner="$(pin_executable A "$a_runner")" || fail "pin-runners" "A runner must be an executable regular file"
 b_runner="$(pin_executable B "$b_runner")" || fail "pin-runners" "B runner must be an executable regular file"
 manifest="$(canonical_file "$manifest")" || fail "pin-runners" "manifest must be a regular file: $manifest"
+manifest_hash="$(hash_file "$manifest")"
 
 baseline_hash="$(hash_file "$baseline_runner")"
 a_hash="$(hash_file "$a_runner")"
 b_hash="$(hash_file "$b_runner")"
-if [[ "$a_runner" == "$b_runner" || "$a_hash" == "$b_hash" ]]; then
-    fail "pin-runners" "A and B runners must be distinct immutable artifacts"
+if [[ "$baseline_runner" == "$a_runner" || "$baseline_runner" == "$b_runner" || "$a_runner" == "$b_runner" \
+    || "$baseline_hash" == "$a_hash" || "$baseline_hash" == "$b_hash" || "$a_hash" == "$b_hash" ]]; then
+    fail "pin-runners" "baseline, A, and B runners must be pairwise distinct immutable artifacts"
 fi
 printf 'manifest=%q\n' "$manifest" >>"$metadata"
+printf 'manifest_sha256=%s\n' "$manifest_hash" >>"$metadata"
 printf 'renderer_perf=%q\n' "$renderer_perf" >>"$metadata"
 printf 'comparator=%q\n' "$comparator" >>"$metadata"
 printf 'baseline_runner=%q\n' "$baseline_runner" >>"$metadata"
@@ -297,6 +347,12 @@ for index in "${!sequence[@]}"; do
     run_leg "$((index + 1))" "${sequence[$index]}"
 done
 
+phase="validate-host-load"
+idle_spread="$(awk 'NR == 2 { min = $3; max = $3 } NR > 1 { if ($3 < min) min = $3; if ($3 > max) max = $3 } END { if (NR > 1) printf "%.6f", max - min }' "$output_dir/host-idle.tsv")"
+awk -v spread="$idle_spread" -v maximum="$max_idle_spread_percent" 'BEGIN { exit !(spread <= maximum) }' \
+    || fail "validate-host-load" "idle spread fence failed: ${idle_spread}% > ${max_idle_spread_percent}%"
+printf 'idle_spread_percent=%s\n' "$idle_spread" >>"$metadata"
+
 phase="validate-comparison"
 if ! "$comparator" --a-first "$output_dir/01-A.renderer-perf.json" \
     --b-first "$output_dir/02-B.renderer-perf.json" \
@@ -310,11 +366,6 @@ if ! "$comparator" --a-first "$output_dir/01-A.renderer-perf.json" \
     comparison_reason="$(tr '\n' ' ' <"$output_dir/comparator.stderr")"
     fail "validate-comparison" "${comparison_reason:-comparison failed; see $output_dir/comparator.stderr}"
 fi
-
-idle_spread="$(awk 'NR == 2 { min = $3; max = $3 } NR > 1 { if ($3 < min) min = $3; if ($3 > max) max = $3 } END { if (NR > 1) printf "%.6f", max - min }' "$output_dir/host-idle.tsv")"
-awk -v spread="$idle_spread" -v maximum="$max_idle_spread_percent" 'BEGIN { exit !(spread <= maximum) }' \
-    || fail "validate-host-load" "idle spread fence failed: ${idle_spread}% > ${max_idle_spread_percent}%"
-printf 'idle_spread_percent=%s\n' "$idle_spread" >>"$metadata"
 
 gate_status="pass"
 printf 'r4-timing-gate status=pass artifacts=%s idle_spread_percent=%s\n' "$output_dir" "$idle_spread"

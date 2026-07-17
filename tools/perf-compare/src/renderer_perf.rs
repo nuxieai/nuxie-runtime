@@ -5,7 +5,9 @@ use std::process::{Command, Stdio};
 
 pub const MANIFEST_SCHEMA: &str = "rive-renderer-perf-scenes-v1";
 pub const RUNNER_PROTOCOL: &str = "rive-renderer-perf-runner-v1";
-pub const REPORT_SCHEMA: &str = "rive-renderer-perf-v1";
+pub const REPORT_SCHEMA: &str = "rive-renderer-perf-v2";
+pub const ESTIMATOR: &str = "cpp-control-min-paired-v1";
+pub const PAIR_ORDER: &str = "counterbalanced-scene-sample-v1";
 pub const SAMPLE_COUNT: usize = 7;
 pub const WARMUP_FRAMES: u32 = 10;
 pub const MEASURED_FRAMES: u32 = 100;
@@ -59,6 +61,13 @@ const REQUIRED_MODES: [Mode; 2] = [Mode::ClockwiseAtomic, Mode::Msaa];
 pub enum Mode {
     ClockwiseAtomic,
     Msaa,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SampleOrder {
+    CppThenCandidate,
+    CandidateThenCpp,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -410,11 +419,26 @@ pub fn run_benchmark(
                 RunRequest::for_scene(scene, &manifest.defaults, mode, Measurement::Timing);
             let mut baseline_medians = Vec::with_capacity(SAMPLE_COUNT);
             let mut candidate_medians = Vec::with_capacity(SAMPLE_COUNT);
+            let mut sample_orders = Vec::with_capacity(SAMPLE_COUNT);
             let mut structural = None;
             let mut selected_adapter = None;
+            let scene_index = scenes.len();
 
             for sample in 0..SAMPLE_COUNT {
-                let baseline_response = baseline.run(&request)?;
+                let baseline_first = (scene_index + sample) % 2 == 0;
+                let (baseline_response, candidate_response) = if baseline_first {
+                    (baseline.run(&request)?, candidate.run(&request)?)
+                } else {
+                    let candidate_response = candidate.run(&request)?;
+                    let baseline_response = baseline.run(&request)?;
+                    (baseline_response, candidate_response)
+                };
+                sample_orders.push(if baseline_first {
+                    SampleOrder::CppThenCandidate
+                } else {
+                    SampleOrder::CandidateThenCpp
+                });
+
                 validate_response("baseline", &id, sample, &request, &baseline_response)?;
                 validate_adapter(
                     &id,
@@ -429,7 +453,6 @@ pub fn run_benchmark(
                 structural = Some(baseline_structural);
                 baseline_medians.push(baseline_response.measured_frame_median_ns);
 
-                let candidate_response = candidate.run(&request)?;
                 validate_response("candidate", &id, sample, &request, &candidate_response)?;
                 validate_adapter(
                     &id,
@@ -445,7 +468,8 @@ pub fn run_benchmark(
 
             let baseline = TimingSummary::from_samples(baseline_medians)?;
             let candidate = TimingSummary::from_samples(candidate_medians)?;
-            let ratio = ratio(candidate.min_of_medians_ns, baseline.min_of_medians_ns)?;
+            let control_selected_pair =
+                ControlSelectedPair::from_samples(&baseline, &candidate, &sample_orders)?;
             scenes.push(SceneReport {
                 id: id.clone(),
                 stream: scene.stream.clone(),
@@ -459,9 +483,10 @@ pub fn run_benchmark(
                 timing: TimingMethod::required(),
                 baseline,
                 candidate,
+                sample_orders,
+                control_selected_pair,
                 structural: structural
                     .ok_or_else(|| format!("scene {id} did not produce structural metrics"))?,
-                ratio,
             });
         }
     }
@@ -470,6 +495,8 @@ pub fn run_benchmark(
     Ok(Report {
         schema: REPORT_SCHEMA,
         runner_protocol: RUNNER_PROTOCOL,
+        estimator: ESTIMATOR,
+        pair_order: PAIR_ORDER,
         release: true,
         profile: "release",
         debug: false,
@@ -478,6 +505,41 @@ pub fn run_benchmark(
         scenes,
         aggregate,
     })
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ControlSelectedPair {
+    pub sample_index: usize,
+    pub cpp_control_ns: u64,
+    pub candidate_ns: u64,
+    pub candidate_over_cpp: f64,
+}
+
+impl ControlSelectedPair {
+    fn from_samples(
+        baseline: &TimingSummary,
+        candidate: &TimingSummary,
+        sample_orders: &[SampleOrder],
+    ) -> Result<Self, String> {
+        if baseline.sample_medians_ns.len() != candidate.sample_medians_ns.len()
+            || baseline.sample_medians_ns.len() != sample_orders.len()
+        {
+            return Err("paired timing vectors have different lengths".to_owned());
+        }
+        let (index, &cpp_control_ns) = baseline
+            .sample_medians_ns
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, timing)| *timing)
+            .ok_or_else(|| "paired timing vectors are empty".to_owned())?;
+        let candidate_ns = candidate.sample_medians_ns[index];
+        Ok(Self {
+            sample_index: index + 1,
+            cpp_control_ns,
+            candidate_ns,
+            candidate_over_cpp: ratio(candidate_ns, cpp_control_ns)?,
+        })
+    }
 }
 
 pub(crate) fn validate_response(
@@ -625,43 +687,61 @@ pub struct SceneReport {
     pub timing: TimingMethod,
     pub baseline: TimingSummary,
     pub candidate: TimingSummary,
+    pub sample_orders: Vec<SampleOrder>,
+    pub control_selected_pair: ControlSelectedPair,
     pub structural: StructuralMetrics,
-    pub ratio: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Aggregate {
-    pub baseline_min_of_medians_ns_sum: u64,
-    pub candidate_min_of_medians_ns_sum: u64,
-    pub ratio: f64,
-    pub worst_scene: String,
-    pub worst_ratio: f64,
+    pub cpp_control_selected_ns_sum: u64,
+    pub candidate_paired_ns_sum: u64,
+    pub candidate_over_cpp: f64,
+    pub worst_scene: WorstScene,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct WorstScene {
+    pub id: String,
+    pub sample_index: usize,
+    pub cpp_control_ns: u64,
+    pub candidate_ns: u64,
+    pub candidate_over_cpp: f64,
 }
 
 impl Aggregate {
     fn from_scenes(scenes: &[SceneReport]) -> Result<Self, String> {
-        let baseline_min_of_medians_ns_sum = scenes
-            .iter()
-            .map(|scene| scene.baseline.min_of_medians_ns)
-            .sum();
-        let candidate_min_of_medians_ns_sum = scenes
-            .iter()
-            .map(|scene| scene.candidate.min_of_medians_ns)
-            .sum();
-        let ratio = ratio(
-            candidate_min_of_medians_ns_sum,
-            baseline_min_of_medians_ns_sum,
-        )?;
-        let worst = scenes
-            .iter()
-            .max_by(|left, right| left.ratio.total_cmp(&right.ratio))
+        let cpp_control_selected_ns_sum = scenes.iter().try_fold(0_u64, |sum, scene| {
+            sum.checked_add(scene.control_selected_pair.cpp_control_ns)
+                .ok_or_else(|| "report C++ control timing overflow".to_owned())
+        })?;
+        let candidate_paired_ns_sum = scenes.iter().try_fold(0_u64, |sum, scene| {
+            sum.checked_add(scene.control_selected_pair.candidate_ns)
+                .ok_or_else(|| "report candidate timing overflow".to_owned())
+        })?;
+        let candidate_over_cpp = ratio(candidate_paired_ns_sum, cpp_control_selected_ns_sum)?;
+        let mut scenes = scenes.iter();
+        let mut worst = scenes
+            .next()
             .ok_or_else(|| "report contains no scenes".to_owned())?;
+        for scene in scenes {
+            if scene.control_selected_pair.candidate_over_cpp
+                > worst.control_selected_pair.candidate_over_cpp
+            {
+                worst = scene;
+            }
+        }
         Ok(Self {
-            baseline_min_of_medians_ns_sum,
-            candidate_min_of_medians_ns_sum,
-            ratio,
-            worst_scene: worst.id.clone(),
-            worst_ratio: worst.ratio,
+            cpp_control_selected_ns_sum,
+            candidate_paired_ns_sum,
+            candidate_over_cpp,
+            worst_scene: WorstScene {
+                id: worst.id.clone(),
+                sample_index: worst.control_selected_pair.sample_index,
+                cpp_control_ns: worst.control_selected_pair.cpp_control_ns,
+                candidate_ns: worst.control_selected_pair.candidate_ns,
+                candidate_over_cpp: worst.control_selected_pair.candidate_over_cpp,
+            },
         })
     }
 }
@@ -670,6 +750,8 @@ impl Aggregate {
 pub struct Report {
     pub schema: &'static str,
     pub runner_protocol: &'static str,
+    pub estimator: &'static str,
+    pub pair_order: &'static str,
     pub release: bool,
     pub profile: &'static str,
     pub debug: bool,
@@ -687,34 +769,36 @@ pub fn render_json(report: &Report) -> Result<String, String> {
 
 pub fn render_markdown(report: &Report) -> String {
     let mut markdown = String::from(
-        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | baseline min ns | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate min ns | candidate p50 ns | candidate p95 ns | candidate spread ns | ratio | logical flushes | draws | atomic strategy partitions |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v2`  \nEstimator: `cpp-control-min-paired-v1`  \nPair order: `counterbalanced-scene-sample-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | C++ selected sample | C++ selected ns | paired candidate ns | paired ratio | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate p50 ns | candidate p95 ns | candidate spread ns | logical flushes | draws | atomic strategy partitions |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
     );
     for scene in &report.scenes {
         markdown.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.6} | {} | {} | {} |\n",
+            "| {} | {} | {} | {} | {} | {:.6} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
             scene.id,
             mode_name(scene.mode),
-            scene.baseline.min_of_medians_ns,
+            scene.control_selected_pair.sample_index,
+            scene.control_selected_pair.cpp_control_ns,
+            scene.control_selected_pair.candidate_ns,
+            scene.control_selected_pair.candidate_over_cpp,
             scene.baseline.p50_ns,
             scene.baseline.p95_ns,
             scene.baseline.spread_ns,
-            scene.candidate.min_of_medians_ns,
             scene.candidate.p50_ns,
             scene.candidate.p95_ns,
             scene.candidate.spread_ns,
-            scene.ratio,
             scene.structural.logical_flushes,
             scene.structural.draws,
             scene.structural.atomic_strategy_partitions,
         ));
     }
     markdown.push_str(&format!(
-        "\nAggregate min-of-medians: baseline {} ns, candidate {} ns, ratio {:.6}. Worst scene: {} ({:.6}).\n",
-        report.aggregate.baseline_min_of_medians_ns_sum,
-        report.aggregate.candidate_min_of_medians_ns_sum,
-        report.aggregate.ratio,
-        report.aggregate.worst_scene,
-        report.aggregate.worst_ratio,
+        "\nAggregate control-selected pairs: C++ {} ns, candidate {} ns, ratio {:.6}. Worst scene: {} sample {} ({:.6}).\n",
+        report.aggregate.cpp_control_selected_ns_sum,
+        report.aggregate.candidate_paired_ns_sum,
+        report.aggregate.candidate_over_cpp,
+        report.aggregate.worst_scene.id,
+        report.aggregate.worst_scene.sample_index,
+        report.aggregate.worst_scene.candidate_over_cpp,
     ));
     markdown
 }
@@ -723,10 +807,12 @@ pub fn check_threshold(report: &Report, max_ratio: f64) -> Result<(), String> {
     if !max_ratio.is_finite() || max_ratio <= 0.0 {
         return Err("--max-ratio must be a finite value greater than zero".to_owned());
     }
-    if report.aggregate.worst_ratio > max_ratio {
+    if report.aggregate.worst_scene.candidate_over_cpp > max_ratio {
         return Err(format!(
             "renderer performance threshold failed: {} ratio {:.6} exceeds {:.6}",
-            report.aggregate.worst_scene, report.aggregate.worst_ratio, max_ratio
+            report.aggregate.worst_scene.id,
+            report.aggregate.worst_scene.candidate_over_cpp,
+            max_ratio
         ));
     }
     Ok(())
@@ -749,9 +835,11 @@ pub fn mode_name(mode: Mode) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
     use std::collections::VecDeque;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    use std::rc::Rc;
 
     struct FakeRunner {
         responses: VecDeque<RunnerResponse>,
@@ -762,6 +850,21 @@ mod tests {
             self.responses
                 .pop_front()
                 .ok_or_else(|| "fake runner ran out of responses".to_owned())
+        }
+    }
+
+    struct RecordingRunner {
+        label: &'static str,
+        responses: VecDeque<RunnerResponse>,
+        calls: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl Runner for RecordingRunner {
+        fn run(&mut self, _request: &RunRequest) -> Result<RunnerResponse, String> {
+            self.calls.borrow_mut().push(self.label);
+            self.responses
+                .pop_front()
+                .ok_or_else(|| "recording runner ran out of responses".to_owned())
         }
     }
 
@@ -906,20 +1009,35 @@ mod tests {
     }
 
     #[test]
-    fn ratio_math_uses_min_of_medians() {
+    fn control_minimum_selects_the_candidate_from_the_same_sample() {
         let baseline =
             TimingSummary::from_samples(vec![16, 10, 15, 14, 13, 12, 11]).expect("seven samples");
         let candidate =
-            TimingSummary::from_samples(vec![25, 15, 21, 19, 18, 17, 16]).expect("seven samples");
+            TimingSummary::from_samples(vec![5, 30, 21, 19, 18, 17, 16]).expect("seven samples");
+        let orders = vec![SampleOrder::CppThenCandidate; SAMPLE_COUNT];
+        let selected =
+            ControlSelectedPair::from_samples(&baseline, &candidate, &orders).expect("pair");
         assert_eq!(baseline.min_of_medians_ns, 10);
-        assert_eq!(candidate.min_of_medians_ns, 15);
+        assert_eq!(candidate.min_of_medians_ns, 5);
         assert_eq!(baseline.p50_ns, 13);
-        assert_eq!(candidate.p95_ns, 25);
-        assert_eq!(candidate.spread_ns, 10);
-        assert_eq!(
-            ratio(candidate.min_of_medians_ns, baseline.min_of_medians_ns).unwrap(),
-            1.5
-        );
+        assert_eq!(selected.sample_index, 2);
+        assert_eq!(selected.cpp_control_ns, 10);
+        assert_eq!(selected.candidate_ns, 30);
+        assert_eq!(selected.candidate_over_cpp, 3.0);
+    }
+
+    #[test]
+    fn control_selection_uses_the_first_minimum_on_ties() {
+        let baseline =
+            TimingSummary::from_samples(vec![10, 20, 10, 30, 40, 50, 60]).expect("seven samples");
+        let candidate =
+            TimingSummary::from_samples(vec![15, 1, 25, 1, 1, 1, 1]).expect("seven samples");
+        let orders = vec![SampleOrder::CppThenCandidate; SAMPLE_COUNT];
+        let selected =
+            ControlSelectedPair::from_samples(&baseline, &candidate, &orders).expect("pair");
+        assert_eq!(selected.sample_index, 1);
+        assert_eq!(selected.candidate_ns, 15);
+        assert_eq!(selected.candidate_over_cpp, 1.5);
     }
 
     #[test]
@@ -935,8 +1053,19 @@ mod tests {
         let json = render_json(&report).expect("json");
         let markdown = render_markdown(&report);
         assert_eq!(report.scenes.len(), 16);
+        assert_eq!(report.schema, REPORT_SCHEMA);
+        assert_eq!(report.estimator, ESTIMATOR);
+        assert_eq!(report.pair_order, PAIR_ORDER);
         assert_eq!(report.scenes[0].id, "gm-CubicStroke-clockwise-atomic");
         assert_eq!(report.scenes[15].id, "gm-bug5099-msaa");
+        let cpp_first = report
+            .scenes
+            .iter()
+            .flat_map(|scene| &scene.sample_orders)
+            .filter(|order| **order == SampleOrder::CppThenCandidate)
+            .count();
+        let candidate_first = report.scenes.len() * SAMPLE_COUNT - cpp_first;
+        assert_eq!(cpp_first, candidate_first);
         assert!(
             json.find(&report.scenes[0].id).unwrap() < json.find(&report.scenes[15].id).unwrap()
         );
@@ -944,6 +1073,34 @@ mod tests {
             markdown.find(&report.scenes[0].id).unwrap()
                 < markdown.find(&report.scenes[15].id).unwrap()
         );
+    }
+
+    #[test]
+    fn runner_execution_order_is_counterbalanced_and_matches_the_report() {
+        let manifest = manifest();
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut baseline = RecordingRunner {
+            label: "cpp",
+            responses: responses_for(&manifest, 10),
+            calls: Rc::clone(&calls),
+        };
+        let mut candidate = RecordingRunner {
+            label: "candidate",
+            responses: responses_for(&manifest, 12),
+            calls: Rc::clone(&calls),
+        };
+        let report = run_benchmark(&manifest, &mut baseline, &mut candidate).expect("report");
+        let calls = calls.borrow();
+        assert_eq!(calls.len(), report.scenes.len() * SAMPLE_COUNT * 2);
+        for (pair, expected) in calls
+            .chunks_exact(2)
+            .zip(report.scenes.iter().flat_map(|scene| &scene.sample_orders))
+        {
+            match expected {
+                SampleOrder::CppThenCandidate => assert_eq!(pair, ["cpp", "candidate"]),
+                SampleOrder::CandidateThenCpp => assert_eq!(pair, ["candidate", "cpp"]),
+            }
+        }
     }
 
     #[test]

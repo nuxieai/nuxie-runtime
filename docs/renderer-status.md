@@ -1663,6 +1663,19 @@ Run `make renderer-golden`.
     and MSAA 0.2887x. The corresponding C++ Dawn/current snapshot is 1.4057x
     aggregate, 1.3816x atomic, and 1.4497x MSAA; its 2.0175x worst row is
     directional only and does not close item 135.
+137. [x] Make the staged timing gate compare samples from the same load moment.
+    `rive-renderer-perf-v2` alternates C++-first and Rust-first execution 56/56
+    across the fixed matrix, selects the minimum C++ control sample per row,
+    and pairs Rust from that exact sample index. The v3 comparator validates
+    all sample-order, selected-pair, aggregate, worst-row, adapter, and scene
+    provenance before applying the inclusive 2.0x threshold. The shell pins
+    the manifest and all three runners, rejects every runner alias, applies
+    host-load fences before comparison, and writes one authoritative JSON gate
+    decision on both admitted and rejected runs. Eleven gate integration tests
+    cover pass, threshold, drift, malformed output, mutation, aliasing, idle
+    floor, idle spread, and sampler serialization. This tooling does not add
+    timing ceremony to counter-defined optimizations; it only makes item 135's
+    one final timing-defined decision trustworthy.
 
 ## R2 Completion Record
 
@@ -2823,6 +2836,17 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-16: Closed R4 item 137 by replacing independent-minimum timing with
+  a control-selected paired estimator. The fixed matrix counterbalances
+  execution order exactly, carries sample-level provenance into every row and
+  aggregate, and fails closed on tampering. The gate now rejects baseline/A/B
+  aliases, pins the manifest hash, evaluates load before comparison, and emits
+  `gate-decision.json` for success or any ordinary rejection. All 15 library,
+  4 comparator, 11 gate, and CLI tests pass. Historical item-136 vectors
+  recompute directionally to old/current 0.5414x aggregate and
+  C++/current 1.4809x aggregate with a 2.0277x worst row, but their old fixed
+  call order keeps them outside acceptance. Next, build immutable v2 runners
+  and execute item 135 when the 70% idle fence admits the host.
 - 2026-07-16: Closed R4 item 134 and the finite deterministic counter tail.
   The twelve-prefix OverStroke probe located draw 3; its translated
   quadratic-as-cubic used five Rust parametric segments against C++'s four

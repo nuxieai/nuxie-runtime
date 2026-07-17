@@ -111,6 +111,28 @@ fn host_sampler(directory: &Path) -> PathBuf {
     path
 }
 
+fn fixed_host_sampler(directory: &Path, name: &str, idle_percent: u32) -> PathBuf {
+    let path = directory.join(name);
+    executable(
+        &path,
+        &format!("#!/bin/sh\nprintf 'r4-host-idle-percent={idle_percent}\\n'\n"),
+    );
+    path
+}
+
+fn alternating_host_sampler(directory: &Path) -> PathBuf {
+    let path = directory.join("alternating-host-sampler.sh");
+    let count = directory.join("host-sample-count");
+    executable(
+        &path,
+        &format!(
+            "#!/bin/sh\nset -eu\ncount_file='{}'\ncount=0\nif [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$count_file\"\nidle=98\nif [ $((count % 2)) -eq 0 ]; then idle=90; fi\nprintf 'r4-host-idle-percent=%s\\n' \"$idle\"\n",
+            count.display()
+        ),
+    );
+    path
+}
+
 fn coordinated_runner(
     directory: &Path,
     name: &str,
@@ -214,6 +236,46 @@ fn metadata(directory: &Path) -> String {
     std::fs::read_to_string(directory.join("artifacts/metadata.env")).unwrap()
 }
 
+fn decision(directory: &Path) -> serde_json::Value {
+    serde_json::from_str(
+        &std::fs::read_to_string(directory.join("artifacts/gate-decision.json")).unwrap(),
+    )
+    .unwrap()
+}
+
+fn run_comparator(directory: &Path, a_first: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_r4-timing-compare"))
+        .args([
+            "--a-first",
+            a_first.to_str().unwrap(),
+            "--b-first",
+            directory
+                .join("artifacts/02-B.renderer-perf.json")
+                .to_str()
+                .unwrap(),
+            "--b-second",
+            directory
+                .join("artifacts/03-B.renderer-perf.json")
+                .to_str()
+                .unwrap(),
+            "--a-second",
+            directory
+                .join("artifacts/04-A.renderer-perf.json")
+                .to_str()
+                .unwrap(),
+            "--max-renderer-ratio",
+            "10",
+            "--max-b-over-a",
+            "1",
+            "--max-control-drift",
+            "1",
+            "--max-repeat-drift",
+            "1",
+        ])
+        .output()
+        .unwrap()
+}
+
 fn assert_finalized_failure(directory: &Path) {
     let metadata = metadata(directory);
     assert!(metadata.contains("status=fail\n"), "{metadata}");
@@ -221,6 +283,11 @@ fn assert_finalized_failure(directory: &Path) {
     assert!(metadata.contains("failure_reason="), "{metadata}");
     assert!(metadata.contains("utc_finished="), "{metadata}");
     assert!(metadata.contains("artifact_dir="), "{metadata}");
+    assert!(metadata.contains("decision_path="), "{metadata}");
+    let decision = decision(directory);
+    assert_eq!(decision["schema"], "rive-r4-timing-gate-decision-v1");
+    assert_eq!(decision["status"], "fail");
+    assert!(!decision["reason"].is_null());
 }
 
 #[test]
@@ -250,6 +317,10 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
     );
     let metadata = metadata(&directory.path);
     assert!(metadata.contains("status=pass\n"), "{metadata}");
+    let decision = decision(&directory.path);
+    assert_eq!(decision["status"], "pass");
+    assert_eq!(decision["comparison_available"], true);
+    assert!(decision["reason"].is_null());
     assert!(
         metadata
             .lines()
@@ -266,44 +337,27 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
         "{comparison}"
     );
 
-    let malformed = directory.path.join("artifacts/01-A.renderer-perf.json");
-    std::fs::write(&malformed, "{not renderer-perf JSON}\n").unwrap();
-    let validation = Command::new(env!("CARGO_BIN_EXE_r4-timing-compare"))
-        .args([
-            "--a-first",
-            malformed.to_str().unwrap(),
-            "--b-first",
-            directory
-                .path
-                .join("artifacts/02-B.renderer-perf.json")
-                .to_str()
-                .unwrap(),
-            "--b-second",
-            directory
-                .path
-                .join("artifacts/03-B.renderer-perf.json")
-                .to_str()
-                .unwrap(),
-            "--a-second",
-            directory
-                .path
-                .join("artifacts/04-A.renderer-perf.json")
-                .to_str()
-                .unwrap(),
-            "--max-renderer-ratio",
-            "10",
-            "--max-b-over-a",
-            "1",
-            "--max-control-drift",
-            "1",
-            "--max-repeat-drift",
-            "1",
-        ])
-        .output()
-        .unwrap();
+    let a_report = directory.path.join("artifacts/01-A.renderer-perf.json");
+    let mut tampered: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&a_report).unwrap()).unwrap();
+    tampered["scenes"][0]["control_selected_pair"]["candidate_ns"] = 999.into();
+    let tampered_path = directory.path.join("tampered-pair.json");
+    std::fs::write(
+        &tampered_path,
+        format!("{}\n", serde_json::to_string_pretty(&tampered).unwrap()),
+    )
+    .unwrap();
+    let validation = run_comparator(&directory.path, &tampered_path);
     assert!(!validation.status.success());
     assert!(
-        String::from_utf8_lossy(&validation.stderr).contains("invalid rive-renderer-perf-v1 JSON")
+        String::from_utf8_lossy(&validation.stderr).contains("inconsistent control-selected pair")
+    );
+
+    std::fs::write(&a_report, "{not renderer-perf JSON}\n").unwrap();
+    let validation = run_comparator(&directory.path, &a_report);
+    assert!(!validation.status.success());
+    assert!(
+        String::from_utf8_lossy(&validation.stderr).contains("invalid rive-renderer-perf-v2 JSON")
     );
 }
 
@@ -332,7 +386,10 @@ fn r4_gate_captures_a_above_the_final_ratio_when_b_passes() {
     );
     let comparison =
         std::fs::read_to_string(directory.path.join("artifacts/comparison.json")).unwrap();
-    assert!(comparison.contains("\"b_worst_scene_ratio\": 1.5"));
+    let comparison: serde_json::Value = serde_json::from_str(&comparison).unwrap();
+    assert_eq!(comparison["schema"], "rive-r4-timing-comparison-v3");
+    assert_eq!(comparison["worst_b_scene"]["candidate_over_cpp"], 1.5);
+    assert_eq!(comparison["overall_pass"], true);
 }
 
 #[test]
@@ -357,6 +414,14 @@ fn r4_gate_rejects_b_above_the_final_renderer_ratio() {
     assert!(
         metadata(&directory.path)
             .contains("post-tail\\ B\\ worst-scene\\ renderer/C++\\ timing\\ failed")
+    );
+    let comparison =
+        std::fs::read_to_string(directory.path.join("artifacts/comparison.json")).unwrap();
+    let comparison: serde_json::Value = serde_json::from_str(&comparison).unwrap();
+    assert_eq!(comparison["overall_pass"], false);
+    assert_eq!(
+        comparison["checks"]["post_tail_worst_scene"]["passed"],
+        false
     );
 }
 
@@ -529,7 +594,30 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
     });
     assert!(!output.status.success());
     assert_finalized_failure(&identity.path);
-    assert!(metadata(&identity.path).contains("A\\ and\\ B\\ runners\\ must\\ be\\ distinct"));
+    assert!(
+        metadata(&identity.path)
+            .contains("baseline\\,\\ A\\,\\ and\\ B\\ runners\\ must\\ be\\ pairwise\\ distinct")
+    );
+
+    let baseline_alias = TempDir::new("baseline-alias");
+    let baseline = static_runner(&baseline_alias.path, "baseline.sh", 100);
+    let b = static_runner(&baseline_alias.path, "b.sh", 100);
+    let output = run_gate(Gate {
+        directory: &baseline_alias.path,
+        baseline: &baseline,
+        a: &baseline,
+        b: &b,
+        max_renderer_ratio: "10",
+        max_b_over_a: "1",
+        max_control_drift: "1",
+        max_repeat_drift: "1",
+    });
+    assert!(!output.status.success());
+    assert_finalized_failure(&baseline_alias.path);
+    assert!(
+        metadata(&baseline_alias.path)
+            .contains("baseline\\,\\ A\\,\\ and\\ B\\ runners\\ must\\ be\\ pairwise\\ distinct")
+    );
 
     let mutation = TempDir::new("mutation");
     let baseline = static_runner(&mutation.path, "baseline.sh", 100);
@@ -552,4 +640,63 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
         "{}",
         metadata(&mutation.path)
     );
+}
+
+#[test]
+fn r4_gate_records_a_decision_when_the_idle_floor_fails() {
+    let directory = TempDir::new("idle-floor");
+    let baseline = static_runner(&directory.path, "baseline.sh", 100);
+    let a = static_runner(&directory.path, "a.sh", 100);
+    let b = static_runner(&directory.path, "b.sh", 100);
+    let sampler = fixed_host_sampler(&directory.path, "low-idle.sh", 89);
+    let output = run_gate_with_sampler(
+        Gate {
+            directory: &directory.path,
+            baseline: &baseline,
+            a: &a,
+            b: &b,
+            max_renderer_ratio: "10",
+            max_b_over_a: "1",
+            max_control_drift: "1",
+            max_repeat_drift: "1",
+        },
+        &sampler,
+    );
+
+    assert!(!output.status.success());
+    assert_finalized_failure(&directory.path);
+    let decision = decision(&directory.path);
+    assert_eq!(decision["phase"], "sample-host");
+    assert_eq!(decision["comparison_available"], false);
+    assert!(decision["idle_spread_percent"].is_null());
+}
+
+#[test]
+fn r4_gate_rejects_load_spread_before_writing_a_comparison() {
+    let directory = TempDir::new("idle-spread");
+    let baseline = static_runner(&directory.path, "baseline.sh", 100);
+    let a = static_runner(&directory.path, "a.sh", 100);
+    let b = static_runner(&directory.path, "b.sh", 100);
+    let sampler = alternating_host_sampler(&directory.path);
+    let output = run_gate_with_sampler(
+        Gate {
+            directory: &directory.path,
+            baseline: &baseline,
+            a: &a,
+            b: &b,
+            max_renderer_ratio: "10",
+            max_b_over_a: "1",
+            max_control_drift: "1",
+            max_repeat_drift: "1",
+        },
+        &sampler,
+    );
+
+    assert!(!output.status.success());
+    assert_finalized_failure(&directory.path);
+    let decision = decision(&directory.path);
+    assert_eq!(decision["phase"], "validate-host-load");
+    assert_eq!(decision["comparison_available"], false);
+    assert_eq!(decision["idle_spread_percent"], 8.0);
+    assert!(!directory.path.join("artifacts/comparison.json").exists());
 }

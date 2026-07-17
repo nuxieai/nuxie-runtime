@@ -369,8 +369,11 @@ R4 performance decisions use these controls:
    acceptance gate for counter-defined work.
 2. Use immutable repeated alternating reports and load-matched A-B-B-A when
    the claimed benefit is defined by timing, the effect is disputed, or exact
-   counters do not locate the claimed benefit. A noisy directional sample by
-   itself does not trigger A-B-B-A for an objective work-elimination slice.
+   counters do not locate the claimed benefit. Within each report, alternate
+   C++-first and candidate-first pairs, select the minimum C++ control sample,
+   and use the candidate from that same sample index. A noisy directional
+   sample by itself does not trigger A-B-B-A for an objective work-elimination
+   slice.
 3. For timing-defined work, treat end-to-end submit-to-GPU-complete frame time
    as primary. Trace intervals are diagnostic and may veto only a reproducible
    material regression, not a one-off absolute-duration change.
@@ -892,3 +895,30 @@ is 1.4057x aggregate, 1.3816x atomic, and 1.4497x MSAA. Its worst row,
 `gm-bug339297-clockwise-atomic`, is 2.0175x. That last value is close enough to
 motivate the final load-admissible gate, but it is not accepted threshold
 evidence by itself.
+
+### Item 137 Update
+
+The staged gate no longer divides independently selected C++ and Rust minima.
+`rive-renderer-perf-v2` counterbalances execution order across all 112
+scene-sample pairs: 56 execute C++ first and 56 execute Rust first. For each
+scene it selects the first minimum C++ control and carries the Rust timing from
+that exact sample index. The report stores the order vector and selected pair;
+the aggregate sums only those pairs and the worst row retains full provenance.
+This reduces sensitivity to machine load without pretending that unrelated
+sample minima occurred together.
+
+`r4-timing-comparison-v3` validates the exact fixed scene set and order,
+adapter identity, timing method, sample order, selected pair, checked sums,
+and worst-row provenance before applying the gate. The 2.0x boundary is
+inclusive and covered directly. The shell additionally pins the manifest
+hash, rejects any path or hash alias among C++/A/B runners, validates host-load
+spread before writing a comparison, and always writes `gate-decision.json` so
+an environment rejection cannot look like a renderer verdict. Sol's
+adversarial review found the baseline-alias and load-decision gaps; both now
+have integration regressions alongside low-idle and excessive-spread cases.
+
+Re-evaluating the old item-136 sample vectors with the paired-control selector
+gives old/current 0.5414x aggregate, 0.8741x atomic, and 0.3233x MSAA. The
+C++/current view becomes 1.4809x aggregate, 1.4744x atomic, and 1.4928x MSAA,
+with a 2.0277x worst row. These remain directional because the original runner
+used fixed C++-then-Rust order; only fresh v2 artifacts can close item 135.

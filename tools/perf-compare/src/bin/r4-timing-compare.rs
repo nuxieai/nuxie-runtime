@@ -2,10 +2,30 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};
 
-const REPORT_SCHEMA: &str = "rive-renderer-perf-v1";
+const REPORT_SCHEMA: &str = "rive-renderer-perf-v2";
 const RUNNER_PROTOCOL: &str = "rive-renderer-perf-runner-v1";
 const MANIFEST_SCHEMA: &str = "rive-renderer-perf-scenes-v1";
+const ESTIMATOR: &str = "cpp-control-min-paired-v1";
+const PAIR_ORDER: &str = "counterbalanced-scene-sample-v1";
 const SAMPLES_PER_RUNNER: usize = 7;
+const EXPECTED_SCENE_IDS: [&str; 16] = [
+    "gm-CubicStroke-clockwise-atomic",
+    "gm-CubicStroke-msaa",
+    "gm-OverStroke-clockwise-atomic",
+    "gm-OverStroke-msaa",
+    "gm-batchedconvexpaths-clockwise-atomic",
+    "gm-batchedconvexpaths-msaa",
+    "gm-batchedtriangulations-clockwise-atomic",
+    "gm-batchedtriangulations-msaa",
+    "gm-bevel180strokes-clockwise-atomic",
+    "gm-bevel180strokes-msaa",
+    "gm-bug339297-clockwise-atomic",
+    "gm-bug339297-msaa",
+    "gm-bug339297_as_clip-clockwise-atomic",
+    "gm-bug339297_as_clip-msaa",
+    "gm-bug5099-clockwise-atomic",
+    "gm-bug5099-msaa",
+];
 
 fn main() {
     if let Err(error) = run() {
@@ -22,7 +42,8 @@ fn run() -> Result<(), String> {
     let a_second = load_report("A second", &options.a_second)?;
     validate_trace([&a_first, &b_first, &b_second, &a_second])?;
 
-    let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second)?;
+    let limits = Limits::from_options(&options)?;
+    let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second, limits)?;
     let rendered = serde_json::to_string_pretty(&comparison)
         .map(|json| format!("{json}\n"))
         .map_err(|error| format!("failed to encode comparison: {error}"))?;
@@ -33,44 +54,7 @@ fn run() -> Result<(), String> {
         print!("{rendered}");
     }
 
-    check_limit(
-        "post-tail B worst-scene renderer/C++ timing",
-        comparison.b_worst_scene_ratio,
-        options.max_renderer_ratio,
-    )?;
-    check_limit(
-        "normalized B/A candidate timing",
-        comparison.normalized_b_over_a,
-        options.max_b_over_a,
-    )?;
-    check_limit(
-        "C++ control drift",
-        comparison.cpp_control_drift,
-        options.max_control_drift,
-    )?;
-    check_limit(
-        "normalized A repeat drift",
-        comparison.normalized_a_repeat_drift,
-        options.max_repeat_drift,
-    )?;
-    check_limit(
-        "normalized B repeat drift",
-        comparison.normalized_b_repeat_drift,
-        options.max_repeat_drift,
-    )?;
-    Ok(())
-}
-
-fn check_limit(name: &str, actual: f64, maximum: f64) -> Result<(), String> {
-    if !maximum.is_finite() || maximum <= 0.0 {
-        return Err(format!(
-            "limit for {name} must be finite and greater than zero"
-        ));
-    }
-    if actual > maximum {
-        return Err(format!("{name} failed: {actual:.6} exceeds {maximum:.6}"));
-    }
-    Ok(())
+    comparison.verdict()
 }
 
 fn load_report(label: &str, path: &Path) -> Result<Report, String> {
@@ -90,6 +74,8 @@ fn load_report(label: &str, path: &Path) -> Result<Report, String> {
 struct Report {
     schema: String,
     runner_protocol: String,
+    estimator: String,
+    pair_order: String,
     release: bool,
     profile: String,
     debug: bool,
@@ -103,6 +89,8 @@ impl Report {
     fn validate(self, label: &str) -> Result<Self, String> {
         if self.schema != REPORT_SCHEMA
             || self.runner_protocol != RUNNER_PROTOCOL
+            || self.estimator != ESTIMATOR
+            || self.pair_order != PAIR_ORDER
             || !self.release
             || self.profile != "release"
             || self.debug
@@ -110,41 +98,53 @@ impl Report {
             || self.manifest_schema != MANIFEST_SCHEMA
         {
             return Err(format!(
-                "{label} report does not declare the fenced renderer-perf-v1 protocol"
+                "{label} report does not declare the fenced renderer-perf-v2 protocol"
             ));
         }
-        if self.scenes.len() != 16 {
-            return Err(format!("{label} report must contain the 16 fenced scenes"));
+        if self
+            .scenes
+            .iter()
+            .map(|scene| scene.id.as_str())
+            .ne(EXPECTED_SCENE_IDS)
+        {
+            return Err(format!(
+                "{label} report must contain the exact 16 fenced scenes in manifest order"
+            ));
         }
 
-        let mut ids = std::collections::BTreeSet::new();
-        let mut baseline_sum = 0_u64;
+        let reference_adapter = &self.scenes[0].selected_adapter;
+        let mut cpp_control_sum = 0_u64;
         let mut candidate_sum = 0_u64;
-        let mut worst: Option<(&str, f64)> = None;
-        for scene in &self.scenes {
-            scene.validate(label)?;
-            if !ids.insert(&scene.id) {
-                return Err(format!("{label} report repeats scene {}", scene.id));
+        let mut worst: Option<&Scene> = None;
+        for (scene_index, scene) in self.scenes.iter().enumerate() {
+            scene.validate(label, scene_index)?;
+            if !reference_adapter.matches(&scene.selected_adapter) {
+                return Err(format!(
+                    "{label} report scenes selected different physical adapters"
+                ));
             }
-            baseline_sum = baseline_sum
-                .checked_add(scene.baseline.min_of_medians_ns)
-                .ok_or_else(|| format!("{label} report baseline timing overflow"))?;
+            cpp_control_sum = cpp_control_sum
+                .checked_add(scene.control_selected_pair.cpp_control_ns)
+                .ok_or_else(|| format!("{label} report C++ control timing overflow"))?;
             candidate_sum = candidate_sum
-                .checked_add(scene.candidate.min_of_medians_ns)
+                .checked_add(scene.control_selected_pair.candidate_ns)
                 .ok_or_else(|| format!("{label} report candidate timing overflow"))?;
-            // `Iterator::max_by` used by renderer-perf keeps the final item on
-            // ties, so mirror that rule when checking its reported aggregate.
-            if worst.is_none_or(|(_, ratio)| scene.ratio >= ratio) {
-                worst = Some((&scene.id, scene.ratio));
+            if worst.is_none_or(|current| {
+                scene.control_selected_pair.candidate_over_cpp
+                    > current.control_selected_pair.candidate_over_cpp
+            }) {
+                worst = Some(scene);
             }
         }
-        let aggregate_ratio = ratio(candidate_sum, baseline_sum)?;
-        let (worst_id, worst_ratio) = worst.expect("nonempty scenes checked above");
-        if self.aggregate.baseline_min_of_medians_ns_sum != baseline_sum
-            || self.aggregate.candidate_min_of_medians_ns_sum != candidate_sum
-            || !same_number(self.aggregate.ratio, aggregate_ratio)
-            || self.aggregate.worst_scene != worst_id
-            || !same_number(self.aggregate.worst_ratio, worst_ratio)
+        let aggregate_ratio = ratio(candidate_sum, cpp_control_sum)?;
+        let worst = worst.expect("nonempty scenes checked above");
+        if self.aggregate.cpp_control_selected_ns_sum != cpp_control_sum
+            || self.aggregate.candidate_paired_ns_sum != candidate_sum
+            || !same_number(self.aggregate.candidate_over_cpp, aggregate_ratio)
+            || !self
+                .aggregate
+                .worst_scene
+                .matches(&worst.id, &worst.control_selected_pair)
         {
             return Err(format!(
                 "{label} report aggregate is inconsistent with its scenes"
@@ -191,12 +191,13 @@ struct Scene {
     timing: Timing,
     baseline: TimingSummary,
     candidate: TimingSummary,
+    sample_orders: Vec<String>,
+    control_selected_pair: ControlSelectedPair,
     structural: Structural,
-    ratio: f64,
 }
 
 impl Scene {
-    fn validate(&self, label: &str) -> Result<(), String> {
+    fn validate(&self, label: &str, scene_index: usize) -> Result<(), String> {
         if self.id.trim().is_empty()
             || self.stream.trim().is_empty()
             || self.frame != 0
@@ -211,21 +212,70 @@ impl Scene {
         self.timing.validate(label)?;
         self.baseline.validate(label)?;
         self.candidate.validate(label)?;
-        let expected = ratio(
-            self.candidate.min_of_medians_ns,
-            self.baseline.min_of_medians_ns,
-        )?;
-        if !same_number(self.ratio, expected) {
+        if self.sample_orders.len() != SAMPLES_PER_RUNNER
+            || self
+                .sample_orders
+                .iter()
+                .enumerate()
+                .any(|(sample, order)| {
+                    let expected = if (scene_index + sample) % 2 == 0 {
+                        "cpp-then-candidate"
+                    } else {
+                        "candidate-then-cpp"
+                    };
+                    order != expected
+                })
+        {
             return Err(format!(
-                "{label} report scene {} has an inconsistent ratio",
+                "{label} report scene {} has an invalid counterbalanced sample order",
                 self.id
             ));
         }
+        self.control_selected_pair
+            .validate(label, self, scene_index)?;
         let _ = (
             self.structural.logical_flushes,
             self.structural.draws,
             self.structural.atomic_strategy_partitions,
         );
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ControlSelectedPair {
+    sample_index: usize,
+    cpp_control_ns: u64,
+    candidate_ns: u64,
+    candidate_over_cpp: f64,
+}
+
+impl ControlSelectedPair {
+    fn validate(&self, label: &str, scene: &Scene, _scene_index: usize) -> Result<(), String> {
+        let selected_index = scene
+            .baseline
+            .sample_medians_ns
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, timing)| *timing)
+            .map(|(index, _)| index)
+            .expect("timing summary validation guarantees samples");
+        let cpp_control_ns = scene.baseline.sample_medians_ns[selected_index];
+        let candidate_ns = scene.candidate.sample_medians_ns[selected_index];
+        if self.sample_index != selected_index + 1
+            || self.cpp_control_ns != cpp_control_ns
+            || self.candidate_ns != candidate_ns
+            || !same_number(
+                self.candidate_over_cpp,
+                ratio(candidate_ns, cpp_control_ns)?,
+            )
+        {
+            return Err(format!(
+                "{label} report scene {} has an inconsistent control-selected pair",
+                scene.id
+            ));
+        }
         Ok(())
     }
 }
@@ -340,11 +390,30 @@ struct Structural {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Aggregate {
-    baseline_min_of_medians_ns_sum: u64,
-    candidate_min_of_medians_ns_sum: u64,
-    ratio: f64,
-    worst_scene: String,
-    worst_ratio: f64,
+    cpp_control_selected_ns_sum: u64,
+    candidate_paired_ns_sum: u64,
+    candidate_over_cpp: f64,
+    worst_scene: WorstScene,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorstScene {
+    id: String,
+    sample_index: usize,
+    cpp_control_ns: u64,
+    candidate_ns: u64,
+    candidate_over_cpp: f64,
+}
+
+impl WorstScene {
+    fn matches(&self, id: &str, pair: &ControlSelectedPair) -> bool {
+        self.id == id
+            && self.sample_index == pair.sample_index
+            && self.cpp_control_ns == pair.cpp_control_ns
+            && self.candidate_ns == pair.candidate_ns
+            && same_number(self.candidate_over_cpp, pair.candidate_over_cpp)
+    }
 }
 
 #[derive(Serialize)]
@@ -355,19 +424,100 @@ struct LegValues {
     a_second: f64,
 }
 
+#[derive(Clone, Copy, Serialize)]
+struct Limits {
+    max_renderer_ratio: f64,
+    max_b_over_a: f64,
+    max_control_drift: f64,
+    max_repeat_drift: f64,
+}
+
+impl Limits {
+    fn from_options(options: &Options) -> Result<Self, String> {
+        let limits = Self {
+            max_renderer_ratio: options.max_renderer_ratio,
+            max_b_over_a: options.max_b_over_a,
+            max_control_drift: options.max_control_drift,
+            max_repeat_drift: options.max_repeat_drift,
+        };
+        for (name, value) in [
+            ("max_renderer_ratio", limits.max_renderer_ratio),
+            ("max_b_over_a", limits.max_b_over_a),
+            ("max_control_drift", limits.max_control_drift),
+            ("max_repeat_drift", limits.max_repeat_drift),
+        ] {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(format!("{name} must be finite and greater than zero"));
+            }
+        }
+        Ok(limits)
+    }
+}
+
+#[derive(Serialize)]
+struct Check {
+    value: f64,
+    maximum: f64,
+    passed: bool,
+}
+
+impl Check {
+    fn new(value: f64, maximum: f64) -> Self {
+        Self {
+            value,
+            maximum,
+            passed: value <= maximum,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Checks {
+    post_tail_worst_scene: Check,
+    normalized_b_over_a: Check,
+    cpp_control_drift: Check,
+    normalized_a_repeat_drift: Check,
+    normalized_b_repeat_drift: Check,
+}
+
+impl Checks {
+    fn all_passed(&self) -> bool {
+        self.post_tail_worst_scene.passed
+            && self.normalized_b_over_a.passed
+            && self.cpp_control_drift.passed
+            && self.normalized_a_repeat_drift.passed
+            && self.normalized_b_repeat_drift.passed
+    }
+}
+
+#[derive(Serialize)]
+struct WorstBScene {
+    leg: &'static str,
+    id: String,
+    sample_index: usize,
+    cpp_control_ns: u64,
+    candidate_ns: u64,
+    candidate_over_cpp: f64,
+}
+
 #[derive(Serialize)]
 struct Comparison {
     schema: &'static str,
+    estimator: &'static str,
+    pair_order: &'static str,
     candidate_ns: LegValues,
     cpp_control_ns: LegValues,
     candidate_over_cpp: LegValues,
     normalized_a_average: f64,
     normalized_b_average: f64,
     normalized_b_over_a: f64,
-    b_worst_scene_ratio: f64,
+    worst_b_scene: WorstBScene,
     cpp_control_drift: f64,
     normalized_a_repeat_drift: f64,
     normalized_b_repeat_drift: f64,
+    limits: Limits,
+    checks: Checks,
+    overall_pass: bool,
 }
 
 impl Comparison {
@@ -376,34 +526,46 @@ impl Comparison {
         b_first: &Report,
         b_second: &Report,
         a_second: &Report,
+        limits: Limits,
     ) -> Result<Self, String> {
         let candidate_ns = LegValues {
-            a_first: a_first.aggregate.candidate_min_of_medians_ns_sum as f64,
-            b_first: b_first.aggregate.candidate_min_of_medians_ns_sum as f64,
-            b_second: b_second.aggregate.candidate_min_of_medians_ns_sum as f64,
-            a_second: a_second.aggregate.candidate_min_of_medians_ns_sum as f64,
+            a_first: a_first.aggregate.candidate_paired_ns_sum as f64,
+            b_first: b_first.aggregate.candidate_paired_ns_sum as f64,
+            b_second: b_second.aggregate.candidate_paired_ns_sum as f64,
+            a_second: a_second.aggregate.candidate_paired_ns_sum as f64,
         };
         let cpp_control_ns = LegValues {
-            a_first: a_first.aggregate.baseline_min_of_medians_ns_sum as f64,
-            b_first: b_first.aggregate.baseline_min_of_medians_ns_sum as f64,
-            b_second: b_second.aggregate.baseline_min_of_medians_ns_sum as f64,
-            a_second: a_second.aggregate.baseline_min_of_medians_ns_sum as f64,
+            a_first: a_first.aggregate.cpp_control_selected_ns_sum as f64,
+            b_first: b_first.aggregate.cpp_control_selected_ns_sum as f64,
+            b_second: b_second.aggregate.cpp_control_selected_ns_sum as f64,
+            a_second: a_second.aggregate.cpp_control_selected_ns_sum as f64,
         };
         let candidate_over_cpp = LegValues {
-            a_first: candidate_ns.a_first / cpp_control_ns.a_first,
-            b_first: candidate_ns.b_first / cpp_control_ns.b_first,
-            b_second: candidate_ns.b_second / cpp_control_ns.b_second,
-            a_second: candidate_ns.a_second / cpp_control_ns.a_second,
+            a_first: a_first.aggregate.candidate_over_cpp,
+            b_first: b_first.aggregate.candidate_over_cpp,
+            b_second: b_second.aggregate.candidate_over_cpp,
+            a_second: a_second.aggregate.candidate_over_cpp,
         };
         let normalized_a_average =
             average_number(candidate_over_cpp.a_first, candidate_over_cpp.a_second);
         let normalized_b_average =
             average_number(candidate_over_cpp.b_first, candidate_over_cpp.b_second);
         let normalized_b_over_a = normalized_b_average / normalized_a_average;
-        let b_worst_scene_ratio = b_first
-            .aggregate
-            .worst_ratio
-            .max(b_second.aggregate.worst_ratio);
+        let (worst_leg, worst) = if b_second.aggregate.worst_scene.candidate_over_cpp
+            > b_first.aggregate.worst_scene.candidate_over_cpp
+        {
+            ("B2", &b_second.aggregate.worst_scene)
+        } else {
+            ("B1", &b_first.aggregate.worst_scene)
+        };
+        let worst_b_scene = WorstBScene {
+            leg: worst_leg,
+            id: worst.id.clone(),
+            sample_index: worst.sample_index,
+            cpp_control_ns: worst.cpp_control_ns,
+            candidate_ns: worst.candidate_ns,
+            candidate_over_cpp: worst.candidate_over_cpp,
+        };
         let cpp_control_drift = spread([
             cpp_control_ns.a_first,
             cpp_control_ns.b_first,
@@ -414,19 +576,71 @@ impl Comparison {
             spread([candidate_over_cpp.a_first, candidate_over_cpp.a_second])?;
         let normalized_b_repeat_drift =
             spread([candidate_over_cpp.b_first, candidate_over_cpp.b_second])?;
+        let checks = Checks {
+            post_tail_worst_scene: Check::new(
+                worst_b_scene.candidate_over_cpp,
+                limits.max_renderer_ratio,
+            ),
+            normalized_b_over_a: Check::new(normalized_b_over_a, limits.max_b_over_a),
+            cpp_control_drift: Check::new(cpp_control_drift, limits.max_control_drift),
+            normalized_a_repeat_drift: Check::new(
+                normalized_a_repeat_drift,
+                limits.max_repeat_drift,
+            ),
+            normalized_b_repeat_drift: Check::new(
+                normalized_b_repeat_drift,
+                limits.max_repeat_drift,
+            ),
+        };
+        let overall_pass = checks.all_passed();
         Ok(Self {
-            schema: "rive-r4-timing-comparison-v2",
+            schema: "rive-r4-timing-comparison-v3",
+            estimator: ESTIMATOR,
+            pair_order: PAIR_ORDER,
             candidate_ns,
             cpp_control_ns,
             candidate_over_cpp,
             normalized_a_average,
             normalized_b_average,
             normalized_b_over_a,
-            b_worst_scene_ratio,
+            worst_b_scene,
             cpp_control_drift,
             normalized_a_repeat_drift,
             normalized_b_repeat_drift,
+            limits,
+            checks,
+            overall_pass,
         })
+    }
+
+    fn verdict(&self) -> Result<(), String> {
+        for (name, check) in [
+            (
+                "post-tail B worst-scene renderer/C++ timing",
+                &self.checks.post_tail_worst_scene,
+            ),
+            (
+                "normalized B/A candidate timing",
+                &self.checks.normalized_b_over_a,
+            ),
+            ("C++ control drift", &self.checks.cpp_control_drift),
+            (
+                "normalized A repeat drift",
+                &self.checks.normalized_a_repeat_drift,
+            ),
+            (
+                "normalized B repeat drift",
+                &self.checks.normalized_b_repeat_drift,
+            ),
+        ] {
+            if !check.passed {
+                return Err(format!(
+                    "{name} failed: {:.6} exceeds {:.6}",
+                    check.value, check.maximum
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -544,6 +758,8 @@ mod tests {
         Report {
             schema: REPORT_SCHEMA.to_owned(),
             runner_protocol: RUNNER_PROTOCOL.to_owned(),
+            estimator: ESTIMATOR.to_owned(),
+            pair_order: PAIR_ORDER.to_owned(),
             release: true,
             profile: "release".to_owned(),
             debug: false,
@@ -551,12 +767,26 @@ mod tests {
             manifest_schema: MANIFEST_SCHEMA.to_owned(),
             scenes: Vec::new(),
             aggregate: Aggregate {
-                baseline_min_of_medians_ns_sum: control_ns,
-                candidate_min_of_medians_ns_sum: candidate_ns,
-                ratio: candidate_ns as f64 / control_ns as f64,
-                worst_scene: String::new(),
-                worst_ratio: 0.0,
+                cpp_control_selected_ns_sum: control_ns,
+                candidate_paired_ns_sum: candidate_ns,
+                candidate_over_cpp: candidate_ns as f64 / control_ns as f64,
+                worst_scene: WorstScene {
+                    id: "test".to_owned(),
+                    sample_index: 1,
+                    cpp_control_ns: control_ns,
+                    candidate_ns,
+                    candidate_over_cpp: candidate_ns as f64 / control_ns as f64,
+                },
             },
+        }
+    }
+
+    fn limits() -> Limits {
+        Limits {
+            max_renderer_ratio: 10.0,
+            max_b_over_a: 10.0,
+            max_control_drift: 10.0,
+            max_repeat_drift: 10.0,
         }
     }
 
@@ -567,7 +797,8 @@ mod tests {
         let b_second = report(120, 180);
         let a_second = report(200, 300);
 
-        let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second).unwrap();
+        let comparison =
+            Comparison::new(&a_first, &b_first, &b_second, &a_second, limits()).unwrap();
 
         assert!((comparison.candidate_over_cpp.a_first - 1.0).abs() < 1e-12);
         assert!((comparison.candidate_over_cpp.b_first - 1.2).abs() < 1e-12);
@@ -586,7 +817,8 @@ mod tests {
         let b_second = report(100, 100);
         let a_second = report(200, 100);
 
-        let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second).unwrap();
+        let comparison =
+            Comparison::new(&a_first, &b_first, &b_second, &a_second, limits()).unwrap();
 
         assert_eq!(comparison.cpp_control_drift, 2.0);
     }
@@ -598,10 +830,39 @@ mod tests {
         let b_second = report(100, 100);
         let a_second = report(100, 200);
 
-        let comparison = Comparison::new(&a_first, &b_first, &b_second, &a_second).unwrap();
+        let comparison =
+            Comparison::new(&a_first, &b_first, &b_second, &a_second, limits()).unwrap();
 
         assert_eq!(comparison.normalized_b_over_a, 1.0);
         assert_eq!(comparison.normalized_a_repeat_drift, 2.0);
         assert_eq!(comparison.normalized_b_repeat_drift, 2.0);
+    }
+
+    #[test]
+    fn renderer_limit_accepts_equality_and_records_failure_above_it() {
+        let a_first = report(100, 300);
+        let b_first = report(100, 200);
+        let b_second = report(100, 200);
+        let a_second = report(100, 300);
+        let mut gate_limits = limits();
+        gate_limits.max_renderer_ratio = 2.0;
+
+        let comparison =
+            Comparison::new(&a_first, &b_first, &b_second, &a_second, gate_limits).unwrap();
+        assert!(comparison.overall_pass);
+        assert_eq!(comparison.worst_b_scene.leg, "B1");
+        assert_eq!(comparison.worst_b_scene.sample_index, 1);
+        assert!(comparison.verdict().is_ok());
+
+        let b_first = report(100, 201);
+        let comparison =
+            Comparison::new(&a_first, &b_first, &b_second, &a_second, gate_limits).unwrap();
+        assert!(!comparison.overall_pass);
+        assert!(!comparison.checks.post_tail_worst_scene.passed);
+        assert_eq!(comparison.worst_b_scene.leg, "B1");
+        assert!(comparison.verdict().unwrap_err().contains("2.010000"));
+        let json = serde_json::to_value(&comparison).unwrap();
+        assert_eq!(json["worst_b_scene"]["id"], "test");
+        assert_eq!(json["checks"]["post_tail_worst_scene"]["maximum"], 2.0);
     }
 }

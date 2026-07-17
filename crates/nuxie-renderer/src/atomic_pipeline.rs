@@ -2,6 +2,7 @@
 
 use crate::gpu::{
     ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData, PatchVertex, TriangleVertex,
+    PAINT_FLAG_HAS_CLIP_RECT,
 };
 use crate::tessellator::TessellationFlushResources;
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedRenderPass};
@@ -23,6 +24,11 @@ pub(crate) struct AtomicPipeline {
     feather_stroke_path: wgpu::RenderPipeline,
     stroke_path: wgpu::RenderPipeline,
     interior: wgpu::RenderPipeline,
+    unclipped_path: wgpu::RenderPipeline,
+    unclipped_feather_path: wgpu::RenderPipeline,
+    unclipped_interior: wgpu::RenderPipeline,
+    unclipped_resolve: wgpu::RenderPipeline,
+    unclipped_feather_resolve: wgpu::RenderPipeline,
     atlas_blit: wgpu::RenderPipeline,
     advanced_atlas_blit: wgpu::RenderPipeline,
     advanced_hsl_atlas_blit: wgpu::RenderPipeline,
@@ -830,7 +836,46 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
-        let make_resolve = |label, dither| {
+        let make_unclipped_path = |label, feather, dither| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &path_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(PatchVertex::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: Some(wgpu::Face::Front),
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &path_fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(&[
+                        ("0", 0.0),
+                        ("1", 0.0),
+                        ("3", feather),
+                        ("4", 0.0),
+                        ("7", dither),
+                    ]),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let unclipped_path = make_unclipped_path("nuxie-atomic-unclipped-path-pipeline", 0.0, 0.0);
+        let unclipped_feather_path =
+            make_unclipped_path("nuxie-atomic-unclipped-feather-path-pipeline", 1.0, 1.0);
+        let make_resolve = |label, dither, clip_features| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -850,8 +895,8 @@ impl AtomicPipeline {
                     module: &resolve_fragment,
                     entry_point: Some("main"),
                     compilation_options: options(&[
-                        ("0", 1.0),
-                        ("1", 1.0),
+                        ("0", clip_features),
+                        ("1", clip_features),
                         ("4", 0.0),
                         ("7", dither),
                     ]),
@@ -865,8 +910,11 @@ impl AtomicPipeline {
                 cache: None,
             })
         };
-        let resolve = make_resolve("nuxie-atomic-resolve-pipeline", 0.0);
-        let feather_resolve = make_resolve("nuxie-atomic-feather-resolve-pipeline", 1.0);
+        let resolve = make_resolve("nuxie-atomic-resolve-pipeline", 0.0, 1.0);
+        let feather_resolve = make_resolve("nuxie-atomic-feather-resolve-pipeline", 1.0, 1.0);
+        let unclipped_resolve = make_resolve("nuxie-atomic-unclipped-resolve-pipeline", 0.0, 0.0);
+        let unclipped_feather_resolve =
+            make_resolve("nuxie-atomic-unclipped-feather-resolve-pipeline", 1.0, 0.0);
         let interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-interior-pipeline"),
             layout: Some(&layout),
@@ -886,6 +934,34 @@ impl AtomicPipeline {
                 module: &interior_fragment,
                 entry_point: Some("main"),
                 compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let unclipped_interior = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-atomic-unclipped-interior-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &interior_vertex,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(crate::gpu::TriangleVertex::layout())],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &interior_fragment,
+                entry_point: Some("main"),
+                compilation_options: options(&[("0", 0.0), ("1", 0.0), ("4", 0.0), ("7", 0.0)]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -961,6 +1037,11 @@ impl AtomicPipeline {
             feather_stroke_path,
             stroke_path,
             interior,
+            unclipped_path,
+            unclipped_feather_path,
+            unclipped_interior,
+            unclipped_resolve,
+            unclipped_feather_resolve,
             atlas_blit,
             advanced_atlas_blit,
             advanced_hsl_atlas_blit,
@@ -1006,6 +1087,42 @@ impl AtomicPipeline {
             slot,
             #[cfg(feature = "perf-diagnostics")]
             diagnostics: AtomicEncodeDiagnostics::default(),
+        }
+    }
+
+    fn path_pipeline(
+        &self,
+        draw: &AtomicDraw<'_>,
+        advanced_blend: bool,
+        hsl_blend: bool,
+        use_unclipped_pipelines: bool,
+    ) -> &wgpu::RenderPipeline {
+        if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
+            &self.advanced_feather_hsl_stroke_path
+        } else if advanced_blend && draw.is_feather && draw.is_stroke {
+            &self.advanced_feather_stroke_path
+        } else if advanced_blend && draw.is_feather && hsl_blend {
+            &self.advanced_feather_hsl_path
+        } else if advanced_blend && draw.is_feather {
+            &self.advanced_feather_path
+        } else if advanced_blend && !draw.triangle_vertices.is_empty() {
+            &self.advanced_outer_path
+        } else if advanced_blend {
+            &self.advanced_path
+        } else if draw.is_feather && use_unclipped_pipelines {
+            &self.unclipped_feather_path
+        } else if draw.is_feather && draw.is_stroke {
+            &self.feather_stroke_path
+        } else if draw.is_feather {
+            &self.feather_path
+        } else if use_unclipped_pipelines {
+            &self.unclipped_path
+        } else if draw.is_stroke {
+            &self.stroke_path
+        } else if !draw.triangle_vertices.is_empty() {
+            &self.outer_path
+        } else {
+            &self.path
         }
     }
 
@@ -1057,6 +1174,8 @@ impl AtomicPipeline {
                 draw.image_uniforms
                     .is_some_and(|uniforms| uniforms.blend_mode != 0)
             });
+        let use_unclipped_pipelines =
+            can_use_unclipped_pipelines(batch_shared_draws, advanced_blend, paints);
         // Each draw first resolves coverage left by the previous draw. Shader
         // features therefore describe the whole batch, not only the geometry
         // currently being emitted.
@@ -1466,34 +1585,14 @@ impl AtomicPipeline {
                     && group_draws.windows(2).all(|pair| {
                         pair[0].base_instance + pair[0].instance_count == pair[1].base_instance
                     });
-                let path_pipeline = |draw: &AtomicDraw<'_>| {
-                    if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
-                        &self.advanced_feather_hsl_stroke_path
-                    } else if advanced_blend && draw.is_feather && draw.is_stroke {
-                        &self.advanced_feather_stroke_path
-                    } else if advanced_blend && draw.is_feather && hsl_blend {
-                        &self.advanced_feather_hsl_path
-                    } else if advanced_blend && draw.is_feather {
-                        &self.advanced_feather_path
-                    } else if advanced_blend && !draw.triangle_vertices.is_empty() {
-                        &self.advanced_outer_path
-                    } else if advanced_blend {
-                        &self.advanced_path
-                    } else if draw.is_feather && draw.is_stroke {
-                        &self.feather_stroke_path
-                    } else if draw.is_feather {
-                        &self.feather_path
-                    } else if draw.is_stroke {
-                        &self.stroke_path
-                    } else if !draw.triangle_vertices.is_empty() {
-                        &self.outer_path
-                    } else {
-                        &self.path
-                    }
-                };
                 if batch_paths {
                     let last_draw = group_draws.last().expect("atomic draw group is nonempty");
-                    pass.set_pipeline(path_pipeline(first_draw));
+                    pass.set_pipeline(self.path_pipeline(
+                        first_draw,
+                        advanced_blend,
+                        hsl_blend,
+                        use_unclipped_pipelines,
+                    ));
                     pass.set_bind_group(0, &flush_groups[0], &[]);
                     pass.draw_path_patches(
                         first_draw.patch_index_range.clone(),
@@ -1504,7 +1603,12 @@ impl AtomicPipeline {
                 } else {
                     for (draw_index, draw) in group_draws.iter().enumerate() {
                         let draw_index = group_start + draw_index;
-                        pass.set_pipeline(path_pipeline(draw));
+                        pass.set_pipeline(self.path_pipeline(
+                            draw,
+                            advanced_blend,
+                            hsl_blend,
+                            use_unclipped_pipelines,
+                        ));
                         pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                         pass.draw_path_patches(
                             draw.patch_index_range.clone(),
@@ -1528,6 +1632,8 @@ impl AtomicPipeline {
                         );
                         interior_pass.set_pipeline(if advanced_blend {
                             &self.advanced_interior
+                        } else if use_unclipped_pipelines {
+                            &self.unclipped_interior
                         } else {
                             &self.interior
                         });
@@ -1639,31 +1745,12 @@ impl AtomicPipeline {
                     &attachments,
                 ));
                 initialize(&mut pass);
-                pass.set_pipeline(
-                    if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
-                        &self.advanced_feather_hsl_stroke_path
-                    } else if advanced_blend && draw.is_feather && draw.is_stroke {
-                        &self.advanced_feather_stroke_path
-                    } else if advanced_blend && draw.is_feather && hsl_blend {
-                        &self.advanced_feather_hsl_path
-                    } else if advanced_blend && draw.is_feather {
-                        &self.advanced_feather_path
-                    } else if advanced_blend && !draw.triangle_vertices.is_empty() {
-                        &self.advanced_outer_path
-                    } else if advanced_blend {
-                        &self.advanced_path
-                    } else if draw.is_feather && draw.is_stroke {
-                        &self.feather_stroke_path
-                    } else if draw.is_feather {
-                        &self.feather_path
-                    } else if draw.is_stroke {
-                        &self.stroke_path
-                    } else if !draw.triangle_vertices.is_empty() {
-                        &self.outer_path
-                    } else {
-                        &self.path
-                    },
-                );
+                pass.set_pipeline(self.path_pipeline(
+                    draw,
+                    advanced_blend,
+                    hsl_blend,
+                    use_unclipped_pipelines,
+                ));
                 pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                 pass.set_bind_group(1, image_group(draw_index), &[]);
                 pass.set_bind_group(2, &atomics, &[]);
@@ -1706,6 +1793,8 @@ impl AtomicPipeline {
                     ));
                     pass.set_pipeline(if advanced_blend {
                         &self.advanced_interior
+                    } else if use_unclipped_pipelines {
+                        &self.unclipped_interior
                     } else {
                         &self.interior
                     });
@@ -1741,7 +1830,13 @@ impl AtomicPipeline {
             pass.set_pipeline(if advanced_blend {
                 &self.advanced_resolve
             } else if draws.iter().any(|draw| draw.is_feather) {
-                &self.feather_resolve
+                if use_unclipped_pipelines {
+                    &self.unclipped_feather_resolve
+                } else {
+                    &self.feather_resolve
+                }
+            } else if use_unclipped_pipelines {
+                &self.unclipped_resolve
             } else {
                 &self.resolve
             });
@@ -1798,6 +1893,18 @@ fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> w
         label: Some(label),
         source: wgpu::ShaderSource::Wgsl(source.into()),
     })
+}
+
+fn can_use_unclipped_pipelines(
+    batch_shared_draws: bool,
+    advanced_blend: bool,
+    paints: &[PaintData],
+) -> bool {
+    batch_shared_draws
+        && !advanced_blend
+        && paints
+            .iter()
+            .all(|paint| paint.params & PAINT_FLAG_HAS_CLIP_RECT == 0)
 }
 
 // C++ combines ENABLE_DITHER across an advanced atomic flush, so every draw
@@ -1964,6 +2071,22 @@ mod tests {
                 Some(&("7", 1.0))
             );
         }
+    }
+
+    #[test]
+    fn unclipped_pipeline_guard_rejects_every_clip_and_blend_boundary() {
+        let paint = PaintData {
+            params: 0,
+            value: 0,
+        };
+        assert!(can_use_unclipped_pipelines(true, false, &[paint]));
+        assert!(!can_use_unclipped_pipelines(false, false, &[paint]));
+        assert!(!can_use_unclipped_pipelines(true, true, &[paint]));
+        assert!(!can_use_unclipped_pipelines(
+            true,
+            false,
+            &[paint.with_clip_rect()]
+        ));
     }
 
     #[test]

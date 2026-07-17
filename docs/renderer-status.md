@@ -1750,6 +1750,18 @@ Run `make renderer-golden`.
     builds the wasm target and runs the same Chrome/Metal WebGPU/WebGL2 pixel
     gate with a repository-owned, version-pinned Playwright driver. Parked R4
     item 135 is the explicit restart point after the user-directed pause.
+144. [x] Specialize generic atomic shaders for unclipped flushes, matching
+    C++'s flush-wide feature keys. When every draw shares the unclipped path,
+    advanced blending is absent, and no paint carries a clip rectangle, the
+    path, interior, and resolve pipelines compile both clipping branches out;
+    every clipped and advanced path retains the existing pipelines. A focused
+    guard regression covers all three fallback boundaries, and the full corpus
+    remains exact=1,409/diverges=0/gated=59. In adjacent ordinary reports,
+    Rust p50 improves 1.462->1.229 ms for `OverStroke` (-15.9%),
+    2.461->1.529 ms for `bevel180strokes` (-37.9%), and 1.071->1.036 ms for
+    `batchedconvexpaths` (-3.2%). The normalized aggregate moves
+    1.6678x->1.6907x (+1.4%), so this is directional shader-cost evidence,
+    not a formal item-135 gate result.
 
 ## R2 Completion Record
 
@@ -2943,6 +2955,11 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-17: Closed R4 item 144. Generic atomic unclipped flushes now use
+  C++-style shader specialization with clipping and clip-rectangle branches
+  disabled. Focused pixels and the full 1,409/0/59 renderer corpus pass; all
+  three target Rust medians improve in the adjacent directional snapshot,
+  while the noisy normalized aggregate does not improve.
 - 2026-07-17: Removed R4's absolute 70% host-idle admission threshold by user
   decision. The gate and Makefile no longer expose
   `R4_TIMING_GATE_MIN_IDLE_PERCENT`; a focused integration test proves a

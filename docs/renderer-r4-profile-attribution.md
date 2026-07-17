@@ -982,5 +982,27 @@ deterministic excess-work row remains.
 The full renderer corpus passes at 1,409 exact, zero divergent, and 59 retained
 gates. Replacing the bevel atomic route with MSAA is not pixel-compatible:
 the two current outputs differ at 5,297 pixels (normalized RMSE 0.0172). That
-experiment is rejected, and item 135 remains open on generic atomic bevel
-pass cost rather than resource creation or command volume.
+experiment is rejected. At that point, item 135 remained open on generic
+atomic bevel pass cost rather than resource creation or command volume.
+
+### Item 147 And R4 Close
+
+C++ Dawn creates `m_samplerBindings` once with the render context and reuses it
+for every atomic render pass. Rust retained the sampler objects after item 146
+but still rebuilt the identical three-binding sampler group for every frame.
+`AtomicPipeline` now owns that bind group. Per-frame sampler-group creation
+reaches zero, and the bevel row moves from four to three Rust bind groups while
+preserving 90 bind-group sets, 23 draws, 105 instances, 63 tessellation spans,
+and 40 patches. The 16-variant deterministic comparison remains at zero excess
+rows.
+
+The adjacent old/current p50 moves 1.6074->1.5604 ms for bevel (-2.9%); the
+summed matrix moves 1.0267x and is directional context only. The final
+counterbalanced C++ Dawn/current fixed matrix reports summed p50 ratios of
+1.3718x overall, 1.3201x clockwise atomic, and 1.4656x MSAA. Its slowest p50
+row is `gm-OverStroke-msaa` at 1.6431x. Every aggregate and row is within the
+agreed 2.0x factor, so item 135 and R4 close with deterministic work parity and
+same-capability directional timing parity. Final verification passes the
+renderer corpus at 1,409 exact, zero divergent, and 59 retained gates; normal
+and scripted parity stay at 584 and 35 exact segments; and the full workspace
+suite passes.

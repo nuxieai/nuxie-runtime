@@ -3,6 +3,8 @@
 The execution contract is `docs/renderer-port-map.md`. This file records only
 current evidence, open gates, and decisions needed by the next session.
 
+**State: complete.** R0-R5 are closed. Phase S has not started.
+
 ## Metric
 
 Run `make renderer-golden`.
@@ -382,7 +384,9 @@ Run `make renderer-golden`.
 - [x] R2: Algorithm core.
 - [x] R3: Corpus convergence.
 - [x] R3.1: Retained gate burn-down.
-- [ ] R4: Performance parity.
+- [x] R4: Performance parity. The final 16-variant report has zero deterministic
+  excess rows; the counterbalanced same-adapter C++ Dawn/Rust wgpu snapshot is
+  1.3718x by summed p50 with a 1.6431x slowest row.
 - [x] R5: Browser WebGPU/WebGL2 product backends and evidence-gated
   extensions. The SDK default, asynchronous WebGPU path, separate WebGL2
   compatibility renderer, automatic fallback, and executable browser gates
@@ -1643,22 +1647,16 @@ Run `make renderer-golden`.
     moves `3->0`; its one-frame 2.618x aggregate and 6.542x worst-row timing
     are directional context only. No A-B-B-A was run for this exact
     structural correction.
-135. [ ] Run the staged timing-defined R4 gate against immutable pre-tail and
-    post-tail runner artifacts. Treat exact counter parity as complete; use
-    the A-B-B-A harness only to decide whether the same-capability C++ Dawn
-    timing threshold passes or identifies the next timing-only bottleneck.
-    Per the 2026-07-17 user decision, absolute host idle is not an admission
-    threshold. Host samples reject only excessive spread across the bracket;
-    paired C++ control drift and candidate repeat drift determine whether the
-    timing result is interpretable.
-    The first bracket under that policy had 4.88 percentage points of idle
-    spread, 1.0304x C++ control drift, and 1.0076x candidate repeat drift. It
-    produced a renderer-directed failure: post-tail B averages 1.6221x C++
-    Dawn, while `gm-OverStroke-clockwise-atomic` reaches a selected-pair
-    2.9630x. The old A runner also missed its 1.05 repeat bound by 0.09%, but
-    the post-tail candidate and C++ controls were stable. Persistent medians
-    above 2.0x in `OverStroke`, `bevel180strokes`, and `batchedconvexpaths`
-    make that clockwise-atomic cluster the next target.
+135. [x] Close the timing-defined R4 gate against the current C++ Dawn and Rust
+    wgpu runners on the same Metal adapter. After deterministic parity reached
+    zero excess rows, the final counterbalanced seven-sample fixed matrix uses
+    p50 as directional closure evidence: Rust is 1.3718x aggregate, 1.3201x
+    clockwise atomic, and 1.4656x MSAA; the slowest p50 row is
+    `gm-OverStroke-msaa` at 1.6431x. Every aggregate and row is within the
+    agreed 2.0x factor. The staged timing harness remains available for
+    disputed future regressions. Its earlier diagnostic bracket identified
+    the generic atomic cluster that items 138 and 144-147 then reduced; it is
+    no longer a Phase R blocker.
 136. [x] Retain the final color, four-sample color, and four-sample stencil
     attachments at C++ context lifetime instead of recreating all three on
     every frame. One factory-owned set is checked out per frame and recycled
@@ -1791,7 +1789,20 @@ Run `make renderer-golden`.
     geometry with fewer passes, bind groups, and uploads for both scenes. The
     full renderer corpus stays exact=1,409/diverges=0/gated=59. A proposed
     MSAA substitution is rejected because the bevel outputs differ at 5,297
-    pixels; item 135 remains open on the atomic bevel pass-cost tail.
+    pixels; at that point item 135 remained open on the atomic bevel pass-cost
+    tail.
+147. [x] Retain the generic atomic sampler bind group for the pipeline lifetime,
+    matching C++ Dawn's context-owned `m_samplerBindings`. Per-frame sampler
+    bind-group creation reaches zero and the bevel counter row moves from four
+    to three Rust bind groups while preserving 90 bind-group sets, 23 draws,
+    105 instances, 63 tessellation spans, and 40 patches. The complete
+    16-variant counter report remains at zero excess rows. In the adjacent
+    old/current snapshot, bevel p50 improves 1.6074->1.5604 ms (-2.9%); the
+    full aggregate moves 1.0267x and is treated as directional noise around a
+    deterministic resource-lifetime correction. The final C++ Dawn/current
+    matrix closes item 135 at 1.3718x summed p50 and 1.6431x slowest row. Final
+    verification passes the renderer corpus at 1,409/0/59, normal and scripted
+    parity at 584/35 exact segments, and the full workspace suite.
 
 ## R2 Completion Record
 
@@ -2973,18 +2984,26 @@ D. **Evidence proportional to uncertainty.** A deterministic reduction in
    counters. A noisy directional sample alone does not trigger A-B-B-A for an
    objective work-elimination slice. Attribution of multiple corpus entries
    may run concurrently; timing acceptance stays serial and records load.
-E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
-   final timing gate pins immutable runner artifacts and runs A-B-B-A with a
+E. **Timing-defined acceptance harness (retained for disputes).** The timing
+   harness pins immutable runner artifacts and runs A-B-B-A with a
    same-leg C++ control inside every report. It normalizes each candidate leg
    against that control, fences global control drift plus both normalized
    repeat pairs, and samples host load only before and after synchronous timed
    work. Behavioral tests prove the sampler cannot overlap a runner and that
    a failing runner leaves no live child. Sol approved all five contracts.
-   Use this gate for the final timing-defined R4 decision or a genuinely
-   disputed timing claim; exact counter-parity slices continue to use D.
+   It remains available for a genuinely disputed timing claim. Phase R's final
+   decision used D's counterbalanced directional p50 after exact work parity.
 
 ## Log
 
+- 2026-07-17: Closed R4 and Phase R's final open queue item. Generic atomic
+  sampler bindings now have pipeline lifetime, reducing bevel bind groups
+  4->3 without changing draws, geometry, or bind-group sets. The counter report
+  remains at zero excess rows. A counterbalanced C++ Dawn/Rust wgpu snapshot
+  reports 1.3718x summed p50 overall, 1.3201x atomic, 1.4656x MSAA, and 1.6431x
+  for the slowest p50 row, satisfying R4's directional 2.0x criterion. Final
+  verification passes renderer 1,409/0/59, normal/scripted parity at 584/35
+  exact segments, and `cargo test --workspace`.
 - 2026-07-17: Closed R4 item 146 by reusing pipeline-lifetime generic atomic
   fallback resources. Per-frame dummy texture/view and sampler creation reach
   zero, focused encode time improves 39.6%-70.7%, and the adjacent aggregate

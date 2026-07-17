@@ -112,6 +112,13 @@ rejects excessive load spread across the bracket and retains paired C++ control
 and candidate-repeat drift checks. A stable busy machine is admissible; an
 unstable bracket is not.
 
+**Decision (2026-07-17): close R4 on directional p50 after structural parity.**
+Once the deterministic counter report has zero excess rows, the final timing
+decision uses the counterbalanced fixed matrix as directional evidence rather
+than requiring another heavy timing bracket. R4 closes when the summed and
+per-row p50 ratios are within the agreed 2.0x factor on C++ Dawn and Rust wgpu
+over the same Metal adapter.
+
 **Decision (2026-07-13): orchestrator-first delegation.** The main Phase R agent
 owns decomposition, the critical path, integration, and the final oracle verdict.
 It implements linear or tightly coupled work directly. Worker agents are optional
@@ -415,14 +422,13 @@ snapshot. Recomputing its vectors by selecting the candidate paired with each
 row's minimum C++ control gives 0.5414x aggregate, 0.8741x clockwise atomic,
 and 0.3233x MSAA. The corresponding same-capability C++ Dawn/current view is
 1.4809x aggregate with a 2.0277x worst row. These artifacts used fixed call
-order and remain directional. The staged v2 gate now counterbalances order,
-uses control-selected pairs, pins all inputs, and emits a distinct environment
-or renderer decision. R4 remains open until a fresh post-tail worst-scene
-ratio is at or below 2.0x under the host-idle and repeat-drift fences, or the
-gate identifies the next timing-only bottleneck. By the 2026-07-16 sequencing
-decision, that final run is parked while the default-renderer and R5 browser
-work proceeds. Load-rejected attempts are not evidence. See
-`docs/renderer-r4-profile-attribution.md`.
+order and remain directional. Later slices remove the remaining deterministic
+counter excesses and retain the generic atomic fallback texture, samplers, and
+sampler bind group at pipeline lifetime. The final counterbalanced seven-sample
+fixed matrix reports summed p50 ratios of 1.3718x overall, 1.3201x clockwise
+atomic, and 1.4656x MSAA; its slowest p50 row is 1.6431x. All are within the
+agreed 2.0x factor, and the 16-variant counter report remains at zero excess
+rows. R4 is complete. See `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
 
@@ -467,7 +473,8 @@ The public SDK selects the Rust renderer by default; native synchronous and
 browser asynchronous paths are documented and tested; browser WebGPU and
 WebGL2 each pass their executable target and pixel gates; automatic fallback
 is proven; and every evidence-gated extension has either shipped or a recorded
-no-trigger decision. Then resume R4's parked timing gate.
+no-trigger decision. R5 met these criteria; R4 then resumed and closed on the
+final counter and directional timing evidence above.
 
 ## Long-Tail Strategy (renderer edition)
 

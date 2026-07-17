@@ -51,12 +51,12 @@ pub(crate) struct AtomicPipeline {
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     atomic_layout: wgpu::BindGroupLayout,
-    sampler_layout: wgpu::BindGroupLayout,
     _dummy_image_texture: wgpu::Texture,
     dummy_image_view: wgpu::TextureView,
     dummy_image_uniforms: wgpu::Buffer,
     dummy_image_group: wgpu::BindGroup,
     image_samplers: Vec<wgpu::Sampler>,
+    sampler_group: wgpu::BindGroup,
     image_rect_vertices: wgpu::Buffer,
     image_rect_indices: wgpu::Buffer,
     backing_slots: [Mutex<AtomicBackingSlot>; ATOMIC_BUFFER_RING_SIZE],
@@ -646,6 +646,15 @@ impl AtomicPipeline {
             .map(|sampler| device.create_sampler(&image_sampler(sampler)))
             .collect::<Vec<_>>();
         debug_assert_eq!(image_samplers.len(), 18);
+        let sampler_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-atomic-sampler-group"),
+            layout: &sampler_layout,
+            entries: &[
+                binding(9, wgpu::BindingResource::Sampler(&image_samplers[0])),
+                binding(10, wgpu::BindingResource::Sampler(&image_samplers[0])),
+                binding(11, wgpu::BindingResource::Sampler(&image_samplers[0])),
+            ],
+        });
         let dummy_image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-dummy-image-group"),
             layout: &image_layout,
@@ -1064,12 +1073,12 @@ impl AtomicPipeline {
             flush_layout,
             image_layout,
             atomic_layout,
-            sampler_layout,
             _dummy_image_texture: dummy_image_texture,
             dummy_image_view,
             dummy_image_uniforms,
             dummy_image_group,
             image_samplers,
+            sampler_group,
             image_rect_vertices,
             image_rect_indices,
             backing_slots: std::array::from_fn(|_| Mutex::new(AtomicBackingSlot::default())),
@@ -1310,7 +1319,6 @@ impl AtomicPipeline {
                 .buffer_upload_ns
                 .saturating_add(elapsed_ns(triangle_upload_started));
         }
-        let sampler = &self.image_samplers[0];
         #[cfg(feature = "perf-diagnostics")]
         let image_uniform_upload_started = Instant::now();
         let image_uniform_buffers = draws
@@ -1472,26 +1480,6 @@ impl AtomicPipeline {
                 .saturating_add(elapsed_ns(atomic_bind_group_started));
         }
         #[cfg(feature = "perf-diagnostics")]
-        let sampler_bind_group_started = Instant::now();
-        let samplers = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-atomic-sampler-group"),
-            layout: &self.sampler_layout,
-            entries: &[
-                binding(9, wgpu::BindingResource::Sampler(sampler)),
-                binding(10, wgpu::BindingResource::Sampler(sampler)),
-                binding(11, wgpu::BindingResource::Sampler(sampler)),
-            ],
-        });
-        #[cfg(feature = "perf-diagnostics")]
-        {
-            backing.diagnostics.sampler_bind_groups =
-                backing.diagnostics.sampler_bind_groups.saturating_add(1);
-            backing.diagnostics.sampler_bind_group_ns = backing
-                .diagnostics
-                .sampler_bind_group_ns
-                .saturating_add(elapsed_ns(sampler_bind_group_started));
-        }
-        #[cfg(feature = "perf-diagnostics")]
         let render_encode_started = Instant::now();
         if advanced_blend {
             let load_color_group = load_color_group
@@ -1511,7 +1499,7 @@ impl AtomicPipeline {
             pass.set_bind_group(0, &flush_groups[0], &[]);
             pass.set_bind_group(1, load_color_group, &[]);
             pass.set_bind_group(2, &atomics, &[]);
-            pass.set_bind_group(3, &samplers, &[]);
+            pass.set_bind_group(3, &self.sampler_group, &[]);
             pass.draw(0..4, 0..1);
         }
         let mut needs_init = !advanced_blend;
@@ -1521,7 +1509,7 @@ impl AtomicPipeline {
                 pass.set_bind_group(0, &flush_groups[0], &[]);
                 pass.set_bind_group(1, image_group(0), &[]);
                 pass.set_bind_group(2, &atomics, &[]);
-                pass.set_bind_group(3, &samplers, &[]);
+                pass.set_bind_group(3, &self.sampler_group, &[]);
                 pass.draw(0..4, 0..1);
                 needs_init = false;
             }
@@ -1546,7 +1534,7 @@ impl AtomicPipeline {
                 initialize(&mut pass);
                 pass.set_bind_group(1, image_group(0), &[]);
                 pass.set_bind_group(2, &atomics, &[]);
-                pass.set_bind_group(3, &samplers, &[]);
+                pass.set_bind_group(3, &self.sampler_group, &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
                 let group_draws = &draws[group_start..group_end];
@@ -1621,7 +1609,7 @@ impl AtomicPipeline {
                         interior_pass.set_bind_group(0, &flush_groups[0], &[]);
                         interior_pass.set_bind_group(1, image_group(0), &[]);
                         interior_pass.set_bind_group(2, &atomics, &[]);
-                        interior_pass.set_bind_group(3, &samplers, &[]);
+                        interior_pass.set_bind_group(3, &self.sampler_group, &[]);
                         interior_pass.set_vertex_buffer(0, triangle_buffer.slice(..));
                         interior_pass.draw(vertex_range, 0..1);
                     }
@@ -1651,7 +1639,7 @@ impl AtomicPipeline {
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
-                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_bind_group(3, &self.sampler_group, &[]);
                     pass.set_vertex_buffer(
                         0,
                         triangle_buffers[draw_index].as_ref().unwrap().slice(..),
@@ -1679,7 +1667,7 @@ impl AtomicPipeline {
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
-                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_bind_group(3, &self.sampler_group, &[]);
                     pass.set_vertex_buffer(0, mesh.vertices.slice(..));
                     pass.set_vertex_buffer(1, mesh.uvs.slice(..));
                     pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint16);
@@ -1706,7 +1694,7 @@ impl AtomicPipeline {
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
-                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_bind_group(3, &self.sampler_group, &[]);
                     pass.set_vertex_buffer(0, self.image_rect_vertices.slice(..));
                     pass.set_index_buffer(
                         self.image_rect_indices.slice(..),
@@ -1735,7 +1723,7 @@ impl AtomicPipeline {
                 pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                 pass.set_bind_group(1, image_group(draw_index), &[]);
                 pass.set_bind_group(2, &atomics, &[]);
-                pass.set_bind_group(3, &samplers, &[]);
+                pass.set_bind_group(3, &self.sampler_group, &[]);
                 pass.set_vertex_buffer(0, patch_vertices.slice(..));
                 pass.set_index_buffer(patch_indices.slice(..), wgpu::IndexFormat::Uint16);
                 pass.draw_path_patches(
@@ -1782,7 +1770,7 @@ impl AtomicPipeline {
                     pass.set_bind_group(0, &flush_groups[flush_group_index(draw_index)], &[]);
                     pass.set_bind_group(1, image_group(draw_index), &[]);
                     pass.set_bind_group(2, &atomics, &[]);
-                    pass.set_bind_group(3, &samplers, &[]);
+                    pass.set_bind_group(3, &self.sampler_group, &[]);
                     pass.set_vertex_buffer(0, triangle_buffer.slice(..));
                     pass.draw(vertex_range, 0..1);
                 }
@@ -1824,7 +1812,7 @@ impl AtomicPipeline {
             pass.set_bind_group(0, &flush_groups[flush_group_index(draws.len() - 1)], &[]);
             pass.set_bind_group(1, image_group(draws.len() - 1), &[]);
             pass.set_bind_group(2, &atomics, &[]);
-            pass.set_bind_group(3, &samplers, &[]);
+            pass.set_bind_group(3, &self.sampler_group, &[]);
             pass.draw(0..4, 0..1);
         }
         #[cfg(feature = "perf-diagnostics")]

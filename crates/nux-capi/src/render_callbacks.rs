@@ -9,9 +9,9 @@
 //! a zeroed vtable behaves like a null renderer.
 
 use nuxie::{
-    BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, RawPath, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
 };
 use std::any::Any;
 use std::ffi::c_void;
@@ -554,23 +554,36 @@ impl Factory for CallbackFactory {
         })
     }
 
-    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let mut width = 0u32;
         let mut height = 0u32;
-        let handle = call_handle!(
-            self.callbacks,
-            decode_image,
-            data.as_ptr(),
-            data.len(),
-            &mut width,
-            &mut height
-        );
-        Box::new(CallbackRenderImage {
+        let Some(decode_image) = self.callbacks.decode_image else {
+            return Ok(Box::new(CallbackRenderImage {
+                callbacks: self.callbacks,
+                handle: 0,
+                width,
+                height,
+            }));
+        };
+        // SAFETY: Factory calls run only while the caller-owned callback table is valid.
+        let handle = unsafe {
+            decode_image(
+                self.callbacks.user_data,
+                data.as_ptr(),
+                data.len(),
+                &mut width,
+                &mut height,
+            )
+        };
+        if handle == 0 {
+            return Err(ImageDecodeError);
+        }
+        Ok(Box::new(CallbackRenderImage {
             callbacks: self.callbacks,
             handle,
             width,
             height,
-        })
+        }))
     }
 }
 

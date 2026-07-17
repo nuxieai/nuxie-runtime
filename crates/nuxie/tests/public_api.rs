@@ -6,8 +6,190 @@
     clippy::arithmetic_side_effects
 )]
 
-use nuxie::{File, RecordingFactory, StateMachineInputKind};
+use nuxie::{
+    BlendMode, ColorInt, Factory, File, FillRule, ImageDecodeError, RawPath, RecordingFactory,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, StateMachineInputKind, StrokeCap, StrokeJoin,
+};
+use std::cell::Cell;
 use std::path::PathBuf;
+use std::rc::Rc;
+
+struct DropTrackedRenderImage {
+    inner: Box<dyn RenderImage>,
+    dropped: Rc<Cell<usize>>,
+}
+
+impl Drop for DropTrackedRenderImage {
+    fn drop(&mut self) {
+        self.dropped.set(self.dropped.get() + 1);
+    }
+}
+
+impl RenderImage for DropTrackedRenderImage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.inner.as_any()
+    }
+
+    fn width(&self) -> u32 {
+        self.inner.width()
+    }
+
+    fn height(&self) -> u32 {
+        self.inner.height()
+    }
+
+    fn uv_transform(&self) -> nuxie::Mat2D {
+        self.inner.uv_transform()
+    }
+}
+
+struct DropTrackedRenderPaint {
+    inner: Box<dyn RenderPaint>,
+    dropped: Rc<Cell<usize>>,
+}
+
+impl Drop for DropTrackedRenderPaint {
+    fn drop(&mut self) {
+        self.dropped.set(self.dropped.get() + 1);
+    }
+}
+
+impl RenderPaint for DropTrackedRenderPaint {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.inner.as_any()
+    }
+
+    fn style(&mut self, style: RenderPaintStyle) {
+        self.inner.style(style);
+    }
+
+    fn color(&mut self, value: ColorInt) {
+        self.inner.color(value);
+    }
+
+    fn thickness(&mut self, value: f32) {
+        self.inner.thickness(value);
+    }
+
+    fn join(&mut self, value: StrokeJoin) {
+        self.inner.join(value);
+    }
+
+    fn cap(&mut self, value: StrokeCap) {
+        self.inner.cap(value);
+    }
+
+    fn feather(&mut self, value: f32) {
+        self.inner.feather(value);
+    }
+
+    fn blend_mode(&mut self, value: BlendMode) {
+        self.inner.blend_mode(value);
+    }
+
+    fn shader(&mut self, shader: Option<&dyn RenderShader>) {
+        self.inner.shader(shader);
+    }
+
+    fn invalidate_stroke(&mut self) {
+        self.inner.invalidate_stroke();
+    }
+}
+
+struct FailFirstImageDecodeFactory {
+    inner: RecordingFactory,
+    fail_next_image_decode: bool,
+    decode_attempts: usize,
+    images_created: Rc<Cell<usize>>,
+    images_dropped: Rc<Cell<usize>>,
+    paints_created: Rc<Cell<usize>>,
+    paints_dropped: Rc<Cell<usize>>,
+}
+
+impl FailFirstImageDecodeFactory {
+    fn new() -> Self {
+        Self {
+            inner: RecordingFactory::new(),
+            fail_next_image_decode: true,
+            decode_attempts: 0,
+            images_created: Rc::new(Cell::new(0)),
+            images_dropped: Rc::new(Cell::new(0)),
+            paints_created: Rc::new(Cell::new(0)),
+            paints_dropped: Rc::new(Cell::new(0)),
+        }
+    }
+}
+
+impl Factory for FailFirstImageDecodeFactory {
+    fn make_render_buffer(
+        &mut self,
+        buffer_type: RenderBufferType,
+        flags: RenderBufferFlags,
+        size_in_bytes: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.inner
+            .make_render_buffer(buffer_type, flags, size_in_bytes)
+    }
+
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.inner
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.inner
+            .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+
+    fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+        self.inner.make_render_path(raw_path, fill_rule)
+    }
+
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.inner.make_empty_render_path()
+    }
+
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        let paint = self.inner.make_render_paint();
+        self.paints_created.set(self.paints_created.get() + 1);
+        Box::new(DropTrackedRenderPaint {
+            inner: paint,
+            dropped: Rc::clone(&self.paints_dropped),
+        })
+    }
+
+    fn decode_image(
+        &mut self,
+        data: &[u8],
+    ) -> std::result::Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.decode_attempts += 1;
+        if std::mem::take(&mut self.fail_next_image_decode) {
+            return Err(ImageDecodeError);
+        }
+        let image = self.inner.decode_image(data)?;
+        self.images_created.set(self.images_created.get() + 1);
+        Ok(Box::new(DropTrackedRenderImage {
+            inner: image,
+            dropped: Rc::clone(&self.images_dropped),
+        }))
+    }
+}
 
 fn repo_fixture(relative: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -83,6 +265,46 @@ fn public_api_imports_lists_instantiates_and_draws() {
     let stream = factory.stream();
     assert!(stream.contains("rive-golden-stream-v1"));
     assert!(stream.contains("drawPath"));
+}
+
+#[test]
+fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning() {
+    let file = File::import(&external_fixture("in_band_asset.riv")).expect("import image fixture");
+    let mut instance = file
+        .default_artboard()
+        .expect("default image artboard")
+        .instantiate()
+        .expect("instantiate image artboard");
+    let mut factory = FailFirstImageDecodeFactory::new();
+    let mut cache = instance.new_render_cache();
+
+    assert_eq!(
+        factory.decode_attempts, 0,
+        "retained cache creation must be renderer-neutral"
+    );
+    let mut renderer = factory.inner.make_renderer();
+    let first = instance
+        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
+        .expect_err("first image decode fails at draw time");
+    assert!(first.downcast_ref::<ImageDecodeError>().is_some());
+    assert_eq!(factory.decode_attempts, 1);
+    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    assert!(
+        factory.paints_created.get() > 0,
+        "the failed candidate should exercise owned render resources"
+    );
+    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+
+    instance
+        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
+        .expect("the same retained cache retries and draws");
+    assert!(factory.decode_attempts >= 2);
+    assert!(factory.images_created.get() > factory.images_dropped.get());
+    assert!(factory.paints_created.get() > factory.paints_dropped.get());
+
+    drop(cache);
+    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
 }
 
 #[test]

@@ -468,6 +468,22 @@ pub trait RenderImage: Any {
     }
 }
 
+/// A renderer adapter could not decode encoded image bytes into a render image.
+///
+/// Image codecs and backend limits are adapter-specific, so this error deliberately
+/// does not expose a renderer dialect. Callers can recover by fixing the source bytes,
+/// choosing another adapter, or retrying a later frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageDecodeError;
+
+impl std::fmt::Display for ImageDecodeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("render factory could not decode image")
+    }
+}
+
+impl std::error::Error for ImageDecodeError {}
+
 pub trait RenderPaint: Any {
     fn as_any(&self) -> &dyn Any;
     fn style(&mut self, style: RenderPaintStyle);
@@ -550,7 +566,7 @@ pub trait Factory {
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath>;
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
-    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage>;
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
 }
 
 #[derive(Debug, Default)]
@@ -969,7 +985,7 @@ impl Factory for RecordingFactory {
         Box::new(paint)
     }
 
-    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let id = self.next_image_id;
         self.next_image_id += 1;
         let (width, height) = encoded_image_dimensions(data);
@@ -977,12 +993,12 @@ impl Factory for RecordingFactory {
             "decodeImage id={id} width={width} height={height} data={}",
             hex_bytes(data)
         ));
-        Box::new(RecordingRenderImage {
+        Ok(Box::new(RecordingRenderImage {
             id,
             width,
             height,
             data: data.to_vec(),
-        })
+        }))
     }
 }
 
@@ -1049,9 +1065,9 @@ impl Factory for NullFactory {
         })
     }
 
-    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let (width, height) = encoded_image_dimensions(data);
-        Box::new(NullRenderImage { width, height })
+        Ok(Box::new(NullRenderImage { width, height }))
     }
 }
 
@@ -2491,7 +2507,7 @@ mod tests {
         );
         let mut paint = factory.make_render_paint();
         paint.shader(Some(shader.as_ref()));
-        let image = factory.decode_image(&[1, 2, 3]);
+        let image = factory.decode_image(&[1, 2, 3]).expect("image decodes");
         let mut vertices = factory.make_render_buffer(
             RenderBufferType::Vertex,
             RenderBufferFlags::MappedOnceAtInitialization,

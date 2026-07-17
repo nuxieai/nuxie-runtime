@@ -454,8 +454,10 @@ pub unsafe extern "C" fn nux_artboard_instance_draw(
     })
 }
 
-/// Create a retained render cache for `instance`. The callback table and its
-/// `user_data` must remain valid until `nux_render_cache_free` returns.
+/// Create a retained render cache for `instance` without invoking renderer callbacks.
+/// Resource creation begins on the first cached draw, and a failed candidate is
+/// discarded so the same cache can retry. The callback table and its `user_data`
+/// must remain valid until `nux_render_cache_free` returns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_render_cache_new(
     instance: *const NuxArtboardInstance,
@@ -475,8 +477,7 @@ pub unsafe extern "C" fn nux_render_cache_new(
         let Some(callbacks) = (unsafe { callbacks.as_ref() }).copied() else {
             return NuxStatus::NullArgument;
         };
-        let mut factory = CallbackFactory::new(callbacks);
-        let cache = instance_ref.instance.new_render_cache(&mut factory);
+        let cache = instance_ref.instance.new_render_cache();
         unsafe {
             *out_cache = Box::into_raw(Box::new(NuxRenderCache {
                 instance,

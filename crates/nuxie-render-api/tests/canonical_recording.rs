@@ -27,7 +27,7 @@ fn record_mesh_scene(
         drop(factory.make_linear_gradient(0.0, 0.0, 1.0, 1.0, &[0xff000000], &[0.0]));
     }
     for _ in 0..allocator_offsets.images {
-        drop(factory.decode_image(&[0]));
+        drop(factory.decode_image(&[0]).expect("image decodes"));
     }
     for _ in 0..allocator_offsets.buffers {
         drop(factory.make_render_buffer(RenderBufferType::Vertex, RenderBufferFlags::None, 1));
@@ -45,7 +45,7 @@ fn record_mesh_scene(
     path.line_to(10.0, 10.0);
     path.close();
 
-    let image = factory.decode_image(&[1, 2, 3]);
+    let image = factory.decode_image(&[1, 2, 3]).expect("image decodes");
     let mut vertices = factory.make_render_buffer(
         RenderBufferType::Vertex,
         RenderBufferFlags::MappedOnceAtInitialization,
@@ -161,8 +161,8 @@ fn record_shader_relationship(distinct_second: bool) -> CanonicalRecording {
 
 fn record_image_relationship(distinct_second: bool) -> CanonicalRecording {
     let mut factory = RecordingFactory::new();
-    let image_a = factory.decode_image(&[1, 2, 3]);
-    let image_b = factory.decode_image(&[1, 2, 3]);
+    let image_a = factory.decode_image(&[1, 2, 3]).expect("image decodes");
+    let image_b = factory.decode_image(&[1, 2, 3]).expect("image decodes");
 
     let mut renderer = factory.make_renderer();
     renderer.draw_image(
@@ -259,7 +259,7 @@ fn canonical_recording_is_identical_before_and_after_render_cache_reuse() {
     let mut path = factory.make_empty_render_path();
     path.move_to(1.0, 2.0);
     path.line_to(3.0, 4.0);
-    let image = factory.decode_image(IMAGE_DATA);
+    let image = factory.decode_image(IMAGE_DATA).expect("image decodes");
 
     let mut vertices = factory.make_render_buffer(
         RenderBufferType::Vertex,

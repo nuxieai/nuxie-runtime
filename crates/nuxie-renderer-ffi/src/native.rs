@@ -1,7 +1,7 @@
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
+    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 use std::error::Error;
@@ -386,12 +386,11 @@ impl Factory for FfiFactory {
         })
     }
 
-    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let handle =
             unsafe { ffi::rive_ffi_decode_image(self.context.as_ptr(), data.as_ptr(), data.len()) };
-        Box::new(FfiRenderImage {
-            handle: non_null(handle, "rive_ffi_decode_image"),
-        })
+        let handle = NonNull::new(handle).ok_or(ImageDecodeError)?;
+        Ok(Box::new(FfiRenderImage { handle }))
     }
 }
 

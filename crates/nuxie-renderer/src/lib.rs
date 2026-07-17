@@ -36,9 +36,9 @@ mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
+    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 use std::cell::RefCell;
@@ -503,24 +503,16 @@ impl Factory for WgpuFactory {
         Box::new(WgpuPaint::default())
     }
 
-    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let Some((width, height, pixels)) = decode_image_rgba(data) else {
-            return Box::new(WgpuImage {
-                width: 0,
-                height: 0,
-                texture: None,
-            });
+            return Err(ImageDecodeError);
         };
         if !texture_extent_supported(
             width,
             height,
             self.context.device.limits().max_texture_dimension_2d,
         ) {
-            return Box::new(WgpuImage {
-                width,
-                height,
-                texture: None,
-            });
+            return Err(ImageDecodeError);
         }
         let mip_level_count = u32::BITS - (width | height).leading_zeros();
         let texture = self
@@ -559,11 +551,11 @@ impl Factory for WgpuFactory {
             mip_level_count,
         );
         let view = texture.create_view(&Default::default());
-        Box::new(WgpuImage {
+        Ok(Box::new(WgpuImage {
             width,
             height,
             texture: Some(Arc::new(WgpuImageTexture { texture, view })),
-        })
+        }))
     }
 }
 
@@ -7586,6 +7578,11 @@ mod tests {
     #[test]
     fn rejects_unknown_encoded_image_format() {
         assert!(decode_image_rgba(b"not an image").is_none());
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        assert_eq!(
+            factory.decode_image(b"not an image").err(),
+            Some(ImageDecodeError)
+        );
     }
 
     #[test]
@@ -7628,7 +7625,7 @@ mod tests {
         }
         let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
 
-        let image = factory.decode_image(&encoded);
+        let image = factory.decode_image(&encoded).expect("image decodes");
 
         assert_eq!(image.width(), 2080);
         assert_eq!(image.height(), 1);
@@ -7656,12 +7653,7 @@ mod tests {
                 .unwrap();
         }
 
-        let image = factory.decode_image(&encoded);
-        let image = image.as_any().downcast_ref::<WgpuImage>().unwrap();
-
-        assert_eq!(image.width, width);
-        assert_eq!(image.height, 1);
-        assert!(image.texture.is_none());
+        assert_eq!(factory.decode_image(&encoded).err(), Some(ImageDecodeError));
     }
 
     #[test]
@@ -7721,7 +7713,7 @@ mod tests {
         }
         let render = |mode| {
             let mut factory = WgpuFactory::new_with_mode(16, 16, mode).unwrap();
-            let image = factory.decode_image(&encoded);
+            let image = factory.decode_image(&encoded).expect("image decodes");
             let mut frame = factory.begin_frame(0xff00_0000);
             frame.transform(Mat2D([4.0, 0.0, 0.0, 4.0, 2.0, 2.0]));
             frame.draw_image(
@@ -7762,7 +7754,7 @@ mod tests {
                 .unwrap();
         }
         let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let image = factory.decode_image(&encoded);
+        let image = factory.decode_image(&encoded).expect("image decodes");
         let mut raw_clip = RawPath::new();
         raw_clip.move_to(32.0, 8.0);
         raw_clip.line_to(56.0, 56.0);
@@ -7806,7 +7798,7 @@ mod tests {
 
         for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
             let mut factory = WgpuFactory::new_with_mode(16, 16, mode).unwrap();
-            let image = factory.decode_image(&encoded);
+            let image = factory.decode_image(&encoded).expect("image decodes");
             let mut vertices = factory.make_render_buffer(
                 RenderBufferType::Vertex,
                 RenderBufferFlags::MappedOnceAtInitialization,
@@ -7897,7 +7889,7 @@ mod tests {
         }
 
         let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let image = factory.decode_image(&encoded);
+        let image = factory.decode_image(&encoded).expect("image decodes");
         let mut vertices = factory.make_render_buffer(
             RenderBufferType::Vertex,
             RenderBufferFlags::MappedOnceAtInitialization,
@@ -7976,7 +7968,7 @@ mod tests {
         }
 
         let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
-        let image = factory.decode_image(&encoded);
+        let image = factory.decode_image(&encoded).expect("image decodes");
         let mut vertices = factory.make_render_buffer(
             RenderBufferType::Vertex,
             RenderBufferFlags::MappedOnceAtInitialization,

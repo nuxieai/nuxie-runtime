@@ -9,10 +9,10 @@ use nuxie_graph::{
 };
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
-    FillRule as RenderFillRule, ImageSampler as RenderImageSampler, Mat2D as RenderMat2D,
-    PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
-    StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
+    FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
+    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -6642,6 +6642,7 @@ pub struct RuntimeRenderPaintCache {
     images: RuntimeRenderImages,
     meshes: RuntimeMeshRenderBufferSlots,
     nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    image_decode_error: Option<ImageDecodeError>,
 }
 
 #[derive(Default)]
@@ -6682,6 +6683,10 @@ impl RuntimeRenderPaintCache {
 
     pub fn root_images_mut(&mut self) -> &mut RuntimeRenderImages {
         &mut self.images
+    }
+
+    pub fn image_decode_error(&self) -> Option<ImageDecodeError> {
+        self.image_decode_error
     }
 }
 
@@ -8294,12 +8299,16 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     let pre_source_image_assets =
         pre_source_image_asset_globals(runtime, graph, artboards, &image_asset_globals);
     let mut images = RuntimeRenderImages::default();
+    let mut image_decode_error = None;
     for asset_global in image_asset_globals
         .iter()
         .copied()
         .filter(|asset_global| pre_source_image_assets.contains(asset_global))
     {
-        predecode_render_image(runtime, asset_global, factory, &mut images);
+        if image_decode_error.is_none() {
+            image_decode_error =
+                predecode_render_image(runtime, asset_global, factory, &mut images).err();
+        }
     }
     let _source_artboard_paints =
         allocate_source_paints.then(|| preallocate_render_paint_batch(runtime, factory));
@@ -8308,7 +8317,10 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         .copied()
         .filter(|asset_global| !pre_source_image_assets.contains(asset_global))
     {
-        predecode_render_image(runtime, asset_global, factory, &mut images);
+        if image_decode_error.is_none() {
+            image_decode_error =
+                predecode_render_image(runtime, asset_global, factory, &mut images).err();
+        }
     }
     let mut source_meshes =
         preallocate_source_mesh_render_buffers_for_artboards(runtime, artboards, factory, &images);
@@ -8333,6 +8345,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         include_script_input_artboards,
     );
     cache.images = images;
+    cache.image_decode_error = image_decode_error;
     cache
 }
 
@@ -8498,10 +8511,11 @@ fn predecode_render_image(
     asset_global: u32,
     factory: &mut dyn RenderFactory,
     images: &mut RuntimeRenderImages,
-) {
+) -> std::result::Result<(), ImageDecodeError> {
     if let Some(bytes) = embedded_file_asset_bytes(runtime, asset_global) {
-        images.insert(asset_global, factory.decode_image(bytes));
+        images.insert(asset_global, factory.decode_image(bytes)?);
     }
+    Ok(())
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
@@ -19406,8 +19420,11 @@ mod tests {
             Box::new(TestRenderPaint)
         }
 
-        fn decode_image(&mut self, _data: &[u8]) -> Box<dyn RenderImage> {
-            Box::new(TestRenderImage)
+        fn decode_image(
+            &mut self,
+            _data: &[u8],
+        ) -> std::result::Result<Box<dyn RenderImage>, ImageDecodeError> {
+            Ok(Box::new(TestRenderImage))
         }
     }
 

@@ -60,10 +60,12 @@ mod native_tests {
     }
 
     #[test]
-    #[should_panic(expected = "rive_ffi_decode_image returned null")]
-    fn invalid_image_bytes_are_not_wrapped_as_a_renderable_image() {
+    fn invalid_image_bytes_return_a_recoverable_decode_error() {
         let mut factory = FfiFactory::new_null(64, 64).expect("native context");
-        drop(factory.decode_image(b"not an encoded image"));
+        assert_eq!(
+            factory.decode_image(b"not an encoded image").err(),
+            Some(nuxie_render_api::ImageDecodeError)
+        );
     }
 
     #[test]

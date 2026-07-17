@@ -208,6 +208,65 @@ fn scripting_reader_gives_script_and_shader_contents_their_file_asset_importers(
 }
 
 #[test]
+fn scripting_file_asset_catalog_uses_importer_ownership_not_adjacency() {
+    let bytes = synthetic_runtime_file(4401, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_object_with_properties(bytes, "ScriptAsset", |bytes| {
+            push_string_property(bytes, "ScriptAsset", "name", "protocol");
+        });
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+            push_bytes_property(bytes, "FileAssetContents", "bytes", b"protocol-bytes");
+        });
+        push_object_with_properties(bytes, "ScriptAsset", |bytes| {
+            push_string_property(bytes, "ScriptAsset", "name", "module");
+            push_uint_property(bytes, "ScriptAsset", "isModule", 1);
+        });
+        push_empty_object(bytes, "Node");
+        push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+            push_bytes_property(bytes, "FileAssetContents", "bytes", b"module-bytes");
+        });
+    });
+    let file = read_runtime_file_with_scripting(&bytes).expect("scripting import");
+    let catalog = file.scripting_file_assets_with_contents();
+
+    assert_eq!(catalog.len(), 2);
+    assert_eq!(catalog[0].ordinal, 0);
+    assert_eq!(catalog[0].asset.string_property("name"), Some("protocol"));
+    assert_eq!(catalog[0].contents, Some(b"protocol-bytes".as_slice()));
+    assert_eq!(catalog[1].ordinal, 1);
+    assert_eq!(catalog[1].asset.string_property("name"), Some("module"));
+    assert_eq!(catalog[1].contents, Some(b"module-bytes".as_slice()));
+}
+
+#[test]
+fn scripting_file_asset_catalog_respects_manifest_importer_boundary() {
+    let bytes = synthetic_runtime_file(4401, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_object_with_properties(bytes, "ScriptAsset", |bytes| {
+            push_string_property(bytes, "ScriptAsset", "name", "protocol");
+        });
+        push_empty_object(bytes, "ManifestAsset");
+        push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+            push_bytes_property(bytes, "FileAssetContents", "bytes", b"manifest-bytes");
+        });
+    });
+    let file = read_runtime_file_with_scripting(&bytes).expect("scripting import");
+    let catalog = file.scripting_file_assets_with_contents();
+
+    assert_eq!(
+        catalog.len(),
+        1,
+        "ManifestAsset is not in the dense catalog"
+    );
+    assert_eq!(catalog[0].asset.string_property("name"), Some("protocol"));
+    assert_eq!(
+        catalog[0].contents, None,
+        "manifest bytes are not script bytes"
+    );
+}
+
+#[test]
 fn imports_entire_starter_fixture_corpus() {
     let cases = [
         ("minimal/long_name.riv", 9, 9),

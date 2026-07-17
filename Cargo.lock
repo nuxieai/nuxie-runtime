@@ -748,6 +748,8 @@ name = "nuxie"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "luaur-common",
+ "luaur-compiler",
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-render-api",

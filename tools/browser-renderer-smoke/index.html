@@ -24,6 +24,7 @@
     <pre id="status">running</pre>
     <script type="module">
       import init, {
+        assert_resize,
         assert_webgl2_fail_closed,
         run_backend,
         run_stream_case,
@@ -71,6 +72,8 @@
           }
         }
         if (!forceFallback) {
+          results.push(await assert_resize(document.createElement("canvas"), "webgpu"));
+          results.push(await assert_resize(document.createElement("canvas"), "webgl2"));
           for (const testCase of streamCases) {
             const { name, suite } = testCase;
             const label = testCase.reference ?? `${suite}-${name}`;

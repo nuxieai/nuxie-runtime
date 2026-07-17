@@ -94,7 +94,9 @@ impl fmt::Display for RendererError {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use browser::{BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame};
+pub use browser::{
+    BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame, BrowserResizeError,
+};
 #[cfg(target_arch = "wasm32")]
 pub use webgl2::{WebGl2Factory, WebGl2Frame};
 
@@ -169,6 +171,8 @@ struct Context {
 }
 
 struct FrameAttachments {
+    width: u32,
+    height: u32,
     target_texture: wgpu::Texture,
     target_view: wgpu::TextureView,
     multisample_view: wgpu::TextureView,
@@ -219,6 +223,8 @@ impl FrameAttachments {
         });
         let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
+            width,
+            height,
             target_texture,
             target_view,
             multisample_view,
@@ -228,44 +234,71 @@ impl FrameAttachments {
 }
 
 struct FrameAttachmentPool {
+    state: Mutex<FrameAttachmentPoolState>,
+}
+
+struct FrameAttachmentPoolState {
     width: u32,
     height: u32,
-    available: Mutex<Vec<Arc<FrameAttachments>>>,
+    available: Vec<Arc<FrameAttachments>>,
 }
 
 impl FrameAttachmentPool {
     fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
         Self {
-            width,
-            height,
-            available: Mutex::new(vec![Arc::new(FrameAttachments::new(device, width, height))]),
+            state: Mutex::new(FrameAttachmentPoolState {
+                width,
+                height,
+                available: vec![Arc::new(FrameAttachments::new(device, width, height))],
+            }),
         }
     }
 
-    fn checkout(&self, device: &wgpu::Device) -> Arc<FrameAttachments> {
-        self.available
+    fn checkout(&self, device: &wgpu::Device, width: u32, height: u32) -> Arc<FrameAttachments> {
+        let mut state = self
+            .state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .pop()
-            .unwrap_or_else(|| Arc::new(FrameAttachments::new(device, self.width, self.height)))
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if (width, height) == (state.width, state.height) {
+            if let Some(attachments) = state.available.pop() {
+                return attachments;
+            }
+        }
+        drop(state);
+        Arc::new(FrameAttachments::new(device, width, height))
     }
 
     fn recycle(&self, attachments: Arc<FrameAttachments>) {
-        let mut available = self
-            .available
+        let mut state = self
+            .state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if available.len() < MAX_CACHED_FRAME_ATTACHMENTS {
-            available.push(attachments);
+        if (attachments.width, attachments.height) == (state.width, state.height)
+            && state.available.len() < MAX_CACHED_FRAME_ATTACHMENTS
+        {
+            state.available.push(attachments);
         }
+    }
+
+    fn resize(&self, device: &wgpu::Device, width: u32, height: u32) {
+        let attachments = Arc::new(FrameAttachments::new(device, width, height));
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.width = width;
+        state.height = height;
+        state.available.clear();
+        state.available.push(attachments);
     }
 
     #[cfg(test)]
     fn cached(&self) -> Arc<FrameAttachments> {
         Arc::clone(
-            self.available
+            self.state
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .available
                 .last()
                 .expect("frame attachment pool is empty outside frame execution"),
         )
@@ -273,9 +306,10 @@ impl FrameAttachmentPool {
 
     #[cfg(test)]
     fn cached_len(&self) -> usize {
-        self.available
+        self.state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .available
             .len()
     }
 }
@@ -571,6 +605,28 @@ impl WgpuFactory {
 
     pub fn adapter_info(&self) -> &WgpuAdapterInfo {
         &self.context.adapter_info
+    }
+
+    /// Retargets future frames without replacing the renderer device or any
+    /// factory-owned render resources. Frames that were already created keep
+    /// their original extent and cannot recycle their attachments into the
+    /// resized target pool.
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        validate_texture_extent(
+            "render target",
+            width,
+            height,
+            self.context.device.limits().max_texture_dimension_2d,
+        )?;
+        if (width, height) == (self.width, self.height) {
+            return Ok(());
+        }
+        self.context
+            .frame_attachments
+            .resize(&self.context.device, width, height);
+        self.width = width;
+        self.height = height;
+        Ok(())
     }
 }
 
@@ -1952,10 +2008,10 @@ impl WgpuFrame {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
-        let frame_attachments = self
-            .context
-            .frame_attachments
-            .checkout(&self.context.device);
+        let frame_attachments =
+            self.context
+                .frame_attachments
+                .checkout(&self.context.device, self.width, self.height);
         let texture = frame_attachments.target_texture.clone();
         let view = frame_attachments.target_view.clone();
         let multisample_view = frame_attachments.multisample_view.clone();
@@ -9729,16 +9785,65 @@ mod tests {
         let first = factory
             .context
             .frame_attachments
-            .checkout(&factory.context.device);
+            .checkout(&factory.context.device, 8, 8);
         let second = factory
             .context
             .frame_attachments
-            .checkout(&factory.context.device);
+            .checkout(&factory.context.device, 8, 8);
         assert!(!Arc::ptr_eq(&first, &second));
 
         factory.context.frame_attachments.recycle(first);
         factory.context.frame_attachments.recycle(second);
         assert_eq!(factory.context.frame_attachments.cached_len(), 1);
+    }
+
+    #[test]
+    fn wgpu_factory_resize_retargets_future_frames_without_replacing_the_context() {
+        let mut factory = WgpuFactory::new_with_mode(8, 6, RenderMode::Msaa).unwrap();
+        let context = Arc::clone(&factory.context);
+
+        factory.resize(13, 9).unwrap();
+
+        assert!(Arc::ptr_eq(&context, &factory.context));
+        assert_eq!(
+            factory.begin_frame(0xff00_0000).finish().unwrap().len(),
+            13 * 9 * 4
+        );
+    }
+
+    #[test]
+    fn wgpu_factory_resize_does_not_recycle_old_frame_targets_into_the_new_size() {
+        let mut factory = WgpuFactory::new_with_mode(8, 6, RenderMode::Msaa).unwrap();
+        let old_frame = factory.begin_frame(0xff00_0000);
+
+        factory.resize(13, 9).unwrap();
+
+        assert_eq!(old_frame.finish().unwrap().len(), 8 * 6 * 4);
+        assert_eq!(
+            factory.begin_frame(0xff00_0000).finish().unwrap().len(),
+            13 * 9 * 4
+        );
+        let cached = factory.context.frame_attachments.cached();
+        assert_eq!((cached.width, cached.height), (13, 9));
+    }
+
+    #[test]
+    fn wgpu_factory_rejects_invalid_resize_without_changing_future_frames() {
+        let mut factory = WgpuFactory::new_with_mode(8, 6, RenderMode::Msaa).unwrap();
+
+        assert!(matches!(
+            factory.resize(0, 9),
+            Err(RendererError::InvalidTextureExtent {
+                width: 0,
+                height: 9,
+                ..
+            })
+        ));
+
+        assert_eq!(
+            factory.begin_frame(0xff00_0000).finish().unwrap().len(),
+            8 * 6 * 4
+        );
     }
 
     #[test]

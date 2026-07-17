@@ -26,6 +26,7 @@ type WebGl2Canvas = Canvas<OpenGl>;
 /// linearly sampled images. Unsupported capabilities fail when the frame is
 /// finished instead of rendering partial output.
 pub struct WebGl2Factory {
+    element: web_sys::HtmlCanvasElement,
     canvas: Rc<RefCell<WebGl2Canvas>>,
     frame_active: Rc<Cell<bool>>,
     poisoned: Rc<Cell<bool>>,
@@ -55,6 +56,7 @@ impl WebGl2Factory {
             Canvas::new(renderer).map_err(|error| RendererError::WebGl2(error.to_string()))?;
         canvas.set_size(width, height, 1.0);
         Ok(Self {
+            element: element.clone(),
             canvas: Rc::new(RefCell::new(canvas)),
             frame_active: Rc::new(Cell::new(false)),
             poisoned: Rc::new(Cell::new(false)),
@@ -98,6 +100,36 @@ impl WebGl2Factory {
             unsupported: None,
             finished: false,
         })
+    }
+
+    /// Retargets future frames and the bound HTML canvas without recreating
+    /// the WebGL context. Active or poisoned factories reject the operation
+    /// before changing either extent.
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        if width == 0 || height == 0 {
+            return Err(RendererError::WebGl2(
+                "render target dimensions must be nonzero".into(),
+            ));
+        }
+        if self.poisoned.get() {
+            return Err(RendererError::WebGl2(
+                "renderer was poisoned by an abandoned frame".into(),
+            ));
+        }
+        if self.frame_active.get() {
+            return Err(RendererError::WebGl2(
+                "cannot resize while a WebGL2 frame is active".into(),
+            ));
+        }
+        if (width, height) == (self.width, self.height) {
+            return Ok(());
+        }
+        self.element.set_width(width);
+        self.element.set_height(height);
+        self.canvas.borrow_mut().set_size(width, height, 1.0);
+        self.width = width;
+        self.height = height;
+        Ok(())
     }
 }
 

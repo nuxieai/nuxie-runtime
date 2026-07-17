@@ -4,6 +4,10 @@ use nuxie_render_api::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
     RenderShader, Renderer,
 };
+use std::cell::Cell;
+use std::error::Error;
+use std::fmt;
+use std::rc::Rc;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
@@ -27,6 +31,45 @@ pub enum BrowserBackend {
     WebGl2,
 }
 
+/// Failure to retarget a browser renderer's canvas.
+///
+/// The lifecycle case is backend-independent: a resize never mutates the
+/// active frame or queues a hidden resize behind it. Callers may retry after
+/// that frame finishes while continuing to use document-side APIs.
+#[derive(Debug)]
+pub enum BrowserResizeError {
+    /// A frame created by this factory has not finished or been dropped yet.
+    FrameInFlight,
+    /// The selected renderer rejected the requested target extent.
+    Renderer(RendererError),
+}
+
+impl fmt::Display for BrowserResizeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FrameInFlight => {
+                formatter.write_str("cannot resize while a browser frame is in flight")
+            }
+            Self::Renderer(error) => write!(formatter, "browser resize failed: {error}"),
+        }
+    }
+}
+
+impl Error for BrowserResizeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::FrameInFlight => None,
+            Self::Renderer(error) => Some(error),
+        }
+    }
+}
+
+impl From<RendererError> for BrowserResizeError {
+    fn from(error: RendererError) -> Self {
+        Self::Renderer(error)
+    }
+}
+
 enum BrowserFactoryInner {
     WebGpu(WgpuFactory),
     WebGl2(WebGl2Factory),
@@ -37,6 +80,9 @@ pub struct BrowserFactory {
     inner: BrowserFactoryInner,
     canvas: HtmlCanvasElement,
     fallback_reason: Option<String>,
+    width: u32,
+    height: u32,
+    active_frames: Rc<Cell<u32>>,
 }
 
 impl BrowserFactory {
@@ -77,6 +123,9 @@ impl BrowserFactory {
             inner,
             canvas,
             fallback_reason,
+            width,
+            height,
+            active_frames: Rc::new(Cell::new(0)),
         })
     }
 
@@ -101,6 +150,37 @@ impl BrowserFactory {
         }
     }
 
+    /// Returns the current physical render-target size.
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    /// Retargets the selected renderer and canvas for future frames.
+    ///
+    /// Resizing is synchronous and never recreates the factory's device or
+    /// leaks backend selection into the caller. If a frame is in flight, this
+    /// returns [`BrowserResizeError::FrameInFlight`] without changing state;
+    /// callers may retry after frame completion.
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), BrowserResizeError> {
+        if self.active_frames.get() != 0 {
+            return Err(BrowserResizeError::FrameInFlight);
+        }
+        if (width, height) == (self.width, self.height) {
+            return Ok(());
+        }
+        match &mut self.inner {
+            BrowserFactoryInner::WebGpu(factory) => {
+                factory.resize(width, height)?;
+                self.canvas.set_width(width);
+                self.canvas.set_height(height);
+            }
+            BrowserFactoryInner::WebGl2(factory) => factory.resize(width, height)?,
+        }
+        self.width = width;
+        self.height = height;
+        Ok(())
+    }
+
     /// Begins a frame for the canvas.
     ///
     /// Only one WebGL2 frame may be active for a factory at a time.
@@ -113,9 +193,14 @@ impl BrowserFactory {
                 BrowserFrameInner::WebGl2(factory.begin_frame(clear_color)?)
             }
         };
+        self.active_frames
+            .set(self.active_frames.get().saturating_add(1));
         Ok(BrowserFrame {
             inner,
             canvas: self.canvas.clone(),
+            lease: BrowserFrameLease {
+                active_frames: Rc::clone(&self.active_frames),
+            },
         })
     }
 }
@@ -212,6 +297,18 @@ enum BrowserFrameInner {
 pub struct BrowserFrame {
     inner: BrowserFrameInner,
     canvas: HtmlCanvasElement,
+    lease: BrowserFrameLease,
+}
+
+struct BrowserFrameLease {
+    active_frames: Rc<Cell<u32>>,
+}
+
+impl Drop for BrowserFrameLease {
+    fn drop(&mut self) {
+        self.active_frames
+            .set(self.active_frames.get().saturating_sub(1));
+    }
 }
 
 impl BrowserFrame {
@@ -220,14 +317,21 @@ impl BrowserFrame {
     /// WebGPU submission and readback are asynchronous. WebGL2 flushes and
     /// reads the canvas before resolving this future.
     pub async fn finish(self) -> Result<Vec<u8>, RendererError> {
-        match self.inner {
+        let Self {
+            inner,
+            canvas,
+            lease,
+        } = self;
+        let result = match inner {
             BrowserFrameInner::WebGpu(frame) => {
                 let pixels = frame.finish_async().await?;
-                present_pixels(&self.canvas, &pixels)?;
+                present_pixels(&canvas, &pixels)?;
                 Ok(pixels)
             }
             BrowserFrameInner::WebGl2(frame) => frame.finish(),
-        }
+        };
+        drop(lease);
+        result
     }
 }
 

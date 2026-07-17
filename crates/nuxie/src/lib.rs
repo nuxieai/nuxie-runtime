@@ -38,7 +38,7 @@ pub use nuxie_render_api::{
 pub use nuxie_renderer::{
     BrowserBackend, BrowserBackendPreference, BrowserFactory,
     BrowserFactory as DefaultRendererFactory, BrowserFrame, BrowserFrame as DefaultRendererFrame,
-    WebGl2Factory, WebGl2Frame,
+    BrowserResizeError, WebGl2Factory, WebGl2Frame,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{

@@ -22,6 +22,8 @@ const cases = [
     expected: [
       "backend=webgpu fallback=false",
       "backend=webgl2 fallback=false",
+      "resize=webgpu in-flight=rejected extent=13x9",
+      "resize=webgl2 in-flight=rejected extent=13x9",
       "stream=gm-rect backend=webgpu",
       "stream=gm-rect backend=webgl2",
       "stream=gm-image backend=webgpu",

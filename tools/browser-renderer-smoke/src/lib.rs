@@ -1,8 +1,8 @@
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use nuxie::{
-        BlendMode, BrowserBackendPreference, BrowserFactory, Factory, FillRule, ImageFilter,
-        ImageSampler, ImageWrap, Mat2D, RecordingFactory, Renderer,
+        BlendMode, BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserResizeError,
+        Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, RecordingFactory, Renderer,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -75,6 +75,69 @@ mod wasm {
             "backend={selected} fallback={fallback} checksum={:016x}",
             fnv1a64(&pixels)
         ))
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_resize(
+        canvas: HtmlCanvasElement,
+        backend: String,
+    ) -> Result<String, JsValue> {
+        let preference = match backend.as_str() {
+            "webgpu" => BrowserBackendPreference::WebGpu,
+            "webgl2" => BrowserBackendPreference::WebGl2,
+            value => return Err(JsValue::from_str(&format!("unknown backend {value}"))),
+        };
+        let mut factory = BrowserFactory::new(canvas.clone(), 8, 6, preference)
+            .await
+            .map_err(js_error)?;
+        let frame = factory.begin_frame(0xff12_3456).map_err(js_error)?;
+
+        match factory.resize(13, 9) {
+            Err(BrowserResizeError::FrameInFlight) => {}
+            Err(error) => {
+                return Err(JsValue::from_str(&format!(
+                    "unexpected in-flight resize error: {error}"
+                )));
+            }
+            Ok(()) => {
+                return Err(JsValue::from_str(
+                    "browser factory resized while a frame was in flight",
+                ));
+            }
+        }
+        let selected_backend_matches = matches!(
+            (backend.as_str(), factory.backend()),
+            ("webgpu", BrowserBackend::WebGpu) | ("webgl2", BrowserBackend::WebGl2)
+        );
+        if factory.size() != (8, 6) || !selected_backend_matches {
+            return Err(JsValue::from_str(
+                "in-flight resize changed readable factory state",
+            ));
+        }
+        if frame.finish().await.map_err(js_error)?.len() != 8 * 6 * 4 {
+            return Err(JsValue::from_str(
+                "in-flight frame changed extent after rejected resize",
+            ));
+        }
+
+        factory.resize(13, 9).map_err(js_error)?;
+        if factory.size() != (13, 9) || canvas.width() != 13 || canvas.height() != 9 {
+            return Err(JsValue::from_str(
+                "resize did not update the factory and canvas extent",
+            ));
+        }
+        let pixels = factory
+            .begin_frame(0xff65_4321)
+            .map_err(js_error)?
+            .finish()
+            .await
+            .map_err(js_error)?;
+        if pixels.len() != 13 * 9 * 4 {
+            return Err(JsValue::from_str(
+                "resized frame returned the old pixel extent",
+            ));
+        }
+        Ok(format!("resize={backend} in-flight=rejected extent=13x9"))
     }
 
     #[wasm_bindgen]
@@ -421,4 +484,6 @@ mod wasm {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm::{assert_webgl2_fail_closed, recording_float_probe, run_backend, run_stream_case};
+pub use wasm::{
+    assert_resize, assert_webgl2_fail_closed, recording_float_probe, run_backend, run_stream_case,
+};

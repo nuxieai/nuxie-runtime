@@ -383,7 +383,10 @@ Run `make renderer-golden`.
 - [x] R3: Corpus convergence.
 - [x] R3.1: Retained gate burn-down.
 - [ ] R4: Performance parity.
-- [ ] R5: Native fast paths and extensions; demand-gated after R4.
+- [x] R5: Browser WebGPU/WebGL2 product backends and evidence-gated
+  extensions. The SDK default, asynchronous WebGPU path, separate WebGL2
+  compatibility renderer, automatic fallback, and executable browser gates
+  are complete; neither optional native fast paths nor RSTB assets triggered.
 
 ## Next
 
@@ -1696,6 +1699,53 @@ Run `make renderer-golden`.
     `DefaultRendererFrame`; a public-only integration test proves non-clear
     pixel output. `nuxie --no-default-features` stays valid, and `nux-capi`
     explicitly uses that path because it owns callback rendering.
+140. [x] Add a browser-safe WebGPU lifecycle. `WgpuFactory::new_async` and
+    `new_async_with_mode` request the adapter/device without blocking, while
+    `WgpuFrame::finish_async` completes submission and mapped readback through
+    callbacks on wasm. Native synchronous constructors and finish methods stay
+    as wrappers around the same asynchronous implementation. Browser upload
+    pages remain in flight until submission completion instead of re-entering
+    the reuse pool early. Foreign paths, paints, shaders, images, and mesh
+    buffers now produce named unsupported errors before a panic or cross-device
+    wgpu validation; focused native tests cover both type and device ownership.
+141. [x] Add the public browser backend contract. `BrowserFactory` accepts
+    `Auto`, forced `WebGpu`, or forced `WebGl2`; automatic selection attempts
+    WebGPU first and records the WebGPU failure when WebGL2 is selected. Forced
+    modes never silently switch backend. `BrowserFrame::finish` presents the
+    offscreen WebGPU result or flushes the canvas-bound WebGL2 result and
+    returns the RGBA frame in both cases.
+142. [x] Implement WebGL2 as an independent compatibility renderer through
+    FemtoVG's GLES path. The supported baseline covers solid, linear-gradient,
+    and radial-gradient path fills; strokes; nonzero, even-odd, and clockwise
+    winding; transforms and opacity; transformed rectangular clips; and
+    linearly sampled image rectangles. The existing C++ inner-fan
+    triangulator supplies positive-winding clockwise faces. Image destruction
+    is deferred past command execution, resources carry factory ownership,
+    invalid/foreign resources fail closed, unsupported frames are cleared
+    before returning an error, and abandoned frames poison their factory.
+    Missing-image draws remain no-ops regardless of sampler/blend arguments,
+    while clip rectangles whose relative transforms FemtoVG would approximate
+    are rejected. Non-rectangular clips, feather, advanced blends, image
+    meshes, and non-default samplers remain named unsupported capabilities
+    rather than partial rendering.
+143. [x] Close the R5 browser and extension gates. A real Chrome target
+    forces WebGPU and WebGL2 separately, removes `navigator.gpu` to prove both
+    automatic fallback and forced-WebGPU failure, checks
+    unsupported/recovery/abandoned lifecycle, and
+    compares eight GM streams plus one real `.riv` stream to pinned C++ Dawn
+    references. WebGPU is exact under channel delta 1 (the image stream has
+    only raw delta-1 pixels); WebGL2 passes per-scene pixel budgets plus an
+    expected-edge mask and semantic center probes. The 408-stream census
+    records 226 clockwise-fill, 137 clip, 27 feather, 22 advanced-blend, 19
+    image-rectangle, three image-mesh, 28 linear-gradient, and 14
+    radial-gradient streams. Of 1,087 clip commands, 515 are rectangular
+    forms and 572 are not; 105 of 137 clip-bearing streams use only the
+    rectangular forms. Neither native raster-order modes nor RSTB shader
+    assets are required by the proven shipping paths, so both evidence-gated
+    extensions close with a no-trigger decision. A dedicated macOS CI job
+    builds the wasm target and runs the same Chrome/Metal WebGPU/WebGL2 pixel
+    gate with a repository-owned, version-pinned Playwright driver. Parked R4
+    item 135 is the explicit restart point after the user-directed pause.
 
 ## R2 Completion Record
 
@@ -1907,6 +1957,24 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-16: R5 defines browser support as two explicit, executable backend
+  contracts. WebGPU carries the full translated renderer through asynchronous
+  browser-safe initialization, submission, and readback. WebGL2 is a separate
+  compatibility path for the common render-stream baseline and must reject a
+  named unsupported capability before presenting partial output. Automatic
+  selection is WebGPU-first with an observable WebGL2 fallback reason; forcing
+  either backend disables fallback. This is the release contract tested by
+  `make browser-renderer-smoke`, not a claim that WebGL2 can execute WebGPU's
+  storage-buffer pipelines.
+
+- 2026-07-16: Sol's adversarial R5 review found four release-contract gaps,
+  all closed before the milestone verdict. Wgpu type erasure and device
+  ownership now fail before panic/validation; incompatible transformed WebGL2
+  scissor intersections reject instead of approximating; absent WebGL2 images
+  are no-ops before capability checks; and wasm plus browser pixels are a
+  dedicated CI job. Focused ownership tests and the expanded Chrome
+  lifecycle smoke pass.
 
 - 2026-07-16: At the user's direction, park R4 item 135 after deterministic
   work parity, make the pure-Rust renderer the public SDK default, complete R5,
@@ -2864,6 +2932,27 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-16: Closed R5 items 140-143 and the milestone. `nuxie` now exposes a
+  wasm default renderer that selects WebGPU first and falls back to a distinct
+  WebGL2 implementation. The async WebGPU API compiles for wasm without a
+  blocking poll path. Chrome proves forced WebGPU, forced WebGL2, and forced
+  automatic fallback; eight GM streams and one real `.riv` stream pass the
+  browser pixel gates on both backends. The WebGL2 gate additionally proves
+  named unsupported behavior, incompatible-transform rejection, missing-image
+  no-ops, clean recovery, and abandoned-frame poisoning. Sol's four review
+  findings are closed, including CI enforcement through a self-contained
+  pinned Playwright driver.
+  Native renderer tests, public SDK tests with and without its default feature,
+  wasm target checks, and the in-memory PNG oracle test pass. Native
+  raster-order and RSTB extensions close as evidence-gated no-triggers. Parked
+  R4 item 135 is the explicit restart point after the user-directed pause.
+  Final commit-candidate verification passes: the native renderer corpus is
+  exact=1,409/diverges=0/gated=59/total=1,468; the full import comparison is
+  exact=263 files and 584 segments with no `not-yet` rows; the scripted
+  comparison is exact=27 files and 35 segments; `cargo test --workspace`, the
+  Chrome WebGPU/WebGL2 smoke matrix, and `make capi-smoke` pass. The tracked
+  release-size C ABI is 2,768,624 bytes without scripting and 2,935,728 bytes
+  with scripting.
 - 2026-07-16: Closed R5 item 139. The public `nuxie` facade now selects the
   pure-Rust renderer by default while `nuxie-runtime` and `nuxie-render-api`
   remain backend-neutral. The default feature renders through the public API,

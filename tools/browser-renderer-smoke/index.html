@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>Nuxie browser renderer smoke</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 24px; color: #182027; }
+      main { display: flex; gap: 24px; align-items: flex-start; }
+      canvas { width: 256px; height: 256px; image-rendering: pixelated; border: 1px solid #89939c; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Browser renderer smoke</h1>
+    <main>
+      <section id="webgpu-section"><h2>WebGPU</h2><canvas id="webgpu"></canvas></section>
+      <section id="webgl2-section"><h2>WebGL2</h2><canvas id="webgl2"></canvas></section>
+      <section id="fallback-section" hidden><h2>Automatic fallback</h2><canvas id="fallback"></canvas></section>
+      <canvas id="unsupported" hidden></canvas>
+      <canvas id="abandoned" hidden></canvas>
+    </main>
+    <pre id="status">running</pre>
+    <script type="module">
+      import init, {
+        assert_webgl2_fail_closed,
+        run_backend,
+        run_stream_case,
+      } from "./pkg/browser_renderer_smoke.js";
+
+      const status = document.querySelector("#status");
+      try {
+        const forceFallback = new URLSearchParams(location.search).has("force-webgl2-fallback");
+        if (forceFallback) {
+          Object.defineProperty(navigator, "gpu", {
+            configurable: true,
+            value: undefined,
+          });
+          document.querySelector("#webgpu-section").hidden = true;
+          document.querySelector("#webgl2-section").hidden = true;
+          document.querySelector("#fallback-section").hidden = false;
+        }
+        await init();
+        const streamCases = [
+          { suite: "gm", name: "rect", maxDifferent: 2048, maxOffEdge: 0 },
+          { suite: "gm", name: "rect_grad", maxDifferent: 1536, maxOffEdge: 0 },
+          { suite: "gm", name: "degengrad", maxDifferent: 20000, maxOffEdge: 4096 },
+          { suite: "gm", name: "CubicStroke", maxDifferent: 2560, maxOffEdge: 0 },
+          { suite: "gm", name: "cliprects", maxDifferent: 10240, maxOffEdge: 0 },
+          { suite: "gm", name: "poly_clockwise", maxDifferent: 3584, maxOffEdge: 0 },
+          { suite: "gm", name: "poly_evenOdd", maxDifferent: 5632, maxOffEdge: 0 },
+          { suite: "gm", name: "image", maxDifferent: 2048, maxOffEdge: 512 },
+          { suite: "riv", name: "scripted_color", reference: "riv-scripted_color-frame-0", maxDifferent: 4096, maxOffEdge: 0 },
+        ];
+        const results = forceFallback
+          ? [await run_backend(document.querySelector("#fallback"), "auto")]
+          : [
+              await run_backend(document.querySelector("#webgpu"), "webgpu"),
+              await run_backend(document.querySelector("#webgl2"), "webgl2"),
+            ];
+        if (forceFallback) {
+          try {
+            await run_backend(document.createElement("canvas"), "webgpu");
+            throw new Error("forced WebGPU unexpectedly selected another backend");
+          } catch (error) {
+            if (String(error).includes("unexpectedly selected")) {
+              throw error;
+            }
+            results.push("forced-webgpu=fail-closed");
+          }
+        }
+        if (!forceFallback) {
+          for (const testCase of streamCases) {
+            const { name, suite } = testCase;
+            const label = testCase.reference ?? `${suite}-${name}`;
+            const streamText = await fetch(`/fixtures/renderer/streams/${suite}/${name}.rive-stream`).then((response) => response.text());
+            const streamReference = new Uint8Array(await fetch(`/fixtures/renderer/reference/dawn-webgpu-metal/${suite}/${label}-msaa.png`).then((response) => response.arrayBuffer()));
+            for (const backend of ["webgpu", "webgl2"]) {
+              const canvas = document.createElement("canvas");
+              canvas.hidden = true;
+              document.body.append(canvas);
+              results.push(await run_stream_case(
+                canvas,
+                label,
+                backend,
+                streamText,
+                streamReference,
+                backend === "webgpu" ? 1 : 2,
+                backend === "webgpu" ? 0 : testCase.maxDifferent,
+                backend === "webgpu" ? 0 : 4,
+                backend === "webgpu" ? 0 : testCase.maxOffEdge,
+              ));
+            }
+          }
+          results.push(await assert_webgl2_fail_closed(
+            document.querySelector("#unsupported"),
+            document.querySelector("#abandoned"),
+          ));
+        }
+        if (forceFallback && !results[0].includes("backend=webgl2 fallback=true")) {
+          throw new Error(`automatic fallback selected the wrong backend: ${results[0]}`);
+        }
+        window.__rendererSmoke = { status: "passed", results };
+        status.textContent = `passed\n${results.join("\n")}`;
+        document.body.dataset.status = "passed";
+      } catch (error) {
+        const message = error?.stack || String(error);
+        window.__rendererSmoke = { status: "failed", error: message };
+        status.textContent = `failed\n${message}`;
+        document.body.dataset.status = "failed";
+      }
+    </script>
+  </body>
+</html>

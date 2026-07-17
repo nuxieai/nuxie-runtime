@@ -78,6 +78,31 @@ jobs:
       - name: Build and run C smoke test
         run: make capi-smoke
 
+  browser-renderer:
+    name: Browser WebGPU and WebGL2
+    runs-on: macos-14
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable with wasm target
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+
+      - name: Fetch pinned test assets
+        run: make fixtures
+
+      - name: Verify browser WebGPU, WebGL2, and fallback
+        env:
+          BROWSER_RENDERER_BROWSER: chrome
+        run: make browser-renderer-smoke
+
   renderer-golden:
     name: Phase R pixel golden
     runs-on: macos-14

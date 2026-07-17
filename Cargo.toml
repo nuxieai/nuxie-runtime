@@ -16,6 +16,7 @@ members = [
     "tools/pixel-compare",
     "tools/renderer-fuzz-replay",
     "tools/renderer-replay",
+    "tools/browser-renderer-smoke",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
 ]

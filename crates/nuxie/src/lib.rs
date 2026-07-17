@@ -28,10 +28,19 @@ pub use nuxie_render_api::{
     RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
     Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
+#[cfg(all(feature = "renderer", target_arch = "wasm32"))]
+pub use nuxie_renderer::{
+    BrowserBackend, BrowserBackendPreference, BrowserFactory,
+    BrowserFactory as DefaultRendererFactory, BrowserFrame, BrowserFrame as DefaultRendererFrame,
+    WebGl2Factory, WebGl2Frame,
+};
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
-    RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory as DefaultRendererFactory,
-    WgpuFrame as DefaultRendererFrame, WgpuFrameMetrics,
+    RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuFrameMetrics,
+};
+#[cfg(all(feature = "renderer", not(target_arch = "wasm32")))]
+pub use nuxie_renderer::{
+    WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
 };
 pub use nuxie_runtime::{
     ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,

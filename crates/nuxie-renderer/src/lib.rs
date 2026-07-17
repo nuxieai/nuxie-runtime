@@ -1,4 +1,5 @@
-//! Pure-Rust wgpu renderer behind the `nuxie-render-api` trait boundary.
+//! Pure-Rust WebGPU and WebGL2 renderers behind the `nuxie-render-api` trait
+//! boundary.
 
 #[cfg(test)]
 mod atlas_blit_oracle;
@@ -20,6 +21,8 @@ mod gpu;
 mod gr_triangulator;
 mod gradient_pipeline;
 // Kept standalone until a renderer path has a proven grouping integration.
+#[cfg(target_arch = "wasm32")]
+mod browser;
 #[allow(dead_code)]
 mod intersection_board;
 mod logical_flush;
@@ -32,6 +35,8 @@ mod skyline;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
+#[cfg(target_arch = "wasm32")]
+mod webgl2;
 mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
@@ -47,7 +52,7 @@ use std::error::Error;
 use std::ffi::c_void;
 use std::fmt;
 use std::io::Cursor;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
 #[derive(Debug)]
@@ -63,6 +68,7 @@ pub enum RendererError {
     },
     Map(String),
     Unsupported(&'static str),
+    WebGl2(String),
 }
 
 impl fmt::Display for RendererError {
@@ -82,9 +88,15 @@ impl fmt::Display for RendererError {
             ),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
+            Self::WebGl2(message) => write!(f, "WebGL2 renderer error: {message}"),
         }
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+pub use browser::{BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame};
+#[cfg(target_arch = "wasm32")]
+pub use webgl2::{WebGl2Factory, WebGl2Frame};
 
 impl Error for RendererError {}
 
@@ -302,15 +314,30 @@ pub enum RenderMode {
 }
 
 impl WgpuFactory {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
         Self::new_with_mode(width, height, RenderMode::Msaa)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new_with_mode(width: u32, height: u32, mode: RenderMode) -> Result<Self, RendererError> {
-        pollster::block_on(Self::new_async(width, height, mode))
+        pollster::block_on(Self::new_async_with_mode(width, height, mode))
     }
 
-    async fn new_async(width: u32, height: u32, mode: RenderMode) -> Result<Self, RendererError> {
+    /// Asynchronously creates an MSAA renderer.
+    ///
+    /// This is the browser-safe constructor and does not block while requesting
+    /// the WebGPU adapter or device.
+    pub async fn new_async(width: u32, height: u32) -> Result<Self, RendererError> {
+        Self::new_async_with_mode(width, height, RenderMode::Msaa).await
+    }
+
+    /// Asynchronously creates a renderer for the requested draw mode.
+    pub async fn new_async_with_mode(
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+    ) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -603,6 +630,7 @@ impl Factory for WgpuFactory {
     ) -> Box<dyn RenderPath> {
         raw_path.renew_mutation_id();
         Box::new(WgpuPath {
+            valid: true,
             raw_path,
             fill_rule,
         })
@@ -610,6 +638,7 @@ impl Factory for WgpuFactory {
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
         Box::new(WgpuPath {
+            valid: true,
             raw_path: RawPath::new(),
             fill_rule: FillRule::NonZero,
         })
@@ -671,6 +700,7 @@ impl Factory for WgpuFactory {
             width,
             height,
             texture: Some(Arc::new(WgpuImageTexture { texture, view })),
+            owner: Arc::downgrade(&self.context),
         }))
     }
 }
@@ -679,6 +709,7 @@ impl Factory for WgpuFactory {
 struct WgpuPath {
     raw_path: RawPath,
     fill_rule: FillRule,
+    valid: bool,
 }
 
 impl RenderPath for WgpuPath {
@@ -699,12 +730,31 @@ impl RenderPath for WgpuPath {
     }
 
     fn add_render_path(&mut self, path: &dyn RenderPath, transform: Mat2D) {
-        self.raw_path.add_path(&wgpu_path(path).raw_path, transform);
+        let Some(path) = wgpu_path(path) else {
+            self.raw_path.rewind();
+            self.valid = false;
+            return;
+        };
+        if !path.valid {
+            self.raw_path.rewind();
+            self.valid = false;
+            return;
+        }
+        self.raw_path.add_path(&path.raw_path, transform);
     }
 
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
-        self.raw_path
-            .add_path_backwards(&wgpu_path(path).raw_path, transform);
+        let Some(path) = wgpu_path(path) else {
+            self.raw_path.rewind();
+            self.valid = false;
+            return;
+        };
+        if !path.valid {
+            self.raw_path.rewind();
+            self.valid = false;
+            return;
+        }
+        self.raw_path.add_path_backwards(&path.raw_path, transform);
     }
 
     fn add_raw_path(&mut self, path: &RawPath) {
@@ -783,6 +833,7 @@ struct WgpuPaint {
     feather: f32,
     blend_mode: BlendMode,
     shader: Option<WgpuShader>,
+    invalid_shader: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -806,6 +857,7 @@ impl Default for WgpuPaint {
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
             shader: None,
+            invalid_shader: false,
         }
     }
 }
@@ -874,13 +926,16 @@ impl RenderPaint for WgpuPaint {
     }
 
     fn shader(&mut self, shader: Option<&dyn RenderShader>) {
-        self.shader = shader.map(|shader| {
-            shader
-                .as_any()
-                .downcast_ref::<WgpuShader>()
-                .expect("nuxie-renderer received a foreign shader")
-                .clone()
-        });
+        match shader {
+            Some(shader) => {
+                self.shader = shader.as_any().downcast_ref::<WgpuShader>().cloned();
+                self.invalid_shader = self.shader.is_none();
+            }
+            None => {
+                self.shader = None;
+                self.invalid_shader = false;
+            }
+        }
     }
 
     fn invalidate_stroke(&mut self) {}
@@ -937,6 +992,15 @@ struct WgpuImage {
     width: u32,
     height: u32,
     texture: Option<Arc<WgpuImageTexture>>,
+    owner: Weak<Context>,
+}
+
+impl WgpuImage {
+    fn belongs_to(&self, context: &Arc<Context>) -> bool {
+        self.owner
+            .upgrade()
+            .is_some_and(|owner| Arc::ptr_eq(&owner, context))
+    }
 }
 
 struct WgpuImageTexture {
@@ -1273,8 +1337,26 @@ impl Renderer for WgpuFrame {
         if self.state.clip_is_empty {
             return;
         }
-        let path = wgpu_path(path);
-        let paint = wgpu_paint(paint);
+        let Some(path) = wgpu_path(path) else {
+            self.unsupported
+                .get_or_insert("path from another renderer backend");
+            return;
+        };
+        if !path.valid {
+            self.unsupported
+                .get_or_insert("path contains resources from another renderer backend");
+            return;
+        }
+        let Some(paint) = wgpu_paint(paint) else {
+            self.unsupported
+                .get_or_insert("paint from another renderer backend");
+            return;
+        };
+        if paint.invalid_shader {
+            self.unsupported
+                .get_or_insert("paint shader from another renderer backend");
+            return;
+        }
         if path_draw_is_noop(path, paint, self.state.transform)
             || path_draw_is_outside_frame(
                 path,
@@ -1320,7 +1402,16 @@ impl Renderer for WgpuFrame {
         if self.state.clip_is_empty {
             return;
         }
-        let path = wgpu_path(path);
+        let Some(path) = wgpu_path(path) else {
+            self.unsupported
+                .get_or_insert("clip path from another renderer backend");
+            return;
+        };
+        if !path.valid {
+            self.unsupported
+                .get_or_insert("clip path contains resources from another renderer backend");
+            return;
+        }
         if path.raw_path.verbs().is_empty() {
             self.state.clip_is_empty = true;
             return;
@@ -1353,9 +1444,19 @@ impl Renderer for WgpuFrame {
         if self.state.clip_is_empty {
             return;
         }
-        let Some(image) = image.and_then(|image| image.as_any().downcast_ref::<WgpuImage>()) else {
+        let Some(image) = image else {
             return;
         };
+        let Some(image) = image.as_any().downcast_ref::<WgpuImage>() else {
+            self.unsupported
+                .get_or_insert("image from another renderer backend");
+            return;
+        };
+        if !image.belongs_to(&self.context) {
+            self.unsupported
+                .get_or_insert("image from another renderer factory");
+            return;
+        }
         let Some(texture) = &image.texture else {
             return;
         };
@@ -1378,6 +1479,7 @@ impl Renderer for WgpuFrame {
         paint.blend_mode = blend_mode;
         let content = SolidDraw {
             path: WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             },
@@ -1418,9 +1520,19 @@ impl Renderer for WgpuFrame {
         if self.state.clip_is_empty {
             return;
         }
-        let Some(image) = image.and_then(|image| image.as_any().downcast_ref::<WgpuImage>()) else {
+        let Some(image) = image else {
             return;
         };
+        let Some(image) = image.as_any().downcast_ref::<WgpuImage>() else {
+            self.unsupported
+                .get_or_insert("image from another renderer backend");
+            return;
+        };
+        if !image.belongs_to(&self.context) {
+            self.unsupported
+                .get_or_insert("image from another renderer factory");
+            return;
+        }
         let Some(texture) = &image.texture else {
             return;
         };
@@ -1439,6 +1551,14 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("invalid image mesh index buffer");
             return;
         };
+        if !Arc::ptr_eq(&vertices.context, &self.context)
+            || !Arc::ptr_eq(&uvs.context, &self.context)
+            || !Arc::ptr_eq(&indices.context, &self.context)
+        {
+            self.unsupported
+                .get_or_insert("image mesh buffers from another renderer factory");
+            return;
+        }
         let required_vertex_bytes = usize::try_from(vertex_count)
             .ok()
             .and_then(|count| count.checked_mul(8));
@@ -1468,6 +1588,7 @@ impl Renderer for WgpuFrame {
         };
         let content = SolidDraw {
             path: WgpuPath {
+                valid: true,
                 raw_path: RawPath::new(),
                 fill_rule: FillRule::NonZero,
             },
@@ -1754,16 +1875,31 @@ impl WgpuFrame {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
+        pollster::block_on(self.finish_async())
+    }
+
+    /// Submits the frame, waits asynchronously for GPU completion, and returns
+    /// the offscreen target as tightly packed RGBA pixels.
+    pub async fn finish_async(self) -> Result<Vec<u8>, RendererError> {
         self.finish_internal(false, false, true, true)
+            .await
             .map(|(pixels, _, _, _, _, _)| pixels)
     }
 
     /// Encodes the frame, submits all work, and waits for GPU completion
     /// without copying the render target back to the CPU.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn finish_for_benchmark(self) -> Result<WgpuFrameMetrics, RendererError> {
+        pollster::block_on(self.finish_for_benchmark_async())
+    }
+
+    /// Asynchronously encodes the frame, submits all work, and waits for GPU
+    /// completion without copying the render target back to the CPU.
+    pub async fn finish_for_benchmark_async(self) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
-        let (_, _, _, _, _, backend_work) = self.finish_internal(false, false, true, false)?;
+        let (_, _, _, _, _, backend_work) = self.finish_internal(false, false, true, false).await?;
         metrics.backend_work = backend_work;
         Ok(metrics)
     }
@@ -1772,13 +1908,13 @@ impl WgpuFrame {
     fn finish_with_clockwise_atomic_coverage(
         self,
     ) -> Result<(Vec<u8>, Vec<ClockwiseAtomicCoverageSnapshot>), RendererError> {
-        self.finish_internal(true, false, true, true)
+        pollster::block_on(self.finish_internal(true, false, true, true))
             .map(|(pixels, coverage, _, _, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
-        self.finish_internal(false, true, true, true)
+        pollster::block_on(self.finish_internal(false, true, true, true))
             .map(|(pixels, _, coverage, _, _, _)| (pixels, coverage))
     }
 
@@ -1786,17 +1922,17 @@ impl WgpuFrame {
     fn finish_with_atomic_planes(
         self,
     ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
-        self.finish_internal(false, true, true, true)
+        pollster::block_on(self.finish_internal(false, true, true, true))
             .map(|(pixels, _, coverage, clips, colors, _)| (pixels, coverage, clips, colors))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false, false, true)
+        pollster::block_on(self.finish_internal(false, false, false, true))
             .map(|(pixels, _, _, _, _, _)| pixels)
     }
 
-    fn finish_internal(
+    async fn finish_internal(
         self,
         capture_clockwise_atomic_coverage: bool,
         capture_atomic_planes: bool,
@@ -1847,13 +1983,20 @@ impl WgpuFrame {
             self.context
                 .queue
                 .submit_counted(Some(submitted_encoder.finish()));
-            self.context
-                .device
-                .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|error| RendererError::Map(error.to_string()))?;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                self.context
+                    .device
+                    .poll(wgpu::PollType::wait_indefinitely())
+                    .map_err(|error| RendererError::Map(error.to_string()))?;
+                tessellation_uploads
+                    .borrow_mut()
+                    .begin_next_submission(&self.context.device);
+            }
+            #[cfg(target_arch = "wasm32")]
             tessellation_uploads
                 .borrow_mut()
-                .begin_next_submission(&self.context.device);
+                .begin_next_submission_without_reuse();
             Ok::<(), RendererError>(())
         };
         let mut pending_coverage_readbacks = Vec::new();
@@ -4832,10 +4975,7 @@ impl WgpuFrame {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
             tessellation_uploads.borrow_mut().flush(&self.context.queue);
             self.context.queue.submit_counted(Some(encoder.finish()));
-            self.context
-                .device
-                .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|error| RendererError::Map(error.to_string()))?;
+            wait_for_submitted_work(&self.context).await?;
             #[cfg(feature = "perf-diagnostics")]
             {
                 let diagnostics = tessellation_uploads.borrow().diagnostics();
@@ -4917,18 +5057,7 @@ impl WgpuFrame {
         tessellation_uploads.borrow_mut().flush(&self.context.queue);
         self.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
-        let (sender, receiver) = mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        self.context
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|error| RendererError::Map(error.to_string()))?;
-        receiver
-            .recv()
-            .map_err(|error| RendererError::Map(error.to_string()))?
-            .map_err(|error| RendererError::Map(error.to_string()))?;
+        map_buffer(&self.context, &slice).await?;
         let mapped = slice
             .get_mapped_range()
             .map_err(|error| RendererError::Map(error.to_string()))?;
@@ -4941,36 +5070,42 @@ impl WgpuFrame {
         let mut coverage_snapshots = Vec::with_capacity(pending_coverage_readbacks.len());
         for (readback, ranges, kinds) in pending_coverage_readbacks {
             coverage_snapshots.push(ClockwiseAtomicCoverageSnapshot {
-                borrowed: read_u32_buffer(&self.context, &readback.borrowed, readback.word_count)?,
-                main: read_u32_buffer(&self.context, &readback.main, readback.word_count)?,
+                borrowed: read_u32_buffer(&self.context, &readback.borrowed, readback.word_count)
+                    .await?,
+                main: read_u32_buffer(&self.context, &readback.main, readback.word_count).await?,
                 ranges,
                 kinds,
-                clip_updates: readback
-                    .clip_updates
-                    .iter()
-                    .map(|buffer| {
-                        read_u8_buffer(
-                            &self.context,
-                            buffer,
-                            readback.clip_bytes_per_row as usize * readback.clip_height as usize,
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
+                clip_updates: {
+                    let mut updates = Vec::with_capacity(readback.clip_updates.len());
+                    for buffer in &readback.clip_updates {
+                        updates.push(
+                            read_u8_buffer(
+                                &self.context,
+                                buffer,
+                                readback.clip_bytes_per_row as usize
+                                    * readback.clip_height as usize,
+                            )
+                            .await?,
+                        );
+                    }
+                    updates
+                },
                 clip_bytes_per_row: readback.clip_bytes_per_row,
             });
         }
-        let atomic_coverage_snapshots = pending_atomic_coverage_readbacks
-            .iter()
-            .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
-            .collect::<Result<Vec<_>, _>>()?;
-        let atomic_clip_snapshots = pending_atomic_clip_readbacks
-            .iter()
-            .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
-            .collect::<Result<Vec<_>, _>>()?;
-        let atomic_color_snapshots = pending_atomic_color_readbacks
-            .iter()
-            .map(|readback| read_u32_buffer(&self.context, &readback.buffer, readback.word_count))
-            .collect::<Result<Vec<_>, _>>()?;
+        let read_atomic_snapshots = async |readbacks: &[atomic_pipeline::AtomicPlaneReadback]| {
+            let mut snapshots = Vec::with_capacity(readbacks.len());
+            for readback in readbacks {
+                snapshots.push(
+                    read_u32_buffer(&self.context, &readback.buffer, readback.word_count).await?,
+                );
+            }
+            Ok::<_, RendererError>(snapshots)
+        };
+        let atomic_coverage_snapshots =
+            read_atomic_snapshots(&pending_atomic_coverage_readbacks).await?;
+        let atomic_clip_snapshots = read_atomic_snapshots(&pending_atomic_clip_readbacks).await?;
+        let atomic_color_snapshots = read_atomic_snapshots(&pending_atomic_color_readbacks).await?;
         let backend_work = self.work_recorder.snapshot();
         self.context
             .frame_attachments
@@ -4986,24 +5121,53 @@ impl WgpuFrame {
     }
 }
 
-fn read_u32_buffer(
+async fn wait_for_submitted_work(context: &Context) -> Result<(), RendererError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    context
+        .device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        context.queue.on_submitted_work_done(move || {
+            let _ = sender.send(());
+        });
+        receiver
+            .await
+            .map_err(|error| RendererError::Map(error.to_string()))?;
+    }
+
+    Ok(())
+}
+
+async fn map_buffer(
+    _context: &Context,
+    slice: &wgpu::BufferSlice<'_>,
+) -> Result<(), RendererError> {
+    let (sender, receiver) = futures_channel::oneshot::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    _context
+        .device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|error| RendererError::Map(error.to_string()))?;
+    receiver
+        .await
+        .map_err(|error| RendererError::Map(error.to_string()))?
+        .map_err(|error| RendererError::Map(error.to_string()))
+}
+
+async fn read_u32_buffer(
     context: &Context,
     buffer: &wgpu::Buffer,
     word_count: usize,
 ) -> Result<Vec<u32>, RendererError> {
     let slice = buffer.slice(..);
-    let (sender, receiver) = mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
-    context
-        .device
-        .poll(wgpu::PollType::wait_indefinitely())
-        .map_err(|error| RendererError::Map(error.to_string()))?;
-    receiver
-        .recv()
-        .map_err(|error| RendererError::Map(error.to_string()))?
-        .map_err(|error| RendererError::Map(error.to_string()))?;
+    map_buffer(context, &slice).await?;
     let mapped = slice
         .get_mapped_range()
         .map_err(|error| RendererError::Map(error.to_string()))?;
@@ -5017,24 +5181,13 @@ fn read_u32_buffer(
     Ok(words)
 }
 
-fn read_u8_buffer(
+async fn read_u8_buffer(
     context: &Context,
     buffer: &wgpu::Buffer,
     byte_count: usize,
 ) -> Result<Vec<u8>, RendererError> {
     let slice = buffer.slice(..);
-    let (sender, receiver) = mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
-    context
-        .device
-        .poll(wgpu::PollType::wait_indefinitely())
-        .map_err(|error| RendererError::Map(error.to_string()))?;
-    receiver
-        .recv()
-        .map_err(|error| RendererError::Map(error.to_string()))?
-        .map_err(|error| RendererError::Map(error.to_string()))?;
+    map_buffer(context, &slice).await?;
     let mapped = slice
         .get_mapped_range()
         .map_err(|error| RendererError::Map(error.to_string()))?;
@@ -5629,17 +5782,12 @@ fn gradient_paint_aux(
     aux
 }
 
-fn wgpu_path(path: &dyn RenderPath) -> &WgpuPath {
-    path.as_any()
-        .downcast_ref()
-        .expect("nuxie-renderer received a foreign path")
+fn wgpu_path(path: &dyn RenderPath) -> Option<&WgpuPath> {
+    path.as_any().downcast_ref()
 }
 
-fn wgpu_paint(paint: &dyn RenderPaint) -> &WgpuPaint {
-    paint
-        .as_any()
-        .downcast_ref()
-        .expect("nuxie-renderer received a foreign paint")
+fn wgpu_paint(paint: &dyn RenderPaint) -> Option<&WgpuPaint> {
+    paint.as_any().downcast_ref()
 }
 
 fn wgpu_buffer(buffer: &dyn RenderBuffer) -> Option<&WgpuBuffer> {
@@ -7431,6 +7579,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::mpsc;
 
     // Keep these synchronized with tools/cpp-atlas-mask-oracle/runtime-src/main.cpp.
     const ATLAS_ORACLE_FRAME_SIZE: u32 = 64;
@@ -7576,6 +7725,7 @@ mod tests {
     fn gradient_batch_packs_simple_ramps_before_complex_rows() {
         let draw = |shader| SolidDraw {
             path: WgpuPath {
+                valid: true,
                 raw_path: RawPath::new(),
                 fill_rule: FillRule::NonZero,
             },
@@ -7844,6 +7994,7 @@ mod tests {
         raw_clip.line_to(8.0, 56.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -8011,6 +8162,7 @@ mod tests {
         raw_clip.line_to(8.0, 56.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -9029,6 +9181,7 @@ mod tests {
                 raw_path.line_to(0.0, 0.0);
                 frame.draw_path(
                     &WgpuPath {
+                        valid: true,
                         raw_path,
                         fill_rule: FillRule::NonZero,
                     },
@@ -9342,6 +9495,138 @@ mod tests {
     }
 
     #[test]
+    fn async_factory_and_frame_completion_render_without_sync_wrappers() {
+        let pixels = pollster::block_on(async {
+            let factory = WgpuFactory::new_async_with_mode(2, 2, RenderMode::Msaa).await?;
+            factory.begin_frame(0x8040_2010).finish_async().await
+        })
+        .unwrap();
+
+        for pixel in pixels.chunks_exact(4) {
+            assert_eq!(pixel, [32, 16, 8, 128]);
+        }
+    }
+
+    #[test]
+    fn foreign_wgpu_path_paint_and_shader_fail_closed() {
+        let mut factory = WgpuFactory::new_with_mode(4, 4, RenderMode::Msaa).unwrap();
+        let mut recording = nuxie_render_api::RecordingFactory::new();
+        let foreign_path = recording.make_empty_render_path();
+        let foreign_paint = recording.make_render_paint();
+        let foreign_shader = recording.make_linear_gradient(
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            &[0xff00_0000, 0xffff_ffff],
+            &[0.0, 1.0],
+        );
+
+        let local_path = factory.make_empty_render_path();
+        let local_paint = factory.make_render_paint();
+
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(foreign_path.as_ref(), local_paint.as_ref());
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "path from another renderer backend"
+            ))
+        ));
+
+        let mut composed_path = factory.make_empty_render_path();
+        composed_path.move_to(0.0, 0.0);
+        composed_path.line_to(4.0, 0.0);
+        composed_path.line_to(0.0, 4.0);
+        composed_path.close();
+        composed_path.add_render_path(foreign_path.as_ref(), Mat2D::IDENTITY);
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(composed_path.as_ref(), local_paint.as_ref());
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "path contains resources from another renderer backend"
+            ))
+        ));
+
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(local_path.as_ref(), foreign_paint.as_ref());
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "paint from another renderer backend"
+            ))
+        ));
+
+        let mut invalid_paint = factory.make_render_paint();
+        invalid_paint.shader(Some(foreign_shader.as_ref()));
+        let mut frame = factory.begin_frame(0xff00_0000);
+        frame.draw_path(local_path.as_ref(), invalid_paint.as_ref());
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "paint shader from another renderer backend"
+            ))
+        ));
+    }
+
+    #[test]
+    fn foreign_wgpu_device_resources_fail_before_gpu_validation() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 255, 255, 255])
+                .unwrap();
+        }
+
+        let mut first = WgpuFactory::new_with_mode(4, 4, RenderMode::ClockwiseAtomic).unwrap();
+        let mut second = WgpuFactory::new_with_mode(4, 4, RenderMode::ClockwiseAtomic).unwrap();
+        let foreign_image = first.decode_image(&encoded).expect("decode fixture image");
+        let mut frame = second.begin_frame(0xff00_0000);
+        frame.draw_image(
+            Some(foreign_image.as_ref()),
+            ImageSampler::LINEAR_CLAMP,
+            BlendMode::SrcOver,
+            1.0,
+        );
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "image from another renderer factory"
+            ))
+        ));
+
+        let image = second.decode_image(&encoded).expect("decode fixture image");
+        let vertices =
+            first.make_render_buffer(RenderBufferType::Vertex, RenderBufferFlags::None, 8);
+        let uvs = first.make_render_buffer(RenderBufferType::Vertex, RenderBufferFlags::None, 8);
+        let indices = first.make_render_buffer(RenderBufferType::Index, RenderBufferFlags::None, 2);
+        let mut frame = second.begin_frame(0xff00_0000);
+        frame.draw_image_mesh(
+            Some(image.as_ref()),
+            ImageSampler::LINEAR_CLAMP,
+            Some(vertices.as_ref()),
+            Some(uvs.as_ref()),
+            Some(indices.as_ref()),
+            1,
+            1,
+            BlendMode::SrcOver,
+            1.0,
+        );
+        assert!(matches!(
+            frame.finish(),
+            Err(RendererError::Unsupported(
+                "image mesh buffers from another renderer factory"
+            ))
+        ));
+    }
+
+    #[test]
     fn frame_attachments_are_reused_after_gpu_completion() {
         for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
             let factory = WgpuFactory::new_with_mode(8, 8, mode).unwrap();
@@ -9445,6 +9730,7 @@ mod tests {
         raw_path.line_to(left, bottom);
         raw_path.close();
         WgpuPath {
+            valid: true,
             raw_path,
             fill_rule,
         }
@@ -9644,6 +9930,7 @@ mod tests {
         append_oval(&mut raw_path, [20.0, 20.0, 140.0, 140.0]);
         append_oval(&mut raw_path, [100.0, 20.0, 220.0, 140.0]);
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::EvenOdd,
         };
@@ -9669,6 +9956,7 @@ mod tests {
         let mut red_raw_path = RawPath::new();
         append_oval(&mut red_raw_path, [10.0, 10.0, 100.0, 50.0]);
         let red_path = WgpuPath {
+            valid: true,
             raw_path: red_raw_path,
             fill_rule: FillRule::NonZero,
         };
@@ -9678,6 +9966,7 @@ mod tests {
         append_oval(&mut inner, [90.0, 90.0, 180.0, 180.0]);
         ring_raw_path.add_path_backwards(&inner, Mat2D::IDENTITY);
         let ring_path = WgpuPath {
+            valid: true,
             raw_path: ring_raw_path,
             fill_rule: FillRule::NonZero,
         };
@@ -9742,6 +10031,7 @@ mod tests {
             raw_path.cubic_to(x + 750.0, 1600.0, x + 50.0, 1600.0, x + 50.0, 640.0);
         }
         WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::Clockwise,
         }
@@ -9791,6 +10081,7 @@ mod tests {
             }
         }
         WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::Clockwise,
         }
@@ -9932,6 +10223,7 @@ mod tests {
     #[test]
     fn culls_empty_and_invalid_path_draws_like_cpp() {
         let empty = WgpuPath {
+            valid: true,
             raw_path: RawPath::new(),
             fill_rule: FillRule::NonZero,
         };
@@ -9963,6 +10255,7 @@ mod tests {
     #[test]
     fn culls_path_draws_outside_the_cpp_frame_bounds() {
         let mut path = WgpuPath {
+            valid: true,
             raw_path: RawPath::new(),
             fill_rule: FillRule::NonZero,
         };
@@ -10035,6 +10328,7 @@ mod tests {
         raw_path.close();
         let draw = SolidDraw {
             path: WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             },
@@ -10173,6 +10467,7 @@ mod tests {
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
             WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             }
@@ -10381,6 +10676,7 @@ mod tests {
                 raw_path.line_to(56.0, 32.0);
             }
             WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             }
@@ -10415,6 +10711,7 @@ mod tests {
         stroke_path.move_to(8.0, 32.0);
         stroke_path.line_to(56.0, 32.0);
         let stroke = WgpuPath {
+            valid: true,
             raw_path: stroke_path,
             fill_rule: FillRule::NonZero,
         };
@@ -10813,6 +11110,7 @@ mod tests {
                 raw_path.close();
             }
             WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::Clockwise,
             }
@@ -10879,6 +11177,7 @@ mod tests {
         clip_path.line_to(32.0, 56.0);
         clip_path.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: clip_path,
             fill_rule: FillRule::NonZero,
         };
@@ -10947,6 +11246,7 @@ mod tests {
         clip_path.line_to(32.0, 56.0);
         clip_path.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: clip_path,
             fill_rule: FillRule::NonZero,
         };
@@ -10985,6 +11285,7 @@ mod tests {
             path.line_to(points[2][0], points[2][1]);
             path.close();
             WgpuPath {
+                valid: true,
                 raw_path: path,
                 fill_rule: FillRule::NonZero,
             }
@@ -11031,6 +11332,7 @@ mod tests {
             path.line_to(32.0 - radius, 32.0);
             path.close();
             WgpuPath {
+                valid: true,
                 raw_path: path,
                 fill_rule: FillRule::NonZero,
             }
@@ -11063,6 +11365,7 @@ mod tests {
             path.line_to(32.0, 60.0 - offset);
             path.close();
             WgpuPath {
+                valid: true,
                 raw_path: path,
                 fill_rule: FillRule::NonZero,
             }
@@ -11094,6 +11397,7 @@ mod tests {
         clip_path.line_to(32.0, 60.0);
         clip_path.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: clip_path,
             fill_rule: FillRule::NonZero,
         };
@@ -11147,6 +11451,7 @@ mod tests {
         clip_path.line_to(-469_515.0, -10_354_890.0);
         clip_path.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: clip_path,
             fill_rule: FillRule::NonZero,
         };
@@ -11694,6 +11999,7 @@ mod tests {
         raw_path.move_to(0.0, 100.0);
         raw_path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::Clockwise,
         };
@@ -11959,6 +12265,7 @@ mod tests {
         };
         (
             WgpuPath {
+                valid: true,
                 raw_path: path,
                 fill_rule: FillRule::Clockwise,
             },
@@ -12339,6 +12646,7 @@ mod tests {
     fn large_feather_atlas_blit(case: LargeFeatherAtlasCase) -> atlas_blit_oracle::AtlasBlit {
         let (raw_path, transform) = large_feather_atlas_spec(case);
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::Clockwise,
         };
@@ -12391,6 +12699,7 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::NonZero,
         };
@@ -12412,6 +12721,7 @@ mod tests {
             raw_clip.line_to(left, bottom);
             raw_clip.close();
             frame.clip_path(&WgpuPath {
+                valid: true,
                 raw_path: raw_clip,
                 fill_rule: FillRule::NonZero,
             });
@@ -12423,6 +12733,7 @@ mod tests {
             raw_clip.line_to(16.0, 48.0);
             raw_clip.close();
             frame.clip_path(&WgpuPath {
+                valid: true,
                 raw_path: raw_clip,
                 fill_rule: FillRule::NonZero,
             });
@@ -12452,6 +12763,7 @@ mod tests {
         let mut raw_path = RawPath::new();
         raw_path.move_to(center, center);
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::NonZero,
         };
@@ -12463,6 +12775,7 @@ mod tests {
         marker_path.line_to(center - marker_radius, center + marker_radius);
         marker_path.close();
         let marker_path = WgpuPath {
+            valid: true,
             raw_path: marker_path,
             fill_rule: FillRule::NonZero,
         };
@@ -12503,6 +12816,7 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::Clockwise,
         };
@@ -12723,6 +13037,7 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: if fill_content {
                 FillRule::Clockwise
@@ -12764,6 +13079,7 @@ mod tests {
         raw_path.line_to(points[2][0], points[2][1]);
         raw_path.close();
         WgpuPath {
+            valid: true,
             raw_path,
             fill_rule,
         }
@@ -12829,6 +13145,7 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
         let path = WgpuPath {
+            valid: true,
             raw_path,
             fill_rule: FillRule::NonZero,
         };
@@ -12848,6 +13165,7 @@ mod tests {
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
             WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             }
@@ -12901,6 +13219,7 @@ mod tests {
             raw_path.line_to(left, 48.0);
             raw_path.close();
             WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             }
@@ -12964,6 +13283,7 @@ mod tests {
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -13013,6 +13333,7 @@ mod tests {
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
             WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::NonZero,
             }
@@ -13110,6 +13431,7 @@ mod tests {
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -13169,6 +13491,7 @@ mod tests {
         raw_clip.line_to(8.0, 56.0);
         raw_clip.close();
         let path_clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -13441,6 +13764,7 @@ mod tests {
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -13486,6 +13810,7 @@ mod tests {
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };
@@ -13684,6 +14009,7 @@ mod tests {
         raw_path.close();
         let coverage_draw = SolidDraw {
             path: WgpuPath {
+                valid: true,
                 raw_path,
                 fill_rule: FillRule::Clockwise,
             },
@@ -13790,6 +14116,7 @@ mod tests {
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
         let clip = WgpuPath {
+            valid: true,
             raw_path: raw_clip,
             fill_rule: FillRule::NonZero,
         };

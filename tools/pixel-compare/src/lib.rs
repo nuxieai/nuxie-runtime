@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, Cursor, Seek};
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,7 +162,15 @@ impl RgbaImage {
 
     pub fn read_png(path: impl AsRef<Path>) -> Result<Self, PixelError> {
         let file = File::open(path).map_err(io_error)?;
-        let mut decoder = Decoder::new(BufReader::new(file));
+        Self::decode_png_reader(BufReader::new(file))
+    }
+
+    pub fn decode_png(bytes: &[u8]) -> Result<Self, PixelError> {
+        Self::decode_png_reader(Cursor::new(bytes))
+    }
+
+    fn decode_png_reader(reader: impl BufRead + Seek) -> Result<Self, PixelError> {
+        let mut decoder = Decoder::new(reader);
         decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
         let mut reader = decoder.read_info().map_err(io_error)?;
         let output_size = reader
@@ -365,8 +373,10 @@ mod tests {
         let expected = image(&[[10, 20, 30, 255], [1, 2, 3, 4]]);
         expected.write_png(&path).unwrap();
         let actual = RgbaImage::read_png(&path).unwrap();
+        let decoded = RgbaImage::decode_png(&fs::read(&path).unwrap()).unwrap();
         let _ = std::fs::remove_file(path);
         assert_eq!(actual, expected);
+        assert_eq!(decoded, expected);
     }
 
     #[test]

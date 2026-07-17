@@ -1,0 +1,19 @@
+[package]
+name = "browser-renderer-smoke"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nuxie = { path = "../../crates/nuxie" }
+nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
+pixel-compare = { path = "../pixel-compare" }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"

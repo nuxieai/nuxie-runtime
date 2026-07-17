@@ -373,8 +373,14 @@ impl TessellationUploadFrame<'_> {
         self.slot.flush(queue);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn begin_next_submission(&mut self, device: &wgpu::Device) {
         self.slot.begin_submission(device);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn begin_next_submission_without_reuse(&mut self) {
+        self.slot.uploads.pages.clear();
     }
 
     #[cfg(feature = "perf-diagnostics")]

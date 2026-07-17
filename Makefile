@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -204,6 +204,12 @@ perf-json: RUST_PROFILE=release
 perf-json: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --aggregate "$(PERF_AGGREGATE)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
 	@echo "perf-json wrote $(PERF_JSON_OUT)"
+
+browser-renderer-build:
+	tools/browser-renderer-smoke/build.sh
+
+browser-renderer-smoke:
+	tools/browser-renderer-smoke/run.sh
 
 capi-smoke: fixtures
 	cargo build --quiet -p nux-capi

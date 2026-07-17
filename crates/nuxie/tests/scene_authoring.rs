@@ -1,13 +1,13 @@
 use anyhow::Result;
 use nuxie::{
     Aabb, ArtboardId, ArtboardSpec, ChildIndex, ColorInt, DashPathSpec, DashSpec, DrawError,
-    EditAbort, EditErrorKind, EditId, EditReason, ExportedObjectKind, ExportedProperty,
-    ExportedRecord, Factory, FillRule, FillSpec, FontAssetId, FontAssetSpec, ImageAssetId,
-    ImageAssetSpec, ImageDecodeError, ImageSpec, NodeKind, NodeSpec, ObjectId, Parent,
-    PropValueKind, RawPath, RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader,
-    ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign,
-    SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
+    EditAbort, EditErrorKind, EditId, EditReason, ExportedAnimatableProperty, ExportedObjectKind,
+    ExportedProperty, ExportedRecord, Factory, FillRule, FillSpec, FontAssetId, FontAssetSpec,
+    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec, NodeKind,
+    NodeSpec, ObjectId, Parent, PropValueKind, RawPath, RecordingFactory, RectangleCornerRadii,
+    RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPath, RenderShader, ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin,
+    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
     ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
     StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, Vec2D, props,
 };
@@ -2697,6 +2697,430 @@ fn frame_advance_targets_only_the_requested_live_instance() -> Result<()> {
         !scene.frame().advance(first, 1.0 / 120.0, &mut events),
         "a dropped instance is an unchanged frame"
     );
+    Ok(())
+}
+
+#[test]
+fn authored_linear_animation_exports_canonical_records_and_scrubs_the_live_instance() -> Result<()>
+{
+    let mut scene = Scene::new();
+    let ((artboard, shape, animation), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Card", 80.0, 60.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Card Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Card Color".into(),
+                color: 0xff44_5566,
+            }),
+        )?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 0, 0.0)?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 60, 1.0)?;
+        Ok((artboard, shape, animation))
+    })?;
+
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::Shape,
+            ExportedObjectKind::Rectangle,
+            ExportedObjectKind::Fill,
+            ExportedObjectKind::SolidColor,
+            ExportedObjectKind::LinearAnimation,
+            ExportedObjectKind::KeyedObject,
+            ExportedObjectKind::KeyedProperty,
+            ExportedObjectKind::KeyFrameDouble,
+            ExportedObjectKind::KeyFrameDouble,
+        ],
+        "animation records follow every visual target and stay in ImportContext order"
+    );
+    assert_eq!(
+        &scene.export_records().records()[6..],
+        &[
+            ExportedRecord {
+                kind: ExportedObjectKind::LinearAnimation,
+                properties: vec![
+                    ExportedProperty::AnimationName("Fade".into()),
+                    ExportedProperty::AnimationDuration(60),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyedObject,
+                properties: vec![ExportedProperty::KeyedObjectId(1)],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyedProperty,
+                properties: vec![ExportedProperty::KeyedProperty(
+                    ExportedAnimatableProperty::WorldOpacity,
+                )],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyFrameDouble,
+                properties: vec![
+                    ExportedProperty::KeyFrame(0),
+                    ExportedProperty::KeyFrameInterpolationLinear,
+                    ExportedProperty::KeyFrameDoubleValue(0.0),
+                ],
+            },
+            ExportedRecord {
+                kind: ExportedObjectKind::KeyFrameDouble,
+                properties: vec![
+                    ExportedProperty::KeyFrame(60),
+                    ExportedProperty::KeyFrameInterpolationLinear,
+                    ExportedProperty::KeyFrameDoubleValue(1.0),
+                ],
+            },
+        ]
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let second_instance = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let second_opacity = scene.cursor(second_instance, shape, props::WORLD_OPACITY)?;
+    scene.frame().scrub(instance, animation, 0.0)?;
+    assert_eq!(scene.frame().get(opacity)?, 0.0);
+    assert_eq!(scene.frame().get(second_opacity)?, 1.0);
+    let transparent_draw = canonical_draw_stream(&mut scene, instance)?;
+    scene.frame().scrub(instance, animation, 0.5)?;
+    assert_eq!(scene.frame().get(opacity)?, 0.5);
+    assert_eq!(scene.frame().get(second_opacity)?, 1.0);
+    scene.frame().scrub(second_instance, animation, 0.25)?;
+    assert_eq!(scene.frame().get(second_opacity)?, 0.25);
+    assert_eq!(scene.frame().get(opacity)?, 0.5);
+    scene.frame().scrub(instance, animation, 1.0)?;
+    assert_eq!(scene.frame().get(opacity)?, 1.0);
+    let opaque_draw = canonical_draw_stream(&mut scene, instance)?;
+    assert_ne!(
+        transparent_draw, opaque_draw,
+        "scrubbed state is consumed by draw on the same retained InstanceId"
+    );
+    Ok(())
+}
+
+#[test]
+fn linear_animation_remove_restore_preserves_object_identity_and_stales_absent_handles()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, animation), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 0, 0.0)?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 60, 1.0)?;
+        Ok((artboard, shape, animation))
+    })?;
+    let records_before = scene.export_records();
+    let instance = scene.instantiate(artboard)?;
+    let cursor_before_remove = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+
+    let (removed, _) = scene.edit(|tx| tx.remove(animation.object_id()))?;
+    assert!(
+        !scene
+            .export_records()
+            .records()
+            .iter()
+            .any(|record| record.kind == ExportedObjectKind::LinearAnimation)
+    );
+    assert_eq!(
+        scene.frame().scrub(instance, animation, 0.5),
+        Err(StaleCursor),
+        "the typed handle is stale while its ordinary ObjectId is absent"
+    );
+    assert_eq!(scene.frame().get(cursor_before_remove), Err(StaleCursor));
+
+    let (restored, _) = scene.edit(|tx| tx.restore(removed))?;
+    assert_eq!(restored, animation.object_id());
+    assert_eq!(scene.export_records(), records_before);
+    let cursor_after_restore = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    scene.frame().scrub(instance, animation, 0.5)?;
+    assert_eq!(scene.frame().get(cursor_after_restore)?, 0.5);
+    Ok(())
+}
+
+#[test]
+fn generic_set_mutates_animation_and_keyframe_records_through_typed_props() -> Result<()> {
+    assert_eq!(props::ANIMATION_FPS.value_kind(), PropValueKind::Uint);
+    assert_eq!(props::ANIMATION_FPS.declared_owner(), "LinearAnimation");
+    assert_eq!(props::ANIMATION_DURATION.value_kind(), PropValueKind::Uint);
+    assert_eq!(
+        props::KEY_FRAME_DOUBLE_VALUE.value_kind(),
+        PropValueKind::Double
+    );
+    assert_eq!(
+        props::KEY_FRAME_DOUBLE_VALUE.declared_owner(),
+        "KeyFrameDouble"
+    );
+    assert!(!props::ANIMATION_DURATION.is_available_on(NodeKind::Shape));
+
+    let mut scene = Scene::new();
+    let ((animation, key), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        let key = tx
+            .animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 60, 1.0)?;
+        Ok((animation, key))
+    })?;
+
+    scene.edit(|tx| {
+        tx.set(animation.object_id(), props::ANIMATION_FPS, 30)?;
+        tx.set(animation.object_id(), props::ANIMATION_DURATION, 120)?;
+        tx.set(key, props::KEY_FRAME_DOUBLE_VALUE, 0.25)
+    })?;
+
+    let records = scene.export_records();
+    let animation_record = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::LinearAnimation)
+        .expect("linear animation record");
+    assert!(
+        animation_record
+            .properties
+            .contains(&ExportedProperty::AnimationFps(30))
+    );
+    assert!(
+        animation_record
+            .properties
+            .contains(&ExportedProperty::AnimationDuration(120))
+    );
+    let key_record = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::KeyFrameDouble)
+        .expect("keyframe record");
+    assert!(
+        key_record
+            .properties
+            .contains(&ExportedProperty::KeyFrameDoubleValue(0.25))
+    );
+    Ok(())
+}
+
+#[test]
+fn animation_targeting_another_artboard_reports_precise_cross_artboard_reason() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((source_artboard, target_artboard, foreign_shape, animation), _) = scene.edit(|tx| {
+        let source_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Source".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let target_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Target".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let foreign_shape = tx.create(
+            Parent::Artboard(target_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Foreign".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let animation = tx.animations().create_linear(
+            source_artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        Ok((source_artboard, target_artboard, foreign_shape, animation))
+    })?;
+
+    let error = scene
+        .edit(|tx| {
+            tx.animations()
+                .set_key(animation, foreign_shape, props::WORLD_OPACITY, 0, 0.0)?;
+            Ok(())
+        })
+        .expect_err("cross-artboard animation target must reject");
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::CrossArtboardReference {
+            source: source_artboard,
+            target: target_artboard,
+        }
+    );
+    Ok(())
+}
+
+#[test]
+fn moving_an_animated_visual_to_another_artboard_rejects_atomically() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((source_artboard, target_artboard, shape), _) = scene.edit(|tx| {
+        let source_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Source".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let target_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Target".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(source_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Animated".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let animation = tx.animations().create_linear(
+            source_artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 0, 0.0)?;
+        Ok((source_artboard, target_artboard, shape))
+    })?;
+    let before = scene.export_records();
+    let epoch = scene.epoch();
+
+    let error = scene
+        .edit(|tx| tx.reparent(shape, Parent::Artboard(target_artboard), ChildIndex::Last))
+        .expect_err("an animated target cannot move away from its timeline owner");
+
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::CrossArtboardReference {
+            source: source_artboard,
+            target: target_artboard,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), before);
+    Ok(())
+}
+
+#[test]
+fn cursor_reports_nonvisual_animation_identity_explicitly() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, animation), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        Ok((artboard, animation))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    assert!(matches!(
+        scene.cursor(instance, animation.object_id(), props::WORLD_OPACITY),
+        Err(ResolveError::NonVisualObject)
+    ));
     Ok(())
 }
 

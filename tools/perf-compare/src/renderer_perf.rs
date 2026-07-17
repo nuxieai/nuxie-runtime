@@ -207,6 +207,10 @@ pub struct BackendWorkMetrics {
     pub bind_groups_created: u64,
     pub bind_group_sets: u64,
     pub texture_bindings: u64,
+    #[serde(default)]
+    pub buffer_clear_calls: u64,
+    #[serde(default)]
+    pub buffer_clear_bytes: u64,
     pub buffer_upload_calls: u64,
     pub buffer_upload_bytes: u64,
     pub texture_upload_calls: u64,
@@ -925,6 +929,41 @@ mod tests {
     fn malformed_runner_output_is_rejected() {
         let error = parse_runner_response("not-json").expect_err("must reject malformed output");
         assert!(error.contains("malformed runner JSON"));
+    }
+
+    #[test]
+    fn legacy_runner_output_defaults_new_clear_counters_only() {
+        let manifest = manifest();
+        let scene = &manifest.scene[0];
+        let mut json =
+            serde_json::to_value(response(scene, &manifest.defaults, manifest.modes[0], 10))
+                .expect("response must serialize");
+        let backend_work = json["backend_work"]
+            .as_object_mut()
+            .expect("backend work must be an object");
+        backend_work.remove("buffer_clear_calls");
+        backend_work.remove("buffer_clear_bytes");
+
+        let parsed = parse_runner_response(&json.to_string()).expect("legacy response must parse");
+        assert_eq!(parsed.backend_work.buffer_clear_calls, 0);
+        assert_eq!(parsed.backend_work.buffer_clear_bytes, 0);
+    }
+
+    #[test]
+    fn runner_output_missing_an_established_counter_is_rejected() {
+        let manifest = manifest();
+        let scene = &manifest.scene[0];
+        let mut json =
+            serde_json::to_value(response(scene, &manifest.defaults, manifest.modes[0], 10))
+                .expect("response must serialize");
+        json["backend_work"]
+            .as_object_mut()
+            .expect("backend work must be an object")
+            .remove("gpu_draw_calls");
+
+        let error = parse_runner_response(&json.to_string())
+            .expect_err("missing established counter must fail");
+        assert!(error.contains("gpu_draw_calls"));
     }
 
     #[test]

@@ -10,6 +10,8 @@ pub struct BackendWorkMetrics {
     pub bind_groups_created: u64,
     pub bind_group_sets: u64,
     pub texture_bindings: u64,
+    pub buffer_clear_calls: u64,
+    pub buffer_clear_bytes: u64,
     pub buffer_upload_calls: u64,
     pub buffer_upload_bytes: u64,
     pub texture_upload_calls: u64,
@@ -209,6 +211,13 @@ pub(crate) trait CountedCommandEncoderExt {
         &'encoder mut self,
         descriptor: &wgpu::RenderPassDescriptor<'_>,
     ) -> CountedRenderPass<'encoder>;
+    #[allow(dead_code)]
+    fn clear_counted_buffer(
+        &mut self,
+        buffer: &wgpu::Buffer,
+        offset: wgpu::BufferAddress,
+        size: Option<wgpu::BufferAddress>,
+    );
 }
 
 impl CountedCommandEncoderExt for wgpu::CommandEncoder {
@@ -222,6 +231,20 @@ impl CountedCommandEncoderExt for wgpu::CommandEncoder {
         CountedRenderPass {
             inner: self.begin_render_pass(descriptor),
         }
+    }
+
+    fn clear_counted_buffer(
+        &mut self,
+        buffer: &wgpu::Buffer,
+        offset: wgpu::BufferAddress,
+        size: Option<wgpu::BufferAddress>,
+    ) {
+        let bytes = size.unwrap_or_else(|| buffer.size().saturating_sub(offset));
+        record(|metrics| {
+            metrics.buffer_clear_calls = metrics.buffer_clear_calls.saturating_add(1);
+            metrics.buffer_clear_bytes = metrics.buffer_clear_bytes.saturating_add(bytes);
+        });
+        self.clear_buffer(buffer, offset, size);
     }
 }
 

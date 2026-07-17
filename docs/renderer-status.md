@@ -1640,10 +1640,12 @@ Run `make renderer-golden`.
     moves `3->0`; its one-frame 2.618x aggregate and 6.542x worst-row timing
     are directional context only. No A-B-B-A was run for this exact
     structural correction.
-135. [ ] Run the staged timing-defined R4 gate against immutable pre-tail and
-    post-tail runner artifacts. Treat exact counter parity as complete; use
-    the A-B-B-A harness only to decide whether the same-capability C++ Dawn
-    timing threshold passes or identifies the next timing-only bottleneck.
+135. [ ] Parked by explicit user sequencing until the default-renderer and R5
+    browser work is complete. Then run the staged timing-defined R4 gate
+    against immutable pre-tail and post-tail runner artifacts. Treat exact
+    counter parity as complete; use the A-B-B-A harness only to decide whether
+    the same-capability C++ Dawn timing threshold passes or identifies the next
+    timing-only bottleneck.
     The first formal attempts were rejected before acceptance because host
     idle fell below the 70% fence (observed boundaries include 69.63%, 68.48%,
     69.67%, and 65.41%). A deliberately exploratory 60%-idle bracket is also
@@ -1676,6 +1678,18 @@ Run `make renderer-golden`.
     floor, idle spread, and sampler serialization. This tooling does not add
     timing ceremony to counter-defined optimizations; it only makes item 135's
     one final timing-defined decision trustworthy.
+138. [x] Replace generic atomic backing host clears with C++'s generated
+    fixed-color initialization draw. The pre-change oracle finds one shared
+    cause across all eight atomic scenes: three clears and 8,388,612 cleared
+    bytes per frame plus one missing Rust draw, producing 16 ranked rows. The
+    fixed init draw now opens the first existing atomic pass, so clears reach
+    zero, draw/instance counts match C++, render-pass counts stay unchanged,
+    and the ranked report returns to zero. Advanced initialization retains its
+    pass boundary after folding it regressed two pixel tests. The light atomic
+    aggregate moves 1.7287x -> 1.1267x as directional context only. Sol found
+    no renderer lifecycle or visibility defect; its counter-protocol finding
+    is closed with field-local legacy defaults and malformed-response tests.
+    The renderer corpus passes at 1,409/0/59.
 
 ## R2 Completion Record
 
@@ -1887,6 +1901,14 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-16: At the user's direction, park R4 item 135 after deterministic
+  work parity, make the pure-Rust renderer the public SDK default, complete R5,
+  and then return to the final timing gate. R5 is now explicitly activated for
+  both browser WebGPU and WebGL2. The low-level runtime remains
+  renderer-neutral; product defaulting belongs to `nuxie`. WebGL2 is a distinct
+  capability path because its ES 3.0 baseline cannot execute the current
+  storage-buffer-heavy WebGPU pipelines.
 
 - 2026-07-16: R4 item 119 accepts objective renderer work reductions without
   an A-B-B-A campaign. Direct MSAA path bindings remain live across compatible
@@ -2836,6 +2858,18 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-16: Closed R4 item 138. Generic atomic initialization now uses the
+  C++ generated fixed-color shader in the first existing pass instead of three
+  host clears. Across the fixed atomic matrix, clear calls move 3->0, cleared
+  bytes 8,388,612->0, the missing draw reaches parity, pass counts are
+  unchanged, and `perf-counter-compare` returns zero excess rows. Advanced
+  initialization remains a separate pass because a combined-pass experiment
+  failed two pixel regressions. Sol's final review found one protocol
+  strictness issue; only the two additive clear fields now default, while a
+  missing established counter is rejected by tests. The full renderer corpus
+  passes at exact=1,409/diverges=0/gated=59. Per the user's sequence override,
+  item 135 is parked; default-renderer integration and R5 WebGPU/WebGL2 work
+  are next.
 - 2026-07-16: Closed R4 item 137 by replacing independent-minimum timing with
   a control-selected paired estimator. The fixed matrix counterbalances
   execution order exactly, carries sample-level provenance into every row and

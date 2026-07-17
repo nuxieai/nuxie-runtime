@@ -99,6 +99,13 @@ the independent pixel oracle first, keep the corpus ratchet green, and port the
 algorithm behind the existing render-api boundary. The big-bang variant remains
 documented but inactive.
 
+**Decision (2026-07-16): productize before the final timing gate.** After R4
+reached deterministic C++/Rust work parity, the user explicitly parked R4's one
+remaining timing-defined gate. Finish the accepted structural R4 slice, make the
+pure-Rust renderer the public SDK default, complete R5 with both WebGPU and
+WebGL2 browser support, and then return to R4's final same-capability timing
+decision. This is a sequencing override, not a relaxation of R4's exit gate.
+
 **Decision (2026-07-13): orchestrator-first delegation.** The main Phase R agent
 owns decomposition, the critical path, integration, and the final oracle verdict.
 It implements linear or tightly coupled work directly. Worker agents are optional
@@ -406,8 +413,9 @@ order and remain directional. The staged v2 gate now counterbalances order,
 uses control-selected pairs, pins all inputs, and emits a distinct environment
 or renderer decision. R4 remains open until a fresh post-tail worst-scene
 ratio is at or below 2.0x under the host-idle and repeat-drift fences, or the
-gate identifies the next timing-only bottleneck. Load-rejected attempts are
-not evidence. See
+gate identifies the next timing-only bottleneck. By the 2026-07-16 sequencing
+decision, that final run is parked while the default-renderer and R5 browser
+work proceeds. Load-rejected attempts are not evidence. See
 `docs/renderer-r4-profile-attribution.md`.
 
 ### Exit Criteria
@@ -417,19 +425,43 @@ and directional frame times are within an agreed factor of C++ Dawn on the same
 mode and adapter. Heavy load-bracketed timing is required only for remaining
 timing-defined gaps, not for counter-proven work elimination.
 
-## #R-5: Native Fast Paths And Extensions (gated)
+## #R-5: Product Backends And Extensions
 
-Blocked by: #R-4; each item requires profiling evidence or corpus demand
+Sequencing prerequisite: R4 deterministic work parity. R4's final
+timing-defined gate is explicitly parked until this milestone closes.
 
-- Raster-order modes (fragment-shader interlock / PLS / ROV) via `wgpu-hal`
-  escape hatches or a dedicated native backend behind the same trait — only
-  where #R-4 shows the atomic mode leaves real performance on specific
-  hardware.
-- WebAssembly/WebGPU target — wgpu makes this nearly free; gate on an actual
-  embedding need.
-- RSTB shader-asset consumption (editor-exported `wgsl`/`spirv` targets map
-  directly onto wgpu) — gate on scripted-shader/3D corpus content, aligned
-  with V2's scripting gate.
+### Activated Deliverables
+
+1. Make the pure-Rust renderer the default backend of the public `nuxie` SDK
+   crate while keeping `nuxie-runtime` and `nuxie-render-api` backend-neutral.
+   Custom/callback rendering remains available by disabling the default
+   renderer feature; the C ABI must do so explicitly.
+2. Support browser WebGPU through an asynchronous constructor, submission, and
+   readback path that never blocks the browser event loop.
+3. Support WebGL2 as an explicit backend and as the automatic browser fallback
+   when WebGPU is unavailable. WebGL2 is a separate capability path, not an
+   alias for the current storage-buffer pipelines: it requires WebGL2-compatible
+   resource transport and rendering, selected through the same public SDK
+   backend contract.
+4. Add compile gates and executable browser smoke/pixel oracles for both
+   backends. Backend selection, fallback, unsupported capabilities, and pixel
+   output must fail closed and be test-observable.
+
+### Evidence-Gated Extensions
+
+- Native raster-order modes (fragment-shader interlock / PLS / ROV) via
+  `wgpu-hal` escape hatches or a dedicated native backend stay unactivated
+  unless the final R4 timing result demonstrates a hardware-specific need.
+- RSTB shader-asset consumption stays unactivated until scripted-shader or 3D
+  corpus content requires editor-exported `wgsl`/`spirv` assets.
+
+### Exit Criteria
+
+The public SDK selects the Rust renderer by default; native synchronous and
+browser asynchronous paths are documented and tested; browser WebGPU and
+WebGL2 each pass their executable target and pixel gates; automatic fallback
+is proven; and every evidence-gated extension has either shipped or a recorded
+no-trigger decision. Then resume R4's parked timing gate.
 
 ## Long-Tail Strategy (renderer edition)
 

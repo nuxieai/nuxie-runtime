@@ -9050,7 +9050,7 @@ mod tests {
             )
         });
 
-        assert_eq!(work, [(63, 104, 40), (63, 103, 40)]);
+        assert_eq!(work, [(63, 105, 40), (63, 103, 40)]);
     }
 
     #[cfg(feature = "perf-counters")]
@@ -9077,7 +9077,7 @@ mod tests {
             )
         });
 
-        assert_eq!(work, [(78, 12, 142), (78, 31, 213)]);
+        assert_eq!(work, [(78, 13, 142), (78, 31, 213)]);
     }
 
     #[cfg(feature = "perf-counters")]
@@ -9106,8 +9106,10 @@ mod tests {
                 work[0].tessellation_spans,
                 work[0].path_patches,
                 work[0].buffer_upload_bytes,
+                work[0].buffer_clear_calls,
+                work[0].buffer_clear_bytes,
             ),
-            (9, 988, 490, 497, 37_544)
+            (10, 989, 490, 497, 37_544, 0, 0)
         );
         assert_eq!(
             (
@@ -9116,8 +9118,10 @@ mod tests {
                 work[1].tessellation_spans,
                 work[1].path_patches,
                 work[1].buffer_upload_bytes,
+                work[1].buffer_clear_calls,
+                work[1].buffer_clear_bytes,
             ),
-            (8, 986, 489, 497, 37_696)
+            (8, 986, 489, 497, 37_696, 0, 0)
         );
     }
 
@@ -9132,14 +9136,14 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream"
                 )),
-                (8, 7, 555, 121, 431),
+                (8, 8, 556, 121, 431),
             ),
             (
                 include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/renderer/streams/gm/bug339297.rive-stream"
                 )),
-                (6, 5, 542, 117, 423),
+                (6, 6, 543, 117, 423),
             ),
         ] {
             let stream = RenderStream::parse(source).unwrap();

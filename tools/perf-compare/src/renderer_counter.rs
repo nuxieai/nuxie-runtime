@@ -127,7 +127,7 @@ fn validate_work(scene: &str, runner: &str, work: BackendWorkMetrics) -> Result<
 fn counters(
     baseline: BackendWorkMetrics,
     candidate: BackendWorkMetrics,
-) -> [(&'static str, u64, u64); 14] {
+) -> [(&'static str, u64, u64); 16] {
     [
         (
             "command_encoders",
@@ -153,6 +153,16 @@ fn counters(
             "texture_bindings",
             baseline.texture_bindings,
             candidate.texture_bindings,
+        ),
+        (
+            "buffer_clear_calls",
+            baseline.buffer_clear_calls,
+            candidate.buffer_clear_calls,
+        ),
+        (
+            "buffer_clear_bytes",
+            baseline.buffer_clear_bytes,
+            candidate.buffer_clear_bytes,
         ),
         (
             "buffer_upload_calls",

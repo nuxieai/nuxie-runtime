@@ -4,7 +4,7 @@ use crate::gpu::{
     ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData, PatchVertex, TriangleVertex,
 };
 use crate::tessellator::TessellationFlushResources;
-use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
+use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedRenderPass};
 use bytemuck::Zeroable;
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 use std::sync::{
@@ -37,6 +37,7 @@ pub(crate) struct AtomicPipeline {
     advanced_interior: wgpu::RenderPipeline,
     advanced_image_rect: wgpu::RenderPipeline,
     advanced_image_mesh: wgpu::RenderPipeline,
+    init: wgpu::RenderPipeline,
     advanced_init: wgpu::RenderPipeline,
     advanced_resolve: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
@@ -110,7 +111,6 @@ impl AtomicBackingSlot {
     fn prepare(
         &mut self,
         device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
         plane_size: u64,
         color_size: u64,
     ) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
@@ -122,9 +122,6 @@ impl AtomicBackingSlot {
             "nuxie-atomic-coverage",
             plane_size,
         );
-        encoder.clear_buffer(&colors, 0, Some(color_size));
-        encoder.clear_buffer(&clips, 0, Some(plane_size));
-        encoder.clear_buffer(&coverage, 0, Some(plane_size));
         (colors, clips, coverage)
     }
 }
@@ -281,10 +278,15 @@ impl AtomicPipeline {
             "nuxie-atomic-advanced-image-rect-fragment",
             include_str!("generated/atomic_draw_image_rect.webgpu_frag.wgsl"),
         );
-        let advanced_init_vertex = shader(
+        let init_vertex = shader(
             device,
-            "nuxie-atomic-advanced-init-vertex",
+            "nuxie-atomic-init-vertex",
             include_str!("generated/atomic_init.webgpu_vert.wgsl"),
+        );
+        let init_fragment = shader(
+            device,
+            "nuxie-atomic-init-fragment",
+            include_str!("generated/atomic_init.webgpu_fixedcolor_frag.wgsl"),
         );
         let advanced_init_fragment = shader(
             device,
@@ -533,30 +535,38 @@ impl AtomicPipeline {
             multiview_mask: None,
             cache: None,
         });
-        let advanced_init = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nuxie-atomic-advanced-init-pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &advanced_init_vertex,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &advanced_init_fragment,
-                entry_point: Some("main"),
-                compilation_options: options(&[("0", 1.0), ("11", 0.0), ("12", 1.0)]),
-                targets: &[Some(disabled_color_target())],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let make_init = |label, fragment: &wgpu::ShaderModule, constants| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &init_vertex,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: fragment,
+                    entry_point: Some("main"),
+                    compilation_options: options(constants),
+                    targets: &[Some(disabled_color_target())],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let init = make_init("nuxie-atomic-init-pipeline", &init_fragment, &[("0", 1.0)]);
+        let advanced_init = make_init(
+            "nuxie-atomic-advanced-init-pipeline",
+            &advanced_init_fragment,
+            &[("0", 1.0), ("11", 0.0), ("12", 1.0)],
+        );
         let advanced_resolve = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-atomic-advanced-resolve-pipeline"),
             layout: Some(&layout),
@@ -965,6 +975,7 @@ impl AtomicPipeline {
             advanced_interior,
             advanced_image_rect,
             advanced_image_mesh,
+            init,
             advanced_init,
             advanced_resolve,
             resolve,
@@ -1082,9 +1093,7 @@ impl AtomicPipeline {
             .expect("atomic color byte size overflow");
         #[cfg(feature = "perf-diagnostics")]
         let backing_prepare_started = Instant::now();
-        let (colors, clips, coverage) = backing
-            .slot
-            .prepare(device, encoder, plane_size, color_size);
+        let (colors, clips, coverage) = backing.slot.prepare(device, plane_size, color_size);
         #[cfg(feature = "perf-diagnostics")]
         {
             backing.diagnostics.backing_prepare_ns = backing
@@ -1408,6 +1417,18 @@ impl AtomicPipeline {
             pass.set_bind_group(3, &samplers, &[]);
             pass.draw(0..4, 0..1);
         }
+        let mut needs_init = !advanced_blend;
+        let mut initialize = |pass: &mut CountedRenderPass<'_>| {
+            if needs_init {
+                pass.set_pipeline(&self.init);
+                pass.set_bind_group(0, &flush_groups[0], &[]);
+                pass.set_bind_group(1, image_group(0), &[]);
+                pass.set_bind_group(2, &atomics, &[]);
+                pass.set_bind_group(3, &samplers, &[]);
+                pass.draw(0..4, 0..1);
+                needs_init = false;
+            }
+        };
         if batch_shared_draws && shared_flush_group && draws.iter().all(|draw| draw.atlas.is_none())
         {
             for (group_index, &group_start) in draw_group_starts.iter().enumerate() {
@@ -1425,6 +1446,7 @@ impl AtomicPipeline {
                     "nuxie-atomic-path-pass",
                     &attachments,
                 ));
+                initialize(&mut pass);
                 pass.set_bind_group(1, image_group(0), &[]);
                 pass.set_bind_group(2, &atomics, &[]);
                 pass.set_bind_group(3, &samplers, &[]);
@@ -1531,6 +1553,7 @@ impl AtomicPipeline {
                         "nuxie-atomic-atlas-blit-pass",
                         &attachments,
                     ));
+                    initialize(&mut pass);
                     pass.set_pipeline(if advanced_blend && hsl_blend {
                         &self.advanced_hsl_atlas_blit
                     } else if advanced_blend {
@@ -1560,6 +1583,7 @@ impl AtomicPipeline {
                         "nuxie-atomic-image-mesh-pass",
                         &attachments,
                     ));
+                    initialize(&mut pass);
                     pass.set_pipeline(if advanced_blend {
                         &self.advanced_image_mesh
                     } else {
@@ -1586,6 +1610,7 @@ impl AtomicPipeline {
                         "nuxie-atomic-image-rect-pass",
                         &attachments,
                     ));
+                    initialize(&mut pass);
                     pass.set_pipeline(if advanced_blend {
                         &self.advanced_image_rect
                     } else {
@@ -1613,6 +1638,7 @@ impl AtomicPipeline {
                     "nuxie-atomic-path-pass",
                     &attachments,
                 ));
+                initialize(&mut pass);
                 pass.set_pipeline(
                     if advanced_blend && draw.is_feather && draw.is_stroke && hsl_blend {
                         &self.advanced_feather_hsl_stroke_path

@@ -3931,6 +3931,11 @@ fn image_crop_requires_mesh(crop: ImageCropRect) -> bool {
     crop.x != 0.0 || crop.y != 0.0 || crop.width != 1.0 || crop.height != 1.0
 }
 
+// Rive's Mesh.triangleIndexBytes payload is a sequence of unsigned LEB128
+// values, not a packed u16 array. Every index in this fixed quad fits in one
+// varuint byte.
+const IMAGE_CROP_QUAD_TRIANGLE_INDEX_BYTES: &[u8] = &[0, 1, 2, 0, 2, 3];
+
 fn append_image_crop_mesh_records(
     records: &mut Vec<ExportedRecord>,
     objects_by_local: &mut Vec<Option<ObjectId>>,
@@ -3958,7 +3963,7 @@ fn append_image_crop_mesh_records(
         kind: ExportedObjectKind::Mesh,
         properties: vec![
             ExportedProperty::ParentId(mesh_parent_id),
-            ExportedProperty::MeshTriangleIndexBytes(vec![0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 3, 0]),
+            ExportedProperty::MeshTriangleIndexBytes(IMAGE_CROP_QUAD_TRIANGLE_INDEX_BYTES.to_vec()),
         ],
     });
     objects_by_local.push(None);
@@ -6351,9 +6356,9 @@ mod tests {
         assert!(
             mesh.properties
                 .contains(&ExportedProperty::MeshTriangleIndexBytes(vec![
-                    0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 3, 0,
+                    0, 1, 2, 0, 2, 3,
                 ])),
-            "cropped image mesh exports two triangles"
+            "cropped image mesh exports two varuint-encoded triangles"
         );
         let vertices = exported
             .records()
@@ -6399,6 +6404,19 @@ mod tests {
                 .flatten()
                 .any(|object| object.type_name == "Image"),
             "the binary importer keeps the image as an artboard-local object"
+        );
+        let imported_objects = runtime
+            .artboard_local_object_slots(0)
+            .expect("artboard has validated local objects");
+        let imported_mesh = imported_objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "Mesh")
+            .expect("the binary importer keeps the synthetic crop mesh");
+        assert_eq!(
+            imported_mesh.mesh_triangle_indices(),
+            Some(vec![0, 1, 2, 0, 2, 3]),
+            "the authored varuint stream must round-trip as two nondegenerate triangles",
         );
         Ok(())
     }

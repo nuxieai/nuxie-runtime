@@ -3024,7 +3024,28 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
     ) -> bool {
-        self.reported_events.clear();
+        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, true)
+    }
+
+    pub(crate) fn advance_preserving_reported_events(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false)
+    }
+
+    fn advance_with_report_mode(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        elapsed_seconds: f32,
+        clear_reported_events: bool,
+    ) -> bool {
+        if clear_reported_events {
+            self.reported_events.clear();
+        }
         self.changed_state_count = 0;
         self.needs_advance = false;
         self.apply_default_view_model_bindings(

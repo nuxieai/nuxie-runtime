@@ -1489,6 +1489,50 @@ impl ArtboardInstance {
         instance.advance(self, state_machine, elapsed_seconds)
     }
 
+    fn advance_state_machine_instance_preserving_events(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let state_machines = Arc::clone(&self.state_machines);
+        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
+            return false;
+        };
+        instance.advance_preserving_reported_events(self, state_machine, elapsed_seconds)
+    }
+
+    /// Advance several state-machine instances on this artboard while
+    /// advancing nested artboards only once for the frame.
+    ///
+    /// Nested events are delivered to each root machine in caller order. A
+    /// machine notified by those events is settled once more at zero elapsed
+    /// time, matching the single-machine pipeline without multiplying nested
+    /// animation time by the number of root machines.
+    pub fn advance_state_machine_instances_with_nested(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+    ) -> bool {
+        let mut changed = false;
+        for instance in instances.iter_mut() {
+            changed |= self.advance_state_machine_instance(instance, elapsed_seconds);
+        }
+
+        let mut nested_events = Vec::new();
+        changed |=
+            self.advance_nested_artboards_collect_events(elapsed_seconds, Some(&mut nested_events));
+        for instance in instances.iter_mut() {
+            let mut notified = false;
+            for (host_local, events) in &nested_events {
+                notified |= instance.notify_events(self, Some(*host_local), events);
+            }
+            if notified {
+                changed |= self.advance_state_machine_instance_preserving_events(instance, 0.0);
+            }
+        }
+        changed
+    }
+
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
         self.advance_nested_artboards_collect_events(elapsed_seconds, None)
     }
@@ -4116,6 +4160,29 @@ mod tests {
         }
     }
 
+    fn empty_state_machine(global_id: u32) -> RuntimeStateMachine {
+        RuntimeStateMachine {
+            global_id,
+            name: None,
+            inputs: Arc::new(Vec::new()),
+            listeners: Arc::new(Vec::new()),
+            layers: Arc::new(Vec::new()),
+            bindable_numbers: Arc::new(Vec::new()),
+            bindable_integers: Arc::new(Vec::new()),
+            bindable_colors: Arc::new(Vec::new()),
+            bindable_strings: Arc::new(Vec::new()),
+            bindable_enums: Arc::new(Vec::new()),
+            bindable_assets: Arc::new(Vec::new()),
+            bindable_artboards: Arc::new(Vec::new()),
+            bindable_lists: Arc::new(Vec::new()),
+            bindable_triggers: Arc::new(Vec::new()),
+            bindable_view_models: Arc::new(Vec::new()),
+            bindable_booleans: Arc::new(Vec::new()),
+            view_model_triggers: Arc::new(Vec::new()),
+            transition_duration_bindings: Arc::new(Vec::new()),
+        }
+    }
+
     #[test]
     fn artboard_clone_preserves_instance_local_external_font_attachment() {
         let mut original = synthetic_instance(Vec::new(), Vec::new());
@@ -4271,6 +4338,59 @@ mod tests {
             .expect("queued lifecycle succeeds");
 
         assert_eq!(seconds.borrow().as_slice(), [0.5, 0.25]);
+    }
+
+    #[test]
+    fn state_machine_batch_advances_nested_scripts_once() {
+        let seconds = Rc::new(RefCell::new(Vec::new()));
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        child.set_script_instance_for_global(
+            7,
+            Box::new(RecordingAdvanceScriptInstance {
+                seconds: Rc::clone(&seconds),
+            }),
+        );
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.nested_artboards.insert(
+            0,
+            RuntimeNestedArtboardInstance {
+                child: Box::new(child),
+                render_cache_revision: 0,
+                data_bind_path_ids: None,
+                data_bind_path_is_relative: false,
+                stateful_view_model_instance_local: None,
+                stateful_view_model_context: None,
+                data_bind_property_source_locals: Vec::new(),
+                data_bind_image_source_locals: Vec::new(),
+                data_bind_context_source_locals_by_path: BTreeMap::new(),
+                animations: Vec::new(),
+                is_paused: false,
+                speed: 2.0,
+                quantize: -1.0,
+                cumulated_seconds: 0.0,
+            },
+        );
+        parent.nested_artboard_locals.push(0);
+        parent.state_machines = Arc::new(vec![empty_state_machine(11), empty_state_machine(12)]);
+        let mut machines = parent
+            .state_machines
+            .iter()
+            .enumerate()
+            .map(|(index, definition)| StateMachineInstance::new(index, definition, &parent))
+            .collect::<Vec<_>>();
+
+        parent.advance_state_machine_instances_with_nested(&mut machines, 0.25);
+        let nested = parent
+            .nested_artboards
+            .get_mut(&0)
+            .expect("nested occurrence");
+        let mut factory = RecordingFactory::new();
+        nested
+            .child
+            .flush_script_lifecycle_with_factory(&mut factory)
+            .expect("queued lifecycle succeeds");
+
+        assert_eq!(seconds.borrow().as_slice(), [0.5]);
     }
 
     #[test]

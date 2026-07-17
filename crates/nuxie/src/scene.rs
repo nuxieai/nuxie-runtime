@@ -11,7 +11,10 @@ use std::{
 
 use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
 use nuxie_render_api::{Factory, ImageDecodeError, Renderer};
-use nuxie_runtime::{ArtboardInstance as RuntimeArtboardInstance, embedded_font_is_parseable};
+use nuxie_runtime::{
+    ArtboardInstance as RuntimeArtboardInstance, StateMachineInputKind, StateMachineInstance,
+    embedded_font_is_parseable,
+};
 
 use crate::{ArtboardRenderCache, File, OwnedArtboardInstance};
 
@@ -42,6 +45,32 @@ impl From<AnimationId> for ObjectId {
         animation.object_id()
     }
 }
+
+macro_rules! ordinary_record_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name(ObjectId);
+
+        impl $name {
+            pub const fn object_id(self) -> ObjectId {
+                self.0
+            }
+        }
+
+        impl From<$name> for ObjectId {
+            fn from(id: $name) -> Self {
+                id.object_id()
+            }
+        }
+    };
+}
+
+ordinary_record_id!(EventId);
+ordinary_record_id!(MachineId);
+ordinary_record_id!(MachineInputId);
+ordinary_record_id!(MachineLayerId);
+ordinary_record_id!(MachineStateId);
+ordinary_record_id!(MachineTransitionId);
 
 /// Stable identity of an embedded font owned by the authored scene.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -138,6 +167,13 @@ pub enum EditReason {
         source: ArtboardId,
         target: ArtboardId,
     },
+    InvalidMachineReference,
+    InvalidMachineTopology {
+        requirement: &'static str,
+        actual: usize,
+    },
+    EmptyMachineInputName,
+    DuplicateMachineInputName,
     PropertyOwnerMismatch {
         property: &'static str,
         actual: NodeKind,
@@ -388,6 +424,22 @@ impl<T> Clone for Cursor<T> {
     }
 }
 
+/// Pre-resolved trigger input on one retained state-machine instance.
+///
+/// Like property cursors, this handle is lifetime-free and fenced by scene,
+/// structure epoch, instance identity, machine identity, and runtime input kind.
+#[derive(Debug, Clone, Copy)]
+pub struct InputCursor {
+    scene: SceneId,
+    epoch: StructureEpoch,
+    instance_slot: usize,
+    instance: InstanceId,
+    machine: MachineId,
+    machine_index: usize,
+    input_index: usize,
+    input_kind: StateMachineInputKind,
+}
+
 /// Returned when a cursor predates a structural scene edit or its instance no longer exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StaleCursor;
@@ -428,6 +480,9 @@ pub enum ResolveError {
     NonVisualObject,
     DifferentArtboard,
     UnsupportedProperty,
+    UnknownMachine,
+    UnknownMachineInput,
+    UnsupportedInputKind,
 }
 
 impl std::fmt::Display for ResolveError {
@@ -438,6 +493,9 @@ impl std::fmt::Display for ResolveError {
             Self::NonVisualObject => "authored object is not a visual runtime target",
             Self::DifferentArtboard => "authored object belongs to a different artboard",
             Self::UnsupportedProperty => "property is not valid for the authored object type",
+            Self::UnknownMachine => "unknown authored state machine",
+            Self::UnknownMachineInput => "unknown state-machine input",
+            Self::UnsupportedInputKind => "state-machine input is not a trigger",
         })
     }
 }
@@ -653,7 +711,8 @@ impl DefinitionIndex {
                             .key_frames
                             .insert((*keyed_property, *frame), record.id);
                     }
-                    RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_)) => {}
+                    RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_))
+                    | RecordSpec::Machine(_) => {}
                 }
             }
         }
@@ -842,6 +901,12 @@ impl ArtboardDefinition {
             .filter_map(|record| record.animation().map(|spec| (record, spec)))
     }
 
+    fn machine_views(&self) -> impl Iterator<Item = (&RecordDefinition, &MachineRecordSpec)> {
+        self.records
+            .iter()
+            .filter_map(|record| record.machine().map(|spec| (record, spec)))
+    }
+
     fn visual_record_count(&self) -> usize {
         self.visual_records().count()
     }
@@ -861,7 +926,14 @@ impl RecordDefinition {
     const fn animation(&self) -> Option<&AnimationRecordSpec> {
         match &self.spec {
             RecordSpec::Animation(spec) => Some(spec),
-            RecordSpec::Visual { .. } => None,
+            RecordSpec::Visual { .. } | RecordSpec::Machine(_) => None,
+        }
+    }
+
+    const fn machine(&self) -> Option<&MachineRecordSpec> {
+        match &self.spec {
+            RecordSpec::Machine(spec) => Some(spec),
+            RecordSpec::Visual { .. } | RecordSpec::Animation(_) => None,
         }
     }
 }
@@ -870,6 +942,7 @@ impl RecordDefinition {
 enum RecordSpec {
     Visual { parent: Parent, node: NodeSpec },
     Animation(AnimationRecordSpec),
+    Machine(MachineRecordSpec),
 }
 
 /// Semantic kind of any ordinary authored record in the shared ObjectId space.
@@ -880,6 +953,17 @@ pub enum AuthoredObjectKind {
     KeyedObject,
     KeyedProperty,
     KeyFrameDouble,
+    Event,
+    Machine,
+    MachineTrigger,
+    MachineLayer,
+    AnyState,
+    EntryState,
+    ExitState,
+    AnimationState,
+    StateTransition,
+    TriggerCondition,
+    FireEvent,
 }
 
 impl RecordSpec {
@@ -898,6 +982,25 @@ impl RecordSpec {
             Self::Animation(AnimationRecordSpec::KeyFrameDouble { .. }) => {
                 AuthoredObjectKind::KeyFrameDouble
             }
+            Self::Machine(MachineRecordSpec::Event(_)) => AuthoredObjectKind::Event,
+            Self::Machine(MachineRecordSpec::Machine(_)) => AuthoredObjectKind::Machine,
+            Self::Machine(MachineRecordSpec::TriggerInput { .. }) => {
+                AuthoredObjectKind::MachineTrigger
+            }
+            Self::Machine(MachineRecordSpec::Layer { .. }) => AuthoredObjectKind::MachineLayer,
+            Self::Machine(MachineRecordSpec::AnyState { .. }) => AuthoredObjectKind::AnyState,
+            Self::Machine(MachineRecordSpec::EntryState { .. }) => AuthoredObjectKind::EntryState,
+            Self::Machine(MachineRecordSpec::ExitState { .. }) => AuthoredObjectKind::ExitState,
+            Self::Machine(MachineRecordSpec::AnimationState { .. }) => {
+                AuthoredObjectKind::AnimationState
+            }
+            Self::Machine(MachineRecordSpec::Transition { .. }) => {
+                AuthoredObjectKind::StateTransition
+            }
+            Self::Machine(MachineRecordSpec::TriggerCondition { .. }) => {
+                AuthoredObjectKind::TriggerCondition
+            }
+            Self::Machine(MachineRecordSpec::FireEvent { .. }) => AuthoredObjectKind::FireEvent,
         }
     }
 
@@ -912,13 +1015,14 @@ impl RecordSpec {
                 ..
             } => None,
             Self::Animation(spec) => spec.owner(),
+            Self::Machine(spec) => spec.owner(),
         }
     }
 
     const fn visual(&self) -> Option<(Parent, &NodeSpec)> {
         match self {
             Self::Visual { parent, node } => Some((*parent, node)),
-            Self::Animation(_) => None,
+            Self::Animation(_) | Self::Machine(_) => None,
         }
     }
 }
@@ -959,6 +1063,105 @@ impl AnimationRecordSpec {
             Self::KeyedProperty { keyed_object, .. } => Some(*keyed_object),
             Self::KeyFrameDouble { keyed_property, .. } => Some(*keyed_property),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventSpec {
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MachineSpec {
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerInputSpec {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MachineLayerSpec {
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnimationStateSpec {
+    pub animation: AnimationId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FireEventOccurs {
+    AtStart,
+    AtEnd,
+}
+
+#[derive(Debug, Clone)]
+enum MachineRecordSpec {
+    Event(EventSpec),
+    Machine(MachineSpec),
+    TriggerInput {
+        machine: ObjectId,
+        spec: TriggerInputSpec,
+    },
+    Layer {
+        machine: ObjectId,
+        spec: MachineLayerSpec,
+    },
+    AnyState {
+        layer: ObjectId,
+    },
+    EntryState {
+        layer: ObjectId,
+    },
+    ExitState {
+        layer: ObjectId,
+    },
+    AnimationState {
+        layer: ObjectId,
+        animation: AnimationId,
+    },
+    Transition {
+        source: ObjectId,
+        target: ObjectId,
+    },
+    TriggerCondition {
+        transition: ObjectId,
+        input: MachineInputId,
+    },
+    FireEvent {
+        state: ObjectId,
+        event: EventId,
+        occurs: FireEventOccurs,
+    },
+}
+
+impl MachineRecordSpec {
+    const fn owner(&self) -> Option<ObjectId> {
+        match self {
+            Self::Event(_) | Self::Machine(_) => None,
+            Self::TriggerInput { machine, .. } | Self::Layer { machine, .. } => Some(*machine),
+            Self::AnyState { layer }
+            | Self::EntryState { layer }
+            | Self::ExitState { layer }
+            | Self::AnimationState { layer, .. } => Some(*layer),
+            Self::Transition { source, .. } => Some(*source),
+            Self::TriggerCondition { transition, .. } => Some(*transition),
+            Self::FireEvent { state, .. } => Some(*state),
+        }
+    }
+
+    const fn is_entry_state(&self) -> bool {
+        matches!(self, Self::EntryState { .. })
+    }
+
+    const fn is_any_state(&self) -> bool {
+        matches!(self, Self::AnyState { .. })
+    }
+
+    const fn is_exit_state(&self) -> bool {
+        matches!(self, Self::ExitState { .. })
     }
 }
 
@@ -1714,6 +1917,124 @@ impl Hierarchy<'_> {
                         }
                     }
                 }
+                RecordSpec::Machine(spec) => {
+                    if let Some(owner) = spec.owner() {
+                        let Some(owner_kind) = resolve_kind(owner) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        let Some(owner_artboard) = resolve_artboard(owner) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        if owner_artboard != artboard_id {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::CrossArtboardReference {
+                                    source: artboard_id,
+                                    target: owner_artboard,
+                                },
+                            ));
+                        }
+                        let owner_is_valid = matches!(
+                            (spec, owner_kind),
+                            (
+                                MachineRecordSpec::TriggerInput { .. }
+                                    | MachineRecordSpec::Layer { .. },
+                                AuthoredObjectKind::Machine
+                            ) | (
+                                MachineRecordSpec::AnyState { .. }
+                                    | MachineRecordSpec::EntryState { .. }
+                                    | MachineRecordSpec::ExitState { .. }
+                                    | MachineRecordSpec::AnimationState { .. },
+                                AuthoredObjectKind::MachineLayer
+                            ) | (
+                                MachineRecordSpec::Transition { .. }
+                                    | MachineRecordSpec::FireEvent { .. },
+                                AuthoredObjectKind::AnyState
+                                    | AuthoredObjectKind::EntryState
+                                    | AuthoredObjectKind::ExitState
+                                    | AuthoredObjectKind::AnimationState
+                            ) | (
+                                MachineRecordSpec::TriggerCondition { .. },
+                                AuthoredObjectKind::StateTransition
+                            )
+                        );
+                        if !owner_is_valid {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(owner)],
+                                EditReason::InternalInvariant,
+                            ));
+                        }
+                    }
+
+                    let referenced = match spec {
+                        MachineRecordSpec::AnimationState { animation, .. } => {
+                            Some((animation.object_id(), AuthoredObjectKind::LinearAnimation))
+                        }
+                        MachineRecordSpec::Transition { target, .. } => {
+                            let Some(kind) = resolve_kind(*target) else {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(*target)],
+                                    EditReason::UnknownObject,
+                                ));
+                            };
+                            if !matches!(
+                                kind,
+                                AuthoredObjectKind::AnyState
+                                    | AuthoredObjectKind::EntryState
+                                    | AuthoredObjectKind::ExitState
+                                    | AuthoredObjectKind::AnimationState
+                            ) {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(*target)],
+                                    EditReason::InternalInvariant,
+                                ));
+                            }
+                            None
+                        }
+                        MachineRecordSpec::TriggerCondition { input, .. } => {
+                            Some((input.object_id(), AuthoredObjectKind::MachineTrigger))
+                        }
+                        MachineRecordSpec::FireEvent { event, .. } => {
+                            Some((event.object_id(), AuthoredObjectKind::Event))
+                        }
+                        _ => None,
+                    };
+                    if let Some((target, expected)) = referenced {
+                        let Some(actual) = resolve_kind(target) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(target)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        if actual != expected {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(target)],
+                                EditReason::InternalInvariant,
+                            ));
+                        }
+                        let Some(target_artboard) = resolve_artboard(target) else {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(target)],
+                                EditReason::UnknownObject,
+                            ));
+                        };
+                        if target_artboard != artboard_id {
+                            return Err(self.abort(
+                                vec![EditId::Object(id), EditId::Object(target)],
+                                EditReason::CrossArtboardReference {
+                                    source: artboard_id,
+                                    target: target_artboard,
+                                },
+                            ));
+                        }
+                    }
+                }
             }
         }
 
@@ -2160,6 +2481,8 @@ struct MaterializedArtboard {
     file: Arc<File>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
     animations: BTreeMap<AnimationId, usize>,
+    machines: BTreeMap<MachineId, usize>,
+    events_by_local: Vec<Option<EventId>>,
     objects_by_artboard_local: BTreeMap<ArtboardId, Vec<Option<ObjectId>>>,
     nested_artboard_targets: BTreeMap<ObjectId, ArtboardId>,
 }
@@ -2172,6 +2495,56 @@ struct LiveInstance {
     artboard: ArtboardId,
     mount: MountId,
     runtime: OwnedArtboardInstance,
+    machines: RetainedMachineInstances,
+}
+
+struct RetainedMachineInstances {
+    ids: Vec<MachineId>,
+    values: Vec<StateMachineInstance>,
+}
+
+impl RetainedMachineInstances {
+    fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    fn get(&self, id: MachineId, index: usize) -> Option<&StateMachineInstance> {
+        if self.ids.get(index) != Some(&id) {
+            return None;
+        }
+        self.values.get(index)
+    }
+
+    fn get_mut(&mut self, id: MachineId, index: usize) -> Option<&mut StateMachineInstance> {
+        if self.ids.get(index) != Some(&id) {
+            return None;
+        }
+        self.values.get_mut(index)
+    }
+}
+
+fn instantiate_runtime_mount(
+    materialized: &MaterializedArtboard,
+) -> std::result::Result<(OwnedArtboardInstance, RetainedMachineInstances), ()> {
+    let runtime =
+        OwnedArtboardInstance::instantiate(Arc::clone(&materialized.file), 0).map_err(|_| ())?;
+    let mut machine_indices = materialized
+        .machines
+        .iter()
+        .map(|(id, index)| (*id, *index))
+        .collect::<Vec<_>>();
+    machine_indices.sort_by_key(|(_, index)| *index);
+    let mut ids = Vec::with_capacity(machine_indices.len());
+    let mut values = Vec::with_capacity(machine_indices.len());
+    for (expected_index, (id, index)) in machine_indices.into_iter().enumerate() {
+        if index != expected_index {
+            return Err(());
+        }
+        ids.push(id);
+        values.push(runtime.state_machine_instance(index).ok_or(())?);
+    }
+    let machines = RetainedMachineInstances { ids, values };
+    Ok((runtime, machines))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2236,6 +2609,17 @@ pub enum ExportedObjectKind {
     KeyedObject,
     KeyedProperty,
     KeyFrameDouble,
+    Event,
+    StateMachine,
+    StateMachineTrigger,
+    StateMachineLayer,
+    AnyState,
+    EntryState,
+    ExitState,
+    AnimationState,
+    StateTransition,
+    TransitionTriggerCondition,
+    StateMachineFireEvent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2367,6 +2751,17 @@ pub enum ExportedProperty {
     KeyFrame(u32),
     KeyFrameInterpolationLinear,
     KeyFrameDoubleValue(f32),
+    StateMachineComponentName(String),
+    StateAnimationId(u32),
+    StateSpeed(f32),
+    StateToId(u32),
+    StateTransitionFlags(u32),
+    StateTransitionDuration(u32),
+    StateTransitionExitTime(u32),
+    StateTransitionRandomWeight(u32),
+    StateMachineInputId(u32),
+    EventId(u32),
+    FireEventOccurs(FireEventOccurs),
 }
 
 impl ExportedProperty {
@@ -2442,6 +2837,17 @@ impl ExportedProperty {
             Self::KeyFrame(_) => PROPERTY_KEY_FRAME,
             Self::KeyFrameInterpolationLinear => PROPERTY_KEY_FRAME_INTERPOLATION_TYPE,
             Self::KeyFrameDoubleValue(_) => PROPERTY_KEY_FRAME_DOUBLE_VALUE,
+            Self::StateMachineComponentName(_) => PROPERTY_STATE_MACHINE_COMPONENT_NAME,
+            Self::StateAnimationId(_) => PROPERTY_STATE_ANIMATION_ID,
+            Self::StateSpeed(_) => PROPERTY_STATE_SPEED,
+            Self::StateToId(_) => PROPERTY_STATE_TO_ID,
+            Self::StateTransitionFlags(_) => PROPERTY_STATE_TRANSITION_FLAGS,
+            Self::StateTransitionDuration(_) => PROPERTY_STATE_TRANSITION_DURATION,
+            Self::StateTransitionExitTime(_) => PROPERTY_STATE_TRANSITION_EXIT_TIME,
+            Self::StateTransitionRandomWeight(_) => PROPERTY_STATE_TRANSITION_RANDOM_WEIGHT,
+            Self::StateMachineInputId(_) => PROPERTY_STATE_MACHINE_INPUT_ID,
+            Self::EventId(_) => PROPERTY_STATE_MACHINE_EVENT_ID,
+            Self::FireEventOccurs(_) => PROPERTY_STATE_MACHINE_FIRE_OCCURS,
         }
     }
 
@@ -2451,7 +2857,8 @@ impl ExportedProperty {
             Self::ComponentName(value)
             | Self::AssetName(value)
             | Self::TextValueRunText(value)
-            | Self::AnimationName(value) => AuthoringValue::String(value),
+            | Self::AnimationName(value)
+            | Self::StateMachineComponentName(value) => AuthoringValue::String(value),
             Self::FileAssetContentsBytes(value) | Self::MeshTriangleIndexBytes(value) => {
                 AuthoringValue::Bytes(value)
             }
@@ -2469,7 +2876,19 @@ impl ExportedProperty {
             | Self::AnimationWorkStart(value)
             | Self::AnimationWorkEnd(value)
             | Self::KeyedObjectId(value)
-            | Self::KeyFrame(value) => AuthoringValue::Uint(u64::from(value)),
+            | Self::KeyFrame(value)
+            | Self::StateAnimationId(value)
+            | Self::StateToId(value)
+            | Self::StateTransitionFlags(value)
+            | Self::StateTransitionDuration(value)
+            | Self::StateTransitionExitTime(value)
+            | Self::StateTransitionRandomWeight(value)
+            | Self::StateMachineInputId(value)
+            | Self::EventId(value) => AuthoringValue::Uint(u64::from(value)),
+            Self::FireEventOccurs(value) => AuthoringValue::Uint(match value {
+                FireEventOccurs::AtStart => 0,
+                FireEventOccurs::AtEnd => 1,
+            }),
             Self::KeyedProperty(property) => AuthoringValue::Uint(u64::from(property.schema_key())),
             Self::KeyFrameInterpolationLinear => AuthoringValue::Uint(1),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
@@ -2510,6 +2929,7 @@ impl ExportedProperty {
             | Self::TextStyleLineHeight(value)
             | Self::TextStyleLetterSpacing(value)
             | Self::AnimationSpeed(value)
+            | Self::StateSpeed(value)
             | Self::KeyFrameDoubleValue(value) => AuthoringValue::Double(value),
             Self::RectangleLinkCornerRadius(value)
             | Self::StrokeTransformAffectsStroke(value)
@@ -2560,6 +2980,17 @@ impl ExportedRecord {
             ExportedObjectKind::KeyedObject => TYPE_KEYED_OBJECT,
             ExportedObjectKind::KeyedProperty => TYPE_KEYED_PROPERTY,
             ExportedObjectKind::KeyFrameDouble => TYPE_KEY_FRAME_DOUBLE,
+            ExportedObjectKind::Event => TYPE_EVENT,
+            ExportedObjectKind::StateMachine => TYPE_STATE_MACHINE,
+            ExportedObjectKind::StateMachineTrigger => TYPE_STATE_MACHINE_TRIGGER,
+            ExportedObjectKind::StateMachineLayer => TYPE_STATE_MACHINE_LAYER,
+            ExportedObjectKind::AnyState => TYPE_ANY_STATE,
+            ExportedObjectKind::EntryState => TYPE_ENTRY_STATE,
+            ExportedObjectKind::ExitState => TYPE_EXIT_STATE,
+            ExportedObjectKind::AnimationState => TYPE_ANIMATION_STATE,
+            ExportedObjectKind::StateTransition => TYPE_STATE_TRANSITION,
+            ExportedObjectKind::TransitionTriggerCondition => TYPE_TRANSITION_TRIGGER_CONDITION,
+            ExportedObjectKind::StateMachineFireEvent => TYPE_STATE_MACHINE_FIRE_EVENT,
         };
         AuthoringRecord {
             type_key,
@@ -2687,6 +3118,8 @@ impl Scene {
             .map_err(|abort| EditError::commit(abort.diagnostic))?;
         validate_animation_definitions(&definitions, commit_operation_index, &spec_origins)
             .map_err(EditError::commit)?;
+        validate_machine_definitions(&definitions, commit_operation_index, &spec_origins)
+            .map_err(EditError::commit)?;
         validate_font_assets(
             &definitions.font_assets,
             commit_operation_index,
@@ -2808,14 +3241,13 @@ impl Scene {
                     EditReason::InternalInvariant,
                 )));
             };
-            let runtime = OwnedArtboardInstance::instantiate(Arc::clone(&materialized.file), 0)
-                .map_err(|_| {
-                    EditError::commit(EditDiagnostic::new(
-                        touched_operation_index,
-                        involved_ids.clone(),
-                        EditReason::InternalInvariant,
-                    ))
-                })?;
+            let (runtime, machines) = instantiate_runtime_mount(materialized).map_err(|_| {
+                EditError::commit(EditDiagnostic::new(
+                    touched_operation_index,
+                    involved_ids.clone(),
+                    EditReason::InternalInvariant,
+                ))
+            })?;
             let mount = MountId(allocate_identity(&mut next_mount_id).ok_or_else(|| {
                 EditError::commit(EditDiagnostic::new(
                     touched_operation_index,
@@ -2830,6 +3262,7 @@ impl Scene {
                     artboard: instance.artboard,
                     mount,
                     runtime,
+                    machines,
                 },
             ));
         }
@@ -2879,8 +3312,8 @@ impl Scene {
             .materialized
             .get(&artboard)
             .ok_or(InstanceError::UnknownArtboard)?;
-        let runtime = OwnedArtboardInstance::instantiate(Arc::clone(&materialized.file), 0)
-            .map_err(|_| InstanceError::RuntimeRejected)?;
+        let (runtime, machines) =
+            instantiate_runtime_mount(materialized).map_err(|_| InstanceError::RuntimeRejected)?;
         let id = InstanceId(
             allocate_global_identity(&NEXT_INSTANCE_ID).ok_or(InstanceError::IdentityExhausted)?,
         );
@@ -2892,6 +3325,7 @@ impl Scene {
             artboard,
             mount,
             runtime,
+            machines,
         };
         if let Some(vacant) = self.instances.iter_mut().find(|slot| slot.is_none()) {
             *vacant = Some(live);
@@ -2965,6 +3399,67 @@ impl Scene {
             instance,
             local_id: slot.local_id,
             property,
+        })
+    }
+
+    /// Resolve one named trigger input on a retained machine instance.
+    pub fn machine_input(
+        &self,
+        instance: InstanceId,
+        machine: MachineId,
+        name: &str,
+    ) -> std::result::Result<InputCursor, ResolveError> {
+        let (instance_slot, live) = self
+            .instances
+            .iter()
+            .enumerate()
+            .find_map(|(slot, candidate)| {
+                candidate
+                    .as_ref()
+                    .filter(|candidate| candidate.id == instance)
+                    .map(|candidate| (slot, candidate))
+            })
+            .ok_or(ResolveError::UnknownInstance)?;
+        let materialized = self
+            .materialized
+            .get(&live.artboard)
+            .ok_or(ResolveError::UnknownMachine)?;
+        let Some(machine_index) = materialized.machines.get(&machine).copied() else {
+            return Err(
+                if self
+                    .materialized
+                    .values()
+                    .any(|candidate| candidate.machines.contains_key(&machine))
+                {
+                    ResolveError::DifferentArtboard
+                } else {
+                    ResolveError::UnknownMachine
+                },
+            );
+        };
+        let retained = live
+            .machines
+            .get(machine, machine_index)
+            .ok_or(ResolveError::UnknownMachine)?;
+        let input_index = retained
+            .input_index_named(name)
+            .ok_or(ResolveError::UnknownMachineInput)?;
+        let input_kind = retained
+            .input(input_index)
+            .map(|input| input.kind())
+            .ok_or(ResolveError::UnknownMachineInput)?;
+        if input_kind != StateMachineInputKind::Trigger {
+            return Err(ResolveError::UnsupportedInputKind);
+        }
+        Ok(InputCursor {
+            scene: self.identity.id,
+            epoch: self.epoch,
+            instance_slot,
+            instance,
+            machine,
+            machine_index,
+            input_index,
+            input_kind,
         })
     }
 
@@ -3061,6 +3556,19 @@ impl SceneTx<'_> {
     /// ordinary [`ObjectId`] identity space as visual authoring.
     pub fn animations(&mut self) -> AnimTx<'_> {
         AnimTx {
+            definitions: self.definitions,
+            definition_index: &mut self.definition_index,
+            next_operation_index: &mut self.next_operation_index,
+            created_objects: &mut self.created_objects,
+            touched_artboards: &mut self.touched_artboards,
+            spec_origins: &mut self.spec_origins,
+        }
+    }
+
+    /// Enter the state-machine vocabulary over the same durable record store
+    /// and ordinary [`ObjectId`] identity space as visual authoring.
+    pub fn machines(&mut self) -> MachineTx<'_> {
+        MachineTx {
             definitions: self.definitions,
             definition_index: &mut self.definition_index,
             next_operation_index: &mut self.next_operation_index,
@@ -3949,6 +4457,560 @@ impl AnimTx<'_> {
     }
 }
 
+/// Invariant-enforcing state-machine vocabulary over a [`SceneTx`].
+///
+/// Import-context ordering and runtime-local ordinals are derived during
+/// materialization; callers retain only semantic ids in the uniform record
+/// store.
+pub struct MachineTx<'a> {
+    definitions: &'a mut Definitions,
+    definition_index: &'a mut DefinitionIndex,
+    next_operation_index: &'a mut usize,
+    created_objects: &'a mut Vec<ObjectId>,
+    touched_artboards: &'a mut BTreeMap<ArtboardId, usize>,
+    spec_origins: &'a mut SpecOrigins,
+}
+
+impl MachineTx<'_> {
+    pub fn create_event(
+        &mut self,
+        artboard: ArtboardId,
+        mut spec: EventSpec,
+    ) -> std::result::Result<EventId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_index = self.artboard_index(artboard, operation_index)?;
+        normalize_optional_machine_name(&mut spec.name);
+        self.insert_record(
+            artboard,
+            artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::Event(spec)),
+        )
+        .map(EventId)
+    }
+
+    pub fn create_machine(
+        &mut self,
+        artboard: ArtboardId,
+        mut spec: MachineSpec,
+    ) -> std::result::Result<MachineId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_index = self.artboard_index(artboard, operation_index)?;
+        normalize_optional_machine_name(&mut spec.name);
+        self.insert_record(
+            artboard,
+            artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::Machine(spec)),
+        )
+        .map(MachineId)
+    }
+
+    pub fn create_trigger_input(
+        &mut self,
+        machine: MachineId,
+        spec: TriggerInputSpec,
+    ) -> std::result::Result<MachineInputId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            machine.object_id(),
+            AuthoredObjectKind::Machine,
+            "machine",
+            operation_index,
+        )?;
+        if spec.name.trim().is_empty() {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(machine.object_id())],
+                EditReason::EmptyMachineInputName,
+            ));
+        }
+        if let Some(existing) = self
+            .definitions
+            .artboards
+            .get(owner.artboard_index)
+            .into_iter()
+            .flat_map(|artboard| &artboard.records)
+            .find(|record| {
+                matches!(
+                    &record.spec,
+                    RecordSpec::Machine(MachineRecordSpec::TriggerInput {
+                        machine: candidate,
+                        spec: candidate_spec,
+                    }) if *candidate == machine.object_id() && candidate_spec.name == spec.name
+                )
+            })
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(machine.object_id()),
+                    EditId::Object(existing.id),
+                ],
+                EditReason::DuplicateMachineInputName,
+            ));
+        }
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::TriggerInput {
+                machine: machine.object_id(),
+                spec,
+            }),
+        )
+        .map(MachineInputId)
+    }
+
+    pub fn create_layer(
+        &mut self,
+        machine: MachineId,
+        mut spec: MachineLayerSpec,
+    ) -> std::result::Result<MachineLayerId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            machine.object_id(),
+            AuthoredObjectKind::Machine,
+            "machine",
+            operation_index,
+        )?;
+        normalize_optional_machine_name(&mut spec.name);
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::Layer {
+                machine: machine.object_id(),
+                spec,
+            }),
+        )
+        .map(MachineLayerId)
+    }
+
+    pub fn create_entry_state(
+        &mut self,
+        layer: MachineLayerId,
+    ) -> std::result::Result<MachineStateId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            layer.object_id(),
+            AuthoredObjectKind::MachineLayer,
+            "layer",
+            operation_index,
+        )?;
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::EntryState {
+                layer: layer.object_id(),
+            }),
+        )
+        .map(MachineStateId)
+    }
+
+    pub fn create_any_state(
+        &mut self,
+        layer: MachineLayerId,
+    ) -> std::result::Result<MachineStateId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            layer.object_id(),
+            AuthoredObjectKind::MachineLayer,
+            "layer",
+            operation_index,
+        )?;
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::AnyState {
+                layer: layer.object_id(),
+            }),
+        )
+        .map(MachineStateId)
+    }
+
+    pub fn create_exit_state(
+        &mut self,
+        layer: MachineLayerId,
+    ) -> std::result::Result<MachineStateId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            layer.object_id(),
+            AuthoredObjectKind::MachineLayer,
+            "layer",
+            operation_index,
+        )?;
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::ExitState {
+                layer: layer.object_id(),
+            }),
+        )
+        .map(MachineStateId)
+    }
+
+    pub fn create_animation_state(
+        &mut self,
+        layer: MachineLayerId,
+        spec: AnimationStateSpec,
+    ) -> std::result::Result<MachineStateId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            layer.object_id(),
+            AuthoredObjectKind::MachineLayer,
+            "layer",
+            operation_index,
+        )?;
+        let animation = self.expect_kind(
+            spec.animation.object_id(),
+            AuthoredObjectKind::LinearAnimation,
+            "animation",
+            operation_index,
+        )?;
+        self.ensure_same_artboard(
+            owner.artboard,
+            animation.artboard,
+            operation_index,
+            [layer.object_id(), spec.animation.object_id()],
+        )?;
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::AnimationState {
+                layer: layer.object_id(),
+                animation: spec.animation,
+            }),
+        )
+        .map(MachineStateId)
+    }
+
+    pub fn create_transition(
+        &mut self,
+        source: MachineStateId,
+        target: MachineStateId,
+    ) -> std::result::Result<MachineTransitionId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let source_record = self.expect_state(source, "source", operation_index)?;
+        let target_record = self.expect_state(target, "target", operation_index)?;
+        self.ensure_same_artboard(
+            source_record.artboard,
+            target_record.artboard,
+            operation_index,
+            [source.object_id(), target.object_id()],
+        )?;
+        let source_layer = self.owner_of(source.object_id(), operation_index)?;
+        let target_layer = self.owner_of(target.object_id(), operation_index)?;
+        if source_layer != target_layer {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(source.object_id()),
+                    EditId::Object(target.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        self.insert_record(
+            source_record.artboard,
+            source_record.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::Transition {
+                source: source.object_id(),
+                target: target.object_id(),
+            }),
+        )
+        .map(MachineTransitionId)
+    }
+
+    pub fn add_trigger_condition(
+        &mut self,
+        transition: MachineTransitionId,
+        input: MachineInputId,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let transition_record = self.expect_kind(
+            transition.object_id(),
+            AuthoredObjectKind::StateTransition,
+            "transition",
+            operation_index,
+        )?;
+        let input_record = self.expect_kind(
+            input.object_id(),
+            AuthoredObjectKind::MachineTrigger,
+            "input",
+            operation_index,
+        )?;
+        self.ensure_same_artboard(
+            transition_record.artboard,
+            input_record.artboard,
+            operation_index,
+            [transition.object_id(), input.object_id()],
+        )?;
+        let source = self.owner_of(transition.object_id(), operation_index)?;
+        let layer = self.owner_of(source, operation_index)?;
+        let machine = self.owner_of(layer, operation_index)?;
+        if self.owner_of(input.object_id(), operation_index)? != machine {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(transition.object_id()),
+                    EditId::Object(input.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        self.insert_record(
+            transition_record.artboard,
+            transition_record.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::TriggerCondition {
+                transition: transition.object_id(),
+                input,
+            }),
+        )
+    }
+
+    pub fn add_fire_event(
+        &mut self,
+        state: MachineStateId,
+        event: EventId,
+        occurs: FireEventOccurs,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let state_record = self.expect_state(state, "state", operation_index)?;
+        let event_record = self.expect_kind(
+            event.object_id(),
+            AuthoredObjectKind::Event,
+            "event",
+            operation_index,
+        )?;
+        self.ensure_same_artboard(
+            state_record.artboard,
+            event_record.artboard,
+            operation_index,
+            [state.object_id(), event.object_id()],
+        )?;
+        self.insert_record(
+            state_record.artboard,
+            state_record.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::FireEvent {
+                state: state.object_id(),
+                event,
+                occurs,
+            }),
+        )
+    }
+
+    fn insert_record(
+        &mut self,
+        artboard: ArtboardId,
+        artboard_index: usize,
+        operation_index: usize,
+        spec: RecordSpec,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let id = ObjectId(allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+            EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+        })?);
+        let owner = spec.owner();
+        let kind = spec.kind();
+        let definition = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .filter(|definition| definition.id == artboard)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let record_index = definition.records.len();
+        definition.records.push(RecordDefinition { id, spec });
+        self.definition_index.objects.insert(
+            id,
+            IndexedObject {
+                artboard,
+                artboard_index,
+                record_index,
+                kind,
+            },
+        );
+        self.definition_index.owned.entry(id).or_default();
+        if let Some(owner) = owner {
+            self.definition_index
+                .owned
+                .entry(owner)
+                .or_default()
+                .push(id);
+        }
+        self.created_objects.push(id);
+        self.touched_artboards.insert(artboard, operation_index);
+        self.spec_origins.nodes.insert(id, operation_index);
+        Ok(id)
+    }
+
+    fn artboard_index(
+        &self,
+        artboard: ArtboardId,
+        operation_index: usize,
+    ) -> std::result::Result<usize, EditAbort> {
+        self.definition_index
+            .artboards
+            .get(&artboard)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(artboard)],
+                    EditReason::UnknownArtboard,
+                )
+            })
+    }
+
+    fn expect_kind(
+        &self,
+        id: ObjectId,
+        expected: AuthoredObjectKind,
+        property: &'static str,
+        operation_index: usize,
+    ) -> std::result::Result<IndexedObject, EditAbort> {
+        let actual = self
+            .definition_index
+            .objects
+            .get(&id)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(id)],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if actual.kind != expected {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(id)],
+                EditReason::RecordPropertyOwnerMismatch {
+                    property,
+                    actual: actual.kind,
+                },
+            ));
+        }
+        Ok(actual)
+    }
+
+    fn expect_state(
+        &self,
+        state: MachineStateId,
+        property: &'static str,
+        operation_index: usize,
+    ) -> std::result::Result<IndexedObject, EditAbort> {
+        let actual = self
+            .definition_index
+            .objects
+            .get(&state.object_id())
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(state.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if !matches!(
+            actual.kind,
+            AuthoredObjectKind::AnyState
+                | AuthoredObjectKind::EntryState
+                | AuthoredObjectKind::ExitState
+                | AuthoredObjectKind::AnimationState
+        ) {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(state.object_id())],
+                EditReason::RecordPropertyOwnerMismatch {
+                    property,
+                    actual: actual.kind,
+                },
+            ));
+        }
+        Ok(actual)
+    }
+
+    fn owner_of(
+        &self,
+        id: ObjectId,
+        operation_index: usize,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let indexed = self
+            .definition_index
+            .objects
+            .get(&id)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(id)],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        self.definitions
+            .artboards
+            .get(indexed.artboard_index)
+            .and_then(|artboard| artboard.records.get(indexed.record_index))
+            .and_then(|record| record.spec.owner())
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(id)],
+                    EditReason::InternalInvariant,
+                )
+            })
+    }
+
+    fn ensure_same_artboard(
+        &self,
+        source: ArtboardId,
+        target: ArtboardId,
+        operation_index: usize,
+        ids: [ObjectId; 2],
+    ) -> std::result::Result<(), EditAbort> {
+        if source == target {
+            return Ok(());
+        }
+        Err(EditAbort::new(
+            operation_index,
+            ids.into_iter().map(EditId::Object).collect(),
+            EditReason::CrossArtboardReference { source, target },
+        ))
+    }
+
+    fn begin_operation(&mut self) -> std::result::Result<usize, EditAbort> {
+        let operation_index = *self.next_operation_index;
+        let Some(next) = operation_index.checked_add(1) else {
+            return Err(EditAbort::new(
+                operation_index,
+                Vec::new(),
+                EditReason::OperationLimitExceeded,
+            ));
+        };
+        *self.next_operation_index = next;
+        Ok(operation_index)
+    }
+}
+
+fn normalize_optional_machine_name(name: &mut Option<String>) {
+    if name.as_ref().is_some_and(|name| name.trim().is_empty()) {
+        *name = None;
+    }
+}
+
 fn valid_artboard_child(child: NodeKind) -> bool {
     matches!(
         child,
@@ -4047,15 +5109,16 @@ pub struct Frame<'a> {
     scene: &'a mut Scene,
 }
 
-/// One runtime-originated event reported by [`Frame::advance`].
-///
-/// The current authored-scene vocabulary has no machine or script event
-/// sources, so this type deliberately has no constructible variants yet.
-/// Keeping the platform event type opaque avoids exposing a lower-runtime
-/// event dialect before those Scene concepts exist.
-#[derive(Debug, Clone)]
+/// One semantic runtime event reported by [`Frame::advance`].
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum SceneEvent {}
+pub enum SceneEvent {
+    Authored {
+        event: EventId,
+        name: Option<String>,
+        seconds_delay: f32,
+    },
+}
 
 impl Frame<'_> {
     /// Reads the cursor's current value directly from its live runtime instance.
@@ -4108,6 +5171,35 @@ impl Frame<'_> {
         ))
     }
 
+    /// Fire one pre-resolved trigger on its retained state-machine instance.
+    pub fn fire(&mut self, cursor: InputCursor) -> std::result::Result<(), StaleCursor> {
+        if cursor.scene != self.scene.identity.id
+            || cursor.epoch != self.scene.epoch
+            || cursor.input_kind != StateMachineInputKind::Trigger
+        {
+            return Err(StaleCursor);
+        }
+        let live = self
+            .scene
+            .instances
+            .get_mut(cursor.instance_slot)
+            .and_then(Option::as_mut)
+            .filter(|instance| instance.id == cursor.instance)
+            .ok_or(StaleCursor)?;
+        let machine = live
+            .machines
+            .get_mut(cursor.machine, cursor.machine_index)
+            .ok_or(StaleCursor)?;
+        if machine
+            .input(cursor.input_index)
+            .is_none_or(|input| input.kind() != StateMachineInputKind::Trigger)
+        {
+            return Err(StaleCursor);
+        }
+        let _ = machine.fire_trigger(cursor.input_index);
+        Ok(())
+    }
+
     /// Apply one authored linear animation at an absolute time in seconds to
     /// one existing live instance.
     ///
@@ -4154,9 +5246,9 @@ impl Frame<'_> {
     /// Advance one live instance and settle its runtime-driven visual state.
     ///
     /// `events` is caller-owned reusable storage. It is cleared before each
-    /// advance so it contains only events emitted by this call. The current
-    /// authored-scene slice has no event sources and therefore leaves it
-    /// empty. An unknown or dropped instance is an unchanged frame.
+    /// advance so it contains only semantic authored events emitted by this
+    /// call, ordered by retained machine and runtime report order. An unknown
+    /// or dropped instance is an unchanged frame.
     pub fn advance(
         &mut self,
         instance: InstanceId,
@@ -4164,12 +5256,44 @@ impl Frame<'_> {
         events: &mut Vec<SceneEvent>,
     ) -> bool {
         events.clear();
-        self.scene
-            .instances
+        let (materialized, instances) = (&self.scene.materialized, &mut self.scene.instances);
+        let Some(live) = instances
             .iter_mut()
             .filter_map(Option::as_mut)
             .find(|candidate| candidate.id == instance)
-            .is_some_and(|live| live.runtime.advance(elapsed_seconds))
+        else {
+            return false;
+        };
+        let Some(materialized) = materialized.get(&live.artboard) else {
+            return false;
+        };
+        if live.machines.is_empty() {
+            return live.runtime.advance(elapsed_seconds);
+        }
+
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
+        let changed = runtime.advance_with_state_machines(&mut machines.values, elapsed_seconds);
+        for machine in &machines.values {
+            for index in 0..machine.reported_event_count() {
+                let Some(reported) = machine.reported_event(index) else {
+                    continue;
+                };
+                let Some(event) = materialized
+                    .events_by_local
+                    .get(reported.event_local_index())
+                    .copied()
+                    .flatten()
+                else {
+                    continue;
+                };
+                events.push(SceneEvent::Authored {
+                    event,
+                    name: reported.name().map(ToOwned::to_owned),
+                    seconds_delay: reported.seconds_delay(),
+                });
+            }
+        }
+        changed
     }
 
     /// Advance one live instance with a renderer factory available to script
@@ -4185,16 +5309,51 @@ impl Frame<'_> {
         factory: &mut dyn Factory,
     ) -> std::result::Result<bool, AdvanceError> {
         events.clear();
-        let live = self
-            .scene
-            .instances
+        let (materialized, instances) = (&self.scene.materialized, &mut self.scene.instances);
+        let live = instances
             .iter_mut()
             .filter_map(Option::as_mut)
             .find(|candidate| candidate.id == instance)
             .ok_or(AdvanceError::UnknownInstance)?;
-        live.runtime
-            .try_advance_with_factory(factory, elapsed_seconds)
-            .map_err(|_| AdvanceError::RuntimeRejected)
+        let materialized = materialized
+            .get(&live.artboard)
+            .ok_or(AdvanceError::RuntimeRejected)?;
+        if live.machines.is_empty() {
+            return live
+                .runtime
+                .try_advance_with_factory(factory, elapsed_seconds)
+                .map_err(|_| AdvanceError::RuntimeRejected);
+        }
+
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
+        let changed = runtime
+            .try_advance_with_state_machines_and_factory(
+                &mut machines.values,
+                elapsed_seconds,
+                factory,
+            )
+            .map_err(|_| AdvanceError::RuntimeRejected)?;
+        for machine in &machines.values {
+            for index in 0..machine.reported_event_count() {
+                let Some(reported) = machine.reported_event(index) else {
+                    continue;
+                };
+                let Some(event) = materialized
+                    .events_by_local
+                    .get(reported.event_local_index())
+                    .copied()
+                    .flatten()
+                else {
+                    continue;
+                };
+                events.push(SceneEvent::Authored {
+                    event,
+                    name: reported.name().map(ToOwned::to_owned),
+                    seconds_delay: reported.seconds_delay(),
+                });
+            }
+        }
+        Ok(changed)
     }
 
     /// Return authored shapes under `point`, ordered front to back and deduplicated.
@@ -4448,6 +5607,8 @@ impl MaterializedArtboard {
         records.extend(referenced_assets.records);
         let mut root_objects = None;
         let mut root_animations = None;
+        let mut root_machines = None;
+        let mut root_events_by_local = None;
         let mut objects_by_artboard_local = BTreeMap::new();
         let mut nested_artboard_targets = BTreeMap::new();
         for definition in closure {
@@ -4463,6 +5624,8 @@ impl MaterializedArtboard {
             if definition.id == root {
                 root_objects = Some(lowered.objects.clone());
                 root_animations = Some(lowered.animations.clone());
+                root_machines = Some(lowered.machines.clone());
+                root_events_by_local = Some(lowered.events_by_local.clone());
             }
             objects_by_artboard_local.insert(definition.id, lowered.objects_by_local);
             nested_artboard_targets.extend(definition.records.iter().filter_map(|record| {
@@ -4507,6 +5670,20 @@ impl MaterializedArtboard {
                     EditReason::InternalInvariant,
                 )
             })?,
+            machines: root_machines.ok_or_else(|| {
+                EditDiagnostic::new(
+                    touched_operation_index,
+                    vec![EditId::Artboard(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?,
+            events_by_local: root_events_by_local.ok_or_else(|| {
+                EditDiagnostic::new(
+                    touched_operation_index,
+                    vec![EditId::Artboard(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?,
             objects_by_artboard_local,
             nested_artboard_targets,
         })
@@ -4517,6 +5694,8 @@ struct LoweredArtboard {
     records: Vec<ExportedRecord>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
     animations: BTreeMap<AnimationId, usize>,
+    machines: BTreeMap<MachineId, usize>,
+    events_by_local: Vec<Option<EventId>>,
     objects_by_local: Vec<Option<ObjectId>>,
 }
 
@@ -5150,6 +6329,117 @@ fn validate_animation_definitions(
     Ok(())
 }
 
+fn validate_machine_definitions(
+    definitions: &Definitions,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    for artboard in &definitions.artboards {
+        let mut owned = BTreeMap::<ObjectId, Vec<&RecordDefinition>>::new();
+        for record in &artboard.records {
+            let RecordSpec::Machine(spec) = &record.spec else {
+                continue;
+            };
+            if let Some(owner) = spec.owner() {
+                owned.entry(owner).or_default().push(record);
+            }
+        }
+
+        for machine in &artboard.records {
+            if !matches!(
+                machine.spec,
+                RecordSpec::Machine(MachineRecordSpec::Machine(_))
+            ) {
+                continue;
+            }
+            let layers = owned
+                .get(&machine.id)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|record| {
+                    matches!(
+                        record.spec,
+                        RecordSpec::Machine(MachineRecordSpec::Layer { .. })
+                    )
+                })
+                .collect::<Vec<_>>();
+            if layers.is_empty() {
+                return Err(EditDiagnostic::new(
+                    origins.object(machine.id, fallback_operation_index),
+                    vec![EditId::Object(machine.id)],
+                    EditReason::InvalidMachineTopology {
+                        requirement: "at least one state-machine layer",
+                        actual: 0,
+                    },
+                ));
+            }
+
+            for layer in layers {
+                let states = owned
+                    .get(&layer.id)
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .filter(|record| {
+                        matches!(
+                            record.spec,
+                            RecordSpec::Machine(
+                                MachineRecordSpec::AnyState { .. }
+                                    | MachineRecordSpec::EntryState { .. }
+                                    | MachineRecordSpec::ExitState { .. }
+                                    | MachineRecordSpec::AnimationState { .. }
+                            )
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                for (requirement, predicate) in [
+                    (
+                        "exactly one entry state per layer",
+                        MachineRecordSpec::is_entry_state as fn(&MachineRecordSpec) -> bool,
+                    ),
+                    (
+                        "exactly one any state per layer",
+                        MachineRecordSpec::is_any_state as fn(&MachineRecordSpec) -> bool,
+                    ),
+                    (
+                        "exactly one exit state per layer",
+                        MachineRecordSpec::is_exit_state as fn(&MachineRecordSpec) -> bool,
+                    ),
+                ] {
+                    let matching = states
+                        .iter()
+                        .copied()
+                        .filter(|record| {
+                            let RecordSpec::Machine(spec) = &record.spec else {
+                                unreachable!("state inventory contains only machine records")
+                            };
+                            predicate(spec)
+                        })
+                        .collect::<Vec<_>>();
+                    if matching.len() == 1 {
+                        continue;
+                    }
+                    let culprit = matching.last().copied().unwrap_or(layer);
+                    let involved_ids = std::iter::once(layer)
+                        .chain(matching.iter().copied())
+                        .map(|record| EditId::Object(record.id))
+                        .collect();
+                    return Err(EditDiagnostic::new(
+                        origins.object(culprit.id, fallback_operation_index),
+                        involved_ids,
+                        EditReason::InvalidMachineTopology {
+                            requirement,
+                            actual: matching.len(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Lower exactly one durable artboard into one runtime-file record stream.
 ///
 /// Preview materialization uses this function today; deterministic export can reuse the same
@@ -5405,6 +6695,16 @@ fn lower_artboard(
         )?;
     }
 
+    let mut events_by_local = vec![None; objects_by_local.len()];
+    let event_local_ids = append_event_export_records(
+        &mut records,
+        &mut objects_by_local,
+        &mut events_by_local,
+        artboard,
+        fallback_operation_index,
+        origins,
+    )?;
+
     let synthetic_local_count = objects_by_local
         .len()
         .checked_sub(
@@ -5425,11 +6725,20 @@ fn lower_artboard(
                 vec![EditId::Artboard(artboard.id)],
                 EditReason::InternalInvariant,
             )
+        })?
+        .checked_sub(event_local_ids.len())
+        .ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::InternalInvariant,
+            )
         })?;
     let exact_record_count = artboard
         .visual_record_count()
         .checked_add(1)
         .and_then(|count| count.checked_add(synthetic_local_count))
+        .and_then(|count| count.checked_add(event_local_ids.len()))
         .ok_or_else(|| {
             EditDiagnostic::new(
                 fallback_operation_index,
@@ -5456,13 +6765,394 @@ fn lower_artboard(
         fallback_operation_index,
         origins,
     )?;
+    let machines = append_machine_export_records(
+        &mut records,
+        artboard,
+        &animations,
+        &event_local_ids,
+        fallback_operation_index,
+        origins,
+    )?;
     canonicalize_exported_records(&mut records);
     Ok(LoweredArtboard {
         records,
         objects,
         animations,
+        machines,
+        events_by_local,
         objects_by_local,
     })
+}
+
+fn append_event_export_records(
+    records: &mut Vec<ExportedRecord>,
+    objects_by_local: &mut Vec<Option<ObjectId>>,
+    events_by_local: &mut Vec<Option<EventId>>,
+    artboard: &ArtboardDefinition,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<BTreeMap<EventId, usize>, EditDiagnostic> {
+    let mut event_local_ids = BTreeMap::new();
+    for (record, spec) in artboard.machine_views() {
+        let MachineRecordSpec::Event(spec) = spec else {
+            continue;
+        };
+        let local_id = objects_by_local.len();
+        let event = EventId(record.id);
+        if event_local_ids.insert(event, local_id).is_some() {
+            return Err(EditDiagnostic::new(
+                origins.object(record.id, fallback_operation_index),
+                vec![EditId::Object(record.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+        records.push(ExportedRecord {
+            kind: ExportedObjectKind::Event,
+            properties: spec
+                .name
+                .iter()
+                .cloned()
+                .map(ExportedProperty::ComponentName)
+                .collect(),
+        });
+        objects_by_local.push(None);
+        events_by_local.push(Some(event));
+    }
+    Ok(event_local_ids)
+}
+
+fn append_machine_export_records(
+    records: &mut Vec<ExportedRecord>,
+    artboard: &ArtboardDefinition,
+    animation_indices: &BTreeMap<AnimationId, usize>,
+    event_local_ids: &BTreeMap<EventId, usize>,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<BTreeMap<MachineId, usize>, EditDiagnostic> {
+    let mut owned = BTreeMap::<ObjectId, Vec<(&RecordDefinition, &MachineRecordSpec)>>::new();
+    let mut machines = Vec::new();
+    for (record, spec) in artboard.machine_views() {
+        if let MachineRecordSpec::Machine(spec) = spec {
+            machines.push((record, spec));
+        }
+        if let Some(owner) = spec.owner() {
+            owned.entry(owner).or_default().push((record, spec));
+        }
+    }
+
+    let mut machine_indices = BTreeMap::new();
+    for (machine_index, (machine, spec)) in machines.into_iter().enumerate() {
+        let machine_id = MachineId(machine.id);
+        if machine_indices.insert(machine_id, machine_index).is_some() {
+            return Err(EditDiagnostic::new(
+                origins.object(machine.id, fallback_operation_index),
+                vec![EditId::Object(machine.id)],
+                EditReason::IdentityCollision,
+            ));
+        }
+        records.push(ExportedRecord {
+            kind: ExportedObjectKind::StateMachine,
+            properties: spec
+                .name
+                .iter()
+                .cloned()
+                .map(ExportedProperty::AnimationName)
+                .collect(),
+        });
+
+        let inputs = owned
+            .get(&machine.id)
+            .into_iter()
+            .flatten()
+            .filter_map(|(record, spec)| match spec {
+                MachineRecordSpec::TriggerInput {
+                    machine: owner,
+                    spec,
+                } if *owner == machine.id => Some((*record, spec)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut input_names = BTreeMap::<&str, ObjectId>::new();
+        for (input, spec) in &inputs {
+            if let Some(existing) = input_names.insert(spec.name.as_str(), input.id) {
+                return Err(EditDiagnostic::new(
+                    origins.object(input.id, fallback_operation_index),
+                    vec![
+                        EditId::Object(machine.id),
+                        EditId::Object(existing),
+                        EditId::Object(input.id),
+                    ],
+                    EditReason::DuplicateMachineInputName,
+                ));
+            }
+        }
+        let input_indices = inputs
+            .iter()
+            .enumerate()
+            .map(|(index, (record, _))| (MachineInputId(record.id), index))
+            .collect::<BTreeMap<_, _>>();
+        for (_, input) in inputs {
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::StateMachineTrigger,
+                properties: vec![ExportedProperty::StateMachineComponentName(
+                    input.name.clone(),
+                )],
+            });
+        }
+
+        let layers = owned
+            .get(&machine.id)
+            .into_iter()
+            .flatten()
+            .filter_map(|(record, spec)| match spec {
+                MachineRecordSpec::Layer {
+                    machine: owner,
+                    spec,
+                } if *owner == machine.id => Some((*record, spec)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for (layer, layer_spec) in layers {
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::StateMachineLayer,
+                properties: layer_spec
+                    .name
+                    .iter()
+                    .cloned()
+                    .map(ExportedProperty::StateMachineComponentName)
+                    .collect(),
+            });
+            let states = owned
+                .get(&layer.id)
+                .into_iter()
+                .flatten()
+                .filter(|(_, spec)| {
+                    matches!(
+                        spec,
+                        MachineRecordSpec::AnyState { .. }
+                            | MachineRecordSpec::EntryState { .. }
+                            | MachineRecordSpec::ExitState { .. }
+                            | MachineRecordSpec::AnimationState { .. }
+                    )
+                })
+                .copied()
+                .collect::<Vec<_>>();
+            let state_indices = states
+                .iter()
+                .enumerate()
+                .map(|(index, (record, _))| (record.id, index))
+                .collect::<BTreeMap<_, _>>();
+            for (state, state_spec) in states {
+                let (kind, properties) = match state_spec {
+                    MachineRecordSpec::AnyState { .. } => {
+                        (ExportedObjectKind::AnyState, Vec::new())
+                    }
+                    MachineRecordSpec::EntryState { .. } => {
+                        (ExportedObjectKind::EntryState, Vec::new())
+                    }
+                    MachineRecordSpec::ExitState { .. } => {
+                        (ExportedObjectKind::ExitState, Vec::new())
+                    }
+                    MachineRecordSpec::AnimationState { animation, .. } => {
+                        let animation_index =
+                            animation_indices.get(animation).copied().ok_or_else(|| {
+                                EditDiagnostic::new(
+                                    origins.object(state.id, fallback_operation_index),
+                                    vec![
+                                        EditId::Object(state.id),
+                                        EditId::Object(animation.object_id()),
+                                    ],
+                                    EditReason::UnknownObject,
+                                )
+                            })?;
+                        let animation_index = u32::try_from(animation_index).map_err(|_| {
+                            EditDiagnostic::new(
+                                origins.object(state.id, fallback_operation_index),
+                                vec![EditId::Object(state.id)],
+                                EditReason::CapacityExceeded,
+                            )
+                        })?;
+                        (
+                            ExportedObjectKind::AnimationState,
+                            vec![
+                                ExportedProperty::StateAnimationId(animation_index),
+                                ExportedProperty::StateSpeed(1.0),
+                            ],
+                        )
+                    }
+                    _ => {
+                        return Err(EditDiagnostic::new(
+                            origins.object(state.id, fallback_operation_index),
+                            vec![EditId::Object(state.id)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
+                };
+                records.push(ExportedRecord { kind, properties });
+
+                append_machine_fire_events(
+                    records,
+                    state.id,
+                    &owned,
+                    event_local_ids,
+                    fallback_operation_index,
+                    origins,
+                )?;
+
+                for (transition, transition_spec) in owned
+                    .get(&state.id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(_, spec)| matches!(spec, MachineRecordSpec::Transition { .. }))
+                    .copied()
+                {
+                    let MachineRecordSpec::Transition { source, target } = transition_spec else {
+                        unreachable!("filtered transition records")
+                    };
+                    if *source != state.id {
+                        return Err(EditDiagnostic::new(
+                            origins.object(transition.id, fallback_operation_index),
+                            vec![EditId::Object(transition.id)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
+                    let target_index = state_indices.get(target).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            origins.object(transition.id, fallback_operation_index),
+                            vec![EditId::Object(transition.id), EditId::Object(*target)],
+                            EditReason::UnknownObject,
+                        )
+                    })?;
+                    let target_index = u32::try_from(target_index).map_err(|_| {
+                        EditDiagnostic::new(
+                            origins.object(transition.id, fallback_operation_index),
+                            vec![EditId::Object(transition.id)],
+                            EditReason::CapacityExceeded,
+                        )
+                    })?;
+                    records.push(ExportedRecord {
+                        kind: ExportedObjectKind::StateTransition,
+                        properties: vec![
+                            ExportedProperty::StateToId(target_index),
+                            ExportedProperty::StateTransitionFlags(0),
+                            ExportedProperty::StateTransitionDuration(0),
+                            ExportedProperty::StateTransitionExitTime(0),
+                            ExportedProperty::StateTransitionRandomWeight(1),
+                        ],
+                    });
+                    for (condition, condition_spec) in owned
+                        .get(&transition.id)
+                        .into_iter()
+                        .flatten()
+                        .filter(|(_, spec)| {
+                            matches!(spec, MachineRecordSpec::TriggerCondition { .. })
+                        })
+                        .copied()
+                    {
+                        let MachineRecordSpec::TriggerCondition {
+                            transition: owner,
+                            input,
+                        } = condition_spec
+                        else {
+                            unreachable!("filtered trigger conditions")
+                        };
+                        if *owner != transition.id {
+                            return Err(EditDiagnostic::new(
+                                origins.object(condition.id, fallback_operation_index),
+                                vec![EditId::Object(condition.id)],
+                                EditReason::InternalInvariant,
+                            ));
+                        }
+                        let input_index = input_indices.get(input).copied().ok_or_else(|| {
+                            EditDiagnostic::new(
+                                origins.object(condition.id, fallback_operation_index),
+                                vec![
+                                    EditId::Object(condition.id),
+                                    EditId::Object(input.object_id()),
+                                ],
+                                EditReason::UnknownObject,
+                            )
+                        })?;
+                        let input_index = u32::try_from(input_index).map_err(|_| {
+                            EditDiagnostic::new(
+                                origins.object(condition.id, fallback_operation_index),
+                                vec![EditId::Object(condition.id)],
+                                EditReason::CapacityExceeded,
+                            )
+                        })?;
+                        records.push(ExportedRecord {
+                            kind: ExportedObjectKind::TransitionTriggerCondition,
+                            properties: vec![ExportedProperty::StateMachineInputId(input_index)],
+                        });
+                    }
+                    append_machine_fire_events(
+                        records,
+                        transition.id,
+                        &owned,
+                        event_local_ids,
+                        fallback_operation_index,
+                        origins,
+                    )?;
+                }
+            }
+        }
+    }
+    Ok(machine_indices)
+}
+
+fn append_machine_fire_events(
+    records: &mut Vec<ExportedRecord>,
+    owner: ObjectId,
+    owned: &BTreeMap<ObjectId, Vec<(&RecordDefinition, &MachineRecordSpec)>>,
+    event_local_ids: &BTreeMap<EventId, usize>,
+    fallback_operation_index: usize,
+    origins: &SpecOrigins,
+) -> std::result::Result<(), EditDiagnostic> {
+    for (record, spec) in owned
+        .get(&owner)
+        .into_iter()
+        .flatten()
+        .filter(|(_, spec)| matches!(spec, MachineRecordSpec::FireEvent { .. }))
+        .copied()
+    {
+        let MachineRecordSpec::FireEvent {
+            state,
+            event,
+            occurs,
+        } = spec
+        else {
+            unreachable!("filtered fire-event records")
+        };
+        if *state != owner {
+            return Err(EditDiagnostic::new(
+                origins.object(record.id, fallback_operation_index),
+                vec![EditId::Object(record.id)],
+                EditReason::InternalInvariant,
+            ));
+        }
+        let event_local_id = event_local_ids.get(event).copied().ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.object(record.id, fallback_operation_index),
+                vec![EditId::Object(record.id), EditId::Object(event.object_id())],
+                EditReason::UnknownObject,
+            )
+        })?;
+        let event_local_id = u32::try_from(event_local_id).map_err(|_| {
+            EditDiagnostic::new(
+                origins.object(record.id, fallback_operation_index),
+                vec![EditId::Object(record.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        records.push(ExportedRecord {
+            kind: ExportedObjectKind::StateMachineFireEvent,
+            properties: vec![
+                ExportedProperty::EventId(event_local_id),
+                ExportedProperty::FireEventOccurs(*occurs),
+            ],
+        });
+    }
+    Ok(())
 }
 
 fn append_animation_export_records(
@@ -6374,6 +8064,8 @@ mod tests {
                 file,
                 objects,
                 animations: BTreeMap::new(),
+                machines: BTreeMap::new(),
+                events_by_local: vec![None; local_count],
                 objects_by_artboard_local: BTreeMap::from([(artboard, objects_by_local.clone())]),
                 nested_artboard_targets: BTreeMap::new(),
             },
@@ -6516,6 +8208,8 @@ mod tests {
                 file,
                 objects,
                 animations: BTreeMap::new(),
+                machines: BTreeMap::new(),
+                events_by_local: vec![None; local_count],
                 objects_by_artboard_local: BTreeMap::from([(artboard, objects_by_local.clone())]),
                 nested_artboard_targets: BTreeMap::new(),
             },
@@ -9351,6 +11045,166 @@ mod tests {
             .map(|component| component.global_id)
             .context("scripted drawable global id")?;
         Ok((scene, instance, global_id))
+    }
+
+    #[test]
+    fn authored_machine_export_reimports_with_identical_trigger_event_behavior() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Fader".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let idle = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Idle".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+            let active = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Active".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+            let mut machines = tx.machines();
+            let event = machines.create_event(
+                artboard,
+                EventSpec {
+                    name: Some("Reached active".into()),
+                },
+            )?;
+            let machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Switcher".into()),
+                },
+            )?;
+            let trigger =
+                machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+            let layer = machines.create_layer(
+                machine,
+                MachineLayerSpec {
+                    name: Some("Main".into()),
+                },
+            )?;
+            let entry = machines.create_entry_state(layer)?;
+            let any = machines.create_any_state(layer)?;
+            machines.create_exit_state(layer)?;
+            let idle_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+            let active_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+            machines.create_transition(entry, idle_state)?;
+            let transition = machines.create_transition(any, active_state)?;
+            machines.add_trigger_condition(transition, trigger)?;
+            machines.add_fire_event(active_state, event, FireEventOccurs::AtStart)?;
+            Ok(())
+        })?;
+
+        let runtime =
+            RuntimeFile::from_authoring_records(scene.export_records().into_authoring_records())?;
+        let file = Arc::new(File::from_runtime(runtime)?);
+        let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let mut machine = instance
+            .state_machine_instance(0)
+            .ok_or_else(|| anyhow::anyhow!("state machine"))?;
+        let trigger = machine
+            .input_index_named("Go")
+            .ok_or_else(|| anyhow::anyhow!("Go trigger"))?;
+
+        assert!(instance.advance_with_state_machine(&mut machine, 0.0));
+        assert_eq!(
+            instance.raw().double_property(1, PROPERTY_WORLD_OPACITY),
+            Some(0.2)
+        );
+        assert_eq!(machine.reported_event_count(), 0);
+        assert!(machine.fire_trigger(trigger));
+        assert!(instance.advance_with_state_machine(&mut machine, 0.0));
+        assert_eq!(
+            instance.raw().double_property(1, PROPERTY_WORLD_OPACITY),
+            Some(0.8)
+        );
+        let event = machine
+            .reported_event(0)
+            .ok_or_else(|| anyhow::anyhow!("reported event"))?;
+        assert_eq!(event.event_local_index(), 2);
+        assert_eq!(event.name(), Some("Reached active"));
+        assert_eq!(event.seconds_delay(), 0.0);
+        assert_eq!(machine.reported_event_count(), 1);
+        instance.advance_with_state_machine(&mut machine, 0.0);
+        assert_eq!(machine.reported_event_count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn fire_rechecks_machine_input_kind_and_index_fences() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, machine), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 10.0,
+                height: 10.0,
+            })?;
+            let mut machines = tx.machines();
+            let machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Machine".into()),
+                },
+            )?;
+            let trigger =
+                machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+            let layer = machines.create_layer(
+                machine,
+                MachineLayerSpec {
+                    name: Some("Layer".into()),
+                },
+            )?;
+            machines.create_any_state(layer)?;
+            let entry = machines.create_entry_state(layer)?;
+            let exit = machines.create_exit_state(layer)?;
+            let transition = machines.create_transition(entry, exit)?;
+            machines.add_trigger_condition(transition, trigger)?;
+            Ok((artboard, machine))
+        })?;
+        let instance = scene.instantiate(artboard)?;
+        let valid = scene.machine_input(instance, machine, "Go")?;
+
+        let mut wrong_kind = valid;
+        wrong_kind.input_kind = StateMachineInputKind::Bool;
+        assert_eq!(scene.frame().fire(wrong_kind), Err(StaleCursor));
+
+        let mut unknown_input = valid;
+        unknown_input.input_index = usize::MAX;
+        assert_eq!(scene.frame().fire(unknown_input), Err(StaleCursor));
+
+        let mut unknown_machine = valid;
+        unknown_machine.machine = MachineId(ObjectId(u64::MAX));
+        assert_eq!(scene.frame().fire(unknown_machine), Err(StaleCursor));
+        assert!(scene.frame().fire(valid).is_ok());
+        Ok(())
     }
 
     #[cfg(feature = "scripting")]

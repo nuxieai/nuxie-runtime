@@ -335,6 +335,16 @@ Sol's read-only review passes with no findings across upload-slot lifetime,
 submission ordering, binding ranges, repeated textures, and dummy/image-only
 paths.
 
+### Item 134 Update
+
+The last three counter rows were caused by translated control points entering
+Wang's second-difference calculation. C++ forms the differences locally and
+then applies only `VectorXform`; Rust now does the same for shared stroke,
+feather, fill, and outer-cubic preparation. The direct OverStroke draw-3
+`RIVEATS` oracle matches all five raw records, and the full cumulative sweep
+reaches exact 497-patch parity in both modes plus 986 MSAA instances. The
+ranked deterministic report is empty (`3->0`).
+
 ## Port Checklist
 
 | mechanism | C++ source | Counter or symptom | Rust standing |
@@ -396,6 +406,9 @@ paths.
 - Item 132 closes all eleven upload rows in two mode-wide steps, moving the
   report 14->6->3. `UPLOAD-DUP` and `UPLOAD-LAYOUT` are complete; only the
   three `OVER-PATCH` rows remain in the deterministic tail.
+- Item 134 closes all three `OVER-PATCH` rows by matching C++ Wang float
+  semantics. The deterministic tail is now zero; further R4 work must come
+  from the timing-defined gate, not an invented counter row.
 - `buffer_upload_bytes`, `tessellation_spans`, and `path_patches` represent
   real data or geometry output. Reduce them only with a C++-matched data-layout
   or algorithm explanation; never optimize the counter by hiding accounting.

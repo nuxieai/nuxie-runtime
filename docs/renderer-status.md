@@ -1623,10 +1623,27 @@ Run `make renderer-golden`.
     `batchedconvexpaths` upload rows disappear under shared typed-resource
     reuse, proving no separate payload-layout residual remains. Per-class
     telemetry would no longer answer an open row and is not added.
-134. [ ] Close `OVER-PATCH` from a per-draw C++/Rust `RIVEATS` preparation
-    oracle. Locate the first OverStroke draw whose cumulative count diverges,
-    then correct only the shared stroke-preparation source that emits patch
-    498. Targets are 497 patches in both modes and 986 MSAA instances.
+134. [x] Close `OVER-PATCH` from a per-draw C++/Rust preparation oracle. The
+    cumulative sweep agrees through draws 1-2 and first diverges at draw 3,
+    where the translated quadratic-as-cubic has four C++ parametric segments
+    but five in Rust. C++ evaluates Wang second differences in path-local
+    coordinates and applies only the matrix's linear `VectorXform`; Rust had
+    transformed points first, allowing translation cancellation to change the
+    segment count. Shared fill, stroke, feather, and outer-cubic preparation
+    now mirrors C++.
+    `direct-overstroke-quad` captures patch range `1+3` and all five raw
+    `RIVEATS` records; they compare bit-for-bit. Every one of the twelve draw
+    prefixes now has exact patch parity in both modes and exact MSAA instance
+    parity. Final tuples are atomic `(9,988,490,497,37544)` and MSAA
+    `(8,986,489,497,37696)` for
+    `(draws,instances,spans,patches,upload-bytes)`. The ranked counter report
+    moves `3->0`; its one-frame 2.618x aggregate and 6.542x worst-row timing
+    are directional context only. No A-B-B-A was run for this exact
+    structural correction.
+135. [ ] Run the staged timing-defined R4 gate against immutable pre-tail and
+    post-tail runner artifacts. Treat exact counter parity as complete; use
+    the A-B-B-A harness only to decide whether the same-capability C++ Dawn
+    timing threshold passes or identifies the next timing-only bottleneck.
 
 ## R2 Completion Record
 
@@ -2787,6 +2804,19 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-16: Closed R4 item 134 and the finite deterministic counter tail.
+  The twelve-prefix OverStroke probe located draw 3; its translated
+  quadratic-as-cubic used five Rust parametric segments against C++'s four
+  because Rust transformed control points before Wang's second differences.
+  Local differences plus the linear matrix now match C++ across fill, stroke,
+  feather, and outer-cubic preparation. The focused `1+3`/five-record
+  `RIVEATS` artifact is bit-exact, every prefix has exact patch and span
+  parity, MSAA instances reach 986 exactly, and the ranked report moves
+  3->0. The full renderer corpus remains 1,409/0/59, the perf-counter suite
+  passes 286/40, and normal/scripted V2 floors remain 584/35. Sol's first
+  review found three test-strength gaps; payload segment words, atomic
+  accounting, and skewed transforms are now pinned, and the final review
+  passes. Next, run the staged timing-defined R4 gate.
 - 2026-07-16: Closed R4 item 130 and pre-attributed the complete remaining
   counter tail. One C++-ordered logical tessellation allocation now carries
   both midpoint-fan and outer-curve atomic work across texture rows while

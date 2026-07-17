@@ -327,6 +327,9 @@ impl LiveBackend for CppBackend {
 mod tests {
     use super::lower_median;
 
+    #[cfg(all(feature = "perf-counters", target_os = "macos"))]
+    use nuxie_render_stream::{Command, RenderStream};
+
     #[test]
     fn uses_the_lower_median_for_an_even_sample_count() {
         let mut values = [9, 2, 7, 4];
@@ -336,5 +339,92 @@ mod tests {
     #[test]
     fn rejects_an_empty_measurement_set() {
         assert!(lower_median(&mut []).is_err());
+    }
+
+    #[cfg(all(feature = "perf-counters", target_os = "macos"))]
+    #[test]
+    #[ignore = "diagnostic C++ Dawn/Rust prefix oracle"]
+    fn reports_overstroke_work_after_each_draw() {
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/OverStroke.rive-stream"
+        )))
+        .unwrap();
+        let (width, height) = stream.frame_size.unwrap();
+        let clear = stream.clear_color.unwrap_or(0);
+        let draw_ends = stream.frames[0]
+            .commands
+            .iter()
+            .enumerate()
+            .filter_map(|(index, command)| {
+                matches!(command, Command::DrawPath { .. }).then_some(index + 1)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(draw_ends.len(), 12);
+
+        for (rust_mode, cpp_mode, cpp_instance_excess) in [
+            (
+                nuxie_renderer::RenderMode::ClockwiseAtomic,
+                nuxie_renderer_ffi::FfiRenderMode::ClockwiseAtomic,
+                1,
+            ),
+            (
+                nuxie_renderer::RenderMode::Msaa,
+                nuxie_renderer_ffi::FfiRenderMode::Msaa,
+                0,
+            ),
+        ] {
+            let mut rust_factory =
+                nuxie_renderer::WgpuFactory::new_with_mode(width, height, rust_mode).unwrap();
+            let mut cpp_factory = nuxie_renderer_ffi::FfiFactory::new_dawn(width, height).unwrap();
+
+            for (draw_index, &command_end) in draw_ends.iter().enumerate() {
+                let mut prefix = stream.clone();
+                prefix.frames[0].commands.truncate(command_end);
+
+                let mut rust_frame = rust_factory.begin_frame_for_benchmark(clear, true);
+                prefix
+                    .replay_frame(0, &mut rust_factory, &mut rust_frame)
+                    .unwrap();
+                let rust = rust_frame.finish_for_benchmark().unwrap().backend_work;
+
+                let mut cpp_frame = cpp_factory
+                    .begin_frame_with_mode_and_metrics(clear, cpp_mode, true)
+                    .unwrap();
+                prefix
+                    .replay_frame(0, &mut cpp_factory, &mut cpp_frame)
+                    .unwrap();
+                let cpp = cpp_frame.end_with_metrics().unwrap().backend_work;
+
+                println!(
+                    "mode={rust_mode:?} draw={} command_end={command_end} patches={}/{} instances={}/{} spans={}/{}",
+                    draw_index + 1,
+                    cpp.path_patches,
+                    rust.path_patches,
+                    cpp.gpu_draw_instances,
+                    rust.gpu_draw_instances,
+                    cpp.tessellation_spans,
+                    rust.tessellation_spans,
+                );
+                assert_eq!(
+                    cpp.path_patches,
+                    rust.path_patches,
+                    "path-patch mismatch in {rust_mode:?} after draw {}",
+                    draw_index + 1,
+                );
+                assert_eq!(
+                    cpp.tessellation_spans,
+                    rust.tessellation_spans,
+                    "tessellation-span mismatch in {rust_mode:?} after draw {}",
+                    draw_index + 1,
+                );
+                assert_eq!(
+                    cpp.gpu_draw_instances,
+                    rust.gpu_draw_instances + cpp_instance_excess,
+                    "GPU-instance mismatch in {rust_mode:?} after draw {}",
+                    draw_index + 1,
+                );
+            }
+        }
     }
 }

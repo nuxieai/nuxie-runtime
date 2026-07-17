@@ -191,6 +191,21 @@ corpus promotion gate. `build.sh` requires exactly one contour, patch range
 `1+10`, a nonempty canonical span artifact, and a final-frame artifact of
 exactly `640020` bytes.
 
+`direct-overstroke-quad-spans.bin`, `direct-overstroke-quad-inputs.bin`, and
+`direct-overstroke-quad-blit.rgba` isolate draw 3 from
+`fixtures/renderer/streams/gm/OverStroke.rive-stream`, the first cumulative
+work-counter divergence in that scene. The closed path is one line followed
+by the stream's quadratic-as-cubic from `(100, 0)` back to `(0, 0)`, stroked
+at thickness `500` after the exact effective transform
+`[0.2, 0, 0, 0.2, 290, 80]`. The `RIVEATS` artifact pins all five CPU span
+records, including four parametric segments for the cubic; `RIVEATI` pins
+patch range `1+3`, one contour, and the `2048 x 1` tessellation texture. Their
+canonical sizes are `348` and `32824` bytes. This oracle protects C++ Wang
+formula parity: second differences are evaluated in path-local coordinates
+and only then transformed by the matrix's linear component, so translation
+cannot change a curve's segment count. The `500 x 500` Dawn blit is a
+diagnostic artifact of exactly `1000020` bytes.
+
 `direct-rawtext-spans.bin`, `direct-rawtext-inputs.bin`, and
 `direct-rawtext-blit.rgba` isolate draw 1 from
 `fixtures/renderer/streams/gm/rawtext.rive-stream`. During each build,
@@ -464,6 +479,10 @@ RIVE_CPP_DIRECT_STROKES_ROUND_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct
   cargo test -p nuxie-renderer \
   tests::cpp_direct_strokes_round_cpu_spans_match_rust_record_for_record \
   -- --exact --ignored --nocapture
+RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-overstroke-quad-spans.bin" \
+  cargo test -p nuxie-renderer \
+  tests::cpp_direct_overstroke_quad_cpu_spans_match_rust_record_for_record \
+  -- --exact --ignored --nocapture
 RIVE_CPP_DIRECT_RAWTEXT_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-rawtext-inputs.bin" \
   cargo test -p nuxie-renderer \
   tests::cpp_webgpu_direct_rawtext_tessellation_matches_rust \
@@ -534,7 +553,8 @@ nonempty absolute `RIVE_CPP_ATLAS_MASK`, `RIVE_CPP_ATLAS_INPUTS`,
 `RIVE_CPP_SOFTENED_CUSP`, or
 `RIVE_CPP_DIRECT_CUSP_INPUTS`, `RIVE_CPP_DIRECT_POLYSHARK_INPUTS`, or
 `RIVE_CPP_DIRECT_BAD_SKIN_INPUTS`, `RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS`,
-`RIVE_CPP_DIRECT_STROKES_ROUND_SPANS`, `RIVE_CPP_DIRECT_RAWTEXT_INPUTS`,
+`RIVE_CPP_DIRECT_STROKES_ROUND_SPANS`,
+`RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS`, `RIVE_CPP_DIRECT_RAWTEXT_INPUTS`,
 `RIVE_CPP_DIRECT_RAWTEXT_SPANS`, `RIVE_CPP_ATLAS_BLIT`, or
 `RIVE_CPP_ATLAS_CLIPPED_BLIT`, `RIVE_CPP_ATLAS_PATH_CLIPPED_BLIT`, or
 `RIVE_CPP_ATLAS_CHANGING_PATH_CLIPPED_BLIT`, or

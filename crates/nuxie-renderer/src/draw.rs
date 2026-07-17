@@ -408,9 +408,12 @@ fn build_stroke_or_feather_tessellation(
                     let (parametric_segments, polar_segments) = if curve.is_line {
                         (1, 1)
                     } else {
-                        let transformed = cubic.map(|point| transform.transform_point(point));
                         (
-                            cubic_segment_count_with_precision(transformed, parametric_precision),
+                            cubic_segment_count_with_precision_and_transform(
+                                cubic,
+                                parametric_precision,
+                                transform,
+                            ),
                             if is_stroke {
                                 round_join_segment_count(
                                     tangents[0],
@@ -1299,17 +1302,7 @@ pub(crate) fn build_interior_tessellation(
 }
 
 fn outer_cubic_subdivision_count(points: [Vec2D; 4], transform: Mat2D) -> u32 {
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    let transformed_second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = a.x - 2.0 * b.x + c.x;
-        let y = a.y - 2.0 * b.y + c.y;
-        let transformed_x = xx * x + xy * y;
-        let transformed_y = yx * x + yy * y;
-        transformed_x * transformed_x + transformed_y * transformed_y
-    };
-    let max_length_squared = transformed_second_difference(points[0], points[1], points[2]).max(
-        transformed_second_difference(points[1], points[2], points[3]),
-    );
+    let max_length_squared = max_transformed_cubic_second_difference(points, transform);
     let length_term_squared = (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
     let wang_segments = (max_length_squared * length_term_squared).sqrt().sqrt();
     (wang_segments / 16.0)
@@ -1581,7 +1574,11 @@ pub(crate) fn build_fill_tessellation(
                 if curve.is_line {
                     1
                 } else {
-                    cubic_segment_count(curve.cubic.map(|point| transform.transform_point(point)))
+                    cubic_segment_count_with_precision_and_transform(
+                        curve.cubic,
+                        PARAMETRIC_PRECISION as f32,
+                        transform,
+                    )
                 }
             })
             .collect::<Vec<_>>();
@@ -1964,19 +1961,35 @@ pub(crate) fn cubic_segment_count(points: [Vec2D; 4]) -> u32 {
 }
 
 fn cubic_segment_count_with_precision(points: [Vec2D; 4], precision: f32) -> u32 {
-    let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = a.x - 2.0 * b.x + c.x;
-        let y = a.y - 2.0 * b.y + c.y;
-        x * x + y * y
-    };
-    let max_length_squared = second_difference(points[0], points[1], points[2])
-        .max(second_difference(points[1], points[2], points[3]));
+    cubic_segment_count_with_precision_and_transform(points, precision, Mat2D::IDENTITY)
+}
+
+fn cubic_segment_count_with_precision_and_transform(
+    points: [Vec2D; 4],
+    precision: f32,
+    transform: Mat2D,
+) -> u32 {
+    let max_length_squared = max_transformed_cubic_second_difference(points, transform);
     let length_term_squared = (9.0 / 16.0) * precision.powi(2);
     (max_length_squared * length_term_squared)
         .sqrt()
         .sqrt()
         .ceil()
         .clamp(1.0, MAX_PARAMETRIC_SEGMENTS as f32) as u32
+}
+
+fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D) -> f32 {
+    let [xx, yx, xy, yy, _, _] = transform.0;
+    let transformed_second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
+        let x = -2.0 * b.x + a.x + c.x;
+        let y = -2.0 * b.y + a.y + c.y;
+        let transformed_x = xx * x + xy * y;
+        let transformed_y = yx * x + yy * y;
+        transformed_x * transformed_x + transformed_y * transformed_y
+    };
+    transformed_second_difference(points[0], points[1], points[2]).max(
+        transformed_second_difference(points[1], points[2], points[3]),
+    )
 }
 
 pub(crate) fn triangulate_contour(points: &[Vec2D]) -> Option<Vec<u32>> {
@@ -2081,6 +2094,31 @@ mod tests {
         ];
         assert_eq!(cubic_segment_count(curve), 21);
         assert_eq!(coarse_cubic_segment_count(curve), 4);
+    }
+
+    #[test]
+    fn wang_segment_count_applies_only_the_linear_transform() {
+        let overstroke_quad = [
+            Vec2D::new(100.0, 0.0),
+            Vec2D::new(66.666_664, -26.666_668),
+            Vec2D::new(33.333_336, -26.666_668),
+            Vec2D::new(0.0, 0.0),
+        ];
+        let scaled = Mat2D([0.2, 0.0, 0.0, 0.2, 0.0, 0.0]);
+        let translated = Mat2D([0.2, 0.0, 0.0, 0.2, 290.0, 80.0]);
+        let skewed = Mat2D([0.0, 0.1, 0.2, 0.0, 0.0, 0.0]);
+        let translated_skew = Mat2D([0.0, 0.1, 0.2, 0.0, -410.0, 730.0]);
+
+        for transform in [scaled, translated, skewed, translated_skew] {
+            assert_eq!(
+                cubic_segment_count_with_precision_and_transform(
+                    overstroke_quad,
+                    PARAMETRIC_PRECISION as f32,
+                    transform,
+                ),
+                4
+            );
+        }
     }
 
     #[test]

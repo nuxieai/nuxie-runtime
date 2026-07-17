@@ -81,10 +81,39 @@ Final verification passes renderer exact=1,409/diverges=0/gated=59,
 normal/scripted V2 floors at 584/35 exact segments, the full workspace,
 formatting, and diff hygiene. Sol's read-only review passes with no findings.
 
-`OVER-PATCH` remains oracle-first. Capture the twelve OverStroke draws as
-per-draw `RIVEATS` records, compare cumulative patch counts and raw 64-byte
-spans, and change only the first shared preparation branch that emits Rust's
-498th patch. Do not guess at implicit-close or join handling.
+`OVER-PATCH` followed the oracle-first rule below: the twelve-draw cumulative
+probe and raw `RIVEATS` records located the first mismatch before any source
+change.
+
+## Item 134 Closure And Empty Tail
+
+The twelve-prefix C++ Dawn/Rust sweep agrees through draws 1-2 and locates the
+first mismatch at draw 3. Its translated quadratic-as-cubic used four
+parametric segments in C++ and five in Rust; polar and join counts already
+matched. C++ `wangs_formula::cubic_pow4` forms second differences in local
+coordinates and then applies `VectorXform`, which excludes translation. Rust
+had transformed all four points first, so floating-point cancellation around
+the effective translation `(290,80)` changed the fourth-root ceiling.
+
+Rust now applies only the matrix's linear component to local second
+differences in shared stroke, feather, fill, and outer-cubic preparation. The
+new `direct-overstroke-quad` oracle pins patch range `1+3`, one contour, the
+`2048x1` tessellation texture, and all five raw 64-byte `RIVEATS` records. The
+Rust records match C++ bit-for-bit. All twelve cumulative prefixes have exact
+patch counts in both modes and exact MSAA instance counts.
+
+The final fixed tuples are atomic `(9,988,490,497,37544)` and MSAA
+`(8,986,489,497,37696)` for
+`(draws,instances,spans,patches,upload-bytes)`. The one-lower atomic draw and
+instance remain the documented C++ initialize-draw versus Rust clear
+accounting difference. The complete ranked report moves `3->0`; no
+deterministic excess row remains. Its current one-frame aggregate is 2.618x
+and worst row 6.542x, retained only as a directional snapshot. R4 work now
+moves to the staged timing-defined gate rather than inventing another counter
+task. Sol's final read-only review passes after the validator was strengthened
+to pin all five x ranges and segment tuples, the prefix probe began asserting
+span and documented atomic-instance accounting, and a skewed near-boundary
+unit case covered both off-diagonal matrix terms.
 
 ## Item 131 Closure And Prior Tail
 
@@ -184,8 +213,8 @@ class B: shared implementation work.
    tessellation and every draw pipeline; reports move `14->6->3`.
 4. [x] `UPLOAD-LAYOUT`: both `batchedconvexpaths` rows disappear under the
    shared-resource port, so the proposed telemetry is unnecessary.
-5. [ ] `OVER-PATCH`: capture one focused C++/Rust per-draw preparation oracle,
-   find the 498th Rust patch, and correct the shared stroke source.
+5. [x] `OVER-PATCH`: item 134 locates draw 3 with a focused raw-span oracle,
+   ports C++'s translation-free Wang calculation, and moves the report `3->0`.
 
 ## Execution And Stop Rules
 

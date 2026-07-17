@@ -9032,7 +9032,7 @@ mod tests {
                 work[0].path_patches,
                 work[0].buffer_upload_bytes,
             ),
-            (9, 988, 489, 498, 37_544)
+            (9, 988, 490, 497, 37_544)
         );
         assert_eq!(
             (
@@ -9042,7 +9042,7 @@ mod tests {
                 work[1].path_patches,
                 work[1].buffer_upload_bytes,
             ),
-            (8, 987, 489, 498, 37_696)
+            (8, 986, 489, 497, 37_696)
         );
     }
 
@@ -11726,6 +11726,27 @@ mod tests {
 
     fn fixed_strokes_round_spans() -> tess_span_oracle::TessSpanArtifact {
         let tessellation = fixed_strokes_round_tessellation();
+        tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
+    }
+
+    fn fixed_overstroke_quad_tessellation() -> draw::FillTessellation {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(100.0, 0.0);
+        path.cubic_to(66.666_664, -26.666_668, 33.333_336, -26.666_668, 0.0, 0.0);
+        path.close();
+        draw::build_stroke_tessellation(
+            &path,
+            Mat2D([0.2, 0.0, 0.0, 0.2, 290.0, 80.0]),
+            500.0,
+            StrokeJoin::Miter,
+            StrokeCap::Butt,
+        )
+        .unwrap()
+    }
+
+    fn fixed_overstroke_quad_spans() -> tess_span_oracle::TessSpanArtifact {
+        let tessellation = fixed_overstroke_quad_tessellation();
         tess_span_oracle::TessSpanArtifact::from_spans(0, &tessellation.spans)
     }
 
@@ -14427,6 +14448,61 @@ mod tests {
             panic!(
                 "C++ direct-strokes-round CPU span mismatch at {}: {error}",
                 path.display()
+            )
+        });
+    }
+
+    #[test]
+    #[ignore = "requires RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS from the C++ WebGPU oracle"]
+    fn cpp_direct_overstroke_quad_cpu_spans_match_rust_record_for_record() {
+        fn summarize(artifact: &tess_span_oracle::TessSpanArtifact) -> String {
+            artifact
+                .records
+                .iter()
+                .enumerate()
+                .map(|(index, record)| {
+                    let x0 = record[12] as u16 as i16;
+                    let x1 = (record[12] >> 16) as u16 as i16;
+                    let parametric = record[14] & 0x3ff;
+                    let polar = record[14] >> 10 & 0x3ff;
+                    let join = record[14] >> 20 & 0x3ff;
+                    format!("{index}:x={x0}..{x1},segments={parametric}/{polar}/{join}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+
+        let path = std::env::var_os("RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS").expect(
+            "RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS is required for the ignored direct-overstroke-quad span test",
+        );
+        assert!(
+            !path.is_empty(),
+            "RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS is empty"
+        );
+        let path = PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS must be absolute"
+        );
+        let bytes = fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read C++ direct-overstroke-quad spans at {}: {error}",
+                path.display()
+            )
+        });
+        let cpp_spans = tess_span_oracle::TessSpanArtifact::parse(&bytes).unwrap_or_else(|error| {
+            panic!(
+                "malformed C++ direct-overstroke-quad spans at {}: {error}",
+                path.display()
+            )
+        });
+        let rust_spans = fixed_overstroke_quad_spans();
+        tess_span_oracle::compare_exact(&cpp_spans, &rust_spans).unwrap_or_else(|error| {
+            panic!(
+                "C++ direct-overstroke-quad CPU span mismatch at {}: {error}\n  C++ {}\n  Rust {}",
+                path.display(),
+                summarize(&cpp_spans),
+                summarize(&rust_spans),
             )
         });
     }

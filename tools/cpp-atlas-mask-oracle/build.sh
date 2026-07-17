@@ -64,6 +64,9 @@ direct_bug339297_inputs_output="${RIVE_DIRECT_BUG339297_INPUT_OUTPUT:-$script_di
 direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"
 direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"
 direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"
+direct_overstroke_quad_inputs_output="${RIVE_DIRECT_OVERSTROKE_QUAD_INPUT_OUTPUT:-$script_dir/out/direct-overstroke-quad-inputs.bin}"
+direct_overstroke_quad_blit_output="${RIVE_DIRECT_OVERSTROKE_QUAD_BLIT_OUTPUT:-$script_dir/out/direct-overstroke-quad-blit.rgba}"
+direct_overstroke_quad_spans_output="${RIVE_DIRECT_OVERSTROKE_QUAD_SPANS_OUTPUT:-$script_dir/out/direct-overstroke-quad-spans.bin}"
 direct_rawtext_inputs_output="${RIVE_DIRECT_RAWTEXT_INPUT_OUTPUT:-$script_dir/out/direct-rawtext-inputs.bin}"
 direct_rawtext_blit_output="${RIVE_DIRECT_RAWTEXT_BLIT_OUTPUT:-$script_dir/out/direct-rawtext-blit.rgba}"
 direct_rawtext_spans_output="${RIVE_DIRECT_RAWTEXT_SPANS_OUTPUT:-$script_dir/out/direct-rawtext-spans.bin}"
@@ -445,6 +448,9 @@ mkdir -p "$injected_dir" \
     "$(dirname "$direct_strokes_round_inputs_output")" \
     "$(dirname "$direct_strokes_round_blit_output")" \
     "$(dirname "$direct_strokes_round_spans_output")" \
+    "$(dirname "$direct_overstroke_quad_inputs_output")" \
+    "$(dirname "$direct_overstroke_quad_blit_output")" \
+    "$(dirname "$direct_overstroke_quad_spans_output")" \
     "$(dirname "$direct_rawtext_inputs_output")" \
     "$(dirname "$direct_rawtext_blit_output")" \
     "$(dirname "$direct_rawtext_spans_output")" \
@@ -570,6 +576,7 @@ if [[ "$run_mode" == build-only ]]; then
 fi
 
 rm -f "$output" "$inputs_output" "$blit_output" "$clipped_blit_output" "$path_clipped_blit_output" "$changing_path_clipped_blit_output" "$nested_path_clipped_blit_output" "$nested_evenodd_path_clipped_blit_output" "$nested_clockwise_path_clipped_blit_output" "$advanced_blend_blit_output" "$atomic_advanced_blend_output" "$atomic_colorburn_pair_output" "$atomic_colorburn_pair_color_output" "$atomic_colorburn_pair_coverage_output" "$atomic_interleavedfeather_full_output" "$atomic_interleavedfeather_full_provenance" "$atomic_dstreadshuffle_full_output" "$atomic_dstreadshuffle_full_provenance" "$atomic_dstreadshuffle_srcover_output" "$atomic_dstreadshuffle_srcover_provenance" "$atomic_spotify_kids_app_icon_full_output" "$atomic_spotify_kids_app_icon_full_coverage" "$atomic_spotify_kids_app_icon_full_clip" "$atomic_spotify_kids_app_icon_full_provenance" "$fill_output" "$fill_inputs_output" "$fill_blit_output" "$cusp_output" "$cusp_inputs_output" "$cusp_blit_output" "$empty_stroke_output" "$empty_stroke_inputs_output" "$empty_stroke_blit_output" "$empty_stroke_overlap_blit_output" "$softened_cusp_output" "$direct_cusp_inputs_output" "$direct_cusp_blit_output" "$direct_cusp_coverage_output" "$direct_polyshark_inputs_output" "$direct_grid_inputs_output" "$direct_flower_inputs_output" "$direct_bad_skin_inputs_output" "$direct_bug339297_inputs_output" "$direct_strokes_round_inputs_output" "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" "$direct_rawtext_spans_output"
+rm -f "$direct_strokes_round_blit_output" "$direct_strokes_round_spans_output" "$direct_overstroke_quad_inputs_output" "$direct_overstroke_quad_blit_output" "$direct_overstroke_quad_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" "$output" "$inputs_output" "$blit_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$clipped_blit_output" clipped
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null /dev/null "$path_clipped_blit_output" path-clipped
@@ -632,6 +639,7 @@ validate_spotify_artifacts
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_bad_skin_inputs_output" /dev/null direct-bad-skin
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_bug339297_inputs_output" /dev/null direct-bug339297
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"
+"$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_overstroke_quad_inputs_output" "$direct_overstroke_quad_blit_output" direct-overstroke-quad "$direct_overstroke_quad_spans_output"
 "$runtime/renderer/$build_out/rive_atlas_mask_oracle" /dev/null "$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" direct-rawtext "$direct_rawtext_spans_output"
 python3 "$script_dir/format_test.py" --validate-direct-grid "$direct_grid_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-flower "$direct_flower_inputs_output"
@@ -642,6 +650,8 @@ python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair "$atomic_c
 python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair-coverage "$atomic_colorburn_pair_coverage_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"
+python3 "$script_dir/format_test.py" --validate-direct-overstroke-quad "$direct_overstroke_quad_inputs_output"
+python3 "$script_dir/format_test.py" --validate-direct-overstroke-quad-spans "$direct_overstroke_quad_spans_output"
 python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"
 python3 "$script_dir/format_test.py" --validate-direct-rawtext-spans "$direct_rawtext_spans_output"
 output_bytes="$(wc -c < "$output" | tr -d ' ')"
@@ -893,6 +903,21 @@ if [[ "$direct_strokes_round_blit_bytes" != "640020" ]]; then
     echo "direct strokes-round blit must be exactly 640020 bytes, got $direct_strokes_round_blit_bytes: $direct_strokes_round_blit_output" >&2
     exit 1
 fi
+direct_overstroke_quad_inputs_bytes="$(wc -c < "$direct_overstroke_quad_inputs_output" | tr -d ' ')"
+if [[ "$direct_overstroke_quad_inputs_bytes" != "32824" ]]; then
+    echo "direct overstroke-quad inputs must be exactly 32824 bytes, got $direct_overstroke_quad_inputs_bytes: $direct_overstroke_quad_inputs_output" >&2
+    exit 1
+fi
+direct_overstroke_quad_spans_bytes="$(wc -c < "$direct_overstroke_quad_spans_output" | tr -d ' ')"
+if [[ "$direct_overstroke_quad_spans_bytes" != "348" ]]; then
+    echo "direct overstroke-quad spans must be exactly 348 bytes, got $direct_overstroke_quad_spans_bytes: $direct_overstroke_quad_spans_output" >&2
+    exit 1
+fi
+direct_overstroke_quad_blit_bytes="$(wc -c < "$direct_overstroke_quad_blit_output" | tr -d ' ')"
+if [[ "$direct_overstroke_quad_blit_bytes" != "1000020" ]]; then
+    echo "direct overstroke-quad blit must be exactly 1000020 bytes, got $direct_overstroke_quad_blit_bytes: $direct_overstroke_quad_blit_output" >&2
+    exit 1
+fi
 direct_rawtext_inputs_bytes="$(wc -c < "$direct_rawtext_inputs_output" | tr -d ' ')"
 if [[ "$direct_rawtext_inputs_bytes" != "66152" ]]; then
     echo "direct rawtext inputs must be exactly 66152 bytes, got $direct_rawtext_inputs_bytes: $direct_rawtext_inputs_output" >&2
@@ -962,6 +987,9 @@ echo "direct bug339297 inputs: $direct_bug339297_inputs_output"
 echo "direct strokes-round inputs: $direct_strokes_round_inputs_output"
 echo "direct strokes-round blit: $direct_strokes_round_blit_output"
 echo "direct strokes-round spans: $direct_strokes_round_spans_output"
+echo "direct overstroke-quad inputs: $direct_overstroke_quad_inputs_output"
+echo "direct overstroke-quad blit: $direct_overstroke_quad_blit_output"
+echo "direct overstroke-quad spans: $direct_overstroke_quad_spans_output"
 echo "direct rawtext inputs: $direct_rawtext_inputs_output"
 echo "direct rawtext blit: $direct_rawtext_blit_output"
 echo "direct rawtext spans: $direct_rawtext_spans_output"

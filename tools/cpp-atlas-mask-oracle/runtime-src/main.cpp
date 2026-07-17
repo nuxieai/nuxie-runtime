@@ -1103,6 +1103,8 @@ int main(int argc, char** argv)
         argc > 4 && std::strcmp(argv[4], "direct-bug339297") == 0;
     const bool directStrokesRoundCase =
         argc > 4 && std::strcmp(argv[4], "direct-strokes-round") == 0;
+    const bool directOverstrokeQuadCase =
+        argc > 4 && std::strcmp(argv[4], "direct-overstroke-quad") == 0;
     const bool directRawTextCase =
         argc > 4 && std::strcmp(argv[4], "direct-rawtext") == 0;
     const bool directDegenerateCubicCase =
@@ -1154,8 +1156,8 @@ int main(int argc, char** argv)
         directBug339297Case;
     const bool directCase =
         directCuspCase || directPolySharkCase || directTriangulatedCase ||
-        directStrokesRoundCase || directRawTextCase ||
-        directDegenerateCubicCase;
+        directStrokesRoundCase || directOverstrokeQuadCase ||
+        directRawTextCase || directDegenerateCubicCase;
     const bool directOutputCase =
         (directCase && !directDegenerateCubicCase) ||
         atomicAdvancedBlendCase || atomicColorBurnPairCase || fullStreamCase;
@@ -1163,6 +1165,7 @@ int main(int argc, char** argv)
         directCase || directOutputCase || msaaReferenceMode;
     const bool fillCase = circleCase || cuspCase || largeFeatherCase ||
                           (directCase && !directStrokesRoundCase &&
+                           !directOverstrokeQuadCase &&
                            !directDegenerateCubicCase) ||
                           anyAdvancedBlendCase ||
                           intersectionGroupsCase ||
@@ -1197,7 +1200,7 @@ int main(int argc, char** argv)
     const bool metalBackendCase = pinnedMetalCase || largeFeatherCase;
     if (argc > 7 ||
         (argc > 4 && !fillCase && !emptyStrokeCase &&
-         !directStrokesRoundCase && !clippedCase &&
+         !directStrokesRoundCase && !directOverstrokeQuadCase && !clippedCase &&
          !directDegenerateCubicCase &&
          !pathClippedCase &&
          !changingPathClippedCase && !nestedPathClippedCase &&
@@ -1208,10 +1211,12 @@ int main(int argc, char** argv)
         (auxiliaryOutput != nullptr && !cuspCase && !largeFeatherCase &&
          !directCuspCase &&
          !atomicColorBurnPairCase && !fullStreamCase && !msaaReferenceMode &&
-         !directStrokesRoundCase && !directRawTextCase &&
+         !directStrokesRoundCase && !directOverstrokeQuadCase &&
+         !directRawTextCase &&
          !directDegenerateCubicCase) ||
-        ((directStrokesRoundCase || directRawTextCase ||
-          directDegenerateCubicCase || atomicColorBurnPairCase ||
+        ((directStrokesRoundCase || directOverstrokeQuadCase ||
+          directRawTextCase || directDegenerateCubicCase ||
+          atomicColorBurnPairCase ||
           fullStreamCase) &&
          auxiliaryOutput == nullptr) ||
         (largeFeatherCase && auxiliaryOutput == nullptr) ||
@@ -1224,7 +1229,7 @@ int main(int argc, char** argv)
         (msaaReferenceMode &&
          (msaaReference == nullptr || secondaryOutput == nullptr)))
     {
-        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|atomic-hunter-x-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-bug339297|direct-strokes-round|direct-rawtext|direct-degenerate-cubic] [auxiliary-output-or-case-id] [secondary-output-or-selector]");
+        fail("usage: rive_atlas_mask_oracle [mask-output] [inputs-output] [blit-output] [fill|cusp|large-feather-cusp|large-feather-shapes-cusp|empty-stroke|empty-stroke-overlap|clipped|path-clipped|changing-path-clipped|nested-path-clipped|nested-evenodd-path-clipped|nested-clockwise-path-clipped|advanced-blend|atomic-advanced-blend|atomic-colorburn-pair|atomic-interleavedfeather-full|atomic-dstreadshuffle-full|atomic-dstreadshuffle-srcover-full|atomic-spotify-kids-app-icon-full|atomic-hunter-x-full|msaa-reference|msaa-intersection-groups|direct-cusp|direct-polyshark|direct-grid|direct-flower|direct-bad-skin|direct-bug339297|direct-strokes-round|direct-overstroke-quad|direct-rawtext|direct-degenerate-cubic] [auxiliary-output-or-case-id] [secondary-output-or-selector]");
     }
 
     constexpr WGPUInstanceFeatureName kTimedWaitAny =
@@ -1312,6 +1317,8 @@ int main(int argc, char** argv)
                                     ? kDirectRawTextFrameWidth
                                 : directStrokesRoundCase
                                     ? kDirectStrokesRoundFrameSize
+                                : directOverstrokeQuadCase
+                                    ? 500u
                                 : directBadSkinCase
                                     ? kDirectBadSkinFrameWidth
                                 : directBug339297Case
@@ -1336,6 +1343,8 @@ int main(int argc, char** argv)
                                      ? kDirectRawTextFrameHeight
                                  : directStrokesRoundCase
                                      ? kDirectStrokesRoundFrameSize
+                                 : directOverstrokeQuadCase
+                                     ? 500u
                                  : directBadSkinCase
                                      ? kDirectBadSkinFrameHeight
                                  : directBug339297Case
@@ -1368,7 +1377,9 @@ int main(int argc, char** argv)
                                            ? msaaReference->clearColor
                                        : largeFeatherCase
                                            ? 0xff000000
-                                       : directStrokesRoundCase || directRawTextCase ||
+                                       : directStrokesRoundCase ||
+                                               directOverstrokeQuadCase ||
+                                               directRawTextCase ||
                                                atomicDstReadShuffleCase
                                            ? 0xffffffff
                                            : ((advancedBlendCase || atomicAdvancedBlendCase)
@@ -1422,6 +1433,24 @@ int main(int argc, char** argv)
                       70.300293f,
                       25.5016327f,
                       70.300293f);
+        path->close();
+    }
+    else if (directOverstrokeQuadCase)
+    {
+        // Source: OverStroke.rive-stream draw 3, the first cumulative patch
+        // divergence in the fixed R4 counter matrix.
+        renderer.translate(150, 0);
+        renderer.scale(0.2f, 0.2f);
+        renderer.translate(300, 400);
+        renderer.translate(400, 0);
+        path->moveTo(0, 0);
+        path->lineTo(100, 0);
+        path->cubicTo(66.6666641f,
+                      -26.6666679f,
+                      33.3333359f,
+                      -26.6666679f,
+                      0,
+                      0);
         path->close();
     }
     else if (directDegenerateCubicCase)
@@ -1615,6 +1644,8 @@ int main(int argc, char** argv)
     {
         paint->thickness(directStrokesRoundCase
                              ? kDirectStrokesRoundThickness
+                         : directOverstrokeQuadCase
+                             ? 500.f
                          : directDegenerateTrickyPath20 ? 9.00908184f
                                                        : directDegenerateCubicCase
                                                        ? 100.f
@@ -1624,6 +1655,7 @@ int main(int argc, char** argv)
                                    : rive::StrokeCap::butt);
     }
     paint->feather(directTriangulatedCase || directStrokesRoundCase ||
+                           directOverstrokeQuadCase ||
                            directRawTextCase || directDegenerateCubicCase ||
                            intersectionGroupsCase
                        ? 0.f
@@ -2217,7 +2249,8 @@ int main(int argc, char** argv)
         const uint32_t expectedPatchDrawType = static_cast<uint32_t>(
             directDegenerateCubicCase
                 ? rive::gpu::DrawType::msaaStrokes
-            : directStrokesRoundCase || directRawTextCase
+            : directStrokesRoundCase || directOverstrokeQuadCase ||
+                    directRawTextCase
                 ? rive::gpu::DrawType::midpointFanPatches
                 : rive::gpu::DrawType::midpointFanCenterAAPatches);
         bool directScheduleValid = directDegenerateCubicCase
@@ -2294,7 +2327,8 @@ int main(int argc, char** argv)
             (directPolySharkCase &&
              (facts.strokePatchCount != kExpectedPolySharkPatchCount ||
               facts.contours.size() != kExpectedPolySharkContourCount)) ||
-            (directStrokesRoundCase && facts.contours.size() != 1) ||
+            ((directStrokesRoundCase || directOverstrokeQuadCase) &&
+             facts.contours.size() != 1) ||
             (directDegenerateCubicCase && facts.contours.size() != 1) ||
             (directRawTextCase &&
              facts.contours.size() != kDirectRawTextContourCount) ||
@@ -2313,8 +2347,8 @@ int main(int argc, char** argv)
         {
             fail("direct oracle draw schedule does not match the selected mode");
         }
-        if (directStrokesRoundCase || directRawTextCase ||
-            directDegenerateCubicCase)
+        if (directStrokesRoundCase || directOverstrokeQuadCase ||
+            directRawTextCase || directDegenerateCubicCase)
         {
             writeTessVertexSpans(auxiliaryOutput, facts);
         }

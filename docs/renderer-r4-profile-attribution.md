@@ -830,3 +830,24 @@ the finite row elimination accept this slice without A-B-B-A. Final
 verification passes renderer exact=1,409/diverges=0/gated=59,
 normal/scripted V2 floors at 584/35 exact segments, the full workspace,
 formatting, and diff hygiene. Sol's read-only review passes with no findings.
+
+### Item 134 Update
+
+The final three rows were one float-semantics mismatch. A cumulative
+twelve-draw probe found exact C++/Rust counts through OverStroke draw 2 and the
+first +1 patch at draw 3. A raw `RIVEATS` sub-oracle reduced that difference
+to the quadratic-as-cubic's parametric count: C++ emitted four segments while
+Rust emitted five; polar and join counts matched.
+
+C++ computes Wang second differences in path-local coordinates and applies
+only the matrix's linear `VectorXform`. Rust transformed the control points
+first, so cancellation after translation changed the segment ceiling. Shared
+stroke, feather, fill, and outer-cubic preparation now use the C++ ordering.
+The focused five-span artifact compares bit-for-bit, all twelve prefixes have
+exact patch parity in both modes, and MSAA instances are exact at 986. The
+fixed report moves `3->0` excess rows. Its current one-frame aggregate 2.618x
+and 6.542x worst row are directional context only; exact structure and
+unchanged pixels accept the correction without A-B-B-A. The next evidence is
+the already-staged timing-defined R4 gate. Sol's final read-only review passes
+after the raw segment words, per-prefix span and instance accounting, and a
+near-boundary skew transform were added to the regression surface.

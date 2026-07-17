@@ -514,6 +514,48 @@ def validate_direct_strokes_round_spans(data: bytes) -> dict:
     return validated
 
 
+def validate_direct_overstroke_quad_inputs(data: bytes) -> dict:
+    validated = parse_inputs(data)
+    actual = tuple(validated[field] for field in (
+        "base_patch", "patch_count", "contour_count", "width", "height"
+    ))
+    if actual != (1, 3, 1, 2048, 1):
+        raise ValueError(
+            "direct-overstroke-quad must be exactly patches=1+3, contours=1, "
+            "tessellation=2048x1"
+        )
+    return validated
+
+
+def validate_direct_overstroke_quad_spans(data: bytes) -> dict:
+    validated = parse_tess_spans(data)
+    if (validated["first_span"], validated["span_count"]) != (0, 5):
+        raise ValueError("direct-overstroke-quad span range must be exactly 0+5")
+    actual = tuple(
+        (
+            record[12] & 0xffff,
+            record[12] >> 16,
+            record[14] & 0x3ff,
+            (record[14] >> 10) & 0x3ff,
+            (record[14] >> 20) & 0x3ff,
+        )
+        for record in validated["records"]
+    )
+    expected = (
+        (0, 8, 0, 0, 1),
+        (32, 34, 0, 0, 1),
+        (34, 35, 0, 0, 1),
+        (8, 14, 1, 1, 5),
+        (14, 32, 4, 10, 5),
+    )
+    if actual != expected:
+        raise ValueError(
+            "direct-overstroke-quad span layout and segment counts changed: "
+            f"expected {expected}, got {actual}"
+        )
+    return validated
+
+
 def validate_direct_rawtext_inputs(data: bytes) -> dict:
     validated = parse_inputs(data)
     actual = tuple(validated[field] for field in (
@@ -713,6 +755,47 @@ class FormatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"exactly 0\+438"):
             validate_direct_rawtext_spans(
                 make_tess_spans(first_span=0, span_count=437)
+            )
+
+    def test_direct_overstroke_quad_contract_pins_preparation_shape(self):
+        inputs = make_inputs(
+            patch_count=3, contour_count=1, width=2048, height=1
+        )
+        self.assertEqual(
+            validate_direct_overstroke_quad_inputs(inputs)["patch_count"], 3
+        )
+        with self.assertRaisesRegex(ValueError, r"patches=1\+3"):
+            validate_direct_overstroke_quad_inputs(
+                make_inputs(patch_count=4, contour_count=1, width=2048, height=1)
+            )
+        spans = bytearray(make_tess_spans(first_span=0, span_count=5))
+        expected = (
+            (0, 8, 0, 0, 1),
+            (32, 34, 0, 0, 1),
+            (34, 35, 0, 0, 1),
+            (8, 14, 1, 1, 5),
+            (14, 32, 4, 10, 5),
+        )
+        for index, (x0, x1, parametric, polar, join) in enumerate(expected):
+            record_offset = TESS_SPAN_HEADER_BYTES + index * TESS_SPAN_RECORD_BYTES
+            struct.pack_into("<I", spans, record_offset + 12 * 4, x0 | x1 << 16)
+            struct.pack_into(
+                "<I",
+                spans,
+                record_offset + 14 * 4,
+                parametric | polar << 10 | join << 20,
+            )
+        self.assertEqual(
+            validate_direct_overstroke_quad_spans(bytes(spans))["span_count"], 5
+        )
+        wrong_segments = bytearray(spans)
+        last_record = TESS_SPAN_HEADER_BYTES + 4 * TESS_SPAN_RECORD_BYTES
+        struct.pack_into("<I", wrong_segments, last_record + 14 * 4, 5 | 10 << 10 | 5 << 20)
+        with self.assertRaisesRegex(ValueError, "segment counts changed"):
+            validate_direct_overstroke_quad_spans(bytes(wrong_segments))
+        with self.assertRaisesRegex(ValueError, r"exactly 0\+5"):
+            validate_direct_overstroke_quad_spans(
+                make_tess_spans(first_span=0, span_count=6)
             )
 
     def test_direct_strokes_round_cli_validates_arguments_and_contract(self):
@@ -2828,6 +2911,9 @@ frame
             'direct_strokes_round_inputs_output="${RIVE_DIRECT_STROKES_ROUND_INPUT_OUTPUT:-$script_dir/out/direct-strokes-round-inputs.bin}"',
             'direct_strokes_round_blit_output="${RIVE_DIRECT_STROKES_ROUND_BLIT_OUTPUT:-$script_dir/out/direct-strokes-round-blit.rgba}"',
             'direct_strokes_round_spans_output="${RIVE_DIRECT_STROKES_ROUND_SPANS_OUTPUT:-$script_dir/out/direct-strokes-round-spans.bin}"',
+            'direct_overstroke_quad_inputs_output="${RIVE_DIRECT_OVERSTROKE_QUAD_INPUT_OUTPUT:-$script_dir/out/direct-overstroke-quad-inputs.bin}"',
+            'direct_overstroke_quad_blit_output="${RIVE_DIRECT_OVERSTROKE_QUAD_BLIT_OUTPUT:-$script_dir/out/direct-overstroke-quad-blit.rgba}"',
+            'direct_overstroke_quad_spans_output="${RIVE_DIRECT_OVERSTROKE_QUAD_SPANS_OUTPUT:-$script_dir/out/direct-overstroke-quad-spans.bin}"',
             'direct_rawtext_inputs_output="${RIVE_DIRECT_RAWTEXT_INPUT_OUTPUT:-$script_dir/out/direct-rawtext-inputs.bin}"',
             'direct_rawtext_blit_output="${RIVE_DIRECT_RAWTEXT_BLIT_OUTPUT:-$script_dir/out/direct-rawtext-blit.rgba}"',
             'direct_rawtext_spans_output="${RIVE_DIRECT_RAWTEXT_SPANS_OUTPUT:-$script_dir/out/direct-rawtext-spans.bin}"',
@@ -2852,6 +2938,7 @@ frame
             '"$direct_bad_skin_inputs_output" /dev/null direct-bad-skin',
             '"$direct_bug339297_inputs_output" /dev/null direct-bug339297',
             '"$direct_strokes_round_inputs_output" "$direct_strokes_round_blit_output" direct-strokes-round "$direct_strokes_round_spans_output"',
+            '"$direct_overstroke_quad_inputs_output" "$direct_overstroke_quad_blit_output" direct-overstroke-quad "$direct_overstroke_quad_spans_output"',
             '"$direct_rawtext_inputs_output" "$direct_rawtext_blit_output" direct-rawtext "$direct_rawtext_spans_output"',
             'nested_evenodd_path_clipped_blit_output="${RIVE_ATLAS_NESTED_EVENODD_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-evenodd-path-clipped-blit.rgba}"',
             'nested_clockwise_path_clipped_blit_output="${RIVE_ATLAS_NESTED_CLOCKWISE_PATH_CLIPPED_BLIT_OUTPUT:-$script_dir/out/atlas-nested-clockwise-path-clipped-blit.rgba}"',
@@ -2921,6 +3008,8 @@ frame
             'python3 "$script_dir/format_test.py" --validate-atomic-colorburn-pair-coverage "$atomic_colorburn_pair_coverage_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round "$direct_strokes_round_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-strokes-round-spans "$direct_strokes_round_spans_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-overstroke-quad "$direct_overstroke_quad_inputs_output"',
+            'python3 "$script_dir/format_test.py" --validate-direct-overstroke-quad-spans "$direct_overstroke_quad_spans_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-rawtext "$direct_rawtext_inputs_output"',
             'python3 "$script_dir/format_test.py" --validate-direct-rawtext-spans "$direct_rawtext_spans_output"',
             'if [[ "$output_bytes" != "4628" ]]',
@@ -2943,6 +3032,9 @@ frame
             'if [[ "$direct_cusp_coverage_bytes" != "16408" ]]',
             'if [[ "$direct_polyshark_inputs_bytes" != "163896" ]]',
             'if [[ "$direct_strokes_round_blit_bytes" != "640020" ]]',
+            'if [[ "$direct_overstroke_quad_inputs_bytes" != "32824" ]]',
+            'if [[ "$direct_overstroke_quad_spans_bytes" != "348" ]]',
+            'if [[ "$direct_overstroke_quad_blit_bytes" != "1000020" ]]',
             'if [[ "$direct_rawtext_inputs_bytes" != "66152" ]]',
             'if [[ "$direct_rawtext_spans_bytes" != "28060" ]]',
             'if [[ "$direct_rawtext_blit_bytes" != "536020" ]]',
@@ -2984,6 +3076,7 @@ frame
             '#[ignore = "requires RIVE_CPP_ATOMIC_ADVANCED_BLEND from the C++ WebGPU atomic oracle"]',
             '#[ignore = "requires RIVE_CPP_ATOMIC_INTERLEAVEDFEATHER_FULL and its provenance from the C++ WebGPU-on-Metal oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_STROKES_ROUND_SPANS from the C++ WebGPU oracle"]',
+            '#[ignore = "requires RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_INPUTS from the C++ WebGPU oracle"]',
             '#[ignore = "requires RIVE_CPP_DIRECT_RAWTEXT_SPANS from the C++ WebGPU oracle"]',
             '.expect("RIVE_CPP_ATLAS_MASK is required for the ignored C++ atlas-mask oracle test")',
@@ -3029,6 +3122,8 @@ frame
         self.assertIn('RIVE_CPP_DIRECT_STROKES_ROUND_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-inputs.bin"',
                       readme)
         self.assertIn('RIVE_CPP_DIRECT_STROKES_ROUND_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-strokes-round-spans.bin"',
+                      readme)
+        self.assertIn('RIVE_CPP_DIRECT_OVERSTROKE_QUAD_SPANS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-overstroke-quad-spans.bin"',
                       readme)
         self.assertIn('RIVE_CPP_DIRECT_RAWTEXT_INPUTS="$PWD/tools/cpp-atlas-mask-oracle/out/direct-rawtext-inputs.bin"',
                       readme)
@@ -3209,6 +3304,12 @@ if __name__ == "__main__":
         "--validate-direct-strokes-round-spans":
             ("direct-strokes-round-spans", "RIVEATS",
              validate_direct_strokes_round_spans),
+        "--validate-direct-overstroke-quad":
+            ("direct-overstroke-quad", "RIVEATI",
+             validate_direct_overstroke_quad_inputs),
+        "--validate-direct-overstroke-quad-spans":
+            ("direct-overstroke-quad-spans", "RIVEATS",
+             validate_direct_overstroke_quad_spans),
         "--validate-direct-rawtext":
             ("direct-rawtext", "RIVEATI", validate_direct_rawtext_inputs),
         "--validate-direct-rawtext-spans":

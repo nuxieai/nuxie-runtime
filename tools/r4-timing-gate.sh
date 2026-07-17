@@ -18,7 +18,6 @@ capture_max_ratio="${R4_TIMING_GATE_CAPTURE_MAX_RATIO:-1000}"
 max_b_over_a="${R4_TIMING_GATE_MAX_B_OVER_A:-1.0}"
 max_control_drift="${R4_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
 max_repeat_drift="${R4_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
-min_idle_percent="${R4_TIMING_GATE_MIN_IDLE_PERCENT:-70}"
 max_idle_spread_percent="${R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT:-12}"
 host_sampler="${R4_TIMING_GATE_HOST_SAMPLER:-}"
 
@@ -38,9 +37,10 @@ in the output directory.
 
 R4_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
 emits a `r4-host-idle-percent=<number>` line or a normal `top` CPU line. Its
-raw output is retained. Sampling occurs before and after each leg; paired C++
-controls inside every report account for load during the timed work without
-running a competing monitor.
+raw output is retained. Sampling occurs before and after each leg and rejects
+only excessive spread across the bracket; paired C++ controls inside every
+report account for absolute load during the timed work without running a
+competing monitor.
 EOF
 }
 
@@ -176,7 +176,6 @@ printf 'capture_max_ratio=%s\n' "$capture_max_ratio" >>"$metadata"
 printf 'max_b_over_a=%s\n' "$max_b_over_a" >>"$metadata"
 printf 'max_control_drift=%s\n' "$max_control_drift" >>"$metadata"
 printf 'max_repeat_drift=%s\n' "$max_repeat_drift" >>"$metadata"
-printf 'min_idle_percent=%s\n' "$min_idle_percent" >>"$metadata"
 printf 'max_idle_spread_percent=%s\n' "$max_idle_spread_percent" >>"$metadata"
 printf 'label\tphase\tidle_percent\traw_file\n' >"$output_dir/host-idle.tsv"
 
@@ -203,7 +202,6 @@ for numeric in \
     R4_TIMING_GATE_MAX_B_OVER_A="$max_b_over_a" \
     R4_TIMING_GATE_MAX_CONTROL_DRIFT="$max_control_drift" \
     R4_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift" \
-    R4_TIMING_GATE_MIN_IDLE_PERCENT="$min_idle_percent" \
     R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT="$max_idle_spread_percent"; do
     is_positive_number "${numeric#*=}" \
         || fail "validate-configuration" "${numeric%%=*} must be a positive number" 2
@@ -304,8 +302,6 @@ sample_host() {
     local idle
     idle="$(extract_idle_percent "$raw_file")"
     is_number "$idle" || fail "sample-host" "could not parse host idle percentage from $raw_file"
-    awk -v idle="$idle" -v minimum="$min_idle_percent" 'BEGIN { exit !(idle >= minimum) }' \
-        || fail "sample-host" "idle fence failed for $label $sample_phase: ${idle}% < ${min_idle_percent}%"
     printf '%s\t%s\t%s\t%s\n' "$label" "$sample_phase" "$idle" "$(basename "$raw_file")" >>"$output_dir/host-idle.tsv"
 }
 

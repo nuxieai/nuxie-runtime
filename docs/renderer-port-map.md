@@ -106,6 +106,12 @@ pure-Rust renderer the public SDK default, complete R5 with both WebGPU and
 WebGL2 browser support, and then return to R4's final same-capability timing
 decision. This is a sequencing override, not a relaxation of R4's exit gate.
 
+**Decision (2026-07-17): no absolute idle floor.** The final R4 timing gate
+records host-idle samples but does not require a minimum idle percentage. It
+rejects excessive load spread across the bracket and retains paired C++ control
+and candidate-repeat drift checks. A stable busy machine is admissible; an
+unstable bracket is not.
+
 **Decision (2026-07-13): orchestrator-first delegation.** The main Phase R agent
 owns decomposition, the critical path, integration, and the final oracle verdict.
 It implements linear or tightly coupled work directly. Worker agents are optional

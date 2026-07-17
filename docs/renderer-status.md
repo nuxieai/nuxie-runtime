@@ -1643,18 +1643,22 @@ Run `make renderer-golden`.
     moves `3->0`; its one-frame 2.618x aggregate and 6.542x worst-row timing
     are directional context only. No A-B-B-A was run for this exact
     structural correction.
-135. [ ] Parked by explicit user sequencing until the default-renderer and R5
-    browser work is complete. Then run the staged timing-defined R4 gate
-    against immutable pre-tail and post-tail runner artifacts. Treat exact
-    counter parity as complete; use the A-B-B-A harness only to decide whether
-    the same-capability C++ Dawn timing threshold passes or identifies the next
-    timing-only bottleneck.
-    The first formal attempts were rejected before acceptance because host
-    idle fell below the 70% fence (observed boundaries include 69.63%, 68.48%,
-    69.67%, and 65.41%). A deliberately exploratory 60%-idle bracket is also
-    invalid for acceptance: C++ control drift was 1.1893x and A repeat drift
-    was 1.1928x. It is retained only as attribution evidence for a roughly
-    one-millisecond fixed Rust frame cost across every MSAA row.
+135. [ ] Run the staged timing-defined R4 gate against immutable pre-tail and
+    post-tail runner artifacts. Treat exact counter parity as complete; use
+    the A-B-B-A harness only to decide whether the same-capability C++ Dawn
+    timing threshold passes or identifies the next timing-only bottleneck.
+    Per the 2026-07-17 user decision, absolute host idle is not an admission
+    threshold. Host samples reject only excessive spread across the bracket;
+    paired C++ control drift and candidate repeat drift determine whether the
+    timing result is interpretable.
+    The first bracket under that policy had 4.88 percentage points of idle
+    spread, 1.0304x C++ control drift, and 1.0076x candidate repeat drift. It
+    produced a renderer-directed failure: post-tail B averages 1.6221x C++
+    Dawn, while `gm-OverStroke-clockwise-atomic` reaches a selected-pair
+    2.9630x. The old A runner also missed its 1.05 repeat bound by 0.09%, but
+    the post-tail candidate and C++ controls were stable. Persistent medians
+    above 2.0x in `OverStroke`, `bevel180strokes`, and `batchedconvexpaths`
+    make that clockwise-atomic cluster the next target.
 136. [x] Retain the final color, four-sample color, and four-sample stencil
     attachments at C++ context lifetime instead of recreating all three on
     every frame. One factory-owned set is checked out per frame and recycled
@@ -1677,8 +1681,8 @@ Run `make renderer-golden`.
     the manifest and all three runners, rejects every runner alias, applies
     host-load fences before comparison, and writes one authoritative JSON gate
     decision on both admitted and rejected runs. Eleven gate integration tests
-    cover pass, threshold, drift, malformed output, mutation, aliasing, idle
-    floor, idle spread, and sampler serialization. This tooling does not add
+    cover pass, threshold, drift, malformed output, mutation, aliasing, stable
+    low absolute idle, idle spread, and sampler serialization. This tooling does not add
     timing ceremony to counter-defined optimizations; it only makes item 135's
     one final timing-defined decision trustworthy.
 138. [x] Replace generic atomic backing host clears with C++'s generated
@@ -1957,6 +1961,13 @@ Run `make renderer-golden`.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-17: At the user's direction, the R4 timing gate no longer requires
+  any absolute host-idle percentage. Stable low-idle brackets are admissible;
+  sampled idle remains recorded and excessive within-bracket spread still
+  rejects the run. Paired C++ control drift and candidate repeat drift are the
+  objective load controls. This removes an arbitrary scheduling fence without
+  treating every timing sample as trustworthy.
 
 - 2026-07-16: R5 defines browser support as two explicit, executable backend
   contracts. WebGPU carries the full translated renderer through asynchronous
@@ -2932,6 +2943,14 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-17: Removed R4's absolute 70% host-idle admission threshold by user
+  decision. The gate and Makefile no longer expose
+  `R4_TIMING_GATE_MIN_IDLE_PERCENT`; a focused integration test proves a
+  stable 5%-idle bracket is admitted, while idle-spread and paired-drift
+  checks remain. The first no-floor bracket is an interpretable renderer
+  failure at 1.6221x aggregate and 2.9630x worst row, directing item 135 to the
+  persistent clockwise-atomic timing cluster.
+
 - 2026-07-16: Closed R5 items 140-143 and the milestone. `nuxie` now exposes a
   wasm default renderer that selects WebGPU first and falls back to a distinct
   WebGL2 implementation. The async WebGPU API compiles for wasm without a
@@ -2980,7 +2999,8 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
   recompute directionally to old/current 0.5414x aggregate and
   C++/current 1.4809x aggregate with a 2.0277x worst row, but their old fixed
   call order keeps them outside acceptance. Next, build immutable v2 runners
-  and execute item 135 when the 70% idle fence admits the host.
+  and execute item 135 under the then-current 70% idle fence. That absolute
+  floor was removed by the superseding 2026-07-17 decision above.
 - 2026-07-16: Closed R4 item 134 and the finite deterministic counter tail.
   The twelve-prefix OverStroke probe located draw 3; its translated
   quadratic-as-cubic used five Rust parametric segments against C++'s four

@@ -215,7 +215,6 @@ fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
         .env("R4_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
         .env("R4_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
         .env("R4_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
-        .env("R4_TIMING_GATE_MIN_IDLE_PERCENT", "90")
         .env("R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT", "1")
         .env("R4_TIMING_GATE_HOST_SAMPLER", sampler)
         .output()
@@ -643,12 +642,12 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
 }
 
 #[test]
-fn r4_gate_records_a_decision_when_the_idle_floor_fails() {
-    let directory = TempDir::new("idle-floor");
+fn r4_gate_accepts_stable_low_absolute_idle() {
+    let directory = TempDir::new("stable-low-idle");
     let baseline = static_runner(&directory.path, "baseline.sh", 100);
     let a = static_runner(&directory.path, "a.sh", 100);
     let b = static_runner(&directory.path, "b.sh", 100);
-    let sampler = fixed_host_sampler(&directory.path, "low-idle.sh", 89);
+    let sampler = fixed_host_sampler(&directory.path, "low-idle.sh", 5);
     let output = run_gate_with_sampler(
         Gate {
             directory: &directory.path,
@@ -663,12 +662,19 @@ fn r4_gate_records_a_decision_when_the_idle_floor_fails() {
         &sampler,
     );
 
-    assert!(!output.status.success());
-    assert_finalized_failure(&directory.path);
+    assert!(
+        output.status.success(),
+        "stderr={} metadata={}",
+        String::from_utf8_lossy(&output.stderr),
+        metadata(&directory.path)
+    );
     let decision = decision(&directory.path);
-    assert_eq!(decision["phase"], "sample-host");
-    assert_eq!(decision["comparison_available"], false);
-    assert!(decision["idle_spread_percent"].is_null());
+    assert_eq!(decision["status"], "pass");
+    assert_eq!(decision["comparison_available"], true);
+    assert_eq!(decision["idle_spread_percent"], 0.0);
+    let samples = std::fs::read_to_string(directory.path.join("artifacts/host-idle.tsv")).unwrap();
+    assert_eq!(samples.lines().count(), 9, "{samples}");
+    assert!(samples.lines().skip(1).all(|line| line.contains("\t5\t")));
 }
 
 #[test]

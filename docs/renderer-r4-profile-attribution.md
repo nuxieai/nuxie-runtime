@@ -860,11 +860,11 @@ near-boundary skew transform were added to the regression surface.
 The final gate now separates permissive capture from final acceptance: the
 pre-tail A artifact may exceed the 2.0x shipping threshold, while only both
 post-tail B reports must satisfy it. Comparator tests pin that distinction.
-The first real runs did not produce an acceptance result because host idle
-crossed below the 70% admission fence. An explicitly exploratory run lowered
-only that fence to 60%; it completed, but C++ control drift was 1.1893x and A
-repeat drift was 1.1928x, so its aggregate result is rejected rather than
-interpreted as a candidate verdict.
+The first real runs did not produce an acceptance result under the then-current
+70% host-idle admission fence. An explicitly exploratory run lowered only that
+fence to 60%; it completed, but C++ control drift was 1.1893x and A repeat
+drift was 1.1928x, so its aggregate result is rejected rather than interpreted
+as a candidate verdict.
 
 The invalid trace was still useful for attribution. Every MSAA row carried a
 large fixed Rust frame floor even after deterministic command work reached
@@ -922,3 +922,21 @@ gives old/current 0.5414x aggregate, 0.8741x atomic, and 0.3233x MSAA. The
 C++/current view becomes 1.4809x aggregate, 1.4744x atomic, and 1.4928x MSAA,
 with a 2.0277x worst row. These remain directional because the original runner
 used fixed C++-then-Rust order; only fresh v2 artifacts can close item 135.
+
+### Item 135 Admission Policy Update
+
+Per the 2026-07-17 user decision, the gate no longer imposes an absolute
+host-idle floor. The sampler still records every boundary and rejects excessive
+spread across a bracket. Paired C++ controls and candidate-repeat drift remain
+the load-validity checks, so a consistently busy machine can produce evidence
+without pretending that a changing machine can.
+
+The first complete no-floor bracket sampled 70.40%-75.10% idle (4.88 points of
+spread), with 1.0304x C++ control drift and 1.0076x post-tail repeat drift. The
+old A runner's 1.0509x repeat drift misses its 1.05 bound by 0.09%, but does
+not obscure the stable post-tail candidate. Its aggregate is 1.6221x C++ Dawn,
+and the selected-pair worst row is `gm-OverStroke-clockwise-atomic` at
+2.9630x. Repeated medians also leave `gm-bevel180strokes-clockwise-atomic` and
+`gm-batchedconvexpaths-clockwise-atomic` near or above 2.0x. The trace is
+therefore useful evidence of a clockwise-atomic timing cluster, not a host-idle
+rejection and not an R4 pass.

@@ -413,6 +413,15 @@ pub struct RuntimeFile {
     pub import_statuses: Vec<RuntimeImportStatus>,
 }
 
+/// One dense, file-global FileAsset entry and the in-band contents imported
+/// for it by a scripting-enabled FileAsset importer.
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeFileAssetContents<'a> {
+    pub ordinal: usize,
+    pub asset: &'a RuntimeObject,
+    pub contents: Option<&'a [u8]>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AuthoringRecord {
     pub type_key: u16,
@@ -4306,6 +4315,57 @@ impl RuntimeFile {
 
     pub fn file_asset(&self, index: usize) -> Option<&RuntimeObject> {
         self.cpp_file_assets().nth(index)
+    }
+
+    /// Dense FileAsset catalog with `FileAssetContents` associated by the
+    /// scripting-enabled importer stack rather than by record adjacency.
+    ///
+    /// This is the extraction profile used by script-executing hosts. It scans
+    /// the object stream once, tracks the latest imported FileAsset that
+    /// creates an importer in a WITH_RIVE_SCRIPTING build, and attaches only
+    /// imported `FileAssetContents` records to that entry.
+    pub fn scripting_file_assets_with_contents(&self) -> Vec<RuntimeFileAssetContents<'_>> {
+        let assets = self.file_assets();
+        let ordinals_by_global = assets
+            .iter()
+            .enumerate()
+            .map(|(ordinal, asset)| (asset.id, ordinal))
+            .collect::<BTreeMap<_, _>>();
+        let mut contents = vec![None; assets.len()];
+        let mut latest_ordinal = None;
+
+        for (index, object) in self.objects.iter().enumerate() {
+            if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
+                continue;
+            }
+            let Some(object) = object.as_ref() else {
+                continue;
+            };
+            if file_asset_creates_importer(object.type_name, true) {
+                // Importer-owning FileAsset kinds such as ManifestAsset are
+                // intentionally absent from the public dense catalog. They
+                // still delimit contents ownership, so reset the candidate
+                // even when there is no ordinal to publish.
+                latest_ordinal = ordinals_by_global.get(&object.id).copied();
+                continue;
+            }
+            if object.type_name == "FileAssetContents"
+                && let Some(ordinal) = latest_ordinal
+                && let Some(slot) = contents.get_mut(ordinal)
+            {
+                *slot = object.bytes_property("bytes");
+            }
+        }
+
+        assets
+            .into_iter()
+            .enumerate()
+            .map(|(ordinal, asset)| RuntimeFileAssetContents {
+                ordinal,
+                asset,
+                contents: contents.get(ordinal).copied().flatten(),
+            })
+            .collect()
     }
 
     pub fn resolved_file_asset_for_object(&self, object_id: usize) -> Option<&RuntimeObject> {

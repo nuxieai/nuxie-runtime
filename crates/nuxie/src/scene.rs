@@ -410,6 +410,24 @@ impl std::fmt::Display for ResolveError {
 
 impl std::error::Error for ResolveError {}
 
+/// Failure while advancing an authored instance with a renderer factory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdvanceError {
+    UnknownInstance,
+    RuntimeRejected,
+}
+
+impl std::fmt::Display for AdvanceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::UnknownInstance => "unknown scene instance",
+            Self::RuntimeRejected => "runtime rejected authored scene advance",
+        })
+    }
+}
+
+impl std::error::Error for AdvanceError {}
+
 /// Failure while drawing an authored instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DrawError {
@@ -3156,6 +3174,31 @@ impl Frame<'_> {
             .is_some_and(|live| live.runtime.advance(elapsed_seconds))
     }
 
+    /// Advance one live instance with a renderer factory available to script
+    /// generator/init/advance/update phases. Unlike [`Self::advance`], script
+    /// failures are reported by this call instead of being deferred to draw.
+    /// After scripted bootstrap, this and draw must keep using the same live
+    /// Factory object for every instance backed by that materialized File.
+    pub fn try_advance_with_factory(
+        &mut self,
+        instance: InstanceId,
+        elapsed_seconds: f32,
+        events: &mut Vec<SceneEvent>,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<bool, AdvanceError> {
+        events.clear();
+        let live = self
+            .scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(AdvanceError::UnknownInstance)?;
+        live.runtime
+            .try_advance_with_factory(factory, elapsed_seconds)
+            .map_err(|_| AdvanceError::RuntimeRejected)
+    }
+
     /// Return authored shapes under `point`, ordered front to back and deduplicated.
     pub fn hit_test(&mut self, instance: InstanceId, point: crate::Vec2D) -> Vec<ObjectId> {
         self.hit_test_paths(instance, point)
@@ -3438,6 +3481,9 @@ impl MaterializedArtboard {
                 EditReason::InternalInvariant,
             )
         })?;
+        // Arc is the existing owning-instance lifetime contract. A scripting
+        // File is intentionally thread-affine because its Luau VM is not Send.
+        #[allow(clippy::arc_with_non_send_sync)]
         let file = Arc::new(File::from_runtime(runtime).map_err(|_| {
             EditDiagnostic::new(
                 touched_operation_index,
@@ -4702,6 +4748,8 @@ fn canonicalize_exported_records(records: &mut [ExportedRecord]) {
 mod tests {
     use std::sync::Arc;
 
+    #[cfg(feature = "scripting")]
+    use anyhow::Context;
     use anyhow::Result;
     use nuxie_render_stream::RenderStream;
 
@@ -7688,6 +7736,142 @@ mod tests {
                 }
             );
         }
+        Ok(())
+    }
+
+    #[cfg(feature = "scripting")]
+    fn compile_luau(source: &[u8]) -> Vec<u8> {
+        use luaur_compiler::functions::luau_compile::luau_compile;
+
+        luaur_common::set_all_flags(true);
+        let mut output_size = 0;
+        let output = luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            std::ptr::null_mut(),
+            &mut output_size,
+        );
+        assert!(!output.is_null(), "pinned Luau compiler returned null");
+        // SAFETY: luau_compile returned a non-null allocation containing
+        // output_size initialized bytes. Copying detaches the fixture bytes.
+        unsafe { std::slice::from_raw_parts(output.cast(), output_size) }.to_vec()
+    }
+
+    #[cfg(feature = "scripting")]
+    fn scene_with_failing_protocol(bytes: Vec<u8>) -> Result<(Scene, InstanceId, u32)> {
+        let mut scene = Scene::new();
+        let artboard = scene
+            .edit(|tx| {
+                let protocol = tx.create_script_asset(ScriptAssetSpec {
+                    name: "FailingProtocol".into(),
+                    is_module: false,
+                    bytes,
+                })?;
+                let artboard = tx.create_artboard(ArtboardSpec {
+                    name: "Failure".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                tx.create(
+                    Parent::Artboard(artboard),
+                    NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
+                        name: "Failure".into(),
+                        x: 0.0,
+                        y: 0.0,
+                        opacity: 1.0,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        script: protocol,
+                    }),
+                )?;
+                Ok(artboard)
+            })?
+            .0;
+        let instance = scene.instantiate(artboard)?;
+        let global_id = scene
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|live| live.id == instance)
+            .and_then(|live| live.runtime.file().graph().artboards.first())
+            .and_then(|graph| {
+                graph
+                    .components
+                    .iter()
+                    .find(|component| component.type_name == "ScriptedDrawable")
+            })
+            .map(|component| component.global_id)
+            .context("scripted drawable global id")?;
+        Ok((scene, instance, global_id))
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn failed_script_bootstrap_is_cold_retryable_and_attaches_nothing() -> Result<()> {
+        let init_false =
+            compile_luau(b"return function(_) return { init = function() return false end } end");
+        for (case, bytes) in [("malformed", vec![0xff]), ("init false", init_false)] {
+            let (mut scene, instance, global_id) = scene_with_failing_protocol(bytes)?;
+            let mut factory = RecordingFactory::new();
+            let mut renderer = factory.make_renderer();
+            let mut cache = scene.new_render_cache(instance)?;
+
+            let error = scene
+                .frame()
+                .draw(instance, &mut factory, &mut renderer, &mut cache)
+                .expect_err(case);
+            assert_eq!(error, DrawError::RuntimeRejected, "{case}");
+            assert!(
+                cache
+                    .inner
+                    .as_ref()
+                    .is_some_and(|inner| inner.paint.is_none()),
+                "{case} must discard provisional factory resources"
+            );
+
+            let live = scene
+                .instances
+                .iter()
+                .filter_map(Option::as_ref)
+                .find(|live| live.id == instance)
+                .context("live instance remains mounted")?;
+            assert!(
+                !live.runtime.raw().has_script_instance_for_global(global_id),
+                "{case} must leave zero table attachments"
+            );
+            assert!(
+                live.runtime.file().scripts.borrow().ready.is_none(),
+                "{case} must leave the File VM cold and retryable"
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn script_init_accepts_any_lua_truthy_result() -> Result<()> {
+        let truthy_table =
+            compile_luau(b"return function(_) return { init = function() return {} end } end");
+        let (mut scene, instance, global_id) = scene_with_failing_protocol(truthy_table)?;
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let mut cache = scene.new_render_cache(instance)?;
+
+        scene
+            .frame()
+            .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+
+        let live = scene
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|live| live.id == instance)
+            .context("live instance remains mounted")?;
+        assert!(
+            live.runtime.raw().has_script_instance_for_global(global_id),
+            "a Lua table is truthy and must complete bootstrap"
+        );
         Ok(())
     }
 }

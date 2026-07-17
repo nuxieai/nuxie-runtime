@@ -23,6 +23,8 @@ nuxie-scripting = { path = "../nuxie-scripting", optional = true }
 nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
+luaur-common = "=0.1.8"
+luaur-compiler = "=0.1.8"
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-schema = { path = "../nuxie-schema" }
 

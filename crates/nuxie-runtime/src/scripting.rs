@@ -788,6 +788,21 @@ pub trait ScriptInstance {
         self.call_method(method, args, host)
     }
 
+    /// Run an implemented user `init(self, context)` and apply Lua truthiness
+    /// without requiring every backend value kind to cross the VM-neutral
+    /// [`ScriptValue`] seam.
+    fn call_init_with_factory(
+        &mut self,
+        host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let value = self.call_method_with_factory(ScriptMethod::Init, &[], host, factory)?;
+        Ok(!matches!(
+            value,
+            ScriptValue::Nil | ScriptValue::Bool(false)
+        ))
+    }
+
     fn call_path_effect_update(
         &mut self,
         source: RawPath,

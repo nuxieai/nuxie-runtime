@@ -5,6 +5,12 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "scripting")]
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, VecDeque},
+};
+
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
 #[cfg(not(feature = "scripting"))]
@@ -50,25 +56,680 @@ pub use nuxie_runtime::{
 };
 
 #[cfg(feature = "scripting")]
+use nuxie_scripting::vm::ScriptProgram;
+#[cfg(feature = "scripting")]
 pub use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
-/// Imported Rive file plus its runtime graph projection.
+#[cfg(feature = "scripting")]
 #[derive(Debug, Clone)]
+struct FileScriptAsset {
+    ordinal: usize,
+    global_id: u32,
+    type_name: &'static str,
+    name: String,
+    is_module: bool,
+    payload: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "scripting")]
+struct ReadyFileScripts {
+    // Programs contain VM-owned function handles, so they must drop before VM.
+    programs: BTreeMap<usize, ScriptProgram>,
+    vm: ScriptVm,
+    factory_domain: usize,
+}
+
+#[cfg(feature = "scripting")]
+struct FileScriptRuntime {
+    assets: Vec<FileScriptAsset>,
+    allow_unsigned_execution: bool,
+    ready: Option<ReadyFileScripts>,
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for FileScriptRuntime {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("FileScriptRuntime")
+            .field("assets", &self.assets)
+            .field("allow_unsigned_execution", &self.allow_unsigned_execution)
+            .field("ready", &self.ready.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl FileScriptRuntime {
+    fn new(runtime: &RuntimeFile, allow_unsigned_execution: bool) -> Self {
+        let assets = runtime
+            .scripting_file_assets_with_contents()
+            .into_iter()
+            .map(|entry| FileScriptAsset {
+                ordinal: entry.ordinal,
+                global_id: entry.asset.id,
+                type_name: entry.asset.type_name,
+                name: entry
+                    .asset
+                    .string_property("name")
+                    .unwrap_or_default()
+                    .to_owned(),
+                is_module: entry.asset.bool_property("isModule").unwrap_or(false),
+                payload: entry.contents.map(ToOwned::to_owned),
+            })
+            .collect();
+        Self {
+            assets,
+            allow_unsigned_execution,
+            ready: None,
+        }
+    }
+
+    fn build_candidate(
+        &self,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
+        let vm = ScriptVm::new();
+        let mut pending = self
+            .assets
+            .iter()
+            .filter(|asset| asset.type_name == "ScriptAsset" && asset.is_module)
+            .collect::<Vec<_>>();
+
+        loop {
+            let before = pending.len();
+            let mut failures = Vec::new();
+            for asset in pending {
+                let payload = required_script_payload(asset, "module registration")?;
+                if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
+                    failures.push((asset, error));
+                }
+            }
+            if failures.is_empty() {
+                break;
+            }
+            if failures.len() == before {
+                let (asset, error) = failures.remove(0);
+                return Err(asset_phase_error(asset, "module registration", error));
+            }
+            pending = failures.into_iter().map(|(asset, _)| asset).collect();
+        }
+
+        let mut programs = BTreeMap::new();
+        for asset in self
+            .assets
+            .iter()
+            .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
+        {
+            let payload = required_script_payload(asset, "protocol registration")?;
+            let program = vm
+                .register_protocol_script_with_factory(&asset.name, payload, factory)
+                .map_err(|error| asset_phase_error(asset, "protocol registration", error))?;
+            programs.insert(asset.ordinal, program);
+        }
+
+        Ok(ReadyFileScripts {
+            programs,
+            vm,
+            factory_domain: render_factory_domain(factory),
+        })
+    }
+
+    fn prepare_mounts(
+        &mut self,
+        groups: &[ScriptMountGroup],
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
+        let domain = render_factory_domain(factory);
+        if let Some(ready) = self.ready.as_ref() {
+            if ready.factory_domain != domain {
+                return Err(nuxie_runtime::ScriptError::new(
+                    "scripted File was used with a different renderer Factory domain",
+                ));
+            }
+            return Ok(PreparedFileScriptMounts {
+                groups: instantiate_script_mounts(ready, groups, factory)?,
+                candidate: None,
+            });
+        }
+
+        // Keep the candidate cold until every concrete occurrence has a
+        // generated table and successful init. Any error drops all tables and
+        // the candidate VM, leaving this File retryable with zero attachments.
+        let candidate = self.build_candidate(factory)?;
+        let groups = instantiate_script_mounts(&candidate, groups, factory)?;
+        Ok(PreparedFileScriptMounts {
+            // Drop table handles before their candidate VM on a failed
+            // topology validation.
+            groups,
+            candidate: Some(candidate),
+        })
+    }
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug)]
+struct ScriptMountTarget {
+    component_global_id: u32,
+    asset_ordinal: usize,
+    asset_name: String,
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug)]
+struct ScriptMountGroup {
+    path: String,
+    graph_global_id: u32,
+    targets: Vec<ScriptMountTarget>,
+}
+
+#[cfg(feature = "scripting")]
+struct PreparedScriptMountGroup {
+    graph_global_id: u32,
+    scripts: Vec<(u32, Box<dyn ScriptInstance>)>,
+}
+
+#[cfg(feature = "scripting")]
+struct PreparedFileScriptMounts {
+    // Field order is intentional: Lua table handles drop before the cold VM.
+    groups: Vec<PreparedScriptMountGroup>,
+    candidate: Option<ReadyFileScripts>,
+}
+
+#[cfg(feature = "scripting")]
+fn required_script_payload<'a>(
+    asset: &'a FileScriptAsset,
+    phase: &str,
+) -> std::result::Result<&'a [u8], nuxie_runtime::ScriptError> {
+    asset.payload.as_deref().ok_or_else(|| {
+        nuxie_runtime::ScriptError::new(format!(
+            "ScriptAsset ordinal {} global {} name '{}' phase {} has no imported FileAssetContents payload",
+            asset.ordinal, asset.global_id, asset.name, phase
+        ))
+    })
+}
+
+#[cfg(feature = "scripting")]
+fn asset_phase_error(
+    asset: &FileScriptAsset,
+    phase: &str,
+    error: impl std::fmt::Display,
+) -> nuxie_runtime::ScriptError {
+    nuxie_runtime::ScriptError::new(format!(
+        "ScriptAsset ordinal {} global {} name '{}' phase {} failed: {}",
+        asset.ordinal, asset.global_id, asset.name, phase, error
+    ))
+}
+
+#[cfg(feature = "scripting")]
+fn render_factory_domain(factory: &mut dyn Factory) -> usize {
+    let pointer: *mut dyn Factory = factory;
+    pointer as *mut () as usize
+}
+
+#[cfg(feature = "scripting")]
+fn instantiate_script_mounts(
+    ready: &ReadyFileScripts,
+    groups: &[ScriptMountGroup],
+    factory: &mut dyn Factory,
+) -> std::result::Result<Vec<PreparedScriptMountGroup>, nuxie_runtime::ScriptError> {
+    let mut prepared = Vec::with_capacity(groups.len());
+    for group in groups {
+        let mut scripts = Vec::with_capacity(group.targets.len());
+        for target in &group.targets {
+            let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{} ScriptedDrawable global {} references unregistered protocol ordinal {} name '{}'",
+                    group.path,
+                    target.component_global_id,
+                    target.asset_ordinal,
+                    target.asset_name
+                ))
+            })?;
+            let mut host = NoopScriptHost;
+            let mut script = ready
+                .vm
+                .instantiate_registered_script_with_factory(program, &mut host, factory)
+                .map_err(|error| {
+                    nuxie_runtime::ScriptError::new(format!(
+                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase generator failed: {}",
+                        group.path,
+                        target.component_global_id,
+                        target.asset_ordinal,
+                        target.asset_name,
+                        error
+                    ))
+                })?;
+            if script.has_method(ScriptMethod::Init).map_err(|error| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init lookup failed: {}",
+                    group.path,
+                    target.component_global_id,
+                    target.asset_ordinal,
+                    target.asset_name,
+                    error
+                ))
+            })? {
+                let initialized = script
+                    .call_init_with_factory(&mut host, factory)
+                    .map_err(|error| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init failed: {}",
+                            group.path,
+                            target.component_global_id,
+                            target.asset_ordinal,
+                            target.asset_name,
+                            error
+                        ))
+                    })?;
+                if !initialized {
+                    return Err(nuxie_runtime::ScriptError::new(format!(
+                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init returned false or nil",
+                        group.path,
+                        target.component_global_id,
+                        target.asset_ordinal,
+                        target.asset_name
+                    )));
+                }
+            }
+            scripts.push((target.component_global_id, script));
+        }
+        prepared.push(PreparedScriptMountGroup {
+            graph_global_id: group.graph_global_id,
+            scripts,
+        });
+    }
+    Ok(prepared)
+}
+
+#[cfg(feature = "scripting")]
+fn script_mount_group(
+    runtime: &RuntimeFile,
+    scripts: &FileScriptRuntime,
+    graph: &ArtboardGraph,
+    instance: &RuntimeArtboardInstance,
+    path: String,
+) -> std::result::Result<(bool, ScriptMountGroup), nuxie_runtime::ScriptError> {
+    let mut has_scripted_drawable = false;
+    let mut targets = Vec::new();
+    for component in &graph.components {
+        if component.type_name != "ScriptedDrawable" {
+            continue;
+        }
+        has_scripted_drawable = true;
+        if !scripts.allow_unsigned_execution {
+            return Err(nuxie_runtime::ScriptError::new(format!(
+                "{path} contains ScriptedDrawable global {}, but arbitrary imported Files do not execute unsigned bytecode; use File::import_with_unsigned_scripts only for trusted content",
+                component.global_id
+            )));
+        }
+        let object = runtime
+            .object(component.global_id as usize)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{path} ScriptedDrawable global {} is absent from the runtime file",
+                    component.global_id
+                ))
+            })?;
+        let ordinal = object
+            .uint_property("scriptAssetId")
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{path} ScriptedDrawable global {} has no valid FileAsset ordinal",
+                    component.global_id
+                ))
+            })?;
+        let resolved = runtime
+            .resolved_file_asset_for_referencer(object)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{path} ScriptedDrawable global {} cannot resolve FileAsset ordinal {ordinal}",
+                    component.global_id
+                ))
+            })?;
+        let asset = scripts.assets.get(ordinal).ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "{path} ScriptedDrawable global {} references absent FileAsset ordinal {ordinal}",
+                component.global_id
+            ))
+        })?;
+        if asset.global_id != resolved.id {
+            return Err(nuxie_runtime::ScriptError::new(format!(
+                "{path} ScriptedDrawable global {} FileAsset ordinal {ordinal} resolved global {}, but catalog contains global {}",
+                component.global_id, resolved.id, asset.global_id
+            )));
+        }
+        if asset.type_name != "ScriptAsset" || resolved.type_name != "ScriptAsset" {
+            return Err(nuxie_runtime::ScriptError::new(format!(
+                "{path} ScriptedDrawable global {} FileAsset ordinal {ordinal} is {}, not ScriptAsset",
+                component.global_id, resolved.type_name
+            )));
+        }
+        if asset.is_module {
+            return Err(nuxie_runtime::ScriptError::new(format!(
+                "{path} ScriptedDrawable global {} references module ScriptAsset ordinal {ordinal} name '{}'",
+                component.global_id, asset.name
+            )));
+        }
+        if !instance.has_script_instance_for_global(component.global_id) {
+            targets.push(ScriptMountTarget {
+                component_global_id: component.global_id,
+                asset_ordinal: ordinal,
+                asset_name: asset.name.clone(),
+            });
+        }
+    }
+    Ok((
+        has_scripted_drawable,
+        ScriptMountGroup {
+            path,
+            graph_global_id: graph.global_id,
+            targets,
+        },
+    ))
+}
+
+#[cfg(feature = "scripting")]
+fn collect_script_mount_groups(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+) -> std::result::Result<(bool, Vec<ScriptMountGroup>), nuxie_runtime::ScriptError> {
+    let scripts = file.scripts.borrow();
+    let (mut has_scripted_drawable, root) = script_mount_group(
+        &file.runtime,
+        &scripts,
+        root_graph,
+        instance,
+        format!("root graph {}", root_graph.global_id),
+    )?;
+    let mut groups = vec![root];
+    let mut visitor = |depth: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
+        let graph = file
+            .graph
+            .artboards
+            .iter()
+            .find(|candidate| candidate.global_id == graph_global_id)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "occurrence {} depth {depth} references unavailable artboard graph {graph_global_id}",
+                    groups.len()
+                ))
+            })?;
+        let path = format!(
+            "occurrence {} depth {depth} graph {graph_global_id}",
+            groups.len()
+        );
+        let (has_scripts, group) =
+            script_mount_group(&file.runtime, &scripts, graph, nested, path)?;
+        has_scripted_drawable |= has_scripts;
+        groups.push(group);
+        Ok::<(), nuxie_runtime::ScriptError>(())
+    };
+    instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
+    Ok((has_scripted_drawable, groups))
+}
+
+#[cfg(feature = "scripting")]
+fn artboard_tree_topology(instance: &mut RuntimeArtboardInstance) -> Vec<u32> {
+    let mut topology = vec![instance.graph_global_id()];
+    let mut visitor = |_: usize, graph_global_id: u32, _: &mut RuntimeArtboardInstance| {
+        topology.push(graph_global_id);
+        Ok::<(), std::convert::Infallible>(())
+    };
+    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
+    match result {
+        Ok(()) => topology,
+        Err(error) => match error {},
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn validate_prepared_script_mount_topology(
+    instance: &mut RuntimeArtboardInstance,
+    prepared: &[PreparedScriptMountGroup],
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    let expected = prepared
+        .iter()
+        .map(|group| group.graph_global_id)
+        .collect::<Vec<_>>();
+    let actual = artboard_tree_topology(instance);
+    if actual != expected {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "scripted artboard topology changed during atomic bootstrap: expected {expected:?}, found {actual:?}"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn attach_prepared_script_mounts(
+    instance: &mut RuntimeArtboardInstance,
+    prepared: Vec<PreparedScriptMountGroup>,
+) {
+    let mut groups = VecDeque::from(prepared);
+    if let Some(root) = groups.pop_front() {
+        for (global_id, script) in root.scripts {
+            instance.set_script_instance_for_global(global_id, script);
+        }
+    }
+    let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
+        if let Some(group) = groups.pop_front() {
+            for (global_id, script) in group.scripts {
+                nested.set_script_instance_for_global(global_id, script);
+            }
+        }
+        Ok::<(), std::convert::Infallible>(())
+    };
+    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
+    match result {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn flush_scripted_artboard_tree(
+    instance: &mut RuntimeArtboardInstance,
+    factory: &mut dyn Factory,
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+    let mut changed = instance
+        .flush_script_lifecycle_with_factory(factory)
+        .map_err(|error| {
+            nuxie_runtime::ScriptError::new(format!(
+                "root graph {} script lifecycle failed: {error}",
+                instance.graph_global_id()
+            ))
+        })?;
+    let mut visitor = |depth: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
+        changed |= nested
+            .flush_script_lifecycle_with_factory(factory)
+            .map_err(|error| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "nested depth {depth} graph {graph_global_id} script lifecycle failed: {error}"
+                ))
+            })?;
+        Ok::<(), nuxie_runtime::ScriptError>(())
+    };
+    instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
+    // Each concrete child receives a regular component update after its
+    // script update. The facade caller performs the root update immediately
+    // after this helper returns.
+    let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
+        changed |= nested.update_pass();
+        Ok::<(), std::convert::Infallible>(())
+    };
+    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
+    match result {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+    Ok(changed)
+}
+
+#[cfg(feature = "scripting")]
+fn prepare_scripted_artboard_tree(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+    factory: &mut dyn Factory,
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+    let (has_scripted_drawable, groups) = collect_script_mount_groups(file, root_graph, instance)?;
+    if !has_scripted_drawable {
+        return Ok(false);
+    }
+    let mut prepared = file.scripts.borrow_mut().prepare_mounts(&groups, factory)?;
+    validate_prepared_script_mount_topology(instance, &prepared.groups)?;
+
+    // Validation is the final fallible step. Publish a cold candidate before
+    // attaching its tables so every mounted handle always has a live owner;
+    // attachment itself is now an infallible commit over the validated tree.
+    if let Some(candidate) = prepared.candidate.take() {
+        file.scripts.borrow_mut().ready = Some(candidate);
+    }
+    attach_prepared_script_mounts(instance, prepared.groups);
+
+    // Facade execution fails closed: every concrete scripted drawable must
+    // have an attached table before entering the lower runtime draw path.
+    let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
+    if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{} still has unattached scripted drawable instances",
+            group.path
+        )));
+    }
+    let changed = flush_scripted_artboard_tree(instance, factory)?;
+
+    // Script update refreshes component-list occurrences. A newly materialized
+    // child is mounted on the next preparation call, but must not slip through
+    // this draw without a table in the meantime.
+    let (_, after_lifecycle) = collect_script_mount_groups(file, root_graph, instance)?;
+    if let Some(group) = after_lifecycle
+        .iter()
+        .find(|group| !group.targets.is_empty())
+    {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{} materialized an unattached scripted drawable during script lifecycle",
+            group.path
+        )));
+    }
+    Ok(changed)
+}
+
+#[cfg(feature = "scripting")]
+fn queue_root_script_advance(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+    elapsed_seconds: f32,
+) -> bool {
+    let mut has_scripted_drawable = root_graph
+        .components
+        .iter()
+        .any(|component| component.type_name == "ScriptedDrawable");
+    let mut visitor = |_: usize, graph_global_id: u32, _: &mut RuntimeArtboardInstance| {
+        has_scripted_drawable |= file
+            .graph
+            .artboards
+            .iter()
+            .find(|candidate| candidate.global_id == graph_global_id)
+            .is_some_and(|graph| {
+                graph
+                    .components
+                    .iter()
+                    .any(|component| component.type_name == "ScriptedDrawable")
+            });
+        Ok::<(), std::convert::Infallible>(())
+    };
+    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
+    match result {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+    if has_scripted_drawable {
+        instance.queue_script_advance(elapsed_seconds);
+    }
+    has_scripted_drawable && elapsed_seconds != 0.0
+}
+
+/// Imported Rive file plus its runtime graph projection.
 pub struct File {
     runtime: RuntimeFile,
     graph: GraphFile,
+    #[cfg(feature = "scripting")]
+    scripts: RefCell<FileScriptRuntime>,
+}
+
+impl std::fmt::Debug for File {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug = formatter.debug_struct("File");
+        debug
+            .field("runtime", &self.runtime)
+            .field("graph", &self.graph);
+        #[cfg(feature = "scripting")]
+        debug.field("scripts", &self.scripts);
+        debug.finish()
+    }
+}
+
+impl Clone for File {
+    fn clone(&self) -> Self {
+        let runtime = self.runtime.clone();
+        let graph = self.graph.clone();
+        #[cfg(feature = "scripting")]
+        let scripts = RefCell::new(FileScriptRuntime::new(
+            &runtime,
+            self.scripts.borrow().allow_unsigned_execution,
+        ));
+        Self {
+            runtime,
+            graph,
+            #[cfg(feature = "scripting")]
+            scripts,
+        }
+    }
 }
 
 impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
+    ///
+    /// With scripting enabled, arbitrary imported files remain inert by
+    /// default. Use `File::import_with_unsigned_scripts` only after the host
+    /// has established trust in the file bytes.
     pub fn import(bytes: &[u8]) -> Result<Self> {
         let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime(runtime)
+        Self::from_runtime_with_script_policy(runtime, false)
+    }
+
+    /// Import `.riv` bytes and allow their unsigned ScriptAsset bytecode to
+    /// execute lazily on first factory-bearing advance or draw.
+    ///
+    /// This is an explicit trust boundary for content the host authored or
+    /// authenticated. Arbitrary uploaded or network-provided files should use
+    /// [`Self::import`], which refuses to enter the script draw path.
+    #[cfg(feature = "scripting")]
+    pub fn import_with_unsigned_scripts(bytes: &[u8]) -> Result<Self> {
+        let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
+        Self::from_runtime_with_script_policy(runtime, true)
     }
 
     pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
+        // RuntimeFile values constructed by Scene are authored in-process and
+        // deliberately opt into unsigned editor bytecode execution.
+        Self::from_runtime_with_script_policy(runtime, true)
+    }
+
+    fn from_runtime_with_script_policy(
+        runtime: RuntimeFile,
+        _allow_unsigned_execution: bool,
+    ) -> Result<Self> {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
-        Ok(Self { runtime, graph })
+        Ok(Self {
+            #[cfg(feature = "scripting")]
+            scripts: RefCell::new(FileScriptRuntime::new(&runtime, _allow_unsigned_execution)),
+            runtime,
+            graph,
+        })
     }
 
     /// Low-level imported file data for advanced integrations.
@@ -193,22 +854,23 @@ pub struct ArtboardRenderCache {
     path: RuntimeRenderPathCache,
 }
 
-fn render_paint_cache_for_draw<'a>(
-    retained: &'a mut Option<RuntimeRenderPaintCache>,
+fn ensure_render_paint_cache_for_draw(
+    retained: &mut Option<RuntimeRenderPaintCache>,
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn Factory,
-) -> std::result::Result<&'a mut RuntimeRenderPaintCache, ImageDecodeError> {
-    if let Some(cache) = retained {
-        return Ok(cache);
+) -> std::result::Result<(), ImageDecodeError> {
+    if retained.is_some() {
+        return Ok(());
     }
     let candidate =
         preallocate_render_paint_cache_for_artboard_tree(runtime, artboard, artboards, factory);
     if let Some(error) = candidate.image_decode_error() {
         return Err(error);
     }
-    Ok(retained.insert(candidate))
+    *retained = Some(candidate);
+    Ok(())
 }
 
 impl<'a> ArtboardInstance<'a> {
@@ -232,12 +894,60 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        changed |= self.raw.advance_nested_artboards(elapsed_seconds);
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
         changed
+    }
+
+    /// Advance with a renderer factory available to every script lifecycle
+    /// phase. Legacy [`Self::advance`] queues exact script steps for the next
+    /// draw; this method executes them before the regular update pass and
+    /// surfaces script errors immediately. Once this File's scripts bootstrap,
+    /// every factory-bearing advance and draw must use that same live Factory
+    /// object; a different object is rejected before script execution.
+    pub fn try_advance_with_factory(
+        &mut self,
+        factory: &mut dyn Factory,
+        elapsed_seconds: f32,
+    ) -> Result<bool> {
+        #[cfg(feature = "scripting")]
+        let _ = queue_root_script_advance(
+            self.file,
+            self.artboard().graph(),
+            &mut self.raw,
+            elapsed_seconds,
+        );
+        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
+        Ok(changed)
     }
 
     /// Return visible runtime shape locals under `point`, front to back.
@@ -395,7 +1105,17 @@ impl<'a> ArtboardInstance<'a> {
         state_machine: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let mut changed = self
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        changed |= self
             .raw
             .advance_state_machine_instance(state_machine, elapsed_seconds);
         if self
@@ -410,6 +1130,49 @@ impl<'a> ArtboardInstance<'a> {
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
         changed
+    }
+
+    /// Factory-bearing mirror of [`Self::advance_with_state_machine`].
+    pub fn try_advance_with_state_machine_and_factory(
+        &mut self,
+        state_machine: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        #[cfg(feature = "scripting")]
+        let _ = queue_root_script_advance(
+            self.file,
+            self.artboard().graph(),
+            &mut self.raw,
+            elapsed_seconds,
+        );
+        let mut changed = self
+            .raw
+            .advance_state_machine_instance(state_machine, elapsed_seconds);
+        if self
+            .raw
+            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
+        {
+            self.raw.advance_state_machine_instance(state_machine, 0.0);
+            changed = true;
+        }
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
+        Ok(changed)
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
@@ -434,7 +1197,8 @@ impl<'a> ArtboardInstance<'a> {
     ///
     /// `cache` must have been created by this instance. Once a draw succeeds,
     /// later draws must use a factory and renderer backed by the same renderer
-    /// integration as the retained resources.
+    /// integration as the retained resources. Scripted Files additionally pin
+    /// the exact live Factory object used for their first successful bootstrap.
     pub fn draw_with_render_cache(
         &mut self,
         factory: &mut dyn Factory,
@@ -447,13 +1211,28 @@ impl<'a> ArtboardInstance<'a> {
             .artboards
             .get(self.artboard_index)
             .context("artboard instance graph is unavailable")?;
-        let paint = render_paint_cache_for_draw(
+        #[cfg(feature = "scripting")]
+        let had_retained_paint = cache.paint.is_some();
+        ensure_render_paint_cache_for_draw(
             &mut cache.paint,
             &self.file.runtime,
             artboard,
             &self.file.graph.artboards,
             factory,
         )?;
+        #[cfg(feature = "scripting")]
+        if let Err(error) =
+            prepare_scripted_artboard_tree(self.file, artboard, &mut self.raw, factory)
+        {
+            if !had_retained_paint {
+                cache.paint = None;
+            }
+            return Err(error).context("failed to prepare scripted drawables");
+        }
+        let paint = cache
+            .paint
+            .as_mut()
+            .context("render paint cache disappeared after successful allocation")?;
         self.raw.update_pass();
         self.raw
             .prepare_static_artboard_tree_paints(
@@ -485,10 +1264,12 @@ impl<'a> ArtboardInstance<'a> {
 /// method-for-method mirror of [`ArtboardInstance`] (which stays the
 /// zero-overhead choice when a borrow works).
 pub struct OwnedArtboardInstance {
-    file: Arc<File>,
-    artboard_index: usize,
+    // Raw script-table handles must drop before the final Arc<File> can drop
+    // its VM. Field declaration order is drop order.
     raw: RuntimeArtboardInstance,
     geometry: RuntimeGeometryCache,
+    file: Arc<File>,
+    artboard_index: usize,
 }
 
 impl OwnedArtboardInstance {
@@ -511,10 +1292,10 @@ impl OwnedArtboardInstance {
             })?
         };
         Ok(Self {
-            file,
-            artboard_index,
             raw,
             geometry: RuntimeGeometryCache::default(),
+            file,
+            artboard_index,
         })
     }
 
@@ -568,12 +1349,49 @@ impl OwnedArtboardInstance {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        }
+        changed |= self.raw.advance_nested_artboards(elapsed_seconds);
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
         changed
+    }
+
+    /// Owning mirror of [`ArtboardInstance::try_advance_with_factory`],
+    /// including its stable live-Factory identity precondition.
+    pub fn try_advance_with_factory(
+        &mut self,
+        factory: &mut dyn Factory,
+        elapsed_seconds: f32,
+    ) -> Result<bool> {
+        #[cfg(feature = "scripting")]
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        #[cfg(feature = "scripting")]
+        let _ = queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+                .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
+        Ok(changed)
     }
 
     /// Return visible runtime shape locals under `point`, front to back.
@@ -696,7 +1514,13 @@ impl OwnedArtboardInstance {
         state_machine: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let mut changed = self
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        }
+        changed |= self
             .raw
             .advance_state_machine_instance(state_machine, elapsed_seconds);
         if self
@@ -711,6 +1535,47 @@ impl OwnedArtboardInstance {
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
         changed
+    }
+
+    /// Owning mirror of
+    /// [`ArtboardInstance::try_advance_with_state_machine_and_factory`].
+    pub fn try_advance_with_state_machine_and_factory(
+        &mut self,
+        state_machine: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        #[cfg(feature = "scripting")]
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        #[cfg(feature = "scripting")]
+        let _ = queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        let mut changed = self
+            .raw
+            .advance_state_machine_instance(state_machine, elapsed_seconds);
+        if self
+            .raw
+            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
+        {
+            self.raw.advance_state_machine_instance(state_machine, 0.0);
+            changed = true;
+        }
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+                .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
+        Ok(changed)
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
@@ -739,13 +1604,28 @@ impl OwnedArtboardInstance {
             .artboards
             .get(self.artboard_index)
             .context("owned artboard instance graph is unavailable")?;
-        let paint = render_paint_cache_for_draw(
+        #[cfg(feature = "scripting")]
+        let had_retained_paint = cache.paint.is_some();
+        ensure_render_paint_cache_for_draw(
             &mut cache.paint,
             &self.file.runtime,
             artboard,
             &self.file.graph.artboards,
             factory,
         )?;
+        #[cfg(feature = "scripting")]
+        if let Err(error) =
+            prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+        {
+            if !had_retained_paint {
+                cache.paint = None;
+            }
+            return Err(error).context("failed to prepare scripted drawables");
+        }
+        let paint = cache
+            .paint
+            .as_mut()
+            .context("render paint cache disappeared after successful allocation")?;
         self.raw.update_pass();
         self.raw
             .prepare_static_artboard_tree_paints(

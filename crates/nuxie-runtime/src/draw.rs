@@ -724,7 +724,7 @@ impl ArtboardInstance {
                 let (child_x, child_y) = inverse_host_world.transform_point(point.x, point.y);
                 let child_point = RenderVec2D::new(child_x, child_y);
                 if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
-                    let mut cloned = nested.child.as_ref().clone();
+                    let mut cloned = nested.child.as_ref().clone_for_transient_layout();
                     if runtime_apply_nested_artboard_layout_child_bounds(
                         &mut cloned,
                         command,
@@ -1673,7 +1673,7 @@ impl ArtboardInstance {
             let child = if apply_nested_layout_bounds
                 && command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
             {
-                let mut cloned = child.clone();
+                let mut cloned = child.clone_for_transient_layout();
                 runtime_apply_nested_artboard_layout_child_bounds(
                     &mut cloned,
                     command,
@@ -9649,15 +9649,15 @@ fn runtime_draw_scripted_drawable(
     ));
 
     let mut host = crate::NoopScriptHost;
-    script_instance
+    let draw_result = script_instance
         .borrow_mut()
         .call_draw(factory, renderer, &mut host)
-        .map_err(|error| anyhow::anyhow!("scripted drawable {global_id} draw failed: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("scripted drawable {global_id} draw failed: {error}"));
 
     if command.needs_save_operation || needs_opacity_save {
         renderer.restore();
     }
-    Ok(())
+    draw_result
 }
 
 fn runtime_draw_path_cache_path_kind(
@@ -10399,7 +10399,7 @@ fn runtime_draw_nested_artboard(
     if let Some(child) = persistent_child {
         let layout_child;
         let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
-            let mut cloned = child.clone();
+            let mut cloned = child.clone_for_transient_layout();
             runtime_apply_nested_artboard_layout_child_bounds(
                 &mut cloned,
                 &command,
@@ -19194,6 +19194,7 @@ mod tests {
 
     struct FakeScriptInstance {
         ops: Rc<RefCell<Vec<String>>>,
+        fails: bool,
     }
 
     impl ScriptInstance for FakeScriptInstance {
@@ -19217,7 +19218,11 @@ mod tests {
             _host: &mut dyn ScriptHost,
         ) -> Result<(), ScriptError> {
             self.ops.borrow_mut().push("script_draw".to_owned());
-            Ok(())
+            if self.fails {
+                Err(ScriptError::new("intentional draw failure"))
+            } else {
+                Ok(())
+            }
         }
 
         fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
@@ -19440,6 +19445,7 @@ mod tests {
             900,
             Box::new(FakeScriptInstance {
                 ops: Rc::clone(&ops),
+                fails: false,
             }),
         );
 
@@ -19475,6 +19481,60 @@ mod tests {
                 "save",
                 "opacity:0.5",
                 "transform:[1.0, 0.0, 0.0, 1.0, 10.0, 20.0]",
+                "script_draw",
+                "restore",
+            ]
+        );
+    }
+
+    #[test]
+    fn scripted_drawable_restores_cpp_envelope_when_user_draw_fails() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        instance.set_script_instance_for_global(
+            901,
+            Box::new(FakeScriptInstance {
+                ops: Rc::clone(&ops),
+                fails: true,
+            }),
+        );
+        let command = RuntimeDrawCommand {
+            kind: RuntimeDrawCommandKind::Draw,
+            object_kind: RuntimeDrawCommandObjectKind::ScriptedDrawable,
+            local_id: None,
+            global_id: Some(901),
+            type_name: "ScriptedDrawable",
+            world_transform: Some(Mat2D::IDENTITY),
+            render_opacity: 0.5,
+            referenced_artboard_global: None,
+            resolved_image_asset_global: None,
+            clipping_shape_local: None,
+            needs_save_operation: true,
+            shape_paints: Vec::new(),
+        };
+        let mut factory = CountingFactory {
+            stats: Rc::new(CountingStats::default()),
+            next_path_id: 0,
+        };
+        let mut renderer = RecordingRenderer {
+            ops: Rc::clone(&ops),
+        };
+
+        let error =
+            runtime_draw_scripted_drawable(&instance, &command, &mut factory, &mut renderer)
+                .expect_err("throwing script draw must surface an error");
+
+        assert!(error.to_string().contains("intentional draw failure"));
+        assert_eq!(
+            ops.borrow().as_slice(),
+            [
+                "save",
+                "opacity:0.5",
+                "transform:[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]",
                 "script_draw",
                 "restore",
             ]

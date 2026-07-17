@@ -51,8 +51,8 @@ use crate::properties::{
     transform_property_for_key,
 };
 use crate::scripting::{
-    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptInstance,
-    ScriptMethod, ScriptValue, ScriptViewModel,
+    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
+    ScriptInstance, ScriptMethod, ScriptValue, ScriptViewModel,
 };
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
@@ -103,6 +103,60 @@ impl Clone for RuntimeArtboardInstanceIdentity {
     }
 }
 
+/// Runtime script state is occurrence-owned and must never survive a raw
+/// ArtboardInstance clone. Draw/layout code clones artboards transiently; a
+/// normal derived clone of these collections would alias one Lua table into
+/// multiple concrete occurrences.
+#[derive(Debug)]
+pub(crate) struct RuntimeScriptState<T>(T);
+
+impl<T: Default> Default for RuntimeScriptState<T> {
+    fn default() -> Self {
+        Self(T::default())
+    }
+}
+
+impl<T: Default> Clone for RuntimeScriptState<T> {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl<T> std::ops::Deref for RuntimeScriptState<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for RuntimeScriptState<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: IntoIterator> IntoIterator for RuntimeScriptState<T> {
+    type Item = T::Item;
+    type IntoIter = T::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a RuntimeScriptState<T>
+where
+    &'a T: IntoIterator,
+{
+    type Item = <&'a T as IntoIterator>::Item;
+    type IntoIter = <&'a T as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.0).into_iter()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
     instance_identity: RuntimeArtboardInstanceIdentity,
@@ -128,13 +182,16 @@ pub struct ArtboardInstance {
     pub(crate) update_order: Vec<usize>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
-    pub(crate) script_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    pub(crate) script_instances_by_global:
+        RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
     pub(crate) scripted_data_converter_instances_by_global:
-        BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
+    has_scripted_drawables: bool,
     nested_script_owned_contexts: BTreeMap<u32, RuntimeOwnedViewModelInstance>,
-    script_path_effect_globals: BTreeSet<u32>,
-    script_advances_active: BTreeSet<u32>,
-    script_updates_pending: BTreeSet<u32>,
+    script_path_effect_globals: RuntimeScriptState<BTreeSet<u32>>,
+    script_advances_active: RuntimeScriptState<BTreeSet<u32>>,
+    script_updates_pending: RuntimeScriptState<BTreeSet<u32>>,
+    script_advance_queue: RuntimeScriptState<Vec<f32>>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
@@ -243,6 +300,40 @@ enum RuntimeNestedAnimationInstance {
 }
 
 impl ArtboardInstance {
+    /// Clone used only by draw/layout evaluation of the same concrete
+    /// occurrence. Unlike the public occurrence clone, this explicitly keeps
+    /// the VM table handles needed to render scripted drawables. Lifecycle
+    /// queues remain fresh so the transient view cannot advance the scripts.
+    pub(crate) fn clone_for_transient_layout(&self) -> Self {
+        let mut cloned = self.clone();
+        cloned.restore_transient_script_handles_from(self);
+        cloned
+    }
+
+    fn restore_transient_script_handles_from(&mut self, source: &Self) {
+        self.script_instances_by_global.0 = source.script_instances_by_global.0.clone();
+        self.scripted_data_converter_instances_by_global.0 =
+            source.scripted_data_converter_instances_by_global.0.clone();
+        self.script_path_effect_globals.0 = source.script_path_effect_globals.0.clone();
+        for (local_id, source_nested) in &source.nested_artboards {
+            if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
+                cloned_nested
+                    .child
+                    .restore_transient_script_handles_from(&source_nested.child);
+            }
+        }
+        for (local_id, source_items) in &source.component_list_items {
+            let Some(cloned_items) = self.component_list_items.get_mut(local_id) else {
+                continue;
+            };
+            for (cloned_item, source_item) in cloned_items.iter_mut().zip(source_items) {
+                cloned_item
+                    .child
+                    .restore_transient_script_handles_from(&source_item.child);
+            }
+        }
+    }
+
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
         let artboards = vec![graph.clone()];
         let context = RuntimeArtboardBuildContext {
@@ -419,12 +510,17 @@ impl ArtboardInstance {
             update_order,
             linear_animations,
             state_machines: Arc::new(state_machines),
-            script_instances_by_global: BTreeMap::new(),
-            scripted_data_converter_instances_by_global: BTreeMap::new(),
+            script_instances_by_global: RuntimeScriptState::default(),
+            scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
+            has_scripted_drawables: graph
+                .components
+                .iter()
+                .any(|component| component.type_name == "ScriptedDrawable"),
             nested_script_owned_contexts: BTreeMap::new(),
-            script_path_effect_globals: BTreeSet::new(),
-            script_advances_active: BTreeSet::new(),
-            script_updates_pending: BTreeSet::new(),
+            script_path_effect_globals: RuntimeScriptState::default(),
+            script_advances_active: RuntimeScriptState::default(),
+            script_updates_pending: RuntimeScriptState::default(),
+            script_advance_queue: RuntimeScriptState::default(),
             nested_artboards,
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -535,6 +631,7 @@ impl ArtboardInstance {
         global_id: u32,
         instance: Box<dyn ScriptInstance>,
     ) {
+        self.has_scripted_drawables = true;
         self.script_advances_active.remove(&global_id);
         if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
             self.script_advances_active.insert(global_id);
@@ -542,6 +639,16 @@ impl ArtboardInstance {
         self.script_instances_by_global
             .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
         self.script_updates_pending.insert(global_id);
+    }
+
+    /// Whether this artboard instance already owns a script instance for the
+    /// file-global scripted-object id.
+    pub fn has_script_instance_for_global(&self, global_id: u32) -> bool {
+        self.script_instances_by_global.contains_key(&global_id)
+    }
+
+    pub fn graph_global_id(&self) -> u32 {
+        self.graph_global_id
     }
 
     pub fn set_script_path_effect_instance_for_global(
@@ -556,10 +663,35 @@ impl ArtboardInstance {
     /// Runs the C++ `ScriptedDrawable::update` phase for scripts dirtied by
     /// initialization or input hydration.
     pub fn update_script_instances(&mut self) -> Result<bool, ScriptError> {
-        let pending = std::mem::take(&mut self.script_updates_pending);
+        self.update_script_instances_with(|instance, host| {
+            instance.call_method(ScriptMethod::Update, &[], host)
+        })
+    }
+
+    /// Runs pending scripted-object updates with a renderer factory available
+    /// to back any `Paint` values allocated by user code.
+    pub fn update_script_instances_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        self.update_script_instances_with(|instance, host| {
+            instance.call_method_with_factory(ScriptMethod::Update, &[], host, factory)
+        })
+    }
+
+    fn update_script_instances_with(
+        &mut self,
+        mut call_update: impl FnMut(
+            &mut dyn ScriptInstance,
+            &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError>,
+    ) -> Result<bool, ScriptError> {
+        let pending = std::mem::take(&mut self.script_updates_pending)
+            .into_iter()
+            .collect::<Vec<_>>();
         let mut did_update = false;
         let mut host = NoopScriptHost;
-        for global_id in pending {
+        for (index, global_id) in pending.iter().copied().enumerate() {
             if self.script_path_effect_globals.contains(&global_id) {
                 continue;
             }
@@ -567,10 +699,22 @@ impl ArtboardInstance {
                 continue;
             };
             let mut instance = handle.borrow_mut();
-            if !instance.has_method(ScriptMethod::Update)? {
+            let has_update = match instance.has_method(ScriptMethod::Update) {
+                Ok(has_update) => has_update,
+                Err(error) => {
+                    self.script_updates_pending
+                        .extend(pending[index..].iter().copied());
+                    return Err(error);
+                }
+            };
+            if !has_update {
                 continue;
             }
-            instance.call_method(ScriptMethod::Update, &[], &mut host)?;
+            if let Err(error) = call_update(instance.as_mut(), &mut host) {
+                self.script_updates_pending
+                    .extend(pending[index..].iter().copied());
+                return Err(error);
+            }
             did_update = true;
         }
         did_update |= self.refresh_component_list_items();
@@ -578,21 +722,54 @@ impl ArtboardInstance {
     }
 
     pub fn advance_script_instances(&mut self, seconds: f32) -> Result<bool, ScriptError> {
+        self.advance_script_instances_with(seconds, |instance, args, host| {
+            instance.call_method(ScriptMethod::Advance, args, host)
+        })
+    }
+
+    pub fn advance_script_instances_with_factory(
+        &mut self,
+        seconds: f32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        self.advance_script_instances_with(seconds, |instance, args, host| {
+            instance.call_method_with_factory(ScriptMethod::Advance, args, host, factory)
+        })
+    }
+
+    fn advance_script_instances_with(
+        &mut self,
+        seconds: f32,
+        mut call_advance: impl FnMut(
+            &mut dyn ScriptInstance,
+            &[ScriptValue],
+            &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError>,
+    ) -> Result<bool, ScriptError> {
         if seconds == 0.0 {
             return Ok(false);
         }
-        let active = std::mem::take(&mut self.script_advances_active);
+        let active = std::mem::take(&mut self.script_advances_active)
+            .into_iter()
+            .collect::<Vec<_>>();
         let mut did_advance = false;
         let mut host = NoopScriptHost;
-        for global_id in active {
+        for (index, global_id) in active.iter().copied().enumerate() {
             let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
                 continue;
             };
-            let result = handle.borrow_mut().call_method(
-                ScriptMethod::Advance,
+            let result = match call_advance(
+                handle.borrow_mut().as_mut(),
                 &[ScriptValue::Number(f64::from(seconds))],
                 &mut host,
-            )?;
+            ) {
+                Ok(result) => result,
+                Err(error) => {
+                    self.script_advances_active
+                        .extend(active[index..].iter().copied());
+                    return Err(error);
+                }
+            };
             if result == ScriptValue::Bool(true) {
                 self.script_advances_active.insert(global_id);
                 self.script_updates_pending.insert(global_id);
@@ -600,6 +777,36 @@ impl ArtboardInstance {
             }
         }
         Ok(did_advance)
+    }
+
+    /// Queue one exact advance step for replay when a renderer factory is
+    /// available. Steps are intentionally not aggregated.
+    pub fn queue_script_advance(&mut self, seconds: f32) {
+        if self.has_scripted_drawables && seconds != 0.0 {
+            self.script_advance_queue.push(seconds);
+        }
+    }
+
+    /// Replay queued advance steps and then run the pending update phase with
+    /// one renderer factory in scope for every Lua call.
+    pub fn flush_script_lifecycle_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let queued = std::mem::take(&mut self.script_advance_queue);
+        let mut changed = false;
+        for (index, seconds) in queued.iter().copied().enumerate() {
+            match self.advance_script_instances_with_factory(seconds, factory) {
+                Ok(advanced) => changed |= advanced,
+                Err(error) => {
+                    self.script_advance_queue
+                        .splice(0..0, queued[index..].iter().copied());
+                    return Err(error);
+                }
+            }
+        }
+        changed |= self.update_script_instances_with_factory(factory)?;
+        Ok(changed)
     }
 
     /// Re-runs user `init` after C++ clears a scripted object's data context.
@@ -1307,6 +1514,38 @@ impl ArtboardInstance {
         Ok(())
     }
 
+    /// Visit every concrete child artboard occurrence in this runtime tree,
+    /// including ordinary nested artboards and component-list item artboards.
+    pub fn try_visit_artboard_tree_instances_mut<E>(
+        &mut self,
+        visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.try_visit_artboard_tree_instances_mut_at_depth(1, visitor)
+    }
+
+    fn try_visit_artboard_tree_instances_mut_at_depth<E>(
+        &mut self,
+        depth: usize,
+        visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for nested in self.nested_artboards.values_mut() {
+            visitor(depth, nested.child.graph_global_id, nested.child.as_mut())?;
+            nested
+                .child
+                .try_visit_artboard_tree_instances_mut_at_depth(depth.saturating_add(1), visitor)?;
+        }
+        for items in self.component_list_items.values_mut() {
+            for item in items {
+                visitor(depth, item.child.graph_global_id, item.child.as_mut())?;
+                item.child.try_visit_artboard_tree_instances_mut_at_depth(
+                    depth.saturating_add(1),
+                    visitor,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn bind_nested_artboard_owned_context_for_graph(
         &mut self,
         file: &RuntimeFile,
@@ -1419,6 +1658,7 @@ impl ArtboardInstance {
         }
         for items in self.component_list_items.values_mut() {
             for item in items {
+                item.child.queue_script_advance(elapsed_seconds);
                 if let Some(state_machine) = item.state_machine.as_mut() {
                     changed |= item
                         .child
@@ -3045,6 +3285,8 @@ impl RuntimeNestedArtboardInstance {
             return true;
         }
 
+        self.child.queue_script_advance(local_elapsed_seconds);
+
         let mut changed = false;
         for animation in &mut self.animations {
             changed |= animation.advance(
@@ -3625,8 +3867,9 @@ mod tests {
     use crate::properties::property_key_for_name;
     use nuxie_binary::{BytesValue, FieldValue, RuntimeObject, RuntimeProperty, read_runtime_file};
     use nuxie_graph::GraphFile;
+    use nuxie_render_api::RecordingFactory;
     use nuxie_schema::definition_by_name;
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     struct UpdateScriptInstance {
@@ -3636,6 +3879,15 @@ mod tests {
 
     struct AdvanceScriptInstance {
         advances: Rc<Cell<usize>>,
+    }
+
+    struct RecordingAdvanceScriptInstance {
+        seconds: Rc<RefCell<Vec<f32>>>,
+    }
+
+    struct FailOnceAdvanceScriptInstance {
+        attempts: Rc<RefCell<Vec<f32>>>,
+        should_fail: Rc<Cell<bool>>,
     }
 
     impl ScriptInstance for AdvanceScriptInstance {
@@ -3655,6 +3907,69 @@ mod tests {
             let count = self.advances.get() + 1;
             self.advances.set(count);
             Ok(ScriptValue::Bool(count != 2))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for RecordingAdvanceScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Advance)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Advance);
+            let seconds = args
+                .first()
+                .and_then(ScriptValue::as_number)
+                .map(|value| value as f32)
+                .expect("advance receives seconds");
+            self.seconds.borrow_mut().push(seconds);
+            Ok(ScriptValue::Bool(true))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for FailOnceAdvanceScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Advance)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Advance);
+            let seconds = args
+                .first()
+                .and_then(ScriptValue::as_number)
+                .map(|value| value as f32)
+                .expect("advance receives seconds");
+            self.attempts.borrow_mut().push(seconds);
+            if self.should_fail.replace(false) {
+                return Err(ScriptError::new("fail once"));
+            }
+            Ok(ScriptValue::Bool(true))
         }
 
         fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
@@ -3752,12 +4067,14 @@ mod tests {
             update_order,
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
-            script_instances_by_global: BTreeMap::new(),
-            scripted_data_converter_instances_by_global: BTreeMap::new(),
+            script_instances_by_global: RuntimeScriptState::default(),
+            scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
+            has_scripted_drawables: false,
             nested_script_owned_contexts: BTreeMap::new(),
-            script_path_effect_globals: BTreeSet::new(),
-            script_advances_active: BTreeSet::new(),
-            script_updates_pending: BTreeSet::new(),
+            script_path_effect_globals: RuntimeScriptState::default(),
+            script_advances_active: RuntimeScriptState::default(),
+            script_updates_pending: RuntimeScriptState::default(),
+            script_advance_queue: RuntimeScriptState::default(),
             nested_artboards: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -3815,6 +4132,64 @@ mod tests {
     }
 
     #[test]
+    fn public_artboard_clone_is_cold_but_transient_layout_clone_keeps_scripts() {
+        let mut original = synthetic_instance(Vec::new(), Vec::new());
+        original.set_script_instance_for_global(
+            7,
+            Box::new(UpdateScriptInstance {
+                inits: Rc::new(Cell::new(0)),
+                updates: Rc::new(Cell::new(0)),
+            }),
+        );
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        child.set_script_instance_for_global(
+            8,
+            Box::new(UpdateScriptInstance {
+                inits: Rc::new(Cell::new(0)),
+                updates: Rc::new(Cell::new(0)),
+            }),
+        );
+        original.nested_artboards.insert(
+            0,
+            RuntimeNestedArtboardInstance {
+                child: Box::new(child),
+                render_cache_revision: 0,
+                data_bind_path_ids: None,
+                data_bind_path_is_relative: false,
+                stateful_view_model_instance_local: None,
+                stateful_view_model_context: None,
+                data_bind_property_source_locals: Vec::new(),
+                data_bind_image_source_locals: Vec::new(),
+                data_bind_context_source_locals_by_path: BTreeMap::new(),
+                animations: Vec::new(),
+                is_paused: false,
+                speed: 1.0,
+                quantize: -1.0,
+                cumulated_seconds: 0.0,
+            },
+        );
+
+        let cloned = original.clone();
+        let transient = original.clone_for_transient_layout();
+
+        assert!(original.has_script_instance_for_global(7));
+        assert!(!cloned.has_script_instance_for_global(7));
+        assert!(transient.has_script_instance_for_global(7));
+        assert!(
+            !cloned
+                .nested_artboards
+                .get(&0)
+                .is_some_and(|nested| nested.child.has_script_instance_for_global(8))
+        );
+        assert!(
+            transient
+                .nested_artboards
+                .get(&0)
+                .is_some_and(|nested| nested.child.has_script_instance_for_global(8))
+        );
+    }
+
+    #[test]
     fn scripted_updates_run_once_per_attach_or_input_change() {
         let mut instance = synthetic_instance(Vec::new(), Vec::new());
         let inits = Rc::new(Cell::new(0));
@@ -3849,6 +4224,79 @@ mod tests {
                 .expect("post-init update")
         );
         assert_eq!(updates.get(), 3);
+    }
+
+    #[test]
+    fn nested_script_queue_replays_exact_local_speed_adjusted_steps() {
+        let seconds = Rc::new(RefCell::new(Vec::new()));
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        child.set_script_instance_for_global(
+            7,
+            Box::new(RecordingAdvanceScriptInstance {
+                seconds: Rc::clone(&seconds),
+            }),
+        );
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.nested_artboards.insert(
+            0,
+            RuntimeNestedArtboardInstance {
+                child: Box::new(child),
+                render_cache_revision: 0,
+                data_bind_path_ids: None,
+                data_bind_path_is_relative: false,
+                stateful_view_model_instance_local: None,
+                stateful_view_model_context: None,
+                data_bind_property_source_locals: Vec::new(),
+                data_bind_image_source_locals: Vec::new(),
+                data_bind_context_source_locals_by_path: BTreeMap::new(),
+                animations: Vec::new(),
+                is_paused: false,
+                speed: 2.0,
+                quantize: -1.0,
+                cumulated_seconds: 0.0,
+            },
+        );
+        parent.nested_artboard_locals.push(0);
+
+        parent.advance_nested_artboards(0.25);
+        parent.advance_nested_artboards(0.125);
+        let nested = parent
+            .nested_artboards
+            .get_mut(&0)
+            .expect("nested occurrence");
+        let mut factory = RecordingFactory::new();
+        nested
+            .child
+            .flush_script_lifecycle_with_factory(&mut factory)
+            .expect("queued lifecycle succeeds");
+
+        assert_eq!(seconds.borrow().as_slice(), [0.5, 0.25]);
+    }
+
+    #[test]
+    fn failed_script_advance_preserves_active_state_and_exact_queued_steps() {
+        let attempts = Rc::new(RefCell::new(Vec::new()));
+        let should_fail = Rc::new(Cell::new(true));
+        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        instance.set_script_instance_for_global(
+            7,
+            Box::new(FailOnceAdvanceScriptInstance {
+                attempts: Rc::clone(&attempts),
+                should_fail: Rc::clone(&should_fail),
+            }),
+        );
+        instance.queue_script_advance(0.5);
+        instance.queue_script_advance(0.25);
+        let mut factory = RecordingFactory::new();
+
+        instance
+            .flush_script_lifecycle_with_factory(&mut factory)
+            .expect_err("first advance fails");
+        instance
+            .flush_script_lifecycle_with_factory(&mut factory)
+            .expect("the exact queue is retryable");
+
+        assert_eq!(attempts.borrow().as_slice(), [0.5, 0.5, 0.25]);
     }
 
     #[test]

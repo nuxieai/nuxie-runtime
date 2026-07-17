@@ -56,6 +56,21 @@ pub struct ScriptVm {
     default_context_parent_view_models: Vec<ScriptViewModel>,
 }
 
+/// File-registered protocol generator. The script chunk has already executed;
+/// each drawable occurrence calls this generator to create a fresh table.
+#[derive(Clone)]
+pub struct ScriptProgram {
+    generator: Function,
+}
+
+impl std::fmt::Debug for ScriptProgram {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ScriptProgram")
+            .finish_non_exhaustive()
+    }
+}
+
 /// A luaur-backed scripted object instance table.
 pub struct LuaScriptInstance {
     table: Table,
@@ -167,6 +182,37 @@ impl LuaScriptInstance {
     pub fn table(&self) -> &Table {
         &self.table
     }
+
+    fn call_method_value(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+    ) -> std::result::Result<Value, ScriptError> {
+        let value: Value = self.table.get(method.as_str()).map_err(script_error)?;
+        let Value::Function(function) = value else {
+            return match value {
+                Value::Nil => Ok(Value::Nil),
+                other => Err(ScriptError::new(format!(
+                    "script method '{}' is {}, not function",
+                    method.as_str(),
+                    other.type_name()
+                ))),
+            };
+        };
+
+        let lua = self.table.lua();
+        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        call_args.push_back(Value::Table(self.table.clone()));
+        for arg in args {
+            call_args.push_back(script_value_to_lua(&lua, arg));
+        }
+        if method == ScriptMethod::Init
+            && let Some(context) = self.context.as_ref()
+        {
+            call_args.push_back(Value::UserData(context.clone()));
+        }
+        function.call(call_args).map_err(script_error)
+    }
 }
 
 impl Default for ScriptVm {
@@ -183,9 +229,58 @@ impl ScriptVm {
         host: &mut dyn ScriptHost,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        let program = self.register_protocol_script_with_factory(name, payload, factory)?;
+        self.instantiate_registered_script_with_factory(&program, host, factory)
+    }
+
+    /// Execute one protocol ScriptAsset chunk exactly once for a File and
+    /// retain the generator it returns.
+    pub fn register_protocol_script_with_factory(
+        &self,
+        name: &str,
+        payload: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<ScriptProgram, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
-            <Self as RuntimeScriptingVm>::instantiate_script(self, name, payload, host)
+            self.install_rive_globals().map_err(script_error)?;
+            let generator = self
+                .load_script_asset_payload(name, payload)
+                .map_err(script_error)?
+                .call(())
+                .map_err(script_error)?;
+            Ok(ScriptProgram { generator })
+        })
+    }
+
+    /// Invoke a File-registered protocol generator for one concrete drawable
+    /// occurrence while the caller's renderer factory is in scope.
+    pub fn instantiate_registered_script_with_factory(
+        &self,
+        program: &ScriptProgram,
+        _host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || {
+            let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+            let context = self
+                .lua
+                .create_userdata(ScriptedContext::new(
+                    Rc::clone(&context_view_model),
+                    self.default_context_parent_view_models.clone(),
+                ))
+                .map_err(script_error)?;
+            let instance: Table = program
+                .generator
+                .call(context.clone())
+                .map_err(script_error)?;
+            Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
+                instance,
+                self.renderer_bindings.clone(),
+                context_view_model,
+                Some(context),
+            )) as Box<dyn ScriptInstance>)
         })
     }
 
@@ -358,6 +453,18 @@ impl ScriptVm {
     pub fn register_module(&self, name: &str, payload: &[u8]) -> Result<Value> {
         self.install_rive_globals()?;
         self.register_module_after_init(name, payload)
+    }
+
+    /// Register a module while exposing the draw call's renderer factory to
+    /// module top-level code (for example a module that constructs a `Paint`).
+    pub fn register_module_with_factory(
+        &self,
+        name: &str,
+        payload: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> Result<Value> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || self.register_module(name, payload))
     }
 
     fn register_module_after_init(&self, name: &str, payload: &[u8]) -> Result<Value> {
@@ -643,31 +750,8 @@ impl ScriptInstance for LuaScriptInstance {
         args: &[ScriptValue],
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<ScriptValue, ScriptError> {
-        let value: Value = self.table.get(method.as_str()).map_err(script_error)?;
-        let Value::Function(function) = value else {
-            return match value {
-                Value::Nil => Ok(ScriptValue::Nil),
-                other => Err(ScriptError::new(format!(
-                    "script method '{}' is {}, not function",
-                    method.as_str(),
-                    other.type_name()
-                ))),
-            };
-        };
-
-        let lua = self.table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(self.table.clone()));
-        for arg in args {
-            call_args.push_back(script_value_to_lua(&lua, arg));
-        }
-        if method == ScriptMethod::Init
-            && let Some(context) = self.context.as_ref()
-        {
-            call_args.push_back(Value::UserData(context.clone()));
-        }
-        let value: Value = function.call(call_args).map_err(script_error)?;
-        Ok(script_value_from_lua(value).map_err(script_error)?)
+        let value = self.call_method_value(method, args)?;
+        script_value_from_lua(value).map_err(script_error)
     }
 
     fn call_method_with_factory(
@@ -679,6 +763,18 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<ScriptValue, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || self.call_method(method, args, host))
+    }
+
+    fn call_init_with_factory(
+        &mut self,
+        _host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<bool, ScriptError> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || {
+            let value = self.call_method_value(ScriptMethod::Init, &[])?;
+            Ok(!matches!(value, Value::Nil | Value::Boolean(false)))
+        })
     }
 
     fn call_path_effect_update(
@@ -720,7 +816,7 @@ impl ScriptInstance for LuaScriptInstance {
 
     fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {
         let value: Value = self.table.get(name).map_err(script_error)?;
-        Ok(script_value_from_lua(value).map_err(script_error)?)
+        script_value_from_lua(value).map_err(script_error)
     }
 
     fn set_input(

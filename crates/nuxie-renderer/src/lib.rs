@@ -1848,6 +1848,8 @@ impl WgpuFrame {
         let logical_flushes = u64::try_from(self.logical_flush_starts.len()).unwrap_or(u64::MAX);
         let mut atomic_strategy_partitions = 0_u64;
         if self.mode == RenderMode::ClockwiseAtomic {
+            let advanced_segments =
+                AdvancedAtomicSegmentPlan::new(&self.draws, self.width, self.height);
             for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
                 let flush_end = self
                     .logical_flush_starts
@@ -1857,13 +1859,17 @@ impl WgpuFrame {
                 let mut start = flush_start;
                 while start < flush_end {
                     atomic_strategy_partitions = atomic_strategy_partitions.saturating_add(1);
-                    start = atomic_strategy_run_end(
-                        &self.draws,
-                        start,
-                        flush_end,
-                        self.width,
-                        self.height,
-                    );
+                    start = advanced_segments
+                        .segment_end(start, flush_end)
+                        .unwrap_or_else(|| {
+                            atomic_strategy_run_end(
+                                &self.draws,
+                                start,
+                                flush_end,
+                                self.width,
+                                self.height,
+                            )
+                        });
                 }
             }
         }
@@ -2010,6 +2016,7 @@ impl WgpuFrame {
              draw_group_starts: &[usize],
              clear_target: bool,
              force_clockwise_atomic_batch: bool,
+             force_generic_atomic_batch: bool,
              load_color: Option<&wgpu::TextureView>,
              encoder: &mut wgpu::CommandEncoder| {
                 struct PreparedAtomicDraw {
@@ -2077,9 +2084,10 @@ impl WgpuFrame {
                             && draw.paint.feather == 0.0
                             && draw.state.clip_rect.is_none()
                     });
-                let use_clockwise_atomic_batch = force_clockwise_atomic_batch
-                    || homogeneous_global_fill
-                    || clockwise_atomic_clip_run;
+                let use_clockwise_atomic_batch = !force_generic_atomic_batch
+                    && (force_clockwise_atomic_batch
+                        || homogeneous_global_fill
+                        || clockwise_atomic_clip_run);
                 // C++ AtomicDrawRenderPass applies colorLoadAction to its
                 // renderPassInitialize pass. Generic fixed-color atomics can
                 // do the same; specialized and destination-read paths retain
@@ -3252,11 +3260,13 @@ impl WgpuFrame {
             |draws: &[SolidDraw],
              draw_groups: Option<&[u32]>,
              draw_prepasses: Option<&[bool]>,
+             authored_orders: Option<&[usize]>,
              logical_flush_starts: &[usize],
              clear_target: bool,
              encoder: &mut wgpu::CommandEncoder| {
                 debug_assert!(draw_groups.is_none_or(|groups| groups.len() == draws.len()));
                 debug_assert!(draw_prepasses.is_none_or(|prepasses| prepasses.len() == draws.len()));
+                debug_assert!(authored_orders.is_none_or(|orders| orders.len() == draws.len()));
                 debug_assert!(logical_flush_starts.first().is_none_or(|start| *start == 0));
                 let has_advanced_msaa = draws.iter().any(draw_uses_advanced_blend);
                 let resolve_fixed_msaa_directly = clear_target && !has_advanced_msaa;
@@ -3307,6 +3317,21 @@ impl WgpuFrame {
                     logical_flush: usize,
                     prepared: Option<path_pipeline::PreparedPathDraw>,
                 }
+                struct PendingAtlasDraw {
+                    tessellation: draw::FillTessellation,
+                    paint: gpu::PaintData,
+                    paint_aux: gpu::PaintAuxData,
+                    vertices: [gpu::TriangleVertex; 6],
+                    placement: AtlasPlacement,
+                    is_stroke: bool,
+                    clip_rect: bool,
+                    path_clip: bool,
+                    advanced_blend: bool,
+                    hsl_blend: bool,
+                    destination_copy_bounds: [u32; 4],
+                    logical_flush: usize,
+                    authored_order: usize,
+                }
                 enum PendingDraw {
                     Stroke(usize, DirectPathOptions),
                     Fill(usize, FillRule, DirectPathOptions),
@@ -3320,7 +3345,7 @@ impl WgpuFrame {
                         msaa_stencil_pipeline::PreparedStencilDraw,
                         MsaaClipResetAction,
                     ),
-                    Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
+                    Atlas(usize),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
                 enum PreparedDraw {
@@ -3344,6 +3369,7 @@ impl WgpuFrame {
                     draw_group: u32,
                     is_prepass: bool,
                     logical_flush: usize,
+                    authored_order: usize,
                 }
                 let gradient_batch = prepare_gradient_batch(draws);
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
@@ -3359,6 +3385,7 @@ impl WgpuFrame {
                 );
                 let mut pending_draws = Vec::with_capacity(draws.len());
                 let mut pending_paths = Vec::new();
+                let mut pending_atlas_draws = Vec::new();
                 let mut prepared_schedules = Vec::with_capacity(draws.len());
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let z_index = draw_groups.map_or_else(
@@ -3374,6 +3401,8 @@ impl WgpuFrame {
                         logical_flush: logical_flush_starts
                             .partition_point(|&start| start <= draw_index)
                             .saturating_sub(1),
+                        authored_order: authored_orders
+                            .map_or(draw_index, |orders| orders[draw_index]),
                     };
                     if let DrawRole::ClipReset { bounds, action } = draw.role {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
@@ -3517,16 +3546,10 @@ impl WgpuFrame {
                                 self.height,
                             ),
                         ) {
-                            tessellation.path.atlas_transform = gpu::AtlasTransform {
-                                scale_factor: placement.scale,
-                                translate_x: placement.translate[0],
-                                translate_y: placement.translate[1],
-                            };
                             tessellation.path.z_index = z_index;
                             for contour in &mut tessellation.contours {
                                 contour.path_id = 1;
                             }
-                            let paths = [gpu::PathData::zeroed(), tessellation.path];
                             let gradient = gradient_batch.draws[draw_index];
                             let mut paint = if let Some(gradient) = gradient {
                                 if draw.paint.style == RenderPaintStyle::Stroke {
@@ -3558,86 +3581,6 @@ impl WgpuFrame {
                             if draw.state.clip_rect.is_some() {
                                 paint = paint.with_clip_rect();
                             }
-                            let paints = [
-                                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
-                                paint,
-                            ];
-                            let paint_aux = [
-                                gpu::PaintAuxData::zeroed(),
-                                gradient.map_or_else(
-                                    || clip_rect_paint_aux(draw.state.clip_rect),
-                                    |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
-                                ),
-                            ];
-                            let tessellation_height =
-                                draw::tessellation_texture_height(&tessellation.spans);
-                            let atlas_content_size = [placement.width, placement.height];
-                            let atlas_physical_size = atlas_physical_size(
-                                atlas_content_size,
-                                self.context.device.limits().max_texture_dimension_2d,
-                            );
-                            let mut uniforms =
-                                analytic_uniforms(self.width, self.height, tessellation_height);
-                            uniforms.atlas_texture_inverse_size = [
-                                1.0 / atlas_physical_size[0] as f32,
-                                1.0 / atlas_physical_size[1] as f32,
-                            ];
-                            uniforms.atlas_content_inverse_viewport = [
-                                2.0 / atlas_content_size[0] as f32,
-                                -2.0 / atlas_content_size[1] as f32,
-                            ];
-                            let tessellation_texture = self.context.tessellator.encode(
-                                &self.context.device,
-                                &mut tessellation_texture_frame.borrow_mut(),
-                                &mut tessellation_uploads.borrow_mut(),
-                                encoder,
-                                &self.context.feather_lut.view,
-                                &tessellation.spans,
-                                &uniforms,
-                                &paths,
-                                &tessellation.contours,
-                                tessellation_height,
-                            );
-                            let tessellation_view = tessellation_texture.view.clone();
-                            let atlas_texture =
-                                self.context
-                                    .device
-                                    .create_texture(&wgpu::TextureDescriptor {
-                                        label: Some("nuxie-msaa-feather-atlas"),
-                                        size: wgpu::Extent3d {
-                                            width: atlas_physical_size[0],
-                                            height: atlas_physical_size[1],
-                                            depth_or_array_layers: 1,
-                                        },
-                                        mip_level_count: 1,
-                                        sample_count: 1,
-                                        dimension: wgpu::TextureDimension::D2,
-                                        format: wgpu::TextureFormat::R16Float,
-                                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                                        view_formats: &[],
-                                    });
-                            let atlas_view = atlas_texture.create_view(&Default::default());
-                            self.context.atlas_pipeline.encode_mask(
-                                &self.context.device,
-                                encoder,
-                                &atlas_view,
-                                &self.context.patch_vertex_buffer,
-                                &self.context.patch_index_buffer,
-                                &tessellation_view,
-                                &self.context.feather_lut.view,
-                                &uniforms,
-                                &paths,
-                                &paints,
-                                &paint_aux,
-                                &tessellation.contours,
-                                tessellation.base_instance,
-                                tessellation.instance_count,
-                                draw.paint.style == RenderPaintStyle::Stroke,
-                                true,
-                                atlas_content_size,
-                                [0, 0, placement.width, placement.height],
-                            );
                             let [left, top, right, bottom] = placement.bounds;
                             let vertices = [
                                 gpu::TriangleVertex::new([left, bottom], 1, 1),
@@ -3647,30 +3590,34 @@ impl WgpuFrame {
                                 gpu::TriangleVertex::new([left, top], 1, 1),
                                 gpu::TriangleVertex::new([right, top], 1, 1),
                             ];
-                            pending_draws.push(PendingDraw::Atlas(
-                                self.context.msaa_atlas_pipeline.prepare(
-                                    &self.context.device,
-                                    &tessellation_view,
-                                    &self.context.feather_lut.view,
-                                    gradient_texture.as_ref().map(|texture| &texture.view),
-                                    &atlas_view,
-                                    &uniforms,
-                                    &paths,
-                                    &paints,
-                                    &paint_aux,
-                                    &tessellation.contours,
-                                    &vertices,
-                                    destination_view.as_ref(),
-                                    draw.state.clip_rect.is_some(),
-                                    matches!(
-                                        draw.role,
-                                        DrawRole::Content { clip_id } if clip_id != 0
-                                    ),
-                                    draw.paint.blend_mode != BlendMode::SrcOver,
-                                    gpu::blend_mode_id(draw.paint.blend_mode) >= 12,
-                                    [left as u32, top as u32, right as u32, bottom as u32],
+                            let atlas_index = pending_atlas_draws.len();
+                            pending_atlas_draws.push(PendingAtlasDraw {
+                                tessellation,
+                                paint,
+                                paint_aux: gradient.map_or_else(
+                                    || clip_rect_paint_aux(draw.state.clip_rect),
+                                    |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
                                 ),
-                            ));
+                                vertices,
+                                placement,
+                                is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
+                                clip_rect: draw.state.clip_rect.is_some(),
+                                path_clip: matches!(
+                                    draw.role,
+                                    DrawRole::Content { clip_id } if clip_id != 0
+                                ),
+                                advanced_blend: draw.paint.blend_mode != BlendMode::SrcOver,
+                                hsl_blend: gpu::blend_mode_id(draw.paint.blend_mode) >= 12,
+                                destination_copy_bounds: [
+                                    left as u32,
+                                    top as u32,
+                                    right as u32,
+                                    bottom as u32,
+                                ],
+                                logical_flush: schedule.logical_flush,
+                                authored_order: schedule.authored_order,
+                            });
+                            pending_draws.push(PendingDraw::Atlas(atlas_index));
                             prepared_schedules.push(schedule);
                             continue;
                         }
@@ -3855,6 +3802,192 @@ impl WgpuFrame {
                     }
                 }
                 debug_assert_eq!(pending_draws.len(), prepared_schedules.len());
+                let mut prepared_atlas_draws = (0..pending_atlas_draws.len())
+                    .map(|_| None)
+                    .collect::<Vec<Option<msaa_atlas_pipeline::PreparedAtlasBlit>>>();
+                if !pending_atlas_draws.is_empty() {
+                    struct PackedAtlasFlush {
+                        indices: Vec<usize>,
+                        atlas: LogicalFeatherAtlasLayout,
+                    }
+
+                    let logical_flush_count = logical_flush_starts.len().max(1);
+                    let max_atlas_dimension = self.context.device.limits().max_texture_dimension_2d;
+                    let mut packed_flushes = Vec::new();
+                    let mut max_content_size = [1, 1];
+                    for logical_flush in 0..logical_flush_count {
+                        let mut indices = pending_atlas_draws
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(index, draw)| {
+                                (draw.logical_flush == logical_flush).then_some(index)
+                            })
+                            .collect::<Vec<_>>();
+                        if indices.is_empty() {
+                            continue;
+                        }
+                        indices.sort_unstable_by_key(|&index| {
+                            pending_atlas_draws[index].authored_order
+                        });
+                        let draw_sizes = indices
+                            .iter()
+                            .map(|&index| {
+                                let placement = pending_atlas_draws[index].placement;
+                                (
+                                    placement.width - FEATHER_ATLAS_PADDING * 2,
+                                    placement.height - FEATHER_ATLAS_PADDING * 2,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let atlas =
+                            pack_logical_feather_atlas_for_cpp(max_atlas_dimension, &draw_sizes)?;
+                        let extent = atlas.extent();
+                        max_content_size[0] = max_content_size[0].max(extent[0]);
+                        max_content_size[1] = max_content_size[1].max(extent[1]);
+                        packed_flushes.push(PackedAtlasFlush { indices, atlas });
+                    }
+                    let atlas_physical_size = cpp_webgpu_atlas_physical_size(
+                        max_content_size,
+                        [self.width, self.height],
+                        max_atlas_dimension,
+                    );
+
+                    for packed in packed_flushes {
+                        let atlas_content_size = packed.atlas.extent();
+                        let atlas_texture =
+                            self.context
+                                .device
+                                .create_texture(&wgpu::TextureDescriptor {
+                                    label: Some("nuxie-msaa-feather-atlas"),
+                                    size: wgpu::Extent3d {
+                                        width: atlas_physical_size[0],
+                                        height: atlas_physical_size[1],
+                                        depth_or_array_layers: 1,
+                                    },
+                                    mip_level_count: 1,
+                                    sample_count: 1,
+                                    dimension: wgpu::TextureDimension::D2,
+                                    format: wgpu::TextureFormat::R16Float,
+                                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                                    view_formats: &[],
+                                });
+                        let atlas_view = atlas_texture.create_view(&Default::default());
+                        for (
+                            atlas_position,
+                            ((&atlas_index, &origin), &(region_width, region_height)),
+                        ) in packed
+                            .indices
+                            .iter()
+                            .zip(packed.atlas.origins())
+                            .zip(&packed.atlas.region_sizes)
+                            .enumerate()
+                        {
+                            let draw = &mut pending_atlas_draws[atlas_index];
+                            let raw_width = draw.placement.width - FEATHER_ATLAS_PADDING * 2;
+                            let raw_height = draw.placement.height - FEATHER_ATLAS_PADDING * 2;
+                            let horizontal_padding = (region_width - raw_width) / 2;
+                            let vertical_padding = (region_height - raw_height) / 2;
+                            draw.placement.origin = origin;
+                            draw.placement.translate[0] += origin[0] as f32;
+                            draw.placement.translate[1] += origin[1] as f32;
+                            if horizontal_padding != FEATHER_ATLAS_PADDING {
+                                draw.placement.translate[0] +=
+                                    horizontal_padding as f32 - FEATHER_ATLAS_PADDING as f32;
+                            }
+                            if vertical_padding != FEATHER_ATLAS_PADDING {
+                                draw.placement.translate[1] +=
+                                    vertical_padding as f32 - FEATHER_ATLAS_PADDING as f32;
+                            }
+                            draw.placement.width = region_width;
+                            draw.placement.height = region_height;
+                            draw.tessellation.path.atlas_transform = gpu::AtlasTransform {
+                                scale_factor: draw.placement.scale,
+                                translate_x: draw.placement.translate[0],
+                                translate_y: draw.placement.translate[1],
+                            };
+                            let paths = [gpu::PathData::zeroed(), draw.tessellation.path];
+                            let paints = [
+                                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+                                draw.paint,
+                            ];
+                            let paint_aux = [gpu::PaintAuxData::zeroed(), draw.paint_aux];
+                            let tessellation_height =
+                                draw::tessellation_texture_height(&draw.tessellation.spans);
+                            let mut uniforms =
+                                analytic_uniforms(self.width, self.height, tessellation_height);
+                            if gradient_batch.height != 0 {
+                                uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                            }
+                            uniforms.atlas_texture_inverse_size = [
+                                1.0 / atlas_physical_size[0] as f32,
+                                1.0 / atlas_physical_size[1] as f32,
+                            ];
+                            uniforms.atlas_content_inverse_viewport = [
+                                2.0 / atlas_content_size[0] as f32,
+                                -2.0 / atlas_content_size[1] as f32,
+                            ];
+                            let tessellation_texture = self.context.tessellator.encode(
+                                &self.context.device,
+                                &mut tessellation_texture_frame.borrow_mut(),
+                                &mut tessellation_uploads.borrow_mut(),
+                                encoder,
+                                &self.context.feather_lut.view,
+                                &draw.tessellation.spans,
+                                &uniforms,
+                                &paths,
+                                &draw.tessellation.contours,
+                                tessellation_height,
+                            );
+                            let tessellation_view = tessellation_texture.view.clone();
+                            self.context.atlas_pipeline.encode_mask(
+                                &self.context.device,
+                                encoder,
+                                &atlas_view,
+                                &self.context.patch_vertex_buffer,
+                                &self.context.patch_index_buffer,
+                                &tessellation_view,
+                                &self.context.feather_lut.view,
+                                &uniforms,
+                                &paths,
+                                &paints,
+                                &paint_aux,
+                                &draw.tessellation.contours,
+                                draw.tessellation.base_instance,
+                                draw.tessellation.instance_count,
+                                draw.is_stroke,
+                                atlas_position == 0,
+                                atlas_content_size,
+                                [
+                                    origin[0],
+                                    origin[1],
+                                    draw.placement.width,
+                                    draw.placement.height,
+                                ],
+                            );
+                            prepared_atlas_draws[atlas_index] =
+                                Some(self.context.msaa_atlas_pipeline.prepare(
+                                    &self.context.device,
+                                    &tessellation_view,
+                                    &self.context.feather_lut.view,
+                                    gradient_texture.as_ref().map(|texture| &texture.view),
+                                    &atlas_view,
+                                    &uniforms,
+                                    &paths,
+                                    &paints,
+                                    &paint_aux,
+                                    &draw.tessellation.contours,
+                                    &draw.vertices,
+                                    destination_view.as_ref(),
+                                    draw.clip_rect,
+                                    draw.path_clip,
+                                    draw.advanced_blend,
+                                    draw.hsl_blend,
+                                    draw.destination_copy_bounds,
+                                ));
+                        }
+                    }
+                }
                 let logical_flush_count = logical_flush_starts.len().max(1);
                 for logical_flush in 0..logical_flush_count {
                     let path_start =
@@ -4090,6 +4223,11 @@ impl WgpuFrame {
                         .take()
                         .expect("MSAA path escaped flush-wide preparation")
                 };
+                let mut take_atlas = |index: usize| {
+                    prepared_atlas_draws[index]
+                        .take()
+                        .expect("MSAA atlas escaped logical-flush preparation")
+                };
                 let prepared_draws = pending_draws
                     .into_iter()
                     .map(|draw| match draw {
@@ -4111,7 +4249,7 @@ impl WgpuFrame {
                         PendingDraw::ClipReset(draw, action) => {
                             PreparedDraw::ClipReset(draw, action)
                         }
-                        PendingDraw::Atlas(draw) => PreparedDraw::Atlas(draw),
+                        PendingDraw::Atlas(index) => PreparedDraw::Atlas(take_atlas(index)),
                         PendingDraw::Bootstrap(path, cover, fill_rule) => {
                             PreparedDraw::Bootstrap(path, cover, fill_rule)
                         }
@@ -4741,7 +4879,7 @@ impl WgpuFrame {
                 Ok(())
             };
         if self.draws.is_empty() {
-            encode_fallback_run(&self.draws, None, None, &[0], true, &mut encoder)?;
+            encode_fallback_run(&self.draws, None, None, None, &[0], true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
             if self.draws.len() > MAX_DRAWS_PER_SUBMISSION
                 && msaa_draws_can_submit_independently(&self.draws)
@@ -4753,11 +4891,12 @@ impl WgpuFrame {
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    let (scheduled_draws, draw_groups, draw_prepasses) = ordered_msaa_draws(
-                        &self.draws[flush_start..flush_end],
-                        self.width,
-                        self.height,
-                    );
+                    let (scheduled_draws, draw_groups, draw_prepasses, authored_orders) =
+                        ordered_msaa_draws(
+                            &self.draws[flush_start..flush_end],
+                            self.width,
+                            self.height,
+                        );
                     for chunk_start in (0..scheduled_draws.len()).step_by(MAX_DRAWS_PER_SUBMISSION)
                     {
                         let chunk_end =
@@ -4766,6 +4905,7 @@ impl WgpuFrame {
                             &scheduled_draws[chunk_start..chunk_end],
                             Some(&draw_groups[chunk_start..chunk_end]),
                             Some(&draw_prepasses[chunk_start..chunk_end]),
+                            Some(&authored_orders[chunk_start..chunk_end]),
                             &[0],
                             clear_target,
                             &mut encoder,
@@ -4778,6 +4918,7 @@ impl WgpuFrame {
                 let mut scheduled_draws = Vec::with_capacity(self.draws.len());
                 let mut draw_groups = Vec::with_capacity(self.draws.len());
                 let mut draw_prepasses = Vec::with_capacity(self.draws.len());
+                let mut authored_orders = Vec::with_capacity(self.draws.len());
                 let mut scheduled_flush_starts =
                     Vec::with_capacity(self.logical_flush_starts.len());
                 for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
@@ -4787,20 +4928,23 @@ impl WgpuFrame {
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    let (flush_draws, flush_groups, flush_prepasses) = ordered_msaa_draws(
-                        &self.draws[flush_start..flush_end],
-                        self.width,
-                        self.height,
-                    );
+                    let (flush_draws, flush_groups, flush_prepasses, flush_orders) =
+                        ordered_msaa_draws(
+                            &self.draws[flush_start..flush_end],
+                            self.width,
+                            self.height,
+                        );
                     scheduled_draws.extend(flush_draws);
                     draw_groups.extend(flush_groups);
                     draw_prepasses.extend(flush_prepasses);
+                    authored_orders.extend(flush_orders);
                 }
                 debug_assert_eq!(scheduled_draws.len(), self.draws.len());
                 encode_fallback_run(
                     &scheduled_draws,
                     Some(&draw_groups),
                     Some(&draw_prepasses),
+                    Some(&authored_orders),
                     &scheduled_flush_starts,
                     true,
                     &mut encoder,
@@ -4809,6 +4953,7 @@ impl WgpuFrame {
         } else if self.mode == RenderMode::Msaa {
             encode_fallback_run(
                 &self.draws,
+                None,
                 None,
                 None,
                 &self.logical_flush_starts,
@@ -4820,6 +4965,8 @@ impl WgpuFrame {
             let mut clear_target = true;
             let mut logical_flush_index = 0;
             let mut independent_atomic_draws_in_encoder = 0usize;
+            let advanced_segments =
+                AdvancedAtomicSegmentPlan::new(&self.draws, self.width, self.height);
             while start < self.draws.len() {
                 let logical_flush_end = self
                     .logical_flush_starts
@@ -4827,15 +4974,20 @@ impl WgpuFrame {
                     .copied()
                     .unwrap_or(self.draws.len());
                 let atomic = atomic_draw_is_eligible(&self.draws[start]);
+                let advanced_atomic_end = advanced_segments.segment_end(start, logical_flush_end);
+                let coalesce_advanced_atomic_segment = advanced_atomic_end.is_some();
                 let clockwise_atomic = atomic
+                    && !coalesce_advanced_atomic_segment
                     && draw_requires_clockwise_atomic(&self.draws[start], self.width, self.height);
-                let end = atomic_strategy_run_end(
-                    &self.draws,
-                    start,
-                    logical_flush_end,
-                    self.width,
-                    self.height,
-                );
+                let end = advanced_atomic_end.unwrap_or_else(|| {
+                    atomic_strategy_run_end(
+                        &self.draws,
+                        start,
+                        logical_flush_end,
+                        self.width,
+                        self.height,
+                    )
+                });
                 if atomic {
                     let has_clip_updates = self.draws[start..end]
                         .iter()
@@ -4889,6 +5041,7 @@ impl WgpuFrame {
                             &[0],
                             false,
                             clockwise_atomic,
+                            coalesce_advanced_atomic_segment,
                             Some(&load_view),
                             &mut encoder,
                         )?;
@@ -4898,6 +5051,7 @@ impl WgpuFrame {
                             &[0],
                             clear_target,
                             clockwise_atomic,
+                            false,
                             None,
                             &mut encoder,
                         )?;
@@ -4921,6 +5075,7 @@ impl WgpuFrame {
                                         &draw_group_starts,
                                         clear_target,
                                         false,
+                                        false,
                                         None,
                                         &mut encoder,
                                     )?;
@@ -4940,6 +5095,7 @@ impl WgpuFrame {
                                 &draw_group_starts,
                                 clear_target,
                                 false,
+                                false,
                                 None,
                                 &mut encoder,
                             )?;
@@ -4951,6 +5107,7 @@ impl WgpuFrame {
                 } else {
                     encode_fallback_run(
                         &self.draws[start..end],
+                        None,
                         None,
                         None,
                         &[0],
@@ -5210,10 +5367,14 @@ fn pack_atlas_for_device(
 fn pack_logical_feather_atlas_for_cpp(
     max_texture_dimension: u32,
     draw_sizes: &[(u32, u32)],
-) -> Result<skyline::AtlasLayout, RendererError> {
+) -> Result<LogicalFeatherAtlasLayout, RendererError> {
     let Some(&(first_width, first_height)) = draw_sizes.first() else {
-        return skyline::pack_atlas_regions_in_dimensions(1, 1, &[])
-            .map_err(|error| RendererError::AtlasPacking(error.message()));
+        let layout = skyline::pack_atlas_regions_in_dimensions(1, 1, &[])
+            .map_err(|error| RendererError::AtlasPacking(error.message()))?;
+        return Ok(LogicalFeatherAtlasLayout {
+            layout,
+            region_sizes: Vec::new(),
+        });
     };
     let platform_max_texture_dimension =
         max_texture_dimension.min(CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION);
@@ -5235,12 +5396,50 @@ fn pack_logical_feather_atlas_for_cpp(
             )
         })
         .collect::<Vec<_>>();
-    skyline::pack_atlas_regions_in_dimensions(atlas_width, atlas_height, &padded_regions)
-        .map_err(|error| RendererError::AtlasPacking(error.message()))
+    let layout =
+        skyline::pack_atlas_regions_in_dimensions(atlas_width, atlas_height, &padded_regions)
+            .map_err(|error| RendererError::AtlasPacking(error.message()))?;
+    Ok(LogicalFeatherAtlasLayout {
+        layout,
+        region_sizes: padded_regions,
+    })
+}
+
+struct LogicalFeatherAtlasLayout {
+    layout: skyline::AtlasLayout,
+    region_sizes: Vec<(u32, u32)>,
+}
+
+impl LogicalFeatherAtlasLayout {
+    fn origins(&self) -> &[[u32; 2]] {
+        self.layout.origins()
+    }
+
+    fn extent(&self) -> [u32; 2] {
+        self.layout.extent()
+    }
 }
 
 fn atlas_physical_size(content: [u32; 2], max_dimension: u32) -> [u32; 2] {
     content.map(|dimension| (dimension.saturating_mul(5) / 4).max(1).min(max_dimension))
+}
+
+fn cpp_webgpu_atlas_physical_size(
+    content: [u32; 2],
+    frame: [u32; 2],
+    device_max_dimension: u32,
+) -> [u32; 2] {
+    let platform_max_dimension =
+        device_max_dimension.min(CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION);
+    let atlas_max_dimension = platform_max_dimension.min(CPP_LOGICAL_ATLAS_MAX_DIMENSION);
+    [0, 1].map(|axis| {
+        let allocation_limit = atlas_max_dimension
+            .max(frame[axis])
+            .min(device_max_dimension);
+        (content[axis].saturating_mul(5) / 4)
+            .max(1)
+            .min(allocation_limit)
+    })
 }
 
 fn feather_atlas_placement(
@@ -6282,6 +6481,106 @@ fn atomic_strategy_run_end(
     end
 }
 
+struct AdvancedAtomicSegmentPlan {
+    eligible_segment_ends: Vec<usize>,
+    advanced_prefix: Vec<usize>,
+    clipped_advanced_clockwise_atomic_prefix: Vec<usize>,
+    global_clip_prefix: Vec<usize>,
+    clockwise_clip_incompatible_prefix: Vec<usize>,
+    non_global_content_prefix: Vec<usize>,
+}
+
+impl AdvancedAtomicSegmentPlan {
+    fn new(draws: &[SolidDraw], viewport_width: u32, viewport_height: u32) -> Self {
+        let eligible = draws
+            .iter()
+            .map(atomic_draw_is_eligible)
+            .collect::<Vec<_>>();
+        let mut eligible_segment_ends = vec![0; draws.len()];
+        let mut next_end = draws.len();
+        for index in (0..draws.len()).rev() {
+            if !eligible[index] {
+                next_end = index;
+                continue;
+            }
+            if index + 1 == draws.len() || !eligible[index + 1] {
+                next_end = index + 1;
+            }
+            eligible_segment_ends[index] = next_end;
+        }
+
+        let prefix = |predicate: &dyn Fn(&SolidDraw) -> bool| {
+            let mut counts = Vec::with_capacity(draws.len() + 1);
+            counts.push(0usize);
+            for draw in draws {
+                counts.push(counts.last().copied().unwrap() + usize::from(predicate(draw)));
+            }
+            counts
+        };
+        let contour_count = |draw: &SolidDraw| {
+            draw.path
+                .raw_path
+                .verbs()
+                .iter()
+                .filter(|verb| **verb == PathVerb::Move)
+                .count()
+        };
+        Self {
+            eligible_segment_ends,
+            advanced_prefix: prefix(&draw_uses_advanced_blend),
+            clipped_advanced_clockwise_atomic_prefix: prefix(&|draw| {
+                draw_uses_advanced_blend(draw)
+                    && draw_requires_clockwise_atomic(draw, viewport_width, viewport_height)
+                    && draw.state.clip_rect.is_some()
+            }),
+            global_clip_prefix: prefix(&|draw| {
+                matches!(draw.role, DrawRole::ClipUpdate { .. })
+                    && contour_count(draw) > 1
+                    && draw::should_use_interior_tessellation(
+                        &draw.path.raw_path,
+                        draw.state.transform,
+                    )
+            }),
+            clockwise_clip_incompatible_prefix: prefix(&|draw| {
+                draw.image.is_some()
+                    || draw.paint.style != RenderPaintStyle::Fill
+                    || draw.paint.feather != 0.0
+                    || draw.state.clip_rect.is_some()
+            }),
+            non_global_content_prefix: prefix(&|draw| {
+                !matches!(draw.role, DrawRole::Content { clip_id: 0 })
+            }),
+        }
+    }
+
+    fn has_between(prefix: &[usize], start: usize, end: usize) -> bool {
+        prefix[end] != prefix[start]
+    }
+
+    fn segment_end(&self, start: usize, logical_flush_end: usize) -> Option<usize> {
+        let end = self.eligible_segment_ends[start].min(logical_flush_end);
+        if end <= start || !Self::has_between(&self.advanced_prefix, start, end) {
+            return None;
+        }
+        // Clipped advanced clockwise draws retain their separate
+        // blend/composite path.
+        if Self::has_between(&self.clipped_advanced_clockwise_atomic_prefix, start, end) {
+            return None;
+        }
+        let clockwise_atomic_clip_run = Self::has_between(&self.global_clip_prefix, start, end)
+            && !Self::has_between(&self.clockwise_clip_incompatible_prefix, start, end);
+        if clockwise_atomic_clip_run
+            && Self::has_between(&self.non_global_content_prefix, start, end)
+        {
+            return None;
+        }
+        // C++ generic atomics retain one packed color plane across a contiguous
+        // atomic segment. Resolving between Rust's specialized and generic paths
+        // quantizes color before a later destination-read blend.
+        Some(end)
+    }
+}
+
 fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
     if matches!(draw.role, DrawRole::ClipUpdate { .. }) {
         return draw::build_fill_tessellation(&draw.path.raw_path, draw.state.transform).is_some();
@@ -6812,7 +7111,7 @@ fn ordered_msaa_draws(
     draws: &[SolidDraw],
     viewport_width: u32,
     viewport_height: u32,
-) -> (Vec<SolidDraw>, Vec<u32>, Vec<bool>) {
+) -> (Vec<SolidDraw>, Vec<u32>, Vec<bool>, Vec<usize>) {
     // renderer/src/render_context.cpp sorts opaque MSAA prepasses one subpass
     // at a time. Rust still prepares the passes of a fill as one draw, so it
     // can only move that draw as a unit when all passes share a draw group or
@@ -6845,18 +7144,26 @@ fn ordered_msaa_draws(
     let mut scheduled_draws = Vec::with_capacity(prepasses.len());
     let mut draw_groups = Vec::with_capacity(prepasses.len());
     let mut draw_prepasses = Vec::with_capacity(prepasses.len());
+    let mut authored_orders = Vec::with_capacity(prepasses.len());
     for (index, (z_index, draw_index)) in prepasses.into_iter().enumerate() {
         draw_groups.push(z_index);
         draw_prepasses.push(index < prepass_count);
+        authored_orders.push(draw_index);
         scheduled_draws.push(draws[draw_index].clone());
     }
-    (scheduled_draws, draw_groups, draw_prepasses)
+    (
+        scheduled_draws,
+        draw_groups,
+        draw_prepasses,
+        authored_orders,
+    )
 }
 
 fn msaa_draws_can_submit_independently(draws: &[SolidDraw]) -> bool {
     draws.iter().all(|draw| {
         matches!(draw.role, DrawRole::Content { clip_id: 0 })
             && draw.state.clip_stack_height == 0
+            && draw.paint.feather == 0.0
             && !draw_uses_advanced_blend(draw)
     })
 }
@@ -7700,10 +8007,30 @@ mod tests {
     }
 
     #[test]
+    fn logical_feather_atlas_clips_padding_for_the_first_oversized_draw() {
+        let atlas = pack_logical_feather_atlas_for_cpp(16_384, &[(3387, 1408)]).unwrap();
+
+        assert_eq!(atlas.extent(), [3387, 1412]);
+        assert_eq!(atlas.region_sizes, [(3387, 1412)]);
+    }
+
+    #[test]
     fn atlas_allocation_overallocates_like_cpp_resource_growth() {
         assert_eq!(atlas_physical_size([39, 39], 2048), [48, 48]);
         assert_eq!(atlas_physical_size([1, 2], 2048), [1, 2]);
         assert_eq!(atlas_physical_size([2048, 2048], 2048), [2048, 2048]);
+    }
+
+    #[test]
+    fn cpp_webgpu_resource_growth_respects_its_retained_texture_limit() {
+        assert_eq!(
+            cpp_webgpu_atlas_physical_size([2048, 2043], [1000, 1000], 16_384),
+            [2048, 2048]
+        );
+        assert_eq!(
+            cpp_webgpu_atlas_physical_size([2500, 2200], [3000, 2400], 16_384),
+            [3000, 2400]
+        );
     }
 
     #[test]
@@ -8998,7 +9325,7 @@ mod tests {
 
         assert_eq!(colors, vec![vec![1, 3], vec![], vec![], vec![2]]);
 
-        let (scheduled, z_indices, prepasses) = ordered_msaa_draws(&draws, 64, 64);
+        let (scheduled, z_indices, prepasses, authored_orders) = ordered_msaa_draws(&draws, 64, 64);
         assert_eq!(
             scheduled
                 .iter()
@@ -9008,6 +9335,7 @@ mod tests {
         );
         assert_eq!(z_indices, [1, 1, 4]);
         assert_eq!(prepasses, [false, false, false]);
+        assert_eq!(authored_orders, [0, 2, 1]);
     }
 
     #[test]
@@ -9029,7 +9357,7 @@ mod tests {
             make_draw(3, BlendMode::SrcOver),
         ];
 
-        let (scheduled, z_indices, prepasses) = ordered_msaa_draws(&draws, 64, 64);
+        let (scheduled, z_indices, prepasses, authored_orders) = ordered_msaa_draws(&draws, 64, 64);
 
         assert_eq!(
             scheduled
@@ -9040,6 +9368,7 @@ mod tests {
         );
         assert_eq!(z_indices, [3, 2, 1]);
         assert_eq!(prepasses, [true, true, false]);
+        assert_eq!(authored_orders, [2, 1, 0]);
     }
 
     #[test]
@@ -9060,7 +9389,7 @@ mod tests {
             make_draw([20.0, 20.0, 30.0, 30.0], 2, BlendMode::SrcOver),
         ];
 
-        let (scheduled, z_indices, prepasses) = ordered_msaa_draws(&draws, 64, 64);
+        let (scheduled, z_indices, prepasses, authored_orders) = ordered_msaa_draws(&draws, 64, 64);
 
         assert_eq!(
             scheduled
@@ -9071,6 +9400,7 @@ mod tests {
         );
         assert_eq!(z_indices, [1, 1]);
         assert_eq!(prepasses, [true, false]);
+        assert_eq!(authored_orders, [1, 0]);
     }
 
     #[test]
@@ -9146,7 +9476,7 @@ mod tests {
     }
 
     #[test]
-    fn msaa_submission_splitting_requires_source_over_without_path_clips() {
+    fn msaa_submission_splitting_requires_independent_direct_source_over_draws() {
         let mut draw = SolidDraw {
             path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
             paint: WgpuPaint::default(),
@@ -9164,7 +9494,15 @@ mod tests {
         )));
         draw.paint.blend_mode = BlendMode::SrcOver;
         draw.role = DrawRole::Content { clip_id: 1 };
-        assert!(!msaa_draws_can_submit_independently(&[draw]));
+        assert!(!msaa_draws_can_submit_independently(std::slice::from_ref(
+            &draw
+        )));
+        draw.role = DrawRole::Content { clip_id: 0 };
+        draw.paint.feather = 1.0;
+        let oversized_feather_flush = vec![draw; MAX_DRAWS_PER_SUBMISSION + 1];
+        assert!(!msaa_draws_can_submit_independently(
+            &oversized_feather_flush
+        ));
     }
 
     #[test]
@@ -10977,6 +11315,79 @@ mod tests {
         assert_eq!(pixel(16, 32), [255, 128, 0, 255]);
         assert_eq!(pixel(40, 32), [255, 128, 0, 255]);
         assert_eq!(pixel(52, 32), [255, 102, 0, 255]);
+    }
+
+    #[test]
+    fn advanced_atomic_flush_keeps_one_shared_color_plane() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let mut compound = rect_path([8.0, 8.0, 28.0, 56.0], FillRule::NonZero);
+        compound.raw_path.add_path(
+            &rect_path([36.0, 8.0, 56.0, 56.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let simple = rect_path([12.0, 12.0, 52.0, 52.0], FillRule::NonZero);
+        let base = WgpuPaint {
+            color: 0x9980_4020,
+            ..WgpuPaint::default()
+        };
+        let screen = WgpuPaint {
+            color: 0x8040_80c0,
+            blend_mode: BlendMode::Screen,
+            ..WgpuPaint::default()
+        };
+        let mut frame = factory.begin_frame(0xff20_4060);
+        frame.draw_path(&compound, &base);
+        frame.draw_path(&simple, &screen);
+
+        assert_eq!(frame.metrics().atomic_strategy_partitions, 1);
+        let (_, coverage, clips, colors) = frame.finish_with_atomic_planes().unwrap();
+        assert_eq!(coverage.len(), 1);
+        assert_eq!(clips.len(), 1);
+        assert_eq!(colors.len(), 1);
+        assert_eq!(colors[0].len(), 64 * 64);
+    }
+
+    #[test]
+    fn advanced_atomic_segment_plan_reuses_precomputed_eligible_suffixes() {
+        let simple = SolidDraw {
+            path: rect_path([8.0, 8.0, 28.0, 56.0], FillRule::NonZero),
+            paint: WgpuPaint::default(),
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+        };
+        let mut compound = simple.clone();
+        compound.path.raw_path.add_path(
+            &rect_path([36.0, 8.0, 56.0, 56.0], FillRule::NonZero).raw_path,
+            Mat2D::IDENTITY,
+        );
+        let mut draws = vec![simple.clone(), compound, simple.clone(), simple.clone()];
+        let plan = AdvancedAtomicSegmentPlan::new(&draws, 64, 64);
+
+        assert_eq!(plan.eligible_segment_ends, [4, 4, 4, 4]);
+        for start in 0..draws.len() {
+            assert_eq!(plan.segment_end(start, draws.len()), None);
+        }
+
+        draws[3].paint.blend_mode = BlendMode::Screen;
+        let plan = AdvancedAtomicSegmentPlan::new(&draws, 64, 64);
+        assert_eq!(plan.segment_end(0, draws.len()), Some(4));
+
+        draws[1].paint.blend_mode = BlendMode::Overlay;
+        let plan = AdvancedAtomicSegmentPlan::new(&draws, 64, 64);
+        assert_eq!(plan.segment_end(0, draws.len()), Some(4));
+
+        draws[1].state.clip_rect = Some(ClipRectState {
+            rect: [0.0, 0.0, 48.0, 64.0],
+            matrix: Mat2D::IDENTITY,
+        });
+        let plan = AdvancedAtomicSegmentPlan::new(&draws, 64, 64);
+        assert_eq!(plan.segment_end(0, draws.len()), None);
+
+        let mut generic_draws = vec![simple; 4];
+        generic_draws[3].paint.blend_mode = BlendMode::Screen;
+        let plan = AdvancedAtomicSegmentPlan::new(&generic_draws, 64, 64);
+        assert_eq!(plan.segment_end(0, generic_draws.len()), Some(4));
     }
 
     #[test]

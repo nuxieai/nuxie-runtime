@@ -15,10 +15,10 @@ signal so that the work has a finite end condition.
   byte. This is a non-gating health metric. It does not compare PNG container
   bytes.
 
-The current corpus is:
+The completed corpus is:
 
-- Contract: `exact=1,464`, `diverges=0`, `gated=4`, `total=1,468`.
-- Byte identity: `756/1,464` active rows.
+- Contract: `exact=1,468`, `diverges=0`, `gated=0`, `total=1,468`.
+- Byte identity: `757/1,468` active rows.
 
 The byte-exact metric does not replace the contract metric. Applying `0/0` to
 the whole corpus would redefine hundreds of already reviewed edge-coverage
@@ -57,21 +57,21 @@ row, and atomic Interleaved Feather. None of those 55 rows is byte-identical,
 which is direct evidence that contract exactness and byte identity measure
 different things.
 
-## Remaining Queue
+## Closed Queue
 
-| Priority | Row | Same-tier result | Work |
-| ---: | --- | --- | --- |
-| 1 | `riv-echo_show_demo-frame-0-clockwise-atomic` | 96 pixels, max delta 3 | Use the shortest shared reproduction to fix atomic color-plane lifetime. |
-| 1 | `riv-car_widgets_v01-frame-0-clockwise-atomic` | 9,725 pixels, max delta 6 | Verify the Echo fix against the larger member of the same cluster. |
-| 2 | `gm-interleavedfeather-msaa` | 144 pixels, max delta 85 | Isolate MSAA interleaved-feather color precision against Dawn. |
-| 3 | `gm-dstreadshuffle-clockwise-atomic` | about 6,400 pixels, max delta 50 | First locate the small repeat-to-repeat count variation, then fix advanced-blend intermediate parity. |
+| Row | Final same-tier result | Resolution |
+| --- | --- | --- |
+| `riv-echo_show_demo-frame-0-clockwise-atomic` | 0 pixels beyond delta 2, max delta 1 | Keep one generic packed color plane alive across the advanced atomic segment. |
+| `riv-car_widgets_v01-frame-0-clockwise-atomic` | 13 pixels beyond delta 2, max delta 3 | Same atomic color-plane lifetime fix as Echo Show. |
+| `gm-interleavedfeather-msaa` | 20 pixels beyond delta 2, max delta 5 | Pack feather masks into C++-ordered logical-flush atlases and retain C++ WebGPU's 2,048 texture-allocation ceiling. |
+| `gm-dstreadshuffle-clockwise-atomic` | Byte-identical, max delta 0 | Same atomic color-plane lifetime fix; no repeat variation remains. |
 
-The first two rows intentionally form one task. A fix is accepted against both
-full streams, not as two unrelated one-off patches.
+All four rows retain their existing `max_channel_delta = 2` and
+`max_different_pixels = 32` contracts. No reference or tolerance changed.
 
 ## End Condition
 
-This follow-up is complete when:
+This follow-up completed when:
 
 - `make renderer-golden` reports `exact=1,468`, `diverges=0`, `gated=0` under
   unchanged row contracts;

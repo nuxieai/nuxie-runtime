@@ -483,11 +483,11 @@ correctness remains the reviewed per-row pixel contract; decoded-RGBA byte
 identity is reported separately and does not redefine existing contracts.
 
 The former 59 retained rows now use same-tier C++ Dawn WebGPU references.
-Fifty-five pass unchanged, leaving four implementation gates: the shared
-Car Widgets/Echo atomic color-plane lifetime cluster, MSAA Interleaved Feather
-color precision, and clockwise-atomic DstReadShuffle advanced-blend
-intermediate parity. Completion is `1,468 exact / 0 divergent / 0 gated`
-without tolerance widening.
+Fifty-five passed unchanged. The final four closed through shared atomic
+color-plane lifetime and C++-ordered logical-flush feather-atlas allocation,
+including C++ WebGPU's retained 2,048 texture ceiling. The completed ratchet is
+`1,468 exact / 0 divergent / 0 gated` without a reference or tolerance change;
+decoded-RGBA byte identity is `757/1,468`.
 
 ## Long-Tail Strategy (renderer edition)
 

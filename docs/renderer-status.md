@@ -3,14 +3,14 @@
 The execution contract is `docs/renderer-port-map.md`. This file records only
 current evidence, open gates, and decisions needed by the next session.
 
-**State: R0-R5 complete.** The post-R exactness follow-up is active. Phase S
-has not started.
+**State: R0-R5 and the post-R exactness follow-up are complete.** Phase S has
+not started.
 
 ## Metric
 
 Run `make renderer-golden`.
 
-- Rust wgpu: exact=1,464, byte-exact=756, diverges=0, gated=4,
+- Rust wgpu: exact=1,468, byte-exact=757, diverges=0, gated=0,
   total=1,468.
 - Contract exactness remains the release gate. Decoded-RGBA byte identity is a
   secondary, non-gating health metric; see `docs/renderer-exactness-map.md`.
@@ -403,10 +403,10 @@ Run `make renderer-golden`.
 1. [x] Replace all 59 retained native-Metal comparisons with provenance-bound
    same-tier C++ Dawn WebGPU references. Promote the 55 unchanged-contract
    passes and retain only the four observed implementation failures.
-2. [ ] Fix the shared atomic color-plane lifetime finding, using Echo Show as
+2. [x] Fix the shared atomic color-plane lifetime finding, using Echo Show as
    the short reproduction and Car Widgets as the full-cluster acceptance row.
-3. [ ] Fix MSAA Interleaved Feather color precision against C++ Dawn.
-4. [ ] Diagnose DstReadShuffle's small repeat-to-repeat count variation, then
+3. [x] Fix MSAA Interleaved Feather color precision against C++ Dawn.
+4. [x] Diagnose DstReadShuffle's small repeat-to-repeat count variation, then
    close its clockwise-atomic advanced-blend intermediate mismatch.
 
 The hard stop is `exact=1,468`, `diverges=0`, `gated=0` without tolerance
@@ -2032,6 +2032,16 @@ widening. Universal byte identity is not part of that stop condition.
    work. The R3 semantic-trap and fuzz-replay entry gates remain open.
 
 ## Decisions
+
+- 2026-07-17: The post-R exactness follow-up is complete at exact=1,468,
+  byte-exact=757, diverges=0, gated=0 under all unchanged row contracts.
+  Generic atomic rendering now keeps one packed color plane across contiguous
+  advanced-blend segments, closing Echo Show, Car Widgets, and byte-identical
+  DstReadShuffle. MSAA feather masks now share C++-ordered logical-flush
+  atlases, including C++ WebGPU's retained 2,048 texture-allocation ceiling;
+  Interleaved Feather closes at 20 pixels beyond delta 2 and max delta 5.
+  No reference or tolerance changed. Detailed final evidence is in
+  `docs/renderer-exactness-map.md`.
 
 - 2026-07-17: Renderer release exactness remains the reviewed per-row decoded
   pixel contract. `renderer-golden` now also reports decoded-RGBA byte identity

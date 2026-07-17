@@ -652,10 +652,9 @@ stream = "fixtures/renderer/streams/gm/dstreadshuffle.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-dstreadshuffle-clockwise-atomic.png"
 mode = "clockwise-atomic"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-wgpu-atomic-advanced-blend-intermediate-precision"
 
 
 [[entry]]
@@ -1265,10 +1264,9 @@ stream = "fixtures/renderer/streams/gm/interleavedfeather.rive-stream"
 reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-interleavedfeather-msaa.png"
 mode = "msaa"
 backend = "dawn-webgpu-metal"
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "dawn-wgpu-msaa-interleaved-feather-color-precision"
 
 
 [[entry]]
@@ -3511,10 +3509,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v
 mode = "clockwise-atomic"
 backend = "dawn-webgpu-metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-atomic-color-plane-lifetime-parity"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-msaa"
@@ -6224,10 +6221,9 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_dem
 mode = "clockwise-atomic"
 backend = "dawn-webgpu-metal"
 frame = 0
-status = "gated"
+status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
-gated = "rust-wgpu-atomic-color-plane-lifetime-parity"
 
 [[entry]]
 id = "riv-echo_show_demo-frame-0-msaa"

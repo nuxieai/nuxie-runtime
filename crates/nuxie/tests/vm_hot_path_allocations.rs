@@ -77,6 +77,11 @@ fn direct_view_model_slot_writes_allocate_nothing() -> Result<()> {
 
     ALLOCATIONS.store(0, Ordering::Relaxed);
     TRACK_ALLOCATIONS.store(true, Ordering::Release);
+    let no_op = scene.frame().set_vm(cursor, 0.0);
+    if no_op != Ok(false) {
+        TRACK_ALLOCATIONS.store(false, Ordering::Release);
+        panic!("direct no-op slot write failed: {no_op:?}");
+    }
     for index in 0..10_000 {
         let value = if index % 2 == 0 { 1.0 } else { 2.0 };
         let result = scene.frame().set_vm(cursor, value);

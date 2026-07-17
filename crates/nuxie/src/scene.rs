@@ -2631,8 +2631,13 @@ struct LiveInstance {
 struct RetainedViewModelInstance {
     authored_instance: ViewModelInstanceId,
     value: ViewModelInstance,
-    number_ids: Vec<ViewModelNumberId>,
+    numbers: Vec<RetainedViewModelNumber>,
     dirty: bool,
+}
+
+struct RetainedViewModelNumber {
+    id: ViewModelNumberId,
+    overridden: bool,
 }
 
 #[derive(Default)]
@@ -2721,25 +2726,28 @@ fn instantiate_runtime_mount_with_carry(
                     .raw()
                     .number_slot_by_property_index(metadata.property_index)
                     .ok_or(())?;
-                if let Some(carried) = carry
+                let carried = carry
                     .filter(|carry| carry.authored_instance == Some(default.authored_instance))
                     .and_then(|carry| carry.numbers.get(metadata.name.as_str()))
-                    .copied()
-                {
+                    .copied();
+                if let Some(carried) = carried {
                     if !carried.is_finite() {
                         return Err(());
                     }
                     let _ = value.raw_mut().set_number_by_slot(number_slot, carried);
                 }
-                slots.push((number_slot, *number));
+                slots.push((number_slot, *number, carried.is_some()));
             }
-            slots.sort_by_key(|(slot, _)| *slot);
-            let mut number_ids = Vec::with_capacity(slots.len());
-            for (expected_slot, (slot, number)) in slots.into_iter().enumerate() {
+            slots.sort_by_key(|(slot, _, _)| *slot);
+            let mut numbers = Vec::with_capacity(slots.len());
+            for (expected_slot, (slot, number, overridden)) in slots.into_iter().enumerate() {
                 if slot != expected_slot {
                     return Err(());
                 }
-                number_ids.push(number);
+                numbers.push(RetainedViewModelNumber {
+                    id: number,
+                    overridden,
+                });
             }
 
             let _ = runtime.bind_view_model(&value);
@@ -2749,7 +2757,7 @@ fn instantiate_runtime_mount_with_carry(
             Ok(RetainedViewModelInstance {
                 authored_instance: default.authored_instance,
                 value,
-                number_ids,
+                numbers,
                 dirty: false,
             })
         })
@@ -2774,12 +2782,19 @@ fn capture_view_model_carry(
     carry.authored_instance = Some(retained.authored_instance);
     for (number, metadata) in &default.numbers {
         let Some(number_slot) = retained
-            .number_ids
+            .numbers
             .iter()
-            .position(|candidate| candidate == number)
+            .position(|candidate| candidate.id == *number)
         else {
             continue;
         };
+        if !retained
+            .numbers
+            .get(number_slot)
+            .is_some_and(|number| number.overridden)
+        {
+            continue;
+        }
         let Some(value) = retained.value.raw().number_value_by_slot(number_slot) else {
             continue;
         };
@@ -3772,7 +3787,7 @@ impl Scene {
             .raw()
             .number_slot_by_property_index(metadata.property_index)
             .ok_or(ResolveError::UnknownViewModelNumber)?;
-        if retained.number_ids.get(number_slot) != Some(&number) {
+        if retained.numbers.get(number_slot).map(|number| number.id) != Some(number) {
             return Err(ResolveError::UnknownViewModelNumber);
         }
         Ok(VmCursor {
@@ -6175,7 +6190,10 @@ impl Frame<'_> {
             .and_then(|instance| instance.view_model.as_ref())
             .filter(|view_model| {
                 view_model.authored_instance == cursor.authored_instance
-                    && view_model.number_ids.get(cursor.number_slot) == Some(&cursor.number)
+                    && view_model
+                        .numbers
+                        .get(cursor.number_slot)
+                        .is_some_and(|number| number.id == cursor.number)
             })
             .ok_or(StaleCursor)?;
         retained
@@ -6219,6 +6237,10 @@ impl Frame<'_> {
     /// The write mutates only the retained context for this live instance. It
     /// neither changes authored records nor advances the structure epoch. The
     /// context is rebound once, immediately before this instance next advances.
+    /// A finite write also becomes the live override carried through later
+    /// remounts of the same authored instance and property name, even when the
+    /// value was already equal. Untouched slots continue to follow authored
+    /// default edits.
     pub fn set_vm(
         &mut self,
         cursor: VmCursor<f32>,
@@ -6236,16 +6258,24 @@ impl Frame<'_> {
             .and_then(|instance| instance.view_model.as_mut())
             .filter(|view_model| {
                 view_model.authored_instance == cursor.authored_instance
-                    && view_model.number_ids.get(cursor.number_slot) == Some(&cursor.number)
+                    && view_model
+                        .numbers
+                        .get(cursor.number_slot)
+                        .is_some_and(|number| number.id == cursor.number)
             })
             .ok_or(StaleCursor)?;
         if !value.is_finite() {
             return Ok(false);
         }
+        let number = retained
+            .numbers
+            .get_mut(cursor.number_slot)
+            .ok_or(StaleCursor)?;
         let changed = retained
             .value
             .raw_mut()
             .set_number_by_slot(cursor.number_slot, value);
+        number.overridden = true;
         retained.dirty |= changed;
         Ok(changed)
     }
@@ -7022,7 +7052,6 @@ fn lower_view_model_catalog(
     origins: &SpecOrigins,
 ) -> std::result::Result<LoweredViewModelCatalog, EditDiagnostic> {
     let mut records = Vec::new();
-    let mut model_indices = BTreeMap::new();
     let mut number_indices = BTreeMap::new();
     let mut instance_indices = BTreeMap::new();
     let mut identities = BTreeSet::new();
@@ -7035,9 +7064,7 @@ fn lower_view_model_catalog(
                 EditReason::CapacityExceeded,
             )
         })?;
-        if !identities.insert(model.id.object_id())
-            || model_indices.insert(model.id, model_ordinal).is_some()
-        {
+        if !identities.insert(model.id.object_id()) {
             return Err(EditDiagnostic::new(
                 origins.object(model.id.object_id(), fallback_operation_index),
                 vec![EditId::Object(model.id.object_id())],
@@ -7074,16 +7101,6 @@ fn lower_view_model_catalog(
                 properties: vec![ExportedProperty::ViewModelName(number.spec.name.clone())],
             });
         }
-    }
-
-    for (model_index, model) in definitions.iter().enumerate() {
-        let model_ordinal = model_indices.get(&model.id).copied().ok_or_else(|| {
-            EditDiagnostic::new(
-                fallback_operation_index,
-                vec![EditId::Object(model.id.object_id())],
-                EditReason::InternalInvariant,
-            )
-        })?;
         for (instance_index, instance) in model.instances.iter().enumerate() {
             if !identities.insert(instance.id.object_id())
                 || instance_indices
@@ -9603,6 +9620,129 @@ mod tests {
                         AuthoringProperty {
                             key: 588,
                             value: AuthoringValue::Bytes(vec![0, 0]),
+                        },
+                    ],
+                },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_fixpoint_groups_each_view_model_with_its_instances() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let mut view_models = tx.view_models();
+            for (model_name, number_name, instance_name, value) in [
+                ("First", "First number", "First defaults", 1.0),
+                ("Second", "Second number", "Second defaults", 2.0),
+            ] {
+                let model = view_models.create(ViewModelSpec {
+                    name: model_name.into(),
+                })?;
+                let number = view_models.create_number(
+                    model,
+                    ViewModelNumberSpec {
+                        name: number_name.into(),
+                    },
+                )?;
+                let instance = view_models.create_instance(
+                    model,
+                    ViewModelInstanceSpec {
+                        name: Some(instance_name.into()),
+                    },
+                )?;
+                view_models.set_number(instance, number, value)?;
+            }
+            Ok(())
+        })?;
+
+        let records = scene
+            .export_records()
+            .into_authoring_records()
+            .into_iter()
+            .filter(|record| matches!(record.type_key, 435 | 431 | 437 | 442))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            records,
+            vec![
+                AuthoringRecord {
+                    type_key: 435,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("First".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 431,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("First number".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 437,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 4,
+                            value: AuthoringValue::String("First defaults".into()),
+                        },
+                        AuthoringProperty {
+                            key: 566,
+                            value: AuthoringValue::Uint(0),
+                        },
+                    ],
+                },
+                AuthoringRecord {
+                    type_key: 442,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 554,
+                            value: AuthoringValue::Uint(0),
+                        },
+                        AuthoringProperty {
+                            key: 575,
+                            value: AuthoringValue::Double(1.0),
+                        },
+                    ],
+                },
+                AuthoringRecord {
+                    type_key: 435,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("Second".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 431,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("Second number".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 437,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 4,
+                            value: AuthoringValue::String("Second defaults".into()),
+                        },
+                        AuthoringProperty {
+                            key: 566,
+                            value: AuthoringValue::Uint(1),
+                        },
+                    ],
+                },
+                AuthoringRecord {
+                    type_key: 442,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 554,
+                            value: AuthoringValue::Uint(0),
+                        },
+                        AuthoringProperty {
+                            key: 575,
+                            value: AuthoringValue::Double(2.0),
                         },
                     ],
                 },

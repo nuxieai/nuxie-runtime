@@ -1690,6 +1690,12 @@ Run `make renderer-golden`.
     no renderer lifecycle or visibility defect; its counter-protocol finding
     is closed with field-local legacy defaults and malformed-response tests.
     The renderer corpus passes at 1,409/0/59.
+139. [x] Make the pure-Rust renderer the public SDK default without coupling
+    the runtime core to a GPU backend. `nuxie` now enables its `renderer`
+    feature by default and exports `DefaultRendererFactory` and
+    `DefaultRendererFrame`; a public-only integration test proves non-clear
+    pixel output. `nuxie --no-default-features` stays valid, and `nux-capi`
+    explicitly uses that path because it owns callback rendering.
 
 ## R2 Completion Record
 
@@ -2858,6 +2864,11 @@ E. **Timing-defined acceptance gate (ready, not per-slice ceremony).** The
 
 ## Log
 
+- 2026-07-16: Closed R5 item 139. The public `nuxie` facade now selects the
+  pure-Rust renderer by default while `nuxie-runtime` and `nuxie-render-api`
+  remain backend-neutral. The default feature renders through the public API,
+  the feature-disabled facade still passes its library suite, and the C ABI's
+  explicit opt-out passes all callback-renderer tests.
 - 2026-07-16: Closed R4 item 138. Generic atomic initialization now uses the
   C++ generated fixed-color shader in the first existing pass instead of three
   host clears. Across the fixed atomic matrix, clear calls move 3->0, cleared

@@ -9,7 +9,7 @@ repository.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-nuxie = { path = "../nuxie" }
+nuxie = { path = "../nuxie", default-features = false }
 
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]

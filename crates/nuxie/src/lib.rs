@@ -28,6 +28,11 @@ pub use nuxie_render_api::{
     RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
     Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
+#[cfg(feature = "renderer")]
+pub use nuxie_renderer::{
+    RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory as DefaultRendererFactory,
+    WgpuFrame as DefaultRendererFrame, WgpuFrameMetrics,
+};
 pub use nuxie_runtime::{
     ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
     RuntimeStateMachineInput, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,

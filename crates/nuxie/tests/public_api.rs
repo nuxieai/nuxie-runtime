@@ -9,7 +9,7 @@
 use nuxie::{
     BlendMode, ColorInt, Factory, File, FillRule, ImageDecodeError, RawPath, RecordingFactory,
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, StateMachineInputKind, StrokeCap, StrokeJoin,
+    RenderPath, RenderShader, Renderer, StateMachineInputKind, StrokeCap, StrokeJoin,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -305,6 +305,30 @@ fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning(
     drop(cache);
     assert_eq!(factory.images_created.get(), factory.images_dropped.get());
     assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+}
+
+#[test]
+fn public_api_exposes_the_default_rust_renderer() {
+    let mut factory =
+        nuxie::DefaultRendererFactory::new(16, 16).expect("construct the default Rust renderer");
+    let mut frame = factory.begin_frame(0xff_12_34_56);
+    let mut path = factory.make_empty_render_path();
+    path.move_to(2.0, 2.0);
+    path.line_to(14.0, 2.0);
+    path.line_to(2.0, 14.0);
+    path.close();
+    let mut paint = factory.make_render_paint();
+    paint.color(0xff_ff_00_00);
+    frame.draw_path(path.as_ref(), paint.as_ref());
+
+    let pixels = frame.finish().expect("render one default-backend frame");
+    assert_eq!(pixels.len(), 16 * 16 * 4);
+    assert!(
+        pixels
+            .chunks_exact(4)
+            .any(|pixel| pixel == [255, 0, 0, 255]),
+        "the default backend must draw into the frame"
+    );
 }
 
 #[test]

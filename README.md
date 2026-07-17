@@ -11,6 +11,7 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 ## Workspace
 
 - `nuxie`: public Rust API
+- `nuxie-renderer`: default pure-Rust renderer with native and browser backends
 - `nux-capi`: C SDK surface and `nux_capi.h`
 - `nuxie-runtime`: artboard, animation, state-machine, and draw runtime
 - `nuxie-binary`: `.riv` importer

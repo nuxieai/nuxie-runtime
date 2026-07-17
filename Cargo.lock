@@ -685,6 +685,7 @@ dependencies = [
  "nuxie-graph",
  "nuxie-render-api",
  "nuxie-render-stream",
+ "nuxie-renderer",
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-scripting",

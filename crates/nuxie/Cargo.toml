@@ -6,7 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = []
+default = ["renderer"]
+renderer = ["dep:nuxie-renderer"]
 scripting = ["dep:nuxie-scripting"]
 
 [dependencies]
@@ -14,6 +15,7 @@ anyhow = "1"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-api = { path = "../nuxie-render-api" }
+nuxie-renderer = { path = "../nuxie-renderer", optional = true }
 nuxie-runtime = { path = "../nuxie-runtime" }
 nuxie-scripting = { path = "../nuxie-scripting", optional = true }
 

@@ -155,6 +155,7 @@ struct Gate<'a> {
     baseline: &'a Path,
     a: &'a Path,
     b: &'a Path,
+    max_renderer_ratio: &'a str,
     max_b_over_a: &'a str,
     max_control_drift: &'a str,
     max_repeat_drift: &'a str,
@@ -185,7 +186,10 @@ fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
         .env("R4_TIMING_GATE_BASELINE_RUNNER", gate.baseline)
         .env("R4_TIMING_GATE_A_RUNNER", gate.a)
         .env("R4_TIMING_GATE_B_RUNNER", gate.b)
-        .env("R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO", "10")
+        .env(
+            "R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO",
+            gate.max_renderer_ratio,
+        )
         .env("R4_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
         .env("R4_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
         .env("R4_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
@@ -230,6 +234,7 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
         baseline: &baseline,
         a: &a,
         b: &b,
+        max_renderer_ratio: "10",
         max_b_over_a: "1",
         max_control_drift: "1",
         max_repeat_drift: "1",
@@ -285,6 +290,8 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
                 .join("artifacts/04-A.renderer-perf.json")
                 .to_str()
                 .unwrap(),
+            "--max-renderer-ratio",
+            "10",
             "--max-b-over-a",
             "1",
             "--max-control-drift",
@@ -301,6 +308,59 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
 }
 
 #[test]
+fn r4_gate_captures_a_above_the_final_ratio_when_b_passes() {
+    let directory = TempDir::new("slow-a-fast-enough-b");
+    let baseline = static_runner(&directory.path, "baseline.sh", 100);
+    let a = static_runner(&directory.path, "a.sh", 300);
+    let b = static_runner(&directory.path, "b.sh", 150);
+    let output = run_gate(Gate {
+        directory: &directory.path,
+        baseline: &baseline,
+        a: &a,
+        b: &b,
+        max_renderer_ratio: "2",
+        max_b_over_a: "1",
+        max_control_drift: "1",
+        max_repeat_drift: "1",
+    });
+
+    assert!(
+        output.status.success(),
+        "stderr={} metadata={}",
+        String::from_utf8_lossy(&output.stderr),
+        metadata(&directory.path)
+    );
+    let comparison =
+        std::fs::read_to_string(directory.path.join("artifacts/comparison.json")).unwrap();
+    assert!(comparison.contains("\"b_worst_scene_ratio\": 1.5"));
+}
+
+#[test]
+fn r4_gate_rejects_b_above_the_final_renderer_ratio() {
+    let directory = TempDir::new("slow-a-too-slow-b");
+    let baseline = static_runner(&directory.path, "baseline.sh", 100);
+    let a = static_runner(&directory.path, "a.sh", 300);
+    let b = static_runner(&directory.path, "b.sh", 250);
+    let output = run_gate(Gate {
+        directory: &directory.path,
+        baseline: &baseline,
+        a: &a,
+        b: &b,
+        max_renderer_ratio: "2",
+        max_b_over_a: "1",
+        max_control_drift: "1",
+        max_repeat_drift: "1",
+    });
+
+    assert!(!output.status.success());
+    assert_finalized_failure(&directory.path);
+    assert!(
+        metadata(&directory.path)
+            .contains("post-tail\\ B\\ worst-scene\\ renderer/C++\\ timing\\ failed")
+    );
+}
+
+#[test]
 fn r4_gate_rejects_slow_b_and_finalizes_metadata() {
     let directory = TempDir::new("slower");
     let baseline = static_runner(&directory.path, "baseline.sh", 100);
@@ -311,6 +371,7 @@ fn r4_gate_rejects_slow_b_and_finalizes_metadata() {
         baseline: &baseline,
         a: &a,
         b: &b,
+        max_renderer_ratio: "10",
         max_b_over_a: "1.05",
         max_control_drift: "1",
         max_repeat_drift: "1",
@@ -332,6 +393,7 @@ fn r4_gate_rejects_cpp_control_drift() {
         baseline: &baseline,
         a: &a,
         b: &b,
+        max_renderer_ratio: "10",
         max_b_over_a: "1",
         max_control_drift: "1.1",
         max_repeat_drift: "2",
@@ -353,6 +415,7 @@ fn r4_gate_rejects_candidate_repeat_drift() {
         baseline: &baseline,
         a: &a,
         b: &b,
+        max_renderer_ratio: "10",
         max_b_over_a: "2",
         max_control_drift: "1",
         max_repeat_drift: "1.1",
@@ -402,6 +465,7 @@ fn r4_gate_never_overlaps_host_sampling_with_runner_work() {
             baseline: &baseline,
             a: &a,
             b: &b,
+            max_renderer_ratio: "10",
             max_b_over_a: "1",
             max_control_drift: "1",
             max_repeat_drift: "1",
@@ -429,6 +493,7 @@ fn r4_gate_rejects_malformed_report_json() {
         baseline: &baseline,
         a: &malformed,
         b: &b,
+        max_renderer_ratio: "10",
         max_b_over_a: "1",
         max_control_drift: "1",
         max_repeat_drift: "1",
@@ -457,6 +522,7 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
         baseline: &baseline,
         a: &a,
         b: &a,
+        max_renderer_ratio: "10",
         max_b_over_a: "1",
         max_control_drift: "1",
         max_repeat_drift: "1",
@@ -474,6 +540,7 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
         baseline: &baseline,
         a: &a,
         b: &b,
+        max_renderer_ratio: "10",
         max_b_over_a: "1",
         max_control_drift: "1",
         max_repeat_drift: "1",

@@ -14,6 +14,7 @@ baseline_runner="${R4_TIMING_GATE_BASELINE_RUNNER:-}"
 a_runner="${R4_TIMING_GATE_A_RUNNER:-}"
 b_runner="${R4_TIMING_GATE_B_RUNNER:-}"
 renderer_perf_max_ratio="${R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO:-2.0}"
+capture_max_ratio="${R4_TIMING_GATE_CAPTURE_MAX_RATIO:-1000}"
 max_b_over_a="${R4_TIMING_GATE_MAX_B_OVER_A:-1.0}"
 max_control_drift="${R4_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
 max_repeat_drift="${R4_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
@@ -28,9 +29,12 @@ usage: r4-timing-gate.sh [--dry-run] [--output-dir path]
 Runs the fixed `renderer-perf` executable A-B-B-A with the pinned runner paths
 R4_TIMING_GATE_BASELINE_RUNNER, R4_TIMING_GATE_A_RUNNER, and
 R4_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v1 report, then
-requires B/A candidate timing and symmetric C++ control drift to meet their
-configured limits. Every report, stdout/stderr log, host sample, hash, and
-comparison is retained in the output directory.
+requires both post-tail B reports to meet R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO
+and requires B/A candidate timing plus symmetric C++ control drift to meet
+their configured limits. R4_TIMING_GATE_CAPTURE_MAX_RATIO is only a permissive
+collection ceiling so a slower pre-tail A report cannot abort the bracket.
+Every report, stdout/stderr log, host sample, hash, and comparison is retained
+in the output directory.
 
 R4_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
 emits a `r4-host-idle-percent=<number>` line or a normal `top` CPU line. Its
@@ -121,6 +125,7 @@ printf 'utc_started=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$metadata"
 printf 'git_sha=%s\n' "$(git -C "$root" rev-parse HEAD)" >>"$metadata"
 printf 'sequence=A-B-B-A\n' >>"$metadata"
 printf 'renderer_perf_max_ratio=%s\n' "$renderer_perf_max_ratio" >>"$metadata"
+printf 'capture_max_ratio=%s\n' "$capture_max_ratio" >>"$metadata"
 printf 'max_b_over_a=%s\n' "$max_b_over_a" >>"$metadata"
 printf 'max_control_drift=%s\n' "$max_control_drift" >>"$metadata"
 printf 'max_repeat_drift=%s\n' "$max_repeat_drift" >>"$metadata"
@@ -147,6 +152,7 @@ for setting in \
 done
 for numeric in \
     R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO="$renderer_perf_max_ratio" \
+    R4_TIMING_GATE_CAPTURE_MAX_RATIO="$capture_max_ratio" \
     R4_TIMING_GATE_MAX_B_OVER_A="$max_b_over_a" \
     R4_TIMING_GATE_MAX_CONTROL_DRIFT="$max_control_drift" \
     R4_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift" \
@@ -273,7 +279,7 @@ run_leg() {
     (
         cd "$root"
         "$renderer_perf" --manifest "$manifest" --baseline-runner "$baseline_runner" \
-            --candidate-runner "$candidate_runner" --max-ratio "$renderer_perf_max_ratio" \
+            --candidate-runner "$candidate_runner" --max-ratio "$capture_max_ratio" \
             --json "$json" --markdown "$markdown"
     ) >"$output_dir/${label}.stdout" 2>"$output_dir/${label}.stderr"
     status=$?
@@ -296,6 +302,7 @@ if ! "$comparator" --a-first "$output_dir/01-A.renderer-perf.json" \
     --b-first "$output_dir/02-B.renderer-perf.json" \
     --b-second "$output_dir/03-B.renderer-perf.json" \
     --a-second "$output_dir/04-A.renderer-perf.json" \
+    --max-renderer-ratio "$renderer_perf_max_ratio" \
     --max-b-over-a "$max_b_over_a" --max-control-drift "$max_control_drift" \
     --max-repeat-drift "$max_repeat_drift" \
     --output "$comparison_path" >"$output_dir/comparator.stdout" 2>"$output_dir/comparator.stderr" \

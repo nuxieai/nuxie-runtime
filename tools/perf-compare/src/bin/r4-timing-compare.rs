@@ -34,6 +34,11 @@ fn run() -> Result<(), String> {
     }
 
     check_limit(
+        "post-tail B worst-scene renderer/C++ timing",
+        comparison.b_worst_scene_ratio,
+        options.max_renderer_ratio,
+    )?;
+    check_limit(
         "normalized B/A candidate timing",
         comparison.normalized_b_over_a,
         options.max_b_over_a,
@@ -359,6 +364,7 @@ struct Comparison {
     normalized_a_average: f64,
     normalized_b_average: f64,
     normalized_b_over_a: f64,
+    b_worst_scene_ratio: f64,
     cpp_control_drift: f64,
     normalized_a_repeat_drift: f64,
     normalized_b_repeat_drift: f64,
@@ -394,6 +400,10 @@ impl Comparison {
         let normalized_b_average =
             average_number(candidate_over_cpp.b_first, candidate_over_cpp.b_second);
         let normalized_b_over_a = normalized_b_average / normalized_a_average;
+        let b_worst_scene_ratio = b_first
+            .aggregate
+            .worst_ratio
+            .max(b_second.aggregate.worst_ratio);
         let cpp_control_drift = spread([
             cpp_control_ns.a_first,
             cpp_control_ns.b_first,
@@ -412,6 +422,7 @@ impl Comparison {
             normalized_a_average,
             normalized_b_average,
             normalized_b_over_a,
+            b_worst_scene_ratio,
             cpp_control_drift,
             normalized_a_repeat_drift,
             normalized_b_repeat_drift,
@@ -453,6 +464,7 @@ struct Options {
     b_second: PathBuf,
     a_second: PathBuf,
     max_b_over_a: f64,
+    max_renderer_ratio: f64,
     max_control_drift: f64,
     max_repeat_drift: f64,
     output: Option<PathBuf>,
@@ -465,6 +477,7 @@ impl Options {
         let mut b_second = None;
         let mut a_second = None;
         let mut max_b_over_a = None;
+        let mut max_renderer_ratio = None;
         let mut max_control_drift = None;
         let mut max_repeat_drift = None;
         let mut output = None;
@@ -477,6 +490,9 @@ impl Options {
                 "--b-second" => b_second = Some(PathBuf::from(value("--b-second")?)),
                 "--a-second" => a_second = Some(PathBuf::from(value("--a-second")?)),
                 "--max-b-over-a" => max_b_over_a = Some(parse_number(value("--max-b-over-a")?)?),
+                "--max-renderer-ratio" => {
+                    max_renderer_ratio = Some(parse_number(value("--max-renderer-ratio")?)?)
+                }
                 "--max-control-drift" => {
                     max_control_drift = Some(parse_number(value("--max-control-drift")?)?)
                 }
@@ -494,6 +510,8 @@ impl Options {
             b_second: b_second.ok_or_else(|| "--b-second is required".to_owned())?,
             a_second: a_second.ok_or_else(|| "--a-second is required".to_owned())?,
             max_b_over_a: max_b_over_a.ok_or_else(|| "--max-b-over-a is required".to_owned())?,
+            max_renderer_ratio: max_renderer_ratio
+                .ok_or_else(|| "--max-renderer-ratio is required".to_owned())?,
             max_control_drift: max_control_drift
                 .ok_or_else(|| "--max-control-drift is required".to_owned())?,
             max_repeat_drift: max_repeat_drift
@@ -515,7 +533,7 @@ fn parse_number(value: String) -> Result<f64, String> {
 }
 
 fn usage() -> &'static str {
-    "usage: r4-timing-compare --a-first report --b-first report --b-second report --a-second report --max-b-over-a N --max-control-drift N --max-repeat-drift N [--output path]"
+    "usage: r4-timing-compare --a-first report --b-first report --b-second report --a-second report --max-renderer-ratio N --max-b-over-a N --max-control-drift N --max-repeat-drift N [--output path]"
 }
 
 #[cfg(test)]

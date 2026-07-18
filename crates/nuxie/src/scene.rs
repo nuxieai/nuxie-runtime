@@ -1232,6 +1232,23 @@ pub struct LinearAnimationSpec {
     pub duration: u32,
 }
 
+/// Interpolation applied from one authored key to the following key.
+///
+/// Cubic easing uses the canonical Rive `CubicEaseInterpolator` shape. The
+/// x control points must be in `0..=1` so time remains monotonic; y control
+/// points may overshoot that range, but every value must be finite.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum KeyInterpolation {
+    #[default]
+    Linear,
+    CubicEase {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewModelSpec {
     pub name: String,
@@ -1287,6 +1304,7 @@ enum AnimationRecordSpec {
         keyed_property: ObjectId,
         frame: u32,
         value: f32,
+        interpolation: KeyInterpolation,
     },
 }
 
@@ -3114,6 +3132,7 @@ pub enum ExportedObjectKind {
     Mesh,
     MeshVertex,
     LinearAnimation,
+    CubicEaseInterpolator,
     KeyedObject,
     KeyedProperty,
     KeyFrameDouble,
@@ -3271,7 +3290,13 @@ pub enum ExportedProperty {
     KeyedProperty(ExportedAnimatableProperty),
     KeyFrame(u32),
     KeyFrameInterpolationLinear,
+    KeyFrameInterpolationCubic,
+    KeyFrameInterpolatorId(u32),
     KeyFrameDoubleValue(f32),
+    CubicEaseX1(f32),
+    CubicEaseY1(f32),
+    CubicEaseX2(f32),
+    CubicEaseY2(f32),
     StateMachineComponentName(String),
     StateAnimationId(u32),
     StateSpeed(f32),
@@ -3403,8 +3428,15 @@ impl ExportedProperty {
             Self::KeyedObjectId(_) => PROPERTY_KEYED_OBJECT_ID,
             Self::KeyedProperty(_) => PROPERTY_KEYED_PROPERTY_KEY,
             Self::KeyFrame(_) => PROPERTY_KEY_FRAME,
-            Self::KeyFrameInterpolationLinear => PROPERTY_KEY_FRAME_INTERPOLATION_TYPE,
+            Self::KeyFrameInterpolationLinear | Self::KeyFrameInterpolationCubic => {
+                PROPERTY_KEY_FRAME_INTERPOLATION_TYPE
+            }
+            Self::KeyFrameInterpolatorId(_) => PROPERTY_KEY_FRAME_INTERPOLATOR_ID,
             Self::KeyFrameDoubleValue(_) => PROPERTY_KEY_FRAME_DOUBLE_VALUE,
+            Self::CubicEaseX1(_) => PROPERTY_CUBIC_EASE_X1,
+            Self::CubicEaseY1(_) => PROPERTY_CUBIC_EASE_Y1,
+            Self::CubicEaseX2(_) => PROPERTY_CUBIC_EASE_X2,
+            Self::CubicEaseY2(_) => PROPERTY_CUBIC_EASE_Y2,
             Self::StateMachineComponentName(_) => PROPERTY_STATE_MACHINE_COMPONENT_NAME,
             Self::StateAnimationId(_) => PROPERTY_STATE_ANIMATION_ID,
             Self::StateSpeed(_) => PROPERTY_STATE_SPEED,
@@ -3478,6 +3510,7 @@ impl ExportedProperty {
             | Self::AnimationWorkEnd(value)
             | Self::KeyedObjectId(value)
             | Self::KeyFrame(value)
+            | Self::KeyFrameInterpolatorId(value)
             | Self::StateAnimationId(value)
             | Self::StateToId(value)
             | Self::StateTransitionFlags(value)
@@ -3509,6 +3542,7 @@ impl ExportedProperty {
             }),
             Self::KeyedProperty(property) => AuthoringValue::Uint(u64::from(property.schema_key())),
             Self::KeyFrameInterpolationLinear => AuthoringValue::Uint(1),
+            Self::KeyFrameInterpolationCubic => AuthoringValue::Uint(2),
             Self::FillRule(ExportedFillRule::NonZero) => AuthoringValue::Uint(0),
             Self::TextSizing(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::TextAlign(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
@@ -3555,6 +3589,10 @@ impl ExportedProperty {
             | Self::AnimationSpeed(value)
             | Self::StateSpeed(value)
             | Self::KeyFrameDoubleValue(value)
+            | Self::CubicEaseX1(value)
+            | Self::CubicEaseY1(value)
+            | Self::CubicEaseX2(value)
+            | Self::CubicEaseY2(value)
             | Self::ViewModelNumberValue(value)
             | Self::DataConverterRangeMinInput(value)
             | Self::DataConverterRangeMaxInput(value)
@@ -3622,6 +3660,7 @@ impl ExportedRecord {
             ExportedObjectKind::Mesh => TYPE_MESH,
             ExportedObjectKind::MeshVertex => TYPE_MESH_VERTEX,
             ExportedObjectKind::LinearAnimation => TYPE_LINEAR_ANIMATION,
+            ExportedObjectKind::CubicEaseInterpolator => TYPE_CUBIC_EASE_INTERPOLATOR,
             ExportedObjectKind::KeyedObject => TYPE_KEYED_OBJECT,
             ExportedObjectKind::KeyedProperty => TYPE_KEYED_PROPERTY,
             ExportedObjectKind::KeyFrameDouble => TYPE_KEY_FRAME_DOUBLE,
@@ -6018,6 +6057,30 @@ impl AnimTx<'_> {
         frame: u32,
         value: f32,
     ) -> std::result::Result<ObjectId, EditAbort> {
+        self.set_key_with_interpolation(
+            animation,
+            target,
+            property,
+            frame,
+            value,
+            KeyInterpolation::Linear,
+        )
+    }
+
+    /// Upsert one f32 key and the interpolation used by its outgoing segment.
+    ///
+    /// Missing keyed-object/property records are created automatically. The
+    /// returned keyframe identity is preserved when the same tuple is updated,
+    /// including when its interpolation changes between linear and cubic.
+    pub fn set_key_with_interpolation(
+        &mut self,
+        animation: AnimationId,
+        target: ObjectId,
+        property: Prop<f32>,
+        frame: u32,
+        value: f32,
+        interpolation: KeyInterpolation,
+    ) -> std::result::Result<ObjectId, EditAbort> {
         let operation_index = self.begin_operation()?;
         if !value.is_finite() {
             return Err(EditAbort::new(
@@ -6028,6 +6091,13 @@ impl AnimTx<'_> {
                 },
             ));
         }
+        validate_key_interpolation(interpolation).map_err(|reason| {
+            EditAbort::new(
+                operation_index,
+                vec![EditId::Object(animation.object_id())],
+                reason,
+            )
+        })?;
         let Some(animation_location) = self
             .definition_index
             .objects
@@ -6183,6 +6253,7 @@ impl AnimTx<'_> {
                 })?;
             let RecordSpec::Animation(AnimationRecordSpec::KeyFrameDouble {
                 value: key_frame_value,
+                interpolation: key_frame_interpolation,
                 ..
             }) = &mut key_frame.spec
             else {
@@ -6193,6 +6264,7 @@ impl AnimTx<'_> {
                 ));
             };
             *key_frame_value = value;
+            *key_frame_interpolation = interpolation;
             self.touched_artboards.insert(artboard, operation_index);
             self.spec_origins
                 .nodes
@@ -6318,6 +6390,7 @@ impl AnimTx<'_> {
                 keyed_property: keyed_property_id,
                 frame,
                 value,
+                interpolation,
             }),
         });
         self.definition_index.objects.insert(
@@ -8928,6 +9001,7 @@ fn validate_animation_definitions(
                     keyed_property,
                     frame,
                     value,
+                    interpolation,
                 } => {
                     let owner = records_by_id.get(keyed_property).copied().ok_or_else(|| {
                         let reason = match objects.get(keyed_property) {
@@ -8971,6 +9045,13 @@ fn validate_animation_definitions(
                             },
                         ));
                     }
+                    validate_key_interpolation(*interpolation).map_err(|reason| {
+                        EditDiagnostic::new(
+                            operation_index,
+                            vec![EditId::Object(record.id)],
+                            reason,
+                        )
+                    })?;
                 }
             }
         }
@@ -9983,6 +10064,7 @@ fn lower_artboard(
         &mut records,
         artboard,
         &all_local_ids,
+        objects_by_local.len(),
         fallback_operation_index,
         origins,
     )?;
@@ -10433,6 +10515,7 @@ fn append_animation_export_records(
     records: &mut Vec<ExportedRecord>,
     artboard: &ArtboardDefinition,
     local_ids: &BTreeMap<ObjectId, usize>,
+    mut next_artboard_local_id: usize,
     fallback_operation_index: usize,
     origins: &SpecOrigins,
 ) -> std::result::Result<BTreeMap<AnimationId, usize>, EditDiagnostic> {
@@ -10526,24 +10609,62 @@ fn append_animation_export_records(
                     .get(&keyed_property.id)
                     .into_iter()
                     .flatten()
-                    .filter_map(|(_, spec)| match spec {
+                    .filter_map(|(record, spec)| match spec {
                         AnimationRecordSpec::KeyFrameDouble {
                             keyed_property: owner,
                             frame,
                             value,
-                        } if *owner == keyed_property.id => Some((*frame, *value)),
+                            interpolation,
+                        } if *owner == keyed_property.id => {
+                            Some((*record, *frame, *value, *interpolation))
+                        }
                         _ => None,
                     })
                     .collect::<Vec<_>>();
-                key_frames.sort_by_key(|(frame, _)| *frame);
-                for (frame, value) in key_frames {
+                key_frames.sort_by_key(|(_, frame, _, _)| *frame);
+                for (key_frame, frame, value, interpolation) in key_frames {
+                    let mut properties = vec![
+                        ExportedProperty::KeyFrame(frame),
+                        ExportedProperty::KeyFrameDoubleValue(value),
+                    ];
+                    match interpolation {
+                        KeyInterpolation::Linear => {
+                            properties.push(ExportedProperty::KeyFrameInterpolationLinear);
+                        }
+                        KeyInterpolation::CubicEase { x1, y1, x2, y2 } => {
+                            let interpolator_id =
+                                u32::try_from(next_artboard_local_id).map_err(|_| {
+                                    EditDiagnostic::new(
+                                        origins.object(key_frame.id, fallback_operation_index),
+                                        vec![EditId::Object(key_frame.id)],
+                                        EditReason::CapacityExceeded,
+                                    )
+                                })?;
+                            next_artboard_local_id =
+                                next_artboard_local_id.checked_add(1).ok_or_else(|| {
+                                    EditDiagnostic::new(
+                                        origins.object(key_frame.id, fallback_operation_index),
+                                        vec![EditId::Object(key_frame.id)],
+                                        EditReason::CapacityExceeded,
+                                    )
+                                })?;
+                            records.push(ExportedRecord {
+                                kind: ExportedObjectKind::CubicEaseInterpolator,
+                                properties: vec![
+                                    ExportedProperty::CubicEaseX1(x1),
+                                    ExportedProperty::CubicEaseY1(y1),
+                                    ExportedProperty::CubicEaseX2(x2),
+                                    ExportedProperty::CubicEaseY2(y2),
+                                ],
+                            });
+                            properties.push(ExportedProperty::KeyFrameInterpolationCubic);
+                            properties
+                                .push(ExportedProperty::KeyFrameInterpolatorId(interpolator_id));
+                        }
+                    }
                     records.push(ExportedRecord {
                         kind: ExportedObjectKind::KeyFrameDouble,
-                        properties: vec![
-                            ExportedProperty::KeyFrame(frame),
-                            ExportedProperty::KeyFrameInterpolationLinear,
-                            ExportedProperty::KeyFrameDoubleValue(value),
-                        ],
+                        properties,
                     });
                 }
             }
@@ -10651,6 +10772,30 @@ fn validate_linear_animation_spec(
 ) -> std::result::Result<(), EditReason> {
     if spec.fps == 0 {
         return Err(EditReason::NonPositiveProperty { property: "fps" });
+    }
+    Ok(())
+}
+
+fn validate_key_interpolation(
+    interpolation: KeyInterpolation,
+) -> std::result::Result<(), EditReason> {
+    let KeyInterpolation::CubicEase { x1, y1, x2, y2 } = interpolation else {
+        return Ok(());
+    };
+    for (property, value) in [
+        ("cubic_ease_x1", x1),
+        ("cubic_ease_y1", y1),
+        ("cubic_ease_x2", x2),
+        ("cubic_ease_y2", y2),
+    ] {
+        if !value.is_finite() {
+            return Err(EditReason::NonFiniteProperty { property });
+        }
+    }
+    for (property, value) in [("cubic_ease_x1", x1), ("cubic_ease_x2", x2)] {
+        if !(0.0..=1.0).contains(&value) {
+            return Err(EditReason::OutOfRangeProperty { property });
+        }
     }
     Ok(())
 }
@@ -11284,6 +11429,102 @@ mod tests {
         let mut renderer = factory.make_renderer();
         instance.draw(&mut factory, &mut renderer)?;
         Ok(factory.canonical_recording().stream().to_owned())
+    }
+
+    #[test]
+    fn cubic_ease_animation_exports_valid_exact_riv_with_matching_quarter_progress() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Cubic export".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Fader".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let animation = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Smooth".into(),
+                    fps: 60,
+                    duration: 60,
+                },
+            )?;
+            tx.animations().set_key_with_interpolation(
+                animation,
+                shape,
+                props::WORLD_OPACITY,
+                0,
+                0.0,
+                KeyInterpolation::CubicEase {
+                    x1: 0.42,
+                    y1: 0.0,
+                    x2: 0.58,
+                    y2: 1.0,
+                },
+            )?;
+            tx.animations()
+                .set_key(animation, shape, props::WORLD_OPACITY, 60, 1.0)?;
+            Ok(())
+        })?;
+
+        let records = scene.export_records();
+        let bytes = encode_authoring_records(records.into_authoring_records());
+        assert_eq!(bytes.get(..4), Some(b"RIVE".as_slice()));
+        let file = Arc::new(File::import(&bytes)?);
+        let cubic = file
+            .runtime()
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "CubicEaseInterpolator")
+            .context("exact .riv retains CubicEaseInterpolator")?;
+        assert_eq!(cubic.double_property("x1"), Some(0.42));
+        assert_eq!(cubic.double_property("y1"), Some(0.0));
+        assert_eq!(cubic.double_property("x2"), Some(0.58));
+        assert_eq!(cubic.double_property("y2"), Some(1.0));
+        let outgoing = file
+            .runtime()
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| {
+                object.type_name == "KeyFrameDouble" && object.uint_property("frame") == Some(0)
+            })
+            .context("exact .riv retains outgoing keyframe")?;
+        assert_eq!(outgoing.uint_property("interpolationType"), Some(2));
+        let interpolator_id = outgoing
+            .uint_property("interpolatorId")
+            .context("cubic keyframe retains interpolator reference")?;
+        let interpolator_id = usize::try_from(interpolator_id)?;
+        assert_eq!(
+            file.runtime()
+                .artboard_local_object(0, interpolator_id)
+                .map(|object| object.id),
+            Some(cubic.id)
+        );
+
+        let mut imported = OwnedArtboardInstance::instantiate(file, 0)?;
+        assert!(imported.raw_mut().apply_linear_animation(0, 0.25, 1.0));
+        let quarter = imported
+            .raw()
+            .double_property(1, PROPERTY_WORLD_OPACITY)
+            .context("imported shape opacity")?;
+        assert!(
+            quarter < 0.2 && (quarter - 0.25).abs() > 0.05,
+            "exact .riv cubic quarter progress {quarter} must differ from linear 0.25"
+        );
+        Ok(())
     }
 
     #[test]

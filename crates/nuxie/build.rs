@@ -854,6 +854,7 @@ fn render_scene_schema() -> String {
     let mesh = concrete_definition("Mesh");
     let mesh_vertex = concrete_definition("MeshVertex");
     let linear_animation = concrete_definition("LinearAnimation");
+    let cubic_ease_interpolator = concrete_definition("CubicEaseInterpolator");
     let keyed_object = concrete_definition("KeyedObject");
     let keyed_property = concrete_definition("KeyedProperty");
     let key_frame_double = concrete_definition("KeyFrameDouble");
@@ -913,6 +914,7 @@ fn render_scene_schema() -> String {
     .expect("write generated source");
     for (name, definition) in [
         ("LINEAR_ANIMATION", linear_animation),
+        ("CUBIC_EASE_INTERPOLATOR", cubic_ease_interpolator),
         ("KEYED_OBJECT", keyed_object),
         ("KEYED_PROPERTY", keyed_property),
         ("KEY_FRAME_DOUBLE", key_frame_double),
@@ -1340,6 +1342,41 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         true,
     );
+    let key_frame_interpolator_id = resolve_named_property(
+        "KeyFrameDouble",
+        "interpolatorId",
+        "InterpolatingKeyFrame",
+        FieldKind::Uint,
+        true,
+    );
+    let cubic_ease_x1 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "x1",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
+    let cubic_ease_y1 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "y1",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
+    let cubic_ease_x2 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "x2",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
+    let cubic_ease_y2 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "y2",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
     let key_frame_double_value = resolve_named_property(
         "KeyFrameDouble",
         "value",
@@ -1661,7 +1698,12 @@ fn render_scene_schema() -> String {
         ("KEYED_PROPERTY_KEY", keyed_property_key),
         ("KEY_FRAME", key_frame),
         ("KEY_FRAME_INTERPOLATION_TYPE", key_frame_interpolation_type),
+        ("KEY_FRAME_INTERPOLATOR_ID", key_frame_interpolator_id),
         ("KEY_FRAME_DOUBLE_VALUE", key_frame_double_value),
+        ("CUBIC_EASE_X1", cubic_ease_x1),
+        ("CUBIC_EASE_Y1", cubic_ease_y1),
+        ("CUBIC_EASE_X2", cubic_ease_x2),
+        ("CUBIC_EASE_Y2", cubic_ease_y2),
         ("STATE_MACHINE_COMPONENT_NAME", state_machine_component_name),
         ("STATE_ANIMATION_ID", state_animation_id),
         ("STATE_SPEED", state_speed),

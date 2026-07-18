@@ -5,9 +5,9 @@ use nuxie::{
     DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId, EventSpec,
     ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord, Factory,
     FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
-    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec,
-    LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec, MachineSpec,
-    MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
+    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, KeyInterpolation,
+    LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
+    MachineSpec, MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
     RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
     SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
@@ -2842,6 +2842,260 @@ fn authored_linear_animation_exports_canonical_records_and_scrubs_the_live_insta
         transparent_draw, opaque_draw,
         "scrubbed state is consumed by draw on the same retained InstanceId"
     );
+    Ok(())
+}
+
+#[test]
+fn authored_cubic_ease_key_upserts_identity_and_changes_quarter_progress() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, linear_shape, eased_shape, linear, eased, eased_start), _) =
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let make_shape = |tx: &mut SceneTx<'_>, name: &str| {
+                tx.create(
+                    Parent::Artboard(artboard),
+                    NodeSpec::Shape(ShapeSpec {
+                        name: name.into(),
+                        x: 0.0,
+                        y: 0.0,
+                        opacity: 1.0,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                    }),
+                )
+            };
+            let linear_shape = make_shape(tx, "Linear")?;
+            let eased_shape = make_shape(tx, "Smooth")?;
+            let make_animation = |tx: &mut SceneTx<'_>, name: &str| {
+                tx.animations().create_linear(
+                    artboard,
+                    LinearAnimationSpec {
+                        name: name.into(),
+                        fps: 60,
+                        duration: 60,
+                    },
+                )
+            };
+            let linear = make_animation(tx, "Linear")?;
+            tx.animations()
+                .set_key(linear, linear_shape, props::WORLD_OPACITY, 0, 0.0)?;
+            tx.animations()
+                .set_key(linear, linear_shape, props::WORLD_OPACITY, 60, 1.0)?;
+
+            let eased = make_animation(tx, "Smooth")?;
+            let eased_start =
+                tx.animations()
+                    .set_key(eased, eased_shape, props::WORLD_OPACITY, 0, 0.0)?;
+            let upserted = tx.animations().set_key_with_interpolation(
+                eased,
+                eased_shape,
+                props::WORLD_OPACITY,
+                0,
+                0.0,
+                KeyInterpolation::CubicEase {
+                    x1: 0.42,
+                    y1: 0.0,
+                    x2: 0.58,
+                    y2: 1.0,
+                },
+            )?;
+            assert_eq!(upserted, eased_start);
+            tx.animations()
+                .set_key(eased, eased_shape, props::WORLD_OPACITY, 60, 1.0)?;
+            Ok((
+                artboard,
+                linear_shape,
+                eased_shape,
+                linear,
+                eased,
+                eased_start,
+            ))
+        })?;
+
+    let records = scene.export_records();
+    let cubic_index = records
+        .records()
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::CubicEaseInterpolator)
+        .expect("one cubic interpolator is derived for the eased outgoing key");
+    assert_eq!(
+        records
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::CubicEaseInterpolator)
+            .count(),
+        1,
+        "upserting a key must not accumulate helper records"
+    );
+    assert_eq!(
+        records
+            .records()
+            .get(cubic_index)
+            .expect("derived cubic record")
+            .properties,
+        vec![
+            ExportedProperty::CubicEaseX1(0.42),
+            ExportedProperty::CubicEaseY1(0.0),
+            ExportedProperty::CubicEaseX2(0.58),
+            ExportedProperty::CubicEaseY2(1.0),
+        ]
+    );
+    let eased_key_record = records
+        .records()
+        .get(cubic_index + 1)
+        .expect("derived interpolator is immediately followed by its keyframe");
+    assert_eq!(eased_key_record.kind, ExportedObjectKind::KeyFrameDouble);
+    assert!(
+        eased_key_record
+            .properties
+            .contains(&ExportedProperty::KeyFrameInterpolatorId(3))
+    );
+    assert!(
+        eased_key_record
+            .properties
+            .contains(&ExportedProperty::KeyFrameInterpolationCubic)
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let linear_opacity = scene.cursor(instance, linear_shape, props::WORLD_OPACITY)?;
+    let eased_opacity = scene.cursor(instance, eased_shape, props::WORLD_OPACITY)?;
+    scene.frame().scrub(instance, linear, 0.25)?;
+    scene.frame().scrub(instance, eased, 0.25)?;
+    let linear_quarter = scene.frame().get(linear_opacity)?;
+    let eased_quarter = scene.frame().get(eased_opacity)?;
+    assert!((linear_quarter - 0.25).abs() < 0.000_01);
+    assert!(
+        eased_quarter < 0.2 && (eased_quarter - linear_quarter).abs() > 0.05,
+        "smooth cubic quarter progress {eased_quarter} must differ from linear {linear_quarter}"
+    );
+
+    scene.edit(|tx| {
+        let id = tx.animations().set_key_with_interpolation(
+            eased,
+            eased_shape,
+            props::WORLD_OPACITY,
+            0,
+            0.0,
+            KeyInterpolation::CubicEase {
+                x1: 0.42,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            },
+        )?;
+        assert_eq!(id, eased_start);
+        Ok(())
+    })?;
+    assert_eq!(scene.export_records(), records);
+    Ok(())
+}
+
+#[test]
+fn cubic_ease_control_points_fail_closed_without_mutating_the_key() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((animation, shape), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Fade".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 0, 0.0)?;
+        tx.animations()
+            .set_key(animation, shape, props::WORLD_OPACITY, 60, 1.0)?;
+        Ok((animation, shape))
+    })?;
+    let records_before = scene.export_records();
+    let epoch_before = scene.epoch();
+
+    for (interpolation, expected) in [
+        (
+            KeyInterpolation::CubicEase {
+                x1: f32::NAN,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            },
+            EditReason::NonFiniteProperty {
+                property: "cubic_ease_x1",
+            },
+        ),
+        (
+            KeyInterpolation::CubicEase {
+                x1: 0.42,
+                y1: f32::INFINITY,
+                x2: 0.58,
+                y2: 1.0,
+            },
+            EditReason::NonFiniteProperty {
+                property: "cubic_ease_y1",
+            },
+        ),
+        (
+            KeyInterpolation::CubicEase {
+                x1: -0.01,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            },
+            EditReason::OutOfRangeProperty {
+                property: "cubic_ease_x1",
+            },
+        ),
+        (
+            KeyInterpolation::CubicEase {
+                x1: 0.42,
+                y1: 0.0,
+                x2: 1.01,
+                y2: 1.0,
+            },
+            EditReason::OutOfRangeProperty {
+                property: "cubic_ease_x2",
+            },
+        ),
+    ] {
+        let error = scene
+            .edit(|tx| {
+                tx.animations().set_key_with_interpolation(
+                    animation,
+                    shape,
+                    props::WORLD_OPACITY,
+                    0,
+                    0.0,
+                    interpolation,
+                )
+            })
+            .expect_err("invalid cubic control points must abort the transaction");
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(error.diagnostic().reason, expected);
+        assert_eq!(scene.export_records(), records_before);
+        assert_eq!(scene.epoch(), epoch_before);
+    }
     Ok(())
 }
 

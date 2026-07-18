@@ -5079,77 +5079,18 @@ fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D
     }
 }
 
-fn order_opacity_buckets_like_cpp(buckets: Vec<StaticTextPathBucket>) -> Vec<StaticTextPathBucket> {
-    if buckets.len() < 2 {
-        return buckets;
-    }
-
-    // C++ TextStylePaint buckets opacity paths in std::unordered_map<float,
-    // ShapePaintPath>. The golden stream observes libc++'s small-map insertion
-    // order: new empty buckets are linked at the front, while collisions are
-    // inserted before the first node in that bucket.
-    let mut bucket_count = 0usize;
-    let mut ordered_indices = Vec::<usize>::new();
-    for index in 0..buckets.len() {
-        let size_after_insert = index + 1;
-        if size_after_insert > bucket_count {
-            bucket_count = next_cpp_unordered_bucket_count(bucket_count, size_after_insert);
-        }
-        let bucket_index = cpp_float_hash_bucket(buckets[index].opacity, bucket_count);
-        let insertion_index = ordered_indices
-            .iter()
-            .position(|existing| {
-                cpp_float_hash_bucket(buckets[*existing].opacity, bucket_count) == bucket_index
-            })
-            .unwrap_or(0);
-        ordered_indices.insert(insertion_index, index);
-    }
-
-    ordered_indices
-        .into_iter()
-        .map(|index| buckets[index].clone())
-        .collect()
-}
-
-fn cpp_float_hash_bucket(value: f32, bucket_count: usize) -> usize {
-    (value.to_bits() as usize) % bucket_count
-}
-
-fn next_cpp_unordered_bucket_count(current: usize, desired: usize) -> usize {
-    if current == 0 {
-        return 2;
-    }
-    // Guard the rehash growth `current * 2` against usize overflow: in debug it
-    // panics, in release it wraps -- a build-dependent divergence. Bucket counts
-    // are bounded by the real element (glyph/run) count, so saturation is
-    // unreachable on any input; saturating_mul just makes debug and release
-    // agree deterministically.
-    next_prime(current.saturating_mul(2).max(desired))
-}
-
-fn next_prime(mut value: usize) -> usize {
-    while !is_prime(value) {
-        value += 1;
-    }
-    value
-}
-
-fn is_prime(value: usize) -> bool {
-    if value < 2 {
-        return false;
-    }
-    let mut divisor = 2usize;
-    // `divisor * divisor` can overflow usize when `value` is near usize::MAX
-    // (divisor climbs toward sqrt(value)); saturating_mul makes the last
-    // comparison `saturated > value` cleanly false and exits the loop, whereas a
-    // wrapping product could wrap below `value` and loop past the real sqrt.
-    while divisor.saturating_mul(divisor) <= value {
-        if value % divisor == 0 {
-            return false;
-        }
-        divisor += 1;
-    }
-    true
+fn order_opacity_buckets_like_cpp(
+    mut buckets: Vec<StaticTextPathBucket>,
+) -> Vec<StaticTextPathBucket> {
+    // rive-runtime 43dfc847 changed TextStylePaint::m_opacityPaths from
+    // std::unordered_map<float, ...> to std::map<float, ...>. Modifier
+    // falloff paths are now drawn in ascending opacity order.
+    buckets.sort_by(|a, b| {
+        a.opacity
+            .partial_cmp(&b.opacity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    buckets
 }
 
 fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
@@ -6077,5 +6018,23 @@ mod tests {
             context.paragraph_baselines,
             baselines.as_slice()
         ));
+    }
+
+    #[test]
+    fn opacity_buckets_follow_cpp_ordered_map_iteration() {
+        let buckets = [0.8, 0.2, 0.5]
+            .into_iter()
+            .map(|opacity| StaticTextPathBucket {
+                opacity,
+                commands: Vec::new(),
+            })
+            .collect();
+
+        let ordered = order_opacity_buckets_like_cpp(buckets)
+            .into_iter()
+            .map(|bucket| bucket.opacity)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered, vec![0.2, 0.5, 0.8]);
     }
 }

@@ -1,20 +1,21 @@
 use anyhow::Result;
 use nuxie::{
-    Aabb, AnimationId, AnimationStateSpec, ArtboardId, ArtboardSpec, ChildIndex, ColorInt,
-    DashPathSpec, DashSpec, DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason,
-    EventId, EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty,
-    ExportedRecord, Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec,
-    GradientStopSpec, ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec,
-    LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
-    MachineSpec, MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
+    Aabb, AnimationId, AnimationStateSpec, ArtboardComponentListSpec, ArtboardId,
+    ArtboardListMapRuleSpec, ArtboardSpec, ChildIndex, ColorInt, DashPathSpec, DashSpec,
+    DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId, EventSpec,
+    ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord, Factory,
+    FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
+    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec,
+    LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec, MachineSpec,
+    MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
     RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
     SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
     SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec, ScriptedDrawableSpec,
     ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
     TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelId,
-    ViewModelInstanceId, ViewModelInstanceSpec, ViewModelNumberId, ViewModelNumberSpec,
-    ViewModelSpec, props,
+    ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListSpec, ViewModelNumberId,
+    ViewModelNumberSpec, ViewModelSpec, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -3251,6 +3252,200 @@ fn authored_view_model_number_binds_state_transition_duration_records() -> Resul
             .map(|record| record.kind),
         Some(ExportedObjectKind::TransitionTriggerCondition),
         "the transition-owned data bind precedes conditions"
+    );
+    Ok(())
+}
+
+#[test]
+fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items() -> Result<()> {
+    let mut scene = Scene::new();
+    let (root_artboard, _) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 120.0,
+            height: 40.0,
+        })?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Item".into(),
+            width: 20.0,
+            height: 20.0,
+        })?;
+        let item_shape = tx.create(
+            Parent::Artboard(item_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Item shape".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Item bounds", 20.0, 20.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Item fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Item color".into(),
+                color: 0xffab_cdef,
+            }),
+        )?;
+
+        let (root_model, item_model, root_defaults, item_a, item_b, root_items) = {
+            let mut view_models = tx.view_models();
+            view_models.create(ViewModelSpec {
+                name: "Decoy".into(),
+            })?;
+            let root_model = view_models.create(ViewModelSpec {
+                name: "Root model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                name: "Item model".into(),
+            })?;
+            let root_items = view_models.create_list(
+                root_model,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            let item_a = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Item A".into()),
+                },
+            )?;
+            let item_b = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Item B".into()),
+                },
+            )?;
+            view_models.set_list_items(root_defaults, root_items, &[item_a, item_b])?;
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, item_a)?;
+            (
+                root_model,
+                item_model,
+                root_defaults,
+                item_a,
+                item_b,
+                root_items,
+            )
+        };
+        let _ = (root_model, root_defaults, item_a, item_b);
+
+        tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Items".into(),
+                x: 5.0,
+                y: 7.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                source: root_items,
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                }],
+            },
+        )?;
+        Ok(root_artboard)
+    })?;
+
+    let records = scene.export_records();
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelPropertyList
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelName("items".into()))
+    }));
+    let list_items = records
+        .records()
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::ViewModelInstanceListItem)
+        .map(|record| {
+            let model = record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::ViewModelListItemViewModelId(value) => Some(*value),
+                    _ => None,
+                });
+            let instance = record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::ViewModelListItemInstanceId(value) => Some(*value),
+                    _ => None,
+                });
+            (model, instance)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        list_items,
+        vec![(Some(2), Some(0)), (Some(2), Some(1))],
+        "each list item resolves its actual model and per-model instance ordinals"
+    );
+    let list_index = records
+        .records()
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::ArtboardComponentList)
+        .expect("typed component-list host is exported");
+    assert_eq!(
+        records.records().get(list_index + 1),
+        Some(&ExportedRecord {
+            kind: ExportedObjectKind::DataBindContext,
+            properties: vec![
+                ExportedProperty::DataBindArtboardComponentListSource,
+                ExportedProperty::DataBindFlags(0),
+                ExportedProperty::DataBindSourcePath(vec![1, 0]),
+            ],
+        }),
+        "the typed source bind immediately follows its target without exposing a raw schema key"
+    );
+    let map_rule = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::ArtboardListMapRule)
+        .expect("typed list map rule is exported");
+    assert!(
+        map_rule
+            .properties
+            .contains(&ExportedProperty::ArtboardListMapRuleViewModelId(2)),
+        "the map rule resolves the item model ordinal instead of hard-coding zero"
+    );
+    assert!(
+        map_rule
+            .properties
+            .contains(&ExportedProperty::ArtboardListMapRuleArtboardId(1))
+    );
+
+    let instance = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty());
+    let stream = canonical_draw_stream(&mut scene, instance)?;
+    assert_eq!(
+        drawn_move_count(&stream),
+        2,
+        "both list contexts import, instantiate the mapped item artboard, and draw"
     );
     Ok(())
 }

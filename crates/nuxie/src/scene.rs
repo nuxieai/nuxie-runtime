@@ -73,7 +73,9 @@ ordinary_record_id!(MachineStateId);
 ordinary_record_id!(MachineTransitionId);
 ordinary_record_id!(ViewModelId);
 ordinary_record_id!(ViewModelNumberId);
+ordinary_record_id!(ViewModelListId);
 ordinary_record_id!(ViewModelInstanceId);
+ordinary_record_id!(ArtboardComponentListId);
 ordinary_record_id!(DataBindId);
 
 /// Stable identity of an embedded font owned by the authored scene.
@@ -408,6 +410,15 @@ fn read_runtime_color(
     instance.color_property(local_id, key)
 }
 
+/// One typed component-list mapping from an item model to its authored artboard.
+///
+/// Runtime schema keys and file-local ordinals are resolved only while lowering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArtboardListMapRuleSpec {
+    pub view_model: ViewModelId,
+    pub artboard: ArtboardId,
+}
+
 include!(concat!(env!("OUT_DIR"), "/scene_schema.rs"));
 
 /// A direct runtime target. It remains valid only for the scene epoch in which it was resolved.
@@ -664,6 +675,7 @@ struct DefinitionIndex {
     shader_assets: BTreeMap<ShaderAssetId, usize>,
     view_models: BTreeMap<ViewModelId, usize>,
     view_model_numbers: BTreeMap<ViewModelNumberId, (usize, usize)>,
+    view_model_lists: BTreeMap<ViewModelListId, (usize, usize)>,
     view_model_instances: BTreeMap<ViewModelInstanceId, (usize, usize)>,
     artboards: BTreeMap<ArtboardId, usize>,
     objects: BTreeMap<ObjectId, IndexedObject>,
@@ -712,6 +724,17 @@ impl DefinitionIndex {
                     .or_default()
                     .push(number.id.object_id());
                 index.owned.entry(number.id.object_id()).or_default();
+            }
+            for (list_index, list) in view_model.lists.iter().enumerate() {
+                index
+                    .view_model_lists
+                    .insert(list.id, (view_model_index, list_index));
+                index
+                    .owned
+                    .entry(view_model.id.object_id())
+                    .or_default()
+                    .push(list.id.object_id());
+                index.owned.entry(list.id.object_id()).or_default();
             }
             for (instance_index, instance) in view_model.instances.iter().enumerate() {
                 index
@@ -786,6 +809,10 @@ impl DefinitionIndex {
             || self.view_models.keys().any(|id| id.object_id() == object)
             || self
                 .view_model_numbers
+                .keys()
+                .any(|id| id.object_id() == object)
+            || self
+                .view_model_lists
                 .keys()
                 .any(|id| id.object_id() == object)
             || self
@@ -946,6 +973,7 @@ struct ViewModelDefinition {
     id: ViewModelId,
     spec: ViewModelSpec,
     numbers: Vec<ViewModelNumberDefinition>,
+    lists: Vec<ViewModelListDefinition>,
     instances: Vec<ViewModelInstanceDefinition>,
 }
 
@@ -956,10 +984,17 @@ struct ViewModelNumberDefinition {
 }
 
 #[derive(Debug, Clone)]
+struct ViewModelListDefinition {
+    id: ViewModelListId,
+    spec: ViewModelListSpec,
+}
+
+#[derive(Debug, Clone)]
 struct ViewModelInstanceDefinition {
     id: ViewModelInstanceId,
     spec: ViewModelInstanceSpec,
     numbers: BTreeMap<ViewModelNumberId, f32>,
+    lists: BTreeMap<ViewModelListId, Vec<ViewModelInstanceId>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1141,6 +1176,11 @@ pub struct ViewModelSpec {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewModelNumberSpec {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewModelListSpec {
     pub name: String,
 }
 
@@ -1686,10 +1726,7 @@ impl Hierarchy<'_> {
         }
 
         let parent_is_valid = match parent_kind {
-            None => matches!(
-                child_kind,
-                NodeKind::Shape | NodeKind::Text | NodeKind::ScriptedDrawable
-            ),
+            None => valid_artboard_child(child_kind),
             Some(parent) => valid_object_parent(parent, child_kind),
         };
         if !parent_is_valid {
@@ -2266,17 +2303,24 @@ impl Hierarchy<'_> {
                 let Some((parent, node)) = record.visual() else {
                     continue;
                 };
-                if let NodeSpec::NestedArtboard(spec) = node {
-                    if !artboard_ids.contains(&spec.artboard) {
+                let referenced_artboards = match node {
+                    NodeSpec::NestedArtboard(spec) => vec![spec.artboard],
+                    NodeSpec::ArtboardComponentList(spec) => {
+                        spec.map_rules.iter().map(|rule| rule.artboard).collect()
+                    }
+                    _ => Vec::new(),
+                };
+                for referenced in referenced_artboards {
+                    if !artboard_ids.contains(&referenced) {
                         return Err(abort(
-                            vec![EditId::Object(record.id), EditId::Artboard(spec.artboard)],
+                            vec![EditId::Object(record.id), EditId::Artboard(referenced)],
                             EditReason::UnknownArtboard,
                         ));
                     }
                     artboard_references
                         .entry(artboard.id)
                         .or_default()
-                        .push((spec.artboard, record.id));
+                        .push((referenced, record.id));
                 }
                 if let NodeSpec::ScriptedDrawable(spec) = node
                     && !script_asset_ids.contains(&spec.script)
@@ -2862,13 +2906,18 @@ pub enum ExportedObjectKind {
     FileAssetContents,
     ViewModel,
     ViewModelPropertyNumber,
+    ViewModelPropertyList,
     ViewModelInstance,
     ViewModelInstanceNumber,
+    ViewModelInstanceList,
+    ViewModelInstanceListItem,
     Artboard,
     Shape,
     NestedArtboard,
     Image,
     ScriptedDrawable,
+    ArtboardComponentList,
+    ArtboardListMapRule,
     Rectangle,
     Fill,
     SolidColor,
@@ -3052,7 +3101,12 @@ pub enum ExportedProperty {
     ArtboardViewModelId(u32),
     ViewModelPropertyId(u32),
     ViewModelNumberValue(f32),
+    ViewModelListItemViewModelId(u32),
+    ViewModelListItemInstanceId(u32),
+    ArtboardListMapRuleArtboardId(u32),
+    ArtboardListMapRuleViewModelId(u32),
     DataBindPropertyKey(u32),
+    DataBindArtboardComponentListSource,
     DataBindFlags(u32),
     DataBindSourcePath(Vec<u32>),
 }
@@ -3172,7 +3226,18 @@ impl ExportedProperty {
             Self::ArtboardViewModelId(_) => PROPERTY_ARTBOARD_VIEW_MODEL_ID,
             Self::ViewModelPropertyId(_) => PROPERTY_VIEW_MODEL_INSTANCE_VALUE_PROPERTY_ID,
             Self::ViewModelNumberValue(_) => PROPERTY_VIEW_MODEL_INSTANCE_NUMBER_VALUE,
+            Self::ViewModelListItemViewModelId(_) => {
+                PROPERTY_VIEW_MODEL_INSTANCE_LIST_ITEM_VIEW_MODEL_ID
+            }
+            Self::ViewModelListItemInstanceId(_) => {
+                PROPERTY_VIEW_MODEL_INSTANCE_LIST_ITEM_INSTANCE_ID
+            }
+            Self::ArtboardListMapRuleArtboardId(_) => PROPERTY_ARTBOARD_LIST_MAP_RULE_ARTBOARD_ID,
+            Self::ArtboardListMapRuleViewModelId(_) => {
+                PROPERTY_ARTBOARD_LIST_MAP_RULE_VIEW_MODEL_ID
+            }
             Self::DataBindPropertyKey(_) => PROPERTY_DATA_BIND_PROPERTY_KEY,
+            Self::DataBindArtboardComponentListSource => PROPERTY_DATA_BIND_PROPERTY_KEY,
             Self::DataBindFlags(_) => PROPERTY_DATA_BIND_FLAGS,
             Self::DataBindSourcePath(_) => PROPERTY_DATA_BIND_SOURCE_PATH,
         }
@@ -3219,8 +3284,15 @@ impl ExportedProperty {
             Self::ViewModelId(value)
             | Self::ArtboardViewModelId(value)
             | Self::ViewModelPropertyId(value)
+            | Self::ViewModelListItemViewModelId(value)
+            | Self::ViewModelListItemInstanceId(value)
+            | Self::ArtboardListMapRuleArtboardId(value)
+            | Self::ArtboardListMapRuleViewModelId(value)
             | Self::DataBindPropertyKey(value)
             | Self::DataBindFlags(value) => AuthoringValue::Uint(u64::from(value)),
+            Self::DataBindArtboardComponentListSource => {
+                AuthoringValue::Uint(u64::from(PROPERTY_ARTBOARD_COMPONENT_LIST_SOURCE))
+            }
             Self::FireEventOccurs(value) => AuthoringValue::Uint(match value {
                 FireEventOccurs::AtStart => 0,
                 FireEventOccurs::AtEnd => 1,
@@ -3307,13 +3379,18 @@ impl ExportedRecord {
             ExportedObjectKind::FileAssetContents => TYPE_FILE_ASSET_CONTENTS,
             ExportedObjectKind::ViewModel => TYPE_VIEW_MODEL,
             ExportedObjectKind::ViewModelPropertyNumber => TYPE_VIEW_MODEL_PROPERTY_NUMBER,
+            ExportedObjectKind::ViewModelPropertyList => TYPE_VIEW_MODEL_PROPERTY_LIST,
             ExportedObjectKind::ViewModelInstance => TYPE_VIEW_MODEL_INSTANCE,
             ExportedObjectKind::ViewModelInstanceNumber => TYPE_VIEW_MODEL_INSTANCE_NUMBER,
+            ExportedObjectKind::ViewModelInstanceList => TYPE_VIEW_MODEL_INSTANCE_LIST,
+            ExportedObjectKind::ViewModelInstanceListItem => TYPE_VIEW_MODEL_INSTANCE_LIST_ITEM,
             ExportedObjectKind::Artboard => TYPE_ARTBOARD,
             ExportedObjectKind::Shape => TYPE_SHAPE,
             ExportedObjectKind::NestedArtboard => TYPE_NESTED_ARTBOARD,
             ExportedObjectKind::Image => TYPE_IMAGE,
             ExportedObjectKind::ScriptedDrawable => TYPE_SCRIPTED_DRAWABLE,
+            ExportedObjectKind::ArtboardComponentList => TYPE_ARTBOARD_COMPONENT_LIST,
+            ExportedObjectKind::ArtboardListMapRule => TYPE_ARTBOARD_LIST_MAP_RULE,
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::Fill => TYPE_FILL,
             ExportedObjectKind::SolidColor => TYPE_SOLID_COLOR,
@@ -4305,6 +4382,22 @@ impl SceneTx<'_> {
         Ok(id)
     }
 
+    /// Create a typed component-list host directly under an artboard.
+    ///
+    /// The durable spec carries semantic view-model and artboard identities;
+    /// runtime source binds and map-rule records are synthesized while lowering.
+    pub fn create_component_list(
+        &mut self,
+        artboard: ArtboardId,
+        spec: ArtboardComponentListSpec,
+    ) -> std::result::Result<ArtboardComponentListId, EditAbort> {
+        self.create(
+            Parent::Artboard(artboard),
+            NodeSpec::ArtboardComponentList(spec),
+        )
+        .map(ArtboardComponentListId)
+    }
+
     /// Move an authored object subtree to an exact final position among its
     /// current parent's children.
     pub fn reorder(
@@ -4499,6 +4592,7 @@ impl VmTx<'_> {
             id,
             spec,
             numbers: Vec::new(),
+            lists: Vec::new(),
             instances: Vec::new(),
         });
         self.definition_index.view_models.insert(id, index);
@@ -4530,6 +4624,7 @@ impl VmTx<'_> {
                     .numbers
                     .iter()
                     .any(|number| number.spec.name == spec.name)
+                    || model.lists.iter().any(|list| list.spec.name == spec.name)
             })
         {
             return Err(EditAbort::new(
@@ -4559,6 +4654,70 @@ impl VmTx<'_> {
         self.definition_index
             .view_model_numbers
             .insert(id, (view_model_index, number_index));
+        self.definition_index
+            .owned
+            .entry(view_model.object_id())
+            .or_default()
+            .push(id.object_id());
+        self.definition_index
+            .owned
+            .entry(id.object_id())
+            .or_default();
+        self.created_objects.push(id.object_id());
+        self.spec_origins
+            .nodes
+            .insert(id.object_id(), operation_index);
+        self.touch_all_artboards(operation_index);
+        Ok(id)
+    }
+
+    /// Add one typed list property to a view model.
+    pub fn create_list(
+        &mut self,
+        view_model: ViewModelId,
+        spec: ViewModelListSpec,
+    ) -> std::result::Result<ViewModelListId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let view_model_index = self.view_model_index(view_model, operation_index)?;
+        if self
+            .definitions
+            .view_models
+            .get(view_model_index)
+            .is_some_and(|model| {
+                model
+                    .numbers
+                    .iter()
+                    .any(|number| number.spec.name == spec.name)
+                    || model.lists.iter().any(|list| list.spec.name == spec.name)
+            })
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(view_model.object_id())],
+                EditReason::IdentityCollision,
+            ));
+        }
+        let id = ViewModelListId(ObjectId(
+            allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?,
+        ));
+        let model = self
+            .definitions
+            .view_models
+            .get_mut(view_model_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(view_model.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let list_index = model.lists.len();
+        model.lists.push(ViewModelListDefinition { id, spec });
+        self.definition_index
+            .view_model_lists
+            .insert(id, (view_model_index, list_index));
         self.definition_index
             .owned
             .entry(view_model.object_id())
@@ -4616,6 +4775,10 @@ impl VmTx<'_> {
             .iter()
             .enumerate()
             .any(|(index, candidate)| index != number_index && candidate.spec.name == name)
+            || model
+                .lists
+                .iter()
+                .any(|candidate| candidate.spec.name == name)
         {
             return Err(EditAbort::new(
                 operation_index,
@@ -4668,6 +4831,7 @@ impl VmTx<'_> {
             id,
             spec,
             numbers: BTreeMap::new(),
+            lists: BTreeMap::new(),
         });
         self.definition_index
             .view_model_instances
@@ -4759,6 +4923,90 @@ impl VmTx<'_> {
         self.spec_origins
             .properties
             .insert((instance.object_id(), "view_model_number"), operation_index);
+        self.touch_all_artboards(operation_index);
+        Ok(changed)
+    }
+
+    /// Replace the ordered item instances stored in one authored list value.
+    ///
+    /// Items may belong to any authored model; lowering resolves both their
+    /// model ordinal and their per-model instance ordinal. Repeated items are
+    /// preserved because list position, not instance identity, owns the slot.
+    pub fn set_list_items(
+        &mut self,
+        instance: ViewModelInstanceId,
+        list: ViewModelListId,
+        items: &[ViewModelInstanceId],
+    ) -> std::result::Result<bool, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let (instance_model_index, instance_index) = self
+            .definition_index
+            .view_model_instances
+            .get(&instance)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        let (list_model_index, _) = self
+            .definition_index
+            .view_model_lists
+            .get(&list)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(list.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if instance_model_index != list_model_index {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(instance.object_id()),
+                    EditId::Object(list.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        for item in items {
+            if !self
+                .definition_index
+                .view_model_instances
+                .contains_key(item)
+            {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![
+                        EditId::Object(instance.object_id()),
+                        EditId::Object(item.object_id()),
+                    ],
+                    EditReason::UnknownObject,
+                ));
+            }
+        }
+        let authored_instance = self
+            .definitions
+            .view_models
+            .get_mut(instance_model_index)
+            .and_then(|model| model.instances.get_mut(instance_index))
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let replacement = items.to_vec();
+        let changed = authored_instance.lists.get(&list) != Some(&replacement);
+        authored_instance.lists.insert(list, replacement);
+        self.spec_origins
+            .properties
+            .insert((instance.object_id(), "view_model_list"), operation_index);
         self.touch_all_artboards(operation_index);
         Ok(changed)
     }
@@ -6079,6 +6327,7 @@ fn valid_artboard_child(child: NodeKind) -> bool {
             | NodeKind::Image
             | NodeKind::Text
             | NodeKind::ScriptedDrawable
+            | NodeKind::ArtboardComponentList
     )
 }
 
@@ -6105,11 +6354,17 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
 }
 
 fn artboard_references(definition: &ArtboardDefinition) -> impl Iterator<Item = ArtboardId> + '_ {
-    definition.records.iter().filter_map(|record| {
-        let Some((_, NodeSpec::NestedArtboard(spec))) = record.visual() else {
-            return None;
+    definition.records.iter().flat_map(|record| {
+        let Some((_, node)) = record.visual() else {
+            return Vec::new();
         };
-        Some(spec.artboard)
+        match node {
+            NodeSpec::NestedArtboard(spec) => vec![spec.artboard],
+            NodeSpec::ArtboardComponentList(spec) => {
+                spec.map_rules.iter().map(|rule| rule.artboard).collect()
+            }
+            _ => Vec::new(),
+        }
     })
 }
 
@@ -7067,7 +7322,9 @@ struct LoweredFileAssets {
 
 struct LoweredViewModelCatalog {
     records: Vec<ExportedRecord>,
+    model_indices: BTreeMap<ViewModelId, u32>,
     number_indices: BTreeMap<ViewModelNumberId, (u32, u32)>,
+    list_indices: BTreeMap<ViewModelListId, (u32, u32)>,
     instance_indices: BTreeMap<ViewModelInstanceId, (usize, usize)>,
 }
 
@@ -7083,10 +7340,15 @@ fn lower_view_model_catalog(
     origins: &SpecOrigins,
 ) -> std::result::Result<LoweredViewModelCatalog, EditDiagnostic> {
     let mut records = Vec::new();
+    let mut model_indices = BTreeMap::new();
     let mut number_indices = BTreeMap::new();
+    let mut list_indices = BTreeMap::new();
     let mut instance_indices = BTreeMap::new();
     let mut identities = BTreeSet::new();
 
+    // Definitions precede every instance value. List items may reference an
+    // instance of a model authored later in the catalog, so resolve the entire
+    // typed definition and instance index space before emitting values.
     for (model_index, model) in definitions.iter().enumerate() {
         let model_ordinal = u32::try_from(model_index).map_err(|_| {
             EditDiagnostic::new(
@@ -7096,6 +7358,13 @@ fn lower_view_model_catalog(
             )
         })?;
         if !identities.insert(model.id.object_id()) {
+            return Err(EditDiagnostic::new(
+                origins.object(model.id.object_id(), fallback_operation_index),
+                vec![EditId::Object(model.id.object_id())],
+                EditReason::IdentityCollision,
+            ));
+        }
+        if model_indices.insert(model.id, model_ordinal).is_some() {
             return Err(EditDiagnostic::new(
                 origins.object(model.id.object_id(), fallback_operation_index),
                 vec![EditId::Object(model.id.object_id())],
@@ -7132,6 +7401,41 @@ fn lower_view_model_catalog(
                 properties: vec![ExportedProperty::ViewModelName(number.spec.name.clone())],
             });
         }
+        for (list_index, list) in model.lists.iter().enumerate() {
+            let property_index = model.numbers.len().checked_add(list_index).ok_or_else(|| {
+                EditDiagnostic::new(
+                    origins.object(list.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(list.id.object_id())],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            let property_ordinal = u32::try_from(property_index).map_err(|_| {
+                EditDiagnostic::new(
+                    origins.object(list.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(list.id.object_id())],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            if !identities.insert(list.id.object_id())
+                || !names.insert(list.spec.name.as_str())
+                || list_indices
+                    .insert(list.id, (model_ordinal, property_ordinal))
+                    .is_some()
+            {
+                return Err(EditDiagnostic::new(
+                    origins.object(list.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(list.id.object_id())],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::ViewModelPropertyList,
+                properties: vec![ExportedProperty::ViewModelName(list.spec.name.clone())],
+            });
+        }
+    }
+
+    for (model_index, model) in definitions.iter().enumerate() {
         for (instance_index, instance) in model.instances.iter().enumerate() {
             if !identities.insert(instance.id.object_id())
                 || instance_indices
@@ -7144,6 +7448,18 @@ fn lower_view_model_catalog(
                     EditReason::IdentityCollision,
                 ));
             }
+        }
+    }
+
+    for (model_index, model) in definitions.iter().enumerate() {
+        let model_ordinal = u32::try_from(model_index).map_err(|_| {
+            EditDiagnostic::new(
+                origins.object(model.id.object_id(), fallback_operation_index),
+                vec![EditId::Object(model.id.object_id())],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        for instance in &model.instances {
             records.push(ExportedRecord {
                 kind: ExportedObjectKind::ViewModelInstance,
                 properties: instance
@@ -7191,12 +7507,75 @@ fn lower_view_model_catalog(
                     ],
                 });
             }
+            for list in &model.lists {
+                let (_, property_ordinal) =
+                    list_indices.get(&list.id).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            fallback_operation_index,
+                            vec![EditId::Object(list.id.object_id())],
+                            EditReason::InternalInvariant,
+                        )
+                    })?;
+                records.push(ExportedRecord {
+                    kind: ExportedObjectKind::ViewModelInstanceList,
+                    properties: vec![ExportedProperty::ViewModelPropertyId(property_ordinal)],
+                });
+                for item in instance.lists.get(&list.id).into_iter().flatten() {
+                    let (item_model_index, item_instance_index) =
+                        instance_indices.get(item).copied().ok_or_else(|| {
+                            EditDiagnostic::new(
+                                origins.property(
+                                    instance.id.object_id(),
+                                    "view_model_list",
+                                    fallback_operation_index,
+                                ),
+                                vec![
+                                    EditId::Object(instance.id.object_id()),
+                                    EditId::Object(item.object_id()),
+                                ],
+                                EditReason::UnknownObject,
+                            )
+                        })?;
+                    let item_model_ordinal = u32::try_from(item_model_index).map_err(|_| {
+                        EditDiagnostic::new(
+                            origins.property(
+                                instance.id.object_id(),
+                                "view_model_list",
+                                fallback_operation_index,
+                            ),
+                            vec![EditId::Object(item.object_id())],
+                            EditReason::CapacityExceeded,
+                        )
+                    })?;
+                    let item_instance_ordinal =
+                        u32::try_from(item_instance_index).map_err(|_| {
+                            EditDiagnostic::new(
+                                origins.property(
+                                    instance.id.object_id(),
+                                    "view_model_list",
+                                    fallback_operation_index,
+                                ),
+                                vec![EditId::Object(item.object_id())],
+                                EditReason::CapacityExceeded,
+                            )
+                        })?;
+                    records.push(ExportedRecord {
+                        kind: ExportedObjectKind::ViewModelInstanceListItem,
+                        properties: vec![
+                            ExportedProperty::ViewModelListItemViewModelId(item_model_ordinal),
+                            ExportedProperty::ViewModelListItemInstanceId(item_instance_ordinal),
+                        ],
+                    });
+                }
+            }
         }
     }
     canonicalize_exported_records(&mut records);
     Ok(LoweredViewModelCatalog {
         records,
+        model_indices,
         number_indices,
+        list_indices,
         instance_indices,
     })
 }
@@ -7731,10 +8110,14 @@ fn validate_view_model_definitions(
     origins: &SpecOrigins,
 ) -> std::result::Result<(), EditDiagnostic> {
     let mut identities = BTreeSet::new();
+    let mut view_model_models = BTreeMap::new();
     let mut number_models = BTreeMap::new();
+    let mut list_models = BTreeMap::new();
     let mut instance_models = BTreeMap::new();
     for (model_index, model) in definitions.view_models.iter().enumerate() {
-        if !identities.insert(model.id.object_id()) {
+        if !identities.insert(model.id.object_id())
+            || view_model_models.insert(model.id, model_index).is_some()
+        {
             return Err(EditDiagnostic::new(
                 origins.object(model.id.object_id(), fallback_operation_index),
                 vec![EditId::Object(model.id.object_id())],
@@ -7750,6 +8133,18 @@ fn validate_view_model_definitions(
                 return Err(EditDiagnostic::new(
                     origins.object(number.id.object_id(), fallback_operation_index),
                     vec![EditId::Object(number.id.object_id())],
+                    EditReason::IdentityCollision,
+                ));
+            }
+        }
+        for list in &model.lists {
+            if !identities.insert(list.id.object_id())
+                || !names.insert(list.spec.name.as_str())
+                || list_models.insert(list.id, model_index).is_some()
+            {
+                return Err(EditDiagnostic::new(
+                    origins.object(list.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(list.id.object_id())],
                     EditReason::IdentityCollision,
                 ));
             }
@@ -7799,6 +8194,49 @@ fn validate_view_model_definitions(
         }
     }
 
+    for (model_index, model) in definitions.view_models.iter().enumerate() {
+        for instance in &model.instances {
+            for (list, items) in &instance.lists {
+                if list_models.get(list) != Some(&model_index) {
+                    return Err(EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_list",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(list.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    ));
+                }
+                for item in items {
+                    if !instance_models.contains_key(item) {
+                        return Err(EditDiagnostic::new(
+                            origins.property(
+                                instance.id.object_id(),
+                                "view_model_list",
+                                fallback_operation_index,
+                            ),
+                            vec![
+                                EditId::Object(instance.id.object_id()),
+                                EditId::Object(item.object_id()),
+                            ],
+                            EditReason::UnknownObject,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    let artboards_by_id = definitions
+        .artboards
+        .iter()
+        .map(|artboard| (artboard.id, artboard))
+        .collect::<BTreeMap<_, _>>();
+
     for artboard in &definitions.artboards {
         let default_model = artboard
             .view_model_default
@@ -7816,33 +8254,102 @@ fn validate_view_model_definitions(
             })
             .transpose()?;
         for record in &artboard.records {
-            let RecordSpec::Machine(MachineRecordSpec::TransitionDurationBind {
-                transition,
-                number,
-            }) = record.spec
-            else {
-                continue;
-            };
-            let number_model = number_models.get(&number).copied().ok_or_else(|| {
-                EditDiagnostic::new(
-                    origins.object(record.id, fallback_operation_index),
-                    vec![
-                        EditId::Object(record.id),
-                        EditId::Object(number.object_id()),
-                    ],
-                    EditReason::UnknownObject,
-                )
-            })?;
-            if default_model != Some(number_model) {
-                return Err(EditDiagnostic::new(
-                    origins.object(record.id, fallback_operation_index),
-                    vec![
-                        EditId::Artboard(artboard.id),
-                        EditId::Object(transition),
-                        EditId::Object(number.object_id()),
-                    ],
-                    EditReason::InvalidMachineReference,
-                ));
+            match &record.spec {
+                RecordSpec::Machine(MachineRecordSpec::TransitionDurationBind {
+                    transition,
+                    number,
+                }) => {
+                    let number_model = number_models.get(number).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![
+                                EditId::Object(record.id),
+                                EditId::Object(number.object_id()),
+                            ],
+                            EditReason::UnknownObject,
+                        )
+                    })?;
+                    if default_model != Some(number_model) {
+                        return Err(EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![
+                                EditId::Artboard(artboard.id),
+                                EditId::Object(*transition),
+                                EditId::Object(number.object_id()),
+                            ],
+                            EditReason::InvalidMachineReference,
+                        ));
+                    }
+                }
+                RecordSpec::Visual {
+                    node: NodeSpec::ArtboardComponentList(spec),
+                    ..
+                } => {
+                    let source_model = list_models.get(&spec.source).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![
+                                EditId::Object(record.id),
+                                EditId::Object(spec.source.object_id()),
+                            ],
+                            EditReason::UnknownObject,
+                        )
+                    })?;
+                    if default_model != Some(source_model) {
+                        return Err(EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![
+                                EditId::Artboard(artboard.id),
+                                EditId::Object(record.id),
+                                EditId::Object(spec.source.object_id()),
+                            ],
+                            EditReason::InvalidMachineReference,
+                        ));
+                    }
+                    for rule in &spec.map_rules {
+                        let mapped_model = view_model_models
+                            .get(&rule.view_model)
+                            .copied()
+                            .ok_or_else(|| {
+                                EditDiagnostic::new(
+                                    origins.object(record.id, fallback_operation_index),
+                                    vec![
+                                        EditId::Object(record.id),
+                                        EditId::Object(rule.view_model.object_id()),
+                                    ],
+                                    EditReason::UnknownObject,
+                                )
+                            })?;
+                        let mapped_artboard = artboards_by_id
+                            .get(&rule.artboard)
+                            .copied()
+                            .ok_or_else(|| {
+                                EditDiagnostic::new(
+                                    origins.object(record.id, fallback_operation_index),
+                                    vec![
+                                        EditId::Object(record.id),
+                                        EditId::Artboard(rule.artboard),
+                                    ],
+                                    EditReason::UnknownArtboard,
+                                )
+                            })?;
+                        let mapped_default_model = mapped_artboard
+                            .view_model_default
+                            .and_then(|instance| instance_models.get(&instance).copied());
+                        if mapped_default_model != Some(mapped_model) {
+                            return Err(EditDiagnostic::new(
+                                origins.object(record.id, fallback_operation_index),
+                                vec![
+                                    EditId::Object(record.id),
+                                    EditId::Object(rule.view_model.object_id()),
+                                    EditId::Artboard(rule.artboard),
+                                ],
+                                EditReason::InvalidMachineReference,
+                            ));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -8032,6 +8539,7 @@ fn lower_artboard(
     let mut local_ids = BTreeMap::new();
     let mut objects = BTreeMap::new();
     let mut objects_by_local = vec![None];
+    let mut component_list_bind_count = 0usize;
     for (node_index, node) in artboard.visual_records().enumerate() {
         let local_id = node_index.checked_add(1).ok_or_else(|| {
             EditDiagnostic::new(
@@ -8104,6 +8612,18 @@ fn lower_artboard(
                         origins.object(node.id, fallback_operation_index),
                         vec![EditId::Object(node.id), EditId::ScriptAsset(spec.script)],
                         EditReason::UnknownScriptAsset,
+                    ));
+                }
+            }
+            NodeSpec::ArtboardComponentList(spec) => {
+                if !catalogs.view_models.list_indices.contains_key(&spec.source) {
+                    return Err(EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![
+                            EditId::Object(node.id),
+                            EditId::Object(spec.source.object_id()),
+                        ],
+                        EditReason::UnknownObject,
                     ));
                 }
             }
@@ -8189,6 +8709,50 @@ fn lower_artboard(
                 )
             })?,
         );
+        if let NodeSpec::ArtboardComponentList(spec) = node.spec {
+            let (source_model, source_property) = catalogs
+                .view_models
+                .list_indices
+                .get(&spec.source)
+                .copied()
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![
+                            EditId::Object(node.id),
+                            EditId::Object(spec.source.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    )
+                })?;
+            if default_view_model != Some(source_model) {
+                return Err(EditDiagnostic::new(
+                    origins.object(node.id, fallback_operation_index),
+                    vec![
+                        EditId::Artboard(artboard.id),
+                        EditId::Object(node.id),
+                        EditId::Object(spec.source.object_id()),
+                    ],
+                    EditReason::InvalidMachineReference,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::DataBindContext,
+                properties: vec![
+                    ExportedProperty::DataBindArtboardComponentListSource,
+                    ExportedProperty::DataBindFlags(0),
+                    ExportedProperty::DataBindSourcePath(vec![source_model, source_property]),
+                ],
+            });
+            component_list_bind_count =
+                component_list_bind_count.checked_add(1).ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id)],
+                        EditReason::CapacityExceeded,
+                    )
+                })?;
+        }
         if local_ids.insert(node.id, local_id).is_some()
             || objects
                 .insert(
@@ -8243,6 +8807,63 @@ fn lower_artboard(
         )?;
     }
 
+    for node in artboard.visual_records() {
+        let NodeSpec::ArtboardComponentList(spec) = node.spec else {
+            continue;
+        };
+        let parent_id = local_ids.get(&node.id).copied().ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        let parent_id = u32::try_from(parent_id).map_err(|_| {
+            EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        for rule in &spec.map_rules {
+            let view_model_id = catalogs
+                .view_models
+                .model_indices
+                .get(&rule.view_model)
+                .copied()
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![
+                            EditId::Object(node.id),
+                            EditId::Object(rule.view_model.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    )
+                })?;
+            let artboard_id = catalogs
+                .artboard_indices
+                .get(&rule.artboard)
+                .copied()
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(node.id, fallback_operation_index),
+                        vec![EditId::Object(node.id), EditId::Artboard(rule.artboard)],
+                        EditReason::UnknownArtboard,
+                    )
+                })?;
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::ArtboardListMapRule,
+                properties: vec![
+                    ExportedProperty::ParentId(parent_id),
+                    ExportedProperty::ArtboardListMapRuleViewModelId(view_model_id),
+                    ExportedProperty::ArtboardListMapRuleArtboardId(artboard_id),
+                ],
+            });
+            objects_by_local.push(None);
+        }
+    }
+
     let mut events_by_local = vec![None; objects_by_local.len()];
     let event_local_ids = append_event_export_records(
         &mut records,
@@ -8287,6 +8908,7 @@ fn lower_artboard(
         .checked_add(1)
         .and_then(|count| count.checked_add(synthetic_local_count))
         .and_then(|count| count.checked_add(event_local_ids.len()))
+        .and_then(|count| count.checked_add(component_list_bind_count))
         .ok_or_else(|| {
             EditDiagnostic::new(
                 fallback_operation_index,
@@ -8294,7 +8916,15 @@ fn lower_artboard(
                 EditReason::CapacityExceeded,
             )
         })?;
-    let exact_local_count = exact_record_count;
+    let exact_local_count = exact_record_count
+        .checked_sub(component_list_bind_count)
+        .ok_or_else(|| {
+            EditDiagnostic::new(
+                fallback_operation_index,
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::InternalInvariant,
+            )
+        })?;
     if records.len() != exact_record_count
         || objects.len() != artboard.visual_record_count()
         || objects_by_local.len() != exact_local_count
@@ -9026,6 +9656,20 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 }
             }
         }
+        NodeSpec::ArtboardComponentList(spec) => {
+            for (property, value) in [
+                ("x", spec.x),
+                ("y", spec.y),
+                ("opacity", spec.opacity),
+                ("rotation", spec.rotation),
+                ("scale_x", spec.scale_x),
+                ("scale_y", spec.scale_y),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
         NodeSpec::Image(spec) => {
             for (property, value) in [
                 ("x", spec.x),
@@ -9321,6 +9965,28 @@ fn node_record(
                 properties.push(ExportedProperty::ScaleY(spec.scale_y));
             }
             ExportedObjectKind::ScriptedDrawable
+        }
+        NodeSpec::ArtboardComponentList(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            if spec.x != 0.0 {
+                properties.push(ExportedProperty::TranslateX(spec.x));
+            }
+            if spec.y != 0.0 {
+                properties.push(ExportedProperty::TranslateY(spec.y));
+            }
+            if spec.opacity != 1.0 {
+                properties.push(ExportedProperty::WorldOpacity(spec.opacity));
+            }
+            if spec.rotation != 0.0 {
+                properties.push(ExportedProperty::Rotation(spec.rotation));
+            }
+            if spec.scale_x != 1.0 {
+                properties.push(ExportedProperty::ScaleX(spec.scale_x));
+            }
+            if spec.scale_y != 1.0 {
+                properties.push(ExportedProperty::ScaleY(spec.scale_y));
+            }
+            ExportedObjectKind::ArtboardComponentList
         }
         NodeSpec::Rectangle(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));

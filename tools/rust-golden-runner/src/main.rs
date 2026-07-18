@@ -8,9 +8,9 @@ use nuxie_render_api::{
     Factory as RenderFactory, NullFactory, RecordingFactory, Renderer as RenderRenderer,
 };
 use nuxie_runtime::{
-    ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelInstance,
-    RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paint_cache_for_artboard_tree,
-    static_text_support_error,
+    ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
+    preallocate_render_paint_cache_for_artboard_tree, static_text_support_error,
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
@@ -272,12 +272,14 @@ fn run() -> Result<String> {
             &mut instance,
             state,
             factory.as_factory(),
-            owned_view_model_context.as_ref(),
+            owned_view_model_context
+                .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main),
         )?;
     }
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
-            state_machine.bind_owned_view_model_context(context);
+            state_machine.bind_owned_view_model_contexts(context);
         }
         state_machine.advance_data_context();
     }
@@ -295,7 +297,9 @@ fn run() -> Result<String> {
             &mut instance,
             state,
             factory.as_factory(),
-            owned_view_model_context.as_ref(),
+            owned_view_model_context
+                .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main),
         )?;
     }
     #[cfg(feature = "scripting")]
@@ -417,7 +421,9 @@ fn run() -> Result<String> {
                     &graph.artboards,
                     &mut instance,
                     state,
-                    owned_view_model_context.as_ref(),
+                    owned_view_model_context
+                        .as_ref()
+                        .and_then(RuntimeOwnedViewModelContext::main),
                     &mut bound_script_artboards,
                 )?;
                 state.borrow_mut().realize_pending(
@@ -698,7 +704,7 @@ fn instantiate_scene_state(
 ) -> Result<(
     ArtboardInstance,
     Option<StateMachineInstance>,
-    Option<RuntimeOwnedViewModelInstance>,
+    Option<RuntimeOwnedViewModelContext>,
 )> {
     let mut instance = ArtboardInstance::from_graph_with_artboards(runtime, artboard, artboards)
         .context("failed to instantiate artboard")?;
@@ -715,7 +721,7 @@ fn instantiate_scene_state(
     instance.bind_default_view_model_artboard_list_context(runtime);
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
-            state_machine.bind_owned_view_model_context(context);
+            state_machine.bind_owned_view_model_contexts(context);
         }
         state_machine.advance_data_context();
     }
@@ -728,15 +734,15 @@ fn instantiate_scene_state(
 fn bind_selected_artboard_view_model_context(
     instance: &mut ArtboardInstance,
     runtime: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
+    context: &RuntimeOwnedViewModelContext,
 ) {
     #[cfg(feature = "scripting")]
     {
-        instance.bind_owned_view_model_artboard_context(runtime, context);
+        instance.bind_owned_view_model_artboard_contexts(runtime, context);
         instance.rebind_nested_script_owned_contexts(runtime);
     }
     #[cfg(not(feature = "scripting"))]
-    instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
+    instance.bind_owned_view_model_artboard_contexts(runtime, context);
 }
 
 fn timed_result<T>(
@@ -771,7 +777,7 @@ fn write_layout_bounds_report(
     scene_name: &str,
     instance: &mut ArtboardInstance,
     state_machine: &mut Option<StateMachineInstance>,
-    owned_view_model_context: &mut Option<RuntimeOwnedViewModelInstance>,
+    owned_view_model_context: &mut Option<RuntimeOwnedViewModelContext>,
     input_events: &[InputEvent],
 ) -> Result<String> {
     let mut out = String::new();
@@ -945,14 +951,15 @@ fn selected_artboard_view_model_index(
 fn selected_artboard_owned_view_model_context(
     runtime: &RuntimeFile,
     artboard_index: usize,
-) -> Option<RuntimeOwnedViewModelInstance> {
+) -> Option<RuntimeOwnedViewModelContext> {
     let view_model_index = selected_artboard_view_model_index(runtime, artboard_index)?;
     #[cfg(feature = "scripting")]
-    {
-        return RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0);
-    }
+    let main = RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)?;
     #[cfg(not(feature = "scripting"))]
-    RuntimeOwnedViewModelInstance::new(runtime, view_model_index)
+    let main = RuntimeOwnedViewModelInstance::new(runtime, view_model_index)?;
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(runtime, artboard_index);
+    Some(context)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1061,14 +1068,14 @@ fn apply_input_event(
     event: &InputEvent,
     instance: &ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
-    owned_view_model_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
 ) {
     let Some(state_machine) = state_machine else {
         return;
     };
     match event.kind {
         InputKind::PointerDown => {
-            if let Some(context) = owned_view_model_context {
+            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
                 state_machine.pointer_down_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1081,7 +1088,7 @@ fn apply_input_event(
             }
         }
         InputKind::PointerMove => {
-            if let Some(context) = owned_view_model_context {
+            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
                 state_machine.pointer_move_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1101,7 +1108,7 @@ fn apply_input_event(
             }
         }
         InputKind::PointerUp => {
-            if let Some(context) = owned_view_model_context {
+            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
                 state_machine.pointer_up_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1114,7 +1121,7 @@ fn apply_input_event(
             }
         }
         InputKind::PointerExit => {
-            if let Some(context) = owned_view_model_context {
+            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
                 state_machine.pointer_exit_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1271,7 +1278,7 @@ fn advance_scene_to(
     instance: &mut ArtboardInstance,
     runtime: &RuntimeFile,
     state_machine: Option<&mut StateMachineInstance>,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelContext>,
     target_seconds: f32,
     current_seconds: &mut f32,
 ) -> Result<()> {
@@ -1532,6 +1539,7 @@ impl RunnerScriptArtboard {
             state_machine,
             view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
                 .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main)
                 .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context)),
             width: object
                 .and_then(|object| object.double_property("width"))
@@ -1552,11 +1560,13 @@ impl RunnerScriptArtboard {
         };
         let owned = view_model.owned_instance();
         let owned = owned.borrow();
+        let mut contexts = RuntimeOwnedViewModelContext::from_main(owned.clone());
+        contexts.complete_for_artboard(&self.runtime, self.artboard_index);
         if let Some(state_machine) = self.state_machine.as_mut() {
-            state_machine.bind_owned_view_model_context(&owned);
+            state_machine.bind_owned_view_model_contexts(&contexts);
             state_machine.advance_data_context();
         }
-        bind_selected_artboard_view_model_context(&mut self.instance, &self.runtime, &owned);
+        bind_selected_artboard_view_model_context(&mut self.instance, &self.runtime, &contexts);
     }
 }
 
@@ -1882,7 +1892,7 @@ fn artboard_script_payloads_contain(
 #[allow(clippy::too_many_arguments)]
 fn initialize_scripted_drawables_for_artboard(
     runtime: &RuntimeFile,
-    _artboard_index: usize,
+    artboard_index: usize,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
@@ -2008,7 +2018,9 @@ fn initialize_scripted_drawables_for_artboard(
 
     if let Some(model) = bound_context_model {
         let owned = model.owned_instance();
-        bind_selected_artboard_view_model_context(instance, runtime, &owned.borrow());
+        let mut contexts = RuntimeOwnedViewModelContext::from_main(owned.borrow().clone());
+        contexts.complete_for_artboard(runtime, artboard_index);
+        bind_selected_artboard_view_model_context(instance, runtime, &contexts);
         instance.advance_artboard_data_binds();
         instance.update_pass();
     }
@@ -2123,6 +2135,7 @@ fn selected_script_view_model(
 ) -> Option<ScriptViewModel> {
     selected_artboard_owned_view_model_context(runtime, artboard_index)
         .as_ref()
+        .and_then(RuntimeOwnedViewModelContext::main)
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
 }
 

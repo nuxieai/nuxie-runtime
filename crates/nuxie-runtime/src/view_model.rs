@@ -1525,6 +1525,198 @@ pub struct RuntimeOwnedViewModelInstance {
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
 }
 
+/// The ordered set of owned view-model instances visible to an artboard or
+/// state machine.
+///
+/// Rive resolves the main instance first, followed by global slots in file
+/// view-model order. A global slot is addressed by the declared global view
+/// model, independently of the view model that produced the occupying
+/// instance. That distinction is what permits a different view model to be
+/// installed as an override for a global slot.
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeOwnedViewModelContext {
+    main: Option<RuntimeOwnedViewModelInstance>,
+    global_slots: BTreeMap<usize, RuntimeOwnedViewModelInstance>,
+}
+
+impl RuntimeOwnedViewModelContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_main(main: RuntimeOwnedViewModelInstance) -> Self {
+        Self {
+            main: Some(main),
+            global_slots: BTreeMap::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.main.is_none() && self.global_slots.is_empty()
+    }
+
+    pub fn main(&self) -> Option<&RuntimeOwnedViewModelInstance> {
+        self.main.as_ref()
+    }
+
+    pub fn main_mut(&mut self) -> Option<&mut RuntimeOwnedViewModelInstance> {
+        self.main.as_mut()
+    }
+
+    pub fn set_main(&mut self, main: RuntimeOwnedViewModelInstance) {
+        self.main = Some(main);
+    }
+
+    pub fn take_main(&mut self) -> Option<RuntimeOwnedViewModelInstance> {
+        self.main.take()
+    }
+
+    /// Returns instances in C++ `DataContext::viewModelInstances()` order:
+    /// main first, then globals by their file view-model slot.
+    pub fn instances(&self) -> impl Iterator<Item = &RuntimeOwnedViewModelInstance> {
+        self.main.iter().chain(self.global_slots.values())
+    }
+
+    pub fn global_slot(&self, view_model_index: usize) -> Option<&RuntimeOwnedViewModelInstance> {
+        self.global_slots.get(&view_model_index)
+    }
+
+    pub fn global_slot_mut(
+        &mut self,
+        view_model_index: usize,
+    ) -> Option<&mut RuntimeOwnedViewModelInstance> {
+        self.global_slots.get_mut(&view_model_index)
+    }
+
+    pub fn global_named(
+        &self,
+        file: &RuntimeFile,
+        name: &str,
+    ) -> Option<&RuntimeOwnedViewModelInstance> {
+        let slot = runtime_global_view_model_index_named(file, name)?;
+        self.global_slots.get(&slot)
+    }
+
+    pub fn global_named_mut(
+        &mut self,
+        file: &RuntimeFile,
+        name: &str,
+    ) -> Option<&mut RuntimeOwnedViewModelInstance> {
+        let slot = runtime_global_view_model_index_named(file, name)?;
+        self.global_slots.get_mut(&slot)
+    }
+
+    /// Installs `instance` into the named global slot. The instance's own view
+    /// model intentionally need not match the slot's declared view model.
+    pub fn set_global_named(
+        &mut self,
+        file: &RuntimeFile,
+        name: &str,
+        instance: RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let Some(slot) = runtime_global_view_model_index_named(file, name) else {
+            return false;
+        };
+        self.global_slots.insert(slot, instance);
+        true
+    }
+
+    pub fn set_global_slot(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        if !runtime_view_model_is_global(file, view_model_index) {
+            return false;
+        }
+        self.global_slots.insert(view_model_index, instance);
+        true
+    }
+
+    /// Completes any missing instances the same way C++ state-machine `bind()`
+    /// does: the artboard's main default first, then every global default.
+    /// Existing slots, including cross-view-model overrides, are preserved.
+    pub fn complete_for_artboard(&mut self, file: &RuntimeFile, artboard_index: usize) -> bool {
+        let main_view_model_index = file
+            .resolved_view_model_for_artboard(artboard_index)
+            .map(|view_model| view_model.view_model_index);
+        self.complete(file, main_view_model_index)
+    }
+
+    pub fn complete(&mut self, file: &RuntimeFile, main_view_model_index: Option<usize>) -> bool {
+        let mut changed = false;
+        if self.main.is_none() {
+            if let Some(view_model_index) = main_view_model_index {
+                if let Some(instance) =
+                    runtime_default_owned_view_model_instance(file, view_model_index)
+                {
+                    self.main = Some(instance);
+                    changed = true;
+                }
+            }
+        }
+        for view_model_index in runtime_global_view_model_indices(file) {
+            if self.global_slots.contains_key(&view_model_index) {
+                continue;
+            }
+            let Some(instance) = runtime_default_owned_view_model_instance(file, view_model_index)
+            else {
+                continue;
+            };
+            self.global_slots.insert(view_model_index, instance);
+            changed = true;
+        }
+        changed
+    }
+}
+
+fn runtime_default_owned_view_model_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Option<RuntimeOwnedViewModelInstance> {
+    RuntimeOwnedViewModelInstance::from_instance(file, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(file, view_model_index))
+}
+
+fn runtime_view_model_is_global(file: &RuntimeFile, view_model_index: usize) -> bool {
+    file.view_model(view_model_index)
+        .and_then(|view_model| view_model.object.uint_property("viewModelType"))
+        == Some(2)
+}
+
+pub fn runtime_global_view_model_indices(file: &RuntimeFile) -> Vec<usize> {
+    file.view_models()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, view_model)| {
+            (view_model.object.uint_property("viewModelType") == Some(2)).then_some(index)
+        })
+        .collect()
+}
+
+pub fn runtime_global_view_model_names(file: &RuntimeFile) -> Vec<String> {
+    runtime_global_view_model_indices(file)
+        .into_iter()
+        .filter_map(|index| {
+            file.view_model(index)
+                .and_then(|view_model| view_model.object.string_property("name"))
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+fn runtime_global_view_model_index_named(file: &RuntimeFile, name: &str) -> Option<usize> {
+    file.view_models()
+        .iter()
+        .enumerate()
+        .find_map(|(index, view_model)| {
+            (view_model.object.uint_property("viewModelType") == Some(2)
+                && view_model.object.string_property("name") == Some(name))
+            .then_some(index)
+        })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelNumberSourceHandle {
     property_path: Vec<usize>,
@@ -7423,4 +7615,159 @@ fn runtime_object_u32_property(object: &RuntimeObject, property: &str) -> u32 {
         .uint_property(property)
         .and_then(|value| u32::try_from(value).ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod owned_context_tests {
+    use super::*;
+    use crate::properties::property_key_for_name;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_schema::definition_by_name;
+
+    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    fn view_model_records(
+        name: &str,
+        view_model_type: u64,
+        view_model_index: u64,
+        value: f32,
+    ) -> Vec<AuthoringRecord> {
+        vec![
+            record(
+                "ViewModel",
+                vec![
+                    property("ViewModel", "name", AuthoringValue::String(name.to_owned())),
+                    property(
+                        "ViewModel",
+                        "viewModelType",
+                        AuthoringValue::Uint(view_model_type),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("value".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property(
+                        "ViewModelInstance",
+                        "viewModelId",
+                        AuthoringValue::Uint(view_model_index),
+                    ),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Default".to_owned()),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceNumber",
+                vec![
+                    property(
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        AuthoringValue::Double(value),
+                    ),
+                ],
+            ),
+        ]
+    }
+
+    fn global_context_fixture() -> RuntimeFile {
+        let mut records = vec![record("Backboard", Vec::new())];
+        records.extend(view_model_records("Global Z", 2, 0, 10.0));
+        records.extend(view_model_records("Main", 0, 1, 20.0));
+        records.extend(view_model_records("Global A", 2, 2, 30.0));
+        records.push(record(
+            "Artboard",
+            vec![property("Artboard", "viewModelId", AuthoringValue::Uint(1))],
+        ));
+        RuntimeFile::from_authoring_records(records).expect("global context fixture imports")
+    }
+
+    #[test]
+    fn global_view_models_keep_file_order_and_complete_defaults() {
+        let file = global_context_fixture();
+        assert_eq!(runtime_global_view_model_indices(&file), vec![0, 2]);
+        assert_eq!(
+            runtime_global_view_model_names(&file),
+            vec!["Global Z".to_owned(), "Global A".to_owned()]
+        );
+
+        let mut context = RuntimeOwnedViewModelContext::new();
+        assert!(context.complete_for_artboard(&file, 0));
+        assert!(!context.complete_for_artboard(&file, 0));
+        assert_eq!(
+            context
+                .instances()
+                .map(RuntimeOwnedViewModelInstance::view_model_index)
+                .collect::<Vec<_>>(),
+            vec![1, 0, 2]
+        );
+        assert_eq!(
+            context
+                .global_named(&file, "Global Z")
+                .and_then(|instance| instance.number_value_by_property_name("value")),
+            Some(10.0)
+        );
+    }
+
+    #[test]
+    fn global_slots_allow_cross_view_model_overrides_and_reject_standard_names() {
+        let file = global_context_fixture();
+        let override_instance = RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+            .expect("main default instance");
+        let mut context = RuntimeOwnedViewModelContext::new();
+        assert!(context.set_global_named(&file, "Global Z", override_instance));
+        assert!(
+            !context.set_global_named(
+                &file,
+                "Main",
+                RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+                    .expect("global default instance")
+            )
+        );
+        assert!(context.complete_for_artboard(&file, 0));
+        assert_eq!(
+            context
+                .instances()
+                .map(RuntimeOwnedViewModelInstance::view_model_index)
+                .collect::<Vec<_>>(),
+            vec![1, 1, 2]
+        );
+        assert_eq!(
+            context
+                .global_named(&file, "Global Z")
+                .and_then(|instance| instance.number_value_by_property_name("value")),
+            Some(20.0)
+        );
+    }
 }

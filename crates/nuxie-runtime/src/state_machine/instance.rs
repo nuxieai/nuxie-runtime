@@ -10,7 +10,8 @@ use crate::{
     RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
     RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
     RuntimeDefaultViewModelViewModelSourceHandle, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelInstance, runtime_default_view_model_artboard_property_path_for_name,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance,
+    runtime_default_view_model_artboard_property_path_for_name,
     runtime_default_view_model_artboard_property_path_for_name_path,
     runtime_default_view_model_asset_property_path_for_name,
     runtime_default_view_model_asset_property_path_for_name_path,
@@ -2863,6 +2864,22 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn bind_owned_view_model_contexts(
+        &mut self,
+        context: &RuntimeOwnedViewModelContext,
+    ) -> bool {
+        if !self.data_bind_graph.bind_owned_view_model_contexts(context) {
+            return false;
+        }
+        if let Some(main) = context.main() {
+            self.bind_active_owned_view_model_triggers(main);
+        } else {
+            self.reset_active_view_model_triggers();
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub(crate) fn bind_owned_view_model_context_chain(
         &mut self,
         file: &RuntimeFile,
@@ -2876,6 +2893,26 @@ impl StateMachineInstance {
             return false;
         }
         self.bind_active_owned_view_model_triggers(context);
+        self.needs_advance = true;
+        true
+    }
+
+    pub(crate) fn bind_owned_view_model_context_chains(
+        &mut self,
+        file: &RuntimeFile,
+        contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .bind_owned_view_model_context_chains(file, contexts)
+        {
+            return false;
+        }
+        if let Some((main, _)) = contexts.first() {
+            self.bind_active_owned_view_model_triggers(main);
+        } else {
+            self.reset_active_view_model_triggers();
+        }
         self.needs_advance = true;
         true
     }

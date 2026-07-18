@@ -81,11 +81,12 @@ pub use view_model::{
     RuntimeImportedViewModelTriggerSourceHandle, RuntimeImportedViewModelViewModelSourceHandle,
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
-    RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelInstance,
-    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelNumberSourceHandle,
-    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
-    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
-    runtime_data_context_lookup_reports,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelEnumSourceHandle,
+    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListSourceHandle,
+    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
+    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
+    RuntimeOwnedViewModelViewModelSourceHandle, runtime_data_context_lookup_reports,
+    runtime_global_view_model_indices, runtime_global_view_model_names,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

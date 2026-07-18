@@ -6,7 +6,6 @@ use nuxie_binary::RuntimeFile;
 use nuxie_graph::ArtboardGraph;
 use nuxie_render_api::Factory as RenderFactory;
 
-use crate::RuntimeOwnedViewModelInstance;
 use crate::animation::{
     LinearAnimationInstance, RuntimeJoystick, RuntimeKeyedCallback, RuntimeLinearAnimation,
     build_linear_animations, build_runtime_joysticks,
@@ -20,15 +19,16 @@ use crate::artboard_data_bind::{
     RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardOwnedContextKey,
     RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
     RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
-    RuntimeNestedChildContextUpdate, apply_artboard_name_based_color_data_bind_defaults,
-    build_artboard_converter_property_bindings, build_artboard_custom_property_bindings,
-    build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
-    build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
-    build_artboard_list_bindings, build_artboard_nested_host_bindings,
-    build_artboard_numeric_source_bindings, build_artboard_property_bindings,
-    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
-    build_artboard_text_list_bindings, build_nested_host_data_bind_source_local_slots,
-    build_nested_host_data_bind_source_locals, build_nested_host_view_model_instance_locals,
+    RuntimeNestedChildContextUpdate, RuntimeOwnedViewModelBindingCandidate,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_converter_property_bindings,
+    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
+    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
+    build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
+    build_artboard_property_bindings, build_artboard_solo_bindings,
+    build_artboard_solo_source_bindings, build_artboard_text_list_bindings,
+    build_nested_host_data_bind_source_local_slots, build_nested_host_data_bind_source_locals,
+    build_nested_host_view_model_instance_locals,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -59,6 +59,7 @@ use crate::state_machine::{
     build_state_machines,
 };
 use crate::view_model::RuntimeOwnedViewModelListHandle;
+use crate::{RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance};
 
 /// Rejection from attaching host-supplied bytes to one external `FontAsset`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,6 +202,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_owned_context_key: Option<RuntimeArtboardOwnedContextKey>,
+    pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_image_asset_bindings: Vec<RuntimeArtboardImageAssetBindingInstance>,
     pub(crate) artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues,
@@ -241,6 +243,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) data_bind_path_is_relative: bool,
     pub(crate) stateful_view_model_instance_local: Option<usize>,
     pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelInstance>,
+    pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelInstance>,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_context_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
@@ -530,6 +533,7 @@ impl ArtboardInstance {
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_context_key: None,
+            artboard_owned_view_model_context: None,
             artboard_property_bindings,
             artboard_image_asset_bindings,
             artboard_data_bind_target_queues,
@@ -1352,7 +1356,11 @@ impl ArtboardInstance {
 
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         let state_machine = self.state_machine(index)?;
-        Some(StateMachineInstance::new(index, state_machine, self))
+        let mut instance = StateMachineInstance::new(index, state_machine, self);
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            instance.bind_owned_view_model_contexts(context);
+        }
+        Some(instance)
     }
 
     /// Ported from C++ `src/artboard_component_list.cpp::updateList`,
@@ -3336,6 +3344,29 @@ impl RuntimeNestedArtboardInstance {
         changed
     }
 
+    pub(crate) fn bind_owned_view_model_animation_context_candidates(
+        &mut self,
+        file: &RuntimeFile,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> bool {
+        let contexts = candidates
+            .iter()
+            .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
+            else {
+                continue;
+            };
+            if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
+                changed = true;
+                changed |= state_machine.advance_data_context();
+            }
+        }
+        changed
+    }
+
     fn advance(
         &mut self,
         elapsed_seconds: f32,
@@ -3625,6 +3656,24 @@ fn build_runtime_nested_artboard_instance(
         let view_model_index = usize::try_from(instance.uint_property("viewModelId")?).ok()?;
         RuntimeOwnedViewModelInstance::from_instance_object(file, view_model_index, instance)
     });
+    let stateful_global_view_model_contexts = data_bind_view_model_instance_locals_by_id
+        .iter()
+        .filter_map(|(&view_model_id, &local_id)| {
+            let view_model_index = usize::try_from(view_model_id).ok()?;
+            let view_model = file.view_model(view_model_index)?;
+            if view_model.object.uint_property("viewModelType") != Some(2) {
+                return None;
+            }
+            let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
+            let instance = file.object(slot.source_global_id as usize)?;
+            let context = RuntimeOwnedViewModelInstance::from_instance_object(
+                file,
+                view_model_index,
+                instance,
+            )?;
+            Some((view_model_index, context))
+        })
+        .collect();
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
         parent_slots,
         parent_objects,
@@ -3641,6 +3690,7 @@ fn build_runtime_nested_artboard_instance(
         data_bind_path_is_relative,
         stateful_view_model_instance_local,
         stateful_view_model_context,
+        stateful_global_view_model_contexts,
         data_bind_property_source_locals,
         data_bind_image_source_locals,
         data_bind_context_source_locals_by_path: data_bind_source_locals_by_path,
@@ -4149,6 +4199,7 @@ mod tests {
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_context_key: None,
+            artboard_owned_view_model_context: None,
             artboard_property_bindings: Vec::new(),
             artboard_image_asset_bindings: Vec::new(),
             artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues::default(),
@@ -4246,6 +4297,7 @@ mod tests {
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
                 stateful_view_model_context: None,
+                stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -4334,6 +4386,7 @@ mod tests {
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
                 stateful_view_model_context: None,
+                stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -4381,6 +4434,7 @@ mod tests {
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
                 stateful_view_model_context: None,
+                stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -4907,6 +4961,7 @@ mod tests {
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
                 stateful_view_model_context: None,
+                stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),

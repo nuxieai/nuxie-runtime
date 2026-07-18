@@ -5,14 +5,15 @@ use nuxie_binary::{RuntimeFile, RuntimeObject};
 use crate::draw::color_lerp;
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::{
-    RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
-    RuntimeStateMachine, RuntimeTransitionInterpolator, RuntimeViewModelPointer, ScriptValue,
-    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
-    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
-    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
-    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
-    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance, StateMachineTransitionDurationInstance,
+    RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelInstance, RuntimeStateMachine, RuntimeTransitionInterpolator,
+    RuntimeViewModelPointer, ScriptValue, StateMachineBindableArtboardInstance,
+    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
+    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
+    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
+    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
+    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
+    StateMachineTransitionDurationInstance,
     runtime_view_model_view_model_property_path_for_name_path,
 };
 
@@ -1262,6 +1263,75 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
             }
             changed
         }
+        _ => false,
+    }
+}
+
+pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_contexts(
+    converter: &mut RuntimeDataBindGraphConverter,
+    context: &RuntimeOwnedViewModelContext,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            let value = context
+                .instances()
+                .find_map(|instance| {
+                    runtime_owned_view_model_number_value_for_source_path(instance, source_path)
+                })
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            converters.iter_mut().fold(false, |changed, converter| {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_contexts(
+                    converter, context,
+                ) || changed
+            })
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
+    converter: &mut RuntimeDataBindGraphConverter,
+    contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            // The existing owned converter path is absolute; preserve that
+            // behavior while searching the ordered composite candidates.
+            let value = contexts
+                .iter()
+                .find_map(|(context, _)| {
+                    runtime_owned_view_model_number_value_for_source_path(context, source_path)
+                })
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => converters.iter_mut().fold(
+            false,
+            |changed, converter| {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
+                    converter, contexts,
+                ) || changed
+            },
+        ),
         _ => false,
     }
 }
@@ -2740,6 +2810,16 @@ pub(crate) enum RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraphValue {
+    pub(crate) fn resolve_from_owned_view_model_context(
+        &self,
+        context: &RuntimeOwnedViewModelContext,
+        path: &[u32],
+    ) -> Option<Self> {
+        context
+            .instances()
+            .find_map(|instance| self.resolve_from_owned_view_model_instance(instance, path))
+    }
+
     pub(crate) fn resolve_from_owned_view_model_instance(
         &self,
         context: &RuntimeOwnedViewModelInstance,
@@ -3502,6 +3582,33 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    pub(crate) fn bind_owned_view_model_contexts(
+        &mut self,
+        context: &RuntimeOwnedViewModelContext,
+    ) -> bool {
+        for source in &mut self.sources {
+            if let Some(value) = source
+                .value
+                .resolve_from_owned_view_model_context(context, &source.path)
+            {
+                source.value = value;
+                source.bound = true;
+            } else {
+                source.bound = false;
+            }
+            if let Some(converter) = source.converter.as_mut() {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_contexts(
+                    converter, context,
+                );
+            }
+            source.reset_converter_state();
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        self.imported_view_model_context = None;
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     pub(crate) fn bind_owned_view_model_context_chain(
         &mut self,
         file: &RuntimeFile,
@@ -3525,6 +3632,41 @@ impl RuntimeDataBindGraph {
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
                     converter, context,
+                );
+            }
+            source.reset_converter_state();
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        self.imported_view_model_context = None;
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    pub(crate) fn bind_owned_view_model_context_chains(
+        &mut self,
+        file: &RuntimeFile,
+        contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+    ) -> bool {
+        for source in &mut self.sources {
+            if let Some(value) = contexts.iter().find_map(|(context, context_chain)| {
+                context_chain.iter().find_map(|context_path| {
+                    source.value.resolve_from_owned_view_model_context_path(
+                        file,
+                        context,
+                        context_path,
+                        &source.path,
+                    )
+                })
+            }) {
+                source.value = value;
+                source.bound = true;
+            } else {
+                source.bound = false;
+            }
+            if let Some(converter) = source.converter.as_mut() {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
+                    converter,
+                    contexts,
                 );
             }
             source.reset_converter_state();

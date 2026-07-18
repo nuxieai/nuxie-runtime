@@ -7450,6 +7450,140 @@ fn authored_scene_uses_typed_cursor_writes_and_stales_them_after_structure_chang
 }
 
 #[test]
+fn rectangle_height_cursor_resolves_sets_gets_and_stales_after_structure_changes() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, _), _) =
+        scene.edit(|tx| create_card(tx, "Height cursor", 0xff112233))?;
+    let instance = scene.instantiate(artboard)?;
+    let height = scene.cursor(instance, rectangle, props::PATH_HEIGHT)?;
+
+    assert_eq!(scene.frame().get(height)?, 60.0);
+    assert!(scene.frame().set(height, 44.0)?);
+    assert_eq!(scene.frame().get(height)?, 44.0);
+
+    scene.edit(|tx| tx.set(rectangle, props::PATH_WIDTH, 72.0))?;
+    assert_eq!(scene.frame().get(height), Err(StaleCursor));
+    assert_eq!(scene.frame().set(height, 48.0), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
+fn stroke_thickness_cursor_resolves_sets_gets_and_stales_after_structure_changes() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, stroke), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Stroke cursor".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 50.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let rectangle = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Card rectangle", 80.0, 60.0)),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Card stroke".into(),
+                thickness: 2.0,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        Ok((artboard, rectangle, stroke))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let thickness = scene.cursor(instance, stroke, props::STROKE_THICKNESS)?;
+
+    assert_eq!(scene.frame().get(thickness)?, 2.0);
+    assert!(scene.frame().set(thickness, 6.0)?);
+    assert_eq!(scene.frame().get(thickness)?, 6.0);
+
+    scene.edit(|tx| tx.set(rectangle, props::PATH_WIDTH, 72.0))?;
+    assert_eq!(scene.frame().get(thickness), Err(StaleCursor));
+    assert_eq!(scene.frame().set(thickness, 8.0), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
+fn dash_length_cursor_resolves_sets_gets_and_stales_after_structure_changes() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, dash), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Dash cursor".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 50.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let rectangle = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Card rectangle", 80.0, 60.0)),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Card stroke".into(),
+                thickness: 2.0,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        let dash_path = tx.create(
+            Parent::Object(stroke),
+            NodeSpec::DashPath(DashPathSpec {
+                name: "Dash path".into(),
+                offset: 0.0,
+                offset_is_percentage: false,
+            }),
+        )?;
+        let dash = tx.create(
+            Parent::Object(dash_path),
+            NodeSpec::Dash(DashSpec {
+                name: "Dash on".into(),
+                length: 4.0,
+                length_is_percentage: false,
+            }),
+        )?;
+        Ok((artboard, rectangle, dash))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let length = scene.cursor(instance, dash, props::DASH_LENGTH)?;
+
+    assert_eq!(scene.frame().get(length)?, 4.0);
+    assert!(scene.frame().set(length, 9.0)?);
+    assert_eq!(scene.frame().get(length)?, 9.0);
+
+    scene.edit(|tx| tx.set(rectangle, props::PATH_WIDTH, 72.0))?;
+    assert_eq!(scene.frame().get(length), Err(StaleCursor));
+    assert_eq!(scene.frame().set(length, 11.0), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
 fn a_cursor_can_never_write_to_another_scene_with_matching_slots_and_epoch() -> Result<()> {
     let mut left = Scene::new();
     let ((left_artboard, _, left_color), _) =
@@ -7781,6 +7915,21 @@ fn generated_authoring_vocabulary_tracks_schema_owners_value_kinds_and_surface_a
     assert!(props::PATH_WIDTH.is_available_on(NodeKind::Rectangle));
     assert_eq!(props::PATH_WIDTH.value_kind(), PropValueKind::Double);
     assert_eq!(props::PATH_WIDTH.declared_owner(), "ParametricPath");
+
+    assert_eq!(props::PATH_HEIGHT.schema_name(), "height");
+    assert!(props::PATH_HEIGHT.is_available_on(NodeKind::Rectangle));
+    assert_eq!(props::PATH_HEIGHT.value_kind(), PropValueKind::Double);
+    assert_eq!(props::PATH_HEIGHT.declared_owner(), "ParametricPath");
+
+    assert_eq!(props::STROKE_THICKNESS.schema_name(), "thickness");
+    assert!(props::STROKE_THICKNESS.is_available_on(NodeKind::Stroke));
+    assert_eq!(props::STROKE_THICKNESS.value_kind(), PropValueKind::Double);
+    assert_eq!(props::STROKE_THICKNESS.declared_owner(), "Stroke");
+
+    assert_eq!(props::DASH_LENGTH.schema_name(), "length");
+    assert!(props::DASH_LENGTH.is_available_on(NodeKind::Dash));
+    assert_eq!(props::DASH_LENGTH.value_kind(), PropValueKind::Double);
+    assert_eq!(props::DASH_LENGTH.declared_owner(), "Dash");
 
     assert_eq!(props::COLOR_VALUE.schema_name(), "colorValue");
     assert!(props::COLOR_VALUE.is_available_on(NodeKind::SolidColor));

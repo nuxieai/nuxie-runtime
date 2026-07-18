@@ -782,17 +782,34 @@ const OBJECTS: &[ObjectSpec] = &[
     },
 ];
 
-// The first cursor surface is deliberately narrower than the structural
-// NodeSpec vocabulary. Border topology (including the optional all-radii
-// block and dash children) is structural in E2 and is replaced in one scene
-// edit; it must not gain per-field Prop tokens until a presence/update policy
-// for that aggregate is pinned. Transforms, opacity, rectangle width, and
-// solid color are the current hot-write surface.
+// The cursor surface is deliberately narrower than the structural NodeSpec
+// vocabulary. Border topology (including the optional all-radii block and dash
+// children) remains structural and is replaced in one scene edit. Scalar
+// geometry on an existing rectangle, stroke, or dash is hot-writable without
+// exposing raw schema keys or weakening structure-epoch fencing.
 const PROPS: &[PropSpec] = &[
     PropSpec {
         rust_name: "PATH_WIDTH",
         schema_name: "width",
         declared_owner: "ParametricPath",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "PATH_HEIGHT",
+        schema_name: "height",
+        declared_owner: "ParametricPath",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "STROKE_THICKNESS",
+        schema_name: "thickness",
+        declared_owner: "Stroke",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "DASH_LENGTH",
+        schema_name: "length",
+        declared_owner: "Dash",
         kind: FieldKind::Double,
     },
     PropSpec {

@@ -370,7 +370,7 @@ mod tests {
             },
             texture.size(),
         );
-        uploads.flush(&factory.context.queue);
+        uploads.finish_submission(&encoder);
         factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -807,7 +807,7 @@ mod tests {
             },
             texture.size(),
         );
-        tessellation_uploads.flush(&factory.context.queue);
+        tessellation_uploads.finish_submission(&encoder);
         factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();

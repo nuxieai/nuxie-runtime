@@ -119,6 +119,23 @@ than requiring another heavy timing bracket. R4 closes when the summed and
 per-row p50 ratios are within the agreed 2.0x factor on C++ Dawn and Rust wgpu
 over the same Metal adapter.
 
+**Decision (2026-07-17): reopen performance on exact 1.0x parity.** The user
+raised the shipped-renderer requirement from R4's historical 2.0x directional
+bound to at least 1.0x. The old R4 result remains provenance for completed
+structural work, but no longer constitutes performance parity. The current
+acceptance contract is `docs/renderer-parity-workflow.md`: exactly five fresh,
+provenance-bound reports are reduced with the equal-order ratio-of-median-sums
+estimator, and their median must be at most 1.0 overall and in each mode, with
+unchanged pixels and zero candidate-excess counter rows.
+
+**Decision (2026-07-18): exact parity is closed.** After aligning the Rust
+atomic architecture with C++ Dawn, the final isolated five-report gate passes
+at 0.991956 overall, 0.989737 clockwise atomic, and 0.989055 MSAA. Pass counts
+are 5/5, 5/5, and 3/5 respectively. The older minimum-selected ratio remains a
+non-gating biased diagnostic. The corrected physical-copy oracle has zero Rust
+excesses in all 16 variants, and the same-runner 1,468-row corpus has zero
+divergences or gates.
+
 **Decision (2026-07-13): orchestrator-first delegation.** The main Phase R agent
 owns decomposition, the critical path, integration, and the final oracle verdict.
 It implements linear or tightly coupled work directly. Worker agents are optional
@@ -174,8 +191,9 @@ Blocked by: V2 M7 + user activation
 
 ### Exit Criteria
 
-CI renders references, diffs against a stub Rust renderer (all failing), and
-reports the metric. Failure artifacts are inspectable.
+CI renders references, diffs against a transparent stub Rust renderer, rejects
+any byte-exact nonblank reference, requires tolerance-divergent negative
+controls, and reports the metric. Failure artifacts are inspectable.
 
 ## #R-1: wgpu Foundation And Shaders
 
@@ -430,17 +448,48 @@ atomic, and 1.4656x MSAA; its slowest p50 row is 1.6431x. All are within the
 agreed 2.0x factor, and the 16-variant counter report remains at zero excess
 rows. R4 is complete. See `docs/renderer-r4-profile-attribution.md`.
 
+The exact-parity reopening subsequently closed the native submission-topology
+gap. A current steady Metal trace records the same topology for C++ Dawn and
+Rust wgpu: one physical command buffer with three encoders (blit,
+tessellation, solid). The vendored wgpu 30 core/HAL fast path continues a pass
+only after exhaustive classification proves that no query reset, indirect
+validation, render-bundle work, store-discard repair, memory clear, or strict
+event prologue must precede it. It drops a transition-only buffer only when no
+initialization clear was encoded. Every other backend keeps the stock
+default-false behavior. Canonical patch hashes are
+`9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411`
+for core and
+`9e55f5a57cbe17cfe0d61d22ab5c691e88e2dfba510496bd4a039fbc85893e69`
+for HAL.
+
+The same source-parity pass replaced MSAA's bucketed/cloning schedule with one
+flat move-only schedule and retained board walk, made solid gradient state
+sparse, grouped clockwise-atomic read-only uploads, and adopted the C++
+coverage generation prefix. Three completion-guarded clockwise slots retain
+both coverage and clip resources; the deliberate bound is roughly three times
+one frame's peak coverage-and-clip memory. Midpoint preparation no longer
+projects a temporary cubic-point vector, and direct stroke batching no longer
+allocates full-frame end/continuation side arrays. Exact dense contour layouts
+bypass generic remap/sort work, and each upload slot retains MSAA packing
+scratch with a 1 MiB cap. A context-owned one-slot stroke-preparation scratch
+pool now matches C++'s resettable midpoint-fan allocator, including abandoned
+frame recovery, uncached concurrent overflow, and a 1 MiB retention cap.
+Vendored wgpu attachment overlap validation likewise
+stays inline for ordinary attachment counts. The final provenance-bound timing,
+physical-counter, and behavior gates pass; exact hashes and commands are in
+`docs/renderer-parity-workflow.md`.
+
 ### Exit Criteria
 
-Deterministic work counters match C++ or have an explicit backend justification,
-and directional frame times are within an agreed factor of C++ Dawn on the same
-mode and adapter. Heavy load-bracketed timing is required only for remaining
-timing-defined gaps, not for counter-proven work elimination.
+Deterministic physical-work counters do not exceed C++, and the five-report
+same-adapter gate is at or below 1.0 overall and for each mode without behavior
+changes. Future timing-defined changes must retain immutable paired evidence;
+counter-proven work elimination does not require a heavy timing bracket.
 
 ## #R-5: Product Backends And Extensions
 
-Sequencing prerequisite: R4 deterministic work parity. R4's final
-timing-defined gate is explicitly parked until this milestone closes.
+Sequencing prerequisite: R4 deterministic work parity. Productization was
+completed before the reopened R4.1 gate; R4.1 is now also closed.
 
 ### Activated Deliverables
 

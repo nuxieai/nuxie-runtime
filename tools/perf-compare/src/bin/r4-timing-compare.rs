@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};
 
-const REPORT_SCHEMA: &str = "rive-renderer-perf-v2";
+const REPORT_SCHEMA: &str = "rive-renderer-perf-v3";
 const RUNNER_PROTOCOL: &str = "rive-renderer-perf-runner-v1";
 const MANIFEST_SCHEMA: &str = "rive-renderer-perf-scenes-v1";
 const ESTIMATOR: &str = "cpp-control-min-paired-v1";
@@ -81,6 +81,7 @@ struct Report {
     debug: bool,
     samples_per_runner: usize,
     manifest_schema: String,
+    provenance: Provenance,
     scenes: Vec<Scene>,
     aggregate: Aggregate,
 }
@@ -98,7 +99,7 @@ impl Report {
             || self.manifest_schema != MANIFEST_SCHEMA
         {
             return Err(format!(
-                "{label} report does not declare the fenced renderer-perf-v2 protocol"
+                "{label} report does not declare the fenced renderer-perf-v3 protocol"
             ));
         }
         if self
@@ -111,6 +112,7 @@ impl Report {
                 "{label} report must contain the exact 16 fenced scenes in manifest order"
             ));
         }
+        self.provenance.validate(label)?;
 
         let reference_adapter = &self.scenes[0].selected_adapter;
         let mut cpp_control_sum = 0_u64;
@@ -156,6 +158,22 @@ impl Report {
 
 fn validate_trace(reports: [&Report; 4]) -> Result<(), String> {
     let reference = reports[0];
+    if reports[0].provenance != reports[3].provenance
+        || reports[1].provenance != reports[2].provenance
+    {
+        return Err("ABBA repeated variants have different report provenance".to_owned());
+    }
+    for report in reports.into_iter().skip(1) {
+        if !reference
+            .provenance
+            .matches_common_inputs(&report.provenance)
+        {
+            return Err(
+                "ABBA reports have different manifest, baseline, or generator provenance"
+                    .to_owned(),
+            );
+        }
+    }
     for report in reports.into_iter().skip(1) {
         for (expected, actual) in reference.scenes.iter().zip(&report.scenes) {
             if expected.id != actual.id
@@ -175,6 +193,54 @@ fn validate_trace(reports: [&Report; 4]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct Provenance {
+    manifest_sha256: String,
+    baseline_runner_sha256: String,
+    candidate_runner_sha256: String,
+    generator_sha256: String,
+    baseline_source_id: String,
+    candidate_source_id: String,
+}
+
+impl Provenance {
+    fn validate(&self, label: &str) -> Result<(), String> {
+        for (name, hash) in [
+            ("manifest", &self.manifest_sha256),
+            ("baseline runner", &self.baseline_runner_sha256),
+            ("candidate runner", &self.candidate_runner_sha256),
+            ("generator", &self.generator_sha256),
+        ] {
+            if hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err(format!("{label} report has an invalid {name} SHA-256"));
+            }
+        }
+        if self.baseline_source_id.trim().is_empty() {
+            return Err(format!(
+                "{label} report has an empty baseline source identity"
+            ));
+        }
+        if self.candidate_source_id.trim().is_empty() {
+            return Err(format!(
+                "{label} report has an empty candidate source identity"
+            ));
+        }
+        Ok(())
+    }
+
+    fn matches_common_inputs(&self, other: &Self) -> bool {
+        self.manifest_sha256 == other.manifest_sha256
+            && self.baseline_runner_sha256 == other.baseline_runner_sha256
+            && self.generator_sha256 == other.generator_sha256
+            && self.baseline_source_id == other.baseline_source_id
+    }
 }
 
 #[derive(Deserialize)]
@@ -218,7 +284,7 @@ impl Scene {
                 .iter()
                 .enumerate()
                 .any(|(sample, order)| {
-                    let expected = if (scene_index + sample) % 2 == 0 {
+                    let expected = if (scene_index + sample).is_multiple_of(2) {
                         "cpp-then-candidate"
                     } else {
                         "candidate-then-cpp"
@@ -357,8 +423,7 @@ struct TimingSummary {
 
 impl TimingSummary {
     fn validate(&self, label: &str) -> Result<(), String> {
-        if self.sample_medians_ns.len() != SAMPLES_PER_RUNNER
-            || self.sample_medians_ns.iter().any(|sample| *sample == 0)
+        if self.sample_medians_ns.len() != SAMPLES_PER_RUNNER || self.sample_medians_ns.contains(&0)
         {
             return Err(format!("{label} report has invalid timing samples"));
         }
@@ -765,6 +830,14 @@ mod tests {
             debug: false,
             samples_per_runner: SAMPLES_PER_RUNNER,
             manifest_schema: MANIFEST_SCHEMA.to_owned(),
+            provenance: Provenance {
+                manifest_sha256: "11".repeat(32),
+                baseline_runner_sha256: "22".repeat(32),
+                candidate_runner_sha256: "33".repeat(32),
+                generator_sha256: "44".repeat(32),
+                baseline_source_id: "git:baseline".to_owned(),
+                candidate_source_id: "git:test".to_owned(),
+            },
             scenes: Vec::new(),
             aggregate: Aggregate {
                 cpp_control_selected_ns_sum: control_ns,

@@ -5,9 +5,10 @@
 //! - `/Users/levi/dev/oss/rive-runtime/renderer/src/intersection_board.cpp`
 //! - `/Users/levi/dev/oss/rive-runtime/tests/unit_tests/renderer/intersection_board_test.cpp`
 //!
-//! The implementation is deliberately scalar for now. It preserves the C++
-//! module's grouping, strict-overlap, baseline, and eight-lane result contract;
-//! SIMD storage can be introduced later without changing this interface.
+//! The implementation preserves the C++ module's grouping, strict-overlap,
+//! baseline, and eight-lane result contract. Disjoint boards use the same
+//! transposed byte packing as C++ and an AArch64 NEON query loop; other targets
+//! consume that packed representation with an equivalent scalar loop.
 
 /// Whether a rectangle may share a draw group with rectangles it overlaps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -73,6 +74,36 @@ struct StoredRect {
     group_index: i16,
 }
 
+#[repr(C, align(16))]
+#[derive(Clone, Debug)]
+struct DisjointRectChunk {
+    // Eight tile-local rectangles, transposed as L/T/(255-R)/(255-B), with a
+    // -128 bias so every edge fits in signed bytes. This is the same packed
+    // representation consumed by C++ IntersectionTile's SIMD loop.
+    edges: [[i8; 8]; 4],
+    group_indices: [i16; 8],
+}
+
+impl Default for DisjointRectChunk {
+    fn default() -> Self {
+        Self {
+            // 127 is the maximally positive biased edge. Strict comparisons
+            // make unused lanes fail every intersection test.
+            edges: [[i8::MAX; 8]; 4],
+            group_indices: [0; 8],
+        }
+    }
+}
+
+#[inline]
+fn bias_tile_edge(edge: i32) -> i8 {
+    debug_assert!((0..=IntersectionTile::TILE_DIM).contains(&edge));
+    // Tile-local edges are clamped to [0, 255], so subtracting 128 is always
+    // representable in i8. Unlike TryFrom, this compiles to no release checks,
+    // matching C++'s narrowing store into its packed SIMD vectors.
+    (edge - 128) as i8
+}
+
 /// One 255 by 255 region of an [`IntersectionBoard`].
 #[derive(Clone, Debug, Default)]
 pub struct IntersectionTile {
@@ -81,7 +112,9 @@ pub struct IntersectionTile {
     baseline_overlap_bits: u16,
     max_group_index: i16,
     overlap_bits_for_max_group: u16,
+    rectangle_count: usize,
     rectangles: Vec<StoredRect>,
+    disjoint_chunks: Vec<DisjointRectChunk>,
     // `None` is the C++ disjoint-mode invariant: no overlap storage exists.
     overlap_bits: Option<Vec<u16>>,
 }
@@ -97,13 +130,15 @@ impl IntersectionTile {
         baseline_group_index: i16,
         baseline_overlap_bits: u16,
     ) {
-        assert!(baseline_group_index >= 0);
+        debug_assert!(baseline_group_index >= 0);
         self.top_left = (left, top);
         self.baseline_group_index = baseline_group_index;
         self.baseline_overlap_bits = baseline_overlap_bits;
         self.max_group_index = baseline_group_index;
         self.overlap_bits_for_max_group = baseline_overlap_bits;
+        self.rectangle_count = 0;
         self.rectangles.clear();
+        self.disjoint_chunks.clear();
         self.overlap_bits = None;
     }
 
@@ -114,25 +149,35 @@ impl IntersectionTile {
         group_index: i16,
         current_rectangle_overlap_bits: u16,
     ) {
-        assert!(ltrb.is_non_empty());
-        assert!(group_index >= 0);
+        debug_assert!(ltrb.is_non_empty());
+        debug_assert!(group_index >= 0);
 
         match grouping_type {
             GroupingType::OverlapAllowed => {
+                assert_eq!(
+                    self.rectangle_count,
+                    self.rectangles.len(),
+                    "intersection tile grouping mode cannot change after insertion"
+                );
                 if self.overlap_bits.is_none() {
-                    self.overlap_bits = Some(vec![0; self.rectangles.len()]);
+                    debug_assert!(self.disjoint_chunks.is_empty());
+                    self.overlap_bits = Some(vec![0; self.rectangle_count]);
                 }
             }
-            GroupingType::Disjoint => assert_eq!(current_rectangle_overlap_bits, 0),
+            GroupingType::Disjoint => {
+                debug_assert_eq!(current_rectangle_overlap_bits, 0);
+                debug_assert!(self.overlap_bits.is_none());
+                debug_assert!(self.rectangles.is_empty());
+            }
         }
 
         debug_assert!(self.addition_preserves_grouping(grouping_type, ltrb, group_index,));
 
         let local = self.local_rect(ltrb);
-        assert!(local.left < Self::TILE_DIM);
-        assert!(local.top < Self::TILE_DIM);
-        assert!(local.right > 0);
-        assert!(local.bottom > 0);
+        debug_assert!(local.left < Self::TILE_DIM);
+        debug_assert!(local.top < Self::TILE_DIM);
+        debug_assert!(local.right > 0);
+        debug_assert!(local.bottom > 0);
 
         if grouping_type == GroupingType::OverlapAllowed
             && group_index == self.baseline_group_index
@@ -145,14 +190,14 @@ impl IntersectionTile {
         if self.covers_tile(local) {
             match grouping_type {
                 GroupingType::OverlapAllowed => {
-                    assert!(group_index >= self.max_group_index);
+                    debug_assert!(group_index >= self.max_group_index);
                     if group_index == self.max_group_index {
                         self.update_baseline_to_max_group_index(current_rectangle_overlap_bits);
                         debug_assert!(self.invariants_hold());
                         return;
                     }
                 }
-                GroupingType::Disjoint => assert!(group_index > self.max_group_index),
+                GroupingType::Disjoint => debug_assert!(group_index > self.max_group_index),
             }
 
             self.reset(
@@ -165,12 +210,12 @@ impl IntersectionTile {
             return;
         }
 
-        self.rectangles.push(StoredRect {
-            rect: local,
-            group_index,
-        });
         match grouping_type {
             GroupingType::OverlapAllowed => {
+                self.rectangles.push(StoredRect {
+                    rect: local,
+                    group_index,
+                });
                 let overlap_bits = self
                     .overlap_bits
                     .as_mut()
@@ -184,10 +229,28 @@ impl IntersectionTile {
                 }
             }
             GroupingType::Disjoint => {
+                self.push_disjoint_rect(local, group_index);
                 self.max_group_index = self.max_group_index.max(group_index);
             }
         }
+        self.rectangle_count += 1;
         debug_assert!(self.invariants_hold());
+    }
+
+    fn push_disjoint_rect(&mut self, rect: Rect, group_index: i16) {
+        let lane = self.rectangle_count % Self::CHUNK_SIZE;
+        if lane == 0 {
+            self.disjoint_chunks.push(DisjointRectChunk::default());
+        }
+        let chunk = self
+            .disjoint_chunks
+            .last_mut()
+            .expect("disjoint chunk must exist for a stored rectangle");
+        chunk.edges[0][lane] = bias_tile_edge(rect.left);
+        chunk.edges[1][lane] = bias_tile_edge(rect.top);
+        chunk.edges[2][lane] = bias_tile_edge(Self::TILE_DIM - rect.right);
+        chunk.edges[3][lane] = bias_tile_edge(Self::TILE_DIM - rect.bottom);
+        chunk.group_indices[lane] = group_index;
     }
 
     pub fn find_max_intersecting_group_index(
@@ -196,12 +259,14 @@ impl IntersectionTile {
         ltrb: Rect,
         mut running: FindResult,
     ) -> FindResult {
-        assert!(ltrb.is_non_empty());
-        assert!(running.max_group_indices.iter().all(|index| *index >= 0));
-        assert!(ltrb.left < self.top_left.0 + Self::TILE_DIM);
-        assert!(ltrb.top < self.top_left.1 + Self::TILE_DIM);
-        assert!(ltrb.right > self.top_left.0);
-        assert!(ltrb.bottom > self.top_left.1);
+        debug_assert!(ltrb.is_non_empty());
+        debug_assert!(running.max_group_indices.iter().all(|index| *index >= 0));
+        debug_assert!(
+            i64::from(ltrb.left) < i64::from(self.top_left.0) + i64::from(Self::TILE_DIM)
+        );
+        debug_assert!(i64::from(ltrb.top) < i64::from(self.top_left.1) + i64::from(Self::TILE_DIM));
+        debug_assert!(ltrb.right > self.top_left.0);
+        debug_assert!(ltrb.bottom > self.top_left.1);
 
         let local = self.local_rect(ltrb);
         if self.covers_tile(local) {
@@ -223,27 +288,29 @@ impl IntersectionTile {
             return running;
         }
 
-        for (index, stored) in self.rectangles.iter().enumerate() {
-            let lane = index % Self::CHUNK_SIZE;
-            let masked_group_index = if stored.rect.intersects(local) {
-                stored.group_index
-            } else {
-                0
-            };
-
-            if grouping_type == GroupingType::OverlapAllowed {
-                if masked_group_index > running.max_group_indices[lane] {
-                    running.overlap_bits[lane] = 0;
-                }
-                if running.max_group_indices[lane] <= masked_group_index {
-                    // Like the C++ SIMD loop, this can retain irrelevant bits
-                    // in lanes with no intersection. Board-level reduction
-                    // filters them by the final maximum group index.
-                    running.overlap_bits[lane] |= self.overlap_bits_at(index);
+        match grouping_type {
+            GroupingType::Disjoint => self.find_disjoint_packed(local, &mut running),
+            GroupingType::OverlapAllowed => {
+                for (index, stored) in self.rectangles.iter().enumerate() {
+                    let lane = index % Self::CHUNK_SIZE;
+                    let masked_group_index = if stored.rect.intersects(local) {
+                        stored.group_index
+                    } else {
+                        0
+                    };
+                    if masked_group_index > running.max_group_indices[lane] {
+                        running.overlap_bits[lane] = 0;
+                    }
+                    if running.max_group_indices[lane] <= masked_group_index {
+                        // Like the C++ SIMD loop, this can retain irrelevant bits
+                        // in lanes with no intersection. Board-level reduction
+                        // filters them by the final maximum group index.
+                        running.overlap_bits[lane] |= self.overlap_bits_at(index);
+                    }
+                    running.max_group_indices[lane] =
+                        running.max_group_indices[lane].max(masked_group_index);
                 }
             }
-            running.max_group_indices[lane] =
-                running.max_group_indices[lane].max(masked_group_index);
         }
 
         match grouping_type {
@@ -261,6 +328,22 @@ impl IntersectionTile {
             }
         }
         running
+    }
+
+    fn find_disjoint_packed(&self, local: Rect, running: &mut FindResult) {
+        debug_assert_eq!(
+            self.disjoint_chunks.len(),
+            self.rectangle_count.div_ceil(Self::CHUNK_SIZE)
+        );
+        let complement = [
+            bias_tile_edge(local.right),
+            bias_tile_edge(local.bottom),
+            bias_tile_edge(Self::TILE_DIM - local.left),
+            bias_tile_edge(Self::TILE_DIM - local.top),
+        ];
+        for chunk in &self.disjoint_chunks {
+            accumulate_disjoint_chunk(chunk, complement, &mut running.max_group_indices);
+        }
     }
 
     fn local_rect(&self, rect: Rect) -> Rect {
@@ -310,7 +393,7 @@ impl IntersectionTile {
         let existing_max_bits = self.overlap_bits_for_max_group;
         if (additional_baseline_overlap_bits | existing_max_bits)
             == additional_baseline_overlap_bits
-            || self.rectangles.is_empty()
+            || self.rectangle_count == 0
         {
             self.reset(
                 self.top_left.0,
@@ -365,20 +448,119 @@ impl IntersectionTile {
         }
         self.rectangles.truncate(first);
         overlaps.truncate(first);
+        self.rectangle_count = first;
     }
 
     fn invariants_hold(&self) -> bool {
+        let packed_groups_hold = || {
+            let active_groups = (0..self.rectangle_count).map(|index| {
+                self.disjoint_chunks[index / Self::CHUNK_SIZE].group_indices
+                    [index % Self::CHUNK_SIZE]
+            });
+            let mut found_max = self.baseline_group_index;
+            for group_index in active_groups {
+                if group_index < self.baseline_group_index || group_index > self.max_group_index {
+                    return false;
+                }
+                found_max = found_max.max(group_index);
+            }
+            found_max == self.max_group_index
+        };
         self.baseline_group_index >= 0
             && self.max_group_index >= self.baseline_group_index
             && self
                 .overlap_bits
                 .as_ref()
                 .is_none_or(|bits| bits.len() == self.rectangles.len())
+            && match &self.overlap_bits {
+                Some(_) => {
+                    self.rectangle_count == self.rectangles.len() && self.disjoint_chunks.is_empty()
+                }
+                None => {
+                    self.rectangles.is_empty()
+                        && self.disjoint_chunks.len()
+                            == self.rectangle_count.div_ceil(Self::CHUNK_SIZE)
+                        && packed_groups_hold()
+                }
+            }
             && self.rectangles.iter().all(|stored| {
                 stored.group_index >= self.baseline_group_index
                     && stored.group_index <= self.max_group_index
             })
     }
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+fn accumulate_disjoint_chunk(
+    chunk: &DisjointRectChunk,
+    [right, bottom, neg_left, neg_top]: [i8; 4],
+    running: &mut [i16; 8],
+) {
+    for lane in 0..IntersectionTile::CHUNK_SIZE {
+        let intersects = chunk.edges[0][lane] < right
+            && chunk.edges[1][lane] < bottom
+            && chunk.edges[2][lane] < neg_left
+            && chunk.edges[3][lane] < neg_top;
+        if intersects {
+            running[lane] = running[lane].max(chunk.group_indices[lane]);
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+fn accumulate_disjoint_chunk(
+    chunk: &DisjointRectChunk,
+    [right, bottom, neg_left, neg_top]: [i8; 4],
+    running: &mut [i16; 8],
+) {
+    use std::arch::aarch64::*;
+
+    let lower_complement = [
+        right, right, right, right, right, right, right, right, bottom, bottom, bottom, bottom,
+        bottom, bottom, bottom, bottom,
+    ];
+    let upper_complement = [
+        neg_left, neg_left, neg_left, neg_left, neg_left, neg_left, neg_left, neg_left, neg_top,
+        neg_top, neg_top, neg_top, neg_top, neg_top, neg_top, neg_top,
+    ];
+    // SAFETY: NEON is mandatory on AArch64. All loads and stores address
+    // fixed-size arrays of exactly the vector width, and the intrinsics permit
+    // unaligned pointers.
+    unsafe {
+        let edges = chunk.edges.as_ptr().cast::<i8>();
+        let edge_masks_lower = vcltq_s8(vld1q_s8(edges), vld1q_s8(lower_complement.as_ptr()));
+        let edge_masks_upper =
+            vcltq_s8(vld1q_s8(edges.add(16)), vld1q_s8(upper_complement.as_ptr()));
+        let left_top = vand_u8(
+            vget_low_u8(edge_masks_lower),
+            vget_high_u8(edge_masks_lower),
+        );
+        let right_bottom = vand_u8(
+            vget_low_u8(edge_masks_upper),
+            vget_high_u8(edge_masks_upper),
+        );
+        let intersections = vand_u8(left_top, right_bottom);
+        let masks = vmovl_s8(vreinterpret_s8_u8(intersections));
+        let masked_groups = vandq_s16(masks, vld1q_s16(chunk.group_indices.as_ptr()));
+        let maxima = vmaxq_s16(masked_groups, vld1q_s16(running.as_ptr()));
+        vst1q_s16(running.as_mut_ptr(), maxima);
+    }
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+#[inline]
+fn reduce_max_group_indices(groups: &[i16; 8]) -> i16 {
+    groups.iter().copied().max().unwrap_or(0)
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+fn reduce_max_group_indices(groups: &[i16; 8]) -> i16 {
+    use std::arch::aarch64::{vld1q_s16, vmaxvq_s16};
+
+    // SAFETY: `groups` contains exactly eight initialized i16 lanes, matching
+    // the width loaded by vld1q_s16. NEON is mandatory on AArch64.
+    unsafe { vmaxvq_s16(vld1q_s16(groups.as_ptr())) }
 }
 
 /// Tiled collection of rectangles that assigns non-conflicting draw groups.
@@ -475,15 +657,12 @@ impl IntersectionBoard {
         if !ltrb.is_non_empty() {
             return 0;
         }
-        let min_x = u32::try_from(ltrb.left / Self::TILE_DIM)
-            .expect("clamped rectangle has negative left tile");
-        let min_y = u32::try_from(ltrb.top / Self::TILE_DIM)
-            .expect("clamped rectangle has negative top tile");
-        let max_x = u32::try_from((ltrb.right - 1) / Self::TILE_DIM)
-            .expect("clamped rectangle has negative right tile");
-        let max_y = u32::try_from((ltrb.bottom - 1) / Self::TILE_DIM)
-            .expect("clamped rectangle has negative bottom tile");
-        assert!(min_x <= max_x && min_y <= max_y);
+        debug_assert!(ltrb.left >= 0 && ltrb.top >= 0);
+        let min_x = (ltrb.left / Self::TILE_DIM) as u32;
+        let min_y = (ltrb.top / Self::TILE_DIM) as u32;
+        let max_x = ((ltrb.right - 1) / Self::TILE_DIM) as u32;
+        let max_y = ((ltrb.bottom - 1) / Self::TILE_DIM) as u32;
+        debug_assert!(min_x <= max_x && min_y <= max_y);
 
         let mut results = FindResult::default();
         for y in min_y..=max_y {
@@ -496,7 +675,7 @@ impl IntersectionBoard {
             }
         }
 
-        let mut bottom_group_index = results.max_group_indices.into_iter().max().unwrap_or(0);
+        let mut bottom_group_index = reduce_max_group_indices(&results.max_group_indices);
         assert!(bottom_group_index <= i16::MAX - layer_count);
         match self.grouping_type {
             GroupingType::OverlapAllowed => {
@@ -531,23 +710,24 @@ impl IntersectionBoard {
     }
 
     fn tile_index(&self, x: u32, y: u32) -> usize {
-        assert!(
+        debug_assert!(
             x < self.cols && y < self.rows,
             "tile coordinates outside board"
         );
-        let index = y
-            .checked_mul(self.cols)
-            .and_then(|row| row.checked_add(x))
-            .expect("intersection board tile index overflow");
-        usize::try_from(index).expect("intersection board tile index exceeds usize")
+        // resize_and_reset proves cols*rows fits u32 before allocating tiles.
+        // With x/cols and y/rows in range, this index therefore fits usize on
+        // every supported target without checked arithmetic in the hot loops.
+        let index = y as usize * self.cols as usize + x as usize;
+        debug_assert!(
+            index < self.tiles.len(),
+            "tile index outside allocated board"
+        );
+        index
     }
 
     fn tile_origin(coordinate: u32) -> i32 {
-        let tile_dim = u32::try_from(Self::TILE_DIM).expect("tile dimension is negative");
-        let origin = coordinate
-            .checked_mul(tile_dim)
-            .expect("intersection board tile origin overflow");
-        i32::try_from(origin).expect("intersection board tile origin exceeds i32")
+        debug_assert!(coordinate <= i32::MAX as u32 / Self::TILE_DIM as u32);
+        coordinate as i32 * Self::TILE_DIM
     }
 }
 
@@ -754,9 +934,10 @@ mod tests {
         IntersectionBoard::new(GroupingType::Disjoint).resize_and_reset(beyond_i32, 0);
     }
 
+    #[cfg(debug_assertions)]
     #[test]
-    #[should_panic(expected = "intersection board tile index overflow")]
-    fn checked_arithmetic_rejects_tile_index_overflow() {
+    #[should_panic(expected = "tile index outside allocated board")]
+    fn debug_contract_rejects_tile_index_outside_allocation() {
         let board = IntersectionBoard {
             grouping_type: GroupingType::Disjoint,
             viewport_size: (0, 0),

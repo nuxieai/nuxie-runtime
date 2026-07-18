@@ -20,6 +20,15 @@ members = [
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
 ]
+exclude = [
+    "vendor/wgpu-30.0.0",
+    "vendor/wgpu-core-30.0.0",
+    "vendor/wgpu-core-deps-apple-30.0.0",
+    "vendor/wgpu-core-deps-emscripten-30.0.0",
+    "vendor/wgpu-core-deps-wasm-30.0.0",
+    "vendor/wgpu-core-deps-windows-linux-android-30.0.0",
+    "vendor/wgpu-hal-30.0.0",
+]
 resolver = "3"
 
 [workspace.package]

@@ -13,13 +13,16 @@ manifest="${R4_TIMING_GATE_MANIFEST:-}"
 baseline_runner="${R4_TIMING_GATE_BASELINE_RUNNER:-}"
 a_runner="${R4_TIMING_GATE_A_RUNNER:-}"
 b_runner="${R4_TIMING_GATE_B_RUNNER:-}"
-renderer_perf_max_ratio="${R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO:-2.0}"
+renderer_perf_max_ratio="${R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO:-1.0}"
 capture_max_ratio="${R4_TIMING_GATE_CAPTURE_MAX_RATIO:-1000}"
 max_b_over_a="${R4_TIMING_GATE_MAX_B_OVER_A:-1.0}"
 max_control_drift="${R4_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
 max_repeat_drift="${R4_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
 max_idle_spread_percent="${R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT:-12}"
 host_sampler="${R4_TIMING_GATE_HOST_SAMPLER:-}"
+baseline_source_id="${R4_TIMING_GATE_BASELINE_SOURCE_ID:-}"
+a_source_id="${R4_TIMING_GATE_A_SOURCE_ID:-}"
+b_source_id="${R4_TIMING_GATE_B_SOURCE_ID:-}"
 
 usage() {
     cat <<'EOF'
@@ -27,13 +30,15 @@ usage: r4-timing-gate.sh [--dry-run] [--output-dir path]
 
 Runs the fixed `renderer-perf` executable A-B-B-A with the pinned runner paths
 R4_TIMING_GATE_BASELINE_RUNNER, R4_TIMING_GATE_A_RUNNER, and
-R4_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v2 report, then
+R4_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v3 report, then
 requires both post-tail B reports to meet R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO
 and requires B/A candidate timing plus symmetric C++ control drift to meet
 their configured limits. R4_TIMING_GATE_CAPTURE_MAX_RATIO is only a permissive
 collection ceiling so a slower pre-tail A report cannot abort the bracket.
 Every report, stdout/stderr log, host sample, hash, and comparison is retained
-in the output directory.
+in the output directory. R4_TIMING_GATE_BASELINE_SOURCE_ID,
+R4_TIMING_GATE_A_SOURCE_ID, and R4_TIMING_GATE_B_SOURCE_ID must identify the
+three corresponding immutable runner sources.
 
 R4_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
 emits a `r4-host-idle-percent=<number>` line or a normal `top` CPU line. Its
@@ -177,6 +182,9 @@ printf 'max_b_over_a=%s\n' "$max_b_over_a" >>"$metadata"
 printf 'max_control_drift=%s\n' "$max_control_drift" >>"$metadata"
 printf 'max_repeat_drift=%s\n' "$max_repeat_drift" >>"$metadata"
 printf 'max_idle_spread_percent=%s\n' "$max_idle_spread_percent" >>"$metadata"
+printf 'baseline_source_id=%q\n' "$baseline_source_id" >>"$metadata"
+printf 'a_source_id=%q\n' "$a_source_id" >>"$metadata"
+printf 'b_source_id=%q\n' "$b_source_id" >>"$metadata"
 printf 'label\tphase\tidle_percent\traw_file\n' >"$output_dir/host-idle.tsv"
 
 fail() {
@@ -193,7 +201,10 @@ for setting in \
     R4_TIMING_GATE_MANIFEST="$manifest" \
     R4_TIMING_GATE_BASELINE_RUNNER="$baseline_runner" \
     R4_TIMING_GATE_A_RUNNER="$a_runner" \
-    R4_TIMING_GATE_B_RUNNER="$b_runner"; do
+    R4_TIMING_GATE_B_RUNNER="$b_runner" \
+    R4_TIMING_GATE_BASELINE_SOURCE_ID="$baseline_source_id" \
+    R4_TIMING_GATE_A_SOURCE_ID="$a_source_id" \
+    R4_TIMING_GATE_B_SOURCE_ID="$b_source_id"; do
     [[ -n "${setting#*=}" ]] || fail "validate-configuration" "${setting%%=*} is required" 2
 done
 for numeric in \
@@ -308,10 +319,16 @@ sample_host() {
 run_leg() {
     local index="$1"
     local variant="$2"
-    local candidate_runner
+    local candidate_runner candidate_source_id
     case "$variant" in
-        A) candidate_runner="$a_runner" ;;
-        B) candidate_runner="$b_runner" ;;
+        A)
+            candidate_runner="$a_runner"
+            candidate_source_id="$a_source_id"
+            ;;
+        B)
+            candidate_runner="$b_runner"
+            candidate_source_id="$b_source_id"
+            ;;
         *) fail "run-leg" "unsupported trace variant: $variant" ;;
     esac
     local label json markdown status
@@ -325,7 +342,10 @@ run_leg() {
     (
         cd "$root"
         "$renderer_perf" --manifest "$manifest" --baseline-runner "$baseline_runner" \
-            --candidate-runner "$candidate_runner" --max-ratio "$capture_max_ratio" \
+            --candidate-runner "$candidate_runner" \
+            --baseline-source-id "$baseline_source_id" \
+            --candidate-source-id "$candidate_source_id" \
+            --max-ratio "$capture_max_ratio" \
             --json "$json" --markdown "$markdown"
     ) >"$output_dir/${label}.stdout" 2>"$output_dir/${label}.stderr"
     status=$?

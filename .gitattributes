@@ -1,0 +1,5 @@
+# Preserve byte-for-byte upstream payloads whose crates.io archives use CRLF.
+# These files are unmodified; Nuxie's reviewable wgpu patches remain text diffs.
+vendor/wgpu-30.0.0/README.md -text -diff
+vendor/wgpu-core-30.0.0/src/timestamp_normalization/common.wgsl -text -diff
+vendor/wgpu-hal-30.0.0/src/vulkan/descriptor.rs -text -diff

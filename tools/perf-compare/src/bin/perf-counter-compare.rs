@@ -1,5 +1,7 @@
-use perf_compare::renderer_counter::{render_json, render_markdown, run_counter_compare};
-use perf_compare::renderer_perf::{SubprocessRunner, load_manifest};
+use perf_compare::renderer_counter::{
+    check_counter_parity, render_json, render_markdown, run_counter_compare,
+};
+use perf_compare::renderer_perf::{ReportProvenance, SubprocessRunner, load_manifest};
 use std::env;
 use std::path::PathBuf;
 
@@ -12,15 +14,48 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let options = Options::parse(env::args().skip(1))?;
-    let manifest = load_manifest(&options.manifest)?;
+    let baseline_source_id = options
+        .baseline_source_id
+        .or_else(|| env::var("RENDERER_COUNTER_BASELINE_SOURCE_ID").ok())
+        .ok_or_else(|| {
+            "--baseline-source-id is required (or set RENDERER_COUNTER_BASELINE_SOURCE_ID)"
+                .to_owned()
+        })?;
+    let candidate_source_id = options
+        .candidate_source_id
+        .or_else(|| env::var("RENDERER_COUNTER_CANDIDATE_SOURCE_ID").ok())
+        .ok_or_else(|| {
+            "--candidate-source-id is required (or set RENDERER_COUNTER_CANDIDATE_SOURCE_ID)"
+                .to_owned()
+        })?;
     let working_directory = options
         .manifest
         .parent()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    let mut baseline = SubprocessRunner::new(options.baseline_runner, working_directory.clone());
-    let mut candidate = SubprocessRunner::new(options.candidate_runner, working_directory);
-    let report = run_counter_compare(&manifest, &mut baseline, &mut candidate)?;
+    let generator = env::current_exe()
+        .map_err(|error| format!("failed to locate perf-counter-compare executable: {error}"))?;
+    let provenance = ReportProvenance::from_files(
+        &options.manifest,
+        &options.baseline_runner,
+        &options.candidate_runner,
+        &generator,
+        baseline_source_id.clone(),
+        candidate_source_id.clone(),
+    )?;
+    let manifest = load_manifest(&options.manifest)?;
+    let mut baseline =
+        SubprocessRunner::new(options.baseline_runner.clone(), working_directory.clone());
+    let mut candidate = SubprocessRunner::new(options.candidate_runner.clone(), working_directory);
+    let report = run_counter_compare(&manifest, &mut baseline, &mut candidate, provenance)?;
+    report.provenance.verify_files(
+        &options.manifest,
+        &options.baseline_runner,
+        &options.candidate_runner,
+        &generator,
+        &baseline_source_id,
+        &candidate_source_id,
+    )?;
 
     std::fs::write(&options.json, render_json(&report)?)
         .map_err(|error| format!("failed to write {}: {error}", options.json.display()))?;
@@ -38,6 +73,8 @@ fn run() -> Result<(), String> {
         "perf-counter-compare markdown={}",
         options.markdown.display()
     );
+    check_counter_parity(&report)?;
+    println!("perf-counter-compare counter-parity=pass");
     Ok(())
 }
 
@@ -45,6 +82,8 @@ struct Options {
     manifest: PathBuf,
     baseline_runner: PathBuf,
     candidate_runner: PathBuf,
+    baseline_source_id: Option<String>,
+    candidate_source_id: Option<String>,
     json: PathBuf,
     markdown: PathBuf,
 }
@@ -54,6 +93,8 @@ impl Options {
         let mut manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml");
         let mut baseline_runner = None;
         let mut candidate_runner = None;
+        let mut baseline_source_id = None;
+        let mut candidate_source_id = None;
         let mut json = PathBuf::from("rive-renderer-work-counters.json");
         let mut markdown = PathBuf::from("rive-renderer-work-counters.md");
         let mut args = args.into_iter();
@@ -68,6 +109,12 @@ impl Options {
                     candidate_runner =
                         Some(PathBuf::from(next_value(&mut args, "--candidate-runner")?))
                 }
+                "--baseline-source-id" => {
+                    baseline_source_id = Some(next_value(&mut args, "--baseline-source-id")?)
+                }
+                "--candidate-source-id" => {
+                    candidate_source_id = Some(next_value(&mut args, "--candidate-source-id")?)
+                }
                 "--json" => json = PathBuf::from(next_value(&mut args, "--json")?),
                 "--markdown" => markdown = PathBuf::from(next_value(&mut args, "--markdown")?),
                 "--help" | "-h" => return Err(usage().to_owned()),
@@ -80,6 +127,8 @@ impl Options {
                 .ok_or_else(|| format!("--baseline-runner is required\n{}", usage()))?,
             candidate_runner: candidate_runner
                 .ok_or_else(|| format!("--candidate-runner is required\n{}", usage()))?,
+            baseline_source_id,
+            candidate_source_id,
             json,
             markdown,
         })
@@ -92,5 +141,5 @@ fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<Str
 }
 
 fn usage() -> &'static str {
-    "usage: perf-counter-compare [--manifest path] --baseline-runner path --candidate-runner path [--json path] [--markdown path]"
+    "usage: perf-counter-compare [--manifest path] --baseline-runner path --candidate-runner path --baseline-source-id id --candidate-source-id id [--json path] [--markdown path]"
 }

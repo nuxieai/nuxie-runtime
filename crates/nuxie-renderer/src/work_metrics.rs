@@ -84,6 +84,13 @@ fn record(update: impl FnOnce(&mut BackendWorkMetrics)) {
     let _ = update;
 }
 
+pub(crate) fn record_buffer_upload(bytes: u64) {
+    record(|metrics| {
+        metrics.buffer_upload_calls = metrics.buffer_upload_calls.saturating_add(1);
+        metrics.buffer_upload_bytes = metrics.buffer_upload_bytes.saturating_add(bytes);
+    });
+}
+
 fn texture_binding_count(entries: &[wgpu::BindGroupEntry<'_>]) -> u64 {
     entries
         .iter()
@@ -128,10 +135,7 @@ impl CountedDeviceExt for wgpu::Device {
         descriptor: &wgpu::util::BufferInitDescriptor<'_>,
     ) -> wgpu::Buffer {
         let bytes = descriptor.contents.len() as u64;
-        record(|metrics| {
-            metrics.buffer_upload_calls = metrics.buffer_upload_calls.saturating_add(1);
-            metrics.buffer_upload_bytes = metrics.buffer_upload_bytes.saturating_add(bytes);
-        });
+        record_buffer_upload(bytes);
         self.create_buffer_init(descriptor)
     }
 
@@ -151,7 +155,6 @@ pub(crate) trait CountedQueueExt {
         &self,
         command_buffers: I,
     ) -> wgpu::SubmissionIndex;
-    fn write_counted_buffer(&self, buffer: &wgpu::Buffer, offset: wgpu::BufferAddress, data: &[u8]);
     fn write_counted_texture(
         &self,
         texture: wgpu::TexelCopyTextureInfo<'_>,
@@ -170,20 +173,6 @@ impl CountedQueueExt for wgpu::Queue {
             metrics.queue_submissions = metrics.queue_submissions.saturating_add(1);
         });
         self.submit(command_buffers)
-    }
-
-    fn write_counted_buffer(
-        &self,
-        buffer: &wgpu::Buffer,
-        offset: wgpu::BufferAddress,
-        data: &[u8],
-    ) {
-        let bytes = data.len() as u64;
-        record(|metrics| {
-            metrics.buffer_upload_calls = metrics.buffer_upload_calls.saturating_add(1);
-            metrics.buffer_upload_bytes = metrics.buffer_upload_bytes.saturating_add(bytes);
-        });
-        self.write_buffer(buffer, offset, data);
     }
 
     fn write_counted_texture(

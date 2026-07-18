@@ -1,12 +1,12 @@
 use crate::renderer_perf::{
     AdapterIdentity, BackendWorkMetrics, MANIFEST_SCHEMA, Manifest, Measurement, Mode,
-    RUNNER_PROTOCOL, RunRequest, Runner, StructuralMetrics, mode_name, validate_adapter,
-    validate_response, validate_structural,
+    RUNNER_PROTOCOL, ReportProvenance, RunRequest, Runner, StructuralMetrics, mode_name,
+    validate_adapter, validate_response, validate_structural,
 };
 use serde::Serialize;
 use std::cmp::Ordering;
 
-pub const COUNTER_REPORT_SCHEMA: &str = "rive-renderer-perf-counters-v1";
+pub const COUNTER_REPORT_SCHEMA: &str = "rive-renderer-perf-counters-v2";
 
 #[derive(Clone, Debug, Serialize)]
 pub struct CounterSceneReport {
@@ -37,6 +37,7 @@ pub struct CounterReport {
     pub schema: &'static str,
     pub runner_protocol: &'static str,
     pub manifest_schema: &'static str,
+    pub provenance: ReportProvenance,
     pub measurement: Measurement,
     pub warmup_frames: u32,
     pub measured_frames: u32,
@@ -48,6 +49,7 @@ pub fn run_counter_compare(
     manifest: &Manifest,
     baseline: &mut dyn Runner,
     candidate: &mut dyn Runner,
+    provenance: ReportProvenance,
 ) -> Result<CounterReport, String> {
     let mut scenes = Vec::with_capacity(manifest.scene.len() * manifest.modes.len());
     for scene in &manifest.scene {
@@ -106,6 +108,7 @@ pub fn run_counter_compare(
         schema: COUNTER_REPORT_SCHEMA,
         runner_protocol: RUNNER_PROTOCOL,
         manifest_schema: MANIFEST_SCHEMA,
+        provenance,
         measurement: Measurement::Counters,
         warmup_frames: crate::renderer_perf::COUNTER_WARMUP_FRAMES,
         measured_frames: crate::renderer_perf::COUNTER_MEASURED_FRAMES,
@@ -249,8 +252,17 @@ pub fn render_json(report: &CounterReport) -> Result<String, String> {
 
 pub fn render_markdown(report: &CounterReport) -> String {
     let mut markdown = format!(
-        "# Rive Renderer Work Counters\n\nSchema: `{}`  \nProtocol: `{}`  \nCapture: {} warmup + {} measured frame; timing is directional only.\n\n## Ranked Candidate Excess\n\n| rank | scene | counter | C++ Dawn | Rust wgpu | excess | ratio |\n| ---: | --- | --- | ---: | ---: | ---: | ---: |\n",
-        report.schema, report.runner_protocol, report.warmup_frames, report.measured_frames,
+        "# Rive Renderer Work Counters\n\nSchema: `{}`  \nProtocol: `{}`  \nManifest SHA-256: `{}`  \nBaseline runner SHA-256: `{}`  \nCandidate runner SHA-256: `{}`  \nGenerator SHA-256: `{}`  \nBaseline source identity: `{}`  \nCandidate source identity: `{}`  \nCapture: {} warmup + {} measured frame; timing is directional only.\n\n## Ranked Candidate Excess\n\n| rank | scene | counter | C++ Dawn | Rust wgpu | excess | ratio |\n| ---: | --- | --- | ---: | ---: | ---: | ---: |\n",
+        report.schema,
+        report.runner_protocol,
+        report.provenance.manifest_sha256,
+        report.provenance.baseline_runner_sha256,
+        report.provenance.candidate_runner_sha256,
+        report.provenance.generator_sha256,
+        report.provenance.baseline_source_id,
+        report.provenance.candidate_source_id,
+        report.warmup_frames,
+        report.measured_frames,
     );
     if report.ranked_excesses.is_empty() {
         markdown.push_str("| 1 | none | none | 0 | 0 | 0 | 1.000 |\n");
@@ -285,6 +297,20 @@ pub fn render_markdown(report: &CounterReport) -> String {
         ));
     }
     markdown
+}
+
+pub fn check_counter_parity(report: &CounterReport) -> Result<(), String> {
+    let Some(worst) = report.ranked_excesses.first() else {
+        return Ok(());
+    };
+    Err(format!(
+        "counter parity failed: {} candidate work excesses; highest-ranked excess is {} {} (baseline={}, candidate={})",
+        report.ranked_excesses.len(),
+        worst.scene,
+        worst.counter,
+        worst.baseline,
+        worst.candidate,
+    ))
 }
 
 #[cfg(test)]

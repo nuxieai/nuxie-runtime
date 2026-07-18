@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 pub const MANIFEST_SCHEMA: &str = "rive-renderer-perf-scenes-v1";
 pub const RUNNER_PROTOCOL: &str = "rive-renderer-perf-runner-v1";
-pub const REPORT_SCHEMA: &str = "rive-renderer-perf-v2";
+pub const REPORT_SCHEMA: &str = "rive-renderer-perf-v3";
 pub const ESTIMATOR: &str = "cpp-control-min-paired-v1";
 pub const PAIR_ORDER: &str = "counterbalanced-scene-sample-v1";
 pub const SAMPLE_COUNT: usize = 7;
@@ -19,7 +20,76 @@ const REQUIRED_HEIGHT: u32 = 1024;
 const REQUIRED_FRAME: u32 = 0;
 const REQUIRED_ADAPTER_SELECTION: &str = "high-performance";
 
-const REQUIRED_SCENES: [(&str, &str); 8] = [
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReportProvenance {
+    pub manifest_sha256: String,
+    pub baseline_runner_sha256: String,
+    pub candidate_runner_sha256: String,
+    pub generator_sha256: String,
+    pub baseline_source_id: String,
+    pub candidate_source_id: String,
+}
+
+impl ReportProvenance {
+    pub fn from_files(
+        manifest: &Path,
+        baseline_runner: &Path,
+        candidate_runner: &Path,
+        generator: &Path,
+        baseline_source_id: String,
+        candidate_source_id: String,
+    ) -> Result<Self, String> {
+        if baseline_source_id.trim().is_empty() {
+            return Err("--baseline-source-id must not be empty".to_owned());
+        }
+        if candidate_source_id.trim().is_empty() {
+            return Err("--candidate-source-id must not be empty".to_owned());
+        }
+        Ok(Self {
+            manifest_sha256: sha256_file("manifest", manifest)?,
+            baseline_runner_sha256: sha256_file("baseline runner", baseline_runner)?,
+            candidate_runner_sha256: sha256_file("candidate runner", candidate_runner)?,
+            generator_sha256: sha256_file("renderer-perf executable", generator)?,
+            baseline_source_id,
+            candidate_source_id,
+        })
+    }
+
+    pub fn verify_files(
+        &self,
+        manifest: &Path,
+        baseline_runner: &Path,
+        candidate_runner: &Path,
+        generator: &Path,
+        baseline_source_id: &str,
+        candidate_source_id: &str,
+    ) -> Result<(), String> {
+        let after = Self::from_files(
+            manifest,
+            baseline_runner,
+            candidate_runner,
+            generator,
+            baseline_source_id.to_owned(),
+            candidate_source_id.to_owned(),
+        )?;
+        if &after != self {
+            return Err(
+                "manifest, runner, generator, or source identity changed during benchmark collection"
+                    .to_owned(),
+            );
+        }
+        Ok(())
+    }
+}
+
+fn sha256_file(label: &str, path: &Path) -> Result<String, String> {
+    let bytes = std::fs::read(path)
+        .map_err(|error| format!("failed to hash {label} {}: {error}", path.display()))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+pub(crate) const REQUIRED_SCENES: [(&str, &str); 8] = [
     (
         "gm-CubicStroke",
         "../../fixtures/renderer/streams/gm/CubicStroke.rive-stream",
@@ -54,7 +124,7 @@ const REQUIRED_SCENES: [(&str, &str); 8] = [
     ),
 ];
 
-const REQUIRED_MODES: [Mode; 2] = [Mode::ClockwiseAtomic, Mode::Msaa];
+pub(crate) const REQUIRED_MODES: [Mode; 2] = [Mode::ClockwiseAtomic, Mode::Msaa];
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -63,7 +133,7 @@ pub enum Mode {
     Msaa,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SampleOrder {
     CppThenCandidate,
@@ -247,7 +317,8 @@ pub struct RunnerResponse {
     pub backend_work: BackendWorkMetrics,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StructuralMetrics {
     pub logical_flushes: u64,
     pub draws: u64,
@@ -414,6 +485,7 @@ pub fn run_benchmark(
     manifest: &Manifest,
     baseline: &mut dyn Runner,
     candidate: &mut dyn Runner,
+    provenance: ReportProvenance,
 ) -> Result<Report, String> {
     let mut scenes = Vec::with_capacity(manifest.scene.len());
     for scene in &manifest.scene {
@@ -497,21 +569,23 @@ pub fn run_benchmark(
 
     let aggregate = Aggregate::from_scenes(&scenes)?;
     Ok(Report {
-        schema: REPORT_SCHEMA,
-        runner_protocol: RUNNER_PROTOCOL,
-        estimator: ESTIMATOR,
-        pair_order: PAIR_ORDER,
+        schema: REPORT_SCHEMA.to_owned(),
+        runner_protocol: RUNNER_PROTOCOL.to_owned(),
+        estimator: ESTIMATOR.to_owned(),
+        pair_order: PAIR_ORDER.to_owned(),
         release: true,
-        profile: "release",
+        profile: "release".to_owned(),
         debug: false,
         samples_per_runner: SAMPLE_COUNT,
-        manifest_schema: MANIFEST_SCHEMA,
+        manifest_schema: MANIFEST_SCHEMA.to_owned(),
+        provenance,
         scenes,
         aggregate,
     })
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ControlSelectedPair {
     pub sample_index: usize,
     pub cpp_control_ns: u64,
@@ -605,16 +679,16 @@ pub(crate) fn validate_adapter(
             sample + 1
         ));
     }
-    if let Some(expected) = expected {
-        if actual != expected {
-            return Err(format!(
-                "scene {} sample {} {runner} selected a different physical adapter: expected {:?}, got {:?}",
-                scene_id,
-                sample + 1,
-                expected,
-                actual
-            ));
-        }
+    if let Some(expected) = expected
+        && actual != expected
+    {
+        return Err(format!(
+            "scene {} sample {} {runner} selected a different physical adapter: expected {:?}, got {:?}",
+            scene_id,
+            sample + 1,
+            expected,
+            actual
+        ));
     }
     Ok(())
 }
@@ -626,25 +700,26 @@ pub(crate) fn validate_structural(
     expected: Option<StructuralMetrics>,
     actual: StructuralMetrics,
 ) -> Result<(), String> {
-    if let Some(expected) = expected {
-        if actual != expected {
-            return Err(format!(
-                "scene {} sample {} {runner} structural mismatch: expected logical_flushes={} draws={} atomic_strategy_partitions={}, got logical_flushes={} draws={} atomic_strategy_partitions={}",
-                scene_id,
-                sample + 1,
-                expected.logical_flushes,
-                expected.draws,
-                expected.atomic_strategy_partitions,
-                actual.logical_flushes,
-                actual.draws,
-                actual.atomic_strategy_partitions,
-            ));
-        }
+    if let Some(expected) = expected
+        && actual != expected
+    {
+        return Err(format!(
+            "scene {} sample {} {runner} structural mismatch: expected logical_flushes={} draws={} atomic_strategy_partitions={}, got logical_flushes={} draws={} atomic_strategy_partitions={}",
+            scene_id,
+            sample + 1,
+            expected.logical_flushes,
+            expected.draws,
+            expected.atomic_strategy_partitions,
+            actual.logical_flushes,
+            actual.draws,
+            actual.atomic_strategy_partitions,
+        ));
     }
     Ok(())
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct TimingSummary {
     pub sample_medians_ns: Vec<u64>,
     pub min_of_medians_ns: u64,
@@ -678,7 +753,8 @@ impl TimingSummary {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SceneReport {
     pub id: String,
     pub stream: String,
@@ -696,7 +772,8 @@ pub struct SceneReport {
     pub structural: StructuralMetrics,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Aggregate {
     pub cpp_control_selected_ns_sum: u64,
     pub candidate_paired_ns_sum: u64,
@@ -704,7 +781,8 @@ pub struct Aggregate {
     pub worst_scene: WorstScene,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorstScene {
     pub id: String,
     pub sample_index: usize,
@@ -750,17 +828,19 @@ impl Aggregate {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Report {
-    pub schema: &'static str,
-    pub runner_protocol: &'static str,
-    pub estimator: &'static str,
-    pub pair_order: &'static str,
+    pub schema: String,
+    pub runner_protocol: String,
+    pub estimator: String,
+    pub pair_order: String,
     pub release: bool,
-    pub profile: &'static str,
+    pub profile: String,
     pub debug: bool,
     pub samples_per_runner: usize,
-    pub manifest_schema: &'static str,
+    pub manifest_schema: String,
+    pub provenance: ReportProvenance,
     pub scenes: Vec<SceneReport>,
     pub aggregate: Aggregate,
 }
@@ -772,8 +852,15 @@ pub fn render_json(report: &Report) -> Result<String, String> {
 }
 
 pub fn render_markdown(report: &Report) -> String {
-    let mut markdown = String::from(
-        "# Rive Renderer Performance\n\nSchema: `rive-renderer-perf-v2`  \nEstimator: `cpp-control-min-paired-v1`  \nPair order: `counterbalanced-scene-sample-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`\n\n| scene | mode | C++ selected sample | C++ selected ns | paired candidate ns | paired ratio | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate p50 ns | candidate p95 ns | candidate spread ns | logical flushes | draws | atomic strategy partitions |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+    let mut markdown = format!(
+        "# Rive Renderer Performance\n\nSchema: `{}`  \nEstimator: `cpp-control-min-paired-v1`  \nPair order: `counterbalanced-scene-sample-v1`  \nRunner protocol: `rive-renderer-perf-runner-v1`  \nManifest SHA-256: `{}`  \nBaseline runner SHA-256: `{}`  \nCandidate runner SHA-256: `{}`  \nGenerator SHA-256: `{}`  \nBaseline source identity: `{}`  \nCandidate source identity: `{}`\n\n| scene | mode | C++ selected sample | C++ selected ns | paired candidate ns | paired ratio | baseline p50 ns | baseline p95 ns | baseline spread ns | candidate p50 ns | candidate p95 ns | candidate spread ns | logical flushes | draws | atomic strategy partitions |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+        report.schema,
+        report.provenance.manifest_sha256,
+        report.provenance.baseline_runner_sha256,
+        report.provenance.candidate_runner_sha256,
+        report.provenance.generator_sha256,
+        report.provenance.baseline_source_id,
+        report.provenance.candidate_source_id,
     );
     for scene in &report.scenes {
         markdown.push_str(&format!(
@@ -910,6 +997,59 @@ mod tests {
         }
     }
 
+    #[test]
+    fn provenance_verification_rejects_an_input_changed_during_collection() {
+        let directory =
+            std::env::temp_dir().join(format!("renderer-provenance-change-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir(&directory).unwrap();
+        let manifest = directory.join("manifest.toml");
+        let baseline = directory.join("baseline");
+        let candidate = directory.join("candidate");
+        let generator = directory.join("generator");
+        for path in [&manifest, &baseline, &candidate, &generator] {
+            std::fs::write(path, path.as_os_str().as_encoded_bytes()).unwrap();
+        }
+        let provenance = ReportProvenance::from_files(
+            &manifest,
+            &baseline,
+            &candidate,
+            &generator,
+            "git:baseline".to_owned(),
+            "git:test".to_owned(),
+        )
+        .unwrap();
+        std::fs::write(&candidate, b"changed").unwrap();
+
+        let error = provenance
+            .verify_files(
+                &manifest,
+                &baseline,
+                &candidate,
+                &generator,
+                "git:baseline",
+                "git:test",
+            )
+            .expect_err("changed candidate must fail");
+
+        assert!(
+            error.contains("changed during benchmark collection"),
+            "{error}"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    fn provenance() -> ReportProvenance {
+        ReportProvenance {
+            manifest_sha256: "11".repeat(32),
+            baseline_runner_sha256: "22".repeat(32),
+            candidate_runner_sha256: "33".repeat(32),
+            generator_sha256: "44".repeat(32),
+            baseline_source_id: "git:baseline".to_owned(),
+            candidate_source_id: "git:test+dirty-sha256:test".to_owned(),
+        }
+    }
+
     fn responses_for(manifest: &Manifest, median_ns: u64) -> VecDeque<RunnerResponse> {
         manifest
             .scene
@@ -1025,7 +1165,7 @@ mod tests {
         let mut candidate = FakeRunner {
             responses: candidate_responses,
         };
-        let error = run_benchmark(&manifest, &mut baseline, &mut candidate)
+        let error = run_benchmark(&manifest, &mut baseline, &mut candidate, provenance())
             .expect_err("physical adapter mismatch must fail");
         assert!(error.contains("different physical adapter"));
     }
@@ -1041,7 +1181,7 @@ mod tests {
         let mut candidate = FakeRunner {
             responses: candidate_responses,
         };
-        let error = run_benchmark(&manifest, &mut baseline, &mut candidate)
+        let error = run_benchmark(&manifest, &mut baseline, &mut candidate, provenance())
             .expect_err("draw parity must fail");
         assert!(error.contains("structural mismatch"));
         assert!(error.contains("draws"));
@@ -1088,7 +1228,8 @@ mod tests {
         let mut candidate = FakeRunner {
             responses: responses_for(&manifest, 12),
         };
-        let report = run_benchmark(&manifest, &mut baseline, &mut candidate).expect("report");
+        let report =
+            run_benchmark(&manifest, &mut baseline, &mut candidate, provenance()).expect("report");
         let json = render_json(&report).expect("json");
         let markdown = render_markdown(&report);
         assert_eq!(report.scenes.len(), 16);
@@ -1128,7 +1269,8 @@ mod tests {
             responses: responses_for(&manifest, 12),
             calls: Rc::clone(&calls),
         };
-        let report = run_benchmark(&manifest, &mut baseline, &mut candidate).expect("report");
+        let report =
+            run_benchmark(&manifest, &mut baseline, &mut candidate, provenance()).expect("report");
         let calls = calls.borrow();
         assert_eq!(calls.len(), report.scenes.len() * SAMPLE_COUNT * 2);
         for (pair, expected) in calls

@@ -1,4 +1,5 @@
 /target/
+/vendor/*/target/
 /fixtures/**/*.riv
 /fuzz/seeds/**/*.riv
 /tools/cpp-probe/build/Makefile

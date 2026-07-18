@@ -1,6 +1,6 @@
 # Renderer R4 Profile Attribution
 
-Date: 2026-07-15; updated 2026-07-16
+Date: 2026-07-15; updated 2026-07-17
 
 ## Question
 
@@ -1006,3 +1006,98 @@ same-capability directional timing parity. Final verification passes the
 renderer corpus at 1,409 exact, zero divergent, and 59 retained gates; normal
 and scripted parity stay at 584 and 35 exact segments; and the full workspace
 suite passes.
+
+## Exact-Parity Reopening
+
+The 2.0x close above is retained as historical evidence, but it is no longer
+the active performance definition. On 2026-07-17 the target was raised to
+1.0x. The frozen comparison, exact gate, investigation loop, current native
+Metal attribution, accepted/rejected hypotheses, and next queue now live in
+`docs/renderer-parity-workflow.md`.
+
+## Exact-Parity Architecture Attribution
+
+The earlier 46-command-buffer trace in this document is historical, not the
+current topology. The accepted vendored wgpu 30 core/HAL path preserves an
+open Metal command buffer only when exhaustive render-command classification
+proves that the next pass has no query reset, indirect validation, hidden
+render-bundle work, store-discard repair, or other ordered pre-pass work. A
+second opt-in drops a transition-only native buffer only when neither buffer
+nor texture initialization encoded a clear. Metal is the only backend that
+opts in, and strict-event sync disables both capabilities.
+
+The current steady trace now matches C++ Dawn exactly at one physical
+`MTLCommandBuffer` and three encoders: blit, tessellation, and solid. Canonical
+source patch SHA-256 values are
+`9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411`
+for `wgpu-core` and
+`9e55f5a57cbe17cfe0d61d22ab5c691e88e2dfba510496bd4a039fbc85893e69`
+for `wgpu-hal`. The core patch also keeps attachment-overlap validation in an
+inline `ArrayVec` for normal attachment counts and promotes without changing
+membership or error order when that capacity is exceeded.
+
+With physical submission topology equal, the focused CPU profile attributes
+the largest remaining native backend category to render-pass begin/encoder
+setup. A descriptor-caching probe was not retained because its measured effect
+was not material. This identified the next cost center during investigation;
+the final timing verdict is recorded below.
+
+Renderer-side accepted changes in the same exact-parity pass are also
+source-defined rather than timing claims:
+
+- MSAA draw ordering is one flat schedule built by one retained board walk,
+  with explicit authored ties and an in-place move permutation;
+- solid-only frames leave gradient definitions and per-draw gradient tables
+  empty;
+- clockwise-atomic paints, auxiliaries, and triangle vertices share a grouped
+  retained upload;
+- clockwise coverage uses the C++ nonzero generation prefix and clears the
+  full retained allocation only on allocation, growth, or generation wrap;
+- three completion-guarded clockwise slots retain both coverage buffers and
+  clip textures, preventing in-flight reuse;
+- contour midpoint preparation reads endpoints in place, and direct MSAA
+  stroke batches are derived on demand without full-frame end/continuation
+  side arrays;
+- exact construction-order multi-contour strokes bypass the generic contour
+  remap walk and sort, eliminating 520 visits and 12 sorts per `OverStroke`
+  frame;
+- the three upload slots each retain six MSAA packing vectors, release excess
+  capacity above 1 MiB per slot, and cleanly replace only an active staging
+  belt when a frame is abandoned;
+- a context-owned one-slot stroke-preparation scratch pool mirrors C++'s
+  resettable midpoint-fan allocator, recycles through abandoned frames, uses
+  uncached overflow for concurrent frames, and drops retention above 1 MiB;
+- physical work metrics count every aligned staging copy. The final 16-row
+  report has zero Rust excesses; CWA uses five Rust buffer copies versus six or
+  seven C++ copies, and MSAA uses one versus six.
+
+The three-slot design may retain roughly three times one frame's peak
+coverage-and-clip allocation. That bounded memory increase is the explicit
+price of safe concurrent frame ownership. Packing scratch has a separate bound
+of 1 MiB per slot, roughly 3 MiB total.
+
+## Exact-Parity Result
+
+R4.1 closed on 2026-07-18. The source-controlled gate consumed the first five
+fresh, seven-sample, counterbalanced reports after that final source change and
+passed at these median Rust/C++ ratios:
+
+| scope | ratio | reports at or below 1.0 |
+| --- | ---: | ---: |
+| overall | 0.991956 | 5/5 |
+| clockwise atomic | 0.989737 | 5/5 |
+| MSAA | 0.989055 | 3/5 |
+
+Thus production Rust is about 0.8% faster overall on this fixed Apple M5 Max
+matrix. The estimator equal-weights the two runner launch orders inside each
+report and then takes the median of five. The older minimum-selected paired
+diagnostic remains above 1.0 and is non-gating because selecting the minimum
+C++ control biases that comparison.
+
+The final runner SHA-256 values are
+`98f37c7c87f4689309a8b37c1ab25db8b0b6445f04debfddae3031e68b00bb97`
+for C++ Dawn and
+`0c0d932292544d08de1e6a90949abba8865ade4728a5fd956a832d3aeb65c042`
+for Rust. The complete provenance, source identity, five report hashes, gate
+artifact, and reproduction workflow are in
+`docs/renderer-parity-workflow.md`.

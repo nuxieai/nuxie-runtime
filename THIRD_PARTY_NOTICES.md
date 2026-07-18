@@ -31,6 +31,15 @@ Copyright (c) 2017 rlua
 
 Source: https://github.com/mlua-rs/mlua
 
+## wgpu
+
+Copyright (c) 2025 The gfx-rs developers
+
+Source: https://github.com/gfx-rs/wgpu
+
+The vendored wgpu packages are available under either the MIT License below
+or the Apache License 2.0 included with each package. Nuxie uses the MIT option.
+
 ## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

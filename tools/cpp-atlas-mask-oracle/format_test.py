@@ -1873,9 +1873,9 @@ class FormatTests(unittest.TestCase):
             {
                 "accepted": 0,
                 "capture_manifest_cases": 733,
-                "gated_msaa_rows": 1,
+                "gated_msaa_rows": 0,
                 "missing_strict_provenance_rows": 0,
-                "strict_provenance_rows": 1,
+                "strict_provenance_rows": 0,
                 "unsupported": 0,
                 "unsupported_by_reason": {},
             },

@@ -5,19 +5,21 @@ edition = "2021"
 license = "MIT"
 
 [features]
-default = []
+default = ["rust-wgpu"]
+rust-wgpu = ["dep:nuxie-renderer"]
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]
-perf-diagnostics = ["nuxie-renderer/perf-diagnostics"]
+perf-diagnostics = ["rust-wgpu", "nuxie-renderer/perf-diagnostics"]
 perf-counters = [
   "perf-dawn",
+  "rust-wgpu",
   "nuxie-renderer/perf-counters",
   "nuxie-renderer-ffi/perf-counters",
 ]
 
 [dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
-nuxie-renderer = { path = "../../crates/nuxie-renderer" }
+nuxie-renderer = { path = "../../crates/nuxie-renderer", optional = true }
 nuxie-renderer-ffi = { path = "../../crates/nuxie-renderer-ffi", features = ["native"], optional = true }
 perf-compare = { path = "../perf-compare" }
 pixel-compare = { path = "../pixel-compare" }
@@ -26,9 +28,9 @@ serde_json = "1"
 [[bin]]
 name = "renderer-perf-rust-runner"
 path = "src/bin/renderer-perf-rust-runner.rs"
-required-features = ["ffi"]
+required-features = ["ffi", "rust-wgpu"]
 
 [[bin]]
 name = "renderer-perf-cpp-runner"
 path = "src/bin/renderer-perf-cpp-runner.rs"
-required-features = ["perf-dawn"]
+required-features = ["perf-dawn", "rust-wgpu"]

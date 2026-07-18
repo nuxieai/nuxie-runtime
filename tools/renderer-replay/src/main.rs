@@ -11,6 +11,10 @@ struct Options {
     backend: String,
     frame: usize,
     clear: Option<u32>,
+    #[cfg_attr(
+        not(any(feature = "rust-wgpu", all(feature = "ffi", target_os = "macos"))),
+        allow(dead_code)
+    )]
     mode: String,
     command_limit: Option<usize>,
 }
@@ -25,10 +29,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let clear = options.clear.or(stream.clear_color).unwrap_or(0);
     let (pixels, adapter): (Vec<u8>, Option<String>) = match options.backend.as_str() {
         "stub" => (clear_pixels(width, height, clear), None),
-        "rust-wgpu" => (
-            replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
-            None,
-        ),
+        #[cfg(feature = "rust-wgpu")]
+        "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
         #[cfg(all(feature = "ffi", target_os = "macos"))]
         "ffi-metal" => (
             replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?,
@@ -38,7 +40,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         "ffi-dawn" => replay_ffi_dawn(&stream, options.frame, width, height, clear, &options.mode)?,
         backend => {
             return Err(format!(
-                "backend `{backend}` is unavailable; use `stub`, `rust-wgpu`{}{}",
+                "backend `{backend}` is unavailable; use `stub`{}{}{}",
+                if cfg!(feature = "rust-wgpu") {
+                    " or `rust-wgpu`"
+                } else {
+                    ""
+                },
                 if cfg!(all(feature = "ffi", target_os = "macos")) {
                     " or `ffi-metal`"
                 } else {
@@ -68,6 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(feature = "rust-wgpu")]
 fn replay_wgpu(
     stream: &RenderStream,
     frame_index: usize,
@@ -75,16 +83,17 @@ fn replay_wgpu(
     height: u32,
     clear: u32,
     mode: &str,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let mode = match mode {
         "msaa" => nuxie_renderer::RenderMode::Msaa,
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported renderer mode `{value}`").into()),
     };
     let mut factory = nuxie_renderer::WgpuFactory::new_with_mode(width, height, mode)?;
+    let adapter = factory.adapter_info().name.clone();
     let mut frame = factory.begin_frame(clear);
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;
-    Ok(frame.finish()?)
+    Ok((frame.finish()?, Some(adapter)))
 }
 
 #[cfg(all(feature = "ffi", target_os = "macos"))]

@@ -29,7 +29,7 @@ pub(crate) enum WindingFaces {
 }
 
 impl WindingFaces {
-    fn includes(self, weight: i16) -> bool {
+    pub(crate) fn includes(self, weight: i16) -> bool {
         match self {
             Self::Negative => weight < 0,
             Self::Positive => weight >= 0,
@@ -67,6 +67,14 @@ enum CheckResult {
     NoIntersection,
     FoundIntersection,
     Failed,
+}
+
+#[inline]
+fn fill_rule_includes_winding(fill_rule: FillRule, winding: i32) -> bool {
+    match fill_rule {
+        FillRule::EvenOdd => winding & 1 != 0,
+        FillRule::NonZero | FillRule::Clockwise => winding != 0,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -300,7 +308,8 @@ impl InnerFanTriangulator {
     }
 
     pub(crate) fn max_vertex_count(&self) -> usize {
-        self.triangles(0, WindingFaces::All).len()
+        self.mesh
+            .max_triangle_vertex_count(self.poly_head, self.fill_rule)
     }
 
     pub(crate) fn triangles(&self, path_id: u16, faces: WindingFaces) -> Vec<TriangleVertex> {
@@ -312,6 +321,11 @@ impl InnerFanTriangulator {
             self.negate_winding,
             faces,
         )
+    }
+
+    pub(crate) fn non_zero_max_triangle_vertex_count(&self) -> usize {
+        self.mesh
+            .max_triangle_vertex_count(self.poly_head, FillRule::NonZero)
     }
 
     pub(crate) fn grout_triangles(&self) -> &[[Vec2D; 3]] {
@@ -1729,11 +1743,7 @@ impl Mesh {
         let mut output = Vec::new();
         while let Some(poly_id) = poly {
             let record = self.polys[poly_id];
-            let filled = match fill_rule {
-                FillRule::EvenOdd => record.winding & 1 != 0,
-                FillRule::NonZero | FillRule::Clockwise => record.winding != 0,
-            };
-            if filled && record.count >= 3 {
+            if fill_rule_includes_winding(fill_rule, record.winding) && record.count >= 3 {
                 let mut monotone = record.head;
                 while let Some(monotone_id) = monotone {
                     self.emit_monotone(
@@ -1750,6 +1760,21 @@ impl Mesh {
             poly = record.next;
         }
         output
+    }
+
+    fn max_triangle_vertex_count(&self, mut poly: Option<PolyId>, fill_rule: FillRule) -> usize {
+        let mut count = 0usize;
+        while let Some(poly_id) = poly {
+            let record = self.polys[poly_id];
+            if fill_rule_includes_winding(fill_rule, record.winding) && record.count >= 3 {
+                // Each monotone split adds one shared connector, so the sum of
+                // maximum (vertex_count - 2) across the split pieces is still
+                // the original polygon's vertex_count - 2.
+                count = count.saturating_add(record.count.saturating_sub(2).saturating_mul(3));
+            }
+            poly = record.next;
+        }
+        count
     }
 
     fn insert_edge_above(&mut self, edge: EdgeId, vertex: VertexId, direction: SweepDirection) {
@@ -2249,6 +2274,10 @@ mod tests {
             WindingFaces::All,
         );
         assert_eq!(triangles.len(), 7_500);
+        assert_eq!(
+            mesh.max_triangle_vertex_count(poly_head, FillRule::NonZero),
+            triangles.len()
+        );
         let (mut negative, mut positive) = (0, 0);
         for triangle in &triangles {
             match triangle.weight_path_id >> 16 {
@@ -2258,6 +2287,67 @@ mod tests {
             }
         }
         assert_eq!((negative, positive), (3_750, 3_750));
+    }
+
+    #[test]
+    fn max_triangle_vertex_count_bounds_emission_across_fill_edge_cases() {
+        let mut concave = RawPath::new();
+        concave.move_to(0.0, 0.0);
+        concave.line_to(12.0, 0.0);
+        concave.line_to(12.0, 12.0);
+        concave.line_to(6.0, 4.0);
+        concave.line_to(0.0, 12.0);
+        concave.close();
+
+        let mut bowtie = RawPath::new();
+        bowtie.move_to(0.0, 0.0);
+        bowtie.line_to(12.0, 12.0);
+        bowtie.line_to(0.0, 12.0);
+        bowtie.line_to(12.0, 0.0);
+        bowtie.close();
+
+        let mut doubled = RawPath::new();
+        for _ in 0..2 {
+            doubled.move_to(0.0, 0.0);
+            doubled.line_to(12.0, 0.0);
+            doubled.line_to(12.0, 12.0);
+            doubled.line_to(0.0, 12.0);
+            doubled.close();
+        }
+
+        let paths = [concave, bowtie, doubled.clone(), direct_grid_path()];
+        for (path_index, path) in paths.iter().enumerate() {
+            for direction in [SweepDirection::Horizontal, SweepDirection::Vertical] {
+                for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
+                    let triangulator =
+                        InnerFanTriangulator::new(path, Mat2D::IDENTITY, direction, fill_rule);
+                    let actual = triangulator.triangles(1, WindingFaces::All).len();
+                    let maximum = triangulator.non_zero_max_triangle_vertex_count();
+                    assert!(
+                        maximum >= actual,
+                        "path {path_index}, {direction:?}, {fill_rule:?}: {maximum} < {actual}"
+                    );
+                }
+            }
+        }
+
+        let even_odd = InnerFanTriangulator::new(
+            &doubled,
+            Mat2D::IDENTITY,
+            SweepDirection::Vertical,
+            FillRule::EvenOdd,
+        );
+        let even_odd_count = even_odd.triangles(1, WindingFaces::All).len();
+        let non_zero_maximum = even_odd.non_zero_max_triangle_vertex_count();
+        assert!(non_zero_maximum > even_odd_count);
+
+        let non_zero = InnerFanTriangulator::new(
+            &doubled,
+            Mat2D::IDENTITY,
+            SweepDirection::Vertical,
+            FillRule::NonZero,
+        );
+        assert!(non_zero_maximum >= non_zero.triangles(1, WindingFaces::All).len());
     }
 
     #[test]
@@ -2459,7 +2549,7 @@ mod tests {
             },
             texture.size(),
         );
-        tessellation_uploads.flush(&factory.context.queue);
+        tessellation_uploads.finish_submission(&encoder);
         factory.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();

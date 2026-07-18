@@ -8,11 +8,16 @@ repository.workspace = true
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 toml = "0.9"
 
 [[bin]]
 name = "renderer-perf"
 path = "src/bin/renderer-perf.rs"
+
+[[bin]]
+name = "renderer-perf-parity-gate"
+path = "src/bin/renderer-perf-parity-gate.rs"
 
 [[bin]]
 name = "perf-counter-compare"

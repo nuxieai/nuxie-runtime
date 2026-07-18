@@ -12,6 +12,7 @@ use crate::gpu::{
 use crate::gr_triangulator::{InnerFanTriangulator, SweepDirection, WindingFaces};
 use bytemuck::Zeroable;
 use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
+use smallvec::SmallVec;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Contour {
@@ -27,13 +28,76 @@ pub(crate) struct FillTessellation {
     pub instance_count: u32,
 }
 
+impl Clone for FillTessellation {
+    fn clone(&self) -> Self {
+        #[cfg(test)]
+        FILL_TESSELLATION_CLONE_COUNT.with(|count| count.set(count.get() + 1));
+        Self {
+            spans: self.spans.clone(),
+            path: self.path,
+            contours: self.contours.clone(),
+            base_instance: self.base_instance,
+            instance_count: self.instance_count,
+        }
+    }
+}
+
+pub(crate) struct StrokeTessellation {
+    pub tessellation: FillTessellation,
+    pub local_contour_ids_are_dense: bool,
+}
+
 pub(crate) struct InteriorTessellation {
     pub spans: Vec<TessVertexSpan>,
     pub path: PathData,
     pub contours: Vec<ContourData>,
     pub triangles: Vec<TriangleVertex>,
+    pub max_triangle_vertex_count: usize,
     pub base_instance: u32,
     pub instance_count: u32,
+}
+
+impl Clone for InteriorTessellation {
+    fn clone(&self) -> Self {
+        #[cfg(test)]
+        INTERIOR_TESSELLATION_CLONE_COUNT.with(|count| count.set(count.get() + 1));
+        Self {
+            spans: self.spans.clone(),
+            path: self.path,
+            contours: self.contours.clone(),
+            triangles: self.triangles.clone(),
+            max_triangle_vertex_count: self.max_triangle_vertex_count,
+            base_instance: self.base_instance,
+            instance_count: self.instance_count,
+        }
+    }
+}
+
+impl InteriorTessellation {
+    pub(crate) fn visit_triangles(
+        &self,
+        path_id: u16,
+        faces: WindingFaces,
+        mut visit: impl FnMut(i16, [TriangleVertex; 3]),
+    ) {
+        #[cfg(test)]
+        INTERIOR_TRIANGLE_VISIT_COUNT.with(|count| count.set(count.get() + 1));
+        for triangle in self.triangles.chunks_exact(3) {
+            let weight = i16::try_from(triangle[0].weight_path_id >> 16)
+                .expect("interior triangle winding fits i16");
+            debug_assert!(triangle
+                .iter()
+                .all(|vertex| vertex.weight_path_id >> 16 == i32::from(weight)));
+            if !faces.includes(weight) {
+                continue;
+            }
+            let mut emitted = [triangle[0], triangle[1], triangle[2]];
+            for vertex in &mut emitted {
+                vertex.weight_path_id = (vertex.weight_path_id & !0xffff) | i32::from(path_id);
+            }
+            visit(weight, emitted);
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,7 +128,7 @@ struct StrokeCurve {
 }
 
 struct StrokeContour {
-    curves: Vec<StrokeCurve>,
+    curves: SmallVec<[StrokeCurve; 1]>,
     first: Vec2D,
     current: Vec2D,
     closed: bool,
@@ -80,6 +144,72 @@ struct PreparedStrokeCurve {
     ends_original_curve: bool,
 }
 
+type PendingStrokeCurve = ([Vec2D; 4], Vec2D, u32, u32, u32, u32);
+
+#[derive(Default)]
+pub(crate) struct StrokePreparationScratch {
+    // Keep contour slots alive so both the outer Vec and spilled per-contour
+    // SmallVec storage survive until the frame ends.
+    contours: Vec<StrokeContour>,
+    prepared: Vec<PreparedStrokeCurve>,
+    pending: Vec<PendingStrokeCurve>,
+    #[cfg(test)]
+    stats: StrokePreparationStats,
+}
+
+impl StrokePreparationScratch {
+    pub(crate) fn retained_capacity_bytes(&self) -> usize {
+        let contour_bytes = self
+            .contours
+            .capacity()
+            .saturating_mul(std::mem::size_of::<StrokeContour>());
+        let spilled_curve_bytes = self
+            .contours
+            .iter()
+            .filter(|contour| contour.curves.spilled())
+            .map(|contour| {
+                contour
+                    .curves
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<StrokeCurve>())
+            })
+            .fold(0usize, usize::saturating_add);
+        contour_bytes
+            .saturating_add(spilled_curve_bytes)
+            .saturating_add(
+                self.prepared
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<PreparedStrokeCurve>()),
+            )
+            .saturating_add(
+                self.pending
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<PendingStrokeCurve>()),
+            )
+    }
+
+    pub(crate) fn reset_for_reuse(&mut self) {
+        for contour in &mut self.contours {
+            contour.curves.clear();
+        }
+        self.prepared.clear();
+        self.pending.clear();
+    }
+}
+
+#[cfg(test)]
+impl StrokePreparationScratch {
+    pub(crate) fn stats(&self) -> StrokePreparationStats {
+        self.stats
+    }
+
+    pub(crate) fn reserve_retained_bytes_for_test(&mut self, bytes: usize) {
+        let entries = (bytes / std::mem::size_of::<PendingStrokeCurve>()).saturating_add(1);
+        self.pending.reserve_exact(entries);
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn build_stroke_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -87,7 +217,44 @@ pub(crate) fn build_stroke_tessellation(
     join: StrokeJoin,
     cap: StrokeCap,
 ) -> Option<FillTessellation> {
-    build_stroke_or_feather_tessellation(path, transform, Some((thickness, join, cap)), 0.0)
+    build_stroke_tessellation_with_layout(path, transform, thickness, join, cap)
+        .map(|built| built.tessellation)
+}
+
+#[allow(dead_code)] // Retain the fresh-scratch entry point for standalone callers.
+pub(crate) fn build_stroke_tessellation_with_layout(
+    path: &RawPath,
+    transform: Mat2D,
+    thickness: f32,
+    join: StrokeJoin,
+    cap: StrokeCap,
+) -> Option<StrokeTessellation> {
+    let mut scratch = StrokePreparationScratch::default();
+    build_stroke_tessellation_with_layout_using_scratch(
+        path,
+        transform,
+        thickness,
+        join,
+        cap,
+        &mut scratch,
+    )
+}
+
+pub(crate) fn build_stroke_tessellation_with_layout_using_scratch(
+    path: &RawPath,
+    transform: Mat2D,
+    thickness: f32,
+    join: StrokeJoin,
+    cap: StrokeCap,
+    scratch: &mut StrokePreparationScratch,
+) -> Option<StrokeTessellation> {
+    build_stroke_or_feather_tessellation_using_scratch(
+        path,
+        transform,
+        Some((thickness, join, cap)),
+        0.0,
+        scratch,
+    )
 }
 
 pub(crate) fn build_feather_tessellation(
@@ -137,14 +304,20 @@ pub(crate) fn build_feather_tessellation_with_direction(
     if stroke.is_none() {
         match fill_direction {
             FeatherFillDirection::Forward => {}
-            FeatherFillDirection::Reverse => tessellation.make_single_sided_reverse(true),
-            FeatherFillDirection::ReverseThenForward => tessellation.make_double_sided(),
+            FeatherFillDirection::Reverse => {
+                tessellation.tessellation.make_single_sided_reverse(true)
+            }
+            FeatherFillDirection::ReverseThenForward => {
+                tessellation.tessellation.make_double_sided()
+            }
             FeatherFillDirection::ForwardThenReverse => {
-                tessellation.make_double_sided_with_direction(true);
+                tessellation
+                    .tessellation
+                    .make_double_sided_with_direction(true);
             }
         }
     }
-    Some(tessellation)
+    Some(tessellation.tessellation)
 }
 
 pub(crate) fn feather_requires_atlas(
@@ -268,17 +441,54 @@ fn build_stroke_or_feather_tessellation(
     transform: Mat2D,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     paint_feather: f32,
-) -> Option<FillTessellation> {
+) -> Option<StrokeTessellation> {
+    let mut scratch = StrokePreparationScratch::default();
+    build_stroke_or_feather_tessellation_using_scratch(
+        path,
+        transform,
+        stroke,
+        paint_feather,
+        &mut scratch,
+    )
+}
+
+fn build_stroke_or_feather_tessellation_using_scratch(
+    path: &RawPath,
+    transform: Mat2D,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    paint_feather: f32,
+    scratch: &mut StrokePreparationScratch,
+) -> Option<StrokeTessellation> {
     let matrix_scale = max_matrix_scale(transform);
     let feather_radius = paint_feather * 1.5;
     let softened_path = (stroke.is_none()
         && feather_fill_requires_softening(paint_feather, matrix_scale))
     .then(|| softened_path_for_feathering(path, feather_radius, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
-    let mut contours = stroke_contours(path)?;
+    #[cfg(test)]
+    let StrokePreparationScratch {
+        contours,
+        prepared,
+        pending,
+        stats,
+    } = scratch;
+    #[cfg(not(test))]
+    let StrokePreparationScratch {
+        contours,
+        prepared,
+        pending,
+    } = scratch;
+    prepared.clear();
+    pending.clear();
+    #[cfg(test)]
+    let contour_capacity_before = contours.capacity();
+    let contour_count = stroke_contours(path, contours)?;
+    #[cfg(test)]
+    let contour_capacity_grew = contours.capacity() != contour_capacity_before;
+    let contours = &mut contours[..contour_count];
     let is_stroke = stroke.is_some();
     if !is_stroke {
-        for contour in &mut contours {
+        for contour in &mut *contours {
             contour.closed = true;
         }
     }
@@ -286,6 +496,9 @@ fn build_stroke_or_feather_tessellation(
     let stroke_radius = thickness * 0.5;
     if (is_stroke && stroke_radius <= 0.0) || contours.is_empty() {
         return None;
+    }
+    for contour in &mut *contours {
+        normalize_stroke_contour_curves(contour);
     }
     let feather_screen_radius = (feather_radius * matrix_scale).min(feather_max_screen_radius());
     let parametric_precision = if feather_radius > 1.0 {
@@ -317,27 +530,64 @@ fn build_stroke_or_feather_tessellation(
     };
     let feather_join_segments = ((polar_segments_per_radian * std::f32::consts::PI).ceil() + 4.0)
         .clamp(6.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32;
+    // Match C++ PathDraw::initForMidpointFan's path-wide sizing while retaining
+    // the largest allocation in the frame scratch. A stroked cubic can produce
+    // at most five convex/180-degree pieces.
+    let prepared_capacity = contours
+        .iter()
+        .map(|contour| {
+            contour
+                .curves
+                .len()
+                .checked_mul(5)
+                .expect("stroke preparation capacity overflow")
+        })
+        .max()
+        .unwrap_or(0);
+    let pending_capacity = prepared_capacity
+        .checked_add(1)
+        .expect("stroke pending capacity overflow")
+        .max(2);
+    #[cfg(test)]
+    let prepared_capacity_before = prepared.capacity();
+    #[cfg(test)]
+    let pending_capacity_before = pending.capacity();
+    prepared.reserve(prepared_capacity);
+    pending.reserve(pending_capacity);
+    #[cfg(test)]
+    {
+        stats.builds += 1;
+        stats.contours += contours.len();
+        stats.inline_one_curve_contours += contours
+            .iter()
+            .filter(|contour| contour.curves.len() == 1 && !contour.curves.spilled())
+            .count();
+        stats.spilled_curve_contours += contours
+            .iter()
+            .filter(|contour| contour.curves.spilled())
+            .count();
+        stats.contour_capacity_growths += usize::from(contour_capacity_grew);
+        stats.prepared_capacity_growths +=
+            usize::from(prepared.capacity() != prepared_capacity_before);
+        stats.pending_capacity_growths +=
+            usize::from(pending.capacity() != pending_capacity_before);
+    }
     let mut spans = Vec::new();
     let mut contour_data = Vec::with_capacity(contours.len());
+    let mut local_contour_ids_are_dense = true;
     let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
     push_padding_span(&mut spans, 0, location);
     let path_start = location;
-    for (contour_index, contour) in contours.iter().enumerate() {
-        let mut curves = contour.curves.clone();
-        curves.retain(|curve| {
-            let [p0, p1, p2, p3] = curve.cubic;
-            !(points_equal(p0, p1) && points_equal(p1, p2) && points_equal(p2, p3))
-        });
-        if contour.closed && !same_point(contour.first, contour.current) {
-            curves.push(StrokeCurve {
-                cubic: line_cubic(contour.current, contour.first),
-                is_line: true,
-            });
-        }
+    for (contour_index, contour) in contours.iter_mut().enumerate() {
+        let curves = &contour.curves;
         let contour_start = location as u32;
         let contour_id = (contour_index as u32 + 1) & CONTOUR_ID_MASK;
-        let mut pending = Vec::new();
+        prepared.clear();
+        pending.clear();
         if curves.is_empty() && !is_stroke {
+            // There is a contour record but no span carrying this local ID.
+            // Preserve the generic validation/fallback for this sparse layout.
+            local_contour_ids_are_dense = false;
             contour_data.push(ContourData::new([f32::NAN, f32::NAN], 0, contour_start));
             continue;
         }
@@ -379,52 +629,37 @@ fn build_stroke_or_feather_tessellation(
                 ));
             }
         } else {
-            let mut prepared = Vec::new();
-            for curve in &curves {
-                let original_tangents = if curve.is_line {
-                    let tangent = subtract(curve.cubic[3], curve.cubic[0]);
-                    [tangent, tangent]
+            for curve in curves {
+                if curve.is_line {
+                    prepared.push(prepare_line_curve(curve));
+                    continue;
+                }
+                let original_tangents = cubic_tangents(curve.cubic);
+                let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
+                let chopped = if are_cusps {
+                    chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
                 } else {
-                    cubic_tangents(curve.cubic)
-                };
-                let chopped = if curve.is_line {
-                    vec![curve.cubic]
-                } else {
-                    let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
-                    if are_cusps {
-                        chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
-                    } else {
-                        chop_cubic_at_values(curve.cubic, &roots)
-                    }
+                    chop_cubic_at_values(curve.cubic, &roots)
                 };
                 let chopped_count = chopped.len();
                 for (index, cubic) in chopped.into_iter().enumerate() {
-                    let tangents = if curve.is_line {
-                        let tangent = subtract(cubic[3], cubic[0]);
-                        [tangent, tangent]
-                    } else {
-                        cubic_tangents(cubic)
-                    };
-                    let (parametric_segments, polar_segments) = if curve.is_line {
-                        (1, 1)
-                    } else {
-                        (
-                            cubic_segment_count_with_precision_and_transform(
-                                cubic,
-                                parametric_precision,
-                                transform,
-                            ),
-                            if is_stroke {
-                                round_join_segment_count(
-                                    tangents[0],
-                                    tangents[1],
-                                    polar_segments_per_radian,
-                                )
-                            } else {
-                                1
-                            },
-                        )
-                    };
+                    let tangents = cubic_tangents(cubic);
+                    let (parametric_segments, polar_segments) = (
+                        cubic_segment_count_with_precision_and_transform(
+                            cubic,
+                            parametric_precision,
+                            transform,
+                        ),
+                        if is_stroke {
+                            round_join_segment_count(
+                                tangents[0],
+                                tangents[1],
+                                polar_segments_per_radian,
+                            )
+                        } else {
+                            1
+                        },
+                    );
                     prepared.push(PreparedStrokeCurve {
                         cubic,
                         tangents,
@@ -500,11 +735,13 @@ fn build_stroke_or_feather_tessellation(
         let midpoint = if is_stroke {
             Vec2D::new(if contour.closed { 1.0 } else { 0.0 }, 0.0)
         } else {
-            contour_midpoint(&curves.iter().map(|curve| curve.cubic).collect::<Vec<_>>())
+            contour_midpoint(curves)
         };
+        local_contour_ids_are_dense &=
+            u32::try_from(contour_data.len() + 1).ok() == Some(contour_id);
         contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, contour_start));
         for (index, (curve, tangent, parametric, polar, join, flags)) in
-            pending.into_iter().enumerate()
+            pending.drain(..).enumerate()
         {
             let x0 = location;
             location += parametric as i32 + polar as i32 + join as i32 - 1
@@ -529,20 +766,50 @@ fn build_stroke_or_feather_tessellation(
     let geometry_spans = spans.split_off(1);
     push_midpoint_tail_padding(&mut spans, location);
     spans.extend(geometry_spans);
-    Some(FillTessellation {
-        spans,
-        path: PathData::new(
-            transform,
-            stroke_radius,
-            feather_radius,
-            0,
-            AtlasTransform::zeroed(),
-            CoverageBufferRange::zeroed(),
-        ),
-        contours: contour_data,
-        base_instance: 1,
-        instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+    Some(StrokeTessellation {
+        tessellation: FillTessellation {
+            spans,
+            path: PathData::new(
+                transform,
+                stroke_radius,
+                feather_radius,
+                0,
+                AtlasTransform::zeroed(),
+                CoverageBufferRange::zeroed(),
+            ),
+            contours: contour_data,
+            base_instance: 1,
+            instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+        },
+        local_contour_ids_are_dense,
     })
+}
+
+fn normalize_stroke_contour_curves(contour: &mut StrokeContour) {
+    contour.curves.retain(|curve| {
+        let [p0, p1, p2, p3] = curve.cubic;
+        !(points_equal(p0, p1) && points_equal(p1, p2) && points_equal(p2, p3))
+    });
+    if contour.closed && !same_point(contour.first, contour.current) {
+        contour.curves.push(StrokeCurve {
+            cubic: line_cubic(contour.current, contour.first),
+            is_line: true,
+        });
+    }
+}
+
+#[inline]
+fn prepare_line_curve(curve: &StrokeCurve) -> PreparedStrokeCurve {
+    debug_assert!(curve.is_line);
+    let tangent = subtract(curve.cubic[3], curve.cubic[0]);
+    PreparedStrokeCurve {
+        cubic: curve.cubic,
+        tangents: [tangent, tangent],
+        original_start_tangent: tangent,
+        parametric_segments: 1,
+        polar_segments: 1,
+        ends_original_curve: true,
+    }
 }
 
 fn feather_fill_requires_softening(paint_feather: f32, matrix_scale: f32) -> bool {
@@ -722,28 +989,41 @@ fn feather_max_screen_radius() -> f32 {
     1.0 / (POLAR_PRECISION as f32 * (1.0 - (std::f32::consts::PI / 32.0).cos()))
 }
 
-fn stroke_contours(path: &RawPath) -> Option<Vec<StrokeContour>> {
-    let mut contours = Vec::new();
-    let mut contour = None::<StrokeContour>;
+fn stroke_contours(path: &RawPath, contours: &mut Vec<StrokeContour>) -> Option<usize> {
+    let contour_count = path
+        .verbs()
+        .iter()
+        .filter(|verb| **verb == PathVerb::Move)
+        .count();
+    if contours.capacity() < contour_count {
+        contours.reserve(contour_count - contours.len());
+    }
+    let mut contour_count = 0;
     let mut point_index = 0;
     for verb in path.verbs() {
         match verb {
             PathVerb::Move => {
-                if let Some(contour) = contour.take() {
-                    contours.push(contour);
-                }
                 let point = path.points()[point_index];
-                contour = Some(StrokeContour {
-                    curves: Vec::new(),
-                    first: point,
-                    current: point,
-                    closed: false,
-                });
+                if contour_count == contours.len() {
+                    contours.push(StrokeContour {
+                        curves: SmallVec::new(),
+                        first: point,
+                        current: point,
+                        closed: false,
+                    });
+                } else {
+                    let contour = &mut contours[contour_count];
+                    contour.curves.clear();
+                    contour.first = point;
+                    contour.current = point;
+                    contour.closed = false;
+                }
+                contour_count += 1;
                 point_index += 1;
             }
             PathVerb::Line => {
                 let end = path.points()[point_index];
-                let contour = contour.as_mut()?;
+                let contour = contours.get_mut(contour_count.checked_sub(1)?)?;
                 contour.curves.push(StrokeCurve {
                     cubic: line_cubic(contour.current, end),
                     is_line: true,
@@ -754,7 +1034,7 @@ fn stroke_contours(path: &RawPath) -> Option<Vec<StrokeContour>> {
             PathVerb::Quad => {
                 let control = path.points()[point_index];
                 let end = path.points()[point_index + 1];
-                let contour = contour.as_mut()?;
+                let contour = contours.get_mut(contour_count.checked_sub(1)?)?;
                 contour.curves.push(StrokeCurve {
                     cubic: [
                         contour.current,
@@ -771,7 +1051,7 @@ fn stroke_contours(path: &RawPath) -> Option<Vec<StrokeContour>> {
                 let control0 = path.points()[point_index];
                 let control1 = path.points()[point_index + 1];
                 let end = path.points()[point_index + 2];
-                let contour = contour.as_mut()?;
+                let contour = contours.get_mut(contour_count.checked_sub(1)?)?;
                 contour.curves.push(StrokeCurve {
                     cubic: [contour.current, control0, control1, end],
                     is_line: false,
@@ -779,13 +1059,12 @@ fn stroke_contours(path: &RawPath) -> Option<Vec<StrokeContour>> {
                 contour.current = end;
                 point_index += 3;
             }
-            PathVerb::Close => contour.as_mut()?.closed = true,
+            PathVerb::Close => {
+                contours.get_mut(contour_count.checked_sub(1)?)?.closed = true;
+            }
         }
     }
-    if let Some(contour) = contour {
-        contours.push(contour);
-    }
-    Some(contours)
+    Some(contour_count)
 }
 
 fn cubic_tangents(curve: [Vec2D; 4]) -> [Vec2D; 2] {
@@ -996,7 +1275,7 @@ fn fast_acos(x: f32) -> f32 {
     const B: f32 = 0.9217841528914573;
     const C: f32 = -1.2845906244690837;
     const D: f32 = 0.295624144969963174;
-    const PI_OVER_2: f32 = 1.5707963267948966;
+    const PI_OVER_2: f32 = std::f32::consts::FRAC_PI_2;
 
     let xx = x * x;
     let numer = B * xx + A;
@@ -1082,14 +1361,14 @@ pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
     for verb in path.verbs() {
         match verb {
             PathVerb::Move => {
-                area += vector_cross(last, contour_start);
+                area += coarse_area_cross(last, contour_start);
                 contour_start = path.points()[point_index];
                 last = contour_start;
                 point_index += 1;
             }
             PathVerb::Line => {
                 let end = path.points()[point_index];
-                area += vector_cross(last, end);
+                area += coarse_area_cross(last, end);
                 last = end;
                 point_index += 1;
             }
@@ -1118,29 +1397,89 @@ pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
             PathVerb::Close => {}
         }
     }
-    area += vector_cross(last, contour_start);
+    area += coarse_area_cross(last, contour_start);
     area * 0.5
 }
 
 fn accumulate_coarse_cubic_area(area: &mut f32, last: &mut Vec2D, cubic: [Vec2D; 4]) {
     let segment_count = coarse_cubic_segment_count(cubic);
-    for segment in 1..segment_count {
-        let point = eval_cubic(cubic, segment as f32 / segment_count as f32);
-        *area += vector_cross(*last, point);
-        *last = point;
+    if segment_count > 1 {
+        let reciprocal_segment_count = 1.0 / segment_count as f32;
+        let mut low_t = reciprocal_segment_count;
+        let mut high_t = 2.0 * reciprocal_segment_count;
+        let dt = 2.0 * reciprocal_segment_count;
+        let evaluator = CoarseEvalCubic::new(cubic);
+        while low_t < 1.0 {
+            let low = evaluator.at(low_t);
+            *area += coarse_area_cross(*last, low);
+            *last = low;
+
+            // C++ evaluates two SIMD lanes at a time. Its second sample is
+            // present whenever the first is, including t=1 for even counts.
+            let high = evaluator.at(high_t);
+            *area += coarse_area_cross(*last, high);
+            *last = high;
+            low_t += dt;
+            high_t += dt;
+        }
     }
-    *area += vector_cross(*last, cubic[3]);
+    *area += coarse_area_cross(*last, cubic[3]);
     *last = cubic[3];
+}
+
+struct CoarseEvalCubic {
+    a: Vec2D,
+    b: Vec2D,
+    c: Vec2D,
+    d: Vec2D,
+}
+
+impl CoarseEvalCubic {
+    fn new(points: [Vec2D; 4]) -> Self {
+        let c = subtract(points[1], points[0]);
+        let delta = subtract(points[2], points[1]);
+        let endpoint_delta = subtract(points[3], points[0]);
+        let b = scale(subtract(delta, c), 3.0);
+        let a = Vec2D::new(
+            (-3.0f32).mul_add(delta.x, endpoint_delta.x),
+            (-3.0f32).mul_add(delta.y, endpoint_delta.y),
+        );
+        Self {
+            a,
+            b,
+            c: scale(c, 3.0),
+            d: points[0],
+        }
+    }
+
+    fn at(&self, t: f32) -> Vec2D {
+        let x = self.a.x.mul_add(t, self.b.x);
+        let x = x.mul_add(t, self.c.x);
+        let x = x.mul_add(t, self.d.x);
+        let y = self.a.y.mul_add(t, self.b.y);
+        let y = y.mul_add(t, self.c.y);
+        let y = y.mul_add(t, self.d.y);
+        Vec2D::new(x, y)
+    }
+}
+
+fn coarse_area_cross(a: Vec2D, b: Vec2D) -> f32 {
+    a.x.mul_add(b.y, -(a.y * b.x))
 }
 
 fn coarse_cubic_segment_count(points: [Vec2D; 4]) -> u32 {
     let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = a.x - 2.0 * b.x + c.x;
-        let y = a.y - 2.0 * b.y + c.y;
+        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
+        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
         x * x + y * y
     };
-    let max_length_squared = second_difference(points[0], points[1], points[2])
-        .max(second_difference(points[1], points[2], points[3]));
+    let first_length_squared = second_difference(points[0], points[1], points[2]);
+    let second_length_squared = second_difference(points[1], points[2], points[3]);
+    let max_length_squared = if first_length_squared < second_length_squared {
+        second_length_squared
+    } else {
+        first_length_squared
+    };
     let length_term_squared = (9.0 / 16.0) * (1.0 / 8.0f32).powi(2);
     (max_length_squared * length_term_squared)
         .sqrt()
@@ -1155,6 +1494,8 @@ pub(crate) fn build_interior_tessellation(
     fill_rule: FillRule,
     clockwise_override: bool,
 ) -> Option<InteriorTessellation> {
+    #[cfg(test)]
+    INTERIOR_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
     let cubic_contours = cubic_contours(path)
         .into_iter()
         .map(|curves| {
@@ -1210,6 +1551,10 @@ pub(crate) fn build_interior_tessellation(
         triangulator.negate_winding();
     }
     let triangles = triangulator.triangles(1, WindingFaces::All);
+    // Count the NonZero superset from the already-built mesh. This is the same
+    // allocation-free polygon bound as C++ and stays conservative if admission
+    // selects a different fill variant from the final atomic run.
+    let max_triangle_vertex_count = triangulator.non_zero_max_triangle_vertex_count();
     let grout = triangulator.grout_triangles().to_vec();
     let base = OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
     let curve_count = cubic_contours.iter().map(Vec::len).sum::<usize>();
@@ -1296,6 +1641,7 @@ pub(crate) fn build_interior_tessellation(
         ),
         contours,
         triangles,
+        max_triangle_vertex_count,
         base_instance: 1,
         instance_count: (patch_count * 2) as u32,
     })
@@ -1454,8 +1800,17 @@ pub(crate) fn clockwise_atomic_negate_coverage(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn msaa_fill_requires_reverse(
     path: &RawPath,
+    transform: Mat2D,
+    fill_rule: FillRule,
+) -> bool {
+    msaa_fill_requires_reverse_from_area(path_coarse_area(path), transform, fill_rule)
+}
+
+pub(crate) fn msaa_fill_requires_reverse_from_area(
+    coarse_area: f32,
     transform: Mat2D,
     fill_rule: FillRule,
 ) -> bool {
@@ -1463,11 +1818,11 @@ pub(crate) fn msaa_fill_requires_reverse(
     match fill_rule {
         FillRule::EvenOdd => false,
         FillRule::Clockwise => determinant < 0.0,
-        FillRule::NonZero => path_coarse_area(path) * determinant < 0.0,
+        FillRule::NonZero => coarse_area * determinant < 0.0,
     }
 }
 
-fn clockwise_atomic_negate_coverage_from_area(
+pub(crate) fn clockwise_atomic_negate_coverage_from_area(
     coarse_area: f32,
     determinant: f32,
     fill_rule: FillRule,
@@ -1552,6 +1907,8 @@ pub(crate) fn build_fill_tessellation(
     path: &RawPath,
     transform: Mat2D,
 ) -> Option<FillTessellation> {
+    #[cfg(test)]
+    FILL_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
     let contours = fill_cubic_contours(path);
     if contours.is_empty() {
         return None;
@@ -1564,8 +1921,7 @@ pub(crate) fn build_fill_tessellation(
     let path_start = location;
     for (index, curves) in contours.iter().enumerate() {
         let vertex_index0 = location as u32;
-        let midpoint =
-            contour_midpoint(&curves.iter().map(|curve| curve.cubic).collect::<Vec<_>>());
+        let midpoint = contour_midpoint(curves);
         contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, vertex_index0));
         let segment_counts = curves
             .iter()
@@ -1627,6 +1983,77 @@ pub(crate) fn build_fill_tessellation(
         base_instance,
         instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
     })
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct StrokePreparationStats {
+    pub builds: usize,
+    pub contours: usize,
+    pub inline_one_curve_contours: usize,
+    pub spilled_curve_contours: usize,
+    pub contour_capacity_growths: usize,
+    pub prepared_capacity_growths: usize,
+    pub pending_capacity_growths: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static FILL_TESSELLATION_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FILL_TESSELLATION_CLONE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERIOR_TESSELLATION_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERIOR_TESSELLATION_CLONE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERIOR_TRIANGLE_VISIT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_fill_tessellation_build_count() {
+    FILL_TESSELLATION_BUILD_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn fill_tessellation_build_count() -> usize {
+    FILL_TESSELLATION_BUILD_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_fill_tessellation_clone_count() {
+    FILL_TESSELLATION_CLONE_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn fill_tessellation_clone_count() -> usize {
+    FILL_TESSELLATION_CLONE_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_interior_tessellation_build_count() {
+    INTERIOR_TESSELLATION_BUILD_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn interior_tessellation_build_count() -> usize {
+    INTERIOR_TESSELLATION_BUILD_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_interior_tessellation_clone_count() {
+    INTERIOR_TESSELLATION_CLONE_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn interior_tessellation_clone_count() -> usize {
+    INTERIOR_TESSELLATION_CLONE_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_interior_triangle_visit_count() {
+    INTERIOR_TRIANGLE_VISIT_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn interior_triangle_visit_count() -> usize {
+    INTERIOR_TRIANGLE_VISIT_COUNT.with(std::cell::Cell::get)
 }
 
 fn fill_cubic_contours(path: &RawPath) -> Vec<Vec<StrokeCurve>> {
@@ -1742,11 +2169,11 @@ fn line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
     ]
 }
 
-fn contour_midpoint(curves: &[[Vec2D; 4]]) -> Vec2D {
+fn contour_midpoint(curves: &[StrokeCurve]) -> Vec2D {
     let mut sum = Vec2D::new(0.0, 0.0);
     for curve in curves {
-        sum.x += curve[3].x;
-        sum.y += curve[3].y;
+        sum.x += curve.cubic[3].x;
+        sum.y += curve.cubic[3].y;
     }
     let scale = 1.0 / curves.len() as f32;
     Vec2D::new(sum.x * scale, sum.y * scale)
@@ -2076,6 +2503,233 @@ fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
 mod tests {
     use super::*;
 
+    fn assert_stroke_tessellation_bytes_eq(
+        actual: &StrokeTessellation,
+        expected: &StrokeTessellation,
+    ) {
+        assert_eq!(
+            actual.local_contour_ids_are_dense,
+            expected.local_contour_ids_are_dense
+        );
+        let actual = &actual.tessellation;
+        let expected = &expected.tessellation;
+        assert_eq!(actual.base_instance, expected.base_instance);
+        assert_eq!(actual.instance_count, expected.instance_count);
+        assert_eq!(
+            bytemuck::bytes_of(&actual.path),
+            bytemuck::bytes_of(&expected.path)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&actual.spans),
+            bytemuck::cast_slice::<_, u8>(&expected.spans)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&actual.contours),
+            bytemuck::cast_slice::<_, u8>(&expected.contours)
+        );
+    }
+
+    #[test]
+    fn shared_stroke_preparation_scratch_is_byte_identical_to_fresh_scratch() {
+        let mut path = RawPath::new();
+        path.move_to(2.0, 3.0);
+        path.cubic_to(20.0, -7.0, -4.0, 31.0, 38.0, 17.0);
+        path.line_to(9.0, 41.0);
+        path.close();
+        path.move_to(50.0, 11.0);
+        path.cubic_to(75.0, 44.0, 23.0, -19.0, 91.0, 37.0);
+
+        let expected = build_stroke_tessellation_with_layout(
+            &path,
+            Mat2D([1.25, 0.125, -0.25, 0.75, 4.0, -3.0]),
+            5.5,
+            StrokeJoin::Round,
+            StrokeCap::Square,
+        )
+        .unwrap();
+        let mut scratch = StrokePreparationScratch::default();
+        let mut previous_path = RawPath::new();
+        previous_path.move_to(-100.0, -90.0);
+        previous_path.line_to(-80.0, -70.0);
+        previous_path.cubic_to(-60.0, -50.0, -40.0, -30.0, -20.0, -10.0);
+        previous_path.move_to(110.0, 120.0);
+        previous_path.line_to(130.0, 140.0);
+        previous_path.move_to(210.0, 220.0);
+        previous_path.cubic_to(230.0, 240.0, 250.0, 260.0, 270.0, 280.0);
+        build_stroke_tessellation_with_layout_using_scratch(
+            &previous_path,
+            Mat2D::IDENTITY,
+            13.0,
+            StrokeJoin::Miter,
+            StrokeCap::Round,
+            &mut scratch,
+        )
+        .unwrap();
+        let actual = build_stroke_tessellation_with_layout_using_scratch(
+            &path,
+            Mat2D([1.25, 0.125, -0.25, 0.75, 4.0, -3.0]),
+            5.5,
+            StrokeJoin::Round,
+            StrokeCap::Square,
+            &mut scratch,
+        )
+        .unwrap();
+
+        assert_stroke_tessellation_bytes_eq(&actual, &expected);
+    }
+
+    fn assert_stroke_curve_bits_eq(actual: &StrokeCurve, expected: &StrokeCurve) {
+        assert_eq!(actual.is_line, expected.is_line);
+        for (actual, expected) in actual.cubic.iter().zip(expected.cubic.iter()) {
+            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+        }
+    }
+
+    fn assert_prepared_stroke_curve_bits_eq(
+        actual: &PreparedStrokeCurve,
+        expected: &PreparedStrokeCurve,
+    ) {
+        for (actual, expected) in actual.cubic.iter().zip(expected.cubic.iter()) {
+            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+        }
+        for (actual, expected) in actual.tangents.iter().zip(expected.tangents.iter()) {
+            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+        }
+        assert_eq!(
+            actual.original_start_tangent.x.to_bits(),
+            expected.original_start_tangent.x.to_bits()
+        );
+        assert_eq!(
+            actual.original_start_tangent.y.to_bits(),
+            expected.original_start_tangent.y.to_bits()
+        );
+        assert_eq!(actual.parametric_segments, expected.parametric_segments);
+        assert_eq!(actual.polar_segments, expected.polar_segments);
+        assert_eq!(actual.ends_original_curve, expected.ends_original_curve);
+    }
+
+    #[test]
+    fn stroke_contour_normalization_matches_clone_filter_and_close_bit_for_bit() {
+        let nan = f32::from_bits(0x7fc0_0042);
+        let first = Vec2D::new(-0.0, 11.0);
+        let current = Vec2D::new(0.0, 11.0);
+        let mut contour = StrokeContour {
+            curves: vec![
+                StrokeCurve {
+                    cubic: line_cubic(Vec2D::new(2.0, 3.0), Vec2D::new(5.0, 7.0)),
+                    is_line: true,
+                },
+                StrokeCurve {
+                    cubic: [Vec2D::new(9.0, -0.0); 4],
+                    is_line: false,
+                },
+                StrokeCurve {
+                    cubic: [Vec2D::new(nan, 13.0); 4],
+                    is_line: false,
+                },
+            ]
+            .into(),
+            first,
+            current,
+            closed: true,
+        };
+
+        // This is the allocation-heavy sequence used before normalization was
+        // moved in place.
+        let mut expected = contour.curves.clone();
+        expected.retain(|curve| {
+            let [p0, p1, p2, p3] = curve.cubic;
+            !(points_equal(p0, p1) && points_equal(p1, p2) && points_equal(p2, p3))
+        });
+        if contour.closed && !same_point(contour.first, contour.current) {
+            expected.push(StrokeCurve {
+                cubic: line_cubic(contour.current, contour.first),
+                is_line: true,
+            });
+        }
+
+        normalize_stroke_contour_curves(&mut contour);
+
+        assert_eq!(contour.curves.len(), expected.len());
+        for (actual, expected) in contour.curves.iter().zip(expected.iter()) {
+            assert_stroke_curve_bits_eq(actual, expected);
+        }
+    }
+
+    #[test]
+    fn scalar_line_preparation_matches_single_element_chop_bit_for_bit() {
+        let curve = StrokeCurve {
+            cubic: line_cubic(Vec2D::new(-0.0, 1.0e20), Vec2D::new(0.0, -1.0e20)),
+            is_line: true,
+        };
+
+        // Mirror the old vec![curve.cubic] path, including its two independent
+        // tangent calculations.
+        let original_tangent = subtract(curve.cubic[3], curve.cubic[0]);
+        let chopped = vec![curve.cubic];
+        let cubic = chopped.into_iter().next().unwrap();
+        let tangent = subtract(cubic[3], cubic[0]);
+        let expected = PreparedStrokeCurve {
+            cubic,
+            tangents: [tangent, tangent],
+            original_start_tangent: original_tangent,
+            parametric_segments: 1,
+            polar_segments: 1,
+            ends_original_curve: true,
+        };
+
+        let actual = prepare_line_curve(&curve);
+        assert_prepared_stroke_curve_bits_eq(&actual, &expected);
+    }
+
+    #[test]
+    fn contour_midpoint_matches_projected_cubic_endpoints_bit_for_bit() {
+        let curves = [
+            StrokeCurve {
+                cubic: [
+                    Vec2D::new(-2.0, 4.0),
+                    Vec2D::new(8.0, -16.0),
+                    Vec2D::new(32.0, 64.0),
+                    Vec2D::new(1.0e20, -1.0e20),
+                ],
+                is_line: false,
+            },
+            StrokeCurve {
+                cubic: [
+                    Vec2D::new(3.0, 5.0),
+                    Vec2D::new(7.0, 11.0),
+                    Vec2D::new(13.0, 17.0),
+                    Vec2D::new(-1.0e20, 1.0e20),
+                ],
+                is_line: false,
+            },
+            StrokeCurve {
+                cubic: [
+                    Vec2D::new(19.0, 23.0),
+                    Vec2D::new(29.0, 31.0),
+                    Vec2D::new(37.0, 41.0),
+                    Vec2D::new(3.25, -7.5),
+                ],
+                is_line: true,
+            },
+        ];
+        let projected = curves.iter().map(|curve| curve.cubic).collect::<Vec<_>>();
+        let mut old_sum = Vec2D::new(0.0, 0.0);
+        for cubic in &projected {
+            old_sum.x += cubic[3].x;
+            old_sum.y += cubic[3].y;
+        }
+        let old_scale = 1.0 / projected.len() as f32;
+        let expected = Vec2D::new(old_sum.x * old_scale, old_sum.y * old_scale);
+
+        let actual = contour_midpoint(&curves);
+        assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+        assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+    }
+
     #[test]
     fn wang_segment_count_matches_cpp_formula() {
         let line = [
@@ -2138,6 +2792,33 @@ mod tests {
             FillRule::EvenOdd,
             true,
         ));
+    }
+
+    #[test]
+    fn clippedcubic2_path_2_coarse_area_matches_cpp() {
+        // Exact path id=2 from fixtures/renderer/streams/gm/clippedcubic2.rive-stream.
+        let mut path = RawPath::new();
+        path.move_to(0.0, 69.703_048_7);
+        path.cubic_to(
+            21.831_150_1,
+            69.703_048_7,
+            43.664_482_1,
+            58.083_694_5,
+            65.5,
+            34.844_982_1,
+        );
+        path.cubic_to(
+            87.331_146_2,
+            11.608_592,
+            109.164_482,
+            -0.010_765_133_4,
+            131.0,
+            -0.013_089_004_9,
+        );
+        path.close();
+
+        // Pinned C++ RawPath::computeCoarseArea cancels to positive zero.
+        assert_eq!(path_coarse_area(&path).to_bits(), 0x0000_0000);
     }
 
     #[test]
@@ -2465,6 +3146,59 @@ mod tests {
             positive.spans[1].reflection_x0_x1,
             mirrored.spans[1].reflection_x0_x1
         );
+    }
+
+    #[test]
+    fn interior_triangle_visitor_assigns_path_ids_and_preserves_face_order() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(20.0, 0.0);
+        path.line_to(20.0, 20.0);
+        path.line_to(0.0, 20.0);
+        path.close();
+        let mut tessellation =
+            build_interior_tessellation(&path, Mat2D::IDENTITY, FillRule::NonZero, false).unwrap();
+        let triangle = |weight, source_path_id, x| {
+            [
+                TriangleVertex::new([x, 0.0], weight, source_path_id),
+                TriangleVertex::new([x + 1.0, 0.0], weight, source_path_id),
+                TriangleVertex::new([x, 1.0], weight, source_path_id),
+            ]
+        };
+        tessellation.triangles = [
+            triangle(-2, 1, 0.0),
+            triangle(0, 2, 2.0),
+            triangle(3, 3, 4.0),
+            triangle(-1, 4, 6.0),
+            triangle(1, 5, 8.0),
+        ]
+        .concat();
+
+        for faces in [
+            WindingFaces::Negative,
+            WindingFaces::Positive,
+            WindingFaces::All,
+        ] {
+            let mut actual = Vec::new();
+            tessellation
+                .visit_triangles(23, faces, |_, triangle| actual.extend_from_slice(&triangle));
+            let expected = tessellation
+                .triangles
+                .chunks_exact(3)
+                .filter(|triangle| faces.includes((triangle[0].weight_path_id >> 16) as i16))
+                .flat_map(|triangle| {
+                    triangle.iter().copied().map(|mut vertex| {
+                        vertex.weight_path_id = (vertex.weight_path_id & !0xffff) | 23;
+                        vertex
+                    })
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual),
+                bytemuck::cast_slice::<_, u8>(&expected),
+                "{faces:?}"
+            );
+        }
     }
 
     #[test]
@@ -3082,5 +3816,47 @@ mod tests {
             .iter()
             .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0));
         assert_post_contour_padding(&tessellation);
+    }
+
+    #[test]
+    fn overstroke_reuses_frame_scoped_stroke_preparation_capacity() {
+        use nuxie_render_stream::{Command, RenderStream};
+
+        let stream = RenderStream::parse(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/renderer/streams/gm/OverStroke.rive-stream"
+        )))
+        .unwrap();
+        let mut scratch = StrokePreparationScratch::default();
+
+        for command in &stream.frames[0].commands {
+            let Command::DrawPath { path, paint } = command else {
+                continue;
+            };
+            if paint.style != nuxie_render_api::RenderPaintStyle::Stroke {
+                continue;
+            }
+            build_stroke_tessellation_with_layout_using_scratch(
+                &path.raw_path,
+                Mat2D::IDENTITY,
+                paint.thickness,
+                paint.join,
+                paint.cap,
+                &mut scratch,
+            )
+            .unwrap();
+        }
+
+        let stats = scratch.stats();
+        assert_eq!(stats.builds, 12);
+        assert_eq!(stats.contours, 240);
+        assert_eq!(
+            stats.inline_one_curve_contours + stats.spilled_curve_contours,
+            stats.contours
+        );
+        assert!(stats.spilled_curve_contours >= 4);
+        assert!(stats.contour_capacity_growths < stats.builds);
+        assert!(stats.prepared_capacity_growths < stats.builds);
+        assert!(stats.pending_capacity_growths < stats.builds);
     }
 }

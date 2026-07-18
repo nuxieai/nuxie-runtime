@@ -20,6 +20,7 @@ mod feather_lut;
 mod gpu;
 mod gr_triangulator;
 mod gradient_pipeline;
+mod gpu_canvas;
 // Kept standalone until a renderer path has a proven grouping integration.
 #[cfg(target_arch = "wasm32")]
 mod browser;
@@ -66,6 +67,7 @@ pub enum RendererError {
         height: u32,
         max_dimension: u32,
     },
+    InvalidGpuCanvas(String),
     Map(String),
     Unsupported(&'static str),
     WebGl2(String),
@@ -86,6 +88,7 @@ impl fmt::Display for RendererError {
                 f,
                 "invalid {label} texture extent {width}x{height}; dimensions must be between 1 and {max_dimension}"
             ),
+            Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
             Self::WebGl2(message) => write!(f, "WebGL2 renderer error: {message}"),
@@ -340,6 +343,10 @@ pub struct WgpuFrameMetrics {
 }
 
 pub use work_metrics::BackendWorkMetrics;
+pub use gpu_canvas::{
+    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
+    GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderMode {

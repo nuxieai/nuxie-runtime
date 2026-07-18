@@ -8,10 +8,9 @@ description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (lua
 
 [features]
 # `luau` pulls in the pure-Rust Luau VM (luaur-rt). Default-on so
-# `cargo test --workspace` exercises the spike; nothing else in the
-# workspace depends on nuxie-scripting, so no dependency leaks into other
-# crates. Build with `--no-default-features` for the dependency-free
-# envelope-parsing subset.
+# `cargo test --workspace` and the editor ProductHost exercise the same VM.
+# Build with `--no-default-features` for the dependency-free envelope-parsing
+# subset.
 default = ["luau"]
 luau = [
     "dep:luaur-common",

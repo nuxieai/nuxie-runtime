@@ -11166,9 +11166,7 @@ fn canonicalize_exported_records(records: &mut [ExportedRecord]) {
 mod tests {
     use std::sync::Arc;
 
-    #[cfg(feature = "scripting")]
-    use anyhow::Context;
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use nuxie_render_stream::RenderStream;
 
     use super::*;
@@ -12435,6 +12433,101 @@ mod tests {
         )
     }
 
+    fn create_font_text(
+        tx: &mut SceneTx<'_>,
+        artboard: ArtboardId,
+        font: FontAssetId,
+        name: &str,
+        x: f32,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: name.into(),
+                x,
+                y: 20.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 120.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: format!("{name} Style"),
+                font_size: 24.0,
+                line_height: 30.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(style),
+            NodeSpec::Fill(FillSpec {
+                name: format!("{name} Fill"),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: format!("{name} Color"),
+                color: 0xff11_2233,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: format!("{name} Run"),
+                text: name.into(),
+                style,
+            }),
+        )?;
+        Ok(text)
+    }
+
+    fn root_and_nested_font_file(include_embedded_contents: bool) -> Result<File> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let root = tx.create_artboard(ArtboardSpec {
+                name: "Root".into(),
+                width: 240.0,
+                height: 120.0,
+            })?;
+            let child = tx.create_artboard(ArtboardSpec {
+                name: "Child".into(),
+                width: 140.0,
+                height: 70.0,
+            })?;
+            let replacement = tx.create_artboard(ArtboardSpec {
+                name: "Replacement".into(),
+                width: 140.0,
+                height: 70.0,
+            })?;
+            create_font_text(tx, root, font, "root", 10.0)?;
+            create_font_text(tx, child, font, "nested", 5.0)?;
+            create_font_text(tx, replacement, font, "remounted", 5.0)?;
+            create_nested_artboard_host(tx, root, child, "Child Host", 80.0, 40.0)?;
+            Ok(())
+        })?;
+
+        let mut records = scene.export_records().into_authoring_records();
+        if !include_embedded_contents {
+            records.retain(|record| record.type_key != TYPE_FILE_ASSET_CONTENTS);
+        }
+        File::from_runtime(RuntimeFile::from_authoring_records(records)?)
+    }
+
     #[test]
     fn shaped_auto_sized_bottom_trim_moves_public_geometry_with_the_trimmed_glyph_layout()
     -> Result<()> {
@@ -13293,6 +13386,14 @@ mod tests {
         Ok(factory.stream())
     }
 
+    fn borrowed_draw_stream(instance: &mut crate::ArtboardInstance<'_>) -> Result<String> {
+        let mut factory = RecordingFactory::new();
+        let mut cache = instance.new_render_cache();
+        let mut renderer = factory.make_renderer();
+        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        Ok(factory.stream())
+    }
+
     fn stream_draws_path(stream: &str) -> bool {
         stream.lines().any(|line| line.starts_with("drawPath "))
     }
@@ -13605,6 +13706,83 @@ mod tests {
         assert_eq!(
             frame.hit_test(instance, crate::Vec2D::new(50.0, 20.0)),
             vec![child_shape]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn file_external_font_bytes_reach_root_and_nested_artboard_text() -> Result<()> {
+        let embedded = root_and_nested_font_file(true)?;
+        let mut external = root_and_nested_font_file(false)?;
+
+        let mut unresolved = external
+            .default_artboard()
+            .context("external file has a root artboard")?
+            .instantiate()?;
+        let mut unresolved_factory = RecordingFactory::new();
+        let mut unresolved_renderer = unresolved_factory.make_renderer();
+        unresolved.draw(&mut unresolved_factory, &mut unresolved_renderer)?;
+        assert!(
+            !stream_draws_path(&unresolved_factory.stream()),
+            "neither root nor nested text may invent fallback glyphs before attachment"
+        );
+
+        external.attach_font_asset_bytes(0, fixture_font_bytes())?;
+
+        let mut embedded_root = embedded
+            .default_artboard()
+            .context("embedded file has a root artboard")?
+            .instantiate()?;
+        let mut external_root = external
+            .default_artboard()
+            .context("external file has a root artboard")?
+            .instantiate()?;
+        let mut embedded_factory = RecordingFactory::new();
+        let mut embedded_renderer = embedded_factory.make_renderer();
+        embedded_root.draw(&mut embedded_factory, &mut embedded_renderer)?;
+        let mut external_factory = RecordingFactory::new();
+        let mut external_renderer = external_factory.make_renderer();
+        external_root.draw(&mut external_factory, &mut external_renderer)?;
+        assert!(stream_draws_path(&external_factory.stream()));
+        assert_eq!(
+            external_factory.stream(),
+            embedded_factory.stream(),
+            "the combined root+nested draw must exactly match embedded font authority"
+        );
+
+        let nested_host_local = external_root
+            .raw()
+            .components()
+            .iter()
+            .find(|component| component.type_name == "NestedArtboard")
+            .map(|component| component.local_id)
+            .context("root has a nested artboard host")?;
+        let artboard_id_key = ExportedProperty::NestedArtboardId(2).schema_key();
+        assert!(
+            external_root
+                .raw_mut()
+                .set_uint_property(nested_host_local, artboard_id_key, 2,)
+        );
+        assert!(
+            embedded_root
+                .raw_mut()
+                .set_uint_property(nested_host_local, artboard_id_key, 2,)
+        );
+        let remounted_external_stream = borrowed_draw_stream(&mut external_root)?;
+        let remounted_embedded_stream = borrowed_draw_stream(&mut embedded_root)?;
+        assert_eq!(
+            remounted_external_stream, remounted_embedded_stream,
+            "a nested artboard materialized after attachment must inherit the file font bytes"
+        );
+
+        let embedded = Arc::new(embedded);
+        let external = Arc::new(external);
+        let mut embedded_child = OwnedArtboardInstance::instantiate(embedded, 1)?;
+        let mut external_child = OwnedArtboardInstance::instantiate(external, 1)?;
+        assert_eq!(
+            owned_draw_stream(&mut external_child)?,
+            owned_draw_stream(&mut embedded_child)?,
+            "the same attached bytes must resolve when the nested artboard is a root instance"
         );
         Ok(())
     }

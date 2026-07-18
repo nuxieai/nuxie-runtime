@@ -573,10 +573,10 @@ impl ArtboardInstance {
     ///
     /// This performs no I/O. `asset_id` is the serialized `FileAsset.assetId`,
     /// not the asset's ordinal in [`RuntimeFile::file_assets`]. Validation is
-    /// complete before the instance-local map changes, and embedded contents
-    /// remain authoritative when the file contains them. The attachment is
-    /// local to this artboard instance in the current E2 subset; nested
-    /// artboard instances do not inherit it.
+    /// complete before the artboard tree changes, and embedded contents remain
+    /// authoritative when the file contains them. Every existing nested and
+    /// component-list artboard receives the same bytes; children materialized
+    /// later inherit the attachment from their parent.
     pub fn attach_external_font_asset_bytes(
         &mut self,
         asset_id: u32,
@@ -597,17 +597,40 @@ impl ArtboardInstance {
         if !crate::text::embedded_font_is_parseable(&bytes) {
             return Err(ExternalFontAssetError::InvalidFont { asset_id });
         }
-        if self
+        self.install_external_font_asset_bytes(asset_id, bytes);
+        Ok(())
+    }
+
+    fn install_external_font_asset_bytes(&mut self, asset_id: u32, bytes: Arc<[u8]>) -> bool {
+        let mut changed = !self
             .external_font_assets
             .get(&asset_id)
-            .is_some_and(|current| current.as_ref() == bytes.as_ref())
-        {
-            return Ok(());
+            .is_some_and(|current| current.as_ref() == bytes.as_ref());
+        if changed {
+            self.external_font_assets
+                .insert(asset_id, Arc::clone(&bytes));
+            self.mark_path_changed();
+            self.mark_layout_changed();
         }
-        self.external_font_assets.insert(asset_id, bytes);
-        self.mark_path_changed();
-        self.mark_layout_changed();
-        Ok(())
+        for nested in self.nested_artboards.values_mut() {
+            changed |= nested
+                .child
+                .install_external_font_asset_bytes(asset_id, Arc::clone(&bytes));
+        }
+        for items in self.component_list_items.values_mut() {
+            for item in items {
+                changed |= item
+                    .child
+                    .install_external_font_asset_bytes(asset_id, Arc::clone(&bytes));
+            }
+        }
+        changed
+    }
+
+    fn inherit_external_font_assets(&mut self, assets: &BTreeMap<u32, Arc<[u8]>>) {
+        for (&asset_id, bytes) in assets {
+            self.install_external_font_asset_bytes(asset_id, Arc::clone(bytes));
+        }
     }
 
     pub(crate) fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
@@ -1424,6 +1447,7 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
+            child.inherit_external_font_assets(&self.external_font_assets);
             child.bind_owned_view_model_artboard_context(file, &context);
             let mut state_machine = child.state_machine_instance(0);
             if let Some(state_machine) = state_machine.as_mut() {
@@ -2997,7 +3021,7 @@ impl ArtboardInstance {
         });
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
-        build_runtime_nested_artboard_instance(
+        let mut nested = build_runtime_nested_artboard_instance(
             &context.file,
             parent_graph,
             context.artboards.as_slice(),
@@ -3025,7 +3049,11 @@ impl ArtboardInstance {
             )
             .unwrap_or(-1.0),
         )
-        .ok()
+        .ok()?;
+        nested
+            .child
+            .inherit_external_font_assets(&self.external_font_assets);
+        Some(nested)
     }
 
     fn apply_nested_trigger_property_changed(

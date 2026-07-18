@@ -5876,6 +5876,36 @@ fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     }
 }
 
+/// Dimensions proven by a complete decode into the renderer's canonical RGBA
+/// representation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecodedImageDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Fully decode a supported encoded image and validate its canonical RGBA byte
+/// length before returning its dimensions.
+///
+/// Unlike header inspection, this rejects truncated or otherwise malformed
+/// PNG, JPEG, and WebP payloads. The decoded pixel allocation is released
+/// before this function returns.
+#[must_use]
+pub fn validate_encoded_image(data: &[u8]) -> Option<DecodedImageDimensions> {
+    let (width, height, pixels) = decode_image_rgba(data)?;
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let expected_rgba_len = usize::try_from(width)
+        .ok()?
+        .checked_mul(usize::try_from(height).ok()?)?
+        .checked_mul(4)?;
+    if pixels.len() != expected_rgba_len {
+        return None;
+    }
+    Some(DecodedImageDimensions { width, height })
+}
+
 #[cfg(target_os = "macos")]
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -7882,6 +7912,38 @@ mod tests {
 
         assert_eq!((width, height), (2, 1));
         assert_eq!(rgba, [120, 60, 30, 128, 10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn validates_fully_decoded_encoded_image_dimensions() {
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(
+                &[240, 120, 60, 128, 10, 20, 30, 255],
+                2,
+                1,
+                image_webp::ColorType::Rgba8,
+            )
+            .unwrap();
+
+        assert_eq!(
+            validate_encoded_image(&encoded),
+            Some(DecodedImageDimensions {
+                width: 2,
+                height: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn encoded_image_validation_rejects_truncated_header_only_png() {
+        let mut encoded = vec![0; 24];
+        encoded[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        encoded[12..16].copy_from_slice(b"IHDR");
+        encoded[16..20].copy_from_slice(&3_u32.to_be_bytes());
+        encoded[20..24].copy_from_slice(&5_u32.to_be_bytes());
+
+        assert_eq!(validate_encoded_image(&encoded), None);
     }
 
     #[test]

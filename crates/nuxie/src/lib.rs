@@ -656,6 +656,7 @@ pub struct File {
     runtime: RuntimeFile,
     graph: GraphFile,
     external_image_assets: BTreeMap<u32, Arc<[u8]>>,
+    external_font_assets: BTreeMap<u32, Arc<[u8]>>,
     #[cfg(feature = "scripting")]
     scripts: RefCell<FileScriptRuntime>,
 }
@@ -708,6 +709,7 @@ impl Clone for File {
             runtime,
             graph,
             external_image_assets: self.external_image_assets.clone(),
+            external_font_assets: self.external_font_assets.clone(),
             #[cfg(feature = "scripting")]
             scripts,
         }
@@ -754,6 +756,7 @@ impl File {
             runtime,
             graph,
             external_image_assets: BTreeMap::new(),
+            external_font_assets: BTreeMap::new(),
         })
     }
 
@@ -784,6 +787,41 @@ impl File {
         }
         self.external_image_assets
             .insert(asset.id, Arc::<[u8]>::from(bytes));
+        Ok(())
+    }
+
+    /// Attach host-supplied bytes to an external `FontAsset` in this file.
+    ///
+    /// This performs no I/O. `asset_id` is the published, file-wide
+    /// `FileAsset.assetId`, not the object id or asset-list ordinal. The
+    /// identity, asset kind, and both runtime font parsing backends are
+    /// validated before this file changes. Every root or nested artboard
+    /// instantiated from the file receives the bytes, while embedded font
+    /// contents remain authoritative when present.
+    pub fn attach_font_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalFontAssetError> {
+        let Some(asset) = self
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.uint_property("assetId") == Some(u64::from(asset_id)))
+        else {
+            return Err(ExternalFontAssetError::UnknownAsset { asset_id });
+        };
+        if asset.type_name != "FontAsset" {
+            return Err(ExternalFontAssetError::WrongAssetKind {
+                asset_id,
+                actual: asset.type_name,
+            });
+        }
+        if !nuxie_runtime::embedded_font_is_parseable(&bytes) {
+            return Err(ExternalFontAssetError::InvalidFont { asset_id });
+        }
+        self.external_font_assets
+            .insert(asset_id, Arc::<[u8]>::from(bytes));
         Ok(())
     }
 
@@ -821,6 +859,18 @@ impl File {
             .position(|artboard| artboard.name.as_deref() == Some(name))?;
         Some(Artboard { file: self, index })
     }
+}
+
+fn attach_file_font_assets_to_instance(
+    file: &File,
+    instance: &mut RuntimeArtboardInstance,
+) -> Result<()> {
+    for (&asset_id, bytes) in &file.external_font_assets {
+        instance
+            .attach_external_font_asset_bytes(asset_id, Arc::clone(bytes))
+            .with_context(|| format!("failed to attach external font asset {asset_id}"))?;
+    }
+    Ok(())
 }
 
 /// Borrowed handle to an artboard inside an imported [`File`].
@@ -869,7 +919,7 @@ impl<'a> Artboard<'a> {
     }
 
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
-        let raw = RuntimeArtboardInstance::from_graph_with_artboards(
+        let mut raw = RuntimeArtboardInstance::from_graph_with_artboards(
             &self.file.runtime,
             self.graph(),
             &self.file.graph.artboards,
@@ -880,6 +930,7 @@ impl<'a> Artboard<'a> {
                 self.name().unwrap_or("<unnamed>")
             )
         })?;
+        attach_file_font_assets_to_instance(self.file, &mut raw)?;
         Ok(ArtboardInstance {
             file: self.file,
             artboard_index: self.index,
@@ -1359,7 +1410,7 @@ pub struct OwnedArtboardInstance {
 impl OwnedArtboardInstance {
     /// Instantiate `artboard_index` of `file` as an owning instance.
     pub fn instantiate(file: Arc<File>, artboard_index: usize) -> Result<Self> {
-        let raw = {
+        let mut raw = {
             let artboard = file
                 .artboard(artboard_index)
                 .with_context(|| format!("artboard index {artboard_index} out of range"))?;
@@ -1375,6 +1426,7 @@ impl OwnedArtboardInstance {
                 )
             })?
         };
+        attach_file_font_assets_to_instance(&file, &mut raw)?;
         Ok(Self {
             raw,
             geometry: RuntimeGeometryCache::default(),
@@ -1416,9 +1468,8 @@ impl OwnedArtboardInstance {
     /// This performs no I/O. `asset_id` is the published, file-wide
     /// `FileAsset.assetId`, not the asset-list ordinal. The runtime validates
     /// the identity, asset kind, and both font parsing backends before changing
-    /// the instance. Embedded font contents remain authoritative. In the
-    /// current E2 subset the attachment is local to this instance; nested
-    /// artboard instances do not inherit it.
+    /// the instance tree. Embedded font contents remain authoritative. Existing
+    /// and subsequently remounted nested artboards inherit the attachment.
     pub fn attach_font_asset_bytes(
         &mut self,
         asset_id: u32,
@@ -1937,6 +1988,38 @@ mod external_image_asset_tests {
         File::from_runtime(runtime).expect("asset-only file graph")
     }
 
+    #[allow(clippy::arithmetic_side_effects)]
+    fn fixture_font_bytes() -> Vec<u8> {
+        let mut accumulator = 0u32;
+        let mut bit_count = 0u8;
+        let mut decoded = Vec::new();
+        for byte in include_bytes!("../tests/fixtures/roboto-a.ttf.base64")
+            .iter()
+            .copied()
+            .filter(|byte| !byte.is_ascii_whitespace())
+        {
+            if byte == b'=' {
+                break;
+            }
+            let value = match byte {
+                b'A'..=b'Z' => byte - b'A',
+                b'a'..=b'z' => byte - b'a' + 26,
+                b'0'..=b'9' => byte - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => panic!("invalid base64 font fixture"),
+            };
+            accumulator = (accumulator << 6) | u32::from(value);
+            bit_count += 6;
+            if bit_count >= 8 {
+                bit_count -= 8;
+                decoded.push((accumulator >> bit_count) as u8);
+                accumulator &= (1u32 << bit_count) - 1;
+            }
+        }
+        decoded
+    }
+
     #[test]
     fn image_attachment_validates_semantic_identity_and_asset_kind() {
         let mut file = file_with_image_and_font_assets();
@@ -1976,5 +2059,55 @@ mod external_image_asset_tests {
             Some([4, 5, 6].as_slice()),
             "cloned files retain the exact external asset envelope"
         );
+    }
+
+    #[test]
+    fn file_font_attachment_rejects_atomically_and_clones_exact_bytes() {
+        let mut file = file_with_image_and_font_assets();
+
+        assert_eq!(
+            file.attach_font_asset_bytes(99, fixture_font_bytes()),
+            Err(ExternalFontAssetError::UnknownAsset { asset_id: 99 })
+        );
+        assert_eq!(
+            file.attach_font_asset_bytes(7, fixture_font_bytes()),
+            Err(ExternalFontAssetError::WrongAssetKind {
+                asset_id: 7,
+                actual: "ImageAsset",
+            })
+        );
+        assert_eq!(
+            file.attach_font_asset_bytes(8, b"not a font".to_vec()),
+            Err(ExternalFontAssetError::InvalidFont { asset_id: 8 })
+        );
+        assert!(
+            file.external_font_assets.is_empty(),
+            "all validation failures happen before the file changes"
+        );
+
+        file.attach_font_asset_bytes(8, fixture_font_bytes())
+            .expect("valid FontAsset bytes attach by FileAsset.assetId");
+        let attached = Arc::clone(
+            file.external_font_assets
+                .get(&8)
+                .expect("valid attachment is retained by semantic id"),
+        );
+        assert_eq!(
+            file.attach_font_asset_bytes(8, b"invalid replacement".to_vec()),
+            Err(ExternalFontAssetError::InvalidFont { asset_id: 8 })
+        );
+        assert!(Arc::ptr_eq(
+            &attached,
+            file.external_font_assets
+                .get(&8)
+                .expect("rejected replacement preserves the prior bytes")
+        ));
+        assert!(Arc::ptr_eq(
+            &attached,
+            file.clone()
+                .external_font_assets
+                .get(&8)
+                .expect("File::clone retains the exact attachment")
+        ));
     }
 }

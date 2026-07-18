@@ -42,7 +42,7 @@ struct VertexOutput {
     @location(1) member_1: vec4<f32>,
     @location(2) member_2: vec4<f32>,
     @location(3) member_3: vec3<f32>,
-    @location(4) @interpolate(flat) member_4: u32,
+    @location(4) @interpolate(flat, either) member_4: u32,
     @builtin(position) gl_Position: vec4<f32>,
 }
 

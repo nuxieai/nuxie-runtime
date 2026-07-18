@@ -50,8 +50,8 @@ struct Ge {
 struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
     @builtin(clip_distances) gl_ClipDistance: array<f32, 4>,
-    @location(4) @interpolate(flat) member: vec2<f32>,
-    @location(6) @interpolate(flat) member_1: f32,
+    @location(4) @interpolate(flat, either) member: vec2<f32>,
+    @location(6) @interpolate(flat, either) member_1: f32,
     @location(0) member_2: vec4<f32>,
 }
 

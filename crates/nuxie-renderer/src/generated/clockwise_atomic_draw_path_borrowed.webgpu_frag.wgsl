@@ -152,7 +152,7 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(2) O: vec4<f32>, @location(8) l4_: vec2<f32>, @location(7) @interpolate(flat) a3_: vec2<u32>, @location(0) f1_: vec4<f32>, @location(3) @interpolate(flat) A0_: f32, @location(4) @interpolate(flat) U1_: vec2<f32>, @location(5) L0_: vec4<f32>, @location(6) @interpolate(flat) e2_: f32) {
+fn main(@location(2) O: vec4<f32>, @location(8) l4_: vec2<f32>, @location(7) @interpolate(flat, either) a3_: vec2<u32>, @location(0) f1_: vec4<f32>, @location(3) @interpolate(flat, either) A0_: f32, @location(4) @interpolate(flat, either) U1_: vec2<f32>, @location(5) L0_: vec4<f32>, @location(6) @interpolate(flat, either) e2_: f32) {
     O_1 = O;
     l4_1 = l4_;
     a3_1 = a3_;

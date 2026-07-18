@@ -313,7 +313,7 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(0) x6_: vec4<f32>, @location(1) y6_: vec4<f32>, @location(2) L4_: vec4<f32>, @location(4) @interpolate(flat) E7_: u32, @location(3) C5_: vec3<f32>) -> @location(0) vec4<u32> {
+fn main(@location(0) x6_: vec4<f32>, @location(1) y6_: vec4<f32>, @location(2) L4_: vec4<f32>, @location(4) @interpolate(flat, either) E7_: u32, @location(3) C5_: vec3<f32>) -> @location(0) vec4<u32> {
     x6_1 = x6_;
     y6_1 = y6_;
     L4_1 = L4_;

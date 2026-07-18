@@ -7,7 +7,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shaders.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 expected_module_count="66"
-expected_module_digest="ce36036cfab6aa4d46d446e93d4e75f974909b64cb18aebf0b1b1025505e6160"
+expected_module_digest="ad49aadacc61a69a5ce29bc2bfacd030e707c1f10eaa6f74795dc573858bea27"
 expected_cpp_header_count="56"
 expected_cpp_header_digest="9b10df662a71ad939053cb9b9120319e28594dce3052206d0b9e002c4a376780"
 

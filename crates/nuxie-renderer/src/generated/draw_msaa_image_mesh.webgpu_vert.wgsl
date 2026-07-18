@@ -35,9 +35,9 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
     @builtin(clip_distances) gl_ClipDistance: array<f32, 4>,
     @location(0) member: vec2<f32>,
-    @location(1) @interpolate(flat) member_1: f32,
-    @location(3) @interpolate(flat) member_2: f32,
-    @location(4) @interpolate(flat) member_3: u32,
+    @location(1) @interpolate(flat, either) member_1: f32,
+    @location(3) @interpolate(flat, either) member_2: f32,
+    @location(4) @interpolate(flat, either) member_3: u32,
 }
 
 @id(0) override Ug: bool = true;

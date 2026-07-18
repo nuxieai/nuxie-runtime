@@ -47,12 +47,12 @@ struct gl_PerVertex {
 
 struct VertexOutput {
     @location(2) member: vec4<f32>,
-    @location(3) @interpolate(flat) member_1: f32,
-    @location(4) @interpolate(flat) member_2: vec2<f32>,
-    @location(6) @interpolate(flat) member_3: f32,
+    @location(3) @interpolate(flat, either) member_1: f32,
+    @location(4) @interpolate(flat, either) member_2: vec2<f32>,
+    @location(6) @interpolate(flat, either) member_3: f32,
     @location(5) member_4: vec4<f32>,
     @location(0) member_5: vec4<f32>,
-    @location(7) @interpolate(flat) member_6: vec2<u32>,
+    @location(7) @interpolate(flat, either) member_6: vec2<u32>,
     @location(8) member_7: vec2<f32>,
     @builtin(position) gl_Position: vec4<f32>,
 }

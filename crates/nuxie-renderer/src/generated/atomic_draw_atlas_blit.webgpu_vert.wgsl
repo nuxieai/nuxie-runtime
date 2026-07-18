@@ -47,7 +47,7 @@ struct Yf {
 
 struct VertexOutput {
     @location(0) member: vec2<f32>,
-    @location(1) @interpolate(flat) member_1: u32,
+    @location(1) @interpolate(flat, either) member_1: u32,
     @builtin(position) gl_Position: vec4<f32>,
 }
 

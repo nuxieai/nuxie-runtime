@@ -74,7 +74,13 @@ fi
 
 normalize_wgsl() {
     local path="$1"
-    sed -E 's/[[:space:]]+$//' "$path" > "$path.tmp"
+    # WebGPU compatibility mode rejects `flat` (and `flat, first`). Rive's
+    # flat varyings are constant across each primitive, so match upstream's
+    # header generator and choose either provoking vertex explicitly.
+    sed -E \
+        -e 's/@interpolate\([[:space:]]*flat[[:space:]]*(,[[:space:]]*first[[:space:]]*)?\)/@interpolate(flat, either)/g' \
+        -e 's/[[:space:]]+$//' \
+        "$path" > "$path.tmp"
     mv "$path.tmp" "$path"
 }
 

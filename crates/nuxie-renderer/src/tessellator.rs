@@ -1,7 +1,11 @@
 //! GPU tessellation pass translated from `renderer/src/shaders/tessellate.glsl`.
 
-use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TessVertexSpan};
 use crate::work_metrics::{record_buffer_upload, CountedCommandEncoderExt, CountedDeviceExt};
+use crate::{
+    gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TessVertexSpan},
+    storage_texture::{self, StorageBufferStructure, StorageResource},
+    RendererCapabilities,
+};
 use bytemuck::Zeroable;
 #[cfg(feature = "perf-diagnostics")]
 use std::time::Instant;
@@ -170,11 +174,17 @@ pub(crate) struct Tessellator {
 }
 
 impl Tessellator {
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
+        let polyfill = capabilities.polyfill_vertex_storage_buffers;
         let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-tessellate-vertex"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/tessellate.webgpu_vert.wgsl").into(),
+                if polyfill {
+                    include_str!("generated/tessellate.webgpu_nossbo_vert.wgsl")
+                } else {
+                    include_str!("generated/tessellate.webgpu_vert.wgsl")
+                }
+                .into(),
             ),
         });
         let fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -196,8 +206,18 @@ impl Tessellator {
                     },
                     count: None,
                 },
-                storage_entry(2),
-                storage_entry(5),
+                storage_texture::layout_entry(
+                    2,
+                    StorageBufferStructure::Uint32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    5,
+                    StorageBufferStructure::Uint32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
                 wgpu::BindGroupLayoutEntry {
                     binding: 9,
                     visibility: wgpu::ShaderStages::VERTEX,
@@ -282,7 +302,7 @@ impl Tessellator {
             _linear_sampler: linear_sampler,
             sampler_group,
             upload_slots: std::array::from_fn(|_| {
-                Mutex::new(TessellationUploadSlot::new(device, &limits))
+                Mutex::new(TessellationUploadSlot::new(device, &limits, polyfill))
             }),
             next_upload_slot: AtomicUsize::new(0),
             texture_pool: TessellationTexturePool::default(),
@@ -417,11 +437,40 @@ impl Tessellator {
                     UploadRequest::new(bytemuck::cast_slice(contours), storage_alignment),
                 ],
             );
+        let polyfill = uploads.slot.polyfill_vertex_storage_buffers;
         let flush_resources = TessellationFlushResources {
             uniform_buffer,
-            path_buffer,
-            contour_buffer,
+            path: path_buffer.into_storage_resource(
+                device,
+                encoder,
+                "nuxie-path-storage-texture",
+                StorageBufferStructure::Uint32x4,
+                polyfill,
+            ),
+            contour: contour_buffer.into_storage_resource(
+                device,
+                encoder,
+                "nuxie-contour-storage-texture",
+                StorageBufferStructure::Uint32x4,
+                polyfill,
+            ),
         };
+        let prefixes = [
+            prefix_0.into_storage_resource(
+                device,
+                encoder,
+                "nuxie-paint-storage-texture",
+                StorageBufferStructure::Uint32x2,
+                polyfill,
+            ),
+            prefix_1.into_storage_resource(
+                device,
+                encoder,
+                "nuxie-paint-aux-storage-texture",
+                StorageBufferStructure::Float32x4,
+                polyfill,
+            ),
+        ];
         let texture = self.encode_uploaded(
             device,
             textures,
@@ -437,7 +486,7 @@ impl Tessellator {
                 texture,
                 flush_resources,
             },
-            prefixes: [prefix_0, prefix_1],
+            prefixes,
         }
     }
 
@@ -738,17 +787,30 @@ impl TessellationUploadFrame<'_> {
     ) -> TessellationFlushResources {
         assert!(!paths.is_empty());
         let dummy_contours = [ContourData::zeroed()];
+        let contours = if contours.is_empty() {
+            &dummy_contours[..]
+        } else {
+            contours
+        };
+        let polyfill = self.slot.polyfill_vertex_storage_buffers;
+        let uniform_buffer = self.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms));
+        let path_buffer = self.upload_paths(device, encoder, bytemuck::cast_slice(paths));
+        let contour_buffer = self.upload_contours(device, encoder, bytemuck::cast_slice(contours));
         TessellationFlushResources {
-            uniform_buffer: self.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms)),
-            path_buffer: self.upload_paths(device, encoder, bytemuck::cast_slice(paths)),
-            contour_buffer: self.upload_contours(
+            uniform_buffer,
+            path: path_buffer.into_storage_resource(
                 device,
                 encoder,
-                bytemuck::cast_slice(if contours.is_empty() {
-                    &dummy_contours
-                } else {
-                    contours
-                }),
+                "nuxie-path-storage-texture",
+                StorageBufferStructure::Uint32x4,
+                polyfill,
+            ),
+            contour: contour_buffer.into_storage_resource(
+                device,
+                encoder,
+                "nuxie-contour-storage-texture",
+                StorageBufferStructure::Uint32x4,
+                polyfill,
             ),
         }
     }
@@ -791,21 +853,33 @@ struct TessellationUploadSlot {
     msaa_packing_scratch: Arc<Mutex<MsaaPackingScratch>>,
     uniform_alignment: u64,
     storage_alignment: u64,
+    polyfill_vertex_storage_buffers: bool,
 }
 
 impl TessellationUploadSlot {
-    fn new(device: &wgpu::Device, limits: &wgpu::Limits) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        limits: &wgpu::Limits,
+        polyfill_vertex_storage_buffers: bool,
+    ) -> Self {
+        let copy_src = if polyfill_vertex_storage_buffers {
+            wgpu::BufferUsages::COPY_SRC
+        } else {
+            wgpu::BufferUsages::empty()
+        };
         Self {
             uploads: UploadArena::new(
                 device,
                 "nuxie-tessellation-upload-ring",
                 wgpu::BufferUsages::VERTEX
                     | wgpu::BufferUsages::UNIFORM
-                    | wgpu::BufferUsages::STORAGE,
+                    | wgpu::BufferUsages::STORAGE
+                    | copy_src,
             ),
             msaa_packing_scratch: Arc::new(Mutex::new(MsaaPackingScratch::default())),
             uniform_alignment: limits.min_uniform_buffer_offset_alignment as u64,
             storage_alignment: limits.min_storage_buffer_offset_alignment as u64,
+            polyfill_vertex_storage_buffers,
         }
     }
 
@@ -1255,8 +1329,8 @@ pub(crate) struct UploadSlice {
 
 pub(crate) struct TessellationFlushResources {
     uniform_buffer: UploadSlice,
-    path_buffer: UploadSlice,
-    contour_buffer: UploadSlice,
+    path: StorageResource,
+    contour: StorageResource,
 }
 
 impl TessellationFlushResources {
@@ -1265,11 +1339,11 @@ impl TessellationFlushResources {
     }
 
     pub(crate) fn path_binding(&self) -> wgpu::BindingResource<'_> {
-        self.path_buffer.binding()
+        self.path.binding()
     }
 
     pub(crate) fn contour_binding(&self) -> wgpu::BindingResource<'_> {
-        self.contour_buffer.binding()
+        self.contour.binding()
     }
 }
 
@@ -1280,10 +1354,30 @@ pub(crate) struct TessellationEncoding {
 
 pub(crate) struct TessellationEncodingWithPrefixes {
     pub(crate) tessellation: TessellationEncoding,
-    pub(crate) prefixes: [UploadSlice; 2],
+    pub(crate) prefixes: [StorageResource; 2],
 }
 
 impl UploadSlice {
+    fn into_storage_resource(
+        self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        label: &'static str,
+        structure: StorageBufferStructure,
+        polyfill: bool,
+    ) -> StorageResource {
+        StorageResource::from_buffer(
+            device,
+            encoder,
+            label,
+            &self.buffer,
+            self.offset,
+            self.size,
+            structure,
+            polyfill,
+        )
+    }
+
     pub(crate) fn binding(&self) -> wgpu::BindingResource<'_> {
         wgpu::BindingResource::Buffer(wgpu::BufferBinding {
             buffer: &self.buffer,
@@ -1768,17 +1862,4 @@ mod tests {
 
 fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroupEntry<'_> {
     wgpu::BindGroupEntry { binding, resource }
-}
-
-fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::VERTEX,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Storage { read_only: true },
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-        count: None,
-    }
 }

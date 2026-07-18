@@ -139,7 +139,7 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(1) B2_: vec2<f32>, @location(0) f1_: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat) H3_: f32, @location(6) @interpolate(flat) e2_: f32) -> @location(0) vec4<f32> {
+fn main(@location(1) B2_: vec2<f32>, @location(0) f1_: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) H3_: f32, @location(6) @interpolate(flat, either) e2_: f32) -> @location(0) vec4<f32> {
     B2_1 = B2_;
     f1_1 = f1_;
     gl_FragCoord_1 = gl_FragCoord;

@@ -32,6 +32,7 @@ mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
 mod skyline;
+mod storage_texture;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
@@ -103,6 +104,9 @@ pub use webgl2::{WebGl2Factory, WebGl2Frame};
 impl Error for RendererError {}
 
 const MAX_ATOMIC_PATHS: usize = logical_flush::MAX_PATH_COUNT;
+// Rive's per-flush vertex shaders use at most four logical storage buffers.
+// Devices below this threshold use the texture-backed compatibility path.
+const MAX_VERTEX_STORAGE_BUFFERS: u32 = 4;
 // C++ RenderContextWebGPUImpl only advertises generic storage-buffer atomics.
 // Its clockwiseAtomic interlock mode is unreachable, even when a frame enables
 // the global clockwise-fill override.
@@ -124,6 +128,47 @@ const MAX_RETAINED_STROKE_PREPARATION_BYTES: usize = 1 << 20;
 // C++ IAABB::makeMaximal(): intersecting this with any ordinary pixel bounds
 // returns those bounds unchanged.
 const MAXIMAL_PIXEL_BOUNDS: [i32; 4] = [i32::MIN, i32::MIN, i32::MAX, i32::MAX];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RendererCapabilities {
+    polyfill_vertex_storage_buffers: bool,
+}
+
+impl RendererCapabilities {
+    fn from_adapter(
+        limits: &wgpu::Limits,
+        downlevel: &wgpu::DownlevelCapabilities,
+        force_polyfill: bool,
+    ) -> Self {
+        Self {
+            polyfill_vertex_storage_buffers: force_polyfill
+                || limits.max_storage_buffers_per_shader_stage < MAX_VERTEX_STORAGE_BUFFERS
+                || !downlevel
+                    .flags
+                    .contains(wgpu::DownlevelFlags::VERTEX_STORAGE),
+        }
+    }
+
+    const fn required_storage_buffers(self, mode: RenderMode, adapter_limit: u32) -> u32 {
+        if self.polyfill_vertex_storage_buffers {
+            0
+        } else if matches!(mode, RenderMode::ClockwiseAtomic) {
+            // The generic atomic pipeline also binds three fragment-stage PLS
+            // planes; retain the established device requirement for that mode.
+            7
+        } else {
+            // Preserve the established seven-buffer device on capable
+            // adapters (tests and embedders can build optional atomic objects
+            // from it), but do not exclude valid four-to-six-buffer MSAA
+            // devices.
+            if adapter_limit < 7 {
+                adapter_limit
+            } else {
+                7
+            }
+        }
+    }
+}
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
@@ -171,7 +216,7 @@ struct Context {
     patch_index_buffer: wgpu::Buffer,
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
-    atomic_pipeline: atomic_pipeline::AtomicPipeline,
+    atomic_pipeline: Option<atomic_pipeline::AtomicPipeline>,
     clockwise_atomic_pipeline: Option<clockwise_atomic_pipeline::ClockwiseAtomicPipeline>,
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
     composite_pipeline: composite_pipeline::CompositePipeline,
@@ -426,7 +471,23 @@ impl WgpuFactory {
         height: u32,
         mode: RenderMode,
     ) -> Result<Self, RendererError> {
+        Self::new_async_with_mode_inner(width, height, mode, false).await
+    }
+
+    async fn new_async_with_mode_inner(
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+        force_vertex_storage_polyfill: bool,
+    ) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        // WebGPU compatibility adapters require
+        // `GPURequestAdapterOptions.featureLevel = "compatibility"`. wgpu 30
+        // generates the browser dictionary field but does not expose it on
+        // its public `RequestAdapterOptions`, so this factory cannot request
+        // that feature level yet. The capability selection below still
+        // handles native/downlevel adapters whose exposed limits or flags
+        // report that vertex-stage storage buffers are unavailable.
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -446,6 +507,18 @@ impl WgpuFactory {
             driver_info: adapter_info.driver_info,
         };
         let adapter_limits = adapter.limits();
+        let capabilities = RendererCapabilities::from_adapter(
+            &adapter_limits,
+            &adapter.get_downlevel_capabilities(),
+            force_vertex_storage_polyfill,
+        );
+        if capabilities.polyfill_vertex_storage_buffers
+            && matches!(mode, RenderMode::ClockwiseAtomic)
+        {
+            return Err(RendererError::Unsupported(
+                "clockwise-atomic mode requires vertex-stage storage buffers",
+            ));
+        }
         validate_texture_extent(
             "render target",
             width,
@@ -458,7 +531,10 @@ impl WgpuFactory {
                 label: Some("nuxie-renderer-device"),
                 required_features,
                 required_limits: wgpu::Limits {
-                    max_storage_buffers_per_shader_stage: 7,
+                    max_storage_buffers_per_shader_stage: capabilities.required_storage_buffers(
+                        mode,
+                        adapter_limits.max_storage_buffers_per_shader_stage,
+                    ),
                     max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
                     ..wgpu::Limits::downlevel_defaults()
                 },
@@ -581,16 +657,18 @@ impl WgpuFactory {
                 contents: bytemuck::cast_slice(&patch_indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        let tessellator = tessellator::Tessellator::new(&device);
-        let path_pipeline = path_pipeline::PathPipeline::new(&device);
-        let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
+        let tessellator = tessellator::Tessellator::new(&device, capabilities);
+        let path_pipeline = path_pipeline::PathPipeline::new(&device, capabilities);
+        let atomic_pipeline = matches!(mode, RenderMode::ClockwiseAtomic)
+            .then(|| atomic_pipeline::AtomicPipeline::new(&device));
         let clockwise_atomic_pipeline = WEBGPU_SUPPORTS_CLOCKWISE_ATOMIC_MODE
             .then(|| clockwise_atomic_pipeline::ClockwiseAtomicPipeline::new(&device));
-        let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device);
+        let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device, capabilities);
         let composite_pipeline = composite_pipeline::CompositePipeline::new(&device);
         let gradient_pipeline = gradient_pipeline::GradientPipeline::new(&device);
         let mipmap_pipeline = mipmap_pipeline::MipmapPipeline::new(&device);
-        let msaa_atlas_pipeline = msaa_atlas_pipeline::MsaaAtlasPipeline::new(&device);
+        let msaa_atlas_pipeline =
+            msaa_atlas_pipeline::MsaaAtlasPipeline::new(&device, capabilities);
         let msaa_image_mesh_pipeline =
             msaa_image_mesh_pipeline::MsaaImageMeshPipeline::new(&device);
         let msaa_stencil_pipeline = msaa_stencil_pipeline::MsaaStencilPipeline::new(&device);
@@ -4174,14 +4252,19 @@ impl WgpuFrame {
                         );
                     }
                 } else {
+                    let atomic_pipeline = self
+                        .context
+                        .atomic_pipeline
+                        .as_ref()
+                        .expect("atomic render mode initialized without its pipeline");
                     let mut atomic_backing = atomic_backing.borrow_mut();
-                    let atomic_backing = atomic_backing
-                        .get_or_insert_with(|| self.context.atomic_pipeline.begin_frame_backing());
+                    let atomic_backing =
+                        atomic_backing.get_or_insert_with(|| atomic_pipeline.begin_frame_backing());
                     let mut uploads = tessellation_uploads.borrow_mut();
                     let batch_shared_draws = draws
                         .iter()
                         .all(|draw| matches!(draw.role, DrawRole::Content { clip_id: 0 }));
-                    let readbacks = self.context.atomic_pipeline.encode_batch(
+                    let readbacks = atomic_pipeline.encode_batch(
                         &self.context.device,
                         atomic_backing,
                         encoder,
@@ -5013,6 +5096,7 @@ impl WgpuFrame {
                             prepared_atlas_draws[atlas_index] =
                                 Some(self.context.msaa_atlas_pipeline.prepare(
                                     &self.context.device,
+                                    encoder,
                                     &tessellation_view,
                                     &self.context.feather_lut.view,
                                     gradient_texture.as_ref().map(|texture| &texture.view),
@@ -9766,6 +9850,123 @@ mod tests {
             support: 1.0 / 1024.0,
             value: 1.0 / 512.0,
         };
+
+    #[test]
+    fn vertex_storage_polyfill_follows_cpp_capability_threshold() {
+        let mut limits = wgpu::Limits::default();
+        let mut downlevel = wgpu::DownlevelCapabilities::default();
+
+        limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
+        assert!(
+            !RendererCapabilities::from_adapter(&limits, &downlevel, false)
+                .polyfill_vertex_storage_buffers
+        );
+
+        limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS - 1;
+        assert!(
+            RendererCapabilities::from_adapter(&limits, &downlevel, false)
+                .polyfill_vertex_storage_buffers
+        );
+
+        limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
+        downlevel.flags.remove(wgpu::DownlevelFlags::VERTEX_STORAGE);
+        assert!(
+            RendererCapabilities::from_adapter(&limits, &downlevel, false)
+                .polyfill_vertex_storage_buffers
+        );
+        assert!(
+            RendererCapabilities::from_adapter(
+                &limits,
+                &wgpu::DownlevelCapabilities::default(),
+                true,
+            )
+            .polyfill_vertex_storage_buffers
+        );
+    }
+
+    #[test]
+    fn generated_flat_varyings_are_compatibility_safe() {
+        let generated = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/generated");
+        let mut flat_varying_count = 0;
+        for entry in fs::read_dir(generated).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("wgsl") {
+                continue;
+            }
+            let source = fs::read_to_string(path).unwrap();
+            assert!(!source.contains("@interpolate(flat)"));
+            assert!(!source.contains("@interpolate(flat, first)"));
+            flat_varying_count += source.matches("@interpolate(flat, either)").count();
+        }
+        assert!(flat_varying_count != 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn texture_backed_vertex_storage_matches_buffer_backed_msaa() {
+        let render = |force_polyfill| {
+            let factory = pollster::block_on(WgpuFactory::new_async_with_mode_inner(
+                64,
+                64,
+                RenderMode::Msaa,
+                force_polyfill,
+            ))
+            .unwrap();
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(8.0, 8.0);
+            raw_path.line_to(56.0, 8.0);
+            raw_path.line_to(56.0, 56.0);
+            raw_path.line_to(8.0, 56.0);
+            raw_path.close();
+            let path = WgpuPath {
+                valid: true,
+                raw_path: Arc::new(raw_path),
+                fill_rule: FillRule::NonZero,
+            };
+            let paint = WgpuPaint {
+                color: 0xc040_80ff,
+                feather: 8.0,
+                ..Default::default()
+            };
+            let mut frame = factory.begin_frame(0x1020_3040);
+            frame.draw_path(&path, &paint);
+
+            // Cross the 128-texel row boundary in every polyfilled storage
+            // texture, including the 8-byte PaintData texture. The final row
+            // is intentionally partial.
+            let mut small_raw_path = RawPath::new();
+            small_raw_path.move_to(0.0, 0.0);
+            small_raw_path.line_to(3.0, 0.0);
+            small_raw_path.line_to(3.0, 3.0);
+            small_raw_path.line_to(0.0, 3.0);
+            small_raw_path.close();
+            let small_path = WgpuPath {
+                valid: true,
+                raw_path: Arc::new(small_raw_path),
+                fill_rule: FillRule::NonZero,
+            };
+            let small_paint = WgpuPaint {
+                color: 0xff20_c060,
+                ..Default::default()
+            };
+            for index in 0..140 {
+                frame.save();
+                frame.transform(Mat2D([
+                    1.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    (index % 14) as f32 * 4.0 + 4.0,
+                    (index / 14) as f32 * 4.0 + 4.0,
+                ]));
+                frame.draw_path(&small_path, &small_paint);
+                frame.restore();
+            }
+            frame.finish().unwrap()
+        };
+
+        assert_eq!(render(true), render(false));
+    }
 
     #[test]
     fn texture_extent_validation_rejects_zero_and_oversized_dimensions() {

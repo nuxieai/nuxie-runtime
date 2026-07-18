@@ -6,15 +6,15 @@ scratch_dir=$(mktemp -d "${TMPDIR:-/tmp}/nuxie-wgpu-consumer.XXXXXX")
 trap 'rm -rf -- "$scratch_dir"' EXIT
 
 cargo new --quiet --lib "$scratch_dir/consumer"
-cargo add --quiet --offline \
+cargo add --quiet \
   --manifest-path "$scratch_dir/consumer/Cargo.toml" \
   --path "$repo_dir/crates/nuxie-renderer" \
   nuxie-renderer
-cargo add --quiet --offline \
+cargo add --quiet \
   --manifest-path "$scratch_dir/consumer/Cargo.toml" \
   --path "$repo_dir/crates/nuxie" \
   nuxie
-cargo add --quiet --offline \
+cargo add --quiet \
   --manifest-path "$scratch_dir/consumer/Cargo.toml" \
   --path "$repo_dir/vendor/wgpu-30.0.0" \
   --no-default-features \
@@ -22,7 +22,7 @@ cargo add --quiet --offline \
   wgpu
 
 metadata_path="$scratch_dir/metadata.json"
-cargo metadata --offline --format-version 1 \
+cargo metadata --format-version 1 \
   --manifest-path "$scratch_dir/consumer/Cargo.toml" >"$metadata_path"
 
 python3 - "$metadata_path" "$repo_dir" <<'PY'
@@ -63,11 +63,11 @@ for name, expected_manifest in required.items():
         )
 PY
 
-cargo remove --quiet --offline \
+cargo remove --quiet \
   --manifest-path "$scratch_dir/consumer/Cargo.toml" \
   wgpu
 
-CARGO_TARGET_DIR="$repo_dir/target" cargo check --quiet --locked --offline \
+CARGO_TARGET_DIR="$repo_dir/target" cargo check --quiet --locked \
   --manifest-path "$scratch_dir/consumer/Cargo.toml"
 
 echo "renderer-wgpu-consumer-check path-stack=pass compile=pass"

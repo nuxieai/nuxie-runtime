@@ -12,6 +12,7 @@
 //! runtime does not embed — useful for tests and future editor-style flows.
 
 mod bytecode;
+mod mat4;
 mod renderer;
 mod view_model;
 
@@ -27,6 +28,7 @@ use luaur_rt::{
     UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector,
 };
 use luaur_vm::functions::luau_load::luau_load;
+use mat4::install_mat4_global;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance,
@@ -330,6 +332,7 @@ impl ScriptVm {
         }
 
         install_vector_global(&self.lua)?;
+        install_mat4_global(&self.lua)?;
         install_math_fround(&self.lua)?;
         install_data_value_global(&self.lua)?;
 

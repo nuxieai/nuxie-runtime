@@ -403,6 +403,71 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "LinearGradient",
+        schema_name: "LinearGradient",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "start_x",
+                schema_name: "startX",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "start_y",
+                schema_name: "startY",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "end_x",
+                schema_name: "endX",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "end_y",
+                schema_name: "endY",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "GradientStop",
+        schema_name: "GradientStop",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "color",
+                schema_name: "colorValue",
+                declared_owner: "GradientStop",
+                kind: FieldKind::Color,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "position",
+                schema_name: "position",
+                declared_owner: "GradientStop",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "Stroke",
         schema_name: "Stroke",
         fields: &[
@@ -931,6 +996,55 @@ fn render_scene_schema() -> String {
         FieldKind::Color,
         false,
     );
+    let linear_gradient_start_x = resolve_named_property(
+        "LinearGradient",
+        "startX",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_start_y = resolve_named_property(
+        "LinearGradient",
+        "startY",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_end_x = resolve_named_property(
+        "LinearGradient",
+        "endX",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_end_y = resolve_named_property(
+        "LinearGradient",
+        "endY",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_opacity = resolve_named_property(
+        "LinearGradient",
+        "opacity",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let gradient_stop_color_value = resolve_named_property(
+        "GradientStop",
+        "colorValue",
+        "GradientStop",
+        FieldKind::Color,
+        false,
+    );
+    let gradient_stop_position = resolve_named_property(
+        "GradientStop",
+        "position",
+        "GradientStop",
+        FieldKind::Double,
+        false,
+    );
     let rectangle_corner_radius_tl = resolve_named_property(
         "Rectangle",
         "cornerRadiusTL",
@@ -1328,6 +1442,13 @@ fn render_scene_schema() -> String {
         ("PATH_HEIGHT", path_height),
         ("FILL_RULE", fill_rule),
         ("COLOR_VALUE", color_value),
+        ("LINEAR_GRADIENT_START_X", linear_gradient_start_x),
+        ("LINEAR_GRADIENT_START_Y", linear_gradient_start_y),
+        ("LINEAR_GRADIENT_END_X", linear_gradient_end_x),
+        ("LINEAR_GRADIENT_END_Y", linear_gradient_end_y),
+        ("LINEAR_GRADIENT_OPACITY", linear_gradient_opacity),
+        ("GRADIENT_STOP_COLOR_VALUE", gradient_stop_color_value),
+        ("GRADIENT_STOP_POSITION", gradient_stop_position),
         ("RECTANGLE_CORNER_RADIUS_TL", rectangle_corner_radius_tl),
         ("RECTANGLE_CORNER_RADIUS_TR", rectangle_corner_radius_tr),
         ("RECTANGLE_CORNER_RADIUS_BR", rectangle_corner_radius_br),

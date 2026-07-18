@@ -2872,6 +2872,8 @@ pub enum ExportedObjectKind {
     Rectangle,
     Fill,
     SolidColor,
+    LinearGradient,
+    GradientStop,
     Stroke,
     DashPath,
     Dash,
@@ -2993,6 +2995,13 @@ pub enum ExportedProperty {
     RectangleLinkCornerRadius(bool),
     FillRule(ExportedFillRule),
     ColorValue(u32),
+    LinearGradientStartX(f32),
+    LinearGradientStartY(f32),
+    LinearGradientEndX(f32),
+    LinearGradientEndY(f32),
+    LinearGradientOpacity(f32),
+    GradientStopColorValue(u32),
+    GradientStopPosition(f32),
     StrokeThickness(f32),
     StrokeCap(SceneStrokeCap),
     StrokeJoin(SceneStrokeJoin),
@@ -3106,6 +3115,13 @@ impl ExportedProperty {
             Self::RectangleLinkCornerRadius(_) => PROPERTY_RECTANGLE_LINK_CORNER_RADIUS,
             Self::FillRule(_) => PROPERTY_FILL_RULE,
             Self::ColorValue(_) => PROPERTY_COLOR_VALUE,
+            Self::LinearGradientStartX(_) => PROPERTY_LINEAR_GRADIENT_START_X,
+            Self::LinearGradientStartY(_) => PROPERTY_LINEAR_GRADIENT_START_Y,
+            Self::LinearGradientEndX(_) => PROPERTY_LINEAR_GRADIENT_END_X,
+            Self::LinearGradientEndY(_) => PROPERTY_LINEAR_GRADIENT_END_Y,
+            Self::LinearGradientOpacity(_) => PROPERTY_LINEAR_GRADIENT_OPACITY,
+            Self::GradientStopColorValue(_) => PROPERTY_GRADIENT_STOP_COLOR_VALUE,
+            Self::GradientStopPosition(_) => PROPERTY_GRADIENT_STOP_POSITION,
             Self::StrokeThickness(_) => PROPERTY_STROKE_THICKNESS,
             Self::StrokeCap(_) => PROPERTY_STROKE_CAP,
             Self::StrokeJoin(_) => PROPERTY_STROKE_JOIN,
@@ -3240,6 +3256,12 @@ impl ExportedProperty {
             | Self::RectangleCornerRadiusTopRight(value)
             | Self::RectangleCornerRadiusBottomRight(value)
             | Self::RectangleCornerRadiusBottomLeft(value)
+            | Self::LinearGradientStartX(value)
+            | Self::LinearGradientStartY(value)
+            | Self::LinearGradientEndX(value)
+            | Self::LinearGradientEndY(value)
+            | Self::LinearGradientOpacity(value)
+            | Self::GradientStopPosition(value)
             | Self::StrokeThickness(value)
             | Self::DashOffset(value)
             | Self::DashLength(value)
@@ -3259,7 +3281,9 @@ impl ExportedProperty {
             | Self::ScriptAssetIsModule(value)
             | Self::AnimationEnableWorkArea(value)
             | Self::AnimationQuantize(value) => AuthoringValue::Bool(value),
-            Self::ColorValue(value) => AuthoringValue::Color(value),
+            Self::ColorValue(value) | Self::GradientStopColorValue(value) => {
+                AuthoringValue::Color(value)
+            }
         };
         AuthoringProperty { key, value }
     }
@@ -3293,6 +3317,8 @@ impl ExportedRecord {
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::Fill => TYPE_FILL,
             ExportedObjectKind::SolidColor => TYPE_SOLID_COLOR,
+            ExportedObjectKind::LinearGradient => TYPE_LINEAR_GRADIENT,
+            ExportedObjectKind::GradientStop => TYPE_GRADIENT_STOP,
             ExportedObjectKind::Stroke => TYPE_STROKE,
             ExportedObjectKind::DashPath => TYPE_DASH_PATH,
             ExportedObjectKind::Dash => TYPE_DASH,
@@ -6062,8 +6088,13 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
         (
             NodeKind::Shape,
             NodeKind::Rectangle | NodeKind::Fill | NodeKind::Stroke
-        ) | (NodeKind::Fill, NodeKind::SolidColor)
-            | (NodeKind::Stroke, NodeKind::SolidColor | NodeKind::DashPath)
+        ) | (
+            NodeKind::Fill,
+            NodeKind::SolidColor | NodeKind::LinearGradient
+        ) | (
+            NodeKind::Stroke,
+            NodeKind::SolidColor | NodeKind::LinearGradient | NodeKind::DashPath
+        ) | (NodeKind::LinearGradient, NodeKind::GradientStop)
             | (NodeKind::DashPath, NodeKind::Dash)
             | (
                 NodeKind::Text,
@@ -9074,6 +9105,26 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 });
             }
         }
+        NodeSpec::LinearGradient(spec) => {
+            for (property, value) in [
+                ("start_x", spec.start_x),
+                ("start_y", spec.start_y),
+                ("end_x", spec.end_x),
+                ("end_y", spec.end_y),
+                ("opacity", spec.opacity),
+            ] {
+                if !value.is_finite() {
+                    return Err(EditReason::NonFiniteProperty { property });
+                }
+            }
+        }
+        NodeSpec::GradientStop(spec) => {
+            if !spec.position.is_finite() {
+                return Err(EditReason::NonFiniteProperty {
+                    property: "position",
+                });
+            }
+        }
         NodeSpec::DashPath(spec) => {
             if !spec.offset.is_finite() {
                 return Err(EditReason::NonFiniteProperty { property: "offset" });
@@ -9301,6 +9352,21 @@ fn node_record(
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
             properties.push(ExportedProperty::ColorValue(spec.color));
             ExportedObjectKind::SolidColor
+        }
+        NodeSpec::LinearGradient(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::LinearGradientStartX(spec.start_x));
+            properties.push(ExportedProperty::LinearGradientStartY(spec.start_y));
+            properties.push(ExportedProperty::LinearGradientEndX(spec.end_x));
+            properties.push(ExportedProperty::LinearGradientEndY(spec.end_y));
+            properties.push(ExportedProperty::LinearGradientOpacity(spec.opacity));
+            ExportedObjectKind::LinearGradient
+        }
+        NodeSpec::GradientStop(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::GradientStopColorValue(spec.color));
+            properties.push(ExportedProperty::GradientStopPosition(spec.position));
+            ExportedObjectKind::GradientStop
         }
         NodeSpec::Stroke(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));

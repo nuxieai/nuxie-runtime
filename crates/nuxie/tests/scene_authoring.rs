@@ -4,16 +4,17 @@ use nuxie::{
     DashPathSpec, DashSpec, DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason,
     EventId, EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty,
     ExportedRecord, Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec,
-    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, LinearAnimationSpec, MachineId,
-    MachineInputId, MachineLayerSpec, MachineSpec, MachineTransitionId, NodeKind, NodeSpec,
-    ObjectId, Parent, PropValueKind, RawPath, RecordingFactory, RectangleCornerRadii,
-    RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPath, RenderShader, ResolveError, Scene, SceneEvent, SceneStrokeCap, SceneStrokeJoin,
-    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
-    ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
-    StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
-    ViewModelId, ViewModelInstanceId, ViewModelInstanceSpec, ViewModelNumberId,
-    ViewModelNumberSpec, ViewModelSpec, props,
+    GradientStopSpec, ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec,
+    LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
+    MachineSpec, MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
+    RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
+    SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
+    SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec, ScriptedDrawableSpec,
+    ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
+    TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelId,
+    ViewModelInstanceId, ViewModelInstanceSpec, ViewModelNumberId, ViewModelNumberSpec,
+    ViewModelSpec, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -7285,6 +7286,115 @@ fn typed_scene_materializes_rectangle_radii_and_a_dashed_stroke_without_raw_sche
     let stream = draw_stream(&mut scene, instance)?;
     assert!(stream.contains("style=stroke"));
     assert!(stream.contains("color=0xff445566"));
+    Ok(())
+}
+
+#[test]
+fn typed_scene_materializes_and_draws_a_real_linear_gradient_subtree() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Gradient".into(),
+            width: 20.0,
+            height: 20.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Gradient Shape".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Gradient Rectangle", 20.0, 20.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Gradient Fill".into(),
+            }),
+        )?;
+        let gradient = tx.create(
+            Parent::Object(fill),
+            NodeSpec::LinearGradient(LinearGradientSpec {
+                name: "Background Gradient".into(),
+                start_x: -10.0,
+                start_y: 0.0,
+                end_x: 10.0,
+                end_y: 0.0,
+                opacity: 0.75,
+            }),
+        )?;
+        for (index, (color, position)) in [(0xff09_0e38, 0.0), (0xff05_0410, 1.0)]
+            .into_iter()
+            .enumerate()
+        {
+            tx.create(
+                Parent::Object(gradient),
+                NodeSpec::GradientStop(GradientStopSpec {
+                    name: format!("Gradient Stop {index}"),
+                    color,
+                    position,
+                }),
+            )?;
+        }
+        Ok(artboard)
+    })?;
+
+    let records = scene.export_records();
+    assert_eq!(
+        records
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::Shape,
+            ExportedObjectKind::Rectangle,
+            ExportedObjectKind::Fill,
+            ExportedObjectKind::LinearGradient,
+            ExportedObjectKind::GradientStop,
+            ExportedObjectKind::GradientStop,
+        ]
+    );
+    assert_eq!(
+        records.records()[5].properties,
+        vec![
+            ExportedProperty::ComponentName("Background Gradient".into()),
+            ExportedProperty::ParentId(3),
+            ExportedProperty::LinearGradientStartY(0.0),
+            ExportedProperty::LinearGradientEndX(10.0),
+            ExportedProperty::LinearGradientEndY(0.0),
+            ExportedProperty::LinearGradientStartX(-10.0),
+            ExportedProperty::LinearGradientOpacity(0.75),
+        ]
+    );
+    assert_eq!(
+        records.records()[6].properties,
+        vec![
+            ExportedProperty::ComponentName("Gradient Stop 0".into()),
+            ExportedProperty::ParentId(4),
+            ExportedProperty::GradientStopColorValue(0xff09_0e38),
+            ExportedProperty::GradientStopPosition(0.0),
+        ]
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let stream = draw_stream(&mut scene, instance)?;
+    assert!(
+        stream.contains(
+            "start=(-10,0) end=(10,0) stops=[{color=0xbf090e38,stop=0},{color=0xbf050410,stop=1}]"
+        ),
+        "{stream}"
+    );
     Ok(())
 }
 

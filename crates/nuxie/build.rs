@@ -861,6 +861,7 @@ fn render_scene_schema() -> String {
     let event = concrete_definition("Event");
     let state_machine = concrete_definition("StateMachine");
     let state_machine_trigger = concrete_definition("StateMachineTrigger");
+    let state_machine_bool = concrete_definition("StateMachineBool");
     let state_machine_layer = concrete_definition("StateMachineLayer");
     let any_state = concrete_definition("AnyState");
     let entry_state = concrete_definition("EntryState");
@@ -868,6 +869,7 @@ fn render_scene_schema() -> String {
     let animation_state = concrete_definition("AnimationState");
     let state_transition = concrete_definition("StateTransition");
     let transition_trigger_condition = concrete_definition("TransitionTriggerCondition");
+    let transition_bool_condition = concrete_definition("TransitionBoolCondition");
     let state_machine_fire_event = concrete_definition("StateMachineFireEvent");
     let view_model = concrete_definition("ViewModel");
     let view_model_property_number = concrete_definition("ViewModelPropertyNumber");
@@ -921,6 +923,7 @@ fn render_scene_schema() -> String {
         ("EVENT", event),
         ("STATE_MACHINE", state_machine),
         ("STATE_MACHINE_TRIGGER", state_machine_trigger),
+        ("STATE_MACHINE_BOOL", state_machine_bool),
         ("STATE_MACHINE_LAYER", state_machine_layer),
         ("ANY_STATE", any_state),
         ("ENTRY_STATE", entry_state),
@@ -928,6 +931,7 @@ fn render_scene_schema() -> String {
         ("ANIMATION_STATE", animation_state),
         ("STATE_TRANSITION", state_transition),
         ("TRANSITION_TRIGGER_CONDITION", transition_trigger_condition),
+        ("TRANSITION_BOOL_CONDITION", transition_bool_condition),
         ("STATE_MACHINE_FIRE_EVENT", state_machine_fire_event),
         ("VIEW_MODEL", view_model),
         ("VIEW_MODEL_PROPERTY_NUMBER", view_model_property_number),
@@ -1447,6 +1451,20 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         true,
     );
+    let state_machine_bool_value = resolve_named_property(
+        "StateMachineBool",
+        "value",
+        "StateMachineBool",
+        FieldKind::Bool,
+        false,
+    );
+    let transition_condition_op_value = resolve_named_property(
+        "TransitionBoolCondition",
+        "opValue",
+        "TransitionValueCondition",
+        FieldKind::Uint,
+        true,
+    );
     let state_machine_event_id = resolve_named_property(
         "StateMachineFireEvent",
         "eventId",
@@ -1716,6 +1734,11 @@ fn render_scene_schema() -> String {
             state_transition_random_weight,
         ),
         ("STATE_MACHINE_INPUT_ID", state_machine_input_id),
+        ("STATE_MACHINE_BOOL_VALUE", state_machine_bool_value),
+        (
+            "TRANSITION_CONDITION_OP_VALUE",
+            transition_condition_op_value,
+        ),
         ("STATE_MACHINE_EVENT_ID", state_machine_event_id),
         ("STATE_MACHINE_FIRE_OCCURS", state_machine_fire_occurs),
         ("VIEW_MODEL_COMPONENT_NAME", view_model_component_name),

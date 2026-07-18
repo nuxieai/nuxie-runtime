@@ -508,6 +508,22 @@ pub struct InputCursor {
     input_kind: StateMachineInputKind,
 }
 
+/// Pre-resolved boolean input on one retained state-machine instance.
+///
+/// The opaque handle is fenced by the scene epoch, live instance, authored
+/// machine, runtime input ordinal, and boolean input kind. Hot writes therefore
+/// avoid exposing file-local ids or repeating name lookup.
+#[derive(Debug, Clone, Copy)]
+pub struct BooleanInputCursor {
+    scene: SceneId,
+    epoch: StructureEpoch,
+    instance_slot: usize,
+    instance: InstanceId,
+    machine: MachineId,
+    machine_index: usize,
+    input_index: usize,
+}
+
 /// Returned when a cursor predates a structural scene edit or its instance no longer exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StaleCursor;
@@ -566,7 +582,7 @@ impl std::fmt::Display for ResolveError {
             Self::UnsupportedProperty => "property is not valid for the authored object type",
             Self::UnknownMachine => "unknown authored state machine",
             Self::UnknownMachineInput => "unknown state-machine input",
-            Self::UnsupportedInputKind => "state-machine input is not a trigger",
+            Self::UnsupportedInputKind => "state-machine input has the wrong kind",
             Self::UnknownViewModelInstance => "unknown authored view-model instance",
             Self::UnknownViewModelNumber => "unknown authored view-model number",
             Self::UnknownViewModelBoolean => "unknown authored view-model boolean",
@@ -1145,6 +1161,7 @@ pub enum AuthoredObjectKind {
     Event,
     Machine,
     MachineTrigger,
+    MachineBoolean,
     MachineLayer,
     AnyState,
     EntryState,
@@ -1152,6 +1169,7 @@ pub enum AuthoredObjectKind {
     AnimationState,
     StateTransition,
     TriggerCondition,
+    BooleanEqualsCondition,
     FireEvent,
     DataBindContext,
 }
@@ -1177,6 +1195,9 @@ impl RecordSpec {
             Self::Machine(MachineRecordSpec::TriggerInput { .. }) => {
                 AuthoredObjectKind::MachineTrigger
             }
+            Self::Machine(MachineRecordSpec::BooleanInput { .. }) => {
+                AuthoredObjectKind::MachineBoolean
+            }
             Self::Machine(MachineRecordSpec::Layer { .. }) => AuthoredObjectKind::MachineLayer,
             Self::Machine(MachineRecordSpec::AnyState { .. }) => AuthoredObjectKind::AnyState,
             Self::Machine(MachineRecordSpec::EntryState { .. }) => AuthoredObjectKind::EntryState,
@@ -1189,6 +1210,9 @@ impl RecordSpec {
             }
             Self::Machine(MachineRecordSpec::TriggerCondition { .. }) => {
                 AuthoredObjectKind::TriggerCondition
+            }
+            Self::Machine(MachineRecordSpec::BooleanEqualsCondition { .. }) => {
+                AuthoredObjectKind::BooleanEqualsCondition
             }
             Self::Machine(MachineRecordSpec::FireEvent { .. }) => AuthoredObjectKind::FireEvent,
             Self::Machine(MachineRecordSpec::TransitionDurationBind { .. }) => {
@@ -1335,6 +1359,12 @@ pub struct TriggerInputSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BooleanInputSpec {
+    pub name: String,
+    pub default_value: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MachineLayerSpec {
     pub name: Option<String>,
 }
@@ -1357,6 +1387,10 @@ enum MachineRecordSpec {
     TriggerInput {
         machine: ObjectId,
         spec: TriggerInputSpec,
+    },
+    BooleanInput {
+        machine: ObjectId,
+        spec: BooleanInputSpec,
     },
     Layer {
         machine: ObjectId,
@@ -1383,6 +1417,11 @@ enum MachineRecordSpec {
         transition: ObjectId,
         input: MachineInputId,
     },
+    BooleanEqualsCondition {
+        transition: ObjectId,
+        input: MachineInputId,
+        value: bool,
+    },
     FireEvent {
         state: ObjectId,
         event: EventId,
@@ -1398,13 +1437,16 @@ impl MachineRecordSpec {
     const fn owner(&self) -> Option<ObjectId> {
         match self {
             Self::Event(_) | Self::Machine(_) => None,
-            Self::TriggerInput { machine, .. } | Self::Layer { machine, .. } => Some(*machine),
+            Self::TriggerInput { machine, .. }
+            | Self::BooleanInput { machine, .. }
+            | Self::Layer { machine, .. } => Some(*machine),
             Self::AnyState { layer }
             | Self::EntryState { layer }
             | Self::ExitState { layer }
             | Self::AnimationState { layer, .. } => Some(*layer),
             Self::Transition { source, .. } => Some(*source),
-            Self::TriggerCondition { transition, .. } => Some(*transition),
+            Self::TriggerCondition { transition, .. }
+            | Self::BooleanEqualsCondition { transition, .. } => Some(*transition),
             Self::FireEvent { state, .. } => Some(*state),
             Self::TransitionDurationBind { transition, .. } => Some(*transition),
         }
@@ -2199,6 +2241,7 @@ impl Hierarchy<'_> {
                             (spec, owner_kind),
                             (
                                 MachineRecordSpec::TriggerInput { .. }
+                                    | MachineRecordSpec::BooleanInput { .. }
                                     | MachineRecordSpec::Layer { .. },
                                 AuthoredObjectKind::Machine
                             ) | (
@@ -2215,7 +2258,8 @@ impl Hierarchy<'_> {
                                     | AuthoredObjectKind::ExitState
                                     | AuthoredObjectKind::AnimationState
                             ) | (
-                                MachineRecordSpec::TriggerCondition { .. },
+                                MachineRecordSpec::TriggerCondition { .. }
+                                    | MachineRecordSpec::BooleanEqualsCondition { .. },
                                 AuthoredObjectKind::StateTransition
                             )
                         );
@@ -2254,6 +2298,9 @@ impl Hierarchy<'_> {
                         }
                         MachineRecordSpec::TriggerCondition { input, .. } => {
                             Some((input.object_id(), AuthoredObjectKind::MachineTrigger))
+                        }
+                        MachineRecordSpec::BooleanEqualsCondition { input, .. } => {
+                            Some((input.object_id(), AuthoredObjectKind::MachineBoolean))
                         }
                         MachineRecordSpec::FireEvent { event, .. } => {
                             Some((event.object_id(), AuthoredObjectKind::Event))
@@ -3139,6 +3186,7 @@ pub enum ExportedObjectKind {
     Event,
     StateMachine,
     StateMachineTrigger,
+    StateMachineBoolean,
     StateMachineLayer,
     AnyState,
     EntryState,
@@ -3146,6 +3194,7 @@ pub enum ExportedObjectKind {
     AnimationState,
     StateTransition,
     TransitionTriggerCondition,
+    TransitionBooleanEqualsCondition,
     StateMachineFireEvent,
     DataConverterBooleanNegate,
     DataConverterToNumber,
@@ -3306,6 +3355,8 @@ pub enum ExportedProperty {
     StateTransitionExitTime(u32),
     StateTransitionRandomWeight(u32),
     StateMachineInputId(u32),
+    StateMachineBooleanValue(bool),
+    BooleanEqualsValue(bool),
     EventId(u32),
     FireEventOccurs(FireEventOccurs),
     ViewModelName(String),
@@ -3446,6 +3497,8 @@ impl ExportedProperty {
             Self::StateTransitionExitTime(_) => PROPERTY_STATE_TRANSITION_EXIT_TIME,
             Self::StateTransitionRandomWeight(_) => PROPERTY_STATE_TRANSITION_RANDOM_WEIGHT,
             Self::StateMachineInputId(_) => PROPERTY_STATE_MACHINE_INPUT_ID,
+            Self::StateMachineBooleanValue(_) => PROPERTY_STATE_MACHINE_BOOL_VALUE,
+            Self::BooleanEqualsValue(_) => PROPERTY_TRANSITION_CONDITION_OP_VALUE,
             Self::EventId(_) => PROPERTY_STATE_MACHINE_EVENT_ID,
             Self::FireEventOccurs(_) => PROPERTY_STATE_MACHINE_FIRE_OCCURS,
             Self::ViewModelName(_) => PROPERTY_VIEW_MODEL_COMPONENT_NAME,
@@ -3605,7 +3658,9 @@ impl ExportedProperty {
             | Self::ScriptAssetIsModule(value)
             | Self::AnimationEnableWorkArea(value)
             | Self::AnimationQuantize(value)
-            | Self::ViewModelBooleanValue(value) => AuthoringValue::Bool(value),
+            | Self::ViewModelBooleanValue(value)
+            | Self::StateMachineBooleanValue(value) => AuthoringValue::Bool(value),
+            Self::BooleanEqualsValue(value) => AuthoringValue::Uint(u64::from(!value)),
             Self::ColorValue(value) | Self::GradientStopColorValue(value) => {
                 AuthoringValue::Color(value)
             }
@@ -3667,6 +3722,7 @@ impl ExportedRecord {
             ExportedObjectKind::Event => TYPE_EVENT,
             ExportedObjectKind::StateMachine => TYPE_STATE_MACHINE,
             ExportedObjectKind::StateMachineTrigger => TYPE_STATE_MACHINE_TRIGGER,
+            ExportedObjectKind::StateMachineBoolean => TYPE_STATE_MACHINE_BOOL,
             ExportedObjectKind::StateMachineLayer => TYPE_STATE_MACHINE_LAYER,
             ExportedObjectKind::AnyState => TYPE_ANY_STATE,
             ExportedObjectKind::EntryState => TYPE_ENTRY_STATE,
@@ -3674,6 +3730,7 @@ impl ExportedRecord {
             ExportedObjectKind::AnimationState => TYPE_ANIMATION_STATE,
             ExportedObjectKind::StateTransition => TYPE_STATE_TRANSITION,
             ExportedObjectKind::TransitionTriggerCondition => TYPE_TRANSITION_TRIGGER_CONDITION,
+            ExportedObjectKind::TransitionBooleanEqualsCondition => TYPE_TRANSITION_BOOL_CONDITION,
             ExportedObjectKind::StateMachineFireEvent => TYPE_STATE_MACHINE_FIRE_EVENT,
             ExportedObjectKind::DataConverterBooleanNegate => TYPE_DATA_CONVERTER_BOOLEAN_NEGATE,
             ExportedObjectKind::DataConverterToNumber => TYPE_DATA_CONVERTER_TO_NUMBER,
@@ -4282,6 +4339,66 @@ impl Scene {
             machine_index,
             input_index,
             input_kind,
+        })
+    }
+
+    /// Resolve one named boolean input on a retained machine instance.
+    pub fn machine_boolean_input(
+        &self,
+        instance: InstanceId,
+        machine: MachineId,
+        name: &str,
+    ) -> std::result::Result<BooleanInputCursor, ResolveError> {
+        let (instance_slot, live) = self
+            .instances
+            .iter()
+            .enumerate()
+            .find_map(|(slot, candidate)| {
+                candidate
+                    .as_ref()
+                    .filter(|candidate| candidate.id == instance)
+                    .map(|candidate| (slot, candidate))
+            })
+            .ok_or(ResolveError::UnknownInstance)?;
+        let materialized = self
+            .materialized
+            .get(&live.artboard)
+            .ok_or(ResolveError::UnknownMachine)?;
+        let Some(machine_index) = materialized.machines.get(&machine).copied() else {
+            return Err(
+                if self
+                    .materialized
+                    .values()
+                    .any(|candidate| candidate.machines.contains_key(&machine))
+                {
+                    ResolveError::DifferentArtboard
+                } else {
+                    ResolveError::UnknownMachine
+                },
+            );
+        };
+        let retained = live
+            .machines
+            .get(machine, machine_index)
+            .ok_or(ResolveError::UnknownMachine)?;
+        let input_index = retained
+            .input_index_named(name)
+            .ok_or(ResolveError::UnknownMachineInput)?;
+        let input_kind = retained
+            .input(input_index)
+            .map(|input| input.kind())
+            .ok_or(ResolveError::UnknownMachineInput)?;
+        if input_kind != StateMachineInputKind::Bool {
+            return Err(ResolveError::UnsupportedInputKind);
+        }
+        Ok(BooleanInputCursor {
+            scene: self.identity.id,
+            epoch: self.epoch,
+            instance_slot,
+            instance,
+            machine,
+            machine_index,
+            input_index,
         })
     }
 
@@ -6514,6 +6631,12 @@ impl MachineTx<'_> {
                         machine: candidate,
                         spec: candidate_spec,
                     }) if *candidate == machine.object_id() && candidate_spec.name == spec.name
+                ) || matches!(
+                    &record.spec,
+                    RecordSpec::Machine(MachineRecordSpec::BooleanInput {
+                        machine: candidate,
+                        spec: candidate_spec,
+                    }) if *candidate == machine.object_id() && candidate_spec.name == spec.name
                 )
             })
         {
@@ -6531,6 +6654,68 @@ impl MachineTx<'_> {
             owner.artboard_index,
             operation_index,
             RecordSpec::Machine(MachineRecordSpec::TriggerInput {
+                machine: machine.object_id(),
+                spec,
+            }),
+        )
+        .map(MachineInputId)
+    }
+
+    pub fn create_boolean_input(
+        &mut self,
+        machine: MachineId,
+        spec: BooleanInputSpec,
+    ) -> std::result::Result<MachineInputId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let owner = self.expect_kind(
+            machine.object_id(),
+            AuthoredObjectKind::Machine,
+            "machine",
+            operation_index,
+        )?;
+        if spec.name.trim().is_empty() {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(machine.object_id())],
+                EditReason::EmptyMachineInputName,
+            ));
+        }
+        if let Some(existing) = self
+            .definitions
+            .artboards
+            .get(owner.artboard_index)
+            .into_iter()
+            .flat_map(|artboard| &artboard.records)
+            .find(|record| {
+                matches!(
+                    &record.spec,
+                    RecordSpec::Machine(MachineRecordSpec::TriggerInput {
+                        machine: candidate,
+                        spec: candidate_spec,
+                    }) if *candidate == machine.object_id() && candidate_spec.name == spec.name
+                ) || matches!(
+                    &record.spec,
+                    RecordSpec::Machine(MachineRecordSpec::BooleanInput {
+                        machine: candidate,
+                        spec: candidate_spec,
+                    }) if *candidate == machine.object_id() && candidate_spec.name == spec.name
+                )
+            })
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(machine.object_id()),
+                    EditId::Object(existing.id),
+                ],
+                EditReason::DuplicateMachineInputName,
+            ));
+        }
+        self.insert_record(
+            owner.artboard,
+            owner.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::BooleanInput {
                 machine: machine.object_id(),
                 spec,
             }),
@@ -6747,6 +6932,56 @@ impl MachineTx<'_> {
             RecordSpec::Machine(MachineRecordSpec::TriggerCondition {
                 transition: transition.object_id(),
                 input,
+            }),
+        )
+    }
+
+    pub fn add_boolean_equals_condition(
+        &mut self,
+        transition: MachineTransitionId,
+        input: MachineInputId,
+        value: bool,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let transition_record = self.expect_kind(
+            transition.object_id(),
+            AuthoredObjectKind::StateTransition,
+            "transition",
+            operation_index,
+        )?;
+        let input_record = self.expect_kind(
+            input.object_id(),
+            AuthoredObjectKind::MachineBoolean,
+            "input",
+            operation_index,
+        )?;
+        self.ensure_same_artboard(
+            transition_record.artboard,
+            input_record.artboard,
+            operation_index,
+            [transition.object_id(), input.object_id()],
+        )?;
+        let source = self.owner_of(transition.object_id(), operation_index)?;
+        let layer = self.owner_of(source, operation_index)?;
+        let machine = self.owner_of(layer, operation_index)?;
+        if self.owner_of(input.object_id(), operation_index)? != machine {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(transition.object_id()),
+                    EditId::Object(input.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        self.insert_record(
+            transition_record.artboard,
+            transition_record.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::BooleanEqualsCondition {
+                transition: transition.object_id(),
+                input,
+                value,
             }),
         )
     }
@@ -7307,6 +7542,35 @@ impl Frame<'_> {
         boolean.overridden = true;
         retained.dirty |= changed;
         Ok(changed)
+    }
+
+    /// Write one pre-resolved boolean on its retained state-machine instance.
+    pub fn set_boolean(
+        &mut self,
+        cursor: BooleanInputCursor,
+        value: bool,
+    ) -> std::result::Result<bool, StaleCursor> {
+        if cursor.scene != self.scene.identity.id || cursor.epoch != self.scene.epoch {
+            return Err(StaleCursor);
+        }
+        let live = self
+            .scene
+            .instances
+            .get_mut(cursor.instance_slot)
+            .and_then(Option::as_mut)
+            .filter(|instance| instance.id == cursor.instance)
+            .ok_or(StaleCursor)?;
+        let machine = live
+            .machines
+            .get_mut(cursor.machine, cursor.machine_index)
+            .ok_or(StaleCursor)?;
+        if machine
+            .input(cursor.input_index)
+            .is_none_or(|input| input.kind() != StateMachineInputKind::Bool)
+        {
+            return Err(StaleCursor);
+        }
+        Ok(machine.set_bool(cursor.input_index, value))
     }
 
     /// Fire one pre-resolved trigger on its retained state-machine instance.
@@ -10173,13 +10437,19 @@ fn append_machine_export_records(
                 MachineRecordSpec::TriggerInput {
                     machine: owner,
                     spec,
-                } if *owner == machine.id => Some((*record, spec)),
+                } if *owner == machine.id => Some((*record, spec.name.as_str(), None)),
+                MachineRecordSpec::BooleanInput {
+                    machine: owner,
+                    spec,
+                } if *owner == machine.id => {
+                    Some((*record, spec.name.as_str(), Some(spec.default_value)))
+                }
                 _ => None,
             })
             .collect::<Vec<_>>();
         let mut input_names = BTreeMap::<&str, ObjectId>::new();
-        for (input, spec) in &inputs {
-            if let Some(existing) = input_names.insert(spec.name.as_str(), input.id) {
+        for (input, name, _) in &inputs {
+            if let Some(existing) = input_names.insert(name, input.id) {
                 return Err(EditDiagnostic::new(
                     origins.object(input.id, fallback_operation_index),
                     vec![
@@ -10194,15 +10464,18 @@ fn append_machine_export_records(
         let input_indices = inputs
             .iter()
             .enumerate()
-            .map(|(index, (record, _))| (MachineInputId(record.id), index))
+            .map(|(index, (record, _, _))| (MachineInputId(record.id), index))
             .collect::<BTreeMap<_, _>>();
-        for (_, input) in inputs {
-            records.push(ExportedRecord {
-                kind: ExportedObjectKind::StateMachineTrigger,
-                properties: vec![ExportedProperty::StateMachineComponentName(
-                    input.name.clone(),
-                )],
-            });
+        for (_, name, default_value) in inputs {
+            let mut properties = vec![ExportedProperty::StateMachineComponentName(name.into())];
+            let kind = match default_value {
+                Some(default_value) => {
+                    properties.push(ExportedProperty::StateMachineBooleanValue(default_value));
+                    ExportedObjectKind::StateMachineBoolean
+                }
+                None => ExportedObjectKind::StateMachineTrigger,
+            };
+            records.push(ExportedRecord { kind, properties });
         }
 
         let layers = owned
@@ -10401,25 +10674,33 @@ fn append_machine_export_records(
                         .into_iter()
                         .flatten()
                         .filter(|(_, spec)| {
-                            matches!(spec, MachineRecordSpec::TriggerCondition { .. })
+                            matches!(
+                                spec,
+                                MachineRecordSpec::TriggerCondition { .. }
+                                    | MachineRecordSpec::BooleanEqualsCondition { .. }
+                            )
                         })
                         .copied()
                     {
-                        let MachineRecordSpec::TriggerCondition {
-                            transition: owner,
-                            input,
-                        } = condition_spec
-                        else {
-                            unreachable!("filtered trigger conditions")
+                        let (owner, input, boolean_value) = match condition_spec {
+                            MachineRecordSpec::TriggerCondition { transition, input } => {
+                                (*transition, *input, None)
+                            }
+                            MachineRecordSpec::BooleanEqualsCondition {
+                                transition,
+                                input,
+                                value,
+                            } => (*transition, *input, Some(*value)),
+                            _ => unreachable!("filtered input conditions"),
                         };
-                        if *owner != transition.id {
+                        if owner != transition.id {
                             return Err(EditDiagnostic::new(
                                 origins.object(condition.id, fallback_operation_index),
                                 vec![EditId::Object(condition.id)],
                                 EditReason::InternalInvariant,
                             ));
                         }
-                        let input_index = input_indices.get(input).copied().ok_or_else(|| {
+                        let input_index = input_indices.get(&input).copied().ok_or_else(|| {
                             EditDiagnostic::new(
                                 origins.object(condition.id, fallback_operation_index),
                                 vec![
@@ -10436,10 +10717,16 @@ fn append_machine_export_records(
                                 EditReason::CapacityExceeded,
                             )
                         })?;
-                        records.push(ExportedRecord {
-                            kind: ExportedObjectKind::TransitionTriggerCondition,
-                            properties: vec![ExportedProperty::StateMachineInputId(input_index)],
-                        });
+                        let mut properties =
+                            vec![ExportedProperty::StateMachineInputId(input_index)];
+                        let kind = match boolean_value {
+                            Some(value) => {
+                                properties.push(ExportedProperty::BooleanEqualsValue(value));
+                                ExportedObjectKind::TransitionBooleanEqualsCondition
+                            }
+                            None => ExportedObjectKind::TransitionTriggerCondition,
+                        };
+                        records.push(ExportedRecord { kind, properties });
                     }
                     append_machine_fire_events(
                         records,
@@ -15503,6 +15790,204 @@ mod tests {
         assert_eq!(machine.reported_event_count(), 1);
         instance.advance_with_state_machine(&mut machine, 0.0);
         assert_eq!(machine.reported_event_count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn authored_boolean_machine_exports_exact_riv_with_draw_and_event_behavior() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Fader".into(),
+                    x: 50.0,
+                    y: 50.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Card", 40.0, 30.0)),
+            )?;
+            let fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "Card fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Card color".into(),
+                    color: 0xff11_2233,
+                }),
+            )?;
+            let idle = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Idle".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+            let active = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Active".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+            let mut machines = tx.machines();
+            let event = machines.create_event(
+                artboard,
+                EventSpec {
+                    name: Some("Reached active".into()),
+                },
+            )?;
+            let machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Switcher".into()),
+                },
+            )?;
+            let armed = machines.create_boolean_input(
+                machine,
+                BooleanInputSpec {
+                    name: "Armed".into(),
+                    default_value: true,
+                },
+            )?;
+            let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+            let entry = machines.create_entry_state(layer)?;
+            let any = machines.create_any_state(layer)?;
+            machines.create_exit_state(layer)?;
+            let idle_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+            let active_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+            machines.create_transition(entry, idle_state)?;
+            let transition = machines.create_transition(any, active_state)?;
+            machines.add_boolean_equals_condition(transition, armed, false)?;
+            machines.add_fire_event(active_state, event, FireEventOccurs::AtStart)?;
+            Ok(())
+        })?;
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        assert!(bytes.starts_with(b"RIVE"));
+        let file = Arc::new(File::import(&bytes)?);
+        let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let mut machine = instance
+            .state_machine_instance(0)
+            .ok_or_else(|| anyhow::anyhow!("state machine"))?;
+        let armed = machine
+            .input_index_named("Armed")
+            .ok_or_else(|| anyhow::anyhow!("Armed boolean"))?;
+        assert_eq!(
+            machine.input(armed).and_then(|input| input.bool_value()),
+            Some(true)
+        );
+
+        assert!(instance.advance_with_state_machine(&mut machine, 0.0));
+        assert_eq!(
+            instance.raw().double_property(1, PROPERTY_WORLD_OPACITY),
+            Some(0.2)
+        );
+        let idle_draw = owned_canonical_draw(&mut instance)?;
+        assert!(machine.set_bool(armed, false));
+        assert!(instance.advance_with_state_machine(&mut machine, 0.0));
+        assert_eq!(
+            instance.raw().double_property(1, PROPERTY_WORLD_OPACITY),
+            Some(0.8)
+        );
+        let active_draw = owned_canonical_draw(&mut instance)?;
+        assert_ne!(idle_draw, active_draw);
+        let event = machine
+            .reported_event(0)
+            .ok_or_else(|| anyhow::anyhow!("reported event"))?;
+        assert_eq!(event.name(), Some("Reached active"));
+        assert_eq!(machine.reported_event_count(), 1);
+        instance.advance_with_state_machine(&mut machine, 0.0);
+        assert_eq!(machine.reported_event_count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn set_boolean_rechecks_machine_input_kind_and_index_fences() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, machine), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 10.0,
+                height: 10.0,
+            })?;
+            let mut machines = tx.machines();
+            let machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Machine".into()),
+                },
+            )?;
+            let armed = machines.create_boolean_input(
+                machine,
+                BooleanInputSpec {
+                    name: "Armed".into(),
+                    default_value: false,
+                },
+            )?;
+            machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+            let layer = machines.create_layer(
+                machine,
+                MachineLayerSpec {
+                    name: Some("Layer".into()),
+                },
+            )?;
+            machines.create_any_state(layer)?;
+            let entry = machines.create_entry_state(layer)?;
+            let exit = machines.create_exit_state(layer)?;
+            let transition = machines.create_transition(entry, exit)?;
+            machines.add_boolean_equals_condition(transition, armed, true)?;
+            Ok((artboard, machine))
+        })?;
+        let instance = scene.instantiate(artboard)?;
+        let valid = scene.machine_boolean_input(instance, machine, "Armed")?;
+
+        let mut wrong_kind = valid;
+        wrong_kind.input_index = 1;
+        assert_eq!(
+            scene.frame().set_boolean(wrong_kind, true),
+            Err(StaleCursor)
+        );
+
+        let mut unknown_input = valid;
+        unknown_input.input_index = usize::MAX;
+        assert_eq!(
+            scene.frame().set_boolean(unknown_input, true),
+            Err(StaleCursor)
+        );
+
+        let mut unknown_machine = valid;
+        unknown_machine.machine = MachineId(ObjectId(u64::MAX));
+        assert_eq!(
+            scene.frame().set_boolean(unknown_machine, true),
+            Err(StaleCursor)
+        );
+        assert_eq!(scene.frame().set_boolean(valid, true), Ok(true));
+        assert_eq!(scene.frame().set_boolean(valid, true), Ok(false));
         Ok(())
     }
 

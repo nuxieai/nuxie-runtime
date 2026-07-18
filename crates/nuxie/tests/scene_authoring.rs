@@ -1,10 +1,10 @@
 use anyhow::Result;
 use nuxie::{
     Aabb, AnimationId, AnimationStateSpec, ArtboardComponentListSpec, ArtboardId,
-    ArtboardListMapRuleSpec, ArtboardSpec, ChildIndex, ColorInt, DashPathSpec, DashSpec,
-    DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId, EventSpec,
-    ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord, Factory,
-    FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
+    ArtboardListMapRuleSpec, ArtboardSpec, BooleanInputSpec, ChildIndex, ColorInt, DashPathSpec,
+    DashSpec, DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId,
+    EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord,
+    Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
     ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, KeyInterpolation,
     LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
     MachineSpec, MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
@@ -4251,6 +4251,221 @@ fn trigger_machine_changes_visual_state_and_reports_one_semantic_event() -> Resu
         events.is_empty(),
         "machine state is isolated per live instance"
     );
+    Ok(())
+}
+
+#[test]
+fn boolean_machine_input_changes_visual_state_without_rebuilding_the_scene() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, machine, event), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+        let mut machines = tx.machines();
+        let event = machines.create_event(
+            artboard,
+            EventSpec {
+                name: Some("Reached active".into()),
+            },
+        )?;
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Switcher".into()),
+            },
+        )?;
+        let armed = machines.create_boolean_input(
+            machine,
+            BooleanInputSpec {
+                name: "Armed".into(),
+                default_value: false,
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        let any = machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let idle_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+        let active_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+        machines.create_transition(entry, idle_state)?;
+        let transition = machines.create_transition(any, active_state)?;
+        machines.add_boolean_equals_condition(transition, armed, true)?;
+        machines.add_fire_event(active_state, event, FireEventOccurs::AtStart)?;
+        Ok((artboard, shape, machine, event))
+    })?;
+
+    assert!(scene.export_records().records().iter().any(|record| {
+        record.kind == ExportedObjectKind::StateMachineBoolean
+            && record.properties
+                == vec![
+                    ExportedProperty::StateMachineComponentName("Armed".into()),
+                    ExportedProperty::StateMachineBooleanValue(false),
+                ]
+    }));
+    assert!(scene.export_records().records().iter().any(|record| {
+        record.kind == ExportedObjectKind::TransitionBooleanEqualsCondition
+            && record.properties
+                == vec![
+                    ExportedProperty::StateMachineInputId(0),
+                    ExportedProperty::BooleanEqualsValue(true),
+                ]
+    }));
+
+    let instance = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let armed = scene.machine_boolean_input(instance, machine, "Armed")?;
+    assert!(matches!(
+        scene.machine_input(instance, machine, "Armed"),
+        Err(ResolveError::UnsupportedInputKind)
+    ));
+    let epoch = scene.epoch();
+    let records = scene.export_records().into_records();
+    let mut events = Vec::new();
+
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.2);
+    assert!(events.is_empty());
+    assert!(scene.frame().set_boolean(armed, true)?);
+    assert!(!scene.frame().set_boolean(armed, true)?);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records().into_records(), records);
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+    assert_eq!(
+        events,
+        vec![SceneEvent::Authored {
+            event,
+            name: Some("Reached active".into()),
+            seconds_delay: 0.0,
+        }]
+    );
+
+    scene.edit(|tx| {
+        tx.create_artboard(ArtboardSpec {
+            name: "Other".into(),
+            width: 10.0,
+            height: 10.0,
+        })
+    })?;
+    assert_eq!(scene.frame().set_boolean(armed, false), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
+fn boolean_and_trigger_inputs_share_one_closed_name_namespace() -> Result<()> {
+    let mut scene = Scene::new();
+    let (machine, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        machines.create_boolean_input(
+            machine,
+            BooleanInputSpec {
+                name: "Armed".into(),
+                default_value: false,
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_entry_state(layer)?;
+        machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        Ok(machine)
+    })?;
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+
+    for error in [
+        scene
+            .edit(|tx| {
+                tx.machines().create_boolean_input(
+                    machine,
+                    BooleanInputSpec {
+                        name: "Go".into(),
+                        default_value: false,
+                    },
+                )?;
+                Ok(())
+            })
+            .expect_err("a boolean cannot reuse a trigger name"),
+        scene
+            .edit(|tx| {
+                tx.machines().create_trigger_input(
+                    machine,
+                    TriggerInputSpec {
+                        name: "Armed".into(),
+                    },
+                )?;
+                Ok(())
+            })
+            .expect_err("a trigger cannot reuse a boolean name"),
+    ] {
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::DuplicateMachineInputName
+        );
+    }
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let error = scene
+        .edit(|tx| {
+            tx.machines().create_boolean_input(
+                machine,
+                BooleanInputSpec {
+                    name: " \n ".into(),
+                    default_value: false,
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("boolean input names must be usable runtime keys");
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().reason, EditReason::EmptyMachineInputName);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
     Ok(())
 }
 

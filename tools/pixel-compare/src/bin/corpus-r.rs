@@ -2,7 +2,8 @@ use pixel_compare::{
     artifact, compare, validate_reference_identities, DiffReport, ReferenceIdentity, RgbaImage,
     Tolerance,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
 use std::fs;
@@ -34,10 +35,13 @@ struct Entry {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::parse()?;
+    let dynamic_run_provenance = DynamicRunProvenance::load(&options)?;
     let manifest: Manifest = toml::from_str(&fs::read_to_string(&options.manifest)?)?;
     let reference_base = std::env::current_dir()?;
     validate_entry_ids(&manifest.entry)?;
-    validate_reference_identity(&reference_base, &manifest.entry)?;
+    if options.dynamic_reference().is_none() {
+        validate_reference_identity(&reference_base, &manifest.entry)?;
+    }
     let entries = selected_entries(&manifest.entry, &options.probe_gated)?;
     fs::create_dir_all(&options.output_dir)?;
     let mut counts = Counts::default();
@@ -45,10 +49,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     let stderr = io::stderr();
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
+    if let Some(reference) = options.dynamic_reference() {
+        writeln!(
+            stdout,
+            "renderer-corpus-oracle reference-replay={} reference-backend={} candidate-replay={} candidate-backend={}",
+            reference.replay.display(),
+            reference.backend,
+            options.replay.display(),
+            options.backend,
+        )?;
+    }
     run_bounded(
         &entries,
         options.jobs,
-        |entry| run_entry(*entry, &options, &reference_base),
+        |entry| {
+            run_entry(
+                entry,
+                &options,
+                &reference_base,
+                dynamic_run_provenance.as_ref(),
+            )
+        },
         |execution| execution.outcome.is_err(),
         |index, execution| {
             emit_entry(
@@ -107,7 +128,27 @@ enum EntryOutcome {
         report: DiffReport,
         byte_exact: bool,
         reference_is_transparent_blank: bool,
+        adapter_check: Option<AdapterCheck>,
     },
+}
+
+#[derive(Clone, Copy, Debug)]
+enum AdapterCheck {
+    Matched,
+    CandidateUnreported,
+    ReferenceUnreported,
+    Unreported,
+}
+
+impl AdapterCheck {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Matched => "matched",
+            Self::CandidateUnreported => "candidate-unreported",
+            Self::ReferenceUnreported => "reference-unreported",
+            Self::Unreported => "unreported",
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -148,7 +189,12 @@ fn validate_stub_baseline(counts: &Counts) -> Result<(), String> {
     Ok(())
 }
 
-fn run_entry(entry: &Entry, options: &Options, reference_base: &Path) -> EntryExecution {
+fn run_entry(
+    entry: &Entry,
+    options: &Options,
+    reference_base: &Path,
+    dynamic_run_provenance: Option<&DynamicRunProvenance>,
+) -> EntryExecution {
     if entry.status == "gated" && options.probe_gated.is_empty() {
         return EntryExecution {
             diagnostics: ChildDiagnostics::default(),
@@ -157,33 +203,75 @@ fn run_entry(entry: &Entry, options: &Options, reference_base: &Path) -> EntryEx
             }),
         };
     }
-    let reference = match resolve_reference(reference_base, entry) {
+    let dynamic_reference = options.dynamic_reference();
+    let reference = dynamic_reference.map_or_else(
+        || resolve_reference(reference_base, entry),
+        |_| {
+            Ok(options
+                .output_dir
+                .join(format!("{}-reference.png", entry.id)))
+        },
+    );
+    let reference = match reference {
         Ok(reference) => reference,
         Err(error) => return EntryExecution::failed(error),
     };
     let actual = options.output_dir.join(format!("{}.png", entry.id));
-    let stream = match path_str(&entry.stream) {
-        Ok(stream) => stream,
-        Err(error) => return EntryExecution::failed(error.to_string()),
+    let mut diagnostics = ChildDiagnostics::default();
+    let reference_output = if let Some(reference_replay) = dynamic_reference {
+        let output = match run_replay(reference_replay, entry, &reference) {
+            Ok(output) => output,
+            Err(error) => return EntryExecution::failed(error),
+        };
+        diagnostics.append(&output);
+        if !output.status.success() {
+            return EntryExecution {
+                diagnostics,
+                outcome: Err(format!("reference renderer replay failed for {}", entry.id)),
+            };
+        }
+        Some(output)
+    } else {
+        None
     };
-    let actual_path = match path_str(&actual) {
-        Ok(actual) => actual,
-        Err(error) => return EntryExecution::failed(error.to_string()),
+    let candidate_replay = ReplayInvocation {
+        replay: &options.replay,
+        backend: &options.backend,
     };
-    let output = match Command::new(&options.replay)
-        .args(["--stream", stream])
-        .args(["--output", actual_path])
-        .args(["--backend", &options.backend])
-        .args(["--frame", &entry.frame.to_string()])
-        .args(["--mode", &entry.mode])
-        .output()
-    {
+    let output = match run_replay(candidate_replay, entry, &actual) {
         Ok(output) => output,
-        Err(error) => return EntryExecution::failed(error.to_string()),
+        Err(error) => {
+            return EntryExecution {
+                diagnostics,
+                outcome: Err(error),
+            };
+        }
     };
-    let diagnostics = ChildDiagnostics {
-        stdout: output.stdout,
-        stderr: output.stderr,
+    diagnostics.append(&output);
+    let adapter_check = match (dynamic_reference, reference_output.as_ref()) {
+        (Some(reference_replay), Some(reference_output)) if output.status.success() => {
+            match prepare_dynamic_reference_report(DynamicComparison {
+                entry,
+                output_dir: &options.output_dir,
+                reference_replay,
+                candidate_replay,
+                reference_png: &reference,
+                candidate_png: &actual,
+                reference_output,
+                candidate_output: &output,
+                run_provenance: dynamic_run_provenance
+                    .expect("dynamic replay provenance must be loaded"),
+            }) {
+                Ok(adapter_check) => Some(adapter_check),
+                Err(error) => {
+                    return EntryExecution {
+                        diagnostics,
+                        outcome: Err(error),
+                    };
+                }
+            }
+        }
+        _ => None,
     };
     let outcome = compare_entry(
         entry,
@@ -191,11 +279,197 @@ fn run_entry(entry: &Entry, options: &Options, reference_base: &Path) -> EntryEx
         &actual,
         &options.output_dir,
         output.status.success(),
+        adapter_check,
     );
     EntryExecution {
         diagnostics,
         outcome,
     }
+}
+
+#[derive(Clone, Copy)]
+struct ReplayInvocation<'a> {
+    replay: &'a Path,
+    backend: &'a str,
+}
+
+fn run_replay(
+    invocation: ReplayInvocation<'_>,
+    entry: &Entry,
+    output: &Path,
+) -> Result<std::process::Output, String> {
+    let stream = path_str(&entry.stream).map_err(|error| error.to_string())?;
+    let output = path_str(output).map_err(|error| error.to_string())?;
+    Command::new(invocation.replay)
+        .args(["--stream", stream])
+        .args(["--output", output])
+        .args(["--backend", invocation.backend])
+        .args(["--frame", &entry.frame.to_string()])
+        .args(["--mode", &entry.mode])
+        .output()
+        .map_err(|error| {
+            format!(
+                "failed to launch renderer replay `{}` with backend `{}`: {error}",
+                invocation.replay.display(),
+                invocation.backend,
+            )
+        })
+}
+
+impl ChildDiagnostics {
+    fn append(&mut self, output: &std::process::Output) {
+        self.stdout.extend_from_slice(&output.stdout);
+        self.stderr.extend_from_slice(&output.stderr);
+    }
+}
+
+#[derive(Serialize)]
+struct DynamicProvenance<'a> {
+    provenance_schema: u8,
+    oracle: &'static str,
+    case_id: &'a str,
+    stream: String,
+    stream_sha256: String,
+    frame: usize,
+    mode: &'a str,
+    max_channel_delta: u8,
+    max_different_pixels: u64,
+    reference_replay: String,
+    reference_replay_sha256: &'a str,
+    reference_backend: &'a str,
+    reference_output: String,
+    reference_png_sha256: String,
+    reference_adapter: &'a str,
+    candidate_replay: String,
+    candidate_replay_sha256: &'a str,
+    candidate_backend: &'a str,
+    candidate_output: String,
+    candidate_png_sha256: String,
+    candidate_adapter: &'a str,
+    adapter_check: &'static str,
+}
+
+struct DynamicComparison<'a> {
+    entry: &'a Entry,
+    output_dir: &'a Path,
+    reference_replay: ReplayInvocation<'a>,
+    candidate_replay: ReplayInvocation<'a>,
+    reference_png: &'a Path,
+    candidate_png: &'a Path,
+    reference_output: &'a std::process::Output,
+    candidate_output: &'a std::process::Output,
+    run_provenance: &'a DynamicRunProvenance,
+}
+
+fn prepare_dynamic_reference_report(
+    comparison: DynamicComparison<'_>,
+) -> Result<AdapterCheck, String> {
+    let DynamicComparison {
+        entry,
+        output_dir,
+        reference_replay,
+        candidate_replay,
+        reference_png,
+        candidate_png,
+        reference_output,
+        candidate_output,
+        run_provenance,
+    } = comparison;
+    let reference_adapter = reported_adapter(&reference_output.stdout)?;
+    let candidate_adapter = reported_adapter(&candidate_output.stdout)?;
+    let (adapter_check, adapter_mismatch) = match (&reference_adapter, &candidate_adapter) {
+        (Some(reference), Some(candidate)) if reference == candidate => {
+            (Some(AdapterCheck::Matched), None)
+        }
+        (Some(reference), Some(candidate)) => (
+            None,
+            Some(format!(
+                "renderer adapter mismatch for {}: reference `{reference}`, candidate `{candidate}`",
+                entry.id
+            )),
+        ),
+        (Some(_), None) => (Some(AdapterCheck::CandidateUnreported), None),
+        (None, Some(_)) => (Some(AdapterCheck::ReferenceUnreported), None),
+        (None, None) => (Some(AdapterCheck::Unreported), None),
+    };
+    let provenance = output_dir.join(format!("{}.provenance.toml", entry.id));
+    let record = DynamicProvenance {
+        provenance_schema: 1,
+        oracle: "same-runner-replay",
+        case_id: &entry.id,
+        stream: entry.stream.display().to_string(),
+        stream_sha256: sha256_file(&entry.stream)?,
+        frame: entry.frame,
+        mode: &entry.mode,
+        max_channel_delta: entry.max_channel_delta,
+        max_different_pixels: entry.max_different_pixels,
+        reference_replay: reference_replay.replay.display().to_string(),
+        reference_replay_sha256: &run_provenance.reference_replay_sha256,
+        reference_backend: reference_replay.backend,
+        reference_output: reference_png.display().to_string(),
+        reference_png_sha256: sha256_file(reference_png)?,
+        reference_adapter: reference_adapter.as_deref().unwrap_or("unreported"),
+        candidate_replay: candidate_replay.replay.display().to_string(),
+        candidate_replay_sha256: &run_provenance.candidate_replay_sha256,
+        candidate_backend: candidate_replay.backend,
+        candidate_output: candidate_png.display().to_string(),
+        candidate_png_sha256: sha256_file(candidate_png)?,
+        candidate_adapter: candidate_adapter.as_deref().unwrap_or("unreported"),
+        adapter_check: adapter_check.map_or("mismatch", AdapterCheck::as_str),
+    };
+    fs::write(
+        &provenance,
+        toml::to_string_pretty(&record).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    if let Some(error) = adapter_mismatch {
+        return Err(error);
+    }
+    Ok(adapter_check.expect("non-mismatching adapters have a reportable check"))
+}
+
+struct DynamicRunProvenance {
+    reference_replay_sha256: String,
+    candidate_replay_sha256: String,
+}
+
+impl DynamicRunProvenance {
+    fn load(options: &Options) -> Result<Option<Self>, String> {
+        let Some(reference) = options.dynamic_reference() else {
+            return Ok(None);
+        };
+        let candidate_replay_sha256 = sha256_file(&options.replay)?;
+        let reference_replay_sha256 = if reference.replay == options.replay {
+            candidate_replay_sha256.clone()
+        } else {
+            sha256_file(reference.replay)?
+        };
+        Ok(Some(Self {
+            reference_replay_sha256,
+            candidate_replay_sha256,
+        }))
+    }
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    fs::read(path)
+        .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+        .map_err(|error| format!("failed to hash {}: {error}", path.display()))
+}
+
+fn reported_adapter(stdout: &[u8]) -> Result<Option<String>, String> {
+    let stdout = String::from_utf8_lossy(stdout);
+    let mut adapters = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("adapter="));
+    let adapter = adapters
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if adapters.next().is_some() {
+        return Err("renderer replay reported more than one `adapter=` line".to_owned());
+    }
+    Ok(adapter.map(str::to_owned))
 }
 
 impl EntryExecution {
@@ -213,6 +487,7 @@ fn compare_entry(
     actual: &Path,
     output_dir: &Path,
     replay_succeeded: bool,
+    adapter_check: Option<AdapterCheck>,
 ) -> Result<EntryOutcome, String> {
     if !replay_succeeded {
         return Err(format!("renderer replay failed for {}", entry.id));
@@ -238,6 +513,7 @@ fn compare_entry(
         report,
         byte_exact: expected == actual_image,
         reference_is_transparent_blank: expected.pixels.iter().all(|channel| *channel == 0),
+        adapter_check,
     })
 }
 
@@ -289,6 +565,7 @@ fn emit_entry(
             report,
             byte_exact,
             reference_is_transparent_blank,
+            adapter_check,
         } if report.within_tolerance => {
             counts.exact += 1;
             counts.byte_exact += usize::from(byte_exact);
@@ -304,8 +581,13 @@ fn emit_entry(
                 report.max_channel_delta
             )
             .map_err(|error| error.to_string())?;
+            emit_dynamic_reference(entry, output_dir, adapter_check, stdout)?;
         }
-        EntryOutcome::Compared { report, .. } => {
+        EntryOutcome::Compared {
+            report,
+            adapter_check,
+            ..
+        } => {
             counts.diverges += 1;
             let artifact_path = output_dir.join(format!("{}-diff.png", entry.id));
             writeln!(
@@ -322,9 +604,31 @@ fn emit_entry(
                 artifact_path.display()
             )
             .map_err(|error| error.to_string())?;
+            emit_dynamic_reference(entry, output_dir, adapter_check, stdout)?;
         }
     }
     stdout.flush().map_err(|error| error.to_string())
+}
+
+fn emit_dynamic_reference(
+    entry: &Entry,
+    output_dir: &Path,
+    adapter_check: Option<AdapterCheck>,
+    stdout: &mut impl Write,
+) -> Result<(), String> {
+    let Some(adapter_check) = adapter_check else {
+        return Ok(());
+    };
+    let reference = output_dir.join(format!("{}-reference.png", entry.id));
+    let provenance = output_dir.join(format!("{}.provenance.toml", entry.id));
+    writeln!(
+        stdout,
+        "same-runner-reference reference={} provenance={} adapter-check={}",
+        reference.display(),
+        provenance.display(),
+        adapter_check.as_str(),
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn run_bounded<T, R, F, P, G, E>(
@@ -540,6 +844,8 @@ fn validate_entry_ids(entries: &[Entry]) -> Result<(), String> {
         for output_name in [
             format!("{}.png", entry.id),
             format!("{}-diff.png", entry.id),
+            format!("{}-reference.png", entry.id),
+            format!("{}.provenance.toml", entry.id),
         ] {
             if !output_names.insert(output_name.to_lowercase()) {
                 return Err(format!(
@@ -596,6 +902,8 @@ struct Options {
     jobs: usize,
     expect_all_fail: bool,
     probe_gated: Vec<String>,
+    reference_replay: Option<PathBuf>,
+    reference_backend: Option<String>,
 }
 
 impl Options {
@@ -611,6 +919,8 @@ impl Options {
         let mut jobs = 1;
         let mut expect_all_fail = false;
         let mut probe_gated = Vec::new();
+        let mut reference_replay = None;
+        let mut reference_backend = None;
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -629,8 +939,23 @@ impl Options {
                 }
                 "--expect-all-fail" => expect_all_fail = true,
                 "--probe-gated" => probe_gated.push(args.next().ok_or(usage())?),
+                "--reference-replay" => {
+                    reference_replay = Some(PathBuf::from(args.next().ok_or(usage())?))
+                }
+                "--reference-backend" => reference_backend = Some(args.next().ok_or(usage())?),
                 _ => return Err(format!("unknown argument `{arg}`\n{}", usage()).into()),
             }
+        }
+        if reference_replay.is_some() != reference_backend.is_some() {
+            return Err(
+                "--reference-replay and --reference-backend must be provided together".into(),
+            );
+        }
+        if reference_backend
+            .as_deref()
+            .is_some_and(|backend| backend != "ffi-dawn")
+        {
+            return Err("--reference-backend must be `ffi-dawn`".into());
         }
         Ok(Self {
             manifest,
@@ -640,6 +965,15 @@ impl Options {
             jobs,
             expect_all_fail,
             probe_gated,
+            reference_replay,
+            reference_backend,
+        })
+    }
+
+    fn dynamic_reference(&self) -> Option<ReplayInvocation<'_>> {
+        Some(ReplayInvocation {
+            replay: self.reference_replay.as_deref()?,
+            backend: self.reference_backend.as_deref()?,
         })
     }
 }
@@ -650,7 +984,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error + Send + Sync>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal] [--output-dir DIR] [--jobs N] [--expect-all-fail] [--probe-gated ID ...]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend BACKEND] [--output-dir DIR] [--jobs N] [--expect-all-fail] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -974,6 +1308,7 @@ mod tests {
                 },
                 byte_exact: false,
                 reference_is_transparent_blank: false,
+                adapter_check: None,
             }),
         };
         let mut counts = Counts::default();
@@ -1014,6 +1349,7 @@ mod tests {
                 },
                 byte_exact: true,
                 reference_is_transparent_blank: true,
+                adapter_check: None,
             }),
         };
         let mut counts = Counts::default();
@@ -1151,5 +1487,42 @@ mod tests {
             .err()
             .unwrap();
         assert!(error.to_string().contains("positive integer"));
+    }
+
+    #[test]
+    fn dynamic_reference_replay_and_backend_are_an_atomic_option_pair() {
+        for lone_option in ["--reference-replay", "--reference-backend"] {
+            let error = Options::parse_args([lone_option.to_owned(), "value".to_owned()])
+                .err()
+                .unwrap();
+            assert!(error.to_string().contains("must be provided together"));
+        }
+
+        let options = Options::parse_args([
+            "--reference-replay".to_owned(),
+            "renderer-replay".to_owned(),
+            "--reference-backend".to_owned(),
+            "ffi-dawn".to_owned(),
+        ])
+        .unwrap();
+        let reference = options.dynamic_reference().unwrap();
+        assert_eq!(reference.replay, Path::new("renderer-replay"));
+        assert_eq!(reference.backend, "ffi-dawn");
+    }
+
+    #[test]
+    fn dynamic_reference_rejects_a_non_dawn_oracle_backend() {
+        let error = Options::parse_args([
+            "--reference-replay".to_owned(),
+            "renderer-replay".to_owned(),
+            "--reference-backend".to_owned(),
+            "rust-wgpu".to_owned(),
+        ])
+        .err()
+        .unwrap();
+
+        assert!(error
+            .to_string()
+            .contains("--reference-backend must be `ffi-dawn`"));
     }
 }

@@ -45,6 +45,31 @@ The Dawn capture path is reproducible with a `perf-dawn` renderer-replay build
 and `capture-corpus-r-references --backend ffi-dawn`. The capture tool records
 provenance automatically.
 
+For CI hosts whose Metal adapter is not the adapter that produced the committed
+PNG, `corpus-r` can instead create the C++ Dawn oracle on that same runner and
+compare the Rust frame immediately afterward:
+
+```sh
+cargo run -p pixel-compare --bin corpus-r -- \
+  --replay target/debug/renderer-replay \
+  --backend rust-wgpu \
+  --reference-replay target/debug/renderer-replay \
+  --reference-backend ffi-dawn \
+  --output-dir target/renderer-corpus
+```
+
+This mode still applies each manifest row's existing channel and pixel budgets;
+it neither edits nor widens them. Each row leaves the C++ reference PNG, Rust
+candidate PNG, any three-panel diff, and a TOML provenance record under the
+output directory. The record binds the comparison to the stream, replay
+executables, generated PNG hashes, frame, mode, tolerance, backends, and
+reported adapters. Replays report adapters with one `adapter=<name>` stdout
+line. When both implementations report a name, a mismatch fails the corpus
+before pixel comparison and retains the generated frames plus mismatch
+provenance. If either replay does not support adapter reporting, the result and
+provenance explicitly say which identity was unreported rather than claiming a
+verified match.
+
 ## Same-tier Migration
 
 The former 59-row retained queue was recaptured through C++ Dawn WebGPU. All

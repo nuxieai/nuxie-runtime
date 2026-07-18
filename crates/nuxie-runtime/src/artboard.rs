@@ -2789,6 +2789,71 @@ impl ArtboardInstance {
         }
 
         match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("Artboard")
+                if local_id == 0
+                    && property_key_for_name("Artboard", "originX") == Some(property_key) =>
+            {
+                self.origin_x = value;
+                self.add_dirt(
+                    local_id,
+                    ComponentDirt::PATH | ComponentDirt::COMPONENTS,
+                    false,
+                )
+            }
+            Some("Artboard")
+                if local_id == 0
+                    && property_key_for_name("Artboard", "originY") == Some(property_key) =>
+            {
+                self.origin_y = value;
+                self.add_dirt(
+                    local_id,
+                    ComponentDirt::PATH | ComponentDirt::COMPONENTS,
+                    false,
+                )
+            }
+            Some("NestedArtboardOrigin")
+                if property_key_for_name("NestedArtboardOrigin", "originX")
+                    == Some(property_key)
+                    || property_key_for_name("NestedArtboardOrigin", "originY")
+                        == Some(property_key) =>
+            {
+                let Some(host_local_id) = self
+                    .component(local_id)
+                    .and_then(|component| component.parent_local)
+                else {
+                    return false;
+                };
+                let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
+                    return false;
+                };
+                let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
+                    return false;
+                };
+                let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
+                    .and_then(|key| self.double_property(local_id, key))
+                else {
+                    return false;
+                };
+                let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
+                    .and_then(|key| self.double_property(local_id, key))
+                else {
+                    return false;
+                };
+                let changed = self
+                    .nested_artboards
+                    .get_mut(&host_local_id)
+                    .is_some_and(|nested| {
+                        let mut changed =
+                            nested.child.set_double_property(0, origin_x_key, origin_x);
+                        changed |= nested.child.set_double_property(0, origin_y_key, origin_y);
+                        changed
+                    });
+                if changed {
+                    self.add_dirt(host_local_id, ComponentDirt::TRANSFORM, false);
+                    self.add_dirt(host_local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                }
+                changed
+            }
             Some("LinearGradient" | "RadialGradient")
                 if property_key_for_name("LinearGradient", "startX") == Some(property_key)
                     || property_key_for_name("LinearGradient", "startY") == Some(property_key)
@@ -3634,6 +3699,7 @@ fn build_runtime_nested_artboard_instance(
         build_context,
         false,
     )?);
+    apply_nested_artboard_origin_override(parent_graph, parent_objects, host_local_id, &mut child);
     child.bind_default_view_model_artboard_list_context(file);
     if !child_has_state_machine_data_binds(file, child_graph) {
         child.clear_default_text_property_context();
@@ -3700,6 +3766,40 @@ fn build_runtime_nested_artboard_instance(
         quantize,
         cumulated_seconds: 0.0,
     })
+}
+
+fn apply_nested_artboard_origin_override(
+    parent_graph: &ArtboardGraph,
+    parent_objects: &InstanceObjectArena,
+    host_local_id: usize,
+    child: &mut ArtboardInstance,
+) -> bool {
+    let Some(origin) = parent_graph.components.iter().find(|component| {
+        component.type_name == "NestedArtboardOrigin"
+            && component.parent_local == Some(host_local_id)
+    }) else {
+        return false;
+    };
+    let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
+        .and_then(|key| parent_objects.double_property(origin.local_id, key))
+    else {
+        return false;
+    };
+    let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
+        .and_then(|key| parent_objects.double_property(origin.local_id, key))
+    else {
+        return false;
+    };
+    let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
+        return false;
+    };
+    let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
+        return false;
+    };
+
+    let mut changed = child.set_double_property(0, origin_x_key, origin_x);
+    changed |= child.set_double_property(0, origin_y_key, origin_y);
+    changed
 }
 
 fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {

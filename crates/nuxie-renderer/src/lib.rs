@@ -121,6 +121,9 @@ const MAX_CACHED_STROKE_PREPARATION_SCRATCHES: usize = 1;
 // Match C++ RenderContext's retained 1 MiB per-frame allocator while dropping
 // pathological overflow storage instead of keeping it for the process lifetime.
 const MAX_RETAINED_STROKE_PREPARATION_BYTES: usize = 1 << 20;
+// C++ IAABB::makeMaximal(): intersecting this with any ordinary pixel bounds
+// returns those bounds unchanged.
+const MAXIMAL_PIXEL_BOUNDS: [i32; 4] = [i32::MIN, i32::MIN, i32::MAX, i32::MAX];
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
@@ -1170,7 +1173,11 @@ struct DrawState {
     transform: Mat2D,
     opacity: f32,
     clip_rect: Option<ClipRectState>,
-    clip_is_empty: bool,
+    // Mirrors C++ RiveRenderer::RenderState::overallClipPixelBounds. This is
+    // the pixel-space intersection of every active clip rectangle and path.
+    // Keeping it on the save/restore stack lets draw admission reject fully
+    // clipped work before clip replay or tessellation.
+    overall_clip_pixel_bounds: [i32; 4],
     clip_stack_height: usize,
 }
 
@@ -1180,7 +1187,7 @@ impl Default for DrawState {
             transform: Mat2D::IDENTITY,
             opacity: 1.0,
             clip_rect: None,
-            clip_is_empty: false,
+            overall_clip_pixel_bounds: MAXIMAL_PIXEL_BOUNDS,
             clip_stack_height: 0,
         }
     }
@@ -1973,7 +1980,7 @@ impl Renderer for WgpuFrame {
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
         self.draw_calls = self.draw_calls.saturating_add(1);
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(path) = wgpu_path(path) else {
@@ -2002,7 +2009,9 @@ impl Renderer for WgpuFrame {
         let Some(pixel_bounds) = path_draw_pixel_bounds(path, paint, self.state.transform) else {
             return;
         };
-        if pixel_bounds_are_outside_frame(pixel_bounds, self.width, self.height) {
+        let clipped_pixel_bounds =
+            intersect_pixel_bounds(pixel_bounds, self.state.overall_clip_pixel_bounds);
+        if pixel_bounds_are_outside_frame(clipped_pixel_bounds, self.width, self.height) {
             return;
         }
         let Some(preparation) = prepare_path_draw_with_pixel_bounds(
@@ -2049,7 +2058,7 @@ impl Renderer for WgpuFrame {
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(path) = wgpu_path(path) else {
@@ -2063,7 +2072,7 @@ impl Renderer for WgpuFrame {
             return;
         }
         if path.raw_path.verbs().is_empty() {
-            self.state.clip_is_empty = true;
+            self.state.overall_clip_pixel_bounds = [0; 4];
             return;
         }
         // RenderContext::frameSupportsClipRects() only enables clip planes for
@@ -2091,7 +2100,7 @@ impl Renderer for WgpuFrame {
         opacity: f32,
     ) {
         self.draw_calls = self.draw_calls.saturating_add(1);
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(image) = image else {
@@ -2108,9 +2117,6 @@ impl Renderer for WgpuFrame {
             return;
         }
         let Some(texture) = &image.texture else {
-            return;
-        };
-        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
         // C++ RiveRenderer::drawImage uses ImageRectDraw only for atomics;
@@ -2131,6 +2137,17 @@ impl Renderer for WgpuFrame {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
+        };
+        let Some(pixel_bounds) = draw::path_pixel_bounds(&path.raw_path, image_matrix) else {
+            return;
+        };
+        let clipped_pixel_bounds =
+            intersect_pixel_bounds(pixel_bounds, self.state.overall_clip_pixel_bounds);
+        if pixel_bounds_are_outside_frame(clipped_pixel_bounds, self.width, self.height) {
+            return;
+        }
+        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
+            return;
         };
         let state = DrawState {
             transform: image_matrix,
@@ -2180,7 +2197,7 @@ impl Renderer for WgpuFrame {
         opacity: f32,
     ) {
         self.draw_calls = self.draw_calls.saturating_add(1);
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(image) = image else {
@@ -2246,6 +2263,16 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("unmapped image mesh buffers");
             return;
         };
+        // C++ ImageMeshDraw uses FULLSCREEN_PIXEL_BOUNDS. Applying the
+        // overall clip therefore reduces its admission bounds to the active
+        // clip itself; reject an off-frame clip before replaying its paths.
+        if pixel_bounds_are_outside_frame(
+            self.state.overall_clip_pixel_bounds,
+            self.width,
+            self.height,
+        ) {
+            return;
+        }
         let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
@@ -2280,16 +2307,35 @@ impl Renderer for WgpuFrame {
 impl WgpuFrame {
     fn push_clip_path(&mut self, path: &WgpuPath) {
         let height = self.state.clip_stack_height;
-        if self
+        let needs_new_element = self
             .clips
             .get(height)
-            .is_none_or(|clip| !clip.is_equivalent(self.state.transform, path))
-        {
+            .is_none_or(|clip| !clip.is_equivalent(self.state.transform, path));
+        let pixel_bounds = if needs_new_element {
+            let Some(pixel_bounds) = draw::path_pixel_bounds(&path.raw_path, self.state.transform)
+            else {
+                self.state.overall_clip_pixel_bounds = [0; 4];
+                return;
+            };
+            pixel_bounds
+        } else {
+            let Some(pixel_bounds) = self.clips[height].pixel_bounds else {
+                self.state.overall_clip_pixel_bounds = [0; 4];
+                return;
+            };
+            pixel_bounds
+        };
+        self.state.overall_clip_pixel_bounds =
+            intersect_pixel_bounds(self.state.overall_clip_pixel_bounds, pixel_bounds);
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
+            return;
+        }
+        if needs_new_element {
             self.clips.truncate(height);
             self.clips.push(ClipElement {
                 path: path.clone(),
                 matrix: self.state.transform,
-                pixel_bounds: draw::path_pixel_bounds(&path.raw_path, self.state.transform),
+                pixel_bounds: Some(pixel_bounds),
                 prepared_fill: Arc::new(PreparedFillGeometry::new(path, self.state.transform)),
                 clip_id: 0,
             });
@@ -2519,6 +2565,15 @@ impl WgpuFrame {
         for (offset, clip) in self.clips[start..height].iter_mut().enumerate() {
             let replacement_id = (self.next_clip_id + offset as u32) as u16;
             clip.clip_id = replacement_id;
+            // C++ clears the precomputed authored bounds when clockwise-atomic
+            // nested clipping inverts the path around its parent content box.
+            // The inverse path has different bounds and must recompute them.
+            let prepared_pixel_bounds =
+                if self.mode == RenderMode::ClockwiseAtomic && parent_id != 0 {
+                    None
+                } else {
+                    clip.pixel_bounds
+                };
             updates.push(SolidDraw::new_with_prepared_fill_and_pixel_bounds(
                 clip.path.clone(),
                 WgpuPaint::default(),
@@ -2534,7 +2589,7 @@ impl WgpuFrame {
                 },
                 None,
                 Some(Arc::clone(&clip.prepared_fill)),
-                clip.pixel_bounds,
+                prepared_pixel_bounds,
             ));
             parent_id = replacement_id;
         }
@@ -6636,7 +6691,7 @@ fn path_aabb(path: &RawPath) -> Option<[f32; 4]> {
 
 fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
     if rect.iter().any(|value| value.is_nan()) || rect[0] >= rect[2] || rect[1] >= rect[3] {
-        state.clip_is_empty = true;
+        state.overall_clip_pixel_bounds = [0; 4];
         return true;
     }
     if let Some(existing) = state.clip_rect {
@@ -6651,7 +6706,7 @@ fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
             existing.rect[3].min(transformed[3]),
         ];
         if rect[0] >= rect[2] || rect[1] >= rect[3] {
-            state.clip_is_empty = true;
+            state.overall_clip_pixel_bounds = [0; 4];
         }
         state.clip_rect = Some(ClipRectState {
             rect,
@@ -6663,6 +6718,14 @@ fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
             matrix: state.transform,
         });
     }
+    let Some(clip_pixel_bounds) =
+        transformed_rect_pixel_bounds(state.clip_rect.expect("clip rectangle was just installed"))
+    else {
+        state.overall_clip_pixel_bounds = [0; 4];
+        return true;
+    };
+    state.overall_clip_pixel_bounds =
+        intersect_pixel_bounds(state.overall_clip_pixel_bounds, clip_pixel_bounds);
     true
 }
 
@@ -7515,6 +7578,47 @@ fn pixel_bounds_are_outside_frame(
         || bottom <= 0
         || left >= right
         || top >= bottom
+}
+
+fn pixel_bounds_are_empty([left, top, right, bottom]: [i32; 4]) -> bool {
+    left >= right || top >= bottom
+}
+
+fn intersect_pixel_bounds(a: [i32; 4], b: [i32; 4]) -> [i32; 4] {
+    [
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+        a[2].min(b[2]),
+        a[3].min(b[3]),
+    ]
+}
+
+fn transformed_rect_pixel_bounds(clip: ClipRectState) -> Option<[i32; 4]> {
+    let [left, top, right, bottom] = clip.rect;
+    let corners = [
+        Vec2D::new(left, top),
+        Vec2D::new(right, top),
+        Vec2D::new(right, bottom),
+        Vec2D::new(left, bottom),
+    ];
+    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for corner in corners {
+        let point = clip.matrix.transform_point(corner);
+        min.x = min.x.min(point.x);
+        min.y = min.y.min(point.y);
+        max.x = max.x.max(point.x);
+        max.y = max.y.max(point.y);
+    }
+    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
+        return None;
+    }
+    Some([
+        min.x.floor() as i32,
+        min.y.floor() as i32,
+        max.x.ceil() as i32,
+        max.y.ceil() as i32,
+    ])
 }
 
 fn path_draw_pixel_bounds(
@@ -10255,6 +10359,76 @@ mod tests {
                 assert_eq!(pixel(15, 15), [0, 255, 0, 255], "{mode:?} {blend_mode:?}");
             }
         }
+    }
+
+    #[test]
+    fn image_mesh_with_an_offscreen_clip_is_rejected_before_clip_replay() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [2.0f32, 2.0],
+            [14.0, 2.0],
+            [2.0, 14.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+        let offscreen_clip = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&offscreen_clip);
+        frame.draw_image_mesh(
+            Some(image.as_ref()),
+            ImageSampler::default(),
+            Some(vertices.as_ref()),
+            Some(uvs.as_ref()),
+            Some(indices.as_ref()),
+            3,
+            3,
+            BlendMode::SrcOver,
+            1.0,
+        );
+
+        assert!(frame.draws.is_empty());
+        assert_eq!(frame.clips[0].clip_id, 0);
+        assert_eq!(frame.next_clip_id, 1);
     }
 
     #[test]
@@ -13493,6 +13667,80 @@ mod tests {
     }
 
     #[test]
+    fn frame_admission_culls_draws_outside_the_active_clip_before_clip_replay() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let content = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let paint = WgpuPaint::default();
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&clip);
+        assert_eq!(frame.state.overall_clip_pixel_bounds, [40, 40, 60, 60]);
+        assert_eq!(frame.state.clip_stack_height, 1);
+        assert_eq!(frame.clips[0].clip_id, 0);
+
+        draw::reset_fill_tessellation_build_count();
+        frame.draw_path(&content, &paint);
+
+        assert_eq!(draw::fill_tessellation_build_count(), 0);
+        assert!(frame.draws.is_empty());
+        assert_eq!(frame.clips[0].clip_id, 0);
+        assert_eq!(frame.next_clip_id, 1);
+    }
+
+    #[test]
+    fn disjoint_path_clips_make_the_state_empty_without_extending_the_clip_stack() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let outer = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let disjoint = triangle_path([[0.0, 0.0], [10.0, 0.0], [5.0, 10.0]], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&outer);
+        frame.clip_path(&disjoint);
+
+        assert!(pixel_bounds_are_empty(
+            frame.state.overall_clip_pixel_bounds
+        ));
+        assert_eq!(frame.state.clip_stack_height, 1);
+        assert_eq!(frame.clips.len(), 1);
+        assert_eq!(frame.clips[0].path, outer);
+    }
+
+    #[test]
+    fn reused_clip_elements_reapply_their_pixel_bounds_before_stack_admission() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let disjoint_rect = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.save();
+        frame.clip_path(&clip);
+        frame.restore();
+        assert_eq!(frame.state.clip_stack_height, 0);
+        assert_eq!(frame.clips.len(), 1);
+
+        frame.clip_path(&disjoint_rect);
+        assert_eq!(frame.state.overall_clip_pixel_bounds, [0, 0, 10, 10]);
+        frame.clip_path(&clip);
+
+        assert!(pixel_bounds_are_empty(
+            frame.state.overall_clip_pixel_bounds
+        ));
+        assert_eq!(frame.state.clip_stack_height, 0);
+        assert_eq!(frame.clips.len(), 1);
+        assert_eq!(frame.clips[0].path, clip);
+    }
+
+    #[test]
     fn paint_thickness_matches_cpp_absolute_value_setter() {
         let mut paint = WgpuPaint::default();
         RenderPaint::thickness(&mut paint, -3.5);
@@ -13702,6 +13950,7 @@ mod tests {
         frame.clip_path(&outer);
         frame.clip_path(&inner);
         assert_eq!(frame.state.clip_rect.unwrap().rect, [16.0, 8.0, 56.0, 48.0]);
+        assert_eq!(frame.state.overall_clip_pixel_bounds, [16, 8, 56, 48]);
         let aux = clip_rect_paint_aux(frame.state.clip_rect);
         for (actual, expected) in aux
             .clip_rect_inverse_matrix
@@ -13715,6 +13964,7 @@ mod tests {
         }
         frame.restore();
         assert!(frame.state.clip_rect.is_none());
+        assert_eq!(frame.state.overall_clip_pixel_bounds, MAXIMAL_PIXEL_BOUNDS);
     }
 
     #[test]

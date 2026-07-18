@@ -531,6 +531,30 @@ impl Clone for VmBooleanCursor {
     }
 }
 
+/// A direct typed string property in the view-model context owned by one live
+/// instance.
+///
+/// The cursor is resolved once from durable authored identities. Runtime
+/// property ordinals remain private, and every read or write is fenced by the
+/// scene structure epoch and exact live/authored identities.
+pub struct VmStringCursor {
+    scene: SceneId,
+    epoch: StructureEpoch,
+    instance_slot: usize,
+    instance: InstanceId,
+    authored_instance: ViewModelInstanceId,
+    string: ViewModelStringId,
+    string_slot: usize,
+}
+
+impl Copy for VmStringCursor {}
+
+impl Clone for VmStringCursor {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 /// Pre-resolved trigger input on one retained state-machine instance.
 ///
 /// Like property cursors, this handle is lifetime-free and fenced by scene,
@@ -608,6 +632,7 @@ pub enum ResolveError {
     UnsupportedInputKind,
     UnknownViewModelInstance,
     UnknownViewModelNumber,
+    UnknownViewModelString,
     UnknownViewModelBoolean,
 }
 
@@ -624,6 +649,7 @@ impl std::fmt::Display for ResolveError {
             Self::UnsupportedInputKind => "state-machine input has the wrong kind",
             Self::UnknownViewModelInstance => "unknown authored view-model instance",
             Self::UnknownViewModelNumber => "unknown authored view-model number",
+            Self::UnknownViewModelString => "unknown authored view-model string",
             Self::UnknownViewModelBoolean => "unknown authored view-model boolean",
         })
     }
@@ -2979,10 +3005,16 @@ struct MaterializedViewModelDefault {
     authored_instance: ViewModelInstanceId,
     instance_index: usize,
     numbers: BTreeMap<ViewModelNumberId, MaterializedViewModelNumber>,
+    strings: BTreeMap<ViewModelStringId, MaterializedViewModelString>,
     booleans: BTreeMap<ViewModelBooleanId, MaterializedViewModelBoolean>,
 }
 
 struct MaterializedViewModelNumber {
+    name: String,
+    property_index: usize,
+}
+
+struct MaterializedViewModelString {
     name: String,
     property_index: usize,
 }
@@ -3008,12 +3040,20 @@ struct RetainedViewModelInstance {
     authored_instance: ViewModelInstanceId,
     value: ViewModelInstance,
     numbers: Vec<RetainedViewModelNumber>,
+    strings: Vec<RetainedViewModelString>,
     booleans: Vec<RetainedViewModelBoolean>,
     dirty: bool,
 }
 
 struct RetainedViewModelNumber {
     id: ViewModelNumberId,
+    overridden: bool,
+}
+
+struct RetainedViewModelString {
+    id: ViewModelStringId,
+    name: String,
+    property_index: usize,
     overridden: bool,
 }
 
@@ -3028,6 +3068,7 @@ struct RetainedViewModelBoolean {
 struct ViewModelCarry {
     authored_instance: Option<ViewModelInstanceId>,
     numbers: BTreeMap<String, f32>,
+    strings: BTreeMap<String, Vec<u8>>,
     booleans: BTreeMap<String, bool>,
 }
 
@@ -3135,6 +3176,28 @@ fn instantiate_runtime_mount_with_carry(
                 });
             }
 
+            let mut strings = default
+                .strings
+                .iter()
+                .map(|(string, metadata)| {
+                    let carried = carry
+                        .filter(|carry| carry.authored_instance == Some(default.authored_instance))
+                        .and_then(|carry| carry.strings.get(metadata.name.as_str()));
+                    if let Some(carried) = carried {
+                        let _ = value
+                            .raw_mut()
+                            .set_string_by_property_index(metadata.property_index, carried);
+                    }
+                    RetainedViewModelString {
+                        id: *string,
+                        name: metadata.name.clone(),
+                        property_index: metadata.property_index,
+                        overridden: carried.is_some(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            strings.sort_by_key(|string| string.property_index);
+
             let mut booleans = default
                 .booleans
                 .iter()
@@ -3166,6 +3229,7 @@ fn instantiate_runtime_mount_with_carry(
                 authored_instance: default.authored_instance,
                 value,
                 numbers,
+                strings,
                 booleans,
                 dirty: false,
             })
@@ -3228,6 +3292,26 @@ fn capture_view_model_carry(
             continue;
         };
         carry.booleans.insert(metadata.name.clone(), value);
+    }
+    for (string, metadata) in &default.strings {
+        let Some(retained_string) = retained
+            .strings
+            .iter()
+            .find(|candidate| candidate.id == *string)
+        else {
+            continue;
+        };
+        if !retained_string.overridden {
+            continue;
+        }
+        let Some(value) = retained
+            .value
+            .raw()
+            .string_value_by_property_name(&retained_string.name)
+        else {
+            continue;
+        };
+        carry.strings.insert(metadata.name.clone(), value.to_vec());
     }
     carry
 }
@@ -4384,6 +4468,64 @@ impl Scene {
             number,
             number_slot,
             value: PhantomData,
+        })
+    }
+
+    /// Resolve one authored string in the exact view-model instance mounted by
+    /// a live artboard instance.
+    ///
+    /// Runtime property ordinals stay inside the opaque cursor; callers use
+    /// only typed authored identities.
+    pub fn vm_string_cursor(
+        &self,
+        instance: InstanceId,
+        authored_instance: ViewModelInstanceId,
+        string: ViewModelStringId,
+    ) -> std::result::Result<VmStringCursor, ResolveError> {
+        let (instance_slot, live) = self
+            .instances
+            .iter()
+            .enumerate()
+            .find_map(|(slot, candidate)| {
+                candidate
+                    .as_ref()
+                    .filter(|candidate| candidate.id == instance)
+                    .map(|candidate| (slot, candidate))
+            })
+            .ok_or(ResolveError::UnknownInstance)?;
+        let materialized = self
+            .materialized
+            .get(&live.artboard)
+            .ok_or(ResolveError::UnknownViewModelInstance)?;
+        let default = materialized
+            .view_model_default
+            .as_ref()
+            .filter(|default| default.authored_instance == authored_instance)
+            .ok_or(ResolveError::UnknownViewModelInstance)?;
+        let metadata = default
+            .strings
+            .get(&string)
+            .ok_or(ResolveError::UnknownViewModelString)?;
+        let retained = live
+            .view_model
+            .as_ref()
+            .filter(|retained| retained.authored_instance == authored_instance)
+            .ok_or(ResolveError::UnknownViewModelInstance)?;
+        let string_slot = retained
+            .strings
+            .iter()
+            .position(|candidate| {
+                candidate.id == string && candidate.property_index == metadata.property_index
+            })
+            .ok_or(ResolveError::UnknownViewModelString)?;
+        Ok(VmStringCursor {
+            scene: self.identity.id,
+            epoch: self.epoch,
+            instance_slot,
+            instance,
+            authored_instance,
+            string,
+            string_slot,
         })
     }
 
@@ -8020,6 +8162,41 @@ impl Frame<'_> {
             .ok_or(StaleCursor)
     }
 
+    /// Read one UTF-8 string through a pre-resolved live view-model cursor.
+    pub fn get_vm_string(
+        &self,
+        cursor: VmStringCursor,
+    ) -> std::result::Result<String, StaleCursor> {
+        if cursor.scene != self.scene.identity.id || cursor.epoch != self.scene.epoch {
+            return Err(StaleCursor);
+        }
+        let retained = self
+            .scene
+            .instances
+            .get(cursor.instance_slot)
+            .and_then(Option::as_ref)
+            .filter(|instance| instance.id == cursor.instance)
+            .and_then(|instance| instance.view_model.as_ref())
+            .filter(|view_model| {
+                view_model.authored_instance == cursor.authored_instance
+                    && view_model
+                        .strings
+                        .get(cursor.string_slot)
+                        .is_some_and(|string| string.id == cursor.string)
+            })
+            .ok_or(StaleCursor)?;
+        let string = retained
+            .strings
+            .get(cursor.string_slot)
+            .ok_or(StaleCursor)?;
+        let value = retained
+            .value
+            .raw()
+            .string_value_by_property_name(&string.name)
+            .ok_or(StaleCursor)?;
+        String::from_utf8(value.to_vec()).map_err(|_| StaleCursor)
+    }
+
     /// Read one boolean through a pre-resolved live view-model cursor.
     pub fn get_vm_boolean(
         &self,
@@ -8127,6 +8304,47 @@ impl Frame<'_> {
             .raw_mut()
             .set_number_by_slot(cursor.number_slot, value);
         number.overridden = true;
+        retained.dirty |= changed;
+        Ok(changed)
+    }
+
+    /// Write one UTF-8 string through a pre-resolved live view-model cursor.
+    ///
+    /// The write mutates only this live instance, never authored records or
+    /// the structure epoch. An explicit no-op remains an override for a later
+    /// same-schema remount.
+    pub fn set_vm_string(
+        &mut self,
+        cursor: VmStringCursor,
+        value: &str,
+    ) -> std::result::Result<bool, StaleCursor> {
+        if cursor.scene != self.scene.identity.id || cursor.epoch != self.scene.epoch {
+            return Err(StaleCursor);
+        }
+        let retained = self
+            .scene
+            .instances
+            .get_mut(cursor.instance_slot)
+            .and_then(Option::as_mut)
+            .filter(|instance| instance.id == cursor.instance)
+            .and_then(|instance| instance.view_model.as_mut())
+            .filter(|view_model| {
+                view_model.authored_instance == cursor.authored_instance
+                    && view_model
+                        .strings
+                        .get(cursor.string_slot)
+                        .is_some_and(|string| string.id == cursor.string)
+            })
+            .ok_or(StaleCursor)?;
+        let string = retained
+            .strings
+            .get_mut(cursor.string_slot)
+            .ok_or(StaleCursor)?;
+        let changed = retained
+            .value
+            .raw_mut()
+            .set_string_by_property_index(string.property_index, value.as_bytes());
+        string.overridden = true;
         retained.dirty |= changed;
         Ok(changed)
     }
@@ -8837,6 +9055,44 @@ fn materialize_view_model_default(
             },
         );
     }
+    let mut strings = BTreeMap::new();
+    for string in &model.strings {
+        let (string_model_index, property_index) = lowered
+            .string_indices
+            .get(&string.id)
+            .copied()
+            .ok_or_else(|| {
+                EditDiagnostic::new(
+                    operation_index,
+                    vec![EditId::Object(string.id.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        if string_model_index != expected_model_index {
+            return Err(EditDiagnostic::new(
+                operation_index,
+                vec![
+                    EditId::Object(model.id.object_id()),
+                    EditId::Object(string.id.object_id()),
+                ],
+                EditReason::InternalInvariant,
+            ));
+        }
+        let property_index = usize::try_from(property_index).map_err(|_| {
+            EditDiagnostic::new(
+                operation_index,
+                vec![EditId::Object(string.id.object_id())],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        strings.insert(
+            string.id,
+            MaterializedViewModelString {
+                name: string.spec.name.clone(),
+                property_index,
+            },
+        );
+    }
     let mut booleans = BTreeMap::new();
     for boolean in &model.booleans {
         let (boolean_model_index, property_index) = lowered
@@ -8879,6 +9135,7 @@ fn materialize_view_model_default(
         authored_instance,
         instance_index,
         numbers,
+        strings,
         booleans,
     }))
 }

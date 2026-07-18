@@ -15,7 +15,8 @@ use nuxie::{
     ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
     TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelChildSpec, ViewModelId,
     ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListSource, ViewModelListSpec,
-    ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec, ViewModelStringSpec, props,
+    ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec, ViewModelStringId, ViewModelStringSpec,
+    props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -4031,6 +4032,90 @@ fn typed_view_model_strings_export_and_import_as_runtime_instance_values() -> Re
     let mut events = Vec::new();
     let _ = scene.frame().advance(instance, 0.0, &mut events);
     assert!(events.is_empty());
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct ViewModelStringFixture {
+    artboard: ArtboardId,
+    shape: ObjectId,
+    defaults: ViewModelInstanceId,
+    label: ViewModelStringId,
+}
+
+fn create_view_model_string_fixture(
+    tx: &mut SceneTx<'_>,
+) -> std::result::Result<ViewModelStringFixture, EditAbort> {
+    let artboard = tx.create_artboard(ArtboardSpec {
+        name: "String cursor".into(),
+        width: 100.0,
+        height: 100.0,
+    })?;
+    let shape = tx.create(
+        Parent::Artboard(artboard),
+        NodeSpec::Shape(ShapeSpec {
+            name: "Remount target".into(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        }),
+    )?;
+    let mut view_models = tx.view_models();
+    let model = view_models.create(ViewModelSpec {
+        name: "Copy".into(),
+    })?;
+    let label = view_models.create_string(
+        model,
+        ViewModelStringSpec {
+            name: "label".into(),
+        },
+    )?;
+    let defaults = view_models.create_instance(
+        model,
+        ViewModelInstanceSpec {
+            name: Some("Defaults".into()),
+        },
+    )?;
+    view_models.set_string(defaults, label, "before")?;
+    view_models.set_artboard_default(artboard, defaults)?;
+    Ok(ViewModelStringFixture {
+        artboard,
+        shape,
+        defaults,
+        label,
+    })
+}
+
+#[test]
+fn typed_view_model_string_cursors_hot_write_and_carry_across_same_schema_remounts() -> Result<()> {
+    let mut scene = Scene::new();
+    let (fixture, _) = scene.edit(create_view_model_string_fixture)?;
+    let instance = scene.instantiate(fixture.artboard)?;
+    let cursor = scene.vm_string_cursor(instance, fixture.defaults, fixture.label)?;
+    let epoch = scene.epoch();
+    let records = scene.export_records().into_records();
+
+    assert_eq!(scene.frame().get_vm_string(cursor)?, "before");
+    assert!(scene.frame().set_vm_string(cursor, "after")?);
+    assert!(!scene.frame().set_vm_string(cursor, "after")?);
+    assert_eq!(scene.frame().get_vm_string(cursor)?, "after");
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records().into_records(), records);
+
+    scene.edit(|tx| tx.set(fixture.shape, props::TRANSLATE_X, 12.0))?;
+    assert_eq!(scene.frame().get_vm_string(cursor), Err(StaleCursor));
+    let carried = scene.vm_string_cursor(instance, fixture.defaults, fixture.label)?;
+    assert_eq!(scene.frame().get_vm_string(carried)?, "after");
+
+    scene.drop_instance(instance);
+    assert_eq!(scene.frame().get_vm_string(carried), Err(StaleCursor));
+    assert_eq!(
+        scene.frame().set_vm_string(carried, "stale"),
+        Err(StaleCursor)
+    );
     Ok(())
 }
 

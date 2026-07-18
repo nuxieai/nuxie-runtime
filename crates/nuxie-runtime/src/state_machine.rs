@@ -1200,7 +1200,9 @@ impl RuntimeBlendState1D {
                     .and_then(|input_id| usize::try_from(input_id).ok()),
             },
             "BlendState1DViewModel" => RuntimeBlendState1DSource::BindableProperty {
-                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+                global_id: file
+                    .latest_bindable_property_for_object(object)
+                    .map(|property| property.id as u32),
             },
             _ => return None,
         };
@@ -1224,7 +1226,7 @@ impl RuntimeBlendState1D {
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeBlendState1DSource {
     Input { input_index: Option<usize> },
-    BindableProperty { global_id: u32 },
+    BindableProperty { global_id: Option<u32> },
 }
 
 #[derive(Debug, Clone)]
@@ -1278,7 +1280,7 @@ pub(crate) struct RuntimeBlendAnimationDirect {
 pub(crate) enum RuntimeDirectBlendSource {
     Input { input_index: usize },
     MixValue { value: f32 },
-    BindableProperty { global_id: u32 },
+    BindableProperty { global_id: Option<u32> },
 }
 
 impl RuntimeDirectBlendSource {
@@ -1291,7 +1293,9 @@ impl RuntimeDirectBlendSource {
                 value: object.double_property("mixValue").unwrap_or(100.0),
             }),
             2 => Some(Self::BindableProperty {
-                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+                global_id: file
+                    .latest_bindable_property_for_object(object)
+                    .map(|property| property.id as u32),
             }),
             _ => None,
         }
@@ -1423,9 +1427,9 @@ impl BlendState1DInstance {
                 .and_then(|input_index| inputs.get(input_index))
                 .and_then(StateMachineInputInstance::number_value)
                 .unwrap_or(0.0),
-            RuntimeBlendState1DSource::BindableProperty { global_id } => {
-                bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
-            }
+            RuntimeBlendState1DSource::BindableProperty { global_id } => global_id
+                .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
+                .unwrap_or(0.0),
         };
 
         let animation_count = self.animations.len();
@@ -1616,7 +1620,14 @@ impl BlendStateDirectInstance {
                     .unwrap_or(0.0),
                 RuntimeDirectBlendSource::MixValue { value } => value,
                 RuntimeDirectBlendSource::BindableProperty { global_id } => {
-                    bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
+                    let Some(value) = global_id
+                        .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
+                    else {
+                        // C++ leaves the current mix untouched when the authored
+                        // bindable property cannot produce a number instance.
+                        continue;
+                    };
+                    value
                 }
             };
             animation.mix = (value / 100.0).clamp(0.0, 1.0);

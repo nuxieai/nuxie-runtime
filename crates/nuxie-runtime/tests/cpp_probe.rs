@@ -1924,6 +1924,30 @@ fn synthetic_state_machine_blend_state_1d_view_model(file_id: u64, value: f32) -
     })
 }
 
+fn synthetic_state_machine_blend_state_1d_missing_bindable_instance(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        // A bindable without a DataBind has no state-machine instance. C++
+        // keeps the 1D blend state and evaluates it at the default value zero.
+        push_object_with_properties(bytes, "BindablePropertyNumber", |_| {});
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_number_blend_state(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_default_viewmodel_number_blend_state_with_state_machines(file_id, 1)
 }
@@ -9206,6 +9230,28 @@ fn synthetic_state_machine_direct_bindable_blend_state(file_id: u64, value: f32)
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
         });
         push_bindable_number_data_bind(bytes, value);
+        push_object_with_properties(bytes, "BlendStateDirect", |_| {});
+        push_blend_animation_direct_bindable(bytes, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_direct_missing_bindable_instance(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        // With no DataBind there is no number instance. Direct blends retain
+        // their previous mix (initially zero) instead of dropping the animation.
+        push_object_with_properties(bytes, "BindablePropertyNumber", |_| {});
         push_object_with_properties(bytes, "BlendStateDirect", |_| {});
         push_blend_animation_direct_bindable(bytes, 0);
         push_object_with_properties(bytes, "ExitState", |_| {});
@@ -18544,6 +18590,69 @@ fn state_machine_bindable_blend_sources_match_cpp_probe() {
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
 
+        let rust_reports = [
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ),
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ),
+        ];
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_missing_bindable_blend_instances_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes) in [
+        (
+            "synthetic/runtime_state_machine_blend_state_1d_missing_bindable_instance_cpp.riv",
+            synthetic_state_machine_blend_state_1d_missing_bindable_instance(8998),
+        ),
+        (
+            "synthetic/runtime_state_machine_direct_missing_bindable_instance_cpp.riv",
+            synthetic_state_machine_direct_missing_bindable_instance(8999),
+        ),
+    ] {
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
         let rust_reports = [
             (
                 rust.advance_state_machine_instance(&mut state_machine, 0.0),

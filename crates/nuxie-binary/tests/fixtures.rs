@@ -13,9 +13,9 @@ use nuxie_binary::{
     RuntimeDataConverterFormulaAddDirtEffect, RuntimeDataConverterMarkDirtyEffect,
     RuntimeDataConverterPropertyChangeEffect, RuntimeDataConverterResetEffect,
     RuntimeDataConverterUnbindEffect, RuntimeDataConverterUpdateEffect, RuntimeDataType,
-    RuntimeFile, RuntimeImportDropReason, RuntimeImportStatus, RuntimeReadErrorKind, SkipReason,
-    SkippedBitmaskPassthrough, read_runtime_file, read_runtime_file_with_error_kind,
-    read_runtime_file_with_scripting,
+    RuntimeFile, RuntimeImportDropReason, RuntimeImportStatus, RuntimeReadErrorKind,
+    SUPPORTED_MAJOR_VERSION, SUPPORTED_MINOR_VERSION, SkipReason, SkippedBitmaskPassthrough,
+    read_runtime_file, read_runtime_file_with_error_kind, read_runtime_file_with_scripting,
 };
 use nuxie_schema::definition_by_name;
 use std::path::{Path, PathBuf};
@@ -299,11 +299,24 @@ fn header_integer_semantics_match_cpp_runtime() {
         read_runtime_file(&noncanonical_major).expect("C++ accepts noncanonical LEB128 encodings");
     assert_eq!(noncanonical_major.header.major_version, 7);
 
-    let newer_minor =
-        read_runtime_file(&synthetic_runtime_file_with_header(7, 999, 0, &[], |_| {}))
-            .expect("C++ accepts newer minor versions with the same major version");
-    assert_eq!(newer_minor.header.major_version, 7);
-    assert_eq!(newer_minor.header.minor_version, 999);
+    for minor_version in [
+        0,
+        SUPPORTED_MINOR_VERSION - 1,
+        SUPPORTED_MINOR_VERSION,
+        SUPPORTED_MINOR_VERSION + 1,
+        999,
+    ] {
+        let file = read_runtime_file(&synthetic_runtime_file_with_header(
+            SUPPORTED_MAJOR_VERSION,
+            minor_version,
+            0,
+            &[],
+            |_| {},
+        ))
+        .expect("C++ accepts every minor version with the same major version");
+        assert_eq!(file.header.major_version, SUPPORTED_MAJOR_VERSION);
+        assert_eq!(file.header.minor_version, minor_version);
+    }
 
     assert!(
         read_runtime_file(&synthetic_runtime_file_with_header(8, 0, 0, &[], |_| {})).is_err(),
@@ -1962,17 +1975,16 @@ fn truncated_fixed_width_primitive_payloads_are_malformed_like_cpp_runtime() {
 #[test]
 fn noncanonical_bool_payloads_decode_like_cpp_runtime() {
     let file = read_runtime_file(&synthetic_runtime_file(4277, |bytes| {
-        push_var_uint(bytes, 653);
-        push_var_uint(bytes, 953);
+        push_var_uint(bytes, 129);
+        push_var_uint(bytes, 245);
         bytes.push(2);
         push_var_uint(bytes, 0);
     }))
     .expect("C++ imports bool payload bytes other than 1 as false");
 
-    let focus_data = file.object(0).expect("FocusData object");
-    assert_eq!(focus_data.type_name, "FocusData");
-    assert_eq!(focus_data.bool_property("canFocus"), Some(false));
-    assert_eq!(focus_data.bool_property("canTouch"), Some(true));
+    let property = file.object(0).expect("CustomPropertyBoolean object");
+    assert_eq!(property.type_name, "CustomPropertyBoolean");
+    assert_eq!(property.bool_property("propertyValue"), Some(false));
 }
 
 #[test]
@@ -2132,6 +2144,23 @@ fn absent_stored_properties_expose_cpp_member_defaults() {
     .expect("empty Artboard imports with C++ constructor defaults");
     let artboard = artboard.object(0).expect("Artboard object");
     assert_eq!(artboard.bool_property("clip"), Some(true));
+}
+
+#[test]
+fn focus_bool_aliases_read_the_serialized_focus_flags_bitmask() {
+    let file = read_runtime_file(&synthetic_runtime_file(4287, |bytes| {
+        push_var_uint(bytes, 653);
+        push_var_uint(bytes, 1033);
+        push_var_uint(bytes, 0b010);
+        push_var_uint(bytes, 0);
+    }))
+    .expect("FocusData imports its packed focus flags");
+
+    let focus_data = file.object(0).expect("FocusData object");
+    assert_eq!(focus_data.uint_property("focusFlags"), Some(0b010));
+    assert_eq!(focus_data.bool_property("canFocus"), Some(false));
+    assert_eq!(focus_data.bool_property("canTouch"), Some(true));
+    assert_eq!(focus_data.bool_property("canTraverse"), Some(false));
 }
 
 #[test]
@@ -7834,16 +7863,21 @@ fn uint_values_match_cpp_unsigned_int_range() {
     }))
     .expect("C++ accepts uint values at u32::MAX");
 
-    assert!(
-        read_runtime_file(&synthetic_runtime_file(4253, |bytes| {
-            push_var_uint(bytes, 70_000);
-            push_var_uint(bytes, 5);
-            push_var_uint(bytes, u64::from(u32::MAX) + 1);
-            push_var_uint(bytes, 0);
-        }))
-        .is_err(),
-        "C++ treats uint values outside unsigned int range as malformed"
-    );
+    let unknown_wide_uint = read_runtime_file(&synthetic_runtime_file(4253, |bytes| {
+        push_var_uint(bytes, 70_000);
+        push_var_uint(bytes, 5);
+        push_var_uint(bytes, u64::MAX);
+        push_var_uint(bytes, 0);
+
+        // Prove the full varuint64 was consumed and the next object stayed
+        // aligned after skipping the unknown object's uint field.
+        push_var_uint(bytes, 2);
+        push_var_uint(bytes, 0);
+    }))
+    .expect("C++ skips unknown uint fields through the full varuint64 range");
+    assert_eq!(unknown_wide_uint.object_count(), 2);
+    assert!(unknown_wide_uint.objects[0].is_none());
+    assert_eq!(unknown_wide_uint.object(1).unwrap().type_name, "Node");
 }
 
 #[test]

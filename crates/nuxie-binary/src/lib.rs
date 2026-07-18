@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use nuxie_schema::{
     BitmaskPassthrough, CoreRegistryFieldKind, Definition, FieldKind, Property,
-    StoredFieldInitializer, core_registry_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key, object_supports_property,
+    StoredFieldInitializer, UintStorage, core_registry_field_kind_by_property_key,
+    definition_by_name, definition_by_type_key, object_supports_property,
 };
 use serde::Serialize;
 use std::{
@@ -12,7 +12,7 @@ use std::{
 };
 
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
-pub const SUPPORTED_MINOR_VERSION: u64 = 0;
+pub const SUPPORTED_MINOR_VERSION: u64 = 2;
 pub const VIEW_MODEL_SYMBOL_ITEM_INDEX: u8 = 15;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -8124,8 +8124,12 @@ impl RuntimeObject {
             return property.value.as_uint();
         }
 
+        if let Some(value) = self.bitmask_passthrough_value(name) {
+            return Some(value);
+        }
+
         match self.stored_field_initializer(name)? {
-            StoredFieldInitializer::Uint(value) => Some(u64::from(value)),
+            StoredFieldInitializer::Uint(value) => Some(value),
             _ => None,
         }
     }
@@ -8133,6 +8137,10 @@ impl RuntimeObject {
     pub fn bool_property(&self, name: &str) -> Option<bool> {
         if let Some(property) = self.property(name) {
             return property.value.as_bool();
+        }
+
+        if let Some(value) = self.bitmask_passthrough_value(name) {
+            return Some(value != 0);
         }
 
         match self.stored_field_initializer(name)? {
@@ -8173,6 +8181,17 @@ impl RuntimeObject {
         let definition = definition_by_type_key(self.type_key)?;
         let property = property_by_name_in_hierarchy(definition, name)?;
         (*property).stored_field_initializer()
+    }
+
+    fn bitmask_passthrough_value(&self, name: &str) -> Option<u64> {
+        let definition = definition_by_type_key(self.type_key)?;
+        let property = property_by_name_in_hierarchy(definition, name)?;
+        let passthrough = property.bitmask_passthrough?;
+        let target = self.uint_property(passthrough.target)?;
+        let mask = 1u64
+            .wrapping_shl(u32::from(passthrough.width))
+            .wrapping_sub(1);
+        Some(target.wrapping_shr(u32::from(passthrough.bit)) & mask)
     }
 }
 
@@ -8477,7 +8496,8 @@ fn authoring_record_to_runtime_object(
                 authored_property.value.kind_name()
             );
         }
-        if let AuthoringValue::Uint(value) = &authored_property.value
+        if property.uint_storage() != Some(UintStorage::Uint64)
+            && let AuthoringValue::Uint(value) = &authored_property.value
             && u32::try_from(*value).is_err()
         {
             bail!(
@@ -8502,11 +8522,18 @@ fn authoring_record_to_runtime_object(
             }
         }
 
+        let mut value = authored_property.value.into_field_value();
+        if property.uint_storage() == Some(UintStorage::Uint8)
+            && let FieldValue::Uint(uint) = &mut value
+        {
+            *uint = u64::from(*uint as u8);
+        }
+
         properties.push(RuntimeProperty {
             key: authored_property.key,
             name: property.name,
             owner,
-            value: authored_property.value.into_field_value(),
+            value,
         });
     }
 
@@ -12624,7 +12651,7 @@ fn read_runtime_object(
         };
 
         if property.deserializes {
-            let value = read_field_value(reader, property.runtime_type)?;
+            let value = read_field_value(reader, property)?;
             upsert_runtime_property(
                 &mut properties,
                 RuntimeProperty {
@@ -12780,7 +12807,10 @@ fn skip_core_registry_value(
 ) -> Result<UnknownPropertySkip> {
     match field {
         CoreRegistryFieldKind::Uint => {
-            read_cpp_unsigned_int_var_uint(reader, "uint field")?;
+            // Uint64 deliberately shares the uint field id. Unknown fields do
+            // not carry enough schema to select a narrower C++ storage type,
+            // so consume the full raw varuint64 just like File::readRuntimeObject.
+            reader.read_var_uint()?;
         }
         CoreRegistryFieldKind::StringOrBytes => {
             reader.read_string()?;
@@ -12810,7 +12840,7 @@ fn read_core_registry_fallback_value(
 ) -> Result<KnownPropertySkip> {
     let value = match field {
         CoreRegistryFieldKind::Uint => {
-            FieldValue::Uint(read_cpp_unsigned_int_var_uint(reader, "uint field")?)
+            FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?)
         }
         CoreRegistryFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         CoreRegistryFieldKind::Double => FieldValue::Double(reader.read_f32()?),
@@ -12834,9 +12864,11 @@ fn read_header_fallback_value(
     property: &Property,
 ) -> Result<FieldValue> {
     Ok(match field {
-        HeaderFieldKind::Uint => {
-            FieldValue::Uint(read_cpp_unsigned_int_var_uint(reader, "header uint field")?)
-        }
+        HeaderFieldKind::Uint => FieldValue::Uint(read_known_uint_field(
+            reader,
+            property,
+            "header uint field",
+        )?),
         HeaderFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         HeaderFieldKind::Double => FieldValue::Double(reader.read_f32()?),
         HeaderFieldKind::Color => FieldValue::Color(reader.read_u32()?),
@@ -12855,8 +12887,8 @@ fn read_string_or_bytes_value(
     }
 }
 
-fn read_field_value(reader: &mut BinaryReader<'_>, kind: FieldKind) -> Result<FieldValue> {
-    Ok(match kind {
+fn read_field_value(reader: &mut BinaryReader<'_>, property: &Property) -> Result<FieldValue> {
+    Ok(match property.runtime_type {
         FieldKind::Bool => FieldValue::Bool(reader.read_byte()? == 1),
         FieldKind::Bytes => {
             let bytes = reader.read_length_prefixed_bytes()?;
@@ -12866,14 +12898,16 @@ fn read_field_value(reader: &mut BinaryReader<'_>, kind: FieldKind) -> Result<Fi
         FieldKind::Color => FieldValue::Color(reader.read_u32()?),
         FieldKind::Double => FieldValue::Double(reader.read_f32()?),
         FieldKind::String => FieldValue::String(reader.read_string()?),
-        FieldKind::Uint => FieldValue::Uint(read_cpp_unsigned_int_var_uint(reader, "uint field")?),
+        FieldKind::Uint => FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?),
     })
 }
 
 fn skip_header_value(reader: &mut BinaryReader<'_>, kind: HeaderFieldKind) -> Result<()> {
     match kind {
         HeaderFieldKind::Uint => {
-            read_cpp_unsigned_int_var_uint(reader, "header uint field")?;
+            // Header field id 0 is shared by uint32 and uint64. Unknown
+            // properties therefore have to consume the full raw varuint.
+            reader.read_var_uint()?;
         }
         HeaderFieldKind::StringOrBytes => {
             reader.read_length_prefixed_bytes()?;
@@ -13104,6 +13138,21 @@ fn read_cpp_unsigned_int_var_uint(reader: &mut BinaryReader<'_>, label: &str) ->
     Ok(value)
 }
 
+fn read_known_uint_field(
+    reader: &mut BinaryReader<'_>,
+    property: &Property,
+    label: &str,
+) -> Result<u64> {
+    match property.uint_storage() {
+        Some(UintStorage::Uint64) => reader.read_var_uint(),
+        Some(UintStorage::Uint8) => {
+            read_cpp_unsigned_int_var_uint(reader, label).map(|value| u64::from(value as u8))
+        }
+        Some(UintStorage::Uint32) => read_cpp_unsigned_int_var_uint(reader, label),
+        None => bail!("{label} schema property is not uint-like"),
+    }
+}
+
 struct BinaryReader<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -13176,6 +13225,125 @@ impl<'a> BinaryReader<'a> {
 
             shift = shift.wrapping_add(7);
         }
+    }
+}
+
+#[cfg(test)]
+mod uint_wire_tests {
+    use super::{
+        BinaryReader, CoreRegistryFieldKind, HeaderFieldKind, definition_by_name,
+        read_known_uint_field, read_runtime_file_with_error_kind, skip_core_registry_value,
+        skip_header_value,
+    };
+
+    fn encoded_var_uint(mut value: u64) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                return bytes;
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_uint_skips_consume_full_varuint64() {
+        let mut bytes = encoded_var_uint(u64::MAX);
+        bytes.push(0x2a);
+
+        let mut core_reader = BinaryReader::new(&bytes);
+        skip_core_registry_value(&mut core_reader, CoreRegistryFieldKind::Uint)
+            .expect("unknown core uint64 should be skippable");
+        assert_eq!(core_reader.read_byte().expect("core sentinel"), 0x2a);
+
+        let mut header_reader = BinaryReader::new(&bytes);
+        skip_header_value(&mut header_reader, HeaderFieldKind::Uint)
+            .expect("unknown header uint64 should be skippable");
+        assert_eq!(header_reader.read_byte().expect("header sentinel"), 0x2a);
+    }
+
+    #[test]
+    fn known_uint_width_controls_value_validation_without_changing_wire_family() {
+        let file_asset = definition_by_name("FileAsset").expect("FileAsset schema");
+        let uint32_property = file_asset
+            .properties
+            .iter()
+            .find(|property| property.name == "assetId")
+            .expect("FileAsset.assetId schema");
+        let uint64_property = file_asset
+            .properties
+            .iter()
+            .find(|property| property.name == "scopeLibraryId")
+            .expect("FileAsset.scopeLibraryId schema");
+        let uint8_property = definition_by_name("LayoutComponentStyle")
+            .expect("LayoutComponentStyle schema")
+            .properties
+            .iter()
+            .find(|property| property.name == "displayValue")
+            .expect("LayoutComponentStyle.displayValue schema");
+
+        let over_u32 = encoded_var_uint(u64::from(u32::MAX) + 1);
+        let error = read_known_uint_field(
+            &mut BinaryReader::new(&over_u32),
+            uint32_property,
+            "uint field",
+        )
+        .expect_err("known uint32 must retain C++ unsigned-int validation");
+        assert!(
+            error
+                .to_string()
+                .contains("does not fit in C++ unsigned int")
+        );
+
+        let wide_bytes = encoded_var_uint(u64::MAX);
+        let mut wide_reader = BinaryReader::new(&wide_bytes);
+        assert_eq!(
+            read_known_uint_field(&mut wide_reader, uint64_property, "uint64 field")
+                .expect("known uint64"),
+            u64::MAX
+        );
+
+        // uint8 changes only generated member storage. Registry dispatch and
+        // deserialization accept the complete uint32 wire range, then the
+        // generated uint8_t member assignment truncates to its low byte.
+        let compact_bytes = encoded_var_uint(u64::from(u32::MAX));
+        let mut compact_reader = BinaryReader::new(&compact_bytes);
+        assert_eq!(
+            read_known_uint_field(&mut compact_reader, uint8_property, "uint8 field")
+                .expect("known uint8 alias"),
+            u64::from(u8::MAX)
+        );
+    }
+
+    #[test]
+    fn runtime_object_decode_preserves_known_uint64_values() {
+        let mut bytes = b"RIVE".to_vec();
+        // A legacy 7.0 header remains importable after advertising 7.2.
+        bytes.extend_from_slice(&[7, 0, 0, 0]); // version, file id, empty header ToC.
+
+        bytes.extend(encoded_var_uint(23)); // Backboard.
+        bytes.push(0); // End Backboard properties.
+
+        bytes.extend(encoded_var_uint(558)); // LibraryAsset.
+        bytes.extend(encoded_var_uint(798)); // libraryId.
+        bytes.extend(encoded_var_uint(u64::MAX));
+        bytes.extend(encoded_var_uint(799)); // libraryVersionId.
+        bytes.extend(encoded_var_uint(u64::from(u32::MAX) + 1));
+        bytes.push(0); // End LibraryAsset properties.
+
+        let file = read_runtime_file_with_error_kind(&bytes)
+            .expect("known uint64 fields should import through the full runtime reader");
+        let library = file.object(1).expect("decoded LibraryAsset");
+        assert_eq!(library.uint_property("libraryId"), Some(u64::MAX));
+        assert_eq!(
+            library.uint_property("libraryVersionId"),
+            Some(u64::from(u32::MAX) + 1)
+        );
     }
 }
 

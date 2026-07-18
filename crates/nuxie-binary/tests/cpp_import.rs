@@ -11872,6 +11872,7 @@ fn cpp_core_field_type_ids_match_runtime_header_contract() {
     let mut ids = BTreeMap::new();
     for (class_name, header_name) in [
         ("CoreUintType", "core_uint_type.hpp"),
+        ("CoreUint64Type", "core_uint64_type.hpp"),
         ("CoreStringType", "core_string_type.hpp"),
         ("CoreBytesType", "core_bytes_type.hpp"),
         ("CoreDoubleType", "core_double_type.hpp"),
@@ -11883,11 +11884,16 @@ fn cpp_core_field_type_ids_match_runtime_header_contract() {
     }
 
     assert_eq!(ids["CoreUintType"], 0);
+    assert_eq!(ids["CoreUint64Type"], 0);
     assert_eq!(ids["CoreStringType"], 1);
     assert_eq!(ids["CoreBytesType"], 1);
     assert_eq!(ids["CoreDoubleType"], 2);
     assert_eq!(ids["CoreColorType"], 3);
     assert_eq!(ids["CoreBoolType"], 4);
+    assert_eq!(
+        ids["CoreUintType"], ids["CoreUint64Type"],
+        "uint32 and uint64 must share the runtime-header field id"
+    );
     assert_eq!(
         ids["CoreStringType"], ids["CoreBytesType"],
         "C++ runtime header only stores one two-bit field id for string/bytes payloads"
@@ -12177,6 +12183,11 @@ fn cpp_core_field_deserializers_match_binary_reader_model() {
             "CoreUintType",
             "core_uint_type.cpp",
             "returnreader.readVarUintAs<unsignedint>();",
+        ),
+        (
+            "CoreUint64Type",
+            "core_uint64_type.cpp",
+            "returnreader.readVarUint64();",
         ),
         (
             "CoreStringType",
@@ -12838,7 +12849,9 @@ fn cpp_read_runtime_object_fallback_switch_matches_skip_model() {
     assert_compact_contains_in_order(
         &body,
         &[
-            "caseCoreUintType::id:CoreUintType::deserialize(reader);break;",
+            "caseCoreUintType::id:",
+            "reader.readVarUint64();",
+            "break;",
             "caseCoreStringType::id:CoreStringType::deserialize(reader);break;",
             "caseCoreDoubleType::id:CoreDoubleType::deserialize(reader);break;",
             "caseCoreColorType::id:CoreColorType::deserialize(reader);break;",

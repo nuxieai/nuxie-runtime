@@ -10430,6 +10430,22 @@ fn validate_view_model_definitions(
                     }
                 }
             }
+            for child in &model.children {
+                if !instance.children.contains_key(&child.id) {
+                    return Err(EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_child",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(child.id.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    ));
+                }
+            }
             for (child, selected_instance) in &instance.children {
                 let Some((owner_model, referenced_model)) = child_models.get(child).copied() else {
                     return Err(EditDiagnostic::new(
@@ -13678,7 +13694,7 @@ mod tests {
     }
 
     #[test]
-    fn compiler_fixpoint_groups_each_view_model_with_its_instances() -> Result<()> {
+    fn compiler_fixpoint_places_all_view_model_definitions_before_instances() -> Result<()> {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let mut view_models = tx.view_models();
@@ -13730,6 +13746,20 @@ mod tests {
                     }],
                 },
                 AuthoringRecord {
+                    type_key: 435,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("Second".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 431,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("Second number".into()),
+                    }],
+                },
+                AuthoringRecord {
                     type_key: 437,
                     properties: vec![
                         AuthoringProperty {
@@ -13754,20 +13784,6 @@ mod tests {
                             value: AuthoringValue::Double(1.0),
                         },
                     ],
-                },
-                AuthoringRecord {
-                    type_key: 435,
-                    properties: vec![AuthoringProperty {
-                        key: 557,
-                        value: AuthoringValue::String("Second".into()),
-                    }],
-                },
-                AuthoringRecord {
-                    type_key: 431,
-                    properties: vec![AuthoringProperty {
-                        key: 557,
-                        value: AuthoringValue::String("Second number".into()),
-                    }],
                 },
                 AuthoringRecord {
                     type_key: 437,

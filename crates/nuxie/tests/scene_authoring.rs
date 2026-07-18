@@ -3943,6 +3943,45 @@ fn nested_view_model_list_path_imports_advances_and_draws_the_mapped_item() -> R
 }
 
 #[test]
+fn unset_child_view_model_values_reject_the_authoring_transaction() -> Result<()> {
+    let mut scene = Scene::new();
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            let mut view_models = tx.view_models();
+            let root = view_models.create(ViewModelSpec {
+                name: "Root".into(),
+            })?;
+            let paywall = view_models.create(ViewModelSpec {
+                name: "Paywall".into(),
+            })?;
+            view_models.create_child(
+                root,
+                ViewModelChildSpec {
+                    name: "paywall".into(),
+                    view_model: paywall,
+                },
+            )?;
+            view_models.create_instance(
+                root,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("every child ViewModel property needs an explicit instance value");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownObject);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+    Ok(())
+}
+
+#[test]
 fn typed_view_model_strings_export_and_import_as_runtime_instance_values() -> Result<()> {
     let mut scene = Scene::new();
     let (artboard, _) = scene.edit(|tx| {

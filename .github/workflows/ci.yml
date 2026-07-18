@@ -182,6 +182,9 @@ jobs:
           depot_tools_dir="${RUNNER_TEMP}/depot_tools"
           git clone --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git "${depot_tools_dir}"
           git -C "${depot_tools_dir}" checkout --detach "${DEPOT_TOOLS_REF}"
+          # Initialize the pinned checkout's CIPD-managed Python and helper
+          # tools without allowing depot_tools to update its source revision.
+          "${depot_tools_dir}/ensure_bootstrap"
           export PATH="${depot_tools_dir}:${PATH}"
           make renderer-dawn-reference-bootstrap
           make renderer-dawn-reference-replay

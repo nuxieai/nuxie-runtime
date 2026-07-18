@@ -12,7 +12,8 @@ use nuxie::{
     ImageDecodeError, LinearAnimationSpec, NodeSpec, ObjectId, Parent, RawPath, RecordingFactory,
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
     RenderPath, RenderShader, Renderer, Scene, ShapeSpec, StateMachineInputKind, StrokeCap,
-    StrokeJoin, props,
+    StrokeJoin, ViewModelBooleanSpec, ViewModelInstanceSpec, ViewModelSpec, VisibilityCondition,
+    props,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -74,6 +75,94 @@ fn scene_animation_authoring_surface_is_typed_key_free_and_upsert_shaped() {
             ExportedAnimatableProperty::WorldOpacity,
         )],
         "the public record vocabulary remains semantic and exposes no numeric Rive key"
+    );
+}
+
+#[test]
+fn scene_visibility_authoring_surface_is_typed_key_free_and_preserves_local_opacity() {
+    let mut scene = Scene::new();
+    let ((artboard, shape, defaults, shown_property), _) = scene
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Conditional".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 0.35,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                name: "Visibility".into(),
+            })?;
+            let shown = view_models.create_boolean(
+                model,
+                ViewModelBooleanSpec {
+                    name: "shown".into(),
+                },
+            )?;
+            let defaults =
+                view_models.create_instance(model, ViewModelInstanceSpec { name: None })?;
+            view_models.set_boolean(defaults, shown, true)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_visibility(shape, shown, VisibilityCondition::WhenTrue, 0.35)?;
+            Ok((artboard, shape, defaults, shown))
+        })
+        .expect("semantic visibility authoring must commit");
+
+    let bind = scene
+        .export_records()
+        .into_records()
+        .into_iter()
+        .find(|record| record.kind == ExportedObjectKind::DataBindContext)
+        .expect("visibility lowers one data bind");
+    assert!(
+        bind.properties
+            .contains(&ExportedProperty::DataBindWorldOpacityTarget),
+        "the exported target is semantic rather than a raw runtime property key"
+    );
+
+    let instance = scene
+        .instantiate(artboard)
+        .expect("instantiate authored scene");
+    let shown = scene
+        .vm_boolean_cursor(instance, defaults, shown_property)
+        .expect("resolve semantic boolean cursor");
+    let opacity = scene
+        .cursor(instance, shape, props::WORLD_OPACITY)
+        .expect("resolve semantic opacity cursor");
+    let mut events = Vec::new();
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity).unwrap(), 0.35);
+
+    let epoch = scene.epoch();
+    assert_eq!(scene.frame().get_vm_boolean(shown), Ok(true));
+    assert_eq!(scene.frame().set_vm_boolean(shown, false), Ok(true));
+    assert_eq!(scene.frame().set_vm_boolean(shown, false), Ok(false));
+    assert_eq!(scene.epoch(), epoch, "the live write is non-structural");
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity).unwrap(), 0.0);
+
+    scene
+        .edit(|tx| tx.set(shape, props::TRANSLATE_X, 12.0))
+        .expect("unrelated structural edit remounts the authored artboard");
+    assert_eq!(scene.frame().get_vm_boolean(shown), Err(nuxie::StaleCursor));
+    let shown = scene
+        .vm_boolean_cursor(instance, defaults, shown_property)
+        .expect("resolve boolean after remount");
+    assert_eq!(
+        scene.frame().get_vm_boolean(shown),
+        Ok(false),
+        "an explicit live boolean survives same-schema remount"
     );
 }
 

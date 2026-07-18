@@ -2,6 +2,7 @@
 members = [
     "crates/nuxie-binary",
     "crates/nuxie-graph",
+    "crates/nuxie-image-codec",
     "crates/nuxie-render-api",
     "crates/nuxie-render-stream",
     "crates/nuxie-renderer",

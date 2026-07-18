@@ -807,6 +807,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nuxie-image-codec"
+version = "0.1.0"
+dependencies = [
+ "image-webp",
+ "jpeg-decoder",
+ "png",
+]
+
+[[package]]
 name = "nuxie-render-api"
 version = "0.1.0"
 

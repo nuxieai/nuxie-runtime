@@ -7208,6 +7208,7 @@ impl RuntimeWorldTransformSlots {
 struct RuntimeImageLayoutTransformCacheKey {
     cache_epoch: u64,
     layout_epoch: u64,
+    layout_scale_separate: bool,
     image_width_bits: u32,
     image_height_bits: u32,
     layout_width_bits: u32,
@@ -7674,6 +7675,7 @@ impl RuntimeRenderPathCache {
 
     fn image_world_transform_with_bounds(
         &mut self,
+        runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         local_id: usize,
@@ -7703,9 +7705,14 @@ impl RuntimeRenderPathCache {
 
         let image_width = image.width() as f32;
         let image_height = image.height() as f32;
+        let layout_scale_separate = runtime_layout_image_uses_separate_fit_scale(
+            runtime.header.major_version,
+            runtime.header.minor_version,
+        );
         let key = RuntimeImageLayoutTransformCacheKey {
             cache_epoch: instance.cache_epoch(),
             layout_epoch: instance.layout_epoch(),
+            layout_scale_separate,
             image_width_bits: image_width.to_bits(),
             image_height_bits: image_height.to_bits(),
             layout_width_bits: parent_bounds.width.to_bits(),
@@ -7723,6 +7730,7 @@ impl RuntimeRenderPathCache {
                 local_id,
                 image_object,
                 component.transform.local_transform,
+                layout_scale_separate,
                 image_width,
                 image_height,
                 parent_bounds.width,
@@ -9761,6 +9769,7 @@ fn runtime_draw_image(
         .unwrap_or(0.5);
     let world = path_cache
         .image_world_transform_with_bounds(
+            runtime,
             instance,
             graph,
             local_id,
@@ -9847,6 +9856,7 @@ fn runtime_draw_mesh_image(
     if weighted_context.is_none() {
         let world = path_cache
             .image_world_transform_with_bounds(
+                runtime,
                 instance,
                 graph,
                 image_local,
@@ -9973,11 +9983,39 @@ fn runtime_mesh_vertex_render_translation(
     Ok((x, y))
 }
 
+fn runtime_apply_image_layout_fit(
+    mut base_local_transform: Mat2D,
+    scale_x: f32,
+    scale_y: f32,
+    offset_x: f32,
+    offset_y: f32,
+    layout_scale_separate: bool,
+) -> Mat2D {
+    if layout_scale_separate {
+        base_local_transform.scale_by_values(scale_x, scale_y);
+        base_local_transform.0[4] += offset_x;
+        base_local_transform.0[5] += offset_y;
+        base_local_transform
+    } else {
+        let mut components = base_local_transform.decompose();
+        components.scale_x = scale_x;
+        components.scale_y = scale_y;
+        components.x += offset_x;
+        components.y += offset_y;
+        Mat2D::compose(components)
+    }
+}
+
+fn runtime_layout_image_uses_separate_fit_scale(major_version: u64, minor_version: u64) -> bool {
+    major_version > 7 || (major_version == 7 && minor_version >= 2)
+}
+
 fn runtime_image_layout_local_transform(
     instance: &ArtboardInstance,
     local_id: usize,
     image_object: Option<&RuntimeObject>,
     base_local_transform: Mat2D,
+    layout_scale_separate: bool,
     image_width: f32,
     image_height: f32,
     layout_width: f32,
@@ -10082,12 +10120,14 @@ fn runtime_image_layout_local_transform(
         offset_y = -scaled_top + height_remainder * y_align;
     }
 
-    let mut components = base_local_transform.decompose();
-    components.scale_x = scale_x;
-    components.scale_y = scale_y;
-    components.x += offset_x;
-    components.y += offset_y;
-    Ok(Mat2D::compose(components))
+    Ok(runtime_apply_image_layout_fit(
+        base_local_transform,
+        scale_x,
+        scale_y,
+        offset_x,
+        offset_y,
+        layout_scale_separate,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -17247,6 +17287,40 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn format_7_2_layout_images_compose_fit_on_top_of_authored_scale() {
+        let authored = Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]);
+
+        assert_eq!(
+            runtime_apply_image_layout_fit(
+                authored,
+                4.0,
+                5.0,
+                13.0,
+                17.0,
+                runtime_layout_image_uses_separate_fit_scale(7, 2),
+            ),
+            Mat2D([8.0, 0.0, 0.0, 15.0, 20.0, 28.0]),
+        );
+    }
+
+    #[test]
+    fn pre_7_2_layout_images_overwrite_authored_scale_with_fit() {
+        let authored = Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]);
+
+        assert_eq!(
+            runtime_apply_image_layout_fit(
+                authored,
+                4.0,
+                5.0,
+                13.0,
+                17.0,
+                runtime_layout_image_uses_separate_fit_scale(7, 1),
+            ),
+            Mat2D([4.0, 0.0, 0.0, 5.0, 20.0, 28.0]),
+        );
+    }
 
     #[test]
     fn geometry_bounds_use_cubic_extrema_instead_of_the_control_hull() {

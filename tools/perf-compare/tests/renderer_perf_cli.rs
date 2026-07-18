@@ -1,6 +1,7 @@
 #![cfg(unix)]
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -40,6 +41,11 @@ print(json.dumps(r))
     path
 }
 
+fn sha256(path: &Path) -> String {
+    let bytes = std::fs::read(path).unwrap();
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 #[test]
 fn cli_emits_reports_before_a_threshold_failure() {
     let unique = format!(
@@ -66,6 +72,10 @@ fn cli_emits_reports_before_a_threshold_failure() {
             baseline.to_str().unwrap(),
             "--candidate-runner",
             candidate.to_str().unwrap(),
+            "--baseline-source-id",
+            "git:baseline-abc123",
+            "--candidate-source-id",
+            "git:abc123+dirty-sha256:def456",
             "--max-ratio",
             "1.5",
             "--json",
@@ -77,13 +87,39 @@ fn cli_emits_reports_before_a_threshold_failure() {
         .unwrap();
 
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("threshold failed"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("threshold failed"),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let report: Value = serde_json::from_str(&std::fs::read_to_string(&json).unwrap()).unwrap();
-    assert_eq!(report["schema"], "rive-renderer-perf-v2");
+    assert_eq!(report["schema"], "rive-renderer-perf-v3");
     assert_eq!(report["estimator"], "cpp-control-min-paired-v1");
+    assert_eq!(report["provenance"]["manifest_sha256"], sha256(&manifest));
+    assert_eq!(
+        report["provenance"]["baseline_runner_sha256"],
+        sha256(&baseline)
+    );
+    assert_eq!(
+        report["provenance"]["candidate_runner_sha256"],
+        sha256(&candidate)
+    );
+    assert_eq!(
+        report["provenance"]["generator_sha256"],
+        sha256(Path::new(env!("CARGO_BIN_EXE_renderer-perf")))
+    );
+    assert_eq!(
+        report["provenance"]["baseline_source_id"],
+        "git:baseline-abc123"
+    );
+    assert_eq!(
+        report["provenance"]["candidate_source_id"],
+        "git:abc123+dirty-sha256:def456"
+    );
     assert_eq!(report["aggregate"]["candidate_over_cpp"], 2.0);
     assert_eq!(report["scenes"][0]["structural"]["logical_flushes"], 3);
     let markdown = std::fs::read_to_string(markdown).unwrap();
     assert!(markdown.contains("logical flushes"));
+    assert!(markdown.contains("git:abc123+dirty-sha256:def456"));
     std::fs::remove_dir_all(directory).unwrap();
 }

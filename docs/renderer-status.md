@@ -388,13 +388,48 @@ Run `make renderer-golden`.
 - [x] R2: Algorithm core.
 - [x] R3: Corpus convergence.
 - [x] R3.1: Retained gate burn-down.
-- [x] R4: Performance parity. The final 16-variant report has zero deterministic
-  excess rows; the counterbalanced same-adapter C++ Dawn/Rust wgpu snapshot is
-  1.3718x by summed p50 with a 1.6431x slowest row.
+- [x] R4: Historical 2.0x directional bound. The final 16-variant report has
+  zero deterministic excess rows; the counterbalanced same-adapter C++
+  Dawn/Rust wgpu snapshot is 1.3718x by summed p50 with a 1.6431x slowest row.
+- [x] R4.1: Exact performance parity. The provenance-bound five-report gate
+  passes at 0.966058 overall, 0.941193 clockwise atomic, and 0.996544 MSAA,
+  with unchanged pixels and zero candidate-excess counter rows. See
+  `docs/renderer-parity-workflow.md`.
 - [x] R5: Browser WebGPU/WebGL2 product backends and evidence-gated
   extensions. The SDK default, asynchronous WebGPU path, separate WebGL2
   compatibility renderer, automatic fallback, and executable browser gates
   are complete; neither optional native fast paths nor RSTB assets triggered.
+
+R4.1 closed on 2026-07-18. The current steady Metal trace matches C++ Dawn at
+one physical command buffer and three encoders (blit, tessellation, solid).
+The accepted vendored wgpu 30 core/HAL path
+coalesces only render passes proved to have no ordered pre-pass work and drops
+only transition buffers proved to contain no initialization clear. Its
+canonical core/HAL source patch hashes are respectively
+`9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411` and
+`9e55f5a57cbe17cfe0d61d22ab5c691e88e2dfba510496bd4a039fbc85893e69`.
+The seven vendored packages are transitively path-wired, and the external
+git/path consumer check resolves and compiles that exact stack without a
+registry duplicate. Crates.io publication remains disabled until these
+changes are upstream or the full family is published under coordinated names.
+
+The renderer side now also uses a flat move-only MSAA schedule, sparse solid
+gradient preparation, grouped clockwise-atomic uploads, C++-style retained
+coverage generations, direct midpoint endpoint reads, on-demand direct stroke
+batching, a dense multi-contour construction fast path, and per-slot retained
+MSAA packing scratch capped at 1 MiB (roughly 3 MiB across the three slots).
+Context-owned stroke-preparation scratch now mirrors C++'s resettable
+midpoint-fan allocator: one bounded slot survives frame boundaries and
+abandoned frames, concurrent frames use uncached overflow, and retention above
+1 MiB is dropped. The first strict five-report attempt is preserved because it
+missed MSAA at 1.005095; the post-fix gate passes at 0.966058 overall,
+0.941193 clockwise atomic, and 0.996544 MSAA (5/5, 5/5, and 3/5 reports at or
+below 1.0).
+Clockwise coverage and its clip texture rotate through three completion-
+guarded slots. The corrected physical counter oracle has zero Rust excesses
+across all 16 variants; the 1,468-row corpus has zero divergences or gates.
+The exact final evidence and immutable hashes are recorded in
+`docs/renderer-parity-workflow.md`.
 
 ## Next
 

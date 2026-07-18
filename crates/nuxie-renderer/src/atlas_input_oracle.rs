@@ -375,17 +375,63 @@ pub(crate) enum AtlasInputError {
 impl fmt::Display for AtlasInputError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TruncatedHeader { actual } => write!(f, "truncated atlas-input header: expected at least {HEADER_SIZE} bytes, got {actual}"),
+            Self::TruncatedHeader { actual } => write!(
+                f,
+                "truncated atlas-input header: expected at least {HEADER_SIZE} bytes, got {actual}"
+            ),
             Self::InvalidMagic => write!(f, "invalid atlas-input magic; expected RIVEATI\\0"),
-            Self::UnsupportedVersion(version) => write!(f, "unsupported atlas-input version {version}; expected {VERSION}"),
-            Self::BatchRangeOverflow { base_patch, patch_count } => write!(f, "atlas-input batch range overflows u32: base_patch={base_patch}, patch_count={patch_count}"),
-            Self::InvalidStride { name, expected, actual } => write!(f, "atlas-input {name} stride must be {expected} bytes, got {actual}"),
-            Self::ZeroDimension { width, height } => write!(f, "atlas-input tessellation dimensions must be nonzero, got {width}x{height}"),
-            Self::ContourCountOverflow { actual } => write!(f, "atlas-input has {actual} contours, which does not fit in u32"),
-            Self::LayoutOverflow { contour_count, tess_width, tess_height } => write!(f, "atlas-input layout overflows host size: {contour_count} contours and {tess_width}x{tess_height} texels"),
-            Self::TruncatedData { expected, actual } => write!(f, "truncated atlas-input data: expected {expected} bytes, got {actual}"),
-            Self::TrailingData { expected, actual } => write!(f, "atlas-input has trailing data: expected {expected} bytes, got {actual}"),
-            Self::TexelCount { width, height, expected, actual } => write!(f, "atlas-input {width}x{height} needs {expected} texels, got {actual}"),
+            Self::UnsupportedVersion(version) => write!(
+                f,
+                "unsupported atlas-input version {version}; expected {VERSION}"
+            ),
+            Self::BatchRangeOverflow {
+                base_patch,
+                patch_count,
+            } => write!(
+                f,
+                "atlas-input batch range overflows u32: base_patch={base_patch}, patch_count={patch_count}"
+            ),
+            Self::InvalidStride {
+                name,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "atlas-input {name} stride must be {expected} bytes, got {actual}"
+            ),
+            Self::ZeroDimension { width, height } => write!(
+                f,
+                "atlas-input tessellation dimensions must be nonzero, got {width}x{height}"
+            ),
+            Self::ContourCountOverflow { actual } => write!(
+                f,
+                "atlas-input has {actual} contours, which does not fit in u32"
+            ),
+            Self::LayoutOverflow {
+                contour_count,
+                tess_width,
+                tess_height,
+            } => write!(
+                f,
+                "atlas-input layout overflows host size: {contour_count} contours and {tess_width}x{tess_height} texels"
+            ),
+            Self::TruncatedData { expected, actual } => write!(
+                f,
+                "truncated atlas-input data: expected {expected} bytes, got {actual}"
+            ),
+            Self::TrailingData { expected, actual } => write!(
+                f,
+                "atlas-input has trailing data: expected {expected} bytes, got {actual}"
+            ),
+            Self::TexelCount {
+                width,
+                height,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "atlas-input {width}x{height} needs {expected} texels, got {actual}"
+            ),
         }
     }
 }
@@ -421,10 +467,31 @@ pub(crate) enum AtlasInputComparisonError {
 impl fmt::Display for AtlasInputComparisonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BatchOrDimensionField { field, cpp, rust } => write!(f, "{field} differs: C++={cpp}, Rust={rust}"),
-            Self::ContourCount { cpp, rust } => write!(f, "contour count differs: C++={cpp}, Rust={rust}"),
-            Self::ContourField { index, field, cpp, rust } => write!(f, "contour {index} field {field} differs: C++={cpp:#010x}, Rust={rust:#010x}"),
-            Self::Texel { x, y, channel, cpp, rust } => write!(f, "tessellation texel ({x}, {y}) channel {channel} differs: C++={cpp:#010x}, Rust={rust:#010x}"),
+            Self::BatchOrDimensionField { field, cpp, rust } => {
+                write!(f, "{field} differs: C++={cpp}, Rust={rust}")
+            }
+            Self::ContourCount { cpp, rust } => {
+                write!(f, "contour count differs: C++={cpp}, Rust={rust}")
+            }
+            Self::ContourField {
+                index,
+                field,
+                cpp,
+                rust,
+            } => write!(
+                f,
+                "contour {index} field {field} differs: C++={cpp:#010x}, Rust={rust:#010x}"
+            ),
+            Self::Texel {
+                x,
+                y,
+                channel,
+                cpp,
+                rust,
+            } => write!(
+                f,
+                "tessellation texel ({x}, {y}) channel {channel} differs: C++={cpp:#010x}, Rust={rust:#010x}"
+            ),
         }
     }
 }

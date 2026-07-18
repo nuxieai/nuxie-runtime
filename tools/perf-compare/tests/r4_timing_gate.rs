@@ -217,6 +217,12 @@ fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
         .env("R4_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
         .env("R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT", "1")
         .env("R4_TIMING_GATE_HOST_SAMPLER", sampler)
+        .env(
+            "R4_TIMING_GATE_BASELINE_SOURCE_ID",
+            "r4-test-baseline-source",
+        )
+        .env("R4_TIMING_GATE_A_SOURCE_ID", "r4-test-a-source")
+        .env("R4_TIMING_GATE_B_SOURCE_ID", "r4-test-b-source")
         .output()
         .unwrap()
 }
@@ -336,6 +342,23 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
         "{comparison}"
     );
 
+    let a_provenance: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(directory.path.join("artifacts/01-A.renderer-perf.json")).unwrap(),
+    )
+    .unwrap();
+    let b_provenance: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(directory.path.join("artifacts/02-B.renderer-perf.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        a_provenance["provenance"]["candidate_source_id"],
+        "r4-test-a-source"
+    );
+    assert_eq!(
+        b_provenance["provenance"]["candidate_source_id"],
+        "r4-test-b-source"
+    );
+
     let a_report = directory.path.join("artifacts/01-A.renderer-perf.json");
     let mut tampered: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&a_report).unwrap()).unwrap();
@@ -356,7 +379,7 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
     let validation = run_comparator(&directory.path, &a_report);
     assert!(!validation.status.success());
     assert!(
-        String::from_utf8_lossy(&validation.stderr).contains("invalid rive-renderer-perf-v2 JSON")
+        String::from_utf8_lossy(&validation.stderr).contains("invalid rive-renderer-perf-v3 JSON")
     );
 }
 
@@ -635,9 +658,12 @@ fn r4_gate_rejects_runner_identity_and_mutation() {
     assert!(!output.status.success());
     assert_finalized_failure(&mutation.path);
     assert!(
-        metadata(&mutation.path).contains("A\\ runner\\ changed\\ during\\ the\\ gate"),
-        "{}",
-        metadata(&mutation.path)
+        std::fs::read_to_string(mutation.path.join("artifacts/01-A.stderr"))
+            .unwrap()
+            .contains("changed during benchmark collection"),
+        "metadata={} stderr={}",
+        metadata(&mutation.path),
+        std::fs::read_to_string(mutation.path.join("artifacts/01-A.stderr")).unwrap()
     );
 }
 

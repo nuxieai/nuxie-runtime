@@ -1,0 +1,102 @@
+{
+  "schema": "rive-renderer-perf-parity-gate-v1",
+  "estimator": "equal-order-ratio-of-median-sums-v1",
+  "max_ratio": 1.0,
+  "run_count": 5,
+  "provenance": {
+    "manifest_sha256": "5bf53a8edb189b12b5b34ae88dcbd9c23958d2964db1f917bb5f9cacf8e78e53",
+    "baseline_runner_sha256": "c0be5dea661f44751490e397759bd0b6fe1f8a7526dccf9c8677b6077fed5487",
+    "candidate_runner_sha256": "d876c3c4b35ec8d116af3e1f059f51830058b9baabe0090c9e5476212055d4b9",
+    "generator_sha256": "6715a33396819b9d82e591f884b39c213a539e64056df052c81b5bfc9677930b",
+    "baseline_source_id": "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2",
+    "candidate_source_id": "eb0e2527dacd68cf55fc181d124cf619f7d11615+renderer-dirty-sha256-45957a307a7c93058bfbbb3dac41f1b7fc409e902d1f75e627f78c02aa4364ae"
+  },
+  "runs": [
+    {
+      "report": "/Users/levi/.codex/worktrees/3b43/nuxie-runtime/docs/evidence/renderer-parity-2026-07-18/attempt2-run1.json",
+      "report_sha256": "956e90dd0a0ed379d980484896ce1c63cc38bb41ed4466526d2c1382d06f3f20",
+      "ratios": {
+        "overall": 0.9698569201000098,
+        "clockwise_atomic": 0.9411930209672675,
+        "msaa": 1.022200924534657
+      },
+      "strict_selected_diagnostic": {
+        "overall": 1.056674573670001,
+        "clockwise_atomic": 0.9887817248843979,
+        "msaa": 1.1504925287618097
+      }
+    },
+    {
+      "report": "/Users/levi/.codex/worktrees/3b43/nuxie-runtime/docs/evidence/renderer-parity-2026-07-18/attempt2-run2.json",
+      "report_sha256": "6e3c70dd4c434483a7a6c403c18c8a9f1994c4ced33d18b3b87e150c07c50cf5",
+      "ratios": {
+        "overall": 0.9800485011370721,
+        "clockwise_atomic": 0.9693743276639166,
+        "msaa": 0.9965442293901048
+      },
+      "strict_selected_diagnostic": {
+        "overall": 1.1765630581134177,
+        "clockwise_atomic": 1.160580539307283,
+        "msaa": 1.2003256647027356
+      }
+    },
+    {
+      "report": "/Users/levi/.codex/worktrees/3b43/nuxie-runtime/docs/evidence/renderer-parity-2026-07-18/attempt2-run3.json",
+      "report_sha256": "be486ea084a4583ff1c2aae72d97468b7f77e5b66971ddeff672c51efb4fdcc3",
+      "ratios": {
+        "overall": 0.9178244162282105,
+        "clockwise_atomic": 0.8789459724833288,
+        "msaa": 0.9887433317464152
+      },
+      "strict_selected_diagnostic": {
+        "overall": 1.1820156911337376,
+        "clockwise_atomic": 1.2295029339358161,
+        "msaa": 1.1147678801743677
+      }
+    },
+    {
+      "report": "/Users/levi/.codex/worktrees/3b43/nuxie-runtime/docs/evidence/renderer-parity-2026-07-18/attempt2-run4.json",
+      "report_sha256": "a9eb3d36898cb5f3ae05536728a35b11b9a8786082896b86f80c66104a4e4473",
+      "ratios": {
+        "overall": 0.9658299901180422,
+        "clockwise_atomic": 0.9654454496583633,
+        "msaa": 0.9663469086193799
+      },
+      "strict_selected_diagnostic": {
+        "overall": 1.0559945360910938,
+        "clockwise_atomic": 1.0278436021083404,
+        "msaa": 1.0959790844289303
+      }
+    },
+    {
+      "report": "/Users/levi/.codex/worktrees/3b43/nuxie-runtime/docs/evidence/renderer-parity-2026-07-18/attempt2-run5.json",
+      "report_sha256": "ac0ba5ed17bf3277f6692c6fa4a03a6be33fd6262ccef5e828086b0d26c4fbab",
+      "ratios": {
+        "overall": 0.9660575448739088,
+        "clockwise_atomic": 0.9303459185897084,
+        "msaa": 1.0194553592541857
+      },
+      "strict_selected_diagnostic": {
+        "overall": 1.1278664521319388,
+        "clockwise_atomic": 1.1264569276753407,
+        "msaa": 1.1298981312440401
+      }
+    }
+  ],
+  "medians": {
+    "overall": 0.9660575448739088,
+    "clockwise_atomic": 0.9411930209672675,
+    "msaa": 0.9965442293901048
+  },
+  "pass_counts": {
+    "overall": 5,
+    "clockwise_atomic": 5,
+    "msaa": 3
+  },
+  "strict_selected_diagnostic_medians": {
+    "overall": 1.1278664521319388,
+    "clockwise_atomic": 1.1264569276753407,
+    "msaa": 1.1298981312440401
+  },
+  "passed": true
+}

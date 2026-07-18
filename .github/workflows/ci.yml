@@ -145,6 +145,9 @@ jobs:
       - name: Verify renderer shader provenance
         run: make renderer-shaders-check
 
+      - name: Verify vendored wgpu backend and downstream graph
+        run: make renderer-wgpu-backend-check renderer-wgpu-consumer-check
+
       - name: Build reference runtime and renderer for dual fuzz replay
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
         run: |

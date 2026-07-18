@@ -1,0 +1,1185 @@
+{
+  "schema": "rive-renderer-perf-v3",
+  "runner_protocol": "rive-renderer-perf-runner-v1",
+  "estimator": "cpp-control-min-paired-v1",
+  "pair_order": "counterbalanced-scene-sample-v1",
+  "release": true,
+  "profile": "release",
+  "debug": false,
+  "samples_per_runner": 7,
+  "manifest_schema": "rive-renderer-perf-scenes-v1",
+  "provenance": {
+    "manifest_sha256": "5bf53a8edb189b12b5b34ae88dcbd9c23958d2964db1f917bb5f9cacf8e78e53",
+    "baseline_runner_sha256": "c0be5dea661f44751490e397759bd0b6fe1f8a7526dccf9c8677b6077fed5487",
+    "candidate_runner_sha256": "2d8009a46bacfad25cdc1c02846d86bc8e7ed9b26d0a6e6b8d6447055381ed78",
+    "generator_sha256": "6715a33396819b9d82e591f884b39c213a539e64056df052c81b5bfc9677930b",
+    "baseline_source_id": "7c778d13c5d903b3b74eec1dd6bb68a811dea5f2",
+    "candidate_source_id": "eb0e2527dacd68cf55fc181d124cf619f7d11615+renderer-dirty-sha256-b297f86d58e1b97e306b4aaa9335f50f2f7c58563e0614cf079c9b1efe9c8bc9"
+  },
+  "scenes": [
+    {
+      "id": "gm-CubicStroke-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/CubicStroke.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          728834,
+          539166,
+          537708,
+          538417,
+          521041,
+          566000,
+          574333
+        ],
+        "min_of_medians_ns": 521041,
+        "p50_ns": 539166,
+        "p95_ns": 728834,
+        "spread_ns": 207793
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          512417,
+          536375,
+          508750,
+          439792,
+          541208,
+          544708,
+          419084
+        ],
+        "min_of_medians_ns": 419084,
+        "p50_ns": 512417,
+        "p95_ns": 544708,
+        "spread_ns": 125624
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 5,
+        "cpp_control_ns": 521041,
+        "candidate_ns": 541208,
+        "candidate_over_cpp": 1.0387052074596816
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 3,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-CubicStroke-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/CubicStroke.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          367292,
+          381083,
+          304750,
+          270875,
+          308541,
+          306292,
+          328541
+        ],
+        "min_of_medians_ns": 270875,
+        "p50_ns": 308541,
+        "p95_ns": 381083,
+        "spread_ns": 110208
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          305125,
+          362500,
+          303500,
+          400750,
+          330625,
+          323542,
+          311458
+        ],
+        "min_of_medians_ns": 303500,
+        "p50_ns": 323542,
+        "p95_ns": 400750,
+        "spread_ns": 97250
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 4,
+        "cpp_control_ns": 270875,
+        "candidate_ns": 400750,
+        "candidate_over_cpp": 1.4794646977388095
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 3,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-OverStroke-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/OverStroke.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          892375,
+          799291,
+          801500,
+          820084,
+          830583,
+          797500,
+          822666
+        ],
+        "min_of_medians_ns": 797500,
+        "p50_ns": 820084,
+        "p95_ns": 892375,
+        "spread_ns": 94875
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          834333,
+          803250,
+          786958,
+          895042,
+          886875,
+          806375,
+          851916
+        ],
+        "min_of_medians_ns": 786958,
+        "p50_ns": 834333,
+        "p95_ns": 895042,
+        "spread_ns": 108084
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 6,
+        "cpp_control_ns": 797500,
+        "candidate_ns": 806375,
+        "candidate_over_cpp": 1.0111285266457681
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 12,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-OverStroke-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/OverStroke.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          367875,
+          360709,
+          364709,
+          264458,
+          348292,
+          351708,
+          356208
+        ],
+        "min_of_medians_ns": 264458,
+        "p50_ns": 356208,
+        "p95_ns": 367875,
+        "spread_ns": 103417
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          381375,
+          275375,
+          387875,
+          374250,
+          357958,
+          375917,
+          358334
+        ],
+        "min_of_medians_ns": 275375,
+        "p50_ns": 374250,
+        "p95_ns": 387875,
+        "spread_ns": 112500
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 4,
+        "cpp_control_ns": 264458,
+        "candidate_ns": 374250,
+        "candidate_over_cpp": 1.4151585506961408
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 12,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-batchedconvexpaths-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          684917,
+          775875,
+          728083,
+          708250,
+          505625,
+          450750,
+          692542
+        ],
+        "min_of_medians_ns": 450750,
+        "p50_ns": 692542,
+        "p95_ns": 775875,
+        "spread_ns": 325125
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          720708,
+          698041,
+          707375,
+          681667,
+          688833,
+          660167,
+          657625
+        ],
+        "min_of_medians_ns": 657625,
+        "p50_ns": 688833,
+        "p95_ns": 720708,
+        "spread_ns": 63083
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 6,
+        "cpp_control_ns": 450750,
+        "candidate_ns": 660167,
+        "candidate_over_cpp": 1.4645967831392124
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 10,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-batchedconvexpaths-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/batchedconvexpaths.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          359334,
+          347875,
+          364875,
+          366041,
+          358709,
+          356542,
+          353000
+        ],
+        "min_of_medians_ns": 347875,
+        "p50_ns": 358709,
+        "p95_ns": 366041,
+        "spread_ns": 18166
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          365084,
+          349334,
+          356875,
+          357542,
+          359834,
+          357709,
+          361208
+        ],
+        "min_of_medians_ns": 349334,
+        "p50_ns": 357709,
+        "p95_ns": 365084,
+        "spread_ns": 15750
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 2,
+        "cpp_control_ns": 347875,
+        "candidate_ns": 349334,
+        "candidate_over_cpp": 1.0041940352137981
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 10,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-batchedtriangulations-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/batchedtriangulations.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          465042,
+          416041,
+          456417,
+          459708,
+          453917,
+          447042,
+          476208
+        ],
+        "min_of_medians_ns": 416041,
+        "p50_ns": 456417,
+        "p95_ns": 476208,
+        "spread_ns": 60167
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          455000,
+          386583,
+          443833,
+          447916,
+          443666,
+          446292,
+          447833
+        ],
+        "min_of_medians_ns": 386583,
+        "p50_ns": 446292,
+        "p95_ns": 455000,
+        "spread_ns": 68417
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 2,
+        "cpp_control_ns": 416041,
+        "candidate_ns": 386583,
+        "candidate_over_cpp": 0.9291944784288086
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 4,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-batchedtriangulations-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/batchedtriangulations.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          362250,
+          297250,
+          292250,
+          292375,
+          285083,
+          281625,
+          304250
+        ],
+        "min_of_medians_ns": 281625,
+        "p50_ns": 292375,
+        "p95_ns": 362250,
+        "spread_ns": 80625
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          317125,
+          299125,
+          298500,
+          282958,
+          303958,
+          304667,
+          299875
+        ],
+        "min_of_medians_ns": 282958,
+        "p50_ns": 299875,
+        "p95_ns": 317125,
+        "spread_ns": 34167
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 6,
+        "cpp_control_ns": 281625,
+        "candidate_ns": 304667,
+        "candidate_over_cpp": 1.0818180204172214
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 4,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-bevel180strokes-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/bevel180strokes.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          1010500,
+          935750,
+          913042,
+          916625,
+          913334,
+          897541,
+          906208
+        ],
+        "min_of_medians_ns": 897541,
+        "p50_ns": 913334,
+        "p95_ns": 1010500,
+        "spread_ns": 112959
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          902083,
+          916209,
+          1038458,
+          893916,
+          498625,
+          887417,
+          888000
+        ],
+        "min_of_medians_ns": 498625,
+        "p50_ns": 893916,
+        "p95_ns": 1038458,
+        "spread_ns": 539833
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 6,
+        "cpp_control_ns": 897541,
+        "candidate_ns": 887417,
+        "candidate_over_cpp": 0.9887202924434649
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 20,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-bevel180strokes-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/bevel180strokes.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          296083,
+          300542,
+          293750,
+          301167,
+          295750,
+          297208,
+          300750
+        ],
+        "min_of_medians_ns": 293750,
+        "p50_ns": 297208,
+        "p95_ns": 301167,
+        "spread_ns": 7417
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          309750,
+          297041,
+          299583,
+          305084,
+          302834,
+          299083,
+          303584
+        ],
+        "min_of_medians_ns": 297041,
+        "p50_ns": 302834,
+        "p95_ns": 309750,
+        "spread_ns": 12709
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 3,
+        "cpp_control_ns": 293750,
+        "candidate_ns": 299583,
+        "candidate_over_cpp": 1.0198570212765958
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 20,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-bug339297-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/bug339297.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          463875,
+          467500,
+          499792,
+          468625,
+          468125,
+          464875,
+          474334
+        ],
+        "min_of_medians_ns": 463875,
+        "p50_ns": 468125,
+        "p95_ns": 499792,
+        "spread_ns": 35917
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          471709,
+          480833,
+          332125,
+          473875,
+          472834,
+          479125,
+          468750
+        ],
+        "min_of_medians_ns": 332125,
+        "p50_ns": 472834,
+        "p95_ns": 480833,
+        "spread_ns": 148708
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 1,
+        "cpp_control_ns": 463875,
+        "candidate_ns": 471709,
+        "candidate_over_cpp": 1.0168881703045
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 2,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-bug339297-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/bug339297.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          343125,
+          386875,
+          323417,
+          337542,
+          317417,
+          334916,
+          327667
+        ],
+        "min_of_medians_ns": 317417,
+        "p50_ns": 334916,
+        "p95_ns": 386875,
+        "spread_ns": 69458
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          328834,
+          320125,
+          355500,
+          340917,
+          324542,
+          331750,
+          324583
+        ],
+        "min_of_medians_ns": 320125,
+        "p50_ns": 328834,
+        "p95_ns": 355500,
+        "spread_ns": 35375
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 5,
+        "cpp_control_ns": 317417,
+        "candidate_ns": 324542,
+        "candidate_over_cpp": 1.0224468128676159
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 2,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-bug339297_as_clip-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          616166,
+          606500,
+          606709,
+          635333,
+          607875,
+          606875,
+          607917
+        ],
+        "min_of_medians_ns": 606500,
+        "p50_ns": 607875,
+        "p95_ns": 635333,
+        "spread_ns": 28833
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          615750,
+          610417,
+          610208,
+          607125,
+          611541,
+          611000,
+          617375
+        ],
+        "min_of_medians_ns": 607125,
+        "p50_ns": 611000,
+        "p95_ns": 617375,
+        "spread_ns": 10250
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 2,
+        "cpp_control_ns": 606500,
+        "candidate_ns": 610417,
+        "candidate_over_cpp": 1.0064583676834296
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 2,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-bug339297_as_clip-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/bug339297_as_clip.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          340625,
+          340875,
+          313417,
+          382125,
+          343833,
+          351875,
+          335833
+        ],
+        "min_of_medians_ns": 313417,
+        "p50_ns": 340875,
+        "p95_ns": 382125,
+        "spread_ns": 68708
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          333042,
+          292458,
+          274583,
+          344834,
+          338583,
+          337292,
+          331292
+        ],
+        "min_of_medians_ns": 274583,
+        "p50_ns": 333042,
+        "p95_ns": 344834,
+        "spread_ns": 70251
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 3,
+        "cpp_control_ns": 313417,
+        "candidate_ns": 274583,
+        "candidate_over_cpp": 0.87609478745569
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 2,
+        "atomic_strategy_partitions": 0
+      }
+    },
+    {
+      "id": "gm-bug5099-clockwise-atomic",
+      "stream": "../../fixtures/renderer/streams/gm/bug5099.rive-stream",
+      "frame": 0,
+      "mode": "clockwise-atomic",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          384208,
+          309792,
+          369541,
+          286708,
+          365333,
+          396708,
+          385334
+        ],
+        "min_of_medians_ns": 286708,
+        "p50_ns": 369541,
+        "p95_ns": 396708,
+        "spread_ns": 110000
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          377459,
+          375125,
+          370167,
+          368333,
+          368500,
+          377167,
+          371083
+        ],
+        "min_of_medians_ns": 368333,
+        "p50_ns": 371083,
+        "p95_ns": 377459,
+        "spread_ns": 9126
+      },
+      "sample_orders": [
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate"
+      ],
+      "control_selected_pair": {
+        "sample_index": 4,
+        "cpp_control_ns": 286708,
+        "candidate_ns": 368333,
+        "candidate_over_cpp": 1.284697322711609
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 1,
+        "atomic_strategy_partitions": 1
+      }
+    },
+    {
+      "id": "gm-bug5099-msaa",
+      "stream": "../../fixtures/renderer/streams/gm/bug5099.rive-stream",
+      "frame": 0,
+      "mode": "msaa",
+      "width": 1024,
+      "height": 1024,
+      "adapter_selection": "high-performance",
+      "selected_adapter": {
+        "backend": "metal",
+        "name": "Apple M5 Max",
+        "vendor": "Apple",
+        "device": "registry-id:0x10000056f",
+        "driver": "Version 26.4.1 (Build 25E253)"
+      },
+      "timing": {
+        "warmup_frames": 10,
+        "measured_frames": 100,
+        "scope": "submit-to-gpu-complete",
+        "gpu_completion": "wait-for-completion-each-frame"
+      },
+      "baseline": {
+        "sample_medians_ns": [
+          268375,
+          272209,
+          266209,
+          279750,
+          270625,
+          268125,
+          266708
+        ],
+        "min_of_medians_ns": 266209,
+        "p50_ns": 268375,
+        "p95_ns": 279750,
+        "spread_ns": 13541
+      },
+      "candidate": {
+        "sample_medians_ns": [
+          267125,
+          270333,
+          281416,
+          270542,
+          275541,
+          275583,
+          279167
+        ],
+        "min_of_medians_ns": 267125,
+        "p50_ns": 275541,
+        "p95_ns": 281416,
+        "spread_ns": 14291
+      },
+      "sample_orders": [
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp",
+        "cpp-then-candidate",
+        "candidate-then-cpp"
+      ],
+      "control_selected_pair": {
+        "sample_index": 3,
+        "cpp_control_ns": 266209,
+        "candidate_ns": 281416,
+        "candidate_over_cpp": 1.0571242895619608
+      },
+      "structural": {
+        "logical_flushes": 1,
+        "draws": 1,
+        "atomic_strategy_partitions": 0
+      }
+    }
+  ],
+  "aggregate": {
+    "cpp_control_selected_ns_sum": 6795582,
+    "candidate_paired_ns_sum": 7341334,
+    "candidate_over_cpp": 1.0803098248244227,
+    "worst_scene": {
+      "id": "gm-CubicStroke-msaa",
+      "sample_index": 4,
+      "cpp_control_ns": 270875,
+      "candidate_ns": 400750,
+      "candidate_over_cpp": 1.4794646977388095
+    }
+  }
+}

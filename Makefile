@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -27,9 +27,20 @@ PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-pa
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
 RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner
-RENDERER_PERF_MAX_RATIO ?= 2.0
+# A single report is capture input. The five-report parity gate owns the 1.0x verdict.
+RENDERER_PERF_MAX_RATIO ?= 1000
+RENDERER_PERF_BASELINE_SOURCE_ID ?=
+RENDERER_PERF_CANDIDATE_SOURCE_ID ?=
 RENDERER_PERF_JSON ?= $(CURDIR)/target/renderer-perf.json
 RENDERER_PERF_MARKDOWN ?= $(CURDIR)/target/renderer-perf.md
+RENDERER_PERF_PARITY_REPORT_1 ?=
+RENDERER_PERF_PARITY_REPORT_2 ?=
+RENDERER_PERF_PARITY_REPORT_3 ?=
+RENDERER_PERF_PARITY_REPORT_4 ?=
+RENDERER_PERF_PARITY_REPORT_5 ?=
+RENDERER_PERF_PARITY_MAX_RATIO ?= 1.0
+RENDERER_PERF_PARITY_JSON ?= $(CURDIR)/target/renderer-perf-parity-gate.json
+RENDERER_PERF_PARITY_MARKDOWN ?= $(CURDIR)/target/renderer-perf-parity-gate.md
 R4_TIMING_GATE_OUT_DIR ?=
 R4_TIMING_GATE_RENDERER_PERF ?= $(CURDIR)/target/release/renderer-perf
 R4_TIMING_GATE_COMPARATOR ?= $(CURDIR)/target/release/r4-timing-compare
@@ -37,13 +48,16 @@ R4_TIMING_GATE_MANIFEST ?= $(CURDIR)/tools/perf-compare/renderer-scenes.toml
 R4_TIMING_GATE_BASELINE_RUNNER ?= $(RENDERER_PERF_CPP_RUNNER)
 R4_TIMING_GATE_A_RUNNER ?=
 R4_TIMING_GATE_B_RUNNER ?=
-R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO ?= 2.0
+R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO ?= 1.0
 R4_TIMING_GATE_CAPTURE_MAX_RATIO ?= 1000
 R4_TIMING_GATE_MAX_B_OVER_A ?= 1.0
 R4_TIMING_GATE_MAX_CONTROL_DRIFT ?= 1.05
 R4_TIMING_GATE_MAX_REPEAT_DRIFT ?= 1.05
 R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT ?= 12
 R4_TIMING_GATE_HOST_SAMPLER ?=
+R4_TIMING_GATE_BASELINE_SOURCE_ID ?=
+R4_TIMING_GATE_A_SOURCE_ID ?=
+R4_TIMING_GATE_B_SOURCE_ID ?=
 
 export R4_TIMING_GATE_OUT_DIR R4_TIMING_GATE_RENDERER_PERF R4_TIMING_GATE_COMPARATOR R4_TIMING_GATE_MANIFEST
 export R4_TIMING_GATE_BASELINE_RUNNER R4_TIMING_GATE_A_RUNNER R4_TIMING_GATE_B_RUNNER
@@ -52,9 +66,12 @@ export R4_TIMING_GATE_CAPTURE_MAX_RATIO
 export R4_TIMING_GATE_MAX_REPEAT_DRIFT
 export R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT
 export R4_TIMING_GATE_HOST_SAMPLER
+export R4_TIMING_GATE_BASELINE_SOURCE_ID R4_TIMING_GATE_A_SOURCE_ID R4_TIMING_GATE_B_SOURCE_ID
 RENDERER_COUNTER_TARGET_DIR ?= $(CURDIR)/target/renderer-counter
 RENDERER_COUNTER_CPP_RUNNER ?= $(RENDERER_COUNTER_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_COUNTER_RUST_RUNNER ?= $(RENDERER_COUNTER_TARGET_DIR)/release/renderer-perf-rust-runner
+RENDERER_COUNTER_BASELINE_SOURCE_ID ?= $(RENDERER_PERF_BASELINE_SOURCE_ID)
+RENDERER_COUNTER_CANDIDATE_SOURCE_ID ?= $(RENDERER_PERF_CANDIDATE_SOURCE_ID)
 RENDERER_COUNTER_JSON ?= $(CURDIR)/target/renderer-work-counters.json
 RENDERER_COUNTER_MARKDOWN ?= $(CURDIR)/target/renderer-work-counters.md
 CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
@@ -148,6 +165,17 @@ renderer-references:
 renderer-shaders-check:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-shaders.sh
 
+# Exercise the focused invariants and transitive feature wiring across the
+# excluded, pinned wgpu packages. Their committed lockfiles keep this check
+# reproducible without mutating the vendored source directories.
+renderer-wgpu-backend-check:
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked --manifest-path vendor/wgpu-30.0.0/Cargo.toml --no-default-features --features std,metal,wgsl
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal coalescing
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-core-30.0.0/Cargo.toml --lib command_buffer
+
+renderer-wgpu-consumer-check:
+	tools/check-renderer-wgpu-consumer.sh
+
 renderer-decoder-oracle:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-decoder-provenance.sh
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_INCREMENTAL=0 cargo test -p nuxie-renderer-ffi --features decode-oracle --test decode_oracle -- --nocapture
@@ -166,7 +194,12 @@ renderer-perf-runners:
 	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_PERF_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-dawn --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
 
 renderer-perf: renderer-perf-runners
-	cargo run --quiet -p perf-compare --bin renderer-perf -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_PERF_CPP_RUNNER)" --candidate-runner "$(RENDERER_PERF_RUST_RUNNER)" --max-ratio "$(RENDERER_PERF_MAX_RATIO)" --json "$(RENDERER_PERF_JSON)" --markdown "$(RENDERER_PERF_MARKDOWN)"
+	@test -n "$(strip $(RENDERER_PERF_BASELINE_SOURCE_ID))" || { echo "RENDERER_PERF_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
+	@test -n "$(strip $(RENDERER_PERF_CANDIDATE_SOURCE_ID))" || { echo "RENDERER_PERF_CANDIDATE_SOURCE_ID is required (use a reconstructable base+dirty source digest)" >&2; exit 2; }
+	cargo run --quiet -p perf-compare --bin renderer-perf -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_PERF_CPP_RUNNER)" --candidate-runner "$(RENDERER_PERF_RUST_RUNNER)" --baseline-source-id "$(RENDERER_PERF_BASELINE_SOURCE_ID)" --candidate-source-id "$(RENDERER_PERF_CANDIDATE_SOURCE_ID)" --max-ratio "$(RENDERER_PERF_MAX_RATIO)" --json "$(RENDERER_PERF_JSON)" --markdown "$(RENDERER_PERF_MARKDOWN)"
+
+renderer-perf-parity-gate:
+	cargo run --quiet -p perf-compare --bin renderer-perf-parity-gate -- --report "$(RENDERER_PERF_PARITY_REPORT_1)" --report "$(RENDERER_PERF_PARITY_REPORT_2)" --report "$(RENDERER_PERF_PARITY_REPORT_3)" --report "$(RENDERER_PERF_PARITY_REPORT_4)" --report "$(RENDERER_PERF_PARITY_REPORT_5)" --max-ratio "$(RENDERER_PERF_PARITY_MAX_RATIO)" --json "$(RENDERER_PERF_PARITY_JSON)" --markdown "$(RENDERER_PERF_PARITY_MARKDOWN)"
 
 # Timing-defined R4 acceptance only. The gate invokes the fixed renderer-perf
 # executable with pinned baseline, A, and B runner paths; it never evaluates a
@@ -175,13 +208,18 @@ r4-timing-gate-tools:
 	cargo build --quiet --release -p perf-compare --bin renderer-perf --bin r4-timing-compare
 
 r4-timing-gate: r4-timing-gate-tools
+	@test -n "$(strip $(R4_TIMING_GATE_BASELINE_SOURCE_ID))" || { echo "R4_TIMING_GATE_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
+	@test -n "$(strip $(R4_TIMING_GATE_A_SOURCE_ID))" || { echo "R4_TIMING_GATE_A_SOURCE_ID is required (identify the A runner source)" >&2; exit 2; }
+	@test -n "$(strip $(R4_TIMING_GATE_B_SOURCE_ID))" || { echo "R4_TIMING_GATE_B_SOURCE_ID is required (identify the B runner source)" >&2; exit 2; }
 	tools/r4-timing-gate.sh
 
 renderer-counter-runners:
 	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_COUNTER_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-counters --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
 
 perf-counter-compare: renderer-counter-runners
-	cargo run --quiet -p perf-compare --bin perf-counter-compare -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_COUNTER_CPP_RUNNER)" --candidate-runner "$(RENDERER_COUNTER_RUST_RUNNER)" --json "$(RENDERER_COUNTER_JSON)" --markdown "$(RENDERER_COUNTER_MARKDOWN)"
+	@test -n "$(strip $(RENDERER_COUNTER_BASELINE_SOURCE_ID))" || { echo "RENDERER_COUNTER_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
+	@test -n "$(strip $(RENDERER_COUNTER_CANDIDATE_SOURCE_ID))" || { echo "RENDERER_COUNTER_CANDIDATE_SOURCE_ID is required (use a reconstructable base+dirty source digest)" >&2; exit 2; }
+	cargo run --quiet -p perf-compare --bin perf-counter-compare -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_COUNTER_CPP_RUNNER)" --candidate-runner "$(RENDERER_COUNTER_RUST_RUNNER)" --baseline-source-id "$(RENDERER_COUNTER_BASELINE_SOURCE_ID)" --candidate-source-id "$(RENDERER_COUNTER_CANDIDATE_SOURCE_ID)" --json "$(RENDERER_COUNTER_JSON)" --markdown "$(RENDERER_COUNTER_MARKDOWN)"
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release

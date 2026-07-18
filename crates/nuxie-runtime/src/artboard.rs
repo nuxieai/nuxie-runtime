@@ -1425,7 +1425,14 @@ impl ArtboardInstance {
                 continue;
             };
             child.bind_owned_view_model_artboard_context(file, &context);
-            let mut state_machine = child.state_machine_instance(0);
+            let state_machine_index = file
+                .object(child_graph.global_id as usize)
+                .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
+            let state_machine_index = component_list_default_state_machine_index(
+                state_machine_index,
+                child.state_machines.len(),
+            );
+            let mut state_machine = child.state_machine_instance(state_machine_index);
             if let Some(state_machine) = state_machine.as_mut() {
                 state_machine.bind_owned_view_model_context(&context);
                 child.advance_state_machine_instance(state_machine, 0.0);
@@ -3292,6 +3299,20 @@ impl ArtboardInstance {
             }
         }
     }
+}
+
+// Ported from C++ Artboard::defaultStateMachineIndex and
+// ArtboardComponentList::createStateMachineInstance. The serialized property
+// is an index, despite its historical `Id` name. Missing and out-of-range
+// values fall back to the first state machine for component-list children.
+fn component_list_default_state_machine_index(
+    default_state_machine_id: Option<u64>,
+    state_machine_count: usize,
+) -> usize {
+    default_state_machine_id
+        .and_then(|index| usize::try_from(index).ok())
+        .filter(|&index| index < state_machine_count)
+        .unwrap_or(0)
 }
 
 impl RuntimeNestedArtboardInstance {
@@ -5767,5 +5788,16 @@ mod tests {
         // descendant walk un-collapsed it before the fix.
         assert_collapsed(&instance, 7, true);
         assert_collapsed(&instance, 8, true);
+    }
+
+    #[test]
+    fn component_list_children_select_the_cpp_default_state_machine_index() {
+        assert_eq!(component_list_default_state_machine_index(Some(1), 3), 1);
+        assert_eq!(component_list_default_state_machine_index(None, 3), 0);
+        assert_eq!(component_list_default_state_machine_index(Some(3), 3), 0);
+        assert_eq!(
+            component_list_default_state_machine_index(Some(u64::MAX), 3),
+            0
+        );
     }
 }

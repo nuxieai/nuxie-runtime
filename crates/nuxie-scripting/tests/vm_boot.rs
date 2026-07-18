@@ -93,6 +93,118 @@ fn rive_globals_are_installed_before_sandboxing() {
 }
 
 #[test]
+fn rive_vector_math_uses_all_three_components() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let values: (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) = vm
+        .eval(
+            r#"
+            local a = Vector.xyz(1, 2, 3)
+            local b = Vector.xyz(4, 5, 6)
+            local cross = Vector.cross3(Vector.xyz(1, 0, 0), Vector.xyz(0, 1, 0))
+            local normalized = Vector.normalized(Vector.xyz(0, 3, 4))
+            local added = Vector.scaleAndAdd(Vector.xyz(0, 0, 1), Vector.xyz(0, 0, 2), 3)
+            local subtracted = Vector.scaleAndSub(Vector.xyz(0, 0, 7), Vector.xyz(0, 0, 2), 3)
+            return a[3],
+                Vector.length(Vector.xyz(1, 2, 2)),
+                Vector.lengthSquared(a),
+                Vector.dot(a, b),
+                Vector.distance(Vector.xyz(1, 1, 1), Vector.xyz(1, 1, 4)),
+                Vector.distanceSquared(Vector.origin(), a),
+                cross.z,
+                normalized.z,
+                Vector.lerp(Vector.xyz(0, 0, 10), Vector.xyz(0, 0, 20), 0.5).z,
+                added.z,
+                subtracted.z
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        values,
+        (
+            3.0,
+            3.0,
+            14.0,
+            32.0,
+            3.0,
+            14.0,
+            1.0,
+            f64::from(0.8_f32),
+            15.0,
+            7.0,
+            1.0,
+        )
+    );
+}
+
+#[test]
+fn rive_vector_lerp_binding_returns_the_exact_endpoint() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    // Load through a local so the source compiler cannot replace this with
+    // Luau's built-in vector.lerp fastcall. This pins the Rive binding path.
+    let exact: bool = vm
+        .eval(
+            r#"
+            local lerp = Vector.lerp
+            local endpoint = Vector.xyz(1, -2, 3)
+            return lerp(Vector.xyz(1e20, -1e20, 1e20), endpoint, 1) == endpoint
+            "#,
+        )
+        .unwrap();
+
+    assert!(exact);
+}
+
+#[test]
+fn rive_math_fround_narrows_to_float32() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let rounded: f64 = vm.eval("return math.fround(1.00000006)").unwrap();
+    assert_eq!(rounded, f64::from(1.00000006_f64 as f32));
+}
+
+#[test]
+fn rive_vector_instance_methods_and_buffer_writes_match_cpp() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let values: (f64, f64, f64, f64, f64) = vm
+        .eval(
+            r#"
+            local value = Vector.xyz(1, 2, 3)
+            local bytes = buffer.create(28)
+            value:writeToBuffer(bytes, 4)
+            value:writeVec4(bytes, 12, 4)
+            return value:length(),
+                buffer.readf32(bytes, 4),
+                buffer.readf32(bytes, 8),
+                buffer.readf32(bytes, 12),
+                buffer.readf32(bytes, 24)
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!(values, (f64::from(14.0_f32.sqrt()), 1.0, 2.0, 1.0, 4.0));
+
+    let in_bounds: bool = vm
+        .eval(
+            r#"
+            local bytes = buffer.create(12)
+            return pcall(function()
+                Vector.origin():writeToBuffer(bytes, 4)
+            end)
+            "#,
+        )
+        .unwrap();
+    assert!(!in_bounds);
+}
+
+#[test]
 fn rive_sandbox_marks_libraries_readonly() {
     let vm = ScriptVm::new();
     vm.install_rive_globals().unwrap();

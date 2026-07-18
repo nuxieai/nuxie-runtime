@@ -5,6 +5,7 @@ mod components;
 mod constraints;
 mod data_bind_graph;
 mod draw;
+mod focus;
 mod objects;
 mod properties;
 mod scripting;
@@ -39,6 +40,10 @@ pub use draw::{
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
     preallocate_source_render_paints, runtime_path_commands_from_raw_path,
+};
+pub use focus::{
+    FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
+    FocusNode, FocusNodeId, FocusPoint,
 };
 pub use objects::InstanceSlot;
 pub use scripting::{

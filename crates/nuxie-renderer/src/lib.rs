@@ -134,18 +134,51 @@ struct RendererCapabilities {
     polyfill_vertex_storage_buffers: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CompatibilityVertexStoragePlan {
+    required_limit: Option<u32>,
+    effective_limit: u32,
+}
+
+impl CompatibilityVertexStoragePlan {
+    #[cfg(any(test, target_arch = "wasm32"))]
+    const fn from_adapter_limit(adapter_limit: Option<u32>) -> Self {
+        match adapter_limit {
+            Some(adapter_limit) => {
+                let requested_limit = if adapter_limit < MAX_VERTEX_STORAGE_BUFFERS {
+                    adapter_limit
+                } else {
+                    MAX_VERTEX_STORAGE_BUFFERS
+                };
+                Self {
+                    required_limit: Some(requested_limit),
+                    effective_limit: requested_limit,
+                }
+            }
+            None => Self {
+                required_limit: None,
+                effective_limit: 0,
+            },
+        }
+    }
+}
+
 impl RendererCapabilities {
     fn from_adapter(
         limits: &wgpu::Limits,
         downlevel: &wgpu::DownlevelCapabilities,
+        vertex_storage_limit_override: Option<u32>,
         force_polyfill: bool,
     ) -> Self {
+        let vertex_storage_limit =
+            vertex_storage_limit_override.unwrap_or(limits.max_storage_buffers_per_shader_stage);
         Self {
             polyfill_vertex_storage_buffers: force_polyfill
-                || limits.max_storage_buffers_per_shader_stage < MAX_VERTEX_STORAGE_BUFFERS
-                || !downlevel
-                    .flags
-                    .contains(wgpu::DownlevelFlags::VERTEX_STORAGE),
+                || vertex_storage_limit < MAX_VERTEX_STORAGE_BUFFERS
+                || (vertex_storage_limit_override.is_none()
+                    && !downlevel
+                        .flags
+                        .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)),
         }
     }
 
@@ -446,6 +479,172 @@ pub enum RenderMode {
     ClockwiseAtomic,
 }
 
+struct RequestedWgpuDevice {
+    adapter_info: WgpuAdapterInfo,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    capabilities: RendererCapabilities,
+}
+
+fn webgpu_adapter_options() -> wgpu::RequestAdapterOptions<'static, 'static> {
+    wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+        apply_limit_buckets: false,
+    }
+}
+
+async fn finish_wgpu_device_request(
+    adapter: wgpu::Adapter,
+    width: u32,
+    height: u32,
+    mode: RenderMode,
+    force_vertex_storage_polyfill: bool,
+    compatibility_plan: Option<CompatibilityVertexStoragePlan>,
+) -> Result<RequestedWgpuDevice, RendererError> {
+    let raw_adapter_info = adapter.get_info();
+    let adapter_info = WgpuAdapterInfo {
+        backend: format!("{:?}", raw_adapter_info.backend).to_ascii_lowercase(),
+        name: raw_adapter_info.name,
+        vendor: raw_adapter_info.vendor,
+        device: raw_adapter_info.device,
+        driver: raw_adapter_info.driver,
+        driver_info: raw_adapter_info.driver_info,
+    };
+    let adapter_limits = adapter.limits();
+    let capabilities = RendererCapabilities::from_adapter(
+        &adapter_limits,
+        &adapter.get_downlevel_capabilities(),
+        compatibility_plan.map(|plan| plan.effective_limit),
+        force_vertex_storage_polyfill,
+    );
+    if capabilities.polyfill_vertex_storage_buffers && matches!(mode, RenderMode::ClockwiseAtomic) {
+        return Err(RendererError::Unsupported(
+            "clockwise-atomic mode requires vertex-stage storage buffers",
+        ));
+    }
+    validate_texture_extent(
+        "render target",
+        width,
+        height,
+        adapter_limits.max_texture_dimension_2d,
+    )?;
+
+    // Compatibility adapters can advertise Core-only optional features. Do
+    // not request one while opening a Compatibility device; the no-clip WGSL
+    // variants are already selected when the resulting device lacks it.
+    let required_features = if compatibility_plan.is_some() {
+        wgpu::Features::empty()
+    } else {
+        adapter.features() & wgpu::Features::CLIP_DISTANCES
+    };
+    let descriptor = wgpu::DeviceDescriptor {
+        label: Some("nuxie-renderer-device"),
+        required_features,
+        required_limits: wgpu::Limits {
+            max_storage_buffers_per_shader_stage: capabilities.required_storage_buffers(
+                mode,
+                adapter_limits.max_storage_buffers_per_shader_stage,
+            ),
+            max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
+            ..wgpu::Limits::downlevel_defaults()
+        },
+        experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        trace: wgpu::Trace::Off,
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    let device_result = match compatibility_plan.and_then(|plan| plan.required_limit) {
+        Some(limit) => {
+            adapter
+                .request_device_with_max_storage_buffers_in_vertex_stage(&descriptor, limit)
+                .await
+        }
+        None => adapter.request_device(&descriptor).await,
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let device_result = adapter.request_device(&descriptor).await;
+
+    let (device, queue) =
+        device_result.map_err(|error| RendererError::Device(error.to_string()))?;
+    Ok(RequestedWgpuDevice {
+        adapter_info,
+        device,
+        queue,
+        capabilities,
+    })
+}
+
+async fn request_core_wgpu_device(
+    instance: &wgpu::Instance,
+    width: u32,
+    height: u32,
+    mode: RenderMode,
+    force_vertex_storage_polyfill: bool,
+) -> Result<RequestedWgpuDevice, RendererError> {
+    let adapter = instance
+        .request_adapter(&webgpu_adapter_options())
+        .await
+        .map_err(|error| RendererError::Adapter(error.to_string()))?;
+    finish_wgpu_device_request(
+        adapter,
+        width,
+        height,
+        mode,
+        force_vertex_storage_polyfill,
+        None,
+    )
+    .await
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn request_compatibility_wgpu_device(
+    instance: &wgpu::Instance,
+    width: u32,
+    height: u32,
+    mode: RenderMode,
+    force_vertex_storage_polyfill: bool,
+) -> Result<RequestedWgpuDevice, RendererError> {
+    let adapter = instance
+        .request_adapter_with_feature_level(
+            &webgpu_adapter_options(),
+            wgpu::wgt::FeatureLevel::Compatibility,
+        )
+        .await
+        .map_err(|error| RendererError::Adapter(error.to_string()))?;
+    let compatibility_plan = CompatibilityVertexStoragePlan::from_adapter_limit(
+        adapter.webgpu_max_storage_buffers_in_vertex_stage(),
+    );
+    finish_wgpu_device_request(
+        adapter,
+        width,
+        height,
+        mode,
+        force_vertex_storage_polyfill,
+        Some(compatibility_plan),
+    )
+    .await
+}
+
+#[cfg(target_arch = "wasm32")]
+fn compatibility_fallback_error(
+    core_error: RendererError,
+    compatibility_error: RendererError,
+) -> RendererError {
+    let core_error = core_error.to_string();
+    match compatibility_error {
+        RendererError::Adapter(message) => RendererError::Adapter(format!(
+            "Core WebGPU initialization failed ({core_error}); Compatibility adapter failed ({message})"
+        )),
+        RendererError::Device(message) => RendererError::Device(format!(
+            "Core WebGPU initialization failed ({core_error}); Compatibility device failed ({message})"
+        )),
+        error => error,
+    }
+}
+
 impl WgpuFactory {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
@@ -481,69 +680,47 @@ impl WgpuFactory {
         force_vertex_storage_polyfill: bool,
     ) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        // WebGPU compatibility adapters require
-        // `GPURequestAdapterOptions.featureLevel = "compatibility"`. wgpu 30
-        // generates the browser dictionary field but does not expose it on
-        // its public `RequestAdapterOptions`, so this factory cannot request
-        // that feature level yet. The capability selection below still
-        // handles native/downlevel adapters whose exposed limits or flags
-        // report that vertex-stage storage buffers are unavailable.
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: None,
-                force_fallback_adapter: false,
-                apply_limit_buckets: false,
-            })
-            .await
-            .map_err(|error| RendererError::Adapter(error.to_string()))?;
-        let adapter_info = adapter.get_info();
-        let adapter_info = WgpuAdapterInfo {
-            backend: format!("{:?}", adapter_info.backend).to_ascii_lowercase(),
-            name: adapter_info.name,
-            vendor: adapter_info.vendor,
-            device: adapter_info.device,
-            driver: adapter_info.driver,
-            driver_info: adapter_info.driver_info,
-        };
-        let adapter_limits = adapter.limits();
-        let capabilities = RendererCapabilities::from_adapter(
-            &adapter_limits,
-            &adapter.get_downlevel_capabilities(),
-            force_vertex_storage_polyfill,
-        );
-        if capabilities.polyfill_vertex_storage_buffers
-            && matches!(mode, RenderMode::ClockwiseAtomic)
-        {
-            return Err(RendererError::Unsupported(
-                "clockwise-atomic mode requires vertex-stage storage buffers",
-            ));
-        }
-        validate_texture_extent(
-            "render target",
+        #[cfg(not(target_arch = "wasm32"))]
+        let requested_device = request_core_wgpu_device(
+            &instance,
             width,
             height,
-            adapter_limits.max_texture_dimension_2d,
-        )?;
-        let required_features = adapter.features() & wgpu::Features::CLIP_DISTANCES;
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("nuxie-renderer-device"),
-                required_features,
-                required_limits: wgpu::Limits {
-                    max_storage_buffers_per_shader_stage: capabilities.required_storage_buffers(
-                        mode,
-                        adapter_limits.max_storage_buffers_per_shader_stage,
-                    ),
-                    max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
-                    ..wgpu::Limits::downlevel_defaults()
-                },
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                trace: wgpu::Trace::Off,
-            })
-            .await
-            .map_err(|error| RendererError::Device(error.to_string()))?;
+            mode,
+            force_vertex_storage_polyfill,
+        )
+        .await?;
+        #[cfg(target_arch = "wasm32")]
+        let requested_device = match request_core_wgpu_device(
+            &instance,
+            width,
+            height,
+            mode,
+            force_vertex_storage_polyfill,
+        )
+        .await
+        {
+            Ok(requested_device) => requested_device,
+            Err(core_error @ (RendererError::Adapter(_) | RendererError::Device(_))) => {
+                request_compatibility_wgpu_device(
+                    &instance,
+                    width,
+                    height,
+                    mode,
+                    force_vertex_storage_polyfill,
+                )
+                .await
+                .map_err(|compatibility_error| {
+                    compatibility_fallback_error(core_error, compatibility_error)
+                })?
+            }
+            Err(error) => return Err(error),
+        };
+        let RequestedWgpuDevice {
+            adapter_info,
+            device,
+            queue,
+            capabilities,
+        } = requested_device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-solid-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("solid.wgsl").into()),
@@ -9858,29 +10035,68 @@ mod tests {
 
         limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
         assert!(
-            !RendererCapabilities::from_adapter(&limits, &downlevel, false)
+            !RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
                 .polyfill_vertex_storage_buffers
         );
 
         limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS - 1;
         assert!(
-            RendererCapabilities::from_adapter(&limits, &downlevel, false)
+            RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
                 .polyfill_vertex_storage_buffers
         );
 
         limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
         downlevel.flags.remove(wgpu::DownlevelFlags::VERTEX_STORAGE);
         assert!(
-            RendererCapabilities::from_adapter(&limits, &downlevel, false)
+            RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
                 .polyfill_vertex_storage_buffers
+        );
+        assert!(
+            !RendererCapabilities::from_adapter(
+                &limits,
+                &downlevel,
+                Some(MAX_VERTEX_STORAGE_BUFFERS),
+                false,
+            )
+            .polyfill_vertex_storage_buffers
         );
         assert!(
             RendererCapabilities::from_adapter(
                 &limits,
                 &wgpu::DownlevelCapabilities::default(),
+                None,
                 true,
             )
             .polyfill_vertex_storage_buffers
+        );
+    }
+
+    #[test]
+    fn compatibility_vertex_storage_plan_requests_only_the_usable_limit() {
+        assert_eq!(
+            CompatibilityVertexStoragePlan::from_adapter_limit(None),
+            CompatibilityVertexStoragePlan {
+                required_limit: None,
+                effective_limit: 0,
+            }
+        );
+        for adapter_limit in 0..MAX_VERTEX_STORAGE_BUFFERS {
+            assert_eq!(
+                CompatibilityVertexStoragePlan::from_adapter_limit(Some(adapter_limit)),
+                CompatibilityVertexStoragePlan {
+                    required_limit: Some(adapter_limit),
+                    effective_limit: adapter_limit,
+                }
+            );
+        }
+        assert_eq!(
+            CompatibilityVertexStoragePlan::from_adapter_limit(Some(
+                MAX_VERTEX_STORAGE_BUFFERS + 8,
+            )),
+            CompatibilityVertexStoragePlan {
+                required_limit: Some(MAX_VERTEX_STORAGE_BUFFERS),
+                effective_limit: MAX_VERTEX_STORAGE_BUFFERS,
+            }
         );
     }
 

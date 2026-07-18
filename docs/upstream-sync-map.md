@@ -1,9 +1,9 @@
 # Upstream Sync Map (Phase S)
 
 Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
-keeps Nuxie runtime current with `rive-app/nuxie-runtime` after the V2/M8
-migration completes. Activation: blocked by M8; the first run is manual; the
-nightly cadence is enabled only after two clean manual cycles.
+keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
+migration completes. M8 and renderer Phase R are complete. The first run is
+manual; write-capable automation is enabled only after two clean manual cycles.
 
 ## Why this works here
 
@@ -34,8 +34,9 @@ beat giant ones).
   - `dev/defs/**` → schema (regenerate `nuxie-schema` via `make schema`;
     usually mechanical, occasionally implies new runtime behavior)
   - `src/**`, `include/rive/**` → runtime (the core triage surface)
-  - `renderer/**` → renderer (DEFER: auto-tag `phase-r-backlog` — this list
-    becomes Phase R's change-queue when the renderer port activates)
+  - `renderer/**` → renderer (active sync surface: classify `PORT`, `WATCH`,
+    or `SKIP`; renderer Phase R is complete, so renderer changes are never
+    auto-deferred)
   - `tests/unit_tests/assets/**`, `tests/gm/**` → fixtures (recommend
     adding to corpus — free verification growth)
   - `src/lua/**`, `scripting` → scripting bindings surface
@@ -61,28 +62,31 @@ series):
   per commit.) A runtime-bucket commit with NO corpus signal gets flagged:
   either the corpus lacks coverage (add a fixture) or the change genuinely
   doesn't affect us.
-- **Recommendation**: score 0-10 plus verdict `PORT` / `SKIP` /
-  `DEFER(phase-r)` / `WATCH` (relevant but wait — e.g. half-landed upstream
-  feature series). Rubric anchors: 9-10 critical fixes on ported surface;
+- **Recommendation**: score 0-10 plus verdict `PORT` / `SKIP` / `WATCH`
+  (relevant but wait — e.g. half-landed upstream feature series). Rubric
+  anchors: 9-10 critical fixes on ported surface;
   7-8 fixes/features Nuxie's paywall/flow content will exercise; 4-6
   features outside current content needs (user judgment); 1-3 internal or
   out-of-scope.
 
 ### 3. Approval gate (USER — hard stop)
 
-The agent presents the report and STOPS. No port work, no pin movement,
-without explicit user approval of specific rows. The user may approve a
-subset; unapproved rows are recorded as `deferred-<date>` and resurface in
-the next cycle's report (with a staleness counter) until approved or skipped.
+The agent presents the report and STOPS. No port work or pin movement is
+allowed without explicit user approval of specific rows, a standing category
+approval recorded in State, or a cycle-scoped authorization recorded in State.
+The user may approve a subset; unapproved rows are recorded as
+`deferred-<date>` and resurface in the next cycle's report (with a staleness
+counter) until approved or skipped. Scheduled automation never infers approval.
 
 ### 4. Port (agent, after approval)
 
 - Port approved commits in upstream order, V2 method: mechanical
   translation, cite the upstream sha in each commit message
-  (`[sync] Port nuxie-runtime <sha>: <title>`), goldens as the oracle.
+  (`[sync] Port rive-runtime <sha>: <title>`), goldens as the oracle.
 - Schema changes: regenerate, then port any runtime consumers.
 - New fixtures: add to corpus as `not-yet`, triage to exact/gated as usual.
-- THEN bump the pin (CI SHA + status file) in the same PR/batch; the full
+- THEN bump every active pin listed in State (plus the status/map state) in
+  the same PR/batch; the full
   ratchet (default + scripted) must be green at the new pin. Any residual
   diff = unported approved change or missed attribution — resolve before
   landing. Skipped-by-approval changes that produce corpus diffs get their
@@ -93,24 +97,26 @@ the next cycle's report (with a staleness counter) until approved or skipped.
 ### 5. Report back
 
 Cycle summary appended to the triage file: what landed, ratchet numbers at
-the new pin, deferred rows, Phase R backlog additions.
+the new pin, and deferred rows.
 
 ## Version Skew (special handling, always HIGH priority in triage)
 
-- **Luau bumps** (`dependencies/**luau**` or bytecode-version changes):
-  luaur is pinned against a specific upstream Luau commit. A Rive editor
-  that emits newer bytecode versions breaks our scripting. Triage must
-  check bytecode-version compatibility explicitly; if luaur lags, options
-  are: hold the pin (WATCH), upstream ask to pjankiewicz/luaur, or
-  fall back per the recorded mlua contingency.
-- **HarfBuzz/Yoga/SheenBidi/image-codec bumps**: check whether HarfRust/
-  Taffy/unicode-bidi/image-crates track the change; text-shaping version
-  skew can move golden text streams — attribute and re-verify tolerances
-  deliberately.
-- **.riv format version bumps** (runtime header major/minor): highest
-  priority of all — import compatibility is the product promise.
+Check these in product-risk order:
 
-## Nightly automation (after two clean manual cycles)
+1. **.riv format version bumps** (runtime header major/minor): highest
+   priority of all — import compatibility is the product promise.
+2. **Luau bumps** (`dependencies/**luau**` or bytecode-version changes):
+   luaur is pinned against a specific upstream Luau commit. A Rive editor that
+   emits newer bytecode versions breaks our scripting. Triage must check
+   bytecode-version compatibility explicitly; if luaur lags, options are:
+   hold the pin (WATCH), upstream ask to pjankiewicz/luaur, or fall back per
+   the recorded mlua contingency.
+3. **HarfBuzz/Yoga/SheenBidi/image-codec bumps**: check whether HarfRust/
+   Taffy/unicode-bidi/image-crates track the change; text-shaping version skew
+   can move golden text streams — attribute and re-verify tolerances
+   deliberately.
+
+## Scheduled automation (after two clean manual cycles)
 
 A scheduled job runs steps 1-2 only: fetch, probe pin-bump on a throwaway
 branch, write/refresh the triage report, and notify the user with the
@@ -124,5 +130,19 @@ as a Decision here before acting on it.
 
 - LAST_SYNCED_SHA: `7c778d13c5d903b3b74eec1dd6bb68a811dea5f2` (the V2
   snapshot; set by the migration itself)
+- Clean manual cycles completed: 0
 - Standing approvals: none
-- Phase R backlog: `docs/sync/phase-r-backlog.md` (created on first cycle)
+- Current cycle authorization: on 2026-07-18 the user requested and authorized
+  an ad hoc exact sync through `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
+  including applicable renderer changes and the final pin advance. This
+  authorization expires when that cycle closes.
+- Active pin registry (advance deliberately; do not blanket-rewrite historical
+  evidence or fixture provenance):
+  - `.github/workflows/ci.yml`
+  - `tools/fetch-test-assets.sh`
+  - `tools/check-renderer-decoder-provenance.sh`
+  - `tools/generate-renderer-shaders.sh`
+  - `tools/cpp-atlas-mask-oracle/build.sh`
+  - `tools/golden-compare/format_test.py`
+  - `tools/inventory_msaa_references.py`
+  - `crates/nuxie-renderer/src/lib.rs`

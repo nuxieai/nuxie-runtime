@@ -6,7 +6,9 @@ signal so that the work has a finite end condition.
 
 ## Metrics
 
-`make renderer-golden` reports two independent numbers:
+`make renderer-golden-same-runner` reports two independent numbers against a
+C++ Dawn replay captured immediately before each Rust frame on the same
+adapter:
 
 - **Contract exact**: decoded Rust pixels satisfy the row's reviewed
   `max_channel_delta` and `max_different_pixels` contract. This is the release
@@ -18,7 +20,7 @@ signal so that the work has a finite end condition.
 The completed corpus is:
 
 - Contract: `exact=1,468`, `diverges=0`, `gated=0`, `total=1,468`.
-- Byte identity: `757/1,468` active rows.
+- Byte identity: `1,360/1,468` active rows.
 
 The byte-exact metric does not replace the contract metric. Applying `0/0` to
 the whole corpus would redefine hundreds of already reviewed edge-coverage
@@ -50,13 +52,22 @@ PNG, `corpus-r` can instead create the C++ Dawn oracle on that same runner and
 compare the Rust frame immediately afterward:
 
 ```sh
+make renderer-dawn-reference-replay renderer-rust-replay-release
 cargo run -p pixel-compare --bin corpus-r -- \
-  --replay target/debug/renderer-replay \
+  --replay target/renderer-golden/release/renderer-replay \
   --backend rust-wgpu \
-  --reference-replay target/debug/renderer-replay \
+  --reference-replay target/renderer-dawn-reference/renderer-replay \
   --reference-backend ffi-dawn \
-  --output-dir target/renderer-corpus
+  --output-dir target/renderer-same-runner-corpus
 ```
+
+`perf-dawn` is release-only. On a new machine, run
+`make renderer-dawn-reference-bootstrap` once (with the pinned depot tools,
+Naga 30, and Premake on `PATH`) before building the reference replay. The CI
+gate caches only the resulting static reference executable; it always rebuilds
+the separate Rust replay from the candidate revision. The cached replay is
+built FFI-only, so Rust renderer and vendored-wgpu changes do not invalidate
+the pinned C++ oracle.
 
 This mode still applies each manifest row's existing channel and pixel budgets;
 it neither edits nor widens them. Each row leaves the C++ reference PNG, Rust
@@ -64,11 +75,10 @@ candidate PNG, any three-panel diff, and a TOML provenance record under the
 output directory. The record binds the comparison to the stream, replay
 executables, generated PNG hashes, frame, mode, tolerance, backends, and
 reported adapters. Replays report adapters with one `adapter=<name>` stdout
-line. When both implementations report a name, a mismatch fails the corpus
-before pixel comparison and retains the generated frames plus mismatch
-provenance. If either replay does not support adapter reporting, the result and
-provenance explicitly say which identity was unreported rather than claiming a
-verified match.
+line. A mismatch or a missing identity fails the corpus before pixel comparison
+and retains the generated frames plus provenance naming the mismatch or the
+side that did not report. Dynamic same-runner comparisons never claim a
+verified match without two equal adapter identities.
 
 ## Same-tier Migration
 
@@ -98,8 +108,8 @@ All four rows retain their existing `max_channel_delta = 2` and
 
 This follow-up completed when:
 
-- `make renderer-golden` reports `exact=1,468`, `diverges=0`, `gated=0` under
-  unchanged row contracts;
+- `make renderer-golden-same-runner` reports `exact=1,468`, `diverges=0`,
+  `gated=0` under unchanged row contracts;
 - every primary reference is same-tier or has an explicit reason why the
   capability is unavailable;
 - the decoded-RGBA byte-exact count is reported as a secondary metric; and

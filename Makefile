@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -6,6 +6,14 @@ CPP_CONFIG ?= debug
 RUST_PROFILE ?= debug
 RUST_GOLDEN_RUNNER_FLAGS = $(if $(filter release,$(RUST_PROFILE)),--release,)
 RENDERER_JOBS ?= 1
+RENDERER_GOLDEN_TARGET_DIR ?= $(CURDIR)/target/renderer-golden
+RENDERER_GOLDEN_RUST_REPLAY ?= $(RENDERER_GOLDEN_TARGET_DIR)/release/renderer-replay
+RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
+RENDERER_DAWN_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-reference
+RENDERER_DAWN_REFERENCE_REPLAY ?= $(RENDERER_DAWN_REFERENCE_DIR)/renderer-replay
+RENDERER_SAME_RUNNER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-same-runner-corpus
+RENDERER_CORPUS_MANIFEST ?= $(CURDIR)/corpus-r.toml
+RENDERER_CORPUS_EXPECTED_ROWS ?= 1468
 CPP_PROBE ?= $(CURDIR)/tools/cpp-probe/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_cpp_probe
 GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner
 SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
@@ -186,6 +194,32 @@ renderer-fuzz-replay:
 
 renderer-golden: renderer-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend rust-wgpu --jobs "$(RENDERER_JOBS)"
+
+# The same-runner gate deliberately keeps the reference and candidate builds
+# separate. CI may restore only RENDERER_DAWN_REFERENCE_REPLAY from its exact
+# pinned-input cache; the Rust candidate below is always compiled from HEAD.
+renderer-rust-replay-release:
+	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --bin renderer-replay
+
+# Bootstrap the pinned Dawn checkout and the exact static C++ archives consumed
+# by nuxie-renderer-ffi. `gclient`, `gn`, `ninja`, `premake5`, and Naga 30 must
+# already be on PATH; CI supplies them with pinned revisions.
+renderer-dawn-reference-bootstrap:
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_ATLAS_MASK_JOBS="$(RENDERER_JOBS)" tools/renderer-dawn-reference-bootstrap.sh
+
+renderer-dawn-reference-replay:
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_DAWN_REFERENCE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features perf-dawn --bin renderer-replay
+	mkdir -p "$(RENDERER_DAWN_REFERENCE_DIR)"
+	cp "$(RENDERER_DAWN_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_DAWN_REFERENCE_REPLAY)"
+	chmod 0755 "$(RENDERER_DAWN_REFERENCE_REPLAY)"
+
+renderer-dawn-reference-check:
+	@test -x "$(RENDERER_DAWN_REFERENCE_REPLAY)" || { echo "missing executable C++ Dawn reference replay: $(RENDERER_DAWN_REFERENCE_REPLAY)" >&2; exit 2; }
+	@if otool -L "$(RENDERER_DAWN_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Dawn reference replay unexpectedly requires a non-system Dawn/WebGPU dynamic library" >&2; exit 2; fi
+
+renderer-golden-same-runner: renderer-rust-replay-release renderer-dawn-reference-check
+	@actual_rows=$$(awk '$$0 == "[[entry]]" { count++ } END { print count + 0 }' "$(RENDERER_CORPUS_MANIFEST)"); test "$$actual_rows" = "$(RENDERER_CORPUS_EXPECTED_ROWS)" || { echo "renderer corpus row count drifted: expected $(RENDERER_CORPUS_EXPECTED_ROWS), got $$actual_rows" >&2; exit 2; }
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-wgpu --reference-replay "$(RENDERER_DAWN_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_JOBS)"
 
 renderer-stub-baseline: renderer-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --expect-all-fail

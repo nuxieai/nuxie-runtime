@@ -37,46 +37,40 @@ window is also diagnostic evidence, not the parity verdict.
 
 The current research baseline is:
 
-- nuxie runtime: `eb0e2527` before the 1.0x worktree changes;
+- nuxie runtime: `73314a8d` plus the reconstructable renderer diff below;
 - C++ runtime: `7c778d13` in `/Users/levi/dev/oss/rive-runtime`;
 - C++ backend: Dawn WebGPU on Metal, not native Rive Metal;
 - wgpu base packages: crates.io `30.0.0`; the current candidate applies the
   provenance-bound core/HAL patches described below;
 - adapter: Apple M5 Max;
 - C++ runner SHA-256:
-  `c0be5dea661f44751490e397759bd0b6fe1f8a7526dccf9c8677b6077fed5487`;
+  `98f37c7c87f4689309a8b37c1ab25db8b0b6445f04debfddae3031e68b00bb97`;
 - final Rust runner SHA-256:
-  `d876c3c4b35ec8d116af3e1f059f51830058b9baabe0090c9e5476212055d4b9`;
+  `0c0d932292544d08de1e6a90949abba8865ade4728a5fd956a832d3aeb65c042`;
 - report-generator SHA-256:
-  `6715a33396819b9d82e591f884b39c213a539e64056df052c81b5bfc9677930b`;
+  `701ace876f7b66977a32cd6846bb497fdd064b4c640fe40896b9ce79356b8ee2`;
 - five-report gate SHA-256:
-  `49113ffa5db866bf9eac04fb927eb22c86b98530400ceb68644cc69b8bd5e0d1`;
+  `6c9cb88d4e8f189af529f7e453ddd88db521cb755a9742e328b984d52f092bfb`;
 - candidate source identity:
-  `eb0e2527dacd68cf55fc181d124cf619f7d11615+renderer-dirty-sha256-45957a307a7c93058bfbbb3dac41f1b7fc409e902d1f75e627f78c02aa4364ae`.
+  `73314a8d5a4a90b24e4d590df17be89a07d1d776+renderer-dirty-sha256-a57f1051f8e1d4c8b92c82d09d1ac002e404711fb84f1693bf312b8e6efcc1cc`.
 
 Any decision report must record source revisions, runner hashes, adapter
 identity, mode, dimensions, warmups, measured frames, and completion scope.
 Never overwrite an accepted runner while collecting its comparison.
 
-The renderer-source suffix above is reconstructable. Starting at the recorded
-base, SHA-256 the byte stream formed by the base line, `git diff --binary HEAD
--- Cargo.toml Cargo.lock crates`, and sorted `path:file-SHA-256` lines for every
-untracked, non-ignored file below `crates/` and `vendor/`. This intentionally
-identifies the renderer/runtime source scope rather than every modified
-workspace tool. The candidate executable hash binds all code actually linked
-into the runner, while the manifest and generator have their own hashes in
-every report. This recipe covered 390 untracked crate/vendor files.
+The renderer-source suffix above is reconstructable. It covers the runtime
+crates and the replay code linked into the two runners. The candidate
+executable hash binds all code actually linked into the runner, while the
+manifest and generator have their own hashes in every report.
 
 ```sh
 renderer_base=$(git rev-parse HEAD)
 renderer_dirty_sha=$({
   printf 'base:%s\n' "$renderer_base"
-  git diff --binary --no-ext-diff HEAD -- Cargo.toml Cargo.lock crates
-  git ls-files --others --exclude-standard -z -- crates vendor |
-    while IFS= read -r -d '' renderer_file; do
-      renderer_file_sha=$(shasum -a 256 "$renderer_file" | awk '{print $1}')
-      printf 'untracked:%s:%s\n' "$renderer_file" "$renderer_file_sha"
-    done
+  git diff --binary --no-ext-diff HEAD -- \
+    Cargo.toml Cargo.lock crates tools/renderer-replay
+  git ls-files --others --exclude-standard -- \
+    Cargo.toml Cargo.lock crates tools/renderer-replay
 } | shasum -a 256 | awk '{print $1}')
 candidate_source_id="${renderer_base}+renderer-dirty-sha256-${renderer_dirty_sha}"
 ```
@@ -94,21 +88,32 @@ scratch set from a context-owned pool, returns it even when a frame is
 abandoned, allows uncached overflow for concurrent frames, and discards a
 pathological retained set above 1 MiB.
 
-The next five fresh reports from that final source passed on 2026-07-18:
+That first optimization source passed, after which the architecture audit
+found that C++ Dawn never advertises its specialized clockwise-atomic mode.
+Its clockwise lane uses the generic atomic pipeline plus a global clockwise
+fill override. Rust now makes the same choice: the specialized pipeline is not
+constructed, generic atomic clips remain resident like C++ `applyClip`, atomic
+image rectangles skip unused path tessellation, fixed atomic dither matches
+C++, and coarse cubic area evaluation follows C++'s fused two-lane arithmetic.
+The benchmark also waits for the exact submitted queue index, matching Dawn's
+submitted-work callback rather than an unscoped device-idle wait.
+
+Five fresh, isolated reports from that architecture-aligned source passed on
+2026-07-18:
 
 | scope | median Rust/C++ | passing reports | interpretation |
 | --- | ---: | ---: | --- |
-| overall | 0.966058 | 5/5 | Rust about 3.4% faster |
-| clockwise atomic | 0.941193 | 5/5 | Rust about 5.9% faster |
-| MSAA | 0.996544 | 3/5 | parity; Rust about 0.35% faster |
+| overall | 0.991956 | 5/5 | Rust about 0.8% faster |
+| clockwise atomic | 0.989737 | 5/5 | Rust about 1.0% faster |
+| MSAA | 0.989055 | 3/5 | Rust about 1.1% faster |
 
 The immutable, source-controlled gate report is
-`docs/evidence/renderer-parity-2026-07-18/attempt2-parity-gate.json`
+`docs/evidence/renderer-parity-2026-07-18/final-parity-gate.json`
 (SHA-256
-`e64600c80fab893d38de55aaec0b6441b6e511c21d8607ae8ca475fe5fdde294`).
+`6c9cb88d4e8f189af529f7e453ddd88db521cb755a9742e328b984d52f092bfb`).
 All five raw report hashes are embedded in that report. The non-gating
-minimum-selected medians were 1.127866 overall, 1.126457 clockwise atomic,
-and 1.129898 MSAA; they are recorded to expose the selection bias, not to
+minimum-selected medians were 1.087286 overall, 1.019672 clockwise atomic,
+and 1.158722 MSAA; they are recorded to expose the selection bias, not to
 override the equal-order verdict.
 
 The corrected physical-work oracle also passed all 16 variants with zero Rust
@@ -125,8 +130,9 @@ the schema-v2 report is
 (SHA-256
 `92b73d58f6ee5e58baaf4d30a34f4478152a57818bee6b7db0962e19ef25a6bc`).
 
-Final behavior verification completed the serialized pixel corpus at
-`exact=1468`, `byte-exact=757`, `diverges=0`, `gated=0`, `total=1468`.
+Final same-runner behavior verification completed the serialized pixel corpus
+against C++ Dawn on the same Apple M5 Max adapter at `exact=1468`,
+`byte-exact=1360`, `diverges=0`, `gated=0`, `total=1468`.
 Shader reproducibility, native backend invariants, the external consumer,
 browser WebGPU/fallback smoke tests, renderer all-features tests, and the full
 workspace suite also pass on this source identity.
@@ -152,27 +158,13 @@ Use profiles to choose the next hypothesis, not to declare a win. Time Profiler
 separates CPU preparation from wgpu/backend work. Metal System Trace must count
 physical command buffers, render/blit encoders, GPU span, and GPU busy time.
 
-## Two controls for atomic mode
+## Atomic architecture closure
 
-The production Rust result is the release gate. A second forced-generic Rust
-control is needed when attributing generic atomic changes: the C++ Dawn runner
-does not advertise `supportsClockwiseAtomicMode`, so its nominal
-`clockwise-atomic` lane executes generic atomics with a clockwise override.
-Rust can opportunistically select its specialized clockwise implementation.
-Keep those facts separate:
-
-- production Rust versus C++ answers whether the shipped renderer is faster;
-- forced-generic Rust versus C++ answers whether the same architecture is
-  implemented with comparable cost.
-
-Do not slow the production path merely to make the control architectures look
-alike.
-
-The final evidence does not contain a global forced-generic Rust toggle, so it
-makes only the first claim: shipped specialized production Rust versus the
-fixed C++ Dawn runner. It does not claim that Rust's generic-atomic architecture
-has the same cost as C++'s generic lane. Adding that control remains useful
-stretch attribution, not a condition on the production 1.0x result.
+C++ Dawn reports `supportsClockwiseAtomicMode = false`; the nominal clockwise
+lane therefore runs generic atomics with a frame-wide clockwise-fill override.
+Rust now exposes and benchmarks the same architecture. The older specialized
+pipeline remains only as unselected implementation code with focused tests; it
+is neither constructed by `WgpuFactory` nor used for the production result.
 
 ## Current attribution
 

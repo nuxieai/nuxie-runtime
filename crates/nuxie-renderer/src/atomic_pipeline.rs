@@ -402,7 +402,12 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &image_rect_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("4", 0.0),
+                    ("7", FIXED_FLUSH_DITHER),
+                ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -430,7 +435,12 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &image_mesh_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 0.0)]),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("4", 0.0),
+                    ("7", FIXED_FLUSH_DITHER),
+                ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -767,8 +777,8 @@ impl AtomicPipeline {
         // Fixed fills, strokes, and outer paths have the same path shader and
         // pipeline state. Feathered fills and strokes likewise share one
         // table; only their feather/dither constants differ from plain paths.
-        let path = make_path("nuxie-atomic-path", 0.0, 0.0);
-        let feather_path = make_path("nuxie-atomic-feather-path", 1.0, 1.0);
+        let path = make_path("nuxie-atomic-path", 0.0, FIXED_FLUSH_DITHER);
+        let feather_path = make_path("nuxie-atomic-feather-path", 1.0, FIXED_FLUSH_DITHER);
         let make_resolve = |base_label: &'static str, dither| {
             FixedAtomicVariants::new(|features| {
                 let clipping = features.clipping_constants();
@@ -804,11 +814,16 @@ impl AtomicPipeline {
                 })
             })
         };
-        let resolve = make_resolve("nuxie-atomic-resolve", 0.0);
-        let feather_resolve = make_resolve("nuxie-atomic-feather-resolve", 1.0);
+        let resolve = make_resolve("nuxie-atomic-resolve", FIXED_FLUSH_DITHER);
+        let feather_resolve = make_resolve("nuxie-atomic-feather-resolve", FIXED_FLUSH_DITHER);
         let interior = FixedAtomicVariants::new(|features| {
             let clipping = features.clipping_constants();
-            let constants = [clipping[0], clipping[1], ("4", 0.0), ("7", 0.0)];
+            let constants = [
+                clipping[0],
+                clipping[1],
+                ("4", 0.0),
+                ("7", FIXED_FLUSH_DITHER),
+            ];
             let label = fixed_pipeline_label("nuxie-atomic-interior", features);
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(&label),
@@ -857,7 +872,12 @@ impl AtomicPipeline {
             fragment: Some(wgpu::FragmentState {
                 module: &atlas_blit_fragment,
                 entry_point: Some("main"),
-                compilation_options: options(&[("0", 1.0), ("1", 1.0), ("4", 0.0), ("7", 1.0)]),
+                compilation_options: options(&[
+                    ("0", 1.0),
+                    ("1", 1.0),
+                    ("4", 0.0),
+                    ("7", FIXED_FLUSH_DITHER),
+                ]),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -1742,6 +1762,8 @@ fn atomic_init_uses_clipping(batch_shared_draws: bool) -> bool {
 // C++ combines ENABLE_DITHER across an advanced atomic flush, so every draw
 // pipeline in that flush must compile the dither branch.
 const ADVANCED_FLUSH_DITHER: f64 = 1.0;
+// Fixed-color atomics inherit the same default frame-wide dither mode.
+const FIXED_FLUSH_DITHER: f64 = 1.0;
 
 fn advanced_path_constants(feather: f64, hsl: f64) -> [(&'static str, f64); 7] {
     [
@@ -2021,6 +2043,11 @@ mod tests {
                 Some(&("7", 1.0))
             );
         }
+    }
+
+    #[test]
+    fn fixed_atomic_draws_enable_cpp_frame_dither() {
+        assert_eq!(FIXED_FLUSH_DITHER, 1.0);
     }
 
     #[test]

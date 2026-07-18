@@ -1361,14 +1361,14 @@ pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
     for verb in path.verbs() {
         match verb {
             PathVerb::Move => {
-                area += vector_cross(last, contour_start);
+                area += coarse_area_cross(last, contour_start);
                 contour_start = path.points()[point_index];
                 last = contour_start;
                 point_index += 1;
             }
             PathVerb::Line => {
                 let end = path.points()[point_index];
-                area += vector_cross(last, end);
+                area += coarse_area_cross(last, end);
                 last = end;
                 point_index += 1;
             }
@@ -1397,29 +1397,89 @@ pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
             PathVerb::Close => {}
         }
     }
-    area += vector_cross(last, contour_start);
+    area += coarse_area_cross(last, contour_start);
     area * 0.5
 }
 
 fn accumulate_coarse_cubic_area(area: &mut f32, last: &mut Vec2D, cubic: [Vec2D; 4]) {
     let segment_count = coarse_cubic_segment_count(cubic);
-    for segment in 1..segment_count {
-        let point = eval_cubic(cubic, segment as f32 / segment_count as f32);
-        *area += vector_cross(*last, point);
-        *last = point;
+    if segment_count > 1 {
+        let reciprocal_segment_count = 1.0 / segment_count as f32;
+        let mut low_t = reciprocal_segment_count;
+        let mut high_t = 2.0 * reciprocal_segment_count;
+        let dt = 2.0 * reciprocal_segment_count;
+        let evaluator = CoarseEvalCubic::new(cubic);
+        while low_t < 1.0 {
+            let low = evaluator.at(low_t);
+            *area += coarse_area_cross(*last, low);
+            *last = low;
+
+            // C++ evaluates two SIMD lanes at a time. Its second sample is
+            // present whenever the first is, including t=1 for even counts.
+            let high = evaluator.at(high_t);
+            *area += coarse_area_cross(*last, high);
+            *last = high;
+            low_t += dt;
+            high_t += dt;
+        }
     }
-    *area += vector_cross(*last, cubic[3]);
+    *area += coarse_area_cross(*last, cubic[3]);
     *last = cubic[3];
+}
+
+struct CoarseEvalCubic {
+    a: Vec2D,
+    b: Vec2D,
+    c: Vec2D,
+    d: Vec2D,
+}
+
+impl CoarseEvalCubic {
+    fn new(points: [Vec2D; 4]) -> Self {
+        let c = subtract(points[1], points[0]);
+        let delta = subtract(points[2], points[1]);
+        let endpoint_delta = subtract(points[3], points[0]);
+        let b = scale(subtract(delta, c), 3.0);
+        let a = Vec2D::new(
+            (-3.0f32).mul_add(delta.x, endpoint_delta.x),
+            (-3.0f32).mul_add(delta.y, endpoint_delta.y),
+        );
+        Self {
+            a,
+            b,
+            c: scale(c, 3.0),
+            d: points[0],
+        }
+    }
+
+    fn at(&self, t: f32) -> Vec2D {
+        let x = self.a.x.mul_add(t, self.b.x);
+        let x = x.mul_add(t, self.c.x);
+        let x = x.mul_add(t, self.d.x);
+        let y = self.a.y.mul_add(t, self.b.y);
+        let y = y.mul_add(t, self.c.y);
+        let y = y.mul_add(t, self.d.y);
+        Vec2D::new(x, y)
+    }
+}
+
+fn coarse_area_cross(a: Vec2D, b: Vec2D) -> f32 {
+    a.x.mul_add(b.y, -(a.y * b.x))
 }
 
 fn coarse_cubic_segment_count(points: [Vec2D; 4]) -> u32 {
     let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = a.x - 2.0 * b.x + c.x;
-        let y = a.y - 2.0 * b.y + c.y;
+        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
+        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
         x * x + y * y
     };
-    let max_length_squared = second_difference(points[0], points[1], points[2])
-        .max(second_difference(points[1], points[2], points[3]));
+    let first_length_squared = second_difference(points[0], points[1], points[2]);
+    let second_length_squared = second_difference(points[1], points[2], points[3]);
+    let max_length_squared = if first_length_squared < second_length_squared {
+        second_length_squared
+    } else {
+        first_length_squared
+    };
     let length_term_squared = (9.0 / 16.0) * (1.0 / 8.0f32).powi(2);
     (max_length_squared * length_term_squared)
         .sqrt()
@@ -2732,6 +2792,33 @@ mod tests {
             FillRule::EvenOdd,
             true,
         ));
+    }
+
+    #[test]
+    fn clippedcubic2_path_2_coarse_area_matches_cpp() {
+        // Exact path id=2 from fixtures/renderer/streams/gm/clippedcubic2.rive-stream.
+        let mut path = RawPath::new();
+        path.move_to(0.0, 69.703_048_7);
+        path.cubic_to(
+            21.831_150_1,
+            69.703_048_7,
+            43.664_482_1,
+            58.083_694_5,
+            65.5,
+            34.844_982_1,
+        );
+        path.cubic_to(
+            87.331_146_2,
+            11.608_592,
+            109.164_482,
+            -0.010_765_133_4,
+            131.0,
+            -0.013_089_004_9,
+        );
+        path.close();
+
+        // Pinned C++ RawPath::computeCoarseArea cancels to positive zero.
+        assert_eq!(path_coarse_area(&path).to_bits(), 0x0000_0000);
     }
 
     #[test]

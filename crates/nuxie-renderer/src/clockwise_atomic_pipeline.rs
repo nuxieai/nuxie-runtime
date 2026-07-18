@@ -1458,7 +1458,7 @@ mod tests {
         use crate::WgpuFactory;
 
         let factory = WgpuFactory::new(16, 16).unwrap();
-        let pipeline = &factory.context.clockwise_atomic_pipeline;
+        let pipeline = ClockwiseAtomicPipeline::new(&factory.context.device);
         let mut backing = pipeline.begin_frame_backing();
 
         let mut first_encoder = factory
@@ -1501,7 +1501,7 @@ mod tests {
         use crate::WgpuFactory;
 
         let factory = WgpuFactory::new(16, 16).unwrap();
-        let pipeline = &factory.context.clockwise_atomic_pipeline;
+        let pipeline = ClockwiseAtomicPipeline::new(&factory.context.device);
         {
             let mut backing = pipeline.begin_frame_backing();
             let mut encoder = factory

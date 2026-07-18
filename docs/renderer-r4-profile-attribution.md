@@ -1084,20 +1084,20 @@ passed at these median Rust/C++ ratios:
 
 | scope | ratio | reports at or below 1.0 |
 | --- | ---: | ---: |
-| overall | 0.966058 | 5/5 |
-| clockwise atomic | 0.941193 | 5/5 |
-| MSAA | 0.996544 | 3/5 |
+| overall | 0.991956 | 5/5 |
+| clockwise atomic | 0.989737 | 5/5 |
+| MSAA | 0.989055 | 3/5 |
 
-Thus production Rust is about 3.4% faster overall on this fixed Apple M5 Max
+Thus production Rust is about 0.8% faster overall on this fixed Apple M5 Max
 matrix. The estimator equal-weights the two runner launch orders inside each
 report and then takes the median of five. The older minimum-selected paired
 diagnostic remains above 1.0 and is non-gating because selecting the minimum
 C++ control biases that comparison.
 
 The final runner SHA-256 values are
-`c0be5dea661f44751490e397759bd0b6fe1f8a7526dccf9c8677b6077fed5487`
+`98f37c7c87f4689309a8b37c1ab25db8b0b6445f04debfddae3031e68b00bb97`
 for C++ Dawn and
-`d876c3c4b35ec8d116af3e1f059f51830058b9baabe0090c9e5476212055d4b9`
+`0c0d932292544d08de1e6a90949abba8865ade4728a5fd956a832d3aeb65c042`
 for Rust. The complete provenance, source identity, five report hashes, gate
 artifact, and reproduction workflow are in
 `docs/renderer-parity-workflow.md`.

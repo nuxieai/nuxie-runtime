@@ -128,12 +128,13 @@ provenance-bound reports are reduced with the equal-order ratio-of-median-sums
 estimator, and their median must be at most 1.0 overall and in each mode, with
 unchanged pixels and zero candidate-excess counter rows.
 
-**Decision (2026-07-18): exact parity is closed.** The five-report gate passes
-at 0.966058 overall, 0.941193 clockwise atomic, and 0.996544 MSAA. Pass counts
+**Decision (2026-07-18): exact parity is closed.** After aligning the Rust
+atomic architecture with C++ Dawn, the final isolated five-report gate passes
+at 0.991956 overall, 0.989737 clockwise atomic, and 0.989055 MSAA. Pass counts
 are 5/5, 5/5, and 3/5 respectively. The older minimum-selected ratio remains a
 non-gating biased diagnostic. The corrected physical-copy oracle has zero Rust
-excesses in all 16 variants, and the 1,468-row corpus has zero divergences or
-gates.
+excesses in all 16 variants, and the same-runner 1,468-row corpus has zero
+divergences or gates.
 
 **Decision (2026-07-13): orchestrator-first delegation.** The main Phase R agent
 owns decomposition, the critical path, integration, and the final oracle verdict.

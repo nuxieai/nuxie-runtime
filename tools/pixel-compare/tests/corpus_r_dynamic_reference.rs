@@ -147,6 +147,57 @@ mode = "clockwise-atomic"
 }
 
 #[test]
+fn same_runner_reference_fails_closed_when_an_adapter_is_unreported() {
+    let root = temporary_directory("adapter-unreported");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("fixture.rive-stream"), "ignored by fake replay\n").unwrap();
+    RgbaImage::new(1, 1, vec![10, 20, 30, 255])
+        .unwrap()
+        .write_png(root.join("fixture.png"))
+        .unwrap();
+    let replay = install_fake_replay(&root, "Shared Test GPU");
+    fs::write(
+        root.join("corpus.toml"),
+        r#"
+[[entry]]
+id = "missing-adapter"
+stream = "fixture.rive-stream"
+reference = "missing.png"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0
+mode = "clockwise-atomic"
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+        .current_dir(&root)
+        .env("FAKE_REPLAY_PNG", root.join("fixture.png"))
+        .env("FAKE_OMIT_CANDIDATE_ADAPTER", "1")
+        .args(["--manifest", "corpus.toml"])
+        .args(["--replay", replay.to_str().unwrap()])
+        .args(["--backend", "rust-wgpu"])
+        .args(["--reference-replay", replay.to_str().unwrap()])
+        .args(["--reference-backend", "ffi-dawn"])
+        .args(["--output-dir", "artifacts"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains(
+        "renderer adapter identity missing for missing-adapter: candidate did not report `adapter=`"
+    ));
+    let provenance = fs::read_to_string(root.join("artifacts/missing-adapter.provenance.toml"))
+        .expect("missing adapter retains provenance");
+    assert!(provenance.contains("reference_adapter = \"Shared Test GPU\""));
+    assert!(provenance.contains("candidate_adapter = \"unreported\""));
+    assert!(provenance.contains("adapter_check = \"candidate-unreported\""));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn same_runner_reference_uses_the_manifest_tolerance_unchanged() {
     let root = temporary_directory("manifest-tolerance");
     fs::create_dir_all(&root).unwrap();
@@ -240,7 +291,14 @@ else
     selected_adapter="${{FAKE_CANDIDATE_ADAPTER:-{adapter}}}"
 fi
 cp "$selected_png" "$output"
-printf 'adapter=%s\n' "$selected_adapter"
+if [ "$backend" = 'ffi-dawn' ]; then
+    omit_adapter="${{FAKE_OMIT_REFERENCE_ADAPTER:-}}"
+else
+    omit_adapter="${{FAKE_OMIT_CANDIDATE_ADAPTER:-}}"
+fi
+if [ -z "$omit_adapter" ]; then
+    printf 'adapter=%s\n' "$selected_adapter"
+fi
 printf 'backend=%s output=%s\n' "$backend" "$output"
 "#
         ),

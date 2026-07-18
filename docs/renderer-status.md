@@ -8,10 +8,10 @@ not started.
 
 ## Metric
 
-Run `make renderer-golden`.
+Run `make renderer-golden-same-runner`.
 
-- Rust wgpu: exact=1,468, byte-exact=757, diverges=0, gated=0,
-  total=1,468.
+- Rust wgpu versus same-runner C++ Dawn: exact=1,468, byte-exact=1,360,
+  diverges=0, gated=0, total=1,468.
 - Contract exactness remains the release gate. Decoded-RGBA byte identity is a
   secondary, non-gating health metric; see `docs/renderer-exactness-map.md`.
 - Transparent stub negative control: 1,432 tolerance divergences, 26
@@ -393,9 +393,9 @@ Run `make renderer-golden`.
 - [x] R4: Historical 2.0x directional bound. The final 16-variant report has
   zero deterministic excess rows; the counterbalanced same-adapter C++
   Dawn/Rust wgpu snapshot is 1.3718x by summed p50 with a 1.6431x slowest row.
-- [x] R4.1: Exact performance parity. The provenance-bound five-report gate
-  passes at 0.966058 overall, 0.941193 clockwise atomic, and 0.996544 MSAA,
-  with unchanged pixels and zero candidate-excess counter rows. See
+- [x] R4.1: Exact performance parity. The final provenance-bound five-report
+  gate passes at 0.991956 overall, 0.989737 clockwise atomic, and 0.989055
+  MSAA, with unchanged pixels and zero candidate-excess counter rows. See
   `docs/renderer-parity-workflow.md`.
 - [x] R5: Browser WebGPU/WebGL2 product backends and evidence-gated
   extensions. The SDK default, asynchronous WebGPU path, separate WebGL2
@@ -424,9 +424,9 @@ Context-owned stroke-preparation scratch now mirrors C++'s resettable
 midpoint-fan allocator: one bounded slot survives frame boundaries and
 abandoned frames, concurrent frames use uncached overflow, and retention above
 1 MiB is dropped. The first strict five-report attempt is preserved because it
-missed MSAA at 1.005095; the post-fix gate passes at 0.966058 overall,
-0.941193 clockwise atomic, and 0.996544 MSAA (5/5, 5/5, and 3/5 reports at or
-below 1.0).
+missed MSAA at 1.005095. After the final C++ Dawn architecture alignment, a
+fresh isolated gate passes at 0.991956 overall, 0.989737 clockwise atomic, and
+0.989055 MSAA (5/5, 5/5, and 3/5 reports at or below 1.0).
 Clockwise coverage and its clip texture rotate through three completion-
 guarded slots. The corrected physical counter oracle has zero Rust excesses
 across all 16 variants; the 1,468-row corpus has zero divergences or gates.
@@ -2070,8 +2070,9 @@ widening. Universal byte identity is not part of that stop condition.
 
 ## Decisions
 
-- 2026-07-17: The post-R exactness follow-up is complete at exact=1,468,
-  byte-exact=757, diverges=0, gated=0 under all unchanged row contracts.
+- 2026-07-18: The post-R exactness follow-up is complete against same-runner
+  C++ Dawn at exact=1,468, byte-exact=1,360, diverges=0, gated=0 under all
+  unchanged row contracts.
   Generic atomic rendering now keeps one packed color plane across contiguous
   advanced-blend segments, closing Echo Show, Car Widgets, and byte-identical
   DstReadShuffle. MSAA feather masks now share C++-ordered logical-flush

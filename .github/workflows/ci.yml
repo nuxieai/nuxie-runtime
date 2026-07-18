@@ -11,6 +11,7 @@ env:
   RIVE_RUNTIME_REF: 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
   RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime
   RIVE_PREMAKE_TAG: v5.0.0-beta7
+  DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
 
 jobs:
   v2-golden:
@@ -157,12 +158,56 @@ jobs:
           RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
           cd renderer
           PATH="${RIVE_RUNTIME_DIR}/build:${PATH}" build_rive.sh debug -- rive_pls_renderer rive_decoders libpng zlib libjpeg libwebp rive_harfbuzz rive_sheenbidi rive_yoga
+          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
 
-      - name: Verify dual fuzz replay, stub baseline, and Rust renderer pixels
+      - name: Compute exact C++ Dawn reference cache key
+        id: dawn-reference-key
+        run: |
+          key="$(tools/renderer-dawn-reference-cache-key.sh)"
+          echo "key=${key}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore static C++ Dawn reference replay
+        id: dawn-reference-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/target/renderer-dawn-reference/renderer-replay
+          key: ${{ steps.dawn-reference-key.outputs.key }}
+
+      - name: Bootstrap pinned Dawn and build static C++ reference replay
+        if: steps.dawn-reference-cache.outputs.cache-hit != 'true'
+        env:
+          DEPOT_TOOLS_UPDATE: 0
+          RENDERER_JOBS: 4
+        run: |
+          depot_tools_dir="${RUNNER_TEMP}/depot_tools"
+          git clone --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git "${depot_tools_dir}"
+          git -C "${depot_tools_dir}" checkout --detach "${DEPOT_TOOLS_REF}"
+          export PATH="${depot_tools_dir}:${PATH}"
+          make renderer-dawn-reference-bootstrap
+          make renderer-dawn-reference-replay
+
+      - name: Verify static C++ Dawn reference replay
+        run: |
+          make renderer-dawn-reference-check
+          file target/renderer-dawn-reference/renderer-replay
+          shasum -a 256 target/renderer-dawn-reference/renderer-replay
+
+      - name: Verify dual fuzz replay, stub baseline, and same-runner renderer pixels
+        env:
+          RENDERER_JOBS: 4
         run: |
           make renderer-fuzz-replay
           make renderer-stub-baseline
-          make renderer-golden
+          make renderer-golden-same-runner
+
+      - name: Upload same-runner corpus failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-same-runner-corpus-${{ github.run_attempt }}
+          path: target/renderer-same-runner-corpus
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Optional perf artifact: continue-on-error keeps this job from affecting
   # the workflow's pass/fail status.

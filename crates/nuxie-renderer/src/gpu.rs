@@ -926,6 +926,34 @@ mod tests {
                 .params,
             1 | 11 << 4
         );
+        for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
+            assert_eq!(
+                PaintData::solid(0x8040_2010, fill_rule, BlendMode::Multiply)
+                    .with_generic_clockwise_fill()
+                    .params
+                    & 0x300,
+                0
+            );
+            assert_eq!(
+                PaintData::gradient(
+                    PaintType::LinearGradient,
+                    0.5,
+                    fill_rule,
+                    BlendMode::Multiply,
+                )
+                .with_generic_clockwise_fill()
+                .params
+                    & 0x300,
+                0
+            );
+            assert_eq!(
+                PaintData::clip_update(7, 3, fill_rule)
+                    .with_generic_clockwise_fill()
+                    .params
+                    & 0x300,
+                0
+            );
+        }
         let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
         assert_eq!(stroke.params, 1 | 11 << 4);
 

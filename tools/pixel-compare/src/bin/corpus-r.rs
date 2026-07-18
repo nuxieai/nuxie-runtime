@@ -377,7 +377,7 @@ fn prepare_dynamic_reference_report(
     } = comparison;
     let reference_adapter = reported_adapter(&reference_output.stdout)?;
     let candidate_adapter = reported_adapter(&candidate_output.stdout)?;
-    let (adapter_check, adapter_mismatch) = match (&reference_adapter, &candidate_adapter) {
+    let (adapter_check, adapter_error) = match (&reference_adapter, &candidate_adapter) {
         (Some(reference), Some(candidate)) if reference == candidate => {
             (Some(AdapterCheck::Matched), None)
         }
@@ -388,9 +388,27 @@ fn prepare_dynamic_reference_report(
                 entry.id
             )),
         ),
-        (Some(_), None) => (Some(AdapterCheck::CandidateUnreported), None),
-        (None, Some(_)) => (Some(AdapterCheck::ReferenceUnreported), None),
-        (None, None) => (Some(AdapterCheck::Unreported), None),
+        (Some(_), None) => (
+            Some(AdapterCheck::CandidateUnreported),
+            Some(format!(
+                "renderer adapter identity missing for {}: candidate did not report `adapter=`",
+                entry.id
+            )),
+        ),
+        (None, Some(_)) => (
+            Some(AdapterCheck::ReferenceUnreported),
+            Some(format!(
+                "renderer adapter identity missing for {}: reference did not report `adapter=`",
+                entry.id
+            )),
+        ),
+        (None, None) => (
+            Some(AdapterCheck::Unreported),
+            Some(format!(
+                "renderer adapter identity missing for {}: neither replay reported `adapter=`",
+                entry.id
+            )),
+        ),
     };
     let provenance = output_dir.join(format!("{}.provenance.toml", entry.id));
     let record = DynamicProvenance {
@@ -422,10 +440,12 @@ fn prepare_dynamic_reference_report(
         toml::to_string_pretty(&record).map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
-    if let Some(error) = adapter_mismatch {
+    if let Some(error) = adapter_error {
         return Err(error);
     }
-    Ok(adapter_check.expect("non-mismatching adapters have a reportable check"))
+    let adapter_check = adapter_check.expect("adapter reports retain a provenance status");
+    debug_assert!(matches!(adapter_check, AdapterCheck::Matched));
+    Ok(adapter_check)
 }
 
 struct DynamicRunProvenance {

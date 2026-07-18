@@ -18,9 +18,9 @@ mod direct_grid_oracle;
 mod draw;
 mod feather_lut;
 mod gpu;
+mod gpu_canvas;
 mod gr_triangulator;
 mod gradient_pipeline;
-mod gpu_canvas;
 // Kept standalone until a renderer path has a proven grouping integration.
 #[cfg(target_arch = "wasm32")]
 mod browser;
@@ -342,11 +342,11 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
-pub use work_metrics::BackendWorkMetrics;
 pub use gpu_canvas::{
-    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
-    GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
+    GpuCanvasVertexLayout,
 };
+pub use work_metrics::BackendWorkMetrics;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderMode {

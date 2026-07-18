@@ -8,7 +8,7 @@ use std::num::NonZeroU64;
 
 use wgpu::util::DeviceExt;
 
-use super::{RendererError, WgpuFactory, align_to, map_buffer};
+use super::{align_to, map_buffer, RendererError, WgpuFactory};
 
 const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
 const MAX_UNIFORM_BUFFER_BYTES: usize = 64 * 1024;

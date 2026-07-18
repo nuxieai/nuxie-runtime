@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, sync::Arc};
 #[cfg(feature = "scripting")]
 use std::{cell::RefCell, collections::VecDeque};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use nuxie_binary::RuntimeFile;
 #[cfg(not(feature = "scripting"))]
 use nuxie_binary::read_runtime_file as read_runtime_file_for_facade;
@@ -80,7 +80,7 @@ struct ReadyFileScripts {
 
 #[cfg(feature = "scripting")]
 struct FileScriptRuntime {
-    assets: Vec<FileScriptAsset>,
+    assets: Option<Vec<FileScriptAsset>>,
     allow_unsigned_execution: bool,
     ready: Option<ReadyFileScripts>,
 }
@@ -100,22 +100,24 @@ impl std::fmt::Debug for FileScriptRuntime {
 #[cfg(feature = "scripting")]
 impl FileScriptRuntime {
     fn new(runtime: &RuntimeFile, allow_unsigned_execution: bool) -> Self {
-        let assets = runtime
-            .scripting_file_assets_with_contents()
-            .into_iter()
-            .map(|entry| FileScriptAsset {
-                ordinal: entry.ordinal,
-                global_id: entry.asset.id,
-                type_name: entry.asset.type_name,
-                name: entry
-                    .asset
-                    .string_property("name")
-                    .unwrap_or_default()
-                    .to_owned(),
-                is_module: entry.asset.bool_property("isModule").unwrap_or(false),
-                payload: entry.contents.map(ToOwned::to_owned),
-            })
-            .collect();
+        let assets = allow_unsigned_execution.then(|| {
+            runtime
+                .scripting_file_assets_with_contents()
+                .into_iter()
+                .map(|entry| FileScriptAsset {
+                    ordinal: entry.ordinal,
+                    global_id: entry.asset.id,
+                    type_name: entry.asset.type_name,
+                    name: entry
+                        .asset
+                        .string_property("name")
+                        .unwrap_or_default()
+                        .to_owned(),
+                    is_module: entry.asset.bool_property("isModule").unwrap_or(false),
+                    payload: entry.contents.map(ToOwned::to_owned),
+                })
+                .collect()
+        });
         Self {
             assets,
             allow_unsigned_execution,
@@ -123,13 +125,23 @@ impl FileScriptRuntime {
         }
     }
 
+    fn materialized_assets(
+        &self,
+    ) -> std::result::Result<&[FileScriptAsset], nuxie_runtime::ScriptError> {
+        self.assets.as_deref().ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(
+                "unsigned script asset catalog is unavailable for an inert File",
+            )
+        })
+    }
+
     fn build_candidate(
         &self,
         factory: &mut dyn Factory,
     ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
         let vm = ScriptVm::new();
-        let mut pending = self
-            .assets
+        let assets = self.materialized_assets()?;
+        let mut pending = assets
             .iter()
             .filter(|asset| asset.type_name == "ScriptAsset" && asset.is_module)
             .collect::<Vec<_>>();
@@ -154,8 +166,7 @@ impl FileScriptRuntime {
         }
 
         let mut programs = BTreeMap::new();
-        for asset in self
-            .assets
+        for asset in assets
             .iter()
             .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
         {
@@ -386,7 +397,7 @@ fn script_mount_group(
                     component.global_id
                 ))
             })?;
-        let asset = scripts.assets.get(ordinal).ok_or_else(|| {
+        let asset = scripts.materialized_assets()?.get(ordinal).ok_or_else(|| {
             nuxie_runtime::ScriptError::new(format!(
                 "{path} ScriptedDrawable global {} references absent FileAsset ordinal {ordinal}",
                 component.global_id
@@ -661,6 +672,30 @@ pub struct File {
     scripts: RefCell<FileScriptRuntime>,
 }
 
+/// Allocation limits applied after binary import and before the owned runtime
+/// graph is constructed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileImportLimits {
+    max_imported_file_assets: Option<usize>,
+}
+
+impl FileImportLimits {
+    pub const fn new() -> Self {
+        Self {
+            max_imported_file_assets: None,
+        }
+    }
+
+    pub const fn with_max_imported_file_assets(mut self, maximum: usize) -> Self {
+        self.max_imported_file_assets = Some(maximum);
+        self
+    }
+
+    pub const fn max_imported_file_assets(self) -> Option<usize> {
+        self.max_imported_file_assets
+    }
+}
+
 /// Failure to attach host-supplied bytes to an external `ImageAsset`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExternalImageAssetError {
@@ -723,8 +758,14 @@ impl File {
     /// default. Use `File::import_with_unsigned_scripts` only after the host
     /// has established trust in the file bytes.
     pub fn import(bytes: &[u8]) -> Result<Self> {
+        Self::import_with_limits(bytes, FileImportLimits::new())
+    }
+
+    /// Import `.riv` bytes while bounding allocations derived from the parsed
+    /// file before constructing the owned runtime graph.
+    pub fn import_with_limits(bytes: &[u8], limits: FileImportLimits) -> Result<Self> {
         let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_policy(runtime, false)
+        Self::from_runtime_with_script_policy_and_limits(runtime, false, limits)
     }
 
     /// Import `.riv` bytes and allow their unsigned ScriptAsset bytecode to
@@ -749,6 +790,25 @@ impl File {
         runtime: RuntimeFile,
         _allow_unsigned_execution: bool,
     ) -> Result<Self> {
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            _allow_unsigned_execution,
+            FileImportLimits::new(),
+        )
+    }
+
+    fn from_runtime_with_script_policy_and_limits(
+        runtime: RuntimeFile,
+        _allow_unsigned_execution: bool,
+        limits: FileImportLimits,
+    ) -> Result<Self> {
+        if let Some(maximum) = limits.max_imported_file_assets()
+            && runtime
+                .imported_file_assets_with_contents_bounded(maximum)
+                .is_none()
+        {
+            bail!("Rive file imports more than {maximum} FileAssets");
+        }
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         Ok(Self {
             #[cfg(feature = "scripting")]
@@ -1860,6 +1920,144 @@ impl ViewModelInstance {
     /// exposed here because the owned context resolves enums by index.)
     pub fn set_enum(&mut self, name_path: &str, value: u64) -> bool {
         self.raw.set_enum_by_property_name_path(name_path, value)
+    }
+}
+
+#[cfg(all(test, feature = "scripting"))]
+mod inert_script_import_tests {
+    use super::*;
+    use nuxie_schema::definition_by_name;
+
+    fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn property_key(type_name: &str, property_name: &str) -> u16 {
+        let definition = definition_by_name(type_name).expect("fixture type exists");
+        definition
+            .properties
+            .iter()
+            .chain(definition.ancestors.iter().flat_map(|ancestor| {
+                definition_by_name(ancestor)
+                    .expect("fixture ancestor exists")
+                    .properties
+                    .iter()
+            }))
+            .find(|property| property.name == property_name)
+            .expect("fixture property exists")
+            .key
+            .int
+    }
+
+    fn push_object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
+        push_var_uint(
+            bytes,
+            u64::from(
+                definition_by_name(type_name)
+                    .expect("fixture type exists")
+                    .type_key
+                    .int,
+            ),
+        );
+        properties(bytes);
+        push_var_uint(bytes, 0);
+    }
+
+    fn push_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
+        push_var_uint(bytes, u64::from(property_key(type_name, name)));
+        push_var_uint(bytes, value);
+    }
+
+    fn push_blob(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &[u8]) {
+        push_var_uint(bytes, u64::from(property_key(type_name, name)));
+        push_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value);
+    }
+
+    fn imported_script_asset_bytes() -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 991);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ScriptAsset", |bytes| {
+            push_uint(bytes, "ScriptAsset", "assetId", 0);
+        });
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_blob(bytes, "FileAssetContents", "bytes", &[0, 1, 2, 3]);
+        });
+        bytes
+    }
+
+    fn imported_image_asset_bytes(count: usize) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 992);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        for asset_id in 0..count {
+            push_object(&mut bytes, "ImageAsset", |bytes| {
+                push_uint(bytes, "ImageAsset", "assetId", asset_id as u64);
+            });
+        }
+        bytes
+    }
+
+    #[test]
+    fn bounded_import_rejects_file_assets_before_owned_graph_construction() {
+        let bytes = imported_image_asset_bytes(2);
+        let limits = FileImportLimits::new().with_max_imported_file_assets(1);
+
+        let error = File::import_with_limits(&bytes, limits)
+            .expect_err("the parsed file exceeds its pre-graph asset limit");
+        assert!(
+            error.to_string().contains("imports more than 1 FileAssets"),
+            "{error:#}"
+        );
+        File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_imported_file_assets(2),
+        )
+        .expect("the exact bound admits graph construction");
+    }
+
+    #[test]
+    fn ordinary_import_does_not_materialize_the_script_asset_catalog() {
+        let bytes = imported_script_asset_bytes();
+
+        let inert = File::import(&bytes).expect("ordinary import remains available");
+        assert!(!inert.scripts.borrow().allow_unsigned_execution);
+        assert!(
+            inert.scripts.borrow().assets.is_none(),
+            "untrusted bytes must not allocate or clone their script asset payload catalog"
+        );
+        assert!(
+            inert.clone().scripts.borrow().assets.is_none(),
+            "cloning an inert File must not materialize the catalog either"
+        );
+
+        let trusted =
+            File::import_with_unsigned_scripts(&bytes).expect("explicitly trusted import succeeds");
+        let scripts = trusted.scripts.borrow();
+        assert!(scripts.allow_unsigned_execution);
+        let assets = scripts
+            .assets
+            .as_ref()
+            .expect("trusted imports retain the script catalog");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
     }
 }
 

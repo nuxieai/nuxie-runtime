@@ -190,8 +190,9 @@ Blocked by: V2 M7 + user activation
 
 ### Exit Criteria
 
-CI renders references, diffs against a stub Rust renderer (all failing), and
-reports the metric. Failure artifacts are inspectable.
+CI renders references, diffs against a transparent stub Rust renderer, rejects
+any byte-exact nonblank reference, requires tolerance-divergent negative
+controls, and reports the metric. Failure artifacts are inspectable.
 
 ## #R-1: wgpu Foundation And Shaders
 

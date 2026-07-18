@@ -14,7 +14,9 @@ Run `make renderer-golden`.
   total=1,468.
 - Contract exactness remains the release gate. Decoded-RGBA byte identity is a
   secondary, non-gating health metric; see `docs/renderer-exactness-map.md`.
-- Stub baseline: exact=0 for every active entry.
+- Transparent stub negative control: 1,432 tolerance divergences, 26
+  byte-exact canonical transparent blanks, 10 additional byte-different
+  entries within tolerance, and no byte-exact nonblank references.
 - Exact: `first-light-rectangle-msaa`,
   `first-light-triangle-clockwise-atomic`, `gm-rect-clockwise-atomic`,
   the Dawn-WebGPU-on-Metal MSAA references for `batchedconvexpaths`,

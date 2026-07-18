@@ -84,11 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         entries.len()
     )?;
     if options.expect_all_fail {
-        if counts.exact != 0 {
-            return Err(
-                format!("stub baseline unexpectedly passed {} entries", counts.exact).into(),
-            );
-        }
+        validate_stub_baseline(&counts)?;
     } else if manifest
         .entry
         .iter()
@@ -110,6 +106,7 @@ enum EntryOutcome {
     Compared {
         report: DiffReport,
         byte_exact: bool,
+        reference_is_transparent_blank: bool,
     },
 }
 
@@ -129,8 +126,26 @@ struct EntryExecution {
 struct Counts {
     exact: usize,
     byte_exact: usize,
+    transparent_blank_byte_exact: usize,
     diverges: usize,
     gated: usize,
+}
+
+fn validate_stub_baseline(counts: &Counts) -> Result<(), String> {
+    let nonblank_byte_exact = counts
+        .byte_exact
+        .checked_sub(counts.transparent_blank_byte_exact)
+        .ok_or_else(|| "stub baseline byte-exact counts are inconsistent".to_owned())?;
+    if nonblank_byte_exact != 0 {
+        return Err(format!(
+            "stub baseline unexpectedly byte-matched {nonblank_byte_exact} nonblank references"
+        ));
+    }
+
+    if counts.diverges == 0 {
+        return Err("stub baseline has no tolerance-divergent references".to_owned());
+    }
+    Ok(())
 }
 
 fn run_entry(entry: &Entry, options: &Options, reference_base: &Path) -> EntryExecution {
@@ -222,6 +237,7 @@ fn compare_entry(
     Ok(EntryOutcome::Compared {
         report,
         byte_exact: expected == actual_image,
+        reference_is_transparent_blank: expected.pixels.iter().all(|channel| *channel == 0),
     })
 }
 
@@ -269,9 +285,15 @@ fn emit_entry(
             writeln!(stdout, "gated {}: {diagnostic}", entry.id)
                 .map_err(|error| error.to_string())?;
         }
-        EntryOutcome::Compared { report, byte_exact } if report.within_tolerance => {
+        EntryOutcome::Compared {
+            report,
+            byte_exact,
+            reference_is_transparent_blank,
+        } if report.within_tolerance => {
             counts.exact += 1;
             counts.byte_exact += usize::from(byte_exact);
+            counts.transparent_blank_byte_exact +=
+                usize::from(byte_exact && reference_is_transparent_blank);
             writeln!(
                 stdout,
                 "{} {}: byte-exact={} different-pixels={} max-channel-delta={}",
@@ -951,6 +973,7 @@ mod tests {
                     within_tolerance: true,
                 },
                 byte_exact: false,
+                reference_is_transparent_blank: false,
             }),
         };
         let mut counts = Counts::default();
@@ -974,6 +997,80 @@ mod tests {
         assert!(String::from_utf8(stdout)
             .unwrap()
             .contains("exact within-contract: byte-exact=false"));
+    }
+
+    #[test]
+    fn transparent_blank_byte_matches_are_counted_for_the_stub_guard() {
+        let entry = entry("transparent-blank", "clockwise-atomic", "reference.png");
+        let execution = EntryExecution {
+            diagnostics: ChildDiagnostics::default(),
+            outcome: Ok(EntryOutcome::Compared {
+                report: DiffReport {
+                    width: 1,
+                    height: 1,
+                    different_pixels: 0,
+                    max_channel_delta: 0,
+                    within_tolerance: true,
+                },
+                byte_exact: true,
+                reference_is_transparent_blank: true,
+            }),
+        };
+        let mut counts = Counts::default();
+
+        emit_entry(
+            &entry,
+            execution,
+            false,
+            Path::new("output"),
+            &mut counts,
+            &mut Vec::new(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        assert_eq!(counts.byte_exact, 1);
+        assert_eq!(counts.transparent_blank_byte_exact, 1);
+    }
+
+    #[test]
+    fn stub_baseline_allows_transparent_blank_byte_matches() {
+        validate_stub_baseline(&Counts {
+            exact: 36,
+            byte_exact: 26,
+            transparent_blank_byte_exact: 26,
+            diverges: 1_432,
+            gated: 0,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn stub_baseline_rejects_nonblank_byte_matches() {
+        let error = validate_stub_baseline(&Counts {
+            exact: 1,
+            byte_exact: 1,
+            transparent_blank_byte_exact: 0,
+            diverges: 1,
+            gated: 0,
+        })
+        .unwrap_err();
+
+        assert!(error.contains("nonblank"));
+    }
+
+    #[test]
+    fn stub_baseline_requires_a_tolerance_divergence() {
+        let error = validate_stub_baseline(&Counts {
+            exact: 1,
+            byte_exact: 0,
+            transparent_blank_byte_exact: 0,
+            diverges: 0,
+            gated: 0,
+        })
+        .unwrap_err();
+
+        assert!(error.contains("no tolerance-divergent references"));
     }
 
     #[test]

@@ -35,6 +35,7 @@ pub use draw::{
     RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
     RuntimeShapePaintState, preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_artboard_tree,
+    preallocate_render_paint_cache_for_artboard_tree_with_external_images,
     preallocate_render_paint_cache_for_scripted_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_render_paints, preallocate_render_paints_for_artboard_tree,

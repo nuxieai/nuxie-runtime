@@ -3,13 +3,10 @@
 //! This crate keeps the user-facing surface narrow while the lower-level
 //! crates continue to carry the import, graph, runtime, and renderer details.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(feature = "scripting")]
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, VecDeque},
-};
+use std::{cell::RefCell, collections::VecDeque};
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
@@ -21,7 +18,7 @@ use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache,
     RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
-    preallocate_render_paint_cache_for_artboard_tree,
+    preallocate_render_paint_cache_for_artboard_tree_with_external_images,
 };
 
 mod scene;
@@ -656,9 +653,33 @@ fn queue_root_script_advance(
 pub struct File {
     runtime: RuntimeFile,
     graph: GraphFile,
+    external_image_assets: BTreeMap<u32, Arc<[u8]>>,
     #[cfg(feature = "scripting")]
     scripts: RefCell<FileScriptRuntime>,
 }
+
+/// Failure to attach host-supplied bytes to an external `ImageAsset`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalImageAssetError {
+    UnknownAsset { asset_id: u32 },
+    WrongAssetKind { asset_id: u32, actual: &'static str },
+}
+
+impl std::fmt::Display for ExternalImageAssetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownAsset { asset_id } => {
+                write!(formatter, "unknown external image asset id {asset_id}")
+            }
+            Self::WrongAssetKind { asset_id, actual } => write!(
+                formatter,
+                "external image asset id {asset_id} resolves to {actual}, not ImageAsset"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ExternalImageAssetError {}
 
 impl std::fmt::Debug for File {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -684,6 +705,7 @@ impl Clone for File {
         Self {
             runtime,
             graph,
+            external_image_assets: self.external_image_assets.clone(),
             #[cfg(feature = "scripting")]
             scripts,
         }
@@ -729,7 +751,38 @@ impl File {
             scripts: RefCell::new(FileScriptRuntime::new(&runtime, _allow_unsigned_execution)),
             runtime,
             graph,
+            external_image_assets: BTreeMap::new(),
         })
+    }
+
+    /// Attach host-supplied bytes to an external `ImageAsset` in this file.
+    ///
+    /// This performs no I/O or decode. `asset_id` is the published, file-wide
+    /// `FileAsset.assetId`, not the object id or asset-list ordinal. The bytes
+    /// are decoded lazily by the renderer on first draw. Embedded image bytes
+    /// remain authoritative if a file carries both forms.
+    pub fn attach_image_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalImageAssetError> {
+        let Some(asset) = self
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.uint_property("assetId") == Some(u64::from(asset_id)))
+        else {
+            return Err(ExternalImageAssetError::UnknownAsset { asset_id });
+        };
+        if asset.type_name != "ImageAsset" {
+            return Err(ExternalImageAssetError::WrongAssetKind {
+                asset_id,
+                actual: asset.type_name,
+            });
+        }
+        self.external_image_assets
+            .insert(asset.id, Arc::<[u8]>::from(bytes));
+        Ok(())
     }
 
     /// Low-level imported file data for advanced integrations.
@@ -859,13 +912,19 @@ fn ensure_render_paint_cache_for_draw(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
+    external_image_assets: &BTreeMap<u32, Arc<[u8]>>,
     factory: &mut dyn Factory,
 ) -> std::result::Result<(), ImageDecodeError> {
     if retained.is_some() {
         return Ok(());
     }
-    let candidate =
-        preallocate_render_paint_cache_for_artboard_tree(runtime, artboard, artboards, factory);
+    let candidate = preallocate_render_paint_cache_for_artboard_tree_with_external_images(
+        runtime,
+        artboard,
+        artboards,
+        factory,
+        external_image_assets,
+    );
     if let Some(error) = candidate.image_decode_error() {
         return Err(error);
     }
@@ -1240,6 +1299,7 @@ impl<'a> ArtboardInstance<'a> {
             &self.file.runtime,
             artboard,
             &self.file.graph.artboards,
+            &self.file.external_image_assets,
             factory,
         )?;
         #[cfg(feature = "scripting")]
@@ -1653,6 +1713,7 @@ impl OwnedArtboardInstance {
             &self.file.runtime,
             artboard,
             &self.file.graph.artboards,
+            &self.file.external_image_assets,
             factory,
         )?;
         #[cfg(feature = "scripting")]
@@ -1833,5 +1894,85 @@ mod owned_instance_tests {
         // Nonexistent property key: the typed write path must report false
         // (no match), never panic.
         assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
+    }
+}
+
+#[cfg(test)]
+mod external_image_asset_tests {
+    use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+
+    fn file_with_image_and_font_assets() -> File {
+        let image_asset_type = nuxie_schema::definition_by_name("ImageAsset")
+            .expect("ImageAsset schema definition")
+            .type_key
+            .int;
+        let font_asset_type = nuxie_schema::definition_by_name("FontAsset")
+            .expect("FontAsset schema definition")
+            .type_key
+            .int;
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: crate::scene::TYPE_BACKBOARD,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: image_asset_type,
+                properties: vec![AuthoringProperty {
+                    key: crate::scene::PROPERTY_FILE_ASSET_ID,
+                    value: AuthoringValue::Uint(7),
+                }],
+            },
+            AuthoringRecord {
+                type_key: font_asset_type,
+                properties: vec![AuthoringProperty {
+                    key: crate::scene::PROPERTY_FILE_ASSET_ID,
+                    value: AuthoringValue::Uint(8),
+                }],
+            },
+        ])
+        .expect("asset-only runtime file");
+        File::from_runtime(runtime).expect("asset-only file graph")
+    }
+
+    #[test]
+    fn image_attachment_validates_semantic_identity_and_asset_kind() {
+        let mut file = file_with_image_and_font_assets();
+
+        assert_eq!(
+            file.attach_image_asset_bytes(99, vec![1, 2, 3]),
+            Err(ExternalImageAssetError::UnknownAsset { asset_id: 99 })
+        );
+        assert_eq!(
+            file.attach_image_asset_bytes(8, vec![1, 2, 3]),
+            Err(ExternalImageAssetError::WrongAssetKind {
+                asset_id: 8,
+                actual: "FontAsset",
+            })
+        );
+
+        file.attach_image_asset_bytes(7, vec![4, 5, 6])
+            .expect("ImageAsset accepts host bytes by FileAsset.assetId");
+        let image_global_id = file
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.type_name == "ImageAsset")
+            .expect("image asset")
+            .id;
+        assert_eq!(
+            file.external_image_assets
+                .get(&image_global_id)
+                .map(AsRef::as_ref),
+            Some([4, 5, 6].as_slice())
+        );
+        assert_eq!(
+            file.clone()
+                .external_image_assets
+                .get(&image_global_id)
+                .map(AsRef::as_ref),
+            Some([4, 5, 6].as_slice()),
+            "cloned files retain the exact external asset envelope"
+        );
     }
 }

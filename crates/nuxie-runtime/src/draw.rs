@@ -8256,7 +8256,36 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, true, true,
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &BTreeMap::new(),
+        true,
+        true,
+    )
+}
+
+/// Preallocate a complete artboard-tree render cache with host-supplied bytes
+/// for external `ImageAsset` objects.
+///
+/// The map is keyed by the file-global object id, not `FileAsset.assetId`.
+/// Embedded `FileAssetContents` remain authoritative when both are present.
+pub fn preallocate_render_paint_cache_for_artboard_tree_with_external_images(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    external_image_bytes: &BTreeMap<u32, Arc<[u8]>>,
+) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        external_image_bytes,
+        true,
+        true,
     )
 }
 
@@ -8267,7 +8296,13 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, true,
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &BTreeMap::new(),
+        false,
+        true,
     )
 }
 
@@ -8278,7 +8313,13 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_pa
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, false,
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &BTreeMap::new(),
+        false,
+        false,
     )
 }
 
@@ -8287,6 +8328,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
+    external_image_bytes: &BTreeMap<u32, Arc<[u8]>>,
     include_script_input_artboards: bool,
     allocate_source_paints: bool,
 ) -> RuntimeRenderPaintCache {
@@ -8306,8 +8348,14 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         .filter(|asset_global| pre_source_image_assets.contains(asset_global))
     {
         if image_decode_error.is_none() {
-            image_decode_error =
-                predecode_render_image(runtime, asset_global, factory, &mut images).err();
+            image_decode_error = predecode_render_image(
+                runtime,
+                asset_global,
+                external_image_bytes,
+                factory,
+                &mut images,
+            )
+            .err();
         }
     }
     let _source_artboard_paints =
@@ -8318,8 +8366,14 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         .filter(|asset_global| !pre_source_image_assets.contains(asset_global))
     {
         if image_decode_error.is_none() {
-            image_decode_error =
-                predecode_render_image(runtime, asset_global, factory, &mut images).err();
+            image_decode_error = predecode_render_image(
+                runtime,
+                asset_global,
+                external_image_bytes,
+                factory,
+                &mut images,
+            )
+            .err();
         }
     }
     let mut source_meshes =
@@ -8509,10 +8563,15 @@ fn heuristic_pre_source_image_decode_count(
 fn predecode_render_image(
     runtime: &RuntimeFile,
     asset_global: u32,
+    external_image_bytes: &BTreeMap<u32, Arc<[u8]>>,
     factory: &mut dyn RenderFactory,
     images: &mut RuntimeRenderImages,
 ) -> std::result::Result<(), ImageDecodeError> {
-    if let Some(bytes) = embedded_file_asset_bytes(runtime, asset_global) {
+    if let Some(bytes) = embedded_file_asset_bytes(runtime, asset_global).or_else(|| {
+        external_image_bytes
+            .get(&asset_global)
+            .map(|bytes| bytes.as_ref())
+    }) {
         images.insert(asset_global, factory.decode_image(bytes)?);
     }
     Ok(())

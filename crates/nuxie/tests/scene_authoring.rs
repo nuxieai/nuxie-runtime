@@ -15,7 +15,7 @@ use nuxie::{
     ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
     TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelId,
     ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListSpec, ViewModelNumberId,
-    ViewModelNumberSpec, ViewModelSpec, props,
+    ViewModelNumberSpec, ViewModelSpec, ViewModelStringSpec, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -3701,6 +3701,59 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
         2,
         "both list contexts import, instantiate the mapped item artboard, and draw"
     );
+    Ok(())
+}
+
+#[test]
+fn typed_view_model_strings_export_and_import_as_runtime_instance_values() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Catalog".into(),
+            width: 120.0,
+            height: 40.0,
+        })?;
+        let mut view_models = tx.view_models();
+        let product = view_models.create(ViewModelSpec {
+            name: "Product".into(),
+        })?;
+        let name = view_models.create_string(
+            product,
+            ViewModelStringSpec {
+                name: "name".into(),
+            },
+        )?;
+        let defaults = view_models.create_instance(
+            product,
+            ViewModelInstanceSpec {
+                name: Some("Default product".into()),
+            },
+        )?;
+        view_models.set_string(defaults, name, "Nuxie Pro")?;
+        view_models.set_artboard_default(artboard, defaults)?;
+        Ok(artboard)
+    })?;
+
+    let records = scene.export_records();
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelPropertyString
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelName("name".into()))
+    }));
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelInstanceString
+            && record.properties
+                == vec![
+                    ExportedProperty::ViewModelPropertyId(0),
+                    ExportedProperty::ViewModelStringValue("Nuxie Pro".into()),
+                ]
+    }));
+
+    let instance = scene.instantiate(artboard)?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty());
     Ok(())
 }
 

@@ -73,6 +73,7 @@ ordinary_record_id!(MachineStateId);
 ordinary_record_id!(MachineTransitionId);
 ordinary_record_id!(ViewModelId);
 ordinary_record_id!(ViewModelNumberId);
+ordinary_record_id!(ViewModelStringId);
 ordinary_record_id!(ViewModelBooleanId);
 ordinary_record_id!(ViewModelListId);
 ordinary_record_id!(ViewModelInstanceId);
@@ -722,6 +723,7 @@ struct DefinitionIndex {
     shader_assets: BTreeMap<ShaderAssetId, usize>,
     view_models: BTreeMap<ViewModelId, usize>,
     view_model_numbers: BTreeMap<ViewModelNumberId, (usize, usize)>,
+    view_model_strings: BTreeMap<ViewModelStringId, (usize, usize)>,
     view_model_booleans: BTreeMap<ViewModelBooleanId, (usize, usize)>,
     view_model_lists: BTreeMap<ViewModelListId, (usize, usize)>,
     view_model_instances: BTreeMap<ViewModelInstanceId, (usize, usize)>,
@@ -772,6 +774,17 @@ impl DefinitionIndex {
                     .or_default()
                     .push(number.id.object_id());
                 index.owned.entry(number.id.object_id()).or_default();
+            }
+            for (string_index, string) in view_model.strings.iter().enumerate() {
+                index
+                    .view_model_strings
+                    .insert(string.id, (view_model_index, string_index));
+                index
+                    .owned
+                    .entry(view_model.id.object_id())
+                    .or_default()
+                    .push(string.id.object_id());
+                index.owned.entry(string.id.object_id()).or_default();
             }
             for (boolean_index, boolean) in view_model.booleans.iter().enumerate() {
                 index
@@ -869,6 +882,10 @@ impl DefinitionIndex {
             || self.view_models.keys().any(|id| id.object_id() == object)
             || self
                 .view_model_numbers
+                .keys()
+                .any(|id| id.object_id() == object)
+            || self
+                .view_model_strings
                 .keys()
                 .any(|id| id.object_id() == object)
             || self
@@ -1037,6 +1054,7 @@ struct ViewModelDefinition {
     id: ViewModelId,
     spec: ViewModelSpec,
     numbers: Vec<ViewModelNumberDefinition>,
+    strings: Vec<ViewModelStringDefinition>,
     booleans: Vec<ViewModelBooleanDefinition>,
     lists: Vec<ViewModelListDefinition>,
     instances: Vec<ViewModelInstanceDefinition>,
@@ -1046,6 +1064,12 @@ struct ViewModelDefinition {
 struct ViewModelNumberDefinition {
     id: ViewModelNumberId,
     spec: ViewModelNumberSpec,
+}
+
+#[derive(Debug, Clone)]
+struct ViewModelStringDefinition {
+    id: ViewModelStringId,
+    spec: ViewModelStringSpec,
 }
 
 #[derive(Debug, Clone)]
@@ -1065,6 +1089,7 @@ struct ViewModelInstanceDefinition {
     id: ViewModelInstanceId,
     spec: ViewModelInstanceSpec,
     numbers: BTreeMap<ViewModelNumberId, f32>,
+    strings: BTreeMap<ViewModelStringId, String>,
     booleans: BTreeMap<ViewModelBooleanId, bool>,
     lists: BTreeMap<ViewModelListId, Vec<ViewModelInstanceId>>,
 }
@@ -1280,6 +1305,11 @@ pub struct ViewModelSpec {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewModelNumberSpec {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewModelStringSpec {
     pub name: String,
 }
 
@@ -3151,10 +3181,12 @@ pub enum ExportedObjectKind {
     FileAssetContents,
     ViewModel,
     ViewModelPropertyNumber,
+    ViewModelPropertyString,
     ViewModelPropertyBoolean,
     ViewModelPropertyList,
     ViewModelInstance,
     ViewModelInstanceNumber,
+    ViewModelInstanceString,
     ViewModelInstanceBoolean,
     ViewModelInstanceList,
     ViewModelInstanceListItem,
@@ -3364,6 +3396,7 @@ pub enum ExportedProperty {
     ArtboardViewModelId(u32),
     ViewModelPropertyId(u32),
     ViewModelNumberValue(f32),
+    ViewModelStringValue(String),
     ViewModelBooleanValue(bool),
     ViewModelListItemViewModelId(u32),
     ViewModelListItemInstanceId(u32),
@@ -3506,6 +3539,7 @@ impl ExportedProperty {
             Self::ArtboardViewModelId(_) => PROPERTY_ARTBOARD_VIEW_MODEL_ID,
             Self::ViewModelPropertyId(_) => PROPERTY_VIEW_MODEL_INSTANCE_VALUE_PROPERTY_ID,
             Self::ViewModelNumberValue(_) => PROPERTY_VIEW_MODEL_INSTANCE_NUMBER_VALUE,
+            Self::ViewModelStringValue(_) => PROPERTY_VIEW_MODEL_INSTANCE_STRING_VALUE,
             Self::ViewModelBooleanValue(_) => PROPERTY_VIEW_MODEL_INSTANCE_BOOLEAN_VALUE,
             Self::ViewModelListItemViewModelId(_) => {
                 PROPERTY_VIEW_MODEL_INSTANCE_LIST_ITEM_VIEW_MODEL_ID
@@ -3541,7 +3575,8 @@ impl ExportedProperty {
             | Self::TextValueRunText(value)
             | Self::AnimationName(value)
             | Self::StateMachineComponentName(value)
-            | Self::ViewModelName(value) => AuthoringValue::String(value),
+            | Self::ViewModelName(value)
+            | Self::ViewModelStringValue(value) => AuthoringValue::String(value),
             Self::FileAssetContentsBytes(value) | Self::MeshTriangleIndexBytes(value) => {
                 AuthoringValue::Bytes(value)
             }
@@ -3687,10 +3722,12 @@ impl ExportedRecord {
             ExportedObjectKind::FileAssetContents => TYPE_FILE_ASSET_CONTENTS,
             ExportedObjectKind::ViewModel => TYPE_VIEW_MODEL,
             ExportedObjectKind::ViewModelPropertyNumber => TYPE_VIEW_MODEL_PROPERTY_NUMBER,
+            ExportedObjectKind::ViewModelPropertyString => TYPE_VIEW_MODEL_PROPERTY_STRING,
             ExportedObjectKind::ViewModelPropertyBoolean => TYPE_VIEW_MODEL_PROPERTY_BOOLEAN,
             ExportedObjectKind::ViewModelPropertyList => TYPE_VIEW_MODEL_PROPERTY_LIST,
             ExportedObjectKind::ViewModelInstance => TYPE_VIEW_MODEL_INSTANCE,
             ExportedObjectKind::ViewModelInstanceNumber => TYPE_VIEW_MODEL_INSTANCE_NUMBER,
+            ExportedObjectKind::ViewModelInstanceString => TYPE_VIEW_MODEL_INSTANCE_STRING,
             ExportedObjectKind::ViewModelInstanceBoolean => TYPE_VIEW_MODEL_INSTANCE_BOOLEAN,
             ExportedObjectKind::ViewModelInstanceList => TYPE_VIEW_MODEL_INSTANCE_LIST,
             ExportedObjectKind::ViewModelInstanceListItem => TYPE_VIEW_MODEL_INSTANCE_LIST_ITEM,
@@ -5034,6 +5071,7 @@ impl VmTx<'_> {
             id,
             spec,
             numbers: Vec::new(),
+            strings: Vec::new(),
             booleans: Vec::new(),
             lists: Vec::new(),
             instances: Vec::new(),
@@ -5067,6 +5105,10 @@ impl VmTx<'_> {
                     .numbers
                     .iter()
                     .any(|number| number.spec.name == spec.name)
+                    || model
+                        .strings
+                        .iter()
+                        .any(|string| string.spec.name == spec.name)
                     || model
                         .booleans
                         .iter()
@@ -5118,6 +5160,78 @@ impl VmTx<'_> {
         Ok(id)
     }
 
+    /// Add one typed string property to a view model.
+    pub fn create_string(
+        &mut self,
+        view_model: ViewModelId,
+        spec: ViewModelStringSpec,
+    ) -> std::result::Result<ViewModelStringId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let view_model_index = self.view_model_index(view_model, operation_index)?;
+        if self
+            .definitions
+            .view_models
+            .get(view_model_index)
+            .is_some_and(|model| {
+                model
+                    .numbers
+                    .iter()
+                    .any(|number| number.spec.name == spec.name)
+                    || model
+                        .strings
+                        .iter()
+                        .any(|string| string.spec.name == spec.name)
+                    || model
+                        .booleans
+                        .iter()
+                        .any(|boolean| boolean.spec.name == spec.name)
+                    || model.lists.iter().any(|list| list.spec.name == spec.name)
+            })
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(view_model.object_id())],
+                EditReason::IdentityCollision,
+            ));
+        }
+        let id = ViewModelStringId(ObjectId(
+            allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?,
+        ));
+        let model = self
+            .definitions
+            .view_models
+            .get_mut(view_model_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(view_model.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let string_index = model.strings.len();
+        model.strings.push(ViewModelStringDefinition { id, spec });
+        self.definition_index
+            .view_model_strings
+            .insert(id, (view_model_index, string_index));
+        self.definition_index
+            .owned
+            .entry(view_model.object_id())
+            .or_default()
+            .push(id.object_id());
+        self.definition_index
+            .owned
+            .entry(id.object_id())
+            .or_default();
+        self.created_objects.push(id.object_id());
+        self.spec_origins
+            .nodes
+            .insert(id.object_id(), operation_index);
+        self.touch_all_artboards(operation_index);
+        Ok(id)
+    }
+
     /// Add one typed boolean property to a view model.
     pub fn create_boolean(
         &mut self,
@@ -5135,6 +5249,10 @@ impl VmTx<'_> {
                     .numbers
                     .iter()
                     .any(|number| number.spec.name == spec.name)
+                    || model
+                        .strings
+                        .iter()
+                        .any(|string| string.spec.name == spec.name)
                     || model
                         .booleans
                         .iter()
@@ -5203,6 +5321,10 @@ impl VmTx<'_> {
                     .numbers
                     .iter()
                     .any(|number| number.spec.name == spec.name)
+                    || model
+                        .strings
+                        .iter()
+                        .any(|string| string.spec.name == spec.name)
                     || model
                         .booleans
                         .iter()
@@ -5295,6 +5417,10 @@ impl VmTx<'_> {
             .enumerate()
             .any(|(index, candidate)| index != number_index && candidate.spec.name == name)
             || model
+                .strings
+                .iter()
+                .any(|candidate| candidate.spec.name == name)
+            || model
                 .booleans
                 .iter()
                 .any(|candidate| candidate.spec.name == name)
@@ -5354,6 +5480,7 @@ impl VmTx<'_> {
             id,
             spec,
             numbers: BTreeMap::new(),
+            strings: BTreeMap::new(),
             booleans: BTreeMap::new(),
             lists: BTreeMap::new(),
         });
@@ -5447,6 +5574,70 @@ impl VmTx<'_> {
         self.spec_origins
             .properties
             .insert((instance.object_id(), "view_model_number"), operation_index);
+        self.touch_all_artboards(operation_index);
+        Ok(changed)
+    }
+
+    /// Set one authored UTF-8 string value on a typed view-model instance.
+    pub fn set_string(
+        &mut self,
+        instance: ViewModelInstanceId,
+        string: ViewModelStringId,
+        value: impl Into<String>,
+    ) -> std::result::Result<bool, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let (instance_model_index, instance_index) = self
+            .definition_index
+            .view_model_instances
+            .get(&instance)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        let (string_model_index, _) = self
+            .definition_index
+            .view_model_strings
+            .get(&string)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(string.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if instance_model_index != string_model_index {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(instance.object_id()),
+                    EditId::Object(string.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        let authored_instance = self
+            .definitions
+            .view_models
+            .get_mut(instance_model_index)
+            .and_then(|model| model.instances.get_mut(instance_index))
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let value = value.into();
+        let changed = authored_instance.strings.get(&string) != Some(&value);
+        authored_instance.strings.insert(string, value);
+        self.spec_origins
+            .properties
+            .insert((instance.object_id(), "view_model_string"), operation_index);
         self.touch_all_artboards(operation_index);
         Ok(changed)
     }
@@ -8490,6 +8681,7 @@ fn lower_view_model_catalog(
     let mut records = Vec::new();
     let mut model_indices = BTreeMap::new();
     let mut number_indices = BTreeMap::new();
+    let mut string_indices = BTreeMap::new();
     let mut boolean_indices = BTreeMap::new();
     let mut list_indices = BTreeMap::new();
     let mut instance_indices = BTreeMap::new();
@@ -8550,19 +8742,56 @@ fn lower_view_model_catalog(
                 properties: vec![ExportedProperty::ViewModelName(number.spec.name.clone())],
             });
         }
-        for (boolean_index, boolean) in model.booleans.iter().enumerate() {
+        for (string_index, string) in model.strings.iter().enumerate() {
             let property_index =
                 model
                     .numbers
                     .len()
-                    .checked_add(boolean_index)
+                    .checked_add(string_index)
                     .ok_or_else(|| {
                         EditDiagnostic::new(
-                            origins.object(boolean.id.object_id(), fallback_operation_index),
-                            vec![EditId::Object(boolean.id.object_id())],
+                            origins.object(string.id.object_id(), fallback_operation_index),
+                            vec![EditId::Object(string.id.object_id())],
                             EditReason::CapacityExceeded,
                         )
                     })?;
+            let property_ordinal = u32::try_from(property_index).map_err(|_| {
+                EditDiagnostic::new(
+                    origins.object(string.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(string.id.object_id())],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            if !identities.insert(string.id.object_id())
+                || !names.insert(string.spec.name.as_str())
+                || string_indices
+                    .insert(string.id, (model_ordinal, property_ordinal))
+                    .is_some()
+            {
+                return Err(EditDiagnostic::new(
+                    origins.object(string.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(string.id.object_id())],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::ViewModelPropertyString,
+                properties: vec![ExportedProperty::ViewModelName(string.spec.name.clone())],
+            });
+        }
+        for (boolean_index, boolean) in model.booleans.iter().enumerate() {
+            let property_index = model
+                .numbers
+                .len()
+                .checked_add(model.strings.len())
+                .and_then(|offset| offset.checked_add(boolean_index))
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(boolean.id.object_id(), fallback_operation_index),
+                        vec![EditId::Object(boolean.id.object_id())],
+                        EditReason::CapacityExceeded,
+                    )
+                })?;
             let property_ordinal = u32::try_from(property_index).map_err(|_| {
                 EditDiagnostic::new(
                     origins.object(boolean.id.object_id(), fallback_operation_index),
@@ -8591,7 +8820,8 @@ fn lower_view_model_catalog(
             let property_index = model
                 .numbers
                 .len()
-                .checked_add(model.booleans.len())
+                .checked_add(model.strings.len())
+                .and_then(|offset| offset.checked_add(model.booleans.len()))
                 .and_then(|offset| offset.checked_add(list_index))
                 .ok_or_else(|| {
                     EditDiagnostic::new(
@@ -8695,6 +8925,29 @@ fn lower_view_model_catalog(
                     properties: vec![
                         ExportedProperty::ViewModelPropertyId(property_ordinal),
                         ExportedProperty::ViewModelNumberValue(value),
+                    ],
+                });
+            }
+            for string in &model.strings {
+                let (_, property_ordinal) =
+                    string_indices.get(&string.id).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            fallback_operation_index,
+                            vec![EditId::Object(string.id.object_id())],
+                            EditReason::InternalInvariant,
+                        )
+                    })?;
+                records.push(ExportedRecord {
+                    kind: ExportedObjectKind::ViewModelInstanceString,
+                    properties: vec![
+                        ExportedProperty::ViewModelPropertyId(property_ordinal),
+                        ExportedProperty::ViewModelStringValue(
+                            instance
+                                .strings
+                                .get(&string.id)
+                                .cloned()
+                                .unwrap_or_default(),
+                        ),
                     ],
                 });
             }
@@ -9331,6 +9584,7 @@ fn validate_view_model_definitions(
     let mut identities = BTreeSet::new();
     let mut view_model_models = BTreeMap::new();
     let mut number_models = BTreeMap::new();
+    let mut string_models = BTreeMap::new();
     let mut boolean_models = BTreeMap::new();
     let mut list_models = BTreeMap::new();
     let mut instance_models = BTreeMap::new();
@@ -9353,6 +9607,18 @@ fn validate_view_model_definitions(
                 return Err(EditDiagnostic::new(
                     origins.object(number.id.object_id(), fallback_operation_index),
                     vec![EditId::Object(number.id.object_id())],
+                    EditReason::IdentityCollision,
+                ));
+            }
+        }
+        for string in &model.strings {
+            if !identities.insert(string.id.object_id())
+                || !names.insert(string.spec.name.as_str())
+                || string_models.insert(string.id, model_index).is_some()
+            {
+                return Err(EditDiagnostic::new(
+                    origins.object(string.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(string.id.object_id())],
                     EditReason::IdentityCollision,
                 ));
             }
@@ -9434,6 +9700,22 @@ fn validate_view_model_definitions(
                         vec![
                             EditId::Object(instance.id.object_id()),
                             EditId::Object(boolean.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    ));
+                }
+            }
+            for string in instance.strings.keys() {
+                if string_models.get(string) != Some(&model_index) {
+                    return Err(EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_string",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(string.object_id()),
                         ],
                         EditReason::UnknownObject,
                     ));
@@ -12216,6 +12498,101 @@ mod tests {
                     ],
                 },
             ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn authored_view_model_string_records_round_trip_through_exact_riv() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Catalog".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let product = view_models.create(ViewModelSpec {
+                name: "Product".into(),
+            })?;
+            let name = view_models.create_string(
+                product,
+                ViewModelStringSpec {
+                    name: "name".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                product,
+                ViewModelInstanceSpec {
+                    name: Some("Default product".into()),
+                },
+            )?;
+            view_models.set_string(defaults, name, "Nuxie Pro")?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            Ok(())
+        })?;
+
+        let authored = scene
+            .export_records()
+            .into_authoring_records()
+            .into_iter()
+            .filter(|record| matches!(record.type_key, 435 | 443 | 437 | 433))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            authored,
+            vec![
+                AuthoringRecord {
+                    type_key: 435,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("Product".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 443,
+                    properties: vec![AuthoringProperty {
+                        key: 557,
+                        value: AuthoringValue::String("name".into()),
+                    }],
+                },
+                AuthoringRecord {
+                    type_key: 437,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 4,
+                            value: AuthoringValue::String("Default product".into()),
+                        },
+                        AuthoringProperty {
+                            key: 566,
+                            value: AuthoringValue::Uint(0),
+                        },
+                    ],
+                },
+                AuthoringRecord {
+                    type_key: 433,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 554,
+                            value: AuthoringValue::Uint(0),
+                        },
+                        AuthoringProperty {
+                            key: 561,
+                            value: AuthoringValue::String("Nuxie Pro".into()),
+                        },
+                    ],
+                },
+            ]
+        );
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let view_model = instance
+            .instantiate_view_model_instance(0)
+            .context("exact .riv retains the artboard default instance")?;
+        assert_eq!(
+            view_model.raw().string_value_by_property_name("name"),
+            Some("Nuxie Pro".as_bytes())
         );
         Ok(())
     }

@@ -873,10 +873,12 @@ fn render_scene_schema() -> String {
     let state_machine_fire_event = concrete_definition("StateMachineFireEvent");
     let view_model = concrete_definition("ViewModel");
     let view_model_property_number = concrete_definition("ViewModelPropertyNumber");
+    let view_model_property_string = concrete_definition("ViewModelPropertyString");
     let view_model_property_boolean = concrete_definition("ViewModelPropertyBoolean");
     let view_model_property_list = concrete_definition("ViewModelPropertyList");
     let view_model_instance = concrete_definition("ViewModelInstance");
     let view_model_instance_number = concrete_definition("ViewModelInstanceNumber");
+    let view_model_instance_string = concrete_definition("ViewModelInstanceString");
     let view_model_instance_boolean = concrete_definition("ViewModelInstanceBoolean");
     let view_model_instance_list = concrete_definition("ViewModelInstanceList");
     let view_model_instance_list_item = concrete_definition("ViewModelInstanceListItem");
@@ -935,10 +937,12 @@ fn render_scene_schema() -> String {
         ("STATE_MACHINE_FIRE_EVENT", state_machine_fire_event),
         ("VIEW_MODEL", view_model),
         ("VIEW_MODEL_PROPERTY_NUMBER", view_model_property_number),
+        ("VIEW_MODEL_PROPERTY_STRING", view_model_property_string),
         ("VIEW_MODEL_PROPERTY_BOOLEAN", view_model_property_boolean),
         ("VIEW_MODEL_PROPERTY_LIST", view_model_property_list),
         ("VIEW_MODEL_INSTANCE", view_model_instance),
         ("VIEW_MODEL_INSTANCE_NUMBER", view_model_instance_number),
+        ("VIEW_MODEL_INSTANCE_STRING", view_model_instance_string),
         ("VIEW_MODEL_INSTANCE_BOOLEAN", view_model_instance_boolean),
         ("VIEW_MODEL_INSTANCE_LIST", view_model_instance_list),
         (
@@ -1507,6 +1511,13 @@ fn render_scene_schema() -> String {
         FieldKind::Double,
         false,
     );
+    let view_model_instance_string_value = resolve_named_property(
+        "ViewModelInstanceString",
+        "propertyValue",
+        "ViewModelInstanceString",
+        FieldKind::String,
+        false,
+    );
     let view_model_instance_boolean_value = resolve_named_property(
         "ViewModelInstanceBoolean",
         "propertyValue",
@@ -1753,6 +1764,10 @@ fn render_scene_schema() -> String {
         (
             "VIEW_MODEL_INSTANCE_NUMBER_VALUE",
             view_model_instance_number_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_STRING_VALUE",
+            view_model_instance_string_value,
         ),
         (
             "VIEW_MODEL_INSTANCE_BOOLEAN_VALUE",

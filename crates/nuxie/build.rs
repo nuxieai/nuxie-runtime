@@ -633,6 +633,28 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "TextStyleAxis",
+        schema_name: "TextStyleAxis",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "tag",
+                schema_name: "tag",
+                declared_owner: "TextStyleAxis",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "axis_value",
+                schema_name: "axisValue",
+                declared_owner: "TextStyleAxis",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "FontAsset",
         schema_name: "FontAsset",
         fields: &[ASSET_NAME],
@@ -1054,6 +1076,15 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         true,
     );
+    let text_style_axis_tag =
+        resolve_named_property("TextStyleAxis", "tag", "TextStyleAxis", FieldKind::Uint, false);
+    let text_style_axis_value = resolve_named_property(
+        "TextStyleAxis",
+        "axisValue",
+        "TextStyleAxis",
+        FieldKind::Double,
+        false,
+    );
     let mesh_triangle_index_bytes =
         resolve_encoded_property("Mesh", "triangleIndexBytes", "Mesh", FieldKind::Bytes);
     let vertex_x = resolve_named_property("MeshVertex", "x", "Vertex", FieldKind::Double, true);
@@ -1360,6 +1391,8 @@ fn render_scene_schema() -> String {
         ("TEXT_STYLE_LINE_HEIGHT", text_style_line_height),
         ("TEXT_STYLE_LETTER_SPACING", text_style_letter_spacing),
         ("TEXT_STYLE_FONT_ASSET_ID", text_style_font_asset_id),
+        ("TEXT_STYLE_AXIS_TAG", text_style_axis_tag),
+        ("TEXT_STYLE_AXIS_VALUE", text_style_axis_value),
         ("MESH_TRIANGLE_INDEX_BYTES", mesh_triangle_index_bytes),
         ("VERTEX_X", vertex_x),
         ("VERTEX_Y", vertex_y),

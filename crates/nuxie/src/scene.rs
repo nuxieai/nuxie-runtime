@@ -2878,6 +2878,7 @@ pub enum ExportedObjectKind {
     Text,
     TextValueRun,
     TextStylePaint,
+    TextStyleAxis,
     Mesh,
     MeshVertex,
     LinearAnimation,
@@ -3013,6 +3014,8 @@ pub enum ExportedProperty {
     TextStyleLineHeight(f32),
     TextStyleLetterSpacing(f32),
     TextStyleFontAssetId(u32),
+    TextStyleAxisTag(u32),
+    TextStyleAxisValue(f32),
     AnimationName(String),
     AnimationFps(u32),
     AnimationDuration(u32),
@@ -3126,6 +3129,8 @@ impl ExportedProperty {
             Self::TextStyleLineHeight(_) => PROPERTY_TEXT_STYLE_LINE_HEIGHT,
             Self::TextStyleLetterSpacing(_) => PROPERTY_TEXT_STYLE_LETTER_SPACING,
             Self::TextStyleFontAssetId(_) => PROPERTY_TEXT_STYLE_FONT_ASSET_ID,
+            Self::TextStyleAxisTag(_) => PROPERTY_TEXT_STYLE_AXIS_TAG,
+            Self::TextStyleAxisValue(_) => PROPERTY_TEXT_STYLE_AXIS_VALUE,
             Self::AnimationName(_) => PROPERTY_ANIMATION_NAME,
             Self::AnimationFps(_) => PROPERTY_ANIMATION_FPS,
             Self::AnimationDuration(_) => PROPERTY_ANIMATION_DURATION,
@@ -3185,6 +3190,7 @@ impl ExportedProperty {
             | Self::ImageFit(value)
             | Self::TextValueRunStyleId(value)
             | Self::TextStyleFontAssetId(value)
+            | Self::TextStyleAxisTag(value)
             | Self::AnimationFps(value)
             | Self::AnimationDuration(value)
             | Self::AnimationLoop(value)
@@ -3248,6 +3254,7 @@ impl ExportedProperty {
             | Self::TextStyleFontSize(value)
             | Self::TextStyleLineHeight(value)
             | Self::TextStyleLetterSpacing(value)
+            | Self::TextStyleAxisValue(value)
             | Self::AnimationSpeed(value)
             | Self::StateSpeed(value)
             | Self::KeyFrameDoubleValue(value)
@@ -3299,6 +3306,7 @@ impl ExportedRecord {
             ExportedObjectKind::Text => TYPE_TEXT,
             ExportedObjectKind::TextValueRun => TYPE_TEXT_VALUE_RUN,
             ExportedObjectKind::TextStylePaint => TYPE_TEXT_STYLE_PAINT,
+            ExportedObjectKind::TextStyleAxis => TYPE_TEXT_STYLE_AXIS,
             ExportedObjectKind::Mesh => TYPE_MESH,
             ExportedObjectKind::MeshVertex => TYPE_MESH_VERTEX,
             ExportedObjectKind::LinearAnimation => TYPE_LINEAR_ANIMATION,
@@ -6069,7 +6077,10 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
                 NodeKind::Text,
                 NodeKind::TextValueRun | NodeKind::TextStylePaint
             )
-            | (NodeKind::TextStylePaint, NodeKind::Fill | NodeKind::Stroke)
+            | (
+                NodeKind::TextStylePaint,
+                NodeKind::Fill | NodeKind::Stroke | NodeKind::TextStyleAxis
+            )
     )
 }
 
@@ -9111,6 +9122,13 @@ fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
                 }
             }
         }
+        NodeSpec::TextStyleAxis(spec) => {
+            if !spec.axis_value.is_finite() {
+                return Err(EditReason::NonFiniteProperty {
+                    property: "axis_value",
+                });
+            }
+        }
         NodeSpec::Fill(_) | NodeSpec::SolidColor(_) | NodeSpec::TextValueRun(_) => {}
     }
     Ok(())
@@ -9376,6 +9394,12 @@ fn node_record(
             ));
             properties.push(ExportedProperty::TextStyleFontAssetId(font_asset_id));
             ExportedObjectKind::TextStylePaint
+        }
+        NodeSpec::TextStyleAxis(spec) => {
+            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
+            properties.push(ExportedProperty::TextStyleAxisTag(spec.tag));
+            properties.push(ExportedProperty::TextStyleAxisValue(spec.axis_value));
+            ExportedObjectKind::TextStyleAxis
         }
     };
     Ok(ExportedRecord { kind, properties })
@@ -12252,6 +12276,22 @@ mod tests {
                     style: second_style,
                 }),
             )?;
+            tx.create(
+                Parent::Object(first_style),
+                NodeSpec::TextStyleAxis(TextStyleAxisSpec {
+                    name: "First Optical Size Axis".into(),
+                    tag: 0x6F70_737A,
+                    axis_value: 12.0,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(second_style),
+                NodeSpec::TextStyleAxis(TextStyleAxisSpec {
+                    name: "Second Weight Axis".into(),
+                    tag: 0x7767_6874,
+                    axis_value: 400.0,
+                }),
+            )?;
             Ok((artboard, text))
         })?;
         let instance = scene.instantiate(artboard)?;
@@ -12320,6 +12360,7 @@ mod tests {
                         | ExportedObjectKind::Fill
                         | ExportedObjectKind::SolidColor
                         | ExportedObjectKind::TextValueRun
+                        | ExportedObjectKind::TextStyleAxis
                 )
                 .then(|| {
                     let name = record
@@ -12376,8 +12417,41 @@ mod tests {
                     "Second Run".into(),
                     Some(1),
                 ),
+                (
+                    ExportedObjectKind::TextStyleAxis,
+                    "First Optical Size Axis".into(),
+                    Some(2),
+                ),
+                (
+                    ExportedObjectKind::TextStyleAxis,
+                    "Second Weight Axis".into(),
+                    Some(3),
+                ),
             ]
         );
+        for (name, expected_tag, expected_value) in [
+            ("First Optical Size Axis", 0x6F70_737A, 12.0),
+            ("Second Weight Axis", 0x7767_6874, 400.0),
+        ] {
+            let axis = exported
+                .records()
+                .iter()
+                .find(|record| {
+                    record.kind == ExportedObjectKind::TextStyleAxis
+                        && record
+                            .properties
+                            .contains(&ExportedProperty::ComponentName(name.into()))
+                })
+                .expect("named text style axis record");
+            assert!(
+                axis.properties
+                    .contains(&ExportedProperty::TextStyleAxisTag(expected_tag))
+            );
+            assert!(
+                axis.properties
+                    .contains(&ExportedProperty::TextStyleAxisValue(expected_value))
+            );
+        }
         for (name, expected_font) in [("First Style", 0), ("Second Style", 1)] {
             let style = exported
                 .records()

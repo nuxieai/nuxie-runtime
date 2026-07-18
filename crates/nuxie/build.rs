@@ -876,12 +876,14 @@ fn render_scene_schema() -> String {
     let view_model_property_string = concrete_definition("ViewModelPropertyString");
     let view_model_property_boolean = concrete_definition("ViewModelPropertyBoolean");
     let view_model_property_list = concrete_definition("ViewModelPropertyList");
+    let view_model_property_view_model = concrete_definition("ViewModelPropertyViewModel");
     let view_model_instance = concrete_definition("ViewModelInstance");
     let view_model_instance_number = concrete_definition("ViewModelInstanceNumber");
     let view_model_instance_string = concrete_definition("ViewModelInstanceString");
     let view_model_instance_boolean = concrete_definition("ViewModelInstanceBoolean");
     let view_model_instance_list = concrete_definition("ViewModelInstanceList");
     let view_model_instance_list_item = concrete_definition("ViewModelInstanceListItem");
+    let view_model_instance_view_model = concrete_definition("ViewModelInstanceViewModel");
     let artboard_list_map_rule = concrete_definition("ArtboardListMapRule");
     let data_converter_boolean_negate = concrete_definition("DataConverterBooleanNegate");
     let data_converter_to_number = concrete_definition("DataConverterToNumber");
@@ -940,6 +942,10 @@ fn render_scene_schema() -> String {
         ("VIEW_MODEL_PROPERTY_STRING", view_model_property_string),
         ("VIEW_MODEL_PROPERTY_BOOLEAN", view_model_property_boolean),
         ("VIEW_MODEL_PROPERTY_LIST", view_model_property_list),
+        (
+            "VIEW_MODEL_PROPERTY_VIEW_MODEL",
+            view_model_property_view_model,
+        ),
         ("VIEW_MODEL_INSTANCE", view_model_instance),
         ("VIEW_MODEL_INSTANCE_NUMBER", view_model_instance_number),
         ("VIEW_MODEL_INSTANCE_STRING", view_model_instance_string),
@@ -948,6 +954,10 @@ fn render_scene_schema() -> String {
         (
             "VIEW_MODEL_INSTANCE_LIST_ITEM",
             view_model_instance_list_item,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_VIEW_MODEL",
+            view_model_instance_view_model,
         ),
         ("ARTBOARD_LIST_MAP_RULE", artboard_list_map_rule),
         (
@@ -1525,6 +1535,20 @@ fn render_scene_schema() -> String {
         FieldKind::Bool,
         false,
     );
+    let view_model_property_view_model_reference_id = resolve_named_property(
+        "ViewModelPropertyViewModel",
+        "viewModelReferenceId",
+        "ViewModelPropertyViewModel",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_instance_view_model_value = resolve_named_property(
+        "ViewModelInstanceViewModel",
+        "propertyValue",
+        "ViewModelInstanceViewModel",
+        FieldKind::Uint,
+        false,
+    );
     let view_model_instance_list_item_view_model_id = resolve_named_property(
         "ViewModelInstanceListItem",
         "viewModelId",
@@ -1774,6 +1798,14 @@ fn render_scene_schema() -> String {
             view_model_instance_boolean_value,
         ),
         (
+            "VIEW_MODEL_PROPERTY_VIEW_MODEL_REFERENCE_ID",
+            view_model_property_view_model_reference_id,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_VIEW_MODEL_VALUE",
+            view_model_instance_view_model_value,
+        ),
+        (
             "VIEW_MODEL_INSTANCE_LIST_ITEM_VIEW_MODEL_ID",
             view_model_instance_list_item_view_model_id,
         ),
@@ -1955,7 +1987,7 @@ fn render_scene_schema() -> String {
             output.push_str("    pub crop: Option<ImageCropRect>,\n");
         }
         if object.rust_name == "ArtboardComponentList" {
-            output.push_str("    pub source: ViewModelListId,\n");
+            output.push_str("    pub source: ViewModelListSource,\n");
             output.push_str("    pub map_rules: Vec<ArtboardListMapRuleSpec>,\n");
         }
         if matches!(

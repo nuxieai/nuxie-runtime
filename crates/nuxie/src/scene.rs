@@ -76,6 +76,7 @@ ordinary_record_id!(ViewModelNumberId);
 ordinary_record_id!(ViewModelStringId);
 ordinary_record_id!(ViewModelBooleanId);
 ordinary_record_id!(ViewModelListId);
+ordinary_record_id!(ViewModelChildId);
 ordinary_record_id!(ViewModelInstanceId);
 ordinary_record_id!(ArtboardComponentListId);
 ordinary_record_id!(DataBindId);
@@ -424,6 +425,43 @@ pub struct ArtboardListMapRuleSpec {
     pub artboard: ArtboardId,
 }
 
+/// Semantic path to a list beneath an artboard's default view-model context.
+///
+/// Each child identity traverses one typed child-view-model property. Runtime
+/// model/property ordinals are derived only when the scene is lowered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewModelListSource {
+    children: Vec<ViewModelChildId>,
+    list: ViewModelListId,
+}
+
+impl ViewModelListSource {
+    pub fn direct(list: ViewModelListId) -> Self {
+        Self {
+            children: Vec::new(),
+            list,
+        }
+    }
+
+    pub fn nested(
+        children: impl IntoIterator<Item = ViewModelChildId>,
+        list: ViewModelListId,
+    ) -> Self {
+        Self {
+            children: children.into_iter().collect(),
+            list,
+        }
+    }
+
+    pub fn children(&self) -> &[ViewModelChildId] {
+        &self.children
+    }
+
+    pub const fn list(&self) -> ViewModelListId {
+        self.list
+    }
+}
+
 include!(concat!(env!("OUT_DIR"), "/scene_schema.rs"));
 
 /// A direct runtime target. It remains valid only for the scene epoch in which it was resolved.
@@ -726,6 +764,7 @@ struct DefinitionIndex {
     view_model_strings: BTreeMap<ViewModelStringId, (usize, usize)>,
     view_model_booleans: BTreeMap<ViewModelBooleanId, (usize, usize)>,
     view_model_lists: BTreeMap<ViewModelListId, (usize, usize)>,
+    view_model_children: BTreeMap<ViewModelChildId, (usize, usize)>,
     view_model_instances: BTreeMap<ViewModelInstanceId, (usize, usize)>,
     artboards: BTreeMap<ArtboardId, usize>,
     objects: BTreeMap<ObjectId, IndexedObject>,
@@ -808,6 +847,17 @@ impl DefinitionIndex {
                     .push(list.id.object_id());
                 index.owned.entry(list.id.object_id()).or_default();
             }
+            for (child_index, child) in view_model.children.iter().enumerate() {
+                index
+                    .view_model_children
+                    .insert(child.id, (view_model_index, child_index));
+                index
+                    .owned
+                    .entry(view_model.id.object_id())
+                    .or_default()
+                    .push(child.id.object_id());
+                index.owned.entry(child.id.object_id()).or_default();
+            }
             for (instance_index, instance) in view_model.instances.iter().enumerate() {
                 index
                     .view_model_instances
@@ -870,7 +920,8 @@ impl DefinitionIndex {
                     }
                     RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_))
                     | RecordSpec::Machine(_)
-                    | RecordSpec::VisibilityBind(_) => {}
+                    | RecordSpec::VisibilityBind(_)
+                    | RecordSpec::TextBind(_) => {}
                 }
             }
         }
@@ -894,6 +945,10 @@ impl DefinitionIndex {
                 .any(|id| id.object_id() == object)
             || self
                 .view_model_lists
+                .keys()
+                .any(|id| id.object_id() == object)
+            || self
+                .view_model_children
                 .keys()
                 .any(|id| id.object_id() == object)
             || self
@@ -1057,6 +1112,7 @@ struct ViewModelDefinition {
     strings: Vec<ViewModelStringDefinition>,
     booleans: Vec<ViewModelBooleanDefinition>,
     lists: Vec<ViewModelListDefinition>,
+    children: Vec<ViewModelChildDefinition>,
     instances: Vec<ViewModelInstanceDefinition>,
 }
 
@@ -1085,6 +1141,12 @@ struct ViewModelListDefinition {
 }
 
 #[derive(Debug, Clone)]
+struct ViewModelChildDefinition {
+    id: ViewModelChildId,
+    spec: ViewModelChildSpec,
+}
+
+#[derive(Debug, Clone)]
 struct ViewModelInstanceDefinition {
     id: ViewModelInstanceId,
     spec: ViewModelInstanceSpec,
@@ -1092,6 +1154,7 @@ struct ViewModelInstanceDefinition {
     strings: BTreeMap<ViewModelStringId, String>,
     booleans: BTreeMap<ViewModelBooleanId, bool>,
     lists: BTreeMap<ViewModelListId, Vec<ViewModelInstanceId>>,
+    children: BTreeMap<ViewModelChildId, ViewModelInstanceId>,
 }
 
 #[derive(Debug, Clone)]
@@ -1151,9 +1214,10 @@ impl RecordDefinition {
     const fn animation(&self) -> Option<&AnimationRecordSpec> {
         match &self.spec {
             RecordSpec::Animation(spec) => Some(spec),
-            RecordSpec::Visual { .. } | RecordSpec::Machine(_) | RecordSpec::VisibilityBind(_) => {
-                None
-            }
+            RecordSpec::Visual { .. }
+            | RecordSpec::Machine(_)
+            | RecordSpec::VisibilityBind(_)
+            | RecordSpec::TextBind(_) => None,
         }
     }
 
@@ -1162,7 +1226,8 @@ impl RecordDefinition {
             RecordSpec::Machine(spec) => Some(spec),
             RecordSpec::Visual { .. }
             | RecordSpec::Animation(_)
-            | RecordSpec::VisibilityBind(_) => None,
+            | RecordSpec::VisibilityBind(_)
+            | RecordSpec::TextBind(_) => None,
         }
     }
 }
@@ -1173,6 +1238,7 @@ enum RecordSpec {
     Animation(AnimationRecordSpec),
     Machine(MachineRecordSpec),
     VisibilityBind(VisibilityBindSpec),
+    TextBind(TextBindSpec),
 }
 
 /// Semantic kind of any ordinary authored record in the shared ObjectId space.
@@ -1243,7 +1309,7 @@ impl RecordSpec {
             Self::Machine(MachineRecordSpec::TransitionDurationBind { .. }) => {
                 AuthoredObjectKind::DataBindContext
             }
-            Self::VisibilityBind(_) => AuthoredObjectKind::DataBindContext,
+            Self::VisibilityBind(_) | Self::TextBind(_) => AuthoredObjectKind::DataBindContext,
         }
     }
 
@@ -1260,13 +1326,16 @@ impl RecordSpec {
             Self::Animation(spec) => spec.owner(),
             Self::Machine(spec) => spec.owner(),
             Self::VisibilityBind(spec) => Some(spec.target),
+            Self::TextBind(spec) => Some(spec.target),
         }
     }
 
     const fn visual(&self) -> Option<(Parent, &NodeSpec)> {
         match self {
             Self::Visual { parent, node } => Some((*parent, node)),
-            Self::Animation(_) | Self::Machine(_) | Self::VisibilityBind(_) => None,
+            Self::Animation(_) | Self::Machine(_) | Self::VisibilityBind(_) | Self::TextBind(_) => {
+                None
+            }
         }
     }
 }
@@ -1324,6 +1393,12 @@ pub struct ViewModelListSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewModelChildSpec {
+    pub name: String,
+    pub view_model: ViewModelId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewModelInstanceSpec {
     pub name: Option<String>,
 }
@@ -1341,6 +1416,12 @@ struct VisibilityBindSpec {
     boolean: ViewModelBooleanId,
     condition: VisibilityCondition,
     visible_opacity: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TextBindSpec {
+    target: ObjectId,
+    string: ViewModelStringId,
 }
 
 #[derive(Debug, Clone)]
@@ -2405,6 +2486,35 @@ impl Hierarchy<'_> {
                         ));
                     }
                 }
+                RecordSpec::TextBind(spec) => {
+                    let Some(target_kind) = resolve_kind(spec.target) else {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(spec.target)],
+                            EditReason::UnknownObject,
+                        ));
+                    };
+                    let Some(target_artboard) = resolve_artboard(spec.target) else {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(spec.target)],
+                            EditReason::UnknownObject,
+                        ));
+                    };
+                    if target_artboard != artboard_id {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(spec.target)],
+                            EditReason::CrossArtboardReference {
+                                source: artboard_id,
+                                target: target_artboard,
+                            },
+                        ));
+                    }
+                    if target_kind != AuthoredObjectKind::Visual(NodeKind::TextValueRun) {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(spec.target)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
+                }
             }
         }
 
@@ -3184,12 +3294,14 @@ pub enum ExportedObjectKind {
     ViewModelPropertyString,
     ViewModelPropertyBoolean,
     ViewModelPropertyList,
+    ViewModelPropertyViewModel,
     ViewModelInstance,
     ViewModelInstanceNumber,
     ViewModelInstanceString,
     ViewModelInstanceBoolean,
     ViewModelInstanceList,
     ViewModelInstanceListItem,
+    ViewModelInstanceViewModel,
     Artboard,
     Shape,
     NestedArtboard,
@@ -3400,6 +3512,8 @@ pub enum ExportedProperty {
     ViewModelBooleanValue(bool),
     ViewModelListItemViewModelId(u32),
     ViewModelListItemInstanceId(u32),
+    ViewModelReferenceId(u32),
+    ViewModelInstanceViewModelValue(u32),
     ArtboardListMapRuleArtboardId(u32),
     ArtboardListMapRuleViewModelId(u32),
     DataConverterRangeMinInput(f32),
@@ -3409,6 +3523,7 @@ pub enum ExportedProperty {
     DataConverterGroupItemConverterId(u32),
     DataBindPropertyKey(u32),
     DataBindWorldOpacityTarget,
+    DataBindTextValueRunTextTarget,
     DataBindConverterId(u32),
     DataBindArtboardComponentListSource,
     DataBindFlags(u32),
@@ -3547,6 +3662,10 @@ impl ExportedProperty {
             Self::ViewModelListItemInstanceId(_) => {
                 PROPERTY_VIEW_MODEL_INSTANCE_LIST_ITEM_INSTANCE_ID
             }
+            Self::ViewModelReferenceId(_) => PROPERTY_VIEW_MODEL_PROPERTY_VIEW_MODEL_REFERENCE_ID,
+            Self::ViewModelInstanceViewModelValue(_) => {
+                PROPERTY_VIEW_MODEL_INSTANCE_VIEW_MODEL_VALUE
+            }
             Self::ArtboardListMapRuleArtboardId(_) => PROPERTY_ARTBOARD_LIST_MAP_RULE_ARTBOARD_ID,
             Self::ArtboardListMapRuleViewModelId(_) => {
                 PROPERTY_ARTBOARD_LIST_MAP_RULE_VIEW_MODEL_ID
@@ -3560,6 +3679,7 @@ impl ExportedProperty {
             }
             Self::DataBindPropertyKey(_) => PROPERTY_DATA_BIND_PROPERTY_KEY,
             Self::DataBindWorldOpacityTarget => PROPERTY_DATA_BIND_PROPERTY_KEY,
+            Self::DataBindTextValueRunTextTarget => PROPERTY_DATA_BIND_PROPERTY_KEY,
             Self::DataBindConverterId(_) => PROPERTY_DATA_BIND_CONVERTER_ID,
             Self::DataBindArtboardComponentListSource => PROPERTY_DATA_BIND_PROPERTY_KEY,
             Self::DataBindFlags(_) => PROPERTY_DATA_BIND_FLAGS,
@@ -3612,6 +3732,8 @@ impl ExportedProperty {
             | Self::ViewModelPropertyId(value)
             | Self::ViewModelListItemViewModelId(value)
             | Self::ViewModelListItemInstanceId(value)
+            | Self::ViewModelReferenceId(value)
+            | Self::ViewModelInstanceViewModelValue(value)
             | Self::ArtboardListMapRuleArtboardId(value)
             | Self::ArtboardListMapRuleViewModelId(value)
             | Self::DataConverterGroupItemConverterId(value)
@@ -3620,6 +3742,9 @@ impl ExportedProperty {
             | Self::DataBindFlags(value) => AuthoringValue::Uint(u64::from(value)),
             Self::DataBindWorldOpacityTarget => {
                 AuthoringValue::Uint(u64::from(PROPERTY_WORLD_OPACITY))
+            }
+            Self::DataBindTextValueRunTextTarget => {
+                AuthoringValue::Uint(u64::from(PROPERTY_TEXT_VALUE_RUN_TEXT))
             }
             Self::DataBindArtboardComponentListSource => {
                 AuthoringValue::Uint(u64::from(PROPERTY_ARTBOARD_COMPONENT_LIST_SOURCE))
@@ -3725,12 +3850,14 @@ impl ExportedRecord {
             ExportedObjectKind::ViewModelPropertyString => TYPE_VIEW_MODEL_PROPERTY_STRING,
             ExportedObjectKind::ViewModelPropertyBoolean => TYPE_VIEW_MODEL_PROPERTY_BOOLEAN,
             ExportedObjectKind::ViewModelPropertyList => TYPE_VIEW_MODEL_PROPERTY_LIST,
+            ExportedObjectKind::ViewModelPropertyViewModel => TYPE_VIEW_MODEL_PROPERTY_VIEW_MODEL,
             ExportedObjectKind::ViewModelInstance => TYPE_VIEW_MODEL_INSTANCE,
             ExportedObjectKind::ViewModelInstanceNumber => TYPE_VIEW_MODEL_INSTANCE_NUMBER,
             ExportedObjectKind::ViewModelInstanceString => TYPE_VIEW_MODEL_INSTANCE_STRING,
             ExportedObjectKind::ViewModelInstanceBoolean => TYPE_VIEW_MODEL_INSTANCE_BOOLEAN,
             ExportedObjectKind::ViewModelInstanceList => TYPE_VIEW_MODEL_INSTANCE_LIST,
             ExportedObjectKind::ViewModelInstanceListItem => TYPE_VIEW_MODEL_INSTANCE_LIST_ITEM,
+            ExportedObjectKind::ViewModelInstanceViewModel => TYPE_VIEW_MODEL_INSTANCE_VIEW_MODEL,
             ExportedObjectKind::Artboard => TYPE_ARTBOARD,
             ExportedObjectKind::Shape => TYPE_SHAPE,
             ExportedObjectKind::NestedArtboard => TYPE_NESTED_ARTBOARD,
@@ -5074,6 +5201,7 @@ impl VmTx<'_> {
             strings: Vec::new(),
             booleans: Vec::new(),
             lists: Vec::new(),
+            children: Vec::new(),
             instances: Vec::new(),
         });
         self.definition_index.view_models.insert(id, index);
@@ -5114,6 +5242,10 @@ impl VmTx<'_> {
                         .iter()
                         .any(|boolean| boolean.spec.name == spec.name)
                     || model.lists.iter().any(|list| list.spec.name == spec.name)
+                    || model
+                        .children
+                        .iter()
+                        .any(|child| child.spec.name == spec.name)
             })
         {
             return Err(EditAbort::new(
@@ -5186,6 +5318,10 @@ impl VmTx<'_> {
                         .iter()
                         .any(|boolean| boolean.spec.name == spec.name)
                     || model.lists.iter().any(|list| list.spec.name == spec.name)
+                    || model
+                        .children
+                        .iter()
+                        .any(|child| child.spec.name == spec.name)
             })
         {
             return Err(EditAbort::new(
@@ -5232,6 +5368,27 @@ impl VmTx<'_> {
         Ok(id)
     }
 
+    /// Resolve one authored string property by its semantic schema name.
+    ///
+    /// This is the boundary for name-based document aliases: callers resolve
+    /// the authored name to a typed identity here, while runtime ordinals and
+    /// any external provenance hashes remain outside the binding API.
+    pub fn string_by_name(&self, view_model: ViewModelId, name: &str) -> Option<ViewModelStringId> {
+        let view_model_index = self
+            .definition_index
+            .view_models
+            .get(&view_model)
+            .copied()?;
+        self.definitions
+            .view_models
+            .get(view_model_index)
+            .filter(|model| model.id == view_model)?
+            .strings
+            .iter()
+            .find(|string| string.spec.name == name)
+            .map(|string| string.id)
+    }
+
     /// Add one typed boolean property to a view model.
     pub fn create_boolean(
         &mut self,
@@ -5258,6 +5415,10 @@ impl VmTx<'_> {
                         .iter()
                         .any(|boolean| boolean.spec.name == spec.name)
                     || model.lists.iter().any(|list| list.spec.name == spec.name)
+                    || model
+                        .children
+                        .iter()
+                        .any(|child| child.spec.name == spec.name)
             })
         {
             return Err(EditAbort::new(
@@ -5330,6 +5491,10 @@ impl VmTx<'_> {
                         .iter()
                         .any(|boolean| boolean.spec.name == spec.name)
                     || model.lists.iter().any(|list| list.spec.name == spec.name)
+                    || model
+                        .children
+                        .iter()
+                        .any(|child| child.spec.name == spec.name)
             })
         {
             return Err(EditAbort::new(
@@ -5359,6 +5524,83 @@ impl VmTx<'_> {
         self.definition_index
             .view_model_lists
             .insert(id, (view_model_index, list_index));
+        self.definition_index
+            .owned
+            .entry(view_model.object_id())
+            .or_default()
+            .push(id.object_id());
+        self.definition_index
+            .owned
+            .entry(id.object_id())
+            .or_default();
+        self.created_objects.push(id.object_id());
+        self.spec_origins
+            .nodes
+            .insert(id.object_id(), operation_index);
+        self.touch_all_artboards(operation_index);
+        Ok(id)
+    }
+
+    /// Add one typed child-view-model property to a view model.
+    pub fn create_child(
+        &mut self,
+        view_model: ViewModelId,
+        spec: ViewModelChildSpec,
+    ) -> std::result::Result<ViewModelChildId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let view_model_index = self.view_model_index(view_model, operation_index)?;
+        let _ = self.view_model_index(spec.view_model, operation_index)?;
+        if self
+            .definitions
+            .view_models
+            .get(view_model_index)
+            .is_some_and(|model| {
+                model
+                    .numbers
+                    .iter()
+                    .any(|number| number.spec.name == spec.name)
+                    || model
+                        .strings
+                        .iter()
+                        .any(|string| string.spec.name == spec.name)
+                    || model
+                        .booleans
+                        .iter()
+                        .any(|boolean| boolean.spec.name == spec.name)
+                    || model.lists.iter().any(|list| list.spec.name == spec.name)
+                    || model
+                        .children
+                        .iter()
+                        .any(|child| child.spec.name == spec.name)
+            })
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(view_model.object_id())],
+                EditReason::IdentityCollision,
+            ));
+        }
+        let id = ViewModelChildId(ObjectId(
+            allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+                EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+            })?,
+        ));
+        let model = self
+            .definitions
+            .view_models
+            .get_mut(view_model_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(view_model.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let child_index = model.children.len();
+        model.children.push(ViewModelChildDefinition { id, spec });
+        self.definition_index
+            .view_model_children
+            .insert(id, (view_model_index, child_index));
         self.definition_index
             .owned
             .entry(view_model.object_id())
@@ -5428,6 +5670,10 @@ impl VmTx<'_> {
                 .lists
                 .iter()
                 .any(|candidate| candidate.spec.name == name)
+            || model
+                .children
+                .iter()
+                .any(|candidate| candidate.spec.name == name)
         {
             return Err(EditAbort::new(
                 operation_index,
@@ -5483,6 +5729,7 @@ impl VmTx<'_> {
             strings: BTreeMap::new(),
             booleans: BTreeMap::new(),
             lists: BTreeMap::new(),
+            children: BTreeMap::new(),
         });
         self.definition_index
             .view_model_instances
@@ -5790,6 +6037,96 @@ impl VmTx<'_> {
         Ok(changed)
     }
 
+    /// Select one authored instance for a typed child-view-model property.
+    pub fn set_child(
+        &mut self,
+        instance: ViewModelInstanceId,
+        child: ViewModelChildId,
+        child_instance: ViewModelInstanceId,
+    ) -> std::result::Result<bool, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let (instance_model_index, instance_index) = self
+            .definition_index
+            .view_model_instances
+            .get(&instance)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        let (child_model_index, child_index) = self
+            .definition_index
+            .view_model_children
+            .get(&child)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(child.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        let (selected_model_index, _) = self
+            .definition_index
+            .view_model_instances
+            .get(&child_instance)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(child_instance.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        let referenced_model = self
+            .definitions
+            .view_models
+            .get(child_model_index)
+            .and_then(|model| model.children.get(child_index))
+            .map(|child| child.spec.view_model)
+            .and_then(|model| self.definition_index.view_models.get(&model).copied())
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(child.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        if instance_model_index != child_model_index || selected_model_index != referenced_model {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![
+                    EditId::Object(instance.object_id()),
+                    EditId::Object(child.object_id()),
+                    EditId::Object(child_instance.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        let authored_instance = self
+            .definitions
+            .view_models
+            .get_mut(instance_model_index)
+            .and_then(|model| model.instances.get_mut(instance_index))
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let changed = authored_instance.children.get(&child).copied() != Some(child_instance);
+        authored_instance.children.insert(child, child_instance);
+        self.spec_origins
+            .properties
+            .insert((instance.object_id(), "view_model_child"), operation_index);
+        self.touch_all_artboards(operation_index);
+        Ok(changed)
+    }
+
     pub fn set_artboard_default(
         &mut self,
         artboard: ArtboardId,
@@ -5875,6 +6212,106 @@ impl VmTx<'_> {
             .artboard_specs
             .insert(artboard, operation_index);
         Ok(changed)
+    }
+
+    /// Bind one typed string to a [`TextValueRunSpec`]'s text value.
+    ///
+    /// The authored target and source remain semantic identities. Lowering
+    /// resolves the runtime text key and view-model path inside the exact file.
+    pub fn bind_text(
+        &mut self,
+        target: ObjectId,
+        string: ViewModelStringId,
+    ) -> std::result::Result<DataBindId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let target_record = self
+            .definition_index
+            .objects
+            .get(&target)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(target)],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if target_record.kind != AuthoredObjectKind::Visual(NodeKind::TextValueRun) {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(target)],
+                EditReason::RecordPropertyOwnerMismatch {
+                    property: "text",
+                    actual: target_record.kind,
+                },
+            ));
+        }
+        if !self
+            .definition_index
+            .view_model_strings
+            .contains_key(&string)
+        {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(string.object_id())],
+                EditReason::UnknownObject,
+            ));
+        }
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(target_record.artboard_index)
+            .filter(|artboard| artboard.id == target_record.artboard)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(target_record.artboard)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        if artboard.records.iter().any(|record| {
+            matches!(
+                record.spec,
+                RecordSpec::TextBind(TextBindSpec {
+                    target: existing,
+                    ..
+                }) if existing == target
+            )
+        }) {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(target)],
+                EditReason::IdentityCollision,
+            ));
+        }
+        let id = ObjectId(allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+            EditAbort::new(operation_index, Vec::new(), EditReason::IdentityExhausted)
+        })?);
+        let record_index = artboard.records.len();
+        artboard.records.push(RecordDefinition {
+            id,
+            spec: RecordSpec::TextBind(TextBindSpec { target, string }),
+        });
+        self.definition_index.objects.insert(
+            id,
+            IndexedObject {
+                artboard: target_record.artboard,
+                artboard_index: target_record.artboard_index,
+                record_index,
+                kind: AuthoredObjectKind::DataBindContext,
+            },
+        );
+        self.definition_index.owned.entry(id).or_default();
+        self.definition_index
+            .owned
+            .entry(target)
+            .or_default()
+            .push(id);
+        self.created_objects.push(id);
+        self.spec_origins.nodes.insert(id, operation_index);
+        self.touched_artboards
+            .insert(target_record.artboard, operation_index);
+        Ok(DataBindId(id))
     }
 
     /// Bind one typed boolean to a visual component's effective visibility.
@@ -8565,8 +9002,10 @@ struct LoweredViewModelCatalog {
     records: Vec<ExportedRecord>,
     model_indices: BTreeMap<ViewModelId, u32>,
     number_indices: BTreeMap<ViewModelNumberId, (u32, u32)>,
+    string_indices: BTreeMap<ViewModelStringId, (u32, u32)>,
     boolean_indices: BTreeMap<ViewModelBooleanId, (u32, u32)>,
     list_indices: BTreeMap<ViewModelListId, (u32, u32)>,
+    child_indices: BTreeMap<ViewModelChildId, (u32, u32, u32)>,
     instance_indices: BTreeMap<ViewModelInstanceId, (usize, usize)>,
 }
 
@@ -8684,12 +9123,13 @@ fn lower_view_model_catalog(
     let mut string_indices = BTreeMap::new();
     let mut boolean_indices = BTreeMap::new();
     let mut list_indices = BTreeMap::new();
+    let mut child_indices = BTreeMap::new();
     let mut instance_indices = BTreeMap::new();
     let mut identities = BTreeSet::new();
 
-    // Definitions precede every instance value. List items may reference an
-    // instance of a model authored later in the catalog, so resolve the entire
-    // typed definition and instance index space before emitting values.
+    // Definitions precede every instance value. Child properties and list items
+    // may reference models authored later in the catalog, so resolve the entire
+    // model index space before emitting any definition records.
     for (model_index, model) in definitions.iter().enumerate() {
         let model_ordinal = u32::try_from(model_index).map_err(|_| {
             EditDiagnostic::new(
@@ -8712,6 +9152,16 @@ fn lower_view_model_catalog(
                 EditReason::IdentityCollision,
             ));
         }
+    }
+
+    for model in definitions {
+        let model_ordinal = model_indices.get(&model.id).copied().ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.object(model.id.object_id(), fallback_operation_index),
+                vec![EditId::Object(model.id.object_id())],
+                EditReason::InternalInvariant,
+            )
+        })?;
         records.push(ExportedRecord {
             kind: ExportedObjectKind::ViewModel,
             properties: vec![ExportedProperty::ViewModelName(model.spec.name.clone())],
@@ -8852,6 +9302,64 @@ fn lower_view_model_catalog(
             records.push(ExportedRecord {
                 kind: ExportedObjectKind::ViewModelPropertyList,
                 properties: vec![ExportedProperty::ViewModelName(list.spec.name.clone())],
+            });
+        }
+        for (child_index, child) in model.children.iter().enumerate() {
+            let property_index = model
+                .numbers
+                .len()
+                .checked_add(model.strings.len())
+                .and_then(|offset| offset.checked_add(model.booleans.len()))
+                .and_then(|offset| offset.checked_add(model.lists.len()))
+                .and_then(|offset| offset.checked_add(child_index))
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(child.id.object_id(), fallback_operation_index),
+                        vec![EditId::Object(child.id.object_id())],
+                        EditReason::CapacityExceeded,
+                    )
+                })?;
+            let property_ordinal = u32::try_from(property_index).map_err(|_| {
+                EditDiagnostic::new(
+                    origins.object(child.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(child.id.object_id())],
+                    EditReason::CapacityExceeded,
+                )
+            })?;
+            let referenced_model_ordinal = model_indices
+                .get(&child.spec.view_model)
+                .copied()
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(child.id.object_id(), fallback_operation_index),
+                        vec![
+                            EditId::Object(child.id.object_id()),
+                            EditId::Object(child.spec.view_model.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    )
+                })?;
+            if !identities.insert(child.id.object_id())
+                || !names.insert(child.spec.name.as_str())
+                || child_indices
+                    .insert(
+                        child.id,
+                        (model_ordinal, property_ordinal, referenced_model_ordinal),
+                    )
+                    .is_some()
+            {
+                return Err(EditDiagnostic::new(
+                    origins.object(child.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(child.id.object_id())],
+                    EditReason::IdentityCollision,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::ViewModelPropertyViewModel,
+                properties: vec![
+                    ExportedProperty::ViewModelName(child.spec.name.clone()),
+                    ExportedProperty::ViewModelReferenceId(referenced_model_ordinal),
+                ],
             });
         }
     }
@@ -9031,6 +9539,81 @@ fn lower_view_model_catalog(
                     });
                 }
             }
+            for child in &model.children {
+                let (_, property_ordinal, referenced_model_ordinal) =
+                    child_indices.get(&child.id).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            fallback_operation_index,
+                            vec![EditId::Object(child.id.object_id())],
+                            EditReason::InternalInvariant,
+                        )
+                    })?;
+                let selected = instance.children.get(&child.id).copied().ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_child",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(child.id.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    )
+                })?;
+                let (selected_model_index, selected_instance_index) =
+                    instance_indices.get(&selected).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            origins.property(
+                                instance.id.object_id(),
+                                "view_model_child",
+                                fallback_operation_index,
+                            ),
+                            vec![
+                                EditId::Object(instance.id.object_id()),
+                                EditId::Object(selected.object_id()),
+                            ],
+                            EditReason::UnknownObject,
+                        )
+                    })?;
+                if u32::try_from(selected_model_index).ok() != Some(referenced_model_ordinal) {
+                    return Err(EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_child",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(child.id.object_id()),
+                            EditId::Object(selected.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    ));
+                }
+                let selected_instance_ordinal =
+                    u32::try_from(selected_instance_index).map_err(|_| {
+                        EditDiagnostic::new(
+                            origins.property(
+                                instance.id.object_id(),
+                                "view_model_child",
+                                fallback_operation_index,
+                            ),
+                            vec![EditId::Object(selected.object_id())],
+                            EditReason::CapacityExceeded,
+                        )
+                    })?;
+                records.push(ExportedRecord {
+                    kind: ExportedObjectKind::ViewModelInstanceViewModel,
+                    properties: vec![
+                        ExportedProperty::ViewModelPropertyId(property_ordinal),
+                        ExportedProperty::ViewModelInstanceViewModelValue(
+                            selected_instance_ordinal,
+                        ),
+                    ],
+                });
+            }
         }
     }
     canonicalize_exported_records(&mut records);
@@ -9038,10 +9621,69 @@ fn lower_view_model_catalog(
         records,
         model_indices,
         number_indices,
+        string_indices,
         boolean_indices,
         list_indices,
+        child_indices,
         instance_indices,
     })
+}
+
+fn lower_view_model_list_source_path(
+    source: &ViewModelListSource,
+    catalog: &LoweredViewModelCatalog,
+    owner: ObjectId,
+    operation_index: usize,
+) -> std::result::Result<(u32, Vec<u32>), EditDiagnostic> {
+    let list = source.list();
+    let (list_model, list_property) =
+        catalog.list_indices.get(&list).copied().ok_or_else(|| {
+            EditDiagnostic::new(
+                operation_index,
+                vec![EditId::Object(owner), EditId::Object(list.object_id())],
+                EditReason::UnknownObject,
+            )
+        })?;
+    let mut current_model = source
+        .children()
+        .first()
+        .and_then(|child| {
+            catalog
+                .child_indices
+                .get(child)
+                .map(|(owner_model, _, _)| *owner_model)
+        })
+        .unwrap_or(list_model);
+    let root_model = current_model;
+    let mut path = vec![root_model];
+    for child in source.children() {
+        let (owner_model, property, referenced_model) =
+            catalog.child_indices.get(child).copied().ok_or_else(|| {
+                EditDiagnostic::new(
+                    operation_index,
+                    vec![EditId::Object(owner), EditId::Object(child.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if owner_model != current_model {
+            return Err(EditDiagnostic::new(
+                operation_index,
+                vec![EditId::Object(owner), EditId::Object(child.object_id())],
+                EditReason::InvalidMachineReference,
+            ));
+        }
+        path.push(property);
+        current_model = referenced_model;
+    }
+    if current_model != list_model {
+        return Err(EditDiagnostic::new(
+            operation_index,
+            vec![EditId::Object(owner), EditId::Object(list.object_id())],
+            EditReason::InvalidMachineReference,
+        ));
+    }
+    path.push(list_property);
+    Ok((root_model, path))
 }
 
 impl<'a> CanonicalFileAssets<'a> {
@@ -9587,6 +10229,7 @@ fn validate_view_model_definitions(
     let mut string_models = BTreeMap::new();
     let mut boolean_models = BTreeMap::new();
     let mut list_models = BTreeMap::new();
+    let mut child_models = BTreeMap::new();
     let mut instance_models = BTreeMap::new();
     for (model_index, model) in definitions.view_models.iter().enumerate() {
         if !identities.insert(model.id.object_id())
@@ -9598,6 +10241,8 @@ fn validate_view_model_definitions(
                 EditReason::IdentityCollision,
             ));
         }
+    }
+    for (model_index, model) in definitions.view_models.iter().enumerate() {
         let mut names = BTreeSet::new();
         for number in &model.numbers {
             if !identities.insert(number.id.object_id())
@@ -9643,6 +10288,33 @@ fn validate_view_model_definitions(
                 return Err(EditDiagnostic::new(
                     origins.object(list.id.object_id(), fallback_operation_index),
                     vec![EditId::Object(list.id.object_id())],
+                    EditReason::IdentityCollision,
+                ));
+            }
+        }
+        for child in &model.children {
+            let referenced_model = view_model_models
+                .get(&child.spec.view_model)
+                .copied()
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(child.id.object_id(), fallback_operation_index),
+                        vec![
+                            EditId::Object(child.id.object_id()),
+                            EditId::Object(child.spec.view_model.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    )
+                })?;
+            if !identities.insert(child.id.object_id())
+                || !names.insert(child.spec.name.as_str())
+                || child_models
+                    .insert(child.id, (model_index, referenced_model))
+                    .is_some()
+            {
+                return Err(EditDiagnostic::new(
+                    origins.object(child.id.object_id(), fallback_operation_index),
+                    vec![EditId::Object(child.id.object_id())],
                     EditReason::IdentityCollision,
                 ));
             }
@@ -9758,6 +10430,39 @@ fn validate_view_model_definitions(
                     }
                 }
             }
+            for (child, selected_instance) in &instance.children {
+                let Some((owner_model, referenced_model)) = child_models.get(child).copied() else {
+                    return Err(EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_child",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(child.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    ));
+                };
+                if owner_model != model_index
+                    || instance_models.get(selected_instance) != Some(&referenced_model)
+                {
+                    return Err(EditDiagnostic::new(
+                        origins.property(
+                            instance.id.object_id(),
+                            "view_model_child",
+                            fallback_operation_index,
+                        ),
+                        vec![
+                            EditId::Object(instance.id.object_id()),
+                            EditId::Object(child.object_id()),
+                            EditId::Object(selected_instance.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    ));
+                }
+            }
         }
     }
 
@@ -9784,6 +10489,7 @@ fn validate_view_model_definitions(
             })
             .transpose()?;
         let mut visibility_targets = BTreeSet::new();
+        let mut text_targets = BTreeSet::new();
         for record in &artboard.records {
             match &record.spec {
                 RecordSpec::Machine(MachineRecordSpec::TransitionDurationBind {
@@ -9884,27 +10590,107 @@ fn validate_view_model_definitions(
                         ));
                     }
                 }
-                RecordSpec::Visual {
-                    node: NodeSpec::ArtboardComponentList(spec),
-                    ..
-                } => {
-                    let source_model = list_models.get(&spec.source).copied().ok_or_else(|| {
-                        EditDiagnostic::new(
+                RecordSpec::TextBind(spec) => {
+                    if !text_targets.insert(spec.target) {
+                        return Err(EditDiagnostic::new(
                             origins.object(record.id, fallback_operation_index),
-                            vec![
-                                EditId::Object(record.id),
-                                EditId::Object(spec.source.object_id()),
-                            ],
-                            EditReason::UnknownObject,
-                        )
-                    })?;
-                    if default_model != Some(source_model) {
+                            vec![EditId::Object(record.id), EditId::Object(spec.target)],
+                            EditReason::IdentityCollision,
+                        ));
+                    }
+                    let string_model =
+                        string_models.get(&spec.string).copied().ok_or_else(|| {
+                            EditDiagnostic::new(
+                                origins.object(record.id, fallback_operation_index),
+                                vec![
+                                    EditId::Object(record.id),
+                                    EditId::Object(spec.string.object_id()),
+                                ],
+                                EditReason::UnknownObject,
+                            )
+                        })?;
+                    if default_model != Some(string_model) {
                         return Err(EditDiagnostic::new(
                             origins.object(record.id, fallback_operation_index),
                             vec![
                                 EditId::Artboard(artboard.id),
                                 EditId::Object(record.id),
-                                EditId::Object(spec.source.object_id()),
+                                EditId::Object(spec.string.object_id()),
+                            ],
+                            EditReason::InvalidMachineReference,
+                        ));
+                    }
+                    let target_kind = artboard
+                        .records
+                        .iter()
+                        .find(|candidate| candidate.id == spec.target)
+                        .and_then(|target| target.visual())
+                        .map(|(_, node)| node.kind())
+                        .ok_or_else(|| {
+                            EditDiagnostic::new(
+                                origins.object(record.id, fallback_operation_index),
+                                vec![EditId::Object(record.id), EditId::Object(spec.target)],
+                                EditReason::UnknownObject,
+                            )
+                        })?;
+                    if target_kind != NodeKind::TextValueRun {
+                        return Err(EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![EditId::Object(record.id), EditId::Object(spec.target)],
+                            EditReason::PropertyOwnerMismatch {
+                                property: "text",
+                                actual: target_kind,
+                            },
+                        ));
+                    }
+                }
+                RecordSpec::Visual {
+                    node: NodeSpec::ArtboardComponentList(spec),
+                    ..
+                } => {
+                    let list = spec.source.list();
+                    let list_model = list_models.get(&list).copied().ok_or_else(|| {
+                        EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![EditId::Object(record.id), EditId::Object(list.object_id())],
+                            EditReason::UnknownObject,
+                        )
+                    })?;
+                    let mut current_model = spec
+                        .source
+                        .children()
+                        .first()
+                        .and_then(|child| child_models.get(child).map(|(owner, _)| *owner))
+                        .unwrap_or(list_model);
+                    let root_model = current_model;
+                    for child in spec.source.children() {
+                        let (owner_model, referenced_model) =
+                            child_models.get(child).copied().ok_or_else(|| {
+                                EditDiagnostic::new(
+                                    origins.object(record.id, fallback_operation_index),
+                                    vec![
+                                        EditId::Object(record.id),
+                                        EditId::Object(child.object_id()),
+                                    ],
+                                    EditReason::UnknownObject,
+                                )
+                            })?;
+                        if owner_model != current_model {
+                            return Err(EditDiagnostic::new(
+                                origins.object(record.id, fallback_operation_index),
+                                vec![EditId::Object(record.id), EditId::Object(child.object_id())],
+                                EditReason::InvalidMachineReference,
+                            ));
+                        }
+                        current_model = referenced_model;
+                    }
+                    if current_model != list_model || default_model != Some(root_model) {
+                        return Err(EditDiagnostic::new(
+                            origins.object(record.id, fallback_operation_index),
+                            vec![
+                                EditId::Artboard(artboard.id),
+                                EditId::Object(record.id),
+                                EditId::Object(list.object_id()),
                             ],
                             EditReason::InvalidMachineReference,
                         ));
@@ -10152,6 +10938,16 @@ fn lower_artboard(
             Some((spec.target, (record.id, spec)))
         })
         .collect::<BTreeMap<_, _>>();
+    let text_binds = artboard
+        .records
+        .iter()
+        .filter_map(|record| {
+            let RecordSpec::TextBind(spec) = record.spec else {
+                return None;
+            };
+            Some((spec.target, (record.id, spec)))
+        })
+        .collect::<BTreeMap<_, _>>();
     let mut nonlocal_data_bind_count = 0usize;
     for (node_index, node) in artboard.visual_records().enumerate() {
         let local_id = node_index.checked_add(1).ok_or_else(|| {
@@ -10229,16 +11025,12 @@ fn lower_artboard(
                 }
             }
             NodeSpec::ArtboardComponentList(spec) => {
-                if !catalogs.view_models.list_indices.contains_key(&spec.source) {
-                    return Err(EditDiagnostic::new(
-                        origins.object(node.id, fallback_operation_index),
-                        vec![
-                            EditId::Object(node.id),
-                            EditId::Object(spec.source.object_id()),
-                        ],
-                        EditReason::UnknownObject,
-                    ));
-                }
+                let _ = lower_view_model_list_source_path(
+                    &spec.source,
+                    catalogs.view_models,
+                    node.id,
+                    fallback_operation_index,
+                )?;
             }
             _ => {}
         }
@@ -10323,28 +11115,19 @@ fn lower_artboard(
             })?,
         );
         if let NodeSpec::ArtboardComponentList(spec) = node.spec {
-            let (source_model, source_property) = catalogs
-                .view_models
-                .list_indices
-                .get(&spec.source)
-                .copied()
-                .ok_or_else(|| {
-                    EditDiagnostic::new(
-                        origins.object(node.id, fallback_operation_index),
-                        vec![
-                            EditId::Object(node.id),
-                            EditId::Object(spec.source.object_id()),
-                        ],
-                        EditReason::UnknownObject,
-                    )
-                })?;
+            let (source_model, source_path) = lower_view_model_list_source_path(
+                &spec.source,
+                catalogs.view_models,
+                node.id,
+                fallback_operation_index,
+            )?;
             if default_view_model != Some(source_model) {
                 return Err(EditDiagnostic::new(
                     origins.object(node.id, fallback_operation_index),
                     vec![
                         EditId::Artboard(artboard.id),
                         EditId::Object(node.id),
-                        EditId::Object(spec.source.object_id()),
+                        EditId::Object(spec.source.list().object_id()),
                     ],
                     EditReason::InvalidMachineReference,
                 ));
@@ -10354,7 +11137,7 @@ fn lower_artboard(
                 properties: vec![
                     ExportedProperty::DataBindArtboardComponentListSource,
                     ExportedProperty::DataBindFlags(0),
-                    ExportedProperty::DataBindSourcePath(vec![source_model, source_property]),
+                    ExportedProperty::DataBindSourcePath(source_path),
                 ],
             });
             nonlocal_data_bind_count =
@@ -10362,6 +11145,50 @@ fn lower_artboard(
                     EditDiagnostic::new(
                         origins.object(node.id, fallback_operation_index),
                         vec![EditId::Object(node.id)],
+                        EditReason::CapacityExceeded,
+                    )
+                })?;
+        }
+        if let Some((bind_id, bind)) = text_binds.get(&node.id).copied() {
+            let (source_model, source_property) = catalogs
+                .view_models
+                .string_indices
+                .get(&bind.string)
+                .copied()
+                .ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(bind_id, fallback_operation_index),
+                        vec![
+                            EditId::Object(bind_id),
+                            EditId::Object(bind.string.object_id()),
+                        ],
+                        EditReason::UnknownObject,
+                    )
+                })?;
+            if default_view_model != Some(source_model) {
+                return Err(EditDiagnostic::new(
+                    origins.object(bind_id, fallback_operation_index),
+                    vec![
+                        EditId::Artboard(artboard.id),
+                        EditId::Object(bind_id),
+                        EditId::Object(bind.string.object_id()),
+                    ],
+                    EditReason::InvalidMachineReference,
+                ));
+            }
+            records.push(ExportedRecord {
+                kind: ExportedObjectKind::DataBindContext,
+                properties: vec![
+                    ExportedProperty::DataBindTextValueRunTextTarget,
+                    ExportedProperty::DataBindFlags(0),
+                    ExportedProperty::DataBindSourcePath(vec![source_model, source_property]),
+                ],
+            });
+            nonlocal_data_bind_count =
+                nonlocal_data_bind_count.checked_add(1).ok_or_else(|| {
+                    EditDiagnostic::new(
+                        origins.object(bind_id, fallback_operation_index),
+                        vec![EditId::Object(bind_id)],
                         EditReason::CapacityExceeded,
                     )
                 })?;
@@ -12181,7 +13008,7 @@ mod tests {
             2
         );
         let bytes = encode_authoring_records(records.into_authoring_records());
-        assert_eq!(&bytes[..4], b"RIVE");
+        assert_eq!(bytes.get(..4), Some(b"RIVE".as_slice()));
         let file = Arc::new(File::import(&bytes)?);
         let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
         let mount = instance.raw().graph_global_id();
@@ -12593,6 +13420,259 @@ mod tests {
         assert_eq!(
             view_model.raw().string_value_by_property_name("name"),
             Some("Nuxie Pro".as_bytes())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn authored_text_string_bind_round_trips_through_exact_riv_and_draws() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Product".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Name".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    width: 120.0,
+                    height: 30.0,
+                    sizing: SceneTextSizing::Fixed,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Name style".into(),
+                    font_size: 18.0,
+                    line_height: 22.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            let fill = tx.create(
+                Parent::Object(style),
+                NodeSpec::Fill(FillSpec {
+                    name: "Name fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Name color".into(),
+                    color: 0xffab_cdef,
+                }),
+            )?;
+            let run = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Name run".into(),
+                    text: String::new(),
+                    style,
+                }),
+            )?;
+            let mut view_models = tx.view_models();
+            let product = view_models.create(ViewModelSpec {
+                name: "Product model".into(),
+            })?;
+            let name = view_models.create_string(
+                product,
+                ViewModelStringSpec {
+                    name: "name".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                product,
+                ViewModelInstanceSpec {
+                    name: Some("Product".into()),
+                },
+            )?;
+            view_models.set_string(defaults, name, "a")?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_text(run, name)?;
+            Ok(())
+        })?;
+
+        let records = scene.export_records();
+        let authored_binds = records
+            .clone()
+            .into_authoring_records()
+            .into_iter()
+            .filter(|record| record.type_key == 447)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            authored_binds,
+            vec![AuthoringRecord {
+                type_key: 447,
+                properties: vec![
+                    AuthoringProperty {
+                        key: 586,
+                        value: AuthoringValue::Uint(268),
+                    },
+                    AuthoringProperty {
+                        key: 587,
+                        value: AuthoringValue::Uint(0),
+                    },
+                    AuthoringProperty {
+                        key: 588,
+                        value: AuthoringValue::Bytes(vec![0, 0]),
+                    },
+                ],
+            }]
+        );
+
+        let bytes = encode_authoring_records(records.into_authoring_records());
+        assert_eq!(&bytes[..4], b"RIVE");
+        let file = Arc::new(File::import(&bytes)?);
+        let data_bind = file
+            .runtime()
+            .artboard_data_binds(0)
+            .into_iter()
+            .next()
+            .context("exact .riv retains the TextValueRun data bind")?;
+        assert_eq!(
+            data_bind.target.map(|target| target.type_name),
+            Some("TextValueRun")
+        );
+        assert_eq!(
+            file.runtime()
+                .data_bind_context_source_path_ids_for_object(data_bind.object),
+            Some(vec![0, 0])
+        );
+
+        let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let view_model = instance
+            .instantiate_view_model_instance(0)
+            .context("exact .riv retains the product instance")?;
+        assert!(instance.bind_view_model(&view_model));
+        instance.advance(0.0);
+        let draw = owned_canonical_draw(&mut instance)?;
+        assert!(
+            draw.contains("verbs=[move"),
+            "the bound fixture glyph must produce a non-empty path: {draw}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn authored_child_view_model_reference_round_trips_through_exact_riv() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Catalog".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let mut view_models = tx.view_models();
+            view_models.create(ViewModelSpec {
+                name: "Seed".into(),
+            })?;
+            let root = view_models.create(ViewModelSpec {
+                name: "Root".into(),
+            })?;
+            let paywall = view_models.create(ViewModelSpec {
+                name: "Paywall".into(),
+            })?;
+            view_models.create_number(
+                root,
+                ViewModelNumberSpec {
+                    name: "seed".into(),
+                },
+            )?;
+            let paywall_property = view_models.create_child(
+                root,
+                ViewModelChildSpec {
+                    name: "paywall".into(),
+                    view_model: paywall,
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            view_models.create_instance(
+                paywall,
+                ViewModelInstanceSpec {
+                    name: Some("Unused paywall".into()),
+                },
+            )?;
+            let selected_paywall = view_models.create_instance(
+                paywall,
+                ViewModelInstanceSpec {
+                    name: Some("Paywall defaults".into()),
+                },
+            )?;
+            view_models.set_child(root_defaults, paywall_property, selected_paywall)?;
+            view_models.set_artboard_default(artboard, root_defaults)?;
+            Ok(())
+        })?;
+
+        let authored = scene
+            .export_records()
+            .into_authoring_records()
+            .into_iter()
+            .filter(|record| matches!(record.type_key, 436 | 444))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            authored,
+            vec![
+                AuthoringRecord {
+                    type_key: 436,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 557,
+                            value: AuthoringValue::String("paywall".into()),
+                        },
+                        AuthoringProperty {
+                            key: 565,
+                            value: AuthoringValue::Uint(2),
+                        },
+                    ],
+                },
+                AuthoringRecord {
+                    type_key: 444,
+                    properties: vec![
+                        AuthoringProperty {
+                            key: 554,
+                            value: AuthoringValue::Uint(1),
+                        },
+                        AuthoringProperty {
+                            key: 577,
+                            value: AuthoringValue::Uint(1),
+                        },
+                    ],
+                },
+            ]
+        );
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let view_model = instance
+            .instantiate_view_model_instance(0)
+            .context("exact .riv retains the root default instance")?;
+        assert_eq!(
+            view_model
+                .raw()
+                .nested_view_model_selection_by_property_name("paywall"),
+            Some((2, Some(1)))
         );
         Ok(())
     }

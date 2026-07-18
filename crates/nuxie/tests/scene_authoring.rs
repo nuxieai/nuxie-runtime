@@ -13,9 +13,9 @@ use nuxie::{
     SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
     SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec, ScriptedDrawableSpec,
     ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
-    TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelId,
-    ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListSpec, ViewModelNumberId,
-    ViewModelNumberSpec, ViewModelSpec, ViewModelStringSpec, props,
+    TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelChildSpec, ViewModelId,
+    ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListSource, ViewModelListSpec,
+    ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec, ViewModelStringSpec, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -3613,7 +3613,7 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
                 rotation: 0.0,
                 scale_x: 1.0,
                 scale_y: 1.0,
-                source: root_items,
+                source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
                     artboard: item_artboard,
@@ -3700,6 +3700,244 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
         drawn_move_count(&stream),
         2,
         "both list contexts import, instantiate the mapped item artboard, and draw"
+    );
+    Ok(())
+}
+
+#[test]
+fn nested_view_model_list_path_imports_advances_and_draws_the_mapped_item() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((root_artboard, item_artboard), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 120.0,
+            height: 40.0,
+        })?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Item".into(),
+            width: 20.0,
+            height: 20.0,
+        })?;
+        let item_text = tx.create(
+            Parent::Artboard(item_artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Product name".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                width: 120.0,
+                height: 30.0,
+                sizing: SceneTextSizing::Fixed,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(item_text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Product style".into(),
+                font_size: 18.0,
+                line_height: 22.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        let paint = tx.create(
+            Parent::Object(style),
+            NodeSpec::Fill(FillSpec {
+                name: "Product fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(paint),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Item color".into(),
+                color: 0xffab_cdef,
+            }),
+        )?;
+        let item_run = tx.create(
+            Parent::Object(item_text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Product run".into(),
+                text: String::new(),
+                style,
+            }),
+        )?;
+
+        let (item_model, paywall, products) = {
+            let mut view_models = tx.view_models();
+            view_models.create(ViewModelSpec {
+                name: "Seed model".into(),
+            })?;
+            let root_model = view_models.create(ViewModelSpec {
+                name: "Root model".into(),
+            })?;
+            let paywall_model = view_models.create(ViewModelSpec {
+                name: "Paywall model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                name: "Product model".into(),
+            })?;
+            view_models.create_number(
+                root_model,
+                ViewModelNumberSpec {
+                    name: "root seed".into(),
+                },
+            )?;
+            view_models.create_number(
+                paywall_model,
+                ViewModelNumberSpec {
+                    name: "paywall seed".into(),
+                },
+            )?;
+            view_models.create_number(
+                item_model,
+                ViewModelNumberSpec {
+                    name: "product seed".into(),
+                },
+            )?;
+            let product_name = view_models.create_string(
+                item_model,
+                ViewModelStringSpec {
+                    name: "name".into(),
+                },
+            )?;
+            let paywall = view_models.create_child(
+                root_model,
+                ViewModelChildSpec {
+                    name: "paywall".into(),
+                    view_model: paywall_model,
+                },
+            )?;
+            let products = view_models.create_list(
+                paywall_model,
+                ViewModelListSpec {
+                    name: "products".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            let paywall_defaults = view_models.create_instance(
+                paywall_model,
+                ViewModelInstanceSpec {
+                    name: Some("Paywall defaults".into()),
+                },
+            )?;
+            let empty_item_defaults = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Empty product defaults".into()),
+                },
+            )?;
+            let populated_item = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Populated product".into()),
+                },
+            )?;
+            view_models.set_child(root_defaults, paywall, paywall_defaults)?;
+            view_models.set_list_items(paywall_defaults, products, &[populated_item])?;
+            // The compact fixture font contains only the `a` glyph. The exact
+            // string-record test below separately pins arbitrary UTF-8 bytes.
+            view_models.set_string(populated_item, product_name, "a")?;
+            let product_name_by_alias = view_models
+                .string_by_name(item_model, "name")
+                .expect("the document alias resolves by authored name");
+            assert_eq!(product_name_by_alias, product_name);
+            assert_eq!(
+                view_models.string_by_name(item_model, "2369371622"),
+                None,
+                "a ProjectDO provenance hash is not a runtime property identity"
+            );
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, empty_item_defaults)?;
+            view_models.bind_text(item_run, product_name_by_alias)?;
+            (item_model, paywall, products)
+        };
+
+        tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Products".into(),
+                x: 5.0,
+                y: 7.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                source: ViewModelListSource::nested([paywall], products),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                }],
+            },
+        )?;
+        Ok((root_artboard, item_artboard))
+    })?;
+
+    let records = scene.export_records();
+    let list_index = records
+        .records()
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::ArtboardComponentList)
+        .expect("nested component-list host is exported");
+    assert_eq!(
+        records.records().get(list_index + 1),
+        Some(&ExportedRecord {
+            kind: ExportedObjectKind::DataBindContext,
+            properties: vec![
+                ExportedProperty::DataBindArtboardComponentListSource,
+                ExportedProperty::DataBindFlags(0),
+                ExportedProperty::DataBindSourcePath(vec![1, 1, 1]),
+            ],
+        }),
+        "the type-447 component-list bind retains every nonzero semantic ordinal"
+    );
+    let run_index = records
+        .records()
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::TextValueRun)
+        .expect("bound item TextValueRun is exported");
+    assert_eq!(
+        records.records().get(run_index + 1),
+        Some(&ExportedRecord {
+            kind: ExportedObjectKind::DataBindContext,
+            properties: vec![
+                ExportedProperty::DataBindTextValueRunTextTarget,
+                ExportedProperty::DataBindFlags(0),
+                ExportedProperty::DataBindSourcePath(vec![3, 1]),
+            ],
+        }),
+        "the type-447 text bind retains its target, flags, and nonzero source ordinals"
+    );
+    let direct_item = scene.instantiate(item_artboard)?;
+    let mut direct_events = Vec::new();
+    let _ = scene.frame().advance(direct_item, 0.0, &mut direct_events);
+    let direct_stream = canonical_draw_stream(&mut scene, direct_item)?;
+    assert_eq!(
+        drawn_move_count(&direct_stream),
+        0,
+        "the empty item default must not hide a broken list-item context: {direct_stream}"
+    );
+    let instance = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    let stream = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        drawn_move_count(&stream) > 0,
+        "the mapped item must draw glyph paths from its bound string: {stream}"
     );
     Ok(())
 }

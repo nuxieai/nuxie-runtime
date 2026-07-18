@@ -1,25 +1,25 @@
-struct NB {
-    Ub: f32,
-    dd: f32,
-    Xe: f32,
-    Ye: f32,
-    q5_: u32,
-    ug: u32,
-    Je: u32,
-    Ke: u32,
-    U7_: vec4<i32>,
-    rg: vec2<f32>,
-    ed: vec2<f32>,
-    W1_: u32,
-    vg: f32,
-    Y5_: u32,
-    P2_: f32,
-    fd: f32,
-    Ee: u32,
+struct CC {
+    bc: f32,
+    kd: f32,
+    bf: f32,
+    cf: f32,
+    m6_: u32,
+    Bg: u32,
+    Ne: u32,
+    Oe: u32,
+    Q7_: vec4<i32>,
+    xg: vec2<f32>,
+    ld: vec2<f32>,
+    a2_: u32,
+    Cg: f32,
+    Z5_: u32,
+    N2_: f32,
+    md: f32,
+    Ie: u32,
     y3_: f32,
     z3_: f32,
-    gd: f32,
-    og: u32,
+    nd: f32,
+    ug: u32,
 }
 
 struct gl_PerVertex {
@@ -35,9 +35,9 @@ struct VertexOutput {
 }
 
 var<private> gl_VertexIndex_1: i32;
-var<private> CC_1: vec4<u32>;
-@group(0) @binding(0) 
-var<uniform> k: NB;
+var<private> KC_1: vec4<u32>;
+@group(0) @binding(0)
+var<uniform> m: CC;
 var<private> R6_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
@@ -54,22 +54,22 @@ fn main_1() {
     let _e33 = (_e31 >> bitcast<u32>(1i));
     let _e34 = (_e33 <= 1i);
     if _e34 {
-        let _e36 = CC_1[0u];
+        let _e36 = KC_1[0u];
         phi_239_ = (_e36 & 65535u);
     } else {
-        let _e39 = CC_1[0u];
+        let _e39 = KC_1[0u];
         phi_239_ = (_e39 >> bitcast<u32>(16i));
     }
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = k.Ub;
+    let _e50 = m.bc;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);
     }
     let _e54 = phi_240_;
-    let _e56 = CC_1[1u];
+    let _e56 = KC_1[1u];
     phi_242_ = _e45;
     if (((_e56 & 2147483648u) != 0u) && (_e33 == 0i)) {
         if ((_e56 & 536870912u) != 0u) {
@@ -93,10 +93,10 @@ fn main_1() {
     }
     let _e81 = phi_246_;
     if _e34 {
-        let _e83 = CC_1[2u];
+        let _e83 = KC_1[2u];
         phi_244_ = _e83;
     } else {
-        let _e85 = CC_1[3u];
+        let _e85 = KC_1[3u];
         phi_244_ = _e85;
     }
     let _e87 = phi_244_;
@@ -105,10 +105,10 @@ fn main_1() {
     return;
 }
 
-@vertex 
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) CC: vec4<u32>) -> VertexOutput {
+@vertex
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) KC: vec4<u32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
-    CC_1 = CC;
+    KC_1 = KC;
     main_1();
     let _e8 = R6_;
     let _e9 = unnamed.gl_Position;

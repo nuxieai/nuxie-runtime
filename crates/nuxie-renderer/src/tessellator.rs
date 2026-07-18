@@ -196,10 +196,10 @@ impl Tessellator {
                     },
                     count: None,
                 },
-                storage_entry(3),
-                storage_entry(6),
+                storage_entry(2),
+                storage_entry(5),
                 wgpu::BindGroupLayoutEntry {
-                    binding: 10,
+                    binding: 9,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -217,7 +217,7 @@ impl Tessellator {
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-tessellate-sampler-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 10,
+                binding: 9,
                 visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
@@ -272,7 +272,7 @@ impl Tessellator {
         let sampler_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-tessellation-sampler-group"),
             layout: &sampler_layout,
-            entries: &[binding(10, wgpu::BindingResource::Sampler(&linear_sampler))],
+            entries: &[binding(9, wgpu::BindingResource::Sampler(&linear_sampler))],
         });
         let limits = device.limits();
         Self {
@@ -483,9 +483,9 @@ impl Tessellator {
             layout: &self.flush_layout,
             entries: &[
                 binding(0, flush_resources.uniform_binding()),
-                binding(3, flush_resources.path_binding()),
-                binding(6, flush_resources.contour_binding()),
-                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                binding(2, flush_resources.path_binding()),
+                binding(5, flush_resources.contour_binding()),
+                binding(9, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
         let texture = textures.checkout(device, height);
@@ -1295,6 +1295,18 @@ impl UploadSlice {
     pub(crate) fn slice(&self) -> wgpu::BufferSlice<'_> {
         self.buffer
             .slice(self.offset..self.offset + self.size.get())
+    }
+
+    pub(crate) fn slice_at(&self, relative_offset: u64, size: u64) -> wgpu::BufferSlice<'_> {
+        let relative_end = relative_offset
+            .checked_add(size)
+            .expect("upload sub-slice overflow");
+        assert!(relative_end <= self.size.get());
+        let start = self
+            .offset
+            .checked_add(relative_offset)
+            .expect("upload sub-slice start overflow");
+        self.buffer.slice(start..start + size)
     }
 }
 

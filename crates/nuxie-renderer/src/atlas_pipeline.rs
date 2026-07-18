@@ -36,20 +36,20 @@ impl AtlasPipeline {
             label: Some("nuxie-atlas-flush-layout"),
             entries: &[
                 uniform_entry(0),
+                storage_entry(2),
                 storage_entry(3),
                 storage_entry(4),
                 storage_entry(5),
-                storage_entry(6),
-                texture_entry(8, wgpu::TextureSampleType::Uint),
+                texture_entry(7, wgpu::TextureSampleType::Uint),
+                texture_entry(8, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(9, wgpu::TextureSampleType::Float { filterable: true }),
-                texture_entry(10, wgpu::TextureSampleType::Float { filterable: true }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atlas-image-layout"),
             entries: &[
-                texture_entry(12, wgpu::TextureSampleType::Float { filterable: true }),
-                sampler_entry(14),
+                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
+                sampler_entry(13),
             ],
         });
         let empty_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -58,7 +58,7 @@ impl AtlasPipeline {
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atlas-sampler-layout"),
-            entries: &[sampler_entry(9), sampler_entry(10)],
+            entries: &[sampler_entry(8), sampler_entry(9)],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nuxie-atlas-pipeline-layout"),
@@ -182,29 +182,29 @@ impl AtlasPipeline {
             layout: &self.flush_layout,
             entries: &[
                 binding(0, uniform.as_entire_binding()),
-                binding(3, path.as_entire_binding()),
-                binding(4, paint.as_entire_binding()),
-                binding(5, paint_aux.as_entire_binding()),
-                binding(6, contours.as_entire_binding()),
-                binding(8, wgpu::BindingResource::TextureView(tessellation)),
-                binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                binding(2, path.as_entire_binding()),
+                binding(3, paint.as_entire_binding()),
+                binding(4, paint_aux.as_entire_binding()),
+                binding(5, contours.as_entire_binding()),
+                binding(7, wgpu::BindingResource::TextureView(tessellation)),
+                binding(8, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(9, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
         let image = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-image-group"),
             layout: &self.image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(13, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         let samplers = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&sampler)),
                 binding(9, wgpu::BindingResource::Sampler(&sampler)),
-                binding(10, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         let attachments = [Some(wgpu::RenderPassColorAttachment {

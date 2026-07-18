@@ -17,9 +17,9 @@ impl MipmapPipeline {
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-mipmap-image-layout"),
             entries: &[
-                texture_entry(12),
+                texture_entry(11),
                 wgpu::BindGroupLayoutEntry {
-                    binding: 14,
+                    binding: 13,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
@@ -116,11 +116,11 @@ impl MipmapPipeline {
                 layout: &self.image_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
-                        binding: 12,
+                        binding: 11,
                         resource: wgpu::BindingResource::TextureView(&source),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 14,
+                        binding: 13,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
                 ],

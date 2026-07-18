@@ -725,8 +725,8 @@ impl PathPipeline {
             label: Some("nuxie-msaa-path-dummy-image-group"),
             layout: &image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&image_samplers[0])),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(13, wgpu::BindingResource::Sampler(&image_samplers[0])),
             ],
         });
         let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -739,8 +739,8 @@ impl PathPipeline {
             label: Some("nuxie-msaa-path-sampler-group"),
             layout: &sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&linear_sampler)),
                 binding(9, wgpu::BindingResource::Sampler(&linear_sampler)),
-                binding(10, wgpu::BindingResource::Sampler(&linear_sampler)),
             ],
         });
         Self {
@@ -833,18 +833,18 @@ impl PathPipeline {
             layout: &self.flush_layout,
             entries: &[
                 binding(0, flush_resources.uniform_binding()),
-                binding(3, flush_resources.path_binding()),
-                binding(4, uploaded_paints.paint_buffer.binding()),
-                binding(5, uploaded_paints.paint_aux_buffer.binding()),
-                binding(6, flush_resources.contour_binding()),
-                binding(8, wgpu::BindingResource::TextureView(tessellation_view)),
+                binding(2, flush_resources.path_binding()),
+                binding(3, uploaded_paints.paint_buffer.binding()),
+                binding(4, uploaded_paints.paint_aux_buffer.binding()),
+                binding(5, flush_resources.contour_binding()),
+                binding(7, wgpu::BindingResource::TextureView(tessellation_view)),
                 binding(
-                    9,
+                    8,
                     wgpu::BindingResource::TextureView(gradient.unwrap_or(&self.dummy_view)),
                 ),
-                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                binding(9, wgpu::BindingResource::TextureView(feather_lut)),
                 binding(
-                    13,
+                    12,
                     wgpu::BindingResource::TextureView(destination.unwrap_or(&self.dummy_view)),
                 ),
             ],
@@ -868,9 +868,9 @@ impl PathPipeline {
                     label: Some("nuxie-msaa-path-image-group"),
                     layout: &self.image_layout,
                     entries: &[
-                        binding(12, wgpu::BindingResource::TextureView(view)),
+                        binding(11, wgpu::BindingResource::TextureView(view)),
                         binding(
-                            14,
+                            13,
                             wgpu::BindingResource::Sampler(
                                 &self.image_samplers[sampler.as_key() as usize],
                             ),
@@ -901,23 +901,23 @@ fn msaa_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 9] {
 
     [
         uniform_entry(0, vertex_fragment),
+        storage_entry(2, vertex),
         storage_entry(3, vertex),
         storage_entry(4, vertex),
         storage_entry(5, vertex),
-        storage_entry(6, vertex),
-        texture_entry(8, wgpu::TextureSampleType::Uint, vertex),
+        texture_entry(7, wgpu::TextureSampleType::Uint, vertex),
         texture_entry(
-            9,
+            8,
             wgpu::TextureSampleType::Float { filterable: true },
             fragment,
         ),
         texture_entry(
-            10,
+            9,
             wgpu::TextureSampleType::Float { filterable: true },
             vertex_fragment,
         ),
         texture_entry(
-            13,
+            12,
             wgpu::TextureSampleType::Float { filterable: false },
             fragment,
         ),
@@ -927,18 +927,18 @@ fn msaa_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 9] {
 fn msaa_image_layout_entries() -> [wgpu::BindGroupLayoutEntry; 2] {
     [
         texture_entry(
-            12,
+            11,
             wgpu::TextureSampleType::Float { filterable: true },
             wgpu::ShaderStages::FRAGMENT,
         ),
-        sampler_entry(14, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(13, wgpu::ShaderStages::FRAGMENT),
     ]
 }
 
 fn msaa_sampler_layout_entries() -> [wgpu::BindGroupLayoutEntry; 2] {
     [
-        sampler_entry(9, wgpu::ShaderStages::FRAGMENT),
-        sampler_entry(10, wgpu::ShaderStages::VERTEX_FRAGMENT),
+        sampler_entry(8, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(9, wgpu::ShaderStages::VERTEX_FRAGMENT),
     ]
 }
 
@@ -1017,23 +1017,23 @@ mod tests {
             &msaa_flush_layout_entries(),
             &[
                 (0, Stages::VERTEX_FRAGMENT),
+                (2, Stages::VERTEX),
                 (3, Stages::VERTEX),
                 (4, Stages::VERTEX),
                 (5, Stages::VERTEX),
-                (6, Stages::VERTEX),
-                (8, Stages::VERTEX),
-                (9, Stages::FRAGMENT),
-                (10, Stages::VERTEX_FRAGMENT),
-                (13, Stages::FRAGMENT),
+                (7, Stages::VERTEX),
+                (8, Stages::FRAGMENT),
+                (9, Stages::VERTEX_FRAGMENT),
+                (12, Stages::FRAGMENT),
             ],
         );
         assert_binding_stages(
             &msaa_image_layout_entries(),
-            &[(12, Stages::FRAGMENT), (14, Stages::FRAGMENT)],
+            &[(11, Stages::FRAGMENT), (13, Stages::FRAGMENT)],
         );
         assert_binding_stages(
             &msaa_sampler_layout_entries(),
-            &[(9, Stages::FRAGMENT), (10, Stages::VERTEX_FRAGMENT)],
+            &[(8, Stages::FRAGMENT), (9, Stages::VERTEX_FRAGMENT)],
         );
     }
 

@@ -2808,7 +2808,7 @@ impl WgpuFrame {
                     hsl_blend: bool,
                     image: Option<Arc<WgpuImageTexture>>,
                     image_sampler: ImageSampler,
-                    image_uniforms: Option<gpu::ImageDrawUniforms>,
+                    image_instance: Option<gpu::ImageDrawInstance>,
                     image_mesh: Option<PreparedImageMesh>,
                 }
 
@@ -3368,8 +3368,8 @@ impl WgpuFrame {
                             .as_ref()
                             .map(ImageDraw::sampler)
                             .unwrap_or_default(),
-                        image_uniforms: draw.image.as_ref().map(|image| {
-                            gpu::ImageDrawUniforms::new(
+                        image_instance: draw.image.as_ref().map(|image| {
+                            gpu::ImageDrawInstance::new(
                                 draw.state.transform,
                                 image.opacity(),
                                 image_clip_rect_inverse_matrix(draw.state.clip_rect),
@@ -4026,7 +4026,7 @@ impl WgpuFrame {
                         hsl_blend: draw.hsl_blend,
                         image: draw.image.as_ref().map(|image| &image.view),
                         image_sampler: draw.image_sampler,
-                        image_uniforms: draw.image_uniforms,
+                        image_instance: draw.image_instance,
                         image_mesh: draw.image_mesh.as_ref().map(|mesh| {
                             atomic_pipeline::ImageMeshBuffers {
                                 vertices: &mesh.vertices,
@@ -4369,6 +4369,9 @@ impl WgpuFrame {
                 let mut pending_paths = Vec::with_capacity(draws.len());
                 let mut pending_atlas_draws = Vec::new();
                 let mut prepared_schedules = Vec::with_capacity(draws.len());
+                let mut image_instances = Vec::<gpu::ImageDrawInstance>::new();
+                let mut image_mesh_resources = None;
+                let mut image_groups = std::collections::HashMap::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let scheduled = draw_schedule.map(|schedule| schedule[draw_index]);
                     let z_index = scheduled.map_or_else(
@@ -4489,7 +4492,7 @@ impl WgpuFrame {
                                 unreachable!("non-content draw carried an image mesh")
                             }
                         };
-                        let image_uniforms = gpu::ImageDrawUniforms::new(
+                        let image_instance = gpu::ImageDrawInstance::new(
                             draw.state.transform,
                             mesh.opacity,
                             image_clip_rect_inverse_matrix(draw.state.clip_rect),
@@ -4497,22 +4500,35 @@ impl WgpuFrame {
                             mesh.blend_mode,
                             z_index,
                         );
-                        pending_draws.push(PendingDraw::ImageMesh(
-                            self.context.msaa_image_mesh_pipeline.prepare(
+                        let instance_index = u32::try_from(image_instances.len())
+                            .expect("MSAA image instance index overflow");
+                        image_instances.push(image_instance);
+                        let resources = image_mesh_resources.get_or_insert_with(|| {
+                            self.context.msaa_image_mesh_pipeline.prepare_resources(
                                 &self.context.device,
                                 &uniforms,
-                                &image_uniforms,
-                                if advanced_blend {
-                                    destination_view.as_ref()
-                                } else {
-                                    None
-                                },
+                                destination_view.as_ref(),
+                            )
+                        });
+                        let image_key =
+                            (Arc::as_ptr(&mesh.texture) as usize, mesh.sampler.as_key());
+                        let image_group = image_groups.entry(image_key).or_insert_with(|| {
+                            self.context.msaa_image_mesh_pipeline.prepare_image_group(
+                                &self.context.device,
                                 &mesh.texture.view,
                                 mesh.sampler,
+                            )
+                        });
+                        pending_draws.push(PendingDraw::ImageMesh(
+                            self.context.msaa_image_mesh_pipeline.prepare(
+                                resources,
+                                image_group,
+                                advanced_blend,
                                 &mesh.vertices,
                                 &mesh.uvs,
                                 &mesh.indices,
                                 mesh.index_count,
+                                instance_index,
                             ),
                             options,
                         ));
@@ -4818,6 +4834,19 @@ impl WgpuFrame {
                     }
                 }
                 debug_assert_eq!(pending_draws.len(), prepared_schedules.len());
+                let image_instance_buffer = if image_instances.is_empty() {
+                    None
+                } else {
+                    let payloads = [tessellator::FrameUploadPayload::Vertex(
+                        bytemuck::cast_slice(&image_instances),
+                    )];
+                    let mut uploads = tessellation_uploads.borrow_mut().upload_group(
+                        &self.context.device,
+                        encoder,
+                        &payloads,
+                    );
+                    Some(uploads.pop().expect("MSAA image instance upload missing"))
+                };
                 let mut prepared_atlas_draws = (0..pending_atlas_draws.len())
                     .map(|_| None)
                     .collect::<Vec<Option<msaa_atlas_pipeline::PreparedAtlasBlit>>>();
@@ -5697,6 +5726,18 @@ impl WgpuFrame {
                                 pass.set_bind_group(1, &draw.image_group, &[]);
                                 pass.set_vertex_buffer(0, draw.vertices.slice(..));
                                 pass.set_vertex_buffer(1, draw.uvs.slice(..));
+                                let instance_offset = u64::from(draw.instance_index)
+                                    * std::mem::size_of::<gpu::ImageDrawInstance>() as u64;
+                                pass.set_vertex_buffer(
+                                    2,
+                                    image_instance_buffer
+                                        .as_ref()
+                                        .expect("prepared MSAA image mesh lost its instance stream")
+                                        .slice_at(
+                                            instance_offset,
+                                            std::mem::size_of::<gpu::ImageDrawInstance>() as u64,
+                                        ),
+                                );
                                 pass.set_index_buffer(
                                     draw.indices.slice(..),
                                     wgpu::IndexFormat::Uint16,
@@ -10226,6 +10267,43 @@ mod tests {
         assert_eq!(draw::interior_tessellation_build_count(), 0);
     }
 
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn repeated_atomic_image_rects_use_one_instance_upload_without_draw_batching() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(32, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
+        for index in 0..8 {
+            frame.save();
+            frame.transform(Mat2D([3.0, 0.0, 0.0, 3.0, 1.0 + index as f32 * 4.0, 2.0]));
+            frame.draw_image(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                BlendMode::SrcOver,
+                1.0,
+            );
+            frame.restore();
+        }
+
+        let work = frame.finish_for_benchmark().unwrap().backend_work;
+        assert_eq!(work.buffer_upload_calls, 4);
+        assert_eq!(work.buffer_upload_bytes, 2_192);
+        assert_eq!(work.gpu_draw_calls, 10);
+        assert_eq!(work.gpu_draw_instances, 10);
+        assert_eq!(work.bind_groups_created, 3);
+    }
+
     #[test]
     fn msaa_path_clip_applies_to_image_rect() {
         let mut encoded = Vec::new();
@@ -10335,6 +10413,23 @@ mod tests {
             assert_eq!(pixel(4, 4), [255, 0, 0, 255], "{mode:?}");
             assert_eq!(pixel(15, 15), [0, 0, 0, 255], "{mode:?}");
 
+            let mut translucent = factory.begin_frame(0xff00_0000);
+            translucent.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                0.5,
+            );
+            let pixels = translucent.finish().unwrap();
+            let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+            assert_eq!(pixel(4, 4), [127, 0, 0, 255], "{mode:?}");
+            assert_eq!(pixel(15, 15), [0, 0, 0, 255], "{mode:?}");
+
             for (blend_mode, expected) in [
                 (BlendMode::Screen, [255, 255, 0, 255]),
                 (BlendMode::Darken, [0, 0, 0, 255]),
@@ -10359,6 +10454,80 @@ mod tests {
                 assert_eq!(pixel(15, 15), [0, 255, 0, 255], "{mode:?} {blend_mode:?}");
             }
         }
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn repeated_msaa_image_meshes_share_instance_and_bind_resources_without_batching() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(32, 16, RenderMode::Msaa).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [3.0, 0.0],
+            [0.0, 3.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+
+        let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
+        for index in 0..8 {
+            frame.save();
+            frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 1.0 + index as f32 * 4.0, 2.0]));
+            frame.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                1.0,
+            );
+            frame.restore();
+        }
+
+        let work = frame.finish_for_benchmark().unwrap().backend_work;
+        assert_eq!(work.buffer_upload_calls, 2);
+        assert_eq!(work.buffer_upload_bytes, 768);
+        assert_eq!(work.gpu_draw_calls, 8);
+        assert_eq!(work.gpu_draw_instances, 8);
+        assert_eq!(work.bind_groups_created, 2);
     }
 
     #[test]

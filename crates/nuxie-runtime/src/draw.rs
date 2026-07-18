@@ -2817,7 +2817,19 @@ impl ArtboardInstance {
             // transforms, so apply the artboard origin exactly once here.
             let x = bounds.x - self.width * self.origin_x;
             let y = bounds.y - self.height * self.origin_y;
-            return Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
+            let stored_world = self
+                .component(layout_local)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY)
+                .0;
+            return Mat2D([
+                stored_world[0],
+                stored_world[1],
+                stored_world[2],
+                stored_world[3],
+                x,
+                y,
+            ]);
         }
         self.component(layout_local)
             .map(|component| component.transform.world_transform)
@@ -18589,6 +18601,49 @@ mod tests {
     }
 
     #[test]
+    fn settled_layout_world_transform_preserves_authored_rotation_and_scale() {
+        let bytes = synthetic_affine_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic affine layout riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic affine layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let report = instance
+            .debug_taffy_layout_bounds_report(&file, graph)
+            .expect("fixture settles with Taffy");
+        let layout = report
+            .iter()
+            .find(|entry| entry.local_id == 3)
+            .expect("second layout component is reported");
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_mat2d_near(layout.world_transform, [0.0, 2.0, -0.5, 0.0, 100.0, 0.0]);
+        assert_mat2d_near(
+            instance
+                .geometry_world_transform_with_context(&file, graph, 5, &mut cache)
+                .expect("child shape has a world transform")
+                .0,
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+        );
+        assert_aabb_near(
+            instance
+                .geometry_world_bounds_with_context(&file, graph, 5, &mut cache)
+                .expect("child shape has geometry"),
+            RenderAabb::new(65.0, -80.0, 115.0, 120.0),
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(90.0, 20.0),
+                &mut cache,
+            ),
+            vec![5]
+        );
+    }
+
+    #[test]
     fn controlled_auto_text_without_shape_uses_exact_layout_bounds_and_authored_origin() {
         let bytes = synthetic_layout_text_bounds_riv();
         let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
@@ -19908,9 +19963,40 @@ mod tests {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
 
+    fn assert_mat2d_near(actual: [f32; 6], expected: [f32; 6]) {
+        for (index, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
+            assert!(
+                (actual - expected).abs() < 1.0e-4,
+                "matrix entry {index}: expected {expected}, got {actual}"
+            );
+        }
+    }
+
+    fn assert_aabb_near(actual: RenderAabb, expected: RenderAabb) {
+        for (label, actual, expected) in [
+            ("min_x", actual.min_x, expected.min_x),
+            ("min_y", actual.min_y, expected.min_y),
+            ("max_x", actual.max_x, expected.max_x),
+            ("max_y", actual.max_y, expected.max_y),
+        ] {
+            assert!(
+                (actual - expected).abs() < 1.0e-4,
+                "bounds {label}: expected {expected}, got {actual}"
+            );
+        }
+    }
+
     // Two fixed-size layout children fill a row artboard. The queried shape is
     // authored under the second child at x=10, so its settled world x is 110.
     fn synthetic_layout_geometry_riv() -> Vec<u8> {
+        synthetic_layout_geometry_riv_with_affine(None)
+    }
+
+    fn synthetic_affine_layout_geometry_riv() -> Vec<u8> {
+        synthetic_layout_geometry_riv_with_affine(Some((std::f32::consts::FRAC_PI_2, 2.0, 0.5)))
+    }
+
+    fn synthetic_layout_geometry_riv_with_affine(affine: Option<(f32, f32, f32)>) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"RIVE");
         push_var_uint(&mut bytes, 7);
@@ -19934,6 +20020,11 @@ mod tests {
             push_f32(bytes, "LayoutComponent", "width", 100.0);
             push_f32(bytes, "LayoutComponent", "height", 100.0);
             push_uint(bytes, "LayoutComponent", "styleId", 4);
+            if let Some((rotation, scale_x, scale_y)) = affine {
+                push_f32(bytes, "Node", "rotation", rotation);
+                push_f32(bytes, "Node", "scaleX", scale_x);
+                push_f32(bytes, "Node", "scaleY", scale_y);
+            }
         });
         push_object(&mut bytes, "LayoutComponentStyle", |_| {});
         push_object(&mut bytes, "Shape", |bytes| {

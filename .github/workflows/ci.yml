@@ -186,6 +186,8 @@ jobs:
           # Initialize the pinned checkout's CIPD-managed Python and helper
           # tools without allowing depot_tools to update its source revision.
           "${depot_tools_dir}/ensure_bootstrap"
+          test -s "${depot_tools_dir}/python3_bin_reldir.txt"
+          "${depot_tools_dir}/python-bin/python3" --version
           make renderer-dawn-reference-bootstrap
           make renderer-dawn-reference-replay
 

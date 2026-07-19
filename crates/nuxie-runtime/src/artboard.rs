@@ -287,6 +287,11 @@ pub struct ArtboardInstance {
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
     pub(crate) prepared_epoch: u64,
+    /// Retained draw-command contents change less often than live world
+    /// transforms. C++ keeps drawable/ShapePaintPath topology in place while
+    /// components update their transforms, so track that boundary separately
+    /// from `prepared_epoch`, which still invalidates world-baked resources.
+    pub(crate) command_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
     pub(crate) text_epoch: u64,
@@ -708,6 +713,7 @@ impl ArtboardInstance {
             dirt_depth: 0,
             cache_epoch: 1,
             prepared_epoch: 1,
+            command_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
             text_epoch: 1,
@@ -2676,6 +2682,10 @@ impl ArtboardInstance {
         self.prepared_epoch
     }
 
+    pub(crate) fn command_epoch(&self) -> u64 {
+        self.command_epoch
+    }
+
     pub(crate) fn path_epoch(&self) -> u64 {
         self.path_epoch
     }
@@ -2712,6 +2722,11 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn mark_prepared_changed(&mut self) {
+        self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
+        self.command_epoch = self.command_epoch.wrapping_add(1);
+    }
+
+    fn mark_world_transform_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
     }
 
@@ -2912,13 +2927,10 @@ impl ArtboardInstance {
         if component_dirt_affects_path_epoch(dirt) {
             self.mark_path_changed();
         } else if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
-            self.mark_prepared_changed();
+            self.mark_world_transform_changed();
         }
         if dirt.contains(ComponentDirt::DRAW_ORDER) {
             self.mark_draw_order_changed();
-        }
-        if dirt.contains(ComponentDirt::RENDER_OPACITY) {
-            self.mark_render_opacity_changed();
         }
         self.on_component_dirty(local_id);
 
@@ -5369,6 +5381,7 @@ mod tests {
             dirt_depth: 0,
             cache_epoch: 1,
             prepared_epoch: 1,
+            command_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
             text_epoch: 1,
@@ -6433,11 +6446,13 @@ mod tests {
 
         let initial_path_epoch = instance.path_epoch();
         let initial_prepared_epoch = instance.prepared_epoch();
+        let initial_command_epoch = instance.command_epoch();
 
         assert!(instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, false));
 
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert!(instance.prepared_epoch() > initial_prepared_epoch);
+        assert_eq!(instance.command_epoch(), initial_command_epoch);
     }
 
     #[test]

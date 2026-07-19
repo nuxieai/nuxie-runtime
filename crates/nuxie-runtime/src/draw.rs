@@ -2144,6 +2144,73 @@ impl ArtboardInstance {
         nested_ancestors: &[u32],
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
+        let has_layout_components = graph
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent");
+
+        if !gradient_preparation.has_paints() && !has_layout_components {
+            // The common nested-artboard path has neither gradients nor
+            // layout-generated host commands. C++ walks its retained child
+            // pointers directly here. Avoid cloning every nested command into
+            // a temporary table on each paint update while preserving the
+            // table's exact semantics: first host insertion order, with the
+            // last command for a duplicate host winning.
+            for (command_index, first_command) in commands.iter().enumerate() {
+                if first_command.referenced_artboard_global.is_none()
+                    || !runtime_draw_command_is_nested_artboard(first_command)
+                {
+                    continue;
+                }
+                let Some(local_id) = first_command.local_id else {
+                    continue;
+                };
+                if commands[..command_index].iter().any(|command| {
+                    command.local_id == Some(local_id)
+                        && command.referenced_artboard_global.is_some()
+                        && runtime_draw_command_is_nested_artboard(command)
+                }) {
+                    continue;
+                }
+                let command = commands[command_index + 1..]
+                    .iter()
+                    .rev()
+                    .find(|command| {
+                        command.local_id == Some(local_id)
+                            && command.referenced_artboard_global.is_some()
+                            && runtime_draw_command_is_nested_artboard(command)
+                    })
+                    .unwrap_or(first_command);
+                self.prepare_static_nested_artboard_tree_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    layout_bounds,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                )?;
+            }
+            if commands.iter().any(|command| {
+                command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList
+            }) {
+                self.prepare_static_component_list_paints_in_lifecycle_order(
+                    runtime,
+                    artboards,
+                    factory,
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    commands,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                )?;
+            }
+            return Ok(());
+        }
 
         let mut nested_command_by_local = Vec::new();
         for command in commands {
@@ -2161,11 +2228,7 @@ impl ArtboardInstance {
                 command.clone(),
             );
         }
-        if graph
-            .components
-            .iter()
-            .any(|component| component.type_name == "LayoutComponent")
-        {
+        if has_layout_components {
             for (local_id, command) in self.runtime_nested_artboard_preparation_commands_by_local(
                 graph,
                 layout_bounds,

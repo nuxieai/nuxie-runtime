@@ -27,6 +27,7 @@ use luaur_rt::{
     AnyUserData, Buffer as LuaBuffer, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table,
     UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector,
 };
+use luaur_vm::functions::lua_settop::lua_settop;
 use luaur_vm::functions::luau_load::luau_load;
 use mat4::install_mat4_global;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
@@ -483,10 +484,8 @@ impl ScriptVm {
             }
             let chunkname = Self::readable_chunkname(name, scope);
             self.set_chunkname_scope(&chunkname, scope);
-            let generator = self
-                .load_script_asset_payload(&chunkname, payload)
-                .map_err(script_error)?
-                .call(())
+            let generator: Function = self
+                .execute_script_asset_payload(&chunkname, payload)
                 .map_err(script_error)?;
             Ok(ScriptProgram { generator })
         })
@@ -685,6 +684,49 @@ impl ScriptVm {
         self.load_bytecode(name, envelope.content)
     }
 
+    /// Load and run bytecode in the fresh sandboxed coroutine C++ creates in
+    /// `ScriptingVM::loadModule`. The closure must be loaded *after* sandboxing:
+    /// moving a main-thread closure into a sandboxed coroutine keeps its main
+    /// global environment and leaks top-level assignments between assets.
+    fn execute_script_asset_payload<R: FromLuaMulti>(
+        &self,
+        chunk_name: &str,
+        payload: &[u8],
+    ) -> Result<R> {
+        let envelope = SignedContent::parse(payload)
+            .map_err(|e| Error::runtime(format!("ScriptAsset '{chunk_name}': {e}")))?;
+        validate_luau_bytecode(envelope.content).map_err(|e| {
+            Error::runtime(format!(
+                "ScriptAsset '{chunk_name}': malformed Luau bytecode: {e}"
+            ))
+        })?;
+        // `luaur_rt` currently creates threads from a function. Clear this
+        // inert bootstrap closure before loading the real bytecode on the
+        // coroutine itself, matching C++'s raw `lua_newthread` flow.
+        let bootstrap = self.lua.load("return nil").into_function()?;
+        let thread = self.lua.create_thread(bootstrap)?;
+        thread.sandbox()?;
+        let name = CString::new(format!("={chunk_name}"))
+            .unwrap_or_else(|_| CString::new("=script").expect("static"));
+        unsafe {
+            let state = thread.state();
+            lua_settop(state, 0);
+            let rc = luau_load(
+                state,
+                name.as_ptr(),
+                envelope.content.as_ptr() as *const core::ffi::c_char,
+                envelope.content.len(),
+                0,
+            );
+            if rc != 0 {
+                return Err(Error::runtime(format!(
+                    "ScriptAsset '{chunk_name}': Luau bytecode load failed"
+                )));
+            }
+        }
+        thread.resume(())
+    }
+
     /// The registered-module cache table (stored in the Lua named registry,
     /// mirroring C++ `registeredCacheTableKey`).
     fn ensure_module_cache(&self) -> Result<Table> {
@@ -751,8 +793,7 @@ impl ScriptVm {
 
     /// Install Rive's custom `require`, resolving bare names in the caller's
     /// scope and `lib:` names through that caller scope's serialized pins.
-    fn install_require_global(&self, cache: Table) -> Result<()> {
-        let lookup = cache.clone();
+    fn install_require_global(&self, _cache: Table) -> Result<()> {
         let scopes = Rc::clone(&self.scopes);
         let require = self.lua.create_function(move |lua, name: String| {
             // The defining chunk remains on the Luau stack when a returned
@@ -760,6 +801,10 @@ impl ScriptVm {
             // scope-correct even long after module registration finished.
             let caller = caller_chunk_source(lua).unwrap_or_default();
             let cache_key = resolve_require_key(&scopes.borrow(), &caller, &name);
+            // A registered asset runs on a sandboxed coroutine. Fetch the
+            // shared registry table through that active coroutine rather than
+            // reusing a main-thread `Table` handle in its callback frame.
+            let lookup: Table = lua.named_registry_value(MODULE_CACHE_KEY)?;
             match lookup.get::<Value>(cache_key.as_str())? {
                 Value::Nil => Err(Error::runtime(format!(
                     "require could not find a script named {name}"
@@ -843,8 +888,34 @@ impl ScriptVm {
         }
         let chunkname = Self::readable_chunkname(name, scope);
         self.set_chunkname_scope(&chunkname, scope);
-        let function = self.load_script_asset_payload(&chunkname, payload)?;
-        self.register_loaded_module(name, scope, function)
+        self.register_script_asset_module(name, scope, &chunkname, payload)
+    }
+
+    fn register_script_asset_module(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        chunkname: &str,
+        payload: &[u8],
+    ) -> Result<Value> {
+        let cache = self.module_cache()?;
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            cache.get::<Value>(cache_key.as_str())?
+        {
+            return Ok(value);
+        }
+        let result: Value = self.execute_script_asset_payload(chunkname, payload)?;
+        match &result {
+            Value::Table(_) | Value::Function(_) => {}
+            other => {
+                return Err(Error::runtime(format!(
+                    "module '{chunkname}' must return a table or function, got {other:?}"
+                )));
+            }
+        }
+        cache.set(cache_key, result.clone())?;
+        Ok(result)
     }
 
     fn register_loaded_module(
@@ -1292,32 +1363,10 @@ impl RuntimeScriptingVm for ScriptVm {
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(script_error)?;
-        let generator: Function = self
-            .load_script_asset_payload(name, payload)
-            .map_err(script_error)?
-            .call(())
-            .map_err(script_error)?;
-        let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
-        let context_missing_requested_data = Rc::new(Cell::new(false));
-        let context_parent_view_models = self.default_context_parent_view_models.clone();
-        let context = self
-            .lua
-            .create_userdata(ScriptedContext::new(
-                Rc::clone(&context_view_model),
-                context_parent_view_models.clone(),
-                Rc::clone(&context_missing_requested_data),
-            ))
-            .map_err(script_error)?;
-        let instance: Table = generator.call(context.clone()).map_err(script_error)?;
-        Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
-            instance,
-            self.renderer_bindings.clone(),
-            context_view_model,
-            Some(context),
-            context_missing_requested_data,
-            context_parent_view_models,
-            Some(generator),
-        )))
+        let mut factory = nuxie_render_api::NullFactory::default();
+        let program =
+            ScriptVm::register_protocol_script_with_factory(self, name, payload, &mut factory)?;
+        ScriptVm::instantiate_registered_script_with_factory(self, &program, _host, &mut factory)
     }
 
     fn advance_detached_view_models(&mut self) -> bool {

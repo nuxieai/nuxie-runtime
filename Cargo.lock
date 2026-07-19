@@ -883,7 +883,9 @@ dependencies = [
 name = "nuxie-scripting"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "luaur-common",
+ "luaur-compiler",
  "luaur-rt",
  "luaur-vm",
  "nuxie-binary",

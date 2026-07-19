@@ -23001,6 +23001,114 @@ mod tests {
     }
 
     #[test]
+    fn prepared_draw_refreshes_nested_nslicer_after_solid_only_root_skips_paint_preparation() {
+        let bytes = synthetic_nested_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic nested NSlicer graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a root artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("root instance builds");
+        instance.update_components();
+
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        assert!(paint_cache.paint_preparation_is_solid_only_tree);
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepared draw succeeds");
+        let first_stream = factory.stream();
+        assert_eq!(
+            first_stream.matches("bufferData").count(),
+            3,
+            "the first prepared draw must upload all three nested NSlicer buffers"
+        );
+        assert!(
+            !paint_cache.needs_paint_preparation(&instance, graph),
+            "the unchanged solid-only root should now take the retained fast path"
+        );
+
+        let offset_key = property_key_for_name("Axis", "offset").expect("Axis.offset key");
+        let child = &mut instance
+            .nested_artboards
+            .get_mut(&1)
+            .expect("nested child is mounted")
+            .child;
+        assert!(child.set_double_property(3, offset_key, 125.0));
+        child.update_components();
+        assert!(
+            !paint_cache.needs_paint_preparation(&instance, graph),
+            "child mesh dirt must not reopen the root paint walk"
+        );
+
+        factory.clear();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("retained paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepared draw succeeds");
+
+        let stream = factory.stream();
+        assert_eq!(
+            stream.matches("bufferData").count(),
+            3,
+            "the nested NSlicer must upload its vertex, UV, and index buffers"
+        );
+        assert_ne!(
+            first_stream
+                .lines()
+                .find(|line| line.starts_with("bufferData ")),
+            stream.lines().find(|line| line.starts_with("bufferData ")),
+            "the changed X axis must reach the retained vertex buffer"
+        );
+    }
+
+    #[test]
     fn empty_visible_clipping_shape_geometry_clips_draw_and_hit_test() {
         let bytes = synthetic_clip_geometry_riv(None);
         let file = read_runtime_file(&bytes).expect("synthetic empty-clip riv imports");
@@ -24740,6 +24848,12 @@ mod tests {
         push_var_uint(bytes, value);
     }
 
+    fn push_bytes(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: &[u8]) {
+        push_var_uint(bytes, schema_property_key(type_name, property_name));
+        push_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value);
+    }
+
     fn push_f32(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
         push_var_uint(bytes, schema_property_key(type_name, property_name));
         bytes.extend_from_slice(&value.to_le_bytes());
@@ -25012,6 +25126,54 @@ mod tests {
         push_object(&mut bytes, "Artboard", |_| {});
         push_object(&mut bytes, "Image", |bytes| {
             push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "NSlicer", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisX", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisY", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        bytes
+    }
+
+    fn synthetic_nested_image_nslicer_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9714);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ImageAsset", |_| {});
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_bytes(
+                bytes,
+                "FileAssetContents",
+                "bytes",
+                b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\x01,\0\0\x01,",
+            );
+        });
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+            push_f32(bytes, "Node", "opacity", 1.0);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "Node", "opacity", 1.0);
+        });
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "Image", "assetId", 0);
         });
         push_object(&mut bytes, "NSlicer", |bytes| {
             push_uint(bytes, "Component", "parentId", 1);

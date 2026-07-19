@@ -7755,7 +7755,11 @@ impl<T> Default for RuntimeNestedRenderCaches<T> {
 }
 
 impl<T> RuntimeNestedRenderCaches<T> {
-    const FLAT_CAPACITY: usize = 8;
+    // Authored nesting can be wider than the usual handful of direct children:
+    // ai_assitant has 16 under one artboard. C++ still reaches each child
+    // through direct NestedArtboard ownership, so keep that real-world width
+    // in the parent-local flat tier instead of spilling every draw to a map.
+    const FLAT_CAPACITY: usize = 32;
 
     #[inline]
     fn get_or_insert_with(
@@ -22936,6 +22940,20 @@ mod tests {
         ));
         let first = nested_render_cache_key(Some(33), Some(14), 105, 0);
         assert_eq!(*caches.get_or_insert_with(first, || 99), 10);
+    }
+
+    #[test]
+    fn nested_render_cache_keeps_authored_sixteen_child_tree_flat() {
+        let mut caches = RuntimeNestedRenderCaches::default();
+        for revision in 0..16 {
+            let key = nested_render_cache_key(Some(33), Some(14), 105, revision);
+            *caches.get_or_insert_with(key, || revision as u32) += 10;
+        }
+
+        assert!(matches!(
+            caches,
+            RuntimeNestedRenderCaches::Flat(ref entries) if entries.len() == 16
+        ));
     }
 
     #[test]

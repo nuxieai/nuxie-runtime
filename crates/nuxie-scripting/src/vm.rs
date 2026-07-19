@@ -1596,6 +1596,27 @@ mod context_init_tests {
     use nuxie_runtime::NoopScriptHost;
 
     #[test]
+    fn protected_host_callback_errors_remain_catchable() {
+        let lua = Lua::new();
+        let host_error = lua
+            .create_function(|_, (): ()| -> Result<()> {
+                Err(Error::runtime("expected host error"))
+            })
+            .expect("host callback");
+        lua.globals()
+            .set("hostError", host_error)
+            .expect("host callback global");
+
+        let (ok, message): (bool, String) = lua
+            .load("return pcall(hostError)")
+            .eval()
+            .expect("pcall catches the host error");
+
+        assert!(!ok);
+        assert_eq!(message, "runtime error: expected host error");
+    }
+
+    #[test]
     fn failed_init_recreates_the_script_lifetime_before_retry() {
         let lua = Lua::new();
         let frame_context = ScriptViewModelFrameContext::default();

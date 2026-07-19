@@ -141,9 +141,12 @@ worker is enabled.
   2026-07-19; no cycle-scoped authorization remains active.
 - Current cycle status: manual cycle 1 is complete. The default and forced
   scripted candidate ratchets cover 317 exact files and 647 exact segments,
-  with zero divergences, unsupported features, or not-yet entries. The
-  write-capable Phase S worker remains paused until a second clean manual
-  cycle is recorded.
+  with zero divergences, unsupported features, or not-yet entries. Two
+  non-manifest surfaces remain explicitly deferred and must resurface in the
+  next inventory: `deferred-2026-07-19-luau-engine` and
+  `deferred-2026-07-19-ore-gpu`, both at staleness 0 (full evidence and exit
+  criteria are in the cycle triage). The write-capable Phase S worker remains
+  paused until a second clean manual cycle is recorded.
 - Current-revision pin registry (advance with each completed Phase S cycle):
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`

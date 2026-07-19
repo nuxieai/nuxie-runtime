@@ -10,6 +10,9 @@ the only memory the next session has. Update it every commit.
   exact-segments=647, diverges=0, unsupported-feature=0, not-yet=0.
 - Forced-scripted candidate compare against upstream `d788e8ec`: exact=317,
   exact-segments=647, diverges=0, unsupported-feature=0, not-yet=0.
+- Non-manifest Phase S deferrals: the unavailable newer luaur VM engine and
+  the baseline-unported optional ORE scripted-GPU host. Neither is an observed
+  corpus divergence; both have explicit re-entry criteria in the cycle triage.
 - Current milestone: **Phase S manual cycle 1 complete; the write-capable
   worker remains paused until two clean manual cycles are recorded.**
 

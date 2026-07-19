@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -74,6 +74,46 @@ pub enum ExternalFontAssetError {
     UnknownAsset { asset_id: u32 },
     WrongAssetKind { asset_id: u32, actual: &'static str },
     InvalidFont { asset_id: u32 },
+}
+
+/// Inputs that make C++ `Image::updateImageScale()` overwrite the public
+/// `scaleX`/`scaleY` fields for a pre-7.2 file. The draw module packs the
+/// decoded image identity, dimensions, fit/alignment, and controlled layout
+/// size into these words. A public scale write remains authoritative until one
+/// of those inputs changes and C++ would run `updateImageScale()` again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeLegacyImageLayoutScaleKey([u64; 12]);
+
+impl RuntimeLegacyImageLayoutScaleKey {
+    pub(crate) fn new(words: [u64; 12]) -> Self {
+        Self(words)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeLegacyImageLayoutScaleState {
+    key: RuntimeLegacyImageLayoutScaleKey,
+    scale_x: f32,
+    scale_y: f32,
+    user_scale_x: bool,
+    user_scale_y: bool,
+}
+
+fn legacy_image_layout_scale_axis(property_key: u16) -> Option<bool> {
+    static SCALE_KEYS: std::sync::OnceLock<(Option<u16>, Option<u16>)> = std::sync::OnceLock::new();
+    let (scale_x_key, scale_y_key) = *SCALE_KEYS.get_or_init(|| {
+        (
+            property_key_for_name("Node", "scaleX"),
+            property_key_for_name("Node", "scaleY"),
+        )
+    });
+    if scale_x_key == Some(property_key) {
+        Some(true)
+    } else if scale_y_key == Some(property_key) {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 impl std::fmt::Display for ExternalFontAssetError {
@@ -234,6 +274,8 @@ pub struct ArtboardInstance {
     pub(crate) artboard_nested_child_context_updates_scratch: Vec<RuntimeNestedChildContextUpdate>,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
+    has_legacy_image_layout_scales: Cell<bool>,
+    legacy_image_layout_scales: RefCell<BTreeMap<usize, RuntimeLegacyImageLayoutScaleState>>,
     external_font_assets: BTreeMap<u32, Arc<[u8]>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
@@ -592,6 +634,8 @@ impl ArtboardInstance {
             artboard_nested_child_context_updates_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
+            has_legacy_image_layout_scales: Cell::new(false),
+            legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
             external_font_assets: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
@@ -1294,8 +1338,106 @@ impl ArtboardInstance {
     /// the object arena, so a matching property returns its current value
     /// even when the source record omitted that default.
     pub fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
-        runtime_scroll_double_property(self, local_id, property_key)
+        self.has_legacy_image_layout_scales
+            .get()
+            .then(|| self.legacy_image_layout_public_scale(local_id, property_key))
+            .flatten()
+            .or_else(|| runtime_scroll_double_property(self, local_id, property_key))
             .or_else(|| self.objects.double_property(local_id, property_key))
+    }
+
+    /// Mirrors the legacy branch of C++ `Image::updateImageScale()`. Files
+    /// before 7.2 expose the layout fit through public scale fields; a later
+    /// user/animation write wins until another fit-driving input changes.
+    pub(crate) fn resolve_legacy_image_layout_scale(
+        &self,
+        local_id: usize,
+        key: RuntimeLegacyImageLayoutScaleKey,
+        fit_scale_x: f32,
+        fit_scale_y: f32,
+    ) -> (f32, f32) {
+        self.has_legacy_image_layout_scales.set(true);
+        let mut states = self.legacy_image_layout_scales.borrow_mut();
+        let state = states
+            .entry(local_id)
+            .and_modify(|state| {
+                if state.key != key {
+                    *state = RuntimeLegacyImageLayoutScaleState {
+                        key,
+                        scale_x: fit_scale_x,
+                        scale_y: fit_scale_y,
+                        user_scale_x: false,
+                        user_scale_y: false,
+                    };
+                }
+            })
+            .or_insert(RuntimeLegacyImageLayoutScaleState {
+                key,
+                scale_x: fit_scale_x,
+                scale_y: fit_scale_y,
+                user_scale_x: false,
+                user_scale_y: false,
+            });
+        let authored_scale_x = property_key_for_name("Node", "scaleX")
+            .and_then(|property_key| self.objects.double_property(local_id, property_key))
+            .unwrap_or(1.0);
+        let authored_scale_y = property_key_for_name("Node", "scaleY")
+            .and_then(|property_key| self.objects.double_property(local_id, property_key))
+            .unwrap_or(1.0);
+        (
+            if state.user_scale_x {
+                authored_scale_x
+            } else {
+                state.scale_x
+            },
+            if state.user_scale_y {
+                authored_scale_y
+            } else {
+                state.scale_y
+            },
+        )
+    }
+
+    fn legacy_image_layout_public_scale(&self, local_id: usize, property_key: u16) -> Option<f32> {
+        let axis_x = legacy_image_layout_scale_axis(property_key)?;
+        let states = self.legacy_image_layout_scales.borrow();
+        let state = states.get(&local_id)?;
+        match (axis_x, state.user_scale_x, state.user_scale_y) {
+            (true, false, _) => Some(state.scale_x),
+            (false, _, false) => Some(state.scale_y),
+            _ => None,
+        }
+    }
+
+    fn has_legacy_image_layout_scale(&self, local_id: usize, property_key: u16) -> bool {
+        self.has_legacy_image_layout_scales.get()
+            && legacy_image_layout_scale_axis(property_key).is_some()
+            && self
+                .legacy_image_layout_scales
+                .borrow()
+                .contains_key(&local_id)
+    }
+
+    fn mark_legacy_image_layout_scale_written(&self, local_id: usize, property_key: u16) -> bool {
+        if !self.has_legacy_image_layout_scales.get() {
+            return false;
+        }
+        let Some(axis_x) = legacy_image_layout_scale_axis(property_key) else {
+            return false;
+        };
+        let mut states = self.legacy_image_layout_scales.borrow_mut();
+        let Some(state) = states.get_mut(&local_id) else {
+            return false;
+        };
+        if axis_x {
+            let changed = !state.user_scale_x;
+            state.user_scale_x = true;
+            changed
+        } else {
+            let changed = !state.user_scale_y;
+            state.user_scale_y = true;
+            changed
+        }
     }
 
     /// Typed property write with dirt propagation — the write path the
@@ -1316,10 +1458,17 @@ impl ArtboardInstance {
         }
         let cleared_intent =
             clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key);
-        if !self
-            .objects
-            .set_double_property(local_id, property_key, value)
+        if self.has_legacy_image_layout_scale(local_id, property_key)
+            && self.double_property(local_id, property_key) == Some(value)
         {
+            return cleared_intent;
+        }
+        let object_changed = self
+            .objects
+            .set_double_property(local_id, property_key, value);
+        let legacy_scale_changed =
+            self.mark_legacy_image_layout_scale_written(local_id, property_key);
+        if !object_changed && !legacy_scale_changed {
             return cleared_intent;
         }
         self.after_double_property_set(local_id, property_key, value)
@@ -1344,10 +1493,17 @@ impl ArtboardInstance {
         }
         let cleared_intent =
             clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key);
-        if !self
-            .objects
-            .set_generated_double_property(local_id, property_key, value)
+        if self.has_legacy_image_layout_scale(local_id, property_key)
+            && self.double_property(local_id, property_key) == Some(value)
         {
+            return cleared_intent;
+        }
+        let object_changed =
+            self.objects
+                .set_generated_double_property(local_id, property_key, value);
+        let legacy_scale_changed =
+            self.mark_legacy_image_layout_scale_written(local_id, property_key);
+        if !object_changed && !legacy_scale_changed {
             return cleared_intent;
         }
         self.after_double_property_set(local_id, property_key, value)
@@ -2291,10 +2447,12 @@ impl ArtboardInstance {
         if current == value {
             return false;
         }
-        if !self
-            .objects
-            .set_generated_double_property(local_id, property_key, value)
-        {
+        let object_changed =
+            self.objects
+                .set_generated_double_property(local_id, property_key, value);
+        let legacy_scale_changed =
+            self.mark_legacy_image_layout_scale_written(local_id, property_key);
+        if !object_changed && !legacy_scale_changed {
             return false;
         }
 
@@ -2331,8 +2489,7 @@ impl ArtboardInstance {
         self.component(local_id)
             .filter(|component| component.capabilities.transform)?;
         Some(
-            self.objects
-                .double_property(local_id, property_key)
+            self.double_property(local_id, property_key)
                 .unwrap_or_else(|| property.default_value()),
         )
     }
@@ -4920,6 +5077,8 @@ mod tests {
             artboard_nested_child_context_updates_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
+            has_legacy_image_layout_scales: Cell::new(false),
+            legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
             external_font_assets: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,

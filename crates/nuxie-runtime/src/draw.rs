@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
-    GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, ParametricPathNode,
-    PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
+    GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
+    ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
     ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
@@ -23,6 +23,7 @@ use taffy::prelude::{
 };
 use taffy::style::Direction as TaffyDirection;
 
+use crate::artboard::RuntimeLegacyImageLayoutScaleKey;
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
     property_key_for_name, runtime_object_explicit_bool_property_by_key,
@@ -38,7 +39,7 @@ use crate::text::{
     static_text_layout_measure_bounds, static_text_selection_rects,
     text_input_layout_measure_bounds,
 };
-use crate::{ArtboardInstance, ComponentDirt, Mat2D};
+use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
 
 // Nested-artboard cycle guard (`nested_ancestors`).
 //
@@ -1336,6 +1337,38 @@ impl ArtboardInstance {
             true,
             true,
             &nested_ancestors,
+        )?;
+        self.prepare_static_artboard_slice_meshes(
+            runtime,
+            graph,
+            factory,
+            &paint_cache.images,
+            &mut paint_cache.meshes,
+            render_cache,
+        )
+    }
+
+    fn prepare_static_artboard_slice_meshes(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        image_by_global: &RuntimeRenderImages,
+        mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        runtime_prepare_slice_meshes(
+            runtime,
+            self,
+            graph,
+            prepared.commands.as_slice(),
+            layout_bounds,
+            factory,
+            image_by_global,
+            mesh_by_local,
+            path_cache,
         )
     }
 
@@ -7363,6 +7396,10 @@ impl RuntimeRenderImages {
     }
 }
 
+fn runtime_render_image_identity(image: &dyn RenderImage) -> usize {
+    (image as *const dyn RenderImage as *const ()) as usize
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct RuntimeCachedRenderPaintConfiguration {
     instance_epoch: u64,
@@ -7448,9 +7485,41 @@ struct RuntimeMeshRenderBuffers {
     last_vertex_bytes: Option<Vec<u8>>,
 }
 
+struct RuntimeSliceMeshRenderBuffers {
+    vertices: Option<Box<dyn RenderBuffer>>,
+    uv_coords: Option<Box<dyn RenderBuffer>>,
+    indices: Option<Box<dyn RenderBuffer>>,
+    vertex_count: u32,
+    index_count: u32,
+    last_update: Option<RuntimeSliceMeshUpdate>,
+}
+
+impl Default for RuntimeSliceMeshRenderBuffers {
+    fn default() -> Self {
+        Self {
+            vertices: None,
+            uv_coords: None,
+            indices: None,
+            vertex_count: 0,
+            index_count: 0,
+            last_update: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeSliceMeshUpdate {
+    world_bits: [u32; 6],
+    input_words: Vec<u64>,
+    vertex_bytes: Vec<u8>,
+    uv_bytes: Vec<u8>,
+    index_bytes: Vec<u8>,
+}
+
 #[derive(Default)]
 struct RuntimeMeshRenderBufferSlots {
     buffers_by_local: Vec<Option<RuntimeMeshRenderBuffers>>,
+    slice_buffers_by_local: Vec<Option<RuntimeSliceMeshRenderBuffers>>,
 }
 
 impl RuntimeMeshRenderBufferSlots {
@@ -7463,6 +7532,19 @@ impl RuntimeMeshRenderBufferSlots {
 
     fn get_mut(&mut self, local_id: usize) -> Option<&mut RuntimeMeshRenderBuffers> {
         self.buffers_by_local.get_mut(local_id)?.as_mut()
+    }
+
+    fn slice_mut(&mut self, local_id: usize) -> &mut RuntimeSliceMeshRenderBuffers {
+        if self.slice_buffers_by_local.len() <= local_id {
+            self.slice_buffers_by_local
+                .resize_with(local_id + 1, || None);
+        }
+        self.slice_buffers_by_local[local_id]
+            .get_or_insert_with(RuntimeSliceMeshRenderBuffers::default)
+    }
+
+    fn slice(&self, local_id: usize) -> Option<&RuntimeSliceMeshRenderBuffers> {
+        self.slice_buffers_by_local.get(local_id)?.as_ref()
     }
 }
 
@@ -7866,6 +7948,7 @@ struct RuntimeImageLayoutTransformCacheKey {
     cache_epoch: u64,
     layout_epoch: u64,
     layout_scale_separate: bool,
+    image_identity: usize,
     image_width_bits: u32,
     image_height_bits: u32,
     layout_width_bits: u32,
@@ -7875,7 +7958,21 @@ struct RuntimeImageLayoutTransformCacheKey {
 #[derive(Debug, Clone, Copy)]
 struct RuntimeCachedImageLayoutTransform {
     key: RuntimeImageLayoutTransformCacheKey,
+    state: RuntimeImageLayoutTransform,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeImageLayoutTransform {
     local_transform: Mat2D,
+    render_scale_x: f32,
+    render_scale_y: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeImageLayoutWorldTransform {
+    world_transform: Mat2D,
+    render_scale_x: f32,
+    render_scale_y: f32,
 }
 
 #[derive(Default)]
@@ -7890,7 +7987,7 @@ impl RuntimeImageLayoutTransformSlots {
         graph_global_id: u32,
         local_id: usize,
         key: RuntimeImageLayoutTransformCacheKey,
-    ) -> Option<Mat2D> {
+    ) -> Option<RuntimeImageLayoutTransform> {
         if self.graph_global_id != Some(graph_global_id) {
             self.graph_global_id = Some(graph_global_id);
             self.by_local.clear();
@@ -7900,7 +7997,7 @@ impl RuntimeImageLayoutTransformSlots {
             .get(local_id)
             .and_then(|cached| cached.as_ref())
             .filter(|cached| cached.key == key)
-            .map(|cached| cached.local_transform)
+            .map(|cached| cached.state)
     }
 
     fn insert(
@@ -7908,7 +8005,7 @@ impl RuntimeImageLayoutTransformSlots {
         graph_global_id: u32,
         local_id: usize,
         key: RuntimeImageLayoutTransformCacheKey,
-        local_transform: Mat2D,
+        state: RuntimeImageLayoutTransform,
     ) {
         if self.graph_global_id != Some(graph_global_id) {
             self.graph_global_id = Some(graph_global_id);
@@ -7917,10 +8014,7 @@ impl RuntimeImageLayoutTransformSlots {
         if self.by_local.len() <= local_id {
             self.by_local.resize(local_id + 1, None);
         }
-        self.by_local[local_id] = Some(RuntimeCachedImageLayoutTransform {
-            key,
-            local_transform,
-        });
+        self.by_local[local_id] = Some(RuntimeCachedImageLayoutTransform { key, state });
     }
 }
 
@@ -8346,17 +8440,18 @@ impl RuntimeRenderPathCache {
         .multiply(component.transform.local_transform)
     }
 
-    fn image_world_transform_with_bounds(
+    fn image_layout_world_transform_with_bounds(
         &mut self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         local_id: usize,
         image_object: Option<&RuntimeObject>,
+        resolved_image_asset_global: Option<u32>,
         image: &dyn RenderImage,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         has_vertex_mesh: bool,
-    ) -> Result<Option<Mat2D>> {
+    ) -> Result<Option<RuntimeImageLayoutWorldTransform>> {
         let Some(layout_bounds) = layout_bounds else {
             return Ok(None);
         };
@@ -8378,6 +8473,7 @@ impl RuntimeRenderPathCache {
 
         let image_width = image.width() as f32;
         let image_height = image.height() as f32;
+        let image_identity = runtime_render_image_identity(image);
         let layout_scale_separate = runtime_layout_image_uses_separate_fit_scale(
             runtime.header.major_version,
             runtime.header.minor_version,
@@ -8386,22 +8482,25 @@ impl RuntimeRenderPathCache {
             cache_epoch: instance.cache_epoch(),
             layout_epoch: instance.layout_epoch(),
             layout_scale_separate,
+            image_identity,
             image_width_bits: image_width.to_bits(),
             image_height_bits: image_height.to_bits(),
             layout_width_bits: parent_bounds.width.to_bits(),
             layout_height_bits: parent_bounds.height.to_bits(),
         };
 
-        let local_transform = if let Some(local_transform) =
+        let state = if let Some(state) =
             self.image_layout_transforms
                 .get(graph.global_id, local_id, key)
         {
-            local_transform
+            state
         } else {
-            let local_transform = runtime_image_layout_local_transform(
+            let state = runtime_image_layout_local_transform(
                 instance,
                 local_id,
                 image_object,
+                resolved_image_asset_global,
+                image_identity as u64,
                 component.transform.local_transform,
                 layout_scale_separate,
                 image_width,
@@ -8411,8 +8510,8 @@ impl RuntimeRenderPathCache {
                 has_vertex_mesh,
             )?;
             self.image_layout_transforms
-                .insert(graph.global_id, local_id, key, local_transform);
-            local_transform
+                .insert(graph.global_id, local_id, key, state);
+            state
         };
 
         let parent_world = self.component_world_transform_with_bounds(
@@ -8421,7 +8520,38 @@ impl RuntimeRenderPathCache {
             parent_local,
             Some(layout_bounds),
         );
-        Ok(Some(parent_world.multiply(local_transform)))
+        Ok(Some(RuntimeImageLayoutWorldTransform {
+            world_transform: parent_world.multiply(state.local_transform),
+            render_scale_x: state.render_scale_x,
+            render_scale_y: state.render_scale_y,
+        }))
+    }
+
+    fn image_world_transform_with_bounds(
+        &mut self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_object: Option<&RuntimeObject>,
+        resolved_image_asset_global: Option<u32>,
+        image: &dyn RenderImage,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        has_vertex_mesh: bool,
+    ) -> Result<Option<Mat2D>> {
+        Ok(self
+            .image_layout_world_transform_with_bounds(
+                runtime,
+                instance,
+                graph,
+                local_id,
+                image_object,
+                resolved_image_asset_global,
+                image,
+                layout_bounds,
+                has_vertex_mesh,
+            )?
+            .map(|state| state.world_transform))
     }
 
     fn prepared_artboard_frame(
@@ -10467,6 +10597,506 @@ fn runtime_draw_path_revision(
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimeSliceMeshGeometry {
+    vertices: Vec<(f32, f32)>,
+    uvs: Vec<(f32, f32)>,
+    indices: Vec<u16>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeSliceMeshVertex {
+    vertex: (f32, f32),
+    uv: (f32, f32),
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_prepare_slice_meshes(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    commands: &[RuntimeDrawCommand],
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    for details in graph
+        .n_slicer_details
+        .iter()
+        .filter(|details| details.type_name == "NSlicer")
+    {
+        let Some(image_local) = runtime_nslicer_image_local(instance, details) else {
+            continue;
+        };
+        let image_command = commands.iter().find(|command| {
+            command.object_kind == RuntimeDrawCommandObjectKind::Image
+                && command.local_id == Some(image_local)
+        });
+        let resolved_image_asset_global = image_command
+            .and_then(|command| command.resolved_image_asset_global)
+            .or_else(|| {
+                let authored = graph
+                    .sorted_drawable_order
+                    .iter()
+                    .find(|drawable| drawable.local_id == Some(image_local))
+                    .and_then(|drawable| drawable.resolved_image_asset_global);
+                instance.resolved_image_asset_global(Some(image_local), authored)
+            });
+        let Some(image) =
+            resolved_image_asset_global.and_then(|asset_global| image_by_global.get(asset_global))
+        else {
+            continue;
+        };
+        let image_object = instance
+            .component(image_local)
+            .and_then(|component| runtime.object(component.global_id as usize));
+        let layout_state = path_cache.image_layout_world_transform_with_bounds(
+            runtime,
+            instance,
+            graph,
+            image_local,
+            image_object,
+            resolved_image_asset_global,
+            image,
+            layout_bounds,
+            false,
+        )?;
+        let world_transform = layout_state
+            .map(|state| state.world_transform)
+            .unwrap_or_else(|| {
+                path_cache.component_world_transform_with_bounds(
+                    instance,
+                    graph,
+                    image_local,
+                    layout_bounds,
+                )
+            });
+        let render_scale_x = layout_state
+            .map(|state| state.render_scale_x)
+            .unwrap_or_else(|| {
+                instance
+                    .transform_property(image_local, TransformProperty::ScaleX)
+                    .unwrap_or(1.0)
+            });
+        let render_scale_y = layout_state
+            .map(|state| state.render_scale_y)
+            .unwrap_or_else(|| {
+                instance
+                    .transform_property(image_local, TransformProperty::ScaleY)
+                    .unwrap_or(1.0)
+            });
+        let input_words = runtime_slice_mesh_input_words(
+            runtime,
+            instance,
+            graph,
+            details,
+            image_local,
+            resolved_image_asset_global,
+            runtime_render_image_identity(image),
+            image.width(),
+            image.height(),
+            render_scale_x,
+            render_scale_y,
+            layout_bounds,
+        );
+        let world_bits = world_transform.0.map(f32::to_bits);
+        if mesh_by_local
+            .slice(details.local_id)
+            .and_then(|buffers| buffers.last_update.as_ref())
+            .is_some_and(|last| last.world_bits == world_bits && last.input_words == input_words)
+        {
+            continue;
+        }
+        let geometry = runtime_slice_mesh_geometry(
+            runtime,
+            instance,
+            details,
+            image.width() as f32,
+            image.height() as f32,
+            render_scale_x.abs(),
+            render_scale_y.abs(),
+        );
+        let update =
+            runtime_slice_mesh_update(geometry, world_transform, image.uv_transform(), input_words);
+        let buffers = mesh_by_local.slice_mut(details.local_id);
+        runtime_update_slice_mesh_render_buffers(factory, buffers, update);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_slice_mesh_input_words(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    details: &NSlicerDetailsNode,
+    image_local: usize,
+    resolved_image_asset_global: Option<u32>,
+    image_identity: usize,
+    image_width: u32,
+    image_height: u32,
+    render_scale_x: f32,
+    render_scale_y: f32,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Vec<u64> {
+    let mut words = vec![
+        u64::from(resolved_image_asset_global.unwrap_or(u32::MAX)),
+        image_identity as u64,
+        u64::from(image_width),
+        u64::from(image_height),
+        u64::from(render_scale_x.to_bits()),
+        u64::from(render_scale_y.to_bits()),
+    ];
+    for property in [
+        TransformProperty::X,
+        TransformProperty::Y,
+        TransformProperty::Rotation,
+        TransformProperty::ScaleX,
+        TransformProperty::ScaleY,
+    ] {
+        words.push(u64::from(
+            instance
+                .transform_property(image_local, property)
+                .unwrap_or_else(|| property.default_value())
+                .to_bits(),
+        ));
+    }
+    let layout_size = instance
+        .component(image_local)
+        .and_then(|component| component.parent_local)
+        .and_then(|parent_local| layout_bounds.and_then(|bounds| bounds.get(&parent_local)))
+        .map(|bounds| (bounds.width.to_bits(), bounds.height.to_bits()));
+    words.push(u64::from(layout_size.map_or(u32::MAX, |(width, _)| width)));
+    words.push(u64::from(
+        layout_size.map_or(u32::MAX, |(_, height)| height),
+    ));
+    for axis in details.x_axes.iter().chain(&details.y_axes) {
+        words.push(u64::from(
+            runtime_axis_offset(runtime, instance, axis).to_bits(),
+        ));
+        words.push(u64::from(runtime_axis_normalized(runtime, instance, axis)));
+    }
+    for tile_mode in &details.tile_modes {
+        words.push(tile_mode.patch_index);
+        words.push(tile_mode.style);
+    }
+    // The graph identity prevents retained slots with coincident local ids and
+    // identical values from being reused across a remounted child artboard.
+    words.push(u64::from(graph.global_id));
+    words
+}
+
+fn runtime_nslicer_image_local(
+    instance: &ArtboardInstance,
+    details: &NSlicerDetailsNode,
+) -> Option<usize> {
+    instance
+        .component(details.local_id)
+        .filter(|component| component.type_name == "NSlicer")?
+        .parent_local
+        .filter(|parent_local| {
+            instance
+                .component(*parent_local)
+                .is_some_and(|component| component.type_name == "Image")
+        })
+}
+
+fn runtime_slice_mesh_geometry(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    details: &NSlicerDetailsNode,
+    image_width: f32,
+    image_height: f32,
+    render_scale_x: f32,
+    render_scale_y: f32,
+) -> RuntimeSliceMeshGeometry {
+    // Ported line-for-line from C++ `src/shapes/slice_mesh.cpp::calc`.
+    if image_width == 0.0 || image_height == 0.0 || render_scale_x == 0.0 || render_scale_y == 0.0 {
+        return RuntimeSliceMeshGeometry {
+            vertices: Vec::new(),
+            uvs: Vec::new(),
+            indices: Vec::new(),
+        };
+    }
+
+    let us = runtime_nslicer_uv_stops(runtime, instance, &details.x_axes, image_width);
+    let vs = runtime_nslicer_uv_stops(runtime, instance, &details.y_axes, image_height);
+    let xs = runtime_slice_mesh_vertex_stops(&us, image_width, render_scale_x);
+    let ys = runtime_slice_mesh_vertex_stops(&vs, image_height, render_scale_y);
+    if us.len() != xs.len() || vs.len() != ys.len() {
+        return RuntimeSliceMeshGeometry {
+            vertices: Vec::new(),
+            uvs: Vec::new(),
+            indices: Vec::new(),
+        };
+    }
+
+    let tile_modes = details
+        .tile_modes
+        .iter()
+        .map(|tile_mode| (tile_mode.patch_index, tile_mode.style))
+        .collect::<BTreeMap<_, _>>();
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let mut vertex_index = 0_u16;
+    let patch_width = details.x_axes.len() + 1;
+
+    'patches: for patch_y in 0..vs.len().saturating_sub(1) {
+        for patch_x in 0..us.len().saturating_sub(1) {
+            let patch_index = patch_y
+                .checked_mul(patch_width)
+                .and_then(|index| index.checked_add(patch_x))
+                .and_then(|index| u64::try_from(index).ok())
+                .unwrap_or(u64::MAX);
+            let tile_mode = tile_modes.get(&patch_index).copied().unwrap_or(0);
+            if tile_mode == 2 {
+                continue;
+            }
+            let patch_vertices = [
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x], ys[patch_y]),
+                    uv: (us[patch_x], vs[patch_y]),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x + 1], ys[patch_y]),
+                    uv: (us[patch_x + 1], vs[patch_y]),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x + 1], ys[patch_y + 1]),
+                    uv: (us[patch_x + 1], vs[patch_y + 1]),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x], ys[patch_y + 1]),
+                    uv: (us[patch_x], vs[patch_y + 1]),
+                },
+            ];
+            if tile_mode == 1 {
+                let added = runtime_slice_mesh_tile_repeat(
+                    &mut vertices,
+                    &mut indices,
+                    patch_vertices,
+                    vertex_index,
+                    image_width,
+                    image_height,
+                    render_scale_x,
+                    render_scale_y,
+                );
+                let Some(next) = vertex_index.checked_add(added) else {
+                    break 'patches;
+                };
+                vertex_index = next;
+                continue;
+            }
+
+            let Some(next) = vertex_index.checked_add(4) else {
+                break 'patches;
+            };
+            vertices.extend_from_slice(&patch_vertices);
+            runtime_slice_mesh_push_triangulation(&mut indices, vertex_index);
+            vertex_index = next;
+        }
+    }
+
+    RuntimeSliceMeshGeometry {
+        vertices: vertices.iter().map(|vertex| vertex.vertex).collect(),
+        uvs: vertices.iter().map(|vertex| vertex.uv).collect(),
+        indices,
+    }
+}
+
+fn runtime_slice_mesh_vertex_stops(
+    normalized_stops: &[f32],
+    image_size: f32,
+    image_scale: f32,
+) -> Vec<f32> {
+    if image_size == 0.0 || image_scale == 0.0 {
+        return Vec::new();
+    }
+    let scale_info = runtime_nslicer_analyze_uv_stops(normalized_stops, image_size, image_scale);
+    let mut vertices = Vec::with_capacity(normalized_stops.len());
+    let mut vertex = 0.0;
+    let mut vertex_in_bounds = 0.0;
+    for index in 0..normalized_stops.len().saturating_sub(1) {
+        vertices.push(vertex_in_bounds);
+        let segment =
+            image_size * (normalized_stops[index + 1] - normalized_stops[index]) / image_scale;
+        if runtime_nslicer_is_fixed_segment(index) {
+            vertex += segment;
+        } else if scale_info.use_scale {
+            vertex += segment * scale_info.scale_factor;
+        } else {
+            vertex += scale_info.fallback_size;
+        }
+        vertex_in_bounds = vertex.clamp(0.0, image_size);
+    }
+    vertices.push(vertex_in_bounds);
+    vertices
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_slice_mesh_tile_repeat(
+    vertices: &mut Vec<RuntimeSliceMeshVertex>,
+    indices: &mut Vec<u16>,
+    patch: [RuntimeSliceMeshVertex; 4],
+    start: u16,
+    image_width: f32,
+    image_height: f32,
+    render_scale_x: f32,
+    render_scale_y: f32,
+) -> u16 {
+    let (start_x, start_y) = patch[0].vertex;
+    let (end_x, end_y) = patch[2].vertex;
+    let (start_u, start_v) = patch[0].uv;
+    let (end_u, end_v) = patch[2].uv;
+    if render_scale_x == 0.0 || render_scale_y == 0.0 {
+        return 0;
+    }
+    let size_x = image_width * (end_u - start_u) / render_scale_x;
+    let size_y = image_height * (end_v - start_v) / render_scale_y;
+    if size_x.abs() < 1.0 || size_y.abs() < 1.0 {
+        return 0;
+    }
+
+    let mut cur_y = start_y;
+    let mut cur_vertex = u32::from(start);
+    let mut escape = 10_000;
+    while cur_y < end_y && escape > 0 {
+        escape -= 1;
+        let frac_y = if cur_y + size_y > end_y {
+            (end_y - cur_y) / size_y
+        } else {
+            1.0
+        };
+        let mut cur_x = start_x;
+        while cur_x < end_x && escape > 0 {
+            escape -= 1;
+            if cur_vertex > u32::from(u16::MAX) - 3 {
+                return u16::MAX - start;
+            }
+            let frac_x = if cur_x + size_x > end_x {
+                (end_x - cur_x) / size_x
+            } else {
+                1.0
+            };
+            let end_u1 = start_u + (end_u - start_u) * frac_x;
+            let end_v1 = start_v + (end_v - start_v) * frac_y;
+            let end_x1 = cur_x + size_x * frac_x;
+            let end_y1 = cur_y + size_y * frac_y;
+            let v0 = cur_vertex as u16;
+            vertices.extend_from_slice(&[
+                RuntimeSliceMeshVertex {
+                    vertex: (cur_x, cur_y),
+                    uv: (start_u, start_v),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (end_x1, cur_y),
+                    uv: (end_u1, start_v),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (end_x1, end_y1),
+                    uv: (end_u1, end_v1),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (cur_x, end_y1),
+                    uv: (start_u, end_v1),
+                },
+            ]);
+            runtime_slice_mesh_push_triangulation(indices, v0);
+            cur_vertex += 4;
+            cur_x += size_x;
+        }
+        cur_y += size_y;
+    }
+    u16::try_from(cur_vertex - u32::from(start)).unwrap_or(u16::MAX - start)
+}
+
+fn runtime_slice_mesh_push_triangulation(indices: &mut Vec<u16>, start: u16) {
+    for offset in [0_u16, 1, 3, 1, 2, 3] {
+        if let Some(index) = start.checked_add(offset) {
+            indices.push(index);
+        }
+    }
+}
+
+fn runtime_slice_mesh_update(
+    geometry: RuntimeSliceMeshGeometry,
+    world_transform: Mat2D,
+    uv_transform: RenderMat2D,
+    input_words: Vec<u64>,
+) -> RuntimeSliceMeshUpdate {
+    let mut vertex_bytes = Vec::with_capacity(geometry.vertices.len() * 8);
+    for (x, y) in geometry.vertices {
+        push_f32_pair_bytes(&mut vertex_bytes, x, y);
+    }
+    let mut uv_bytes = Vec::with_capacity(geometry.uvs.len() * 8);
+    for (u, v) in geometry.uvs {
+        let uv = uv_transform.transform_point(RenderVec2D::new(u, v));
+        push_f32_pair_bytes(&mut uv_bytes, uv.x, uv.y);
+    }
+    let mut index_bytes = Vec::with_capacity(geometry.indices.len() * 2);
+    for index in geometry.indices {
+        index_bytes.extend_from_slice(&index.to_le_bytes());
+    }
+    RuntimeSliceMeshUpdate {
+        world_bits: world_transform.0.map(f32::to_bits),
+        input_words,
+        vertex_bytes,
+        uv_bytes,
+        index_bytes,
+    }
+}
+
+fn runtime_update_slice_mesh_render_buffers(
+    factory: &mut dyn RenderFactory,
+    buffers: &mut RuntimeSliceMeshRenderBuffers,
+    update: RuntimeSliceMeshUpdate,
+) {
+    runtime_update_slice_mesh_render_buffer(
+        factory,
+        &mut buffers.vertices,
+        RenderBufferType::Vertex,
+        &update.vertex_bytes,
+    );
+    runtime_update_slice_mesh_render_buffer(
+        factory,
+        &mut buffers.uv_coords,
+        RenderBufferType::Vertex,
+        &update.uv_bytes,
+    );
+    runtime_update_slice_mesh_render_buffer(
+        factory,
+        &mut buffers.indices,
+        RenderBufferType::Index,
+        &update.index_bytes,
+    );
+    buffers.vertex_count = u32::try_from(update.vertex_bytes.len() / 8).unwrap_or(u32::MAX);
+    buffers.index_count = u32::try_from(update.index_bytes.len() / 2).unwrap_or(u32::MAX);
+    buffers.last_update = Some(update);
+}
+
+fn runtime_update_slice_mesh_render_buffer(
+    factory: &mut dyn RenderFactory,
+    buffer: &mut Option<Box<dyn RenderBuffer>>,
+    buffer_type: RenderBufferType,
+    bytes: &[u8],
+) {
+    if buffer
+        .as_ref()
+        .is_some_and(|buffer| buffer.size_in_bytes() != bytes.len())
+    {
+        *buffer = None;
+    }
+    if buffer.is_none() && !bytes.is_empty() {
+        *buffer =
+            Some(factory.make_render_buffer(buffer_type, RenderBufferFlags::None, bytes.len()));
+    }
+    if let Some(buffer) = buffer.as_deref_mut() {
+        write_render_buffer_bytes(buffer, bytes);
+    }
+}
+
 fn runtime_draw_image(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -10496,6 +11126,28 @@ fn runtime_draw_image(
         renderer.save();
     }
 
+    if let Some(details) = runtime_image_nslicer(instance, graph, local_id) {
+        if let Some(buffers) = mesh_by_local.slice(details.local_id) {
+            runtime_draw_slice_mesh_image(
+                runtime,
+                instance,
+                graph,
+                local_id,
+                image_object,
+                command.resolved_image_asset_global,
+                buffers,
+                layout_bounds,
+                image,
+                path_cache,
+                renderer,
+            )?;
+        }
+        if command.needs_save_operation {
+            renderer.restore();
+        }
+        return Ok(());
+    }
+
     if let Some(mesh) = runtime_image_mesh(runtime, graph, local_id) {
         let buffers = mesh_by_local
             .get_mut(mesh.local_id)
@@ -10506,6 +11158,7 @@ fn runtime_draw_image(
             graph,
             local_id,
             image_object,
+            command.resolved_image_asset_global,
             mesh,
             buffers,
             layout_bounds,
@@ -10546,6 +11199,7 @@ fn runtime_draw_image(
             graph,
             local_id,
             image_object,
+            command.resolved_image_asset_global,
             image,
             layout_bounds,
             false,
@@ -10596,6 +11250,17 @@ fn runtime_draw_image(
     Ok(())
 }
 
+fn runtime_image_nslicer<'a>(
+    instance: &ArtboardInstance,
+    graph: &'a ArtboardGraph,
+    image_local: usize,
+) -> Option<&'a NSlicerDetailsNode> {
+    graph.n_slicer_details.iter().find(|details| {
+        details.type_name == "NSlicer"
+            && runtime_nslicer_image_local(instance, details) == Some(image_local)
+    })
+}
+
 fn runtime_image_mesh<'a>(
     runtime: &RuntimeFile,
     graph: &'a ArtboardGraph,
@@ -10611,12 +11276,113 @@ fn runtime_image_mesh<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_slice_mesh_image(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    image_local: usize,
+    image_object: Option<&RuntimeObject>,
+    resolved_image_asset_global: Option<u32>,
+    buffers: &RuntimeSliceMeshRenderBuffers,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    image: &dyn RenderImage,
+    path_cache: &mut RuntimeRenderPathCache,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    let (Some(vertices), Some(uv_coords), Some(indices)) = (
+        buffers.vertices.as_deref(),
+        buffers.uv_coords.as_deref(),
+        buffers.indices.as_deref(),
+    ) else {
+        return Ok(());
+    };
+    let world = path_cache
+        .image_world_transform_with_bounds(
+            runtime,
+            instance,
+            graph,
+            image_local,
+            image_object,
+            resolved_image_asset_global,
+            image,
+            layout_bounds,
+            false,
+        )?
+        .unwrap_or_else(|| {
+            path_cache.component_world_transform_with_bounds(
+                instance,
+                graph,
+                image_local,
+                layout_bounds,
+            )
+        });
+    renderer.transform(runtime_render_mat(world));
+
+    let origin_x_key =
+        runtime_draw_property_key_for_name("Image", "originX").context("missing Image.originX")?;
+    let origin_y_key =
+        runtime_draw_property_key_for_name("Image", "originY").context("missing Image.originY")?;
+    let origin_x = instance
+        .double_property(image_local, origin_x_key)
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_x_key)
+            })
+        })
+        .unwrap_or(0.5);
+    let origin_y = instance
+        .double_property(image_local, origin_y_key)
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_y_key)
+            })
+        })
+        .unwrap_or(0.5);
+    renderer.transform(RenderMat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        -(image.width() as f32 * origin_x),
+        -(image.height() as f32 * origin_y),
+    ]));
+
+    let blend_mode_key = runtime_draw_property_key_for_name("Drawable", "blendModeValue")
+        .context("missing Drawable.blendModeValue")?;
+    let blend_mode_value = instance
+        .uint_property(image_local, blend_mode_key)
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_uint_property_by_key(object, blend_mode_key)
+            })
+        })
+        .unwrap_or(3);
+    let opacity = instance
+        .component(image_local)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    renderer.draw_image_mesh(
+        Some(image),
+        RenderImageSampler::LINEAR_CLAMP,
+        Some(vertices),
+        Some(uv_coords),
+        Some(indices),
+        buffers.vertex_count,
+        buffers.index_count,
+        runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
+        opacity,
+    );
+    Ok(())
+}
+
 fn runtime_draw_mesh_image(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     image_local: usize,
     image_object: Option<&RuntimeObject>,
+    resolved_image_asset_global: Option<u32>,
     mesh: &MeshGeometryNode,
     buffers: &mut RuntimeMeshRenderBuffers,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -10633,6 +11399,7 @@ fn runtime_draw_mesh_image(
                 graph,
                 image_local,
                 image_object,
+                resolved_image_asset_global,
                 image,
                 layout_bounds,
                 true,
@@ -10782,10 +11549,25 @@ fn runtime_layout_image_uses_separate_fit_scale(major_version: u64, minor_versio
     major_version > 7 || (major_version == 7 && minor_version >= 2)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RuntimeImageLayoutFit {
+    scale_x: f32,
+    scale_y: f32,
+    offset_x: f32,
+    offset_y: f32,
+    fit: u64,
+    origin_x: f32,
+    origin_y: f32,
+    alignment_x: f32,
+    alignment_y: f32,
+}
+
 fn runtime_image_layout_local_transform(
     instance: &ArtboardInstance,
     local_id: usize,
     image_object: Option<&RuntimeObject>,
+    resolved_image_asset_global: Option<u32>,
+    image_identity: u64,
     base_local_transform: Mat2D,
     layout_scale_separate: bool,
     image_width: f32,
@@ -10793,8 +11575,77 @@ fn runtime_image_layout_local_transform(
     layout_width: f32,
     layout_height: f32,
     has_vertex_mesh: bool,
-) -> Result<Mat2D> {
+) -> Result<RuntimeImageLayoutTransform> {
     // Ported from C++ `src/shapes/image.cpp::Image::updateImageScale`.
+    let fit = runtime_image_layout_fit(
+        instance,
+        local_id,
+        image_object,
+        image_width,
+        image_height,
+        layout_width,
+        layout_height,
+        has_vertex_mesh,
+    )?;
+
+    if layout_scale_separate {
+        let user_scale_x = instance
+            .transform_property(local_id, TransformProperty::ScaleX)
+            .unwrap_or(1.0);
+        let user_scale_y = instance
+            .transform_property(local_id, TransformProperty::ScaleY)
+            .unwrap_or(1.0);
+        return Ok(RuntimeImageLayoutTransform {
+            local_transform: runtime_apply_image_layout_fit(
+                base_local_transform,
+                fit.scale_x,
+                fit.scale_y,
+                fit.offset_x,
+                fit.offset_y,
+                true,
+            ),
+            render_scale_x: user_scale_x * fit.scale_x,
+            render_scale_y: user_scale_y * fit.scale_y,
+        });
+    }
+
+    let legacy_key = runtime_legacy_image_layout_scale_key(
+        resolved_image_asset_global,
+        image_identity,
+        image_width,
+        image_height,
+        layout_width,
+        layout_height,
+        has_vertex_mesh,
+        fit,
+    );
+    let (public_scale_x, public_scale_y) =
+        instance.resolve_legacy_image_layout_scale(local_id, legacy_key, fit.scale_x, fit.scale_y);
+    Ok(RuntimeImageLayoutTransform {
+        local_transform: runtime_apply_image_layout_fit(
+            base_local_transform,
+            public_scale_x,
+            public_scale_y,
+            fit.offset_x,
+            fit.offset_y,
+            false,
+        ),
+        render_scale_x: public_scale_x,
+        render_scale_y: public_scale_y,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_image_layout_fit(
+    instance: &ArtboardInstance,
+    local_id: usize,
+    image_object: Option<&RuntimeObject>,
+    image_width: f32,
+    image_height: f32,
+    layout_width: f32,
+    layout_height: f32,
+    has_vertex_mesh: bool,
+) -> Result<RuntimeImageLayoutFit> {
     let fit_key =
         runtime_draw_property_key_for_name("Image", "fit").context("missing Image.fit")?;
     let origin_x_key =
@@ -10892,14 +11743,47 @@ fn runtime_image_layout_local_transform(
         offset_y = -scaled_top + height_remainder * y_align;
     }
 
-    Ok(runtime_apply_image_layout_fit(
-        base_local_transform,
+    Ok(RuntimeImageLayoutFit {
         scale_x,
         scale_y,
         offset_x,
         offset_y,
-        layout_scale_separate,
-    ))
+        fit,
+        origin_x,
+        origin_y,
+        alignment_x,
+        alignment_y,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_legacy_image_layout_scale_key(
+    resolved_image_asset_global: Option<u32>,
+    image_identity: u64,
+    image_width: f32,
+    image_height: f32,
+    layout_width: f32,
+    layout_height: f32,
+    has_vertex_mesh: bool,
+    fit: RuntimeImageLayoutFit,
+) -> RuntimeLegacyImageLayoutScaleKey {
+    // Include only inputs that cause C++ to rerun `Image::updateImageScale`;
+    // public scale is intentionally excluded so a user/animation write
+    // survives until another fit-driving change.
+    RuntimeLegacyImageLayoutScaleKey::new([
+        u64::from(resolved_image_asset_global.unwrap_or(u32::MAX)),
+        image_identity,
+        u64::from(image_width.to_bits()),
+        u64::from(image_height.to_bits()),
+        u64::from(layout_width.to_bits()),
+        u64::from(layout_height.to_bits()),
+        u64::from(has_vertex_mesh),
+        fit.fit,
+        u64::from(fit.origin_x.to_bits()),
+        u64::from(fit.origin_y.to_bits()),
+        u64::from(fit.alignment_x.to_bits()),
+        u64::from(fit.alignment_y.to_bits()),
+    ])
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -11165,6 +12049,14 @@ fn runtime_draw_component_list(
                 true,
                 &child_ancestors,
             )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+            )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
                 child_graph,
@@ -11194,6 +12086,14 @@ fn runtime_draw_component_list(
                 false,
                 true,
                 &child_ancestors,
+            )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -11364,6 +12264,14 @@ fn runtime_draw_nested_artboard(
                 true,
                 &child_ancestors,
             )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+            )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
                 child_graph,
@@ -11393,6 +12301,14 @@ fn runtime_draw_nested_artboard(
                 false,
                 true,
                 &child_ancestors,
+            )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -11439,6 +12355,14 @@ fn runtime_draw_nested_artboard(
             true,
             &child_ancestors,
         )?;
+        child.prepare_static_artboard_slice_meshes(
+            runtime,
+            child_graph,
+            factory,
+            image_by_global,
+            &mut child_paint_cache.meshes,
+            child_cache,
+        )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             child_graph,
@@ -11468,6 +12392,14 @@ fn runtime_draw_nested_artboard(
             false,
             true,
             &child_ancestors,
+        )?;
+        child.prepare_static_artboard_slice_meshes(
+            runtime,
+            child_graph,
+            factory,
+            image_by_global,
+            mesh_by_local,
+            child_cache,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -18274,6 +19206,274 @@ mod tests {
     }
 
     #[test]
+    fn pre_7_2_layout_fit_mutates_public_image_scale_until_the_user_writes_it() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 1);
+        push_var_uint(&mut bytes, 9711);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 3.0);
+        });
+        let file = read_runtime_file(&bytes).expect("synthetic legacy image imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic legacy image graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let scale_x_key = property_key_for_name("Node", "scaleX").expect("Node.scaleX key");
+        let scale_y_key = property_key_for_name("Node", "scaleY").expect("Node.scaleY key");
+        let first_layout = RuntimeLegacyImageLayoutScaleKey::new([11; 12]);
+
+        assert_eq!(
+            instance.resolve_legacy_image_layout_scale(1, first_layout, 4.0, 5.0),
+            (4.0, 5.0)
+        );
+        assert_eq!(instance.double_property(1, scale_x_key), Some(4.0));
+        assert_eq!(instance.double_property(1, scale_y_key), Some(5.0));
+
+        assert!(instance.set_double_property(1, scale_x_key, 7.0));
+        assert_eq!(
+            instance.resolve_legacy_image_layout_scale(1, first_layout, 4.0, 5.0),
+            (7.0, 5.0),
+            "a user write survives while the layout control size is unchanged"
+        );
+
+        assert_eq!(
+            instance.resolve_legacy_image_layout_scale(
+                1,
+                RuntimeLegacyImageLayoutScaleKey::new([12; 12]),
+                6.0,
+                8.0,
+            ),
+            (6.0, 8.0),
+            "a new layout control size overwrites legacy public scale again"
+        );
+        assert_eq!(instance.double_property(1, scale_x_key), Some(6.0));
+        assert_eq!(instance.double_property(1, scale_y_key), Some(8.0));
+    }
+
+    #[test]
+    fn format_7_2_layout_fit_keeps_public_scale_authored_and_reports_composed_render_scale() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9712);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 3.0);
+        });
+        let file = read_runtime_file(&bytes).expect("synthetic modern image imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic modern image graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let image_global = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == 1)
+            .expect("image component")
+            .global_id;
+
+        let state = runtime_image_layout_local_transform(
+            &instance,
+            1,
+            file.object(image_global as usize),
+            Some(99),
+            123,
+            Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]),
+            true,
+            100.0,
+            100.0,
+            400.0,
+            500.0,
+            false,
+        )
+        .expect("layout fit resolves");
+
+        assert_eq!(
+            instance.transform_property(1, TransformProperty::ScaleX),
+            Some(2.0)
+        );
+        assert_eq!(
+            instance.transform_property(1, TransformProperty::ScaleY),
+            Some(3.0)
+        );
+        assert_eq!(
+            state.local_transform,
+            Mat2D([8.0, 0.0, 0.0, 15.0, 7.0, 11.0])
+        );
+        assert_eq!((state.render_scale_x, state.render_scale_y), (8.0, 15.0));
+    }
+
+    #[test]
+    fn slice_mesh_stretch_emits_four_vertices_and_six_indices_per_patch() {
+        let bytes = synthetic_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let details = graph.n_slicer_details.first().expect("NSlicer details");
+
+        let geometry =
+            runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
+
+        assert_eq!(geometry.vertices.len(), 36);
+        assert_eq!(geometry.uvs.len(), 36);
+        assert_eq!(geometry.indices.len(), 54);
+        assert_eq!(&geometry.indices[..6], &[0, 1, 3, 1, 2, 3]);
+        assert_eq!(&geometry.indices[48..], &[32, 33, 35, 33, 34, 35]);
+        assert_eq!(geometry.vertices[0], (0.0, 0.0));
+        assert_eq!(geometry.uvs[0], (0.0, 0.0));
+        assert!((geometry.vertices[34].0 - 300.0).abs() <= 0.0001);
+        assert!((geometry.vertices[34].1 - 300.0).abs() <= 0.0001);
+        assert_eq!(geometry.uvs[34], (1.0, 1.0));
+    }
+
+    #[test]
+    fn slice_mesh_hidden_and_repeat_tile_modes_match_cpp_patch_semantics() {
+        let bytes = synthetic_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let mut hidden = graph
+            .n_slicer_details
+            .first()
+            .expect("NSlicer details")
+            .clone();
+        hidden.tile_modes.push(nuxie_graph::NSlicerTileModeNode {
+            local_id: usize::MAX,
+            global_id: u32::MAX,
+            type_name: "NSlicerTileMode",
+            patch_index: 4,
+            style: 2,
+        });
+        let geometry =
+            runtime_slice_mesh_geometry(&file, &instance, &hidden, 300.0, 300.0, 1.5, 1.5);
+        assert_eq!(geometry.vertices.len(), 32);
+        assert_eq!(geometry.indices.len(), 48);
+
+        let mut repeated = Vec::new();
+        let mut indices = Vec::new();
+        let added = runtime_slice_mesh_tile_repeat(
+            &mut repeated,
+            &mut indices,
+            [
+                RuntimeSliceMeshVertex {
+                    vertex: (0.0, 0.0),
+                    uv: (0.0, 0.0),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (25.0, 0.0),
+                    uv: (0.5, 0.0),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (25.0, 25.0),
+                    uv: (0.5, 0.5),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (0.0, 25.0),
+                    uv: (0.0, 0.5),
+                },
+            ],
+            0,
+            100.0,
+            100.0,
+            3.0,
+            3.0,
+        );
+        assert_eq!(added, 16);
+        assert_eq!(repeated.len(), 16);
+        assert_eq!(indices.len(), 24);
+        assert!((repeated[15].vertex.0 - 50.0 / 3.0).abs() <= 0.0001);
+        assert!((repeated[15].vertex.1 - 25.0).abs() <= 0.0001);
+        assert!((repeated[14].uv.0 - 0.25).abs() <= 0.0001);
+        assert!((repeated[14].uv.1 - 0.25).abs() <= 0.0001);
+    }
+
+    #[test]
+    fn slice_mesh_buffers_reuse_equal_sizes_and_replace_only_the_resized_buffer() {
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut buffers = RuntimeSliceMeshRenderBuffers::default();
+        let update = |vertex_len, fill| RuntimeSliceMeshUpdate {
+            world_bits: [fill; 6],
+            input_words: vec![u64::from(fill)],
+            vertex_bytes: vec![fill as u8; vertex_len],
+            uv_bytes: vec![fill as u8; 16],
+            index_bytes: vec![fill as u8; 12],
+        };
+
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(16, 1));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(16, 2));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(24, 3));
+
+        let stream = factory.stream();
+        assert_eq!(stream.matches("makeRenderBuffer").count(), 4);
+        assert_eq!(stream.matches("bufferData").count(), 9);
+        assert!(stream.contains("makeRenderBuffer id=4 type=1 flags=0 size=24"));
+        assert_eq!(stream.matches("bufferData id=2 ").count(), 3);
+        assert_eq!(stream.matches("bufferData id=3 ").count(), 3);
+    }
+
+    #[test]
+    fn slice_mesh_invalidation_keeps_cpp_axis_dirt_when_clamped_geometry_is_unchanged() {
+        let bytes = synthetic_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let details = graph.n_slicer_details.first().expect("NSlicer details");
+        let offset_key = property_key_for_name("Axis", "offset").expect("Axis.offset key");
+
+        assert!(instance.set_double_property(3, offset_key, 400.0));
+        let first_geometry =
+            runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
+        let first_key = runtime_slice_mesh_input_words(
+            &file,
+            &instance,
+            graph,
+            details,
+            1,
+            Some(7),
+            11,
+            300,
+            300,
+            1.5,
+            1.5,
+            None,
+        );
+
+        assert!(instance.set_double_property(3, offset_key, 500.0));
+        let second_geometry =
+            runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
+        let second_key = runtime_slice_mesh_input_words(
+            &file,
+            &instance,
+            graph,
+            details,
+            1,
+            Some(7),
+            11,
+            300,
+            300,
+            1.5,
+            1.5,
+            None,
+        );
+
+        assert_eq!(first_geometry, second_geometry);
+        assert_ne!(first_key, second_key);
+    }
+
+    #[test]
     fn geometry_bounds_use_cubic_extrema_instead_of_the_control_hull() {
         let commands = [
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
@@ -21176,6 +22376,36 @@ mod tests {
             push_f32(bytes, "ParametricPath", "width", 20.0);
             push_f32(bytes, "ParametricPath", "height", 10.0);
         });
+        bytes
+    }
+
+    fn synthetic_image_nslicer_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9713);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "NSlicer", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisX", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisY", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
         bytes
     }
 

@@ -22,7 +22,7 @@ use nuxie_runtime::{
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptVm};
+use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
 #[cfg(feature = "scripting")]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -225,20 +225,30 @@ fn run() -> Result<String> {
         }
         (state, cache)
     } else {
-        let cache = nuxie_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
+        let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
+        let prepared_vm = prepare_registered_script_vm(&runtime, factory.as_factory())?;
+        let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
             &runtime,
             artboard,
             &graph.artboards,
             factory.as_factory(),
         );
-        let state = initialize_scripted_drawables_and_realize(
+        let state = initialize_scripted_drawables_with_vm(
             &runtime,
             artboard_index,
             artboard,
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
-        )?;
+            prepared_vm,
+        )
+        .context("failed to initialize registered scripted drawables")?;
+        if let Some(state) = state.as_ref() {
+            state
+                .borrow_mut()
+                .realize_pending(&runtime, &graph.artboards, factory.as_factory())
+                .context("failed to allocate initialized script artboard paints")?;
+        }
         (state, cache)
     };
     #[cfg(not(feature = "scripting"))]
@@ -1626,6 +1636,12 @@ struct ExtractedScriptAsset {
 }
 
 #[cfg(feature = "scripting")]
+struct PreparedScriptVm {
+    vm: ScriptVm,
+    programs: BTreeMap<u64, ScriptProgram>,
+}
+
+#[cfg(feature = "scripting")]
 struct RunnerScriptArtboard {
     runtime: RuntimeFile,
     artboards: Vec<ArtboardGraph>,
@@ -1969,6 +1985,27 @@ fn initialize_scripted_drawables(
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
+    initialize_scripted_drawables_with_vm(
+        runtime,
+        artboard_index,
+        artboard,
+        artboards,
+        instance,
+        factory,
+        None,
+    )
+}
+
+#[cfg(feature = "scripting")]
+fn initialize_scripted_drawables_with_vm(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    instance: &mut ArtboardInstance,
+    factory: &mut dyn RenderFactory,
+    prepared_vm: Option<PreparedScriptVm>,
+) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let script_assets = extract_script_assets(runtime);
     if script_assets.is_empty() {
         return Ok(None);
@@ -1988,6 +2025,7 @@ fn initialize_scripted_drawables(
         root_context_model,
         Vec::new(),
         false,
+        prepared_vm,
     )?;
     Ok(Some(render_state))
 }
@@ -2034,6 +2072,7 @@ fn initialize_nested_scripted_drawables(
                 child_context_model.clone(),
                 parent_context_models,
                 true,
+                None,
             )?;
             if let Some(model) = child_context_model.as_ref() {
                 bound_nested_contexts.push((graph_global_id, model.clone()));
@@ -2105,8 +2144,15 @@ fn initialize_scripted_drawables_for_artboard(
     context_model: Option<ScriptViewModel>,
     parent_context_models: Vec<ScriptViewModel>,
     script_context_is_bound: bool,
+    prepared_vm: Option<PreparedScriptVm>,
 ) -> Result<()> {
-    let mut vm = prepare_script_vm(runtime, script_assets, factory)?;
+    let (mut vm, registered_programs) = match prepared_vm {
+        Some(prepared) => (prepared.vm, prepared.programs),
+        None => (
+            prepare_script_vm(runtime, script_assets, factory)?,
+            BTreeMap::new(),
+        ),
+    };
     let bound_context_model = context_model.clone();
     vm.set_default_context_view_model_chain(context_model, parent_context_models);
     let mut host = NoopScriptHost;
@@ -2115,6 +2161,7 @@ fn initialize_scripted_drawables_for_artboard(
         instance,
         factory,
         script_assets,
+        &registered_programs,
         bound_context_model.as_ref(),
         &mut vm,
         &mut host,
@@ -2138,13 +2185,20 @@ fn initialize_scripted_drawables_for_artboard(
                 local_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = instantiate_extracted_script(&vm, script, &mut host, factory)
-            .with_context(|| {
-                format!(
-                    "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
-                    script.name, local_object.global_id
-                )
-            })?;
+        let mut script_instance = instantiate_extracted_script(
+            &vm,
+            script_asset_id,
+            script,
+            &registered_programs,
+            &mut host,
+            factory,
+        )
+        .with_context(|| {
+            format!(
+                "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
+                script.name, local_object.global_id
+            )
+        })?;
         if !script_context_is_bound {
             script_instance
                 .set_context_view_model(None)
@@ -2246,6 +2300,7 @@ fn initialize_scripted_data_converters(
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
     script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    registered_programs: &BTreeMap<u64, ScriptProgram>,
     context_model: Option<&ScriptViewModel>,
     vm: &mut ScriptVm,
     host: &mut NoopScriptHost,
@@ -2262,13 +2317,20 @@ fn initialize_scripted_data_converters(
                 converter.id, script_asset_id
             )
         })?;
-        let mut script_instance = instantiate_extracted_script(vm, script, host, factory)
-            .with_context(|| {
-                format!(
-                    "failed to instantiate ScriptAsset '{}' for ScriptedDataConverter global {}",
-                    script.name, converter.id
-                )
-            })?;
+        let mut script_instance = instantiate_extracted_script(
+            vm,
+            script_asset_id,
+            script,
+            registered_programs,
+            host,
+            factory,
+        )
+        .with_context(|| {
+            format!(
+                "failed to instantiate ScriptAsset '{}' for ScriptedDataConverter global {}",
+                script.name, converter.id
+            )
+        })?;
         for input in scripted_data_converter_inputs(runtime, converter.id) {
             let Some(name) = input.string_property("name") else {
                 continue;
@@ -2364,6 +2426,7 @@ fn initialize_state_machine_scripted_objects(
 
     let script_assets = extract_script_assets(runtime);
     let mut vm = prepare_script_vm(runtime, &script_assets, factory)?;
+    let registered_programs = BTreeMap::new();
     let context_model = owned_context
         .and_then(RuntimeOwnedViewModelContext::main)
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
@@ -2386,13 +2449,20 @@ fn initialize_state_machine_scripted_objects(
                 scripted_object.type_name, scripted_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = instantiate_extracted_script(&vm, script, &mut host, factory)
-            .with_context(|| {
-                format!(
-                    "failed to instantiate ScriptAsset '{}' for {} global {}",
-                    script.name, scripted_object.type_name, scripted_object.global_id
-                )
-            })?;
+        let mut script_instance = instantiate_extracted_script(
+            &vm,
+            script_asset_id,
+            script,
+            &registered_programs,
+            &mut host,
+            factory,
+        )
+        .with_context(|| {
+            format!(
+                "failed to instantiate ScriptAsset '{}' for {} global {}",
+                script.name, scripted_object.type_name, scripted_object.global_id
+            )
+        })?;
 
         for input_node in &scripted_object.inputs {
             let Some(input) = runtime.object(input_node.global_id as usize) else {
@@ -2504,6 +2574,36 @@ fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScript
 }
 
 #[cfg(feature = "scripting")]
+fn prepare_registered_script_vm(
+    runtime: &RuntimeFile,
+    factory: &mut dyn RenderFactory,
+) -> Result<Option<PreparedScriptVm>> {
+    let script_assets = extract_script_assets(runtime);
+    if script_assets.is_empty() {
+        return Ok(None);
+    }
+    let vm = prepare_script_vm(runtime, &script_assets, factory)?;
+    let mut programs = BTreeMap::new();
+    for (&asset_id, asset) in script_assets.iter().filter(|(_, asset)| !asset.is_module) {
+        let program = vm
+            .register_protocol_script_with_factory_scoped(
+                &asset.name,
+                asset.scope,
+                &asset.payload,
+                factory,
+            )
+            .with_context(|| {
+                format!(
+                    "failed to register scoped ScriptAsset '{}' ({}-{})",
+                    asset.name, asset.scope.library_id, asset.scope.library_version_id,
+                )
+            })?;
+        programs.insert(asset_id, program);
+    }
+    Ok(Some(PreparedScriptVm { vm, programs }))
+}
+
+#[cfg(feature = "scripting")]
 fn prepare_script_vm(
     runtime: &RuntimeFile,
     script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
@@ -2576,10 +2676,15 @@ fn prepare_script_vm(
 #[cfg(feature = "scripting")]
 fn instantiate_extracted_script(
     vm: &ScriptVm,
+    script_asset_id: u64,
     script: &ExtractedScriptAsset,
+    registered_programs: &BTreeMap<u64, ScriptProgram>,
     host: &mut dyn nuxie_runtime::ScriptHost,
     factory: &mut dyn RenderFactory,
 ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptInstance>, ScriptError> {
+    if let Some(program) = registered_programs.get(&script_asset_id) {
+        return vm.instantiate_registered_script_with_factory(program, host, factory);
+    }
     let program = vm.register_protocol_script_with_factory_scoped(
         &script.name,
         script.scope,

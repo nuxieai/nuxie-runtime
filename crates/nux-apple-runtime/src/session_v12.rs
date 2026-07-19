@@ -1,4 +1,4 @@
-//! ABI 1.2's bounded, coarse flow-session protocol.
+//! ABI 1.3's bounded, coarse flow-session protocol.
 //!
 //! The C layouts in this module are deliberately independent from the Rust
 //! session model. Every caller-owned view is validated and copied before the
@@ -9,7 +9,7 @@
 use super::*;
 use std::{collections::HashSet, ffi::c_void, ptr, slice};
 
-pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 2;
+pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 3;
 
 pub const NUX_FLOW_MAX_ID_BYTE_LENGTH: u64 = 4_096;
 pub const NUX_FLOW_MAX_PATH_BYTE_LENGTH: u64 = 4_096;
@@ -155,7 +155,7 @@ pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT: NuxFlowSchemaPropertyKind = 10;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL: NuxFlowSchemaPropertyKind = 11;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxFlowSchemaPropertyKind = 12;
 
-/// ABI 1.2 configured-session descriptor. `minimum_abi_minor` must be 2 for
+/// ABI 1.3 configured-session descriptor. `minimum_abi_minor` must be 3 for
 /// this surface. A null `artboard_name` selects the default artboard. A null
 /// `player_name` uses the authored fallback policy; a nonempty UTF-8 name
 /// explicitly selects a state machine. Linear animations are fallback-only.
@@ -467,6 +467,13 @@ pub struct NuxFlowOutputView {
     pub name: NuxByteView,
     pub path: NuxByteView,
     pub payload: NuxByteView,
+    /// Canonical 0/1 presence flag for the paired OpenURL fields.
+    pub has_open_url: u32,
+    /// Exact authored URL for a reported OpenURL event. Empty-but-present URLs
+    /// are distinguished from absent URLs by `has_open_url`.
+    pub open_url: NuxByteView,
+    /// Canonical OpenURL target paired with `open_url`.
+    pub open_url_target: NuxByteView,
 }
 
 /// Borrowed typed property of a reported event.
@@ -482,7 +489,7 @@ pub struct NuxFlowEventPropertyView {
     pub name: NuxByteView,
 }
 
-/// Opaque owned ABI 1.2 result. Every borrowed view returned by an accessor
+/// Opaque owned ABI 1.3 result. Every borrowed view returned by an accessor
 /// remains valid until this handle is freed.
 pub struct NuxFlowSessionResult {
     _private: [u8; 0],
@@ -614,7 +621,7 @@ impl PayloadBudget {
     }
 }
 
-fn validate_v12_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
+fn validate_v13_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
     if required_major == NUX_RUNTIME_ABI_MAJOR && minimum_minor == NUX_FLOW_SESSION_ABI_MINOR {
         Ok(())
     } else {
@@ -698,7 +705,7 @@ unsafe fn copy_configured_session_descriptor(
         return Err(NuxStatus::InvalidArgument);
     }
     let descriptor = unsafe { descriptor.read() };
-    validate_v12_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
+    validate_v13_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
     let mut budget = PayloadBudget::default();
     let artboard_name = copy_optional_utf8(
         descriptor.artboard_name,
@@ -1403,7 +1410,7 @@ unsafe fn copy_session_operation(
         return Err(NuxStatus::InvalidArgument);
     }
     let operation = unsafe { operation.read() };
-    validate_v12_version(operation.required_abi_major, operation.minimum_abi_minor)?;
+    validate_v13_version(operation.required_abi_major, operation.minimum_abi_minor)?;
     let selected_payload_count = [
         !operation.state_batch.is_null(),
         !operation.pointer_batch.is_null(),
@@ -1544,6 +1551,13 @@ struct OwnedOutput {
     name: Vec<u8>,
     path: Vec<u8>,
     payload: Vec<u8>,
+    open_url: Option<OwnedOpenUrl>,
+}
+
+#[derive(Debug, Clone)]
+struct OwnedOpenUrl {
+    url: Vec<u8>,
+    target: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -1777,10 +1791,11 @@ impl FlowSessionResultHandle {
             {
                 return Err(NuxStatus::RuntimeError);
             }
-            for (offset, label) in self.enum_labels[first_enum_label..enum_label_end]
-                .iter()
-                .enumerate()
-            {
+            let labels = self
+                .enum_labels
+                .get(first_enum_label..enum_label_end)
+                .ok_or(NuxStatus::RuntimeError)?;
+            for (offset, label) in labels.iter().enumerate() {
                 if label.value != offset as u32 {
                     return Err(NuxStatus::RuntimeError);
                 }
@@ -1925,9 +1940,27 @@ impl FlowSessionResultHandle {
                     .nodes
                     .get(root as usize)
                     .ok_or(NuxStatus::RuntimeError)?;
-                if output.kind == NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT
-                    && node.edge_count as u64 > NUX_FLOW_MAX_EVENT_PROPERTY_COUNT
-                {
+                let is_scalar = matches!(
+                    node.kind,
+                    NUX_FLOW_VALUE_KIND_NULL
+                        | NUX_FLOW_VALUE_KIND_STRING
+                        | NUX_FLOW_VALUE_KIND_NUMBER
+                        | NUX_FLOW_VALUE_KIND_BOOL
+                        | NUX_FLOW_VALUE_KIND_ENUM
+                        | NUX_FLOW_VALUE_KIND_COLOR
+                        | NUX_FLOW_VALUE_KIND_IMAGE
+                        | NUX_FLOW_VALUE_KIND_LIST_INDEX
+                );
+                let is_view_model_reference = node.kind == NUX_FLOW_VALUE_KIND_VIEW_MODEL
+                    && node.edge_count == 0
+                    && node.instance_id.is_some_and(|instance_id| instance_id != 0)
+                    && !node.schema_id.is_empty();
+                let valid_payload_root = match output.kind {
+                    NUX_FLOW_OUTPUT_KIND_STATE_CHANGE => is_scalar,
+                    NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE => is_scalar || is_view_model_reference,
+                    _ => false,
+                };
+                if !valid_payload_root {
                     return Err(NuxStatus::RuntimeError);
                 }
             }
@@ -1960,6 +1993,27 @@ impl FlowSessionResultHandle {
                 &output.payload,
                 NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH,
             )?;
+            if let Some(open_url) = &output.open_url {
+                if output.kind != NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT {
+                    return Err(NuxStatus::RuntimeError);
+                }
+                if !matches!(
+                    open_url.target.as_slice(),
+                    b"" | b"_blank" | b"_parent" | b"_self" | b"_top"
+                ) {
+                    return Err(NuxStatus::RuntimeError);
+                }
+                charge_result_utf8(
+                    &mut payload_bytes,
+                    &open_url.url,
+                    NUX_FLOW_MAX_STRING_BYTE_LENGTH,
+                )?;
+                charge_result_utf8(
+                    &mut payload_bytes,
+                    &open_url.target,
+                    NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                )?;
+            }
             prior_sequence = Some(output.sequence);
             prior_cycle_phase = Some((output.cycle, output.phase));
         }
@@ -2118,7 +2172,7 @@ fn replace_session_result(
     if result.validate().is_err() {
         result = FlowSessionResultHandle::failure(
             NuxStatus::RuntimeError,
-            "runtime produced an invalid or oversized ABI 1.2 result",
+            "runtime produced an invalid or oversized ABI 1.3 result",
         );
     }
     let status = result.status;
@@ -2205,7 +2259,7 @@ mod configured_session_seam {
         result.is_settled = session.is_settled();
         result
             .validate()
-            .map_err(|_| RuntimeFailure::runtime("bootstrap exceeds ABI 1.2 bounds"))?;
+            .map_err(|_| RuntimeFailure::runtime("bootstrap exceeds ABI 1.3 bounds"))?;
         let session_id = state.allocate_session_id()?;
         state.sessions.insert(
             session_id,
@@ -2290,7 +2344,7 @@ mod configured_session_seam {
                     replace_player_inputs(&mut combined, inputs)?;
                     combined.has_player_inputs = true;
                     combined.validate().map_err(|_| {
-                        RuntimeFailure::runtime("query result exceeds ABI 1.2 bounds")
+                        RuntimeFailure::runtime("query result exceeds ABI 1.3 bounds")
                     })?;
                 }
                 return Ok(combined);
@@ -2979,7 +3033,7 @@ mod configured_session_seam {
         }
     }
 
-    fn result_from_core(
+    pub(super) fn result_from_core(
         result: core::FlowResult,
     ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
         let mut translated = FlowSessionResultHandle::empty_success();
@@ -3036,7 +3090,7 @@ mod configured_session_seam {
         append_outputs(translated, result.outputs)?;
         translated
             .validate()
-            .map_err(|_| RuntimeFailure::runtime("flow result exceeds ABI 1.2 bounds"))?;
+            .map_err(|_| RuntimeFailure::runtime("flow result exceeds ABI 1.3 bounds"))?;
         Ok(())
     }
 
@@ -3092,20 +3146,36 @@ mod configured_session_seam {
                 name: Vec::new(),
                 path: Vec::new(),
                 payload: Vec::new(),
+                open_url: None,
             };
             match output.payload {
                 core::FlowOutputPayload::ReportedEvent {
                     name,
                     event_type,
+                    url,
+                    target,
                     delay_seconds,
                     properties,
                 } => {
                     translated.kind = NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT;
+                    let open_url = match (url, target) {
+                        (Some(url), Some(target)) => Some(OwnedOpenUrl {
+                            url: url.into_bytes(),
+                            target: target.into_bytes(),
+                        }),
+                        (None, None) => None,
+                        _ => {
+                            return Err(RuntimeFailure::runtime(
+                                "OpenURL event URL and target presence must match",
+                            ));
+                        }
+                    };
                     populate_event_output(
                         result,
                         &mut translated,
                         name,
                         event_type,
+                        open_url,
                         delay_seconds,
                         properties,
                     )?;
@@ -3125,7 +3195,8 @@ mod configured_session_seam {
                     translated.path = path.into_bytes();
                     translated.origin_mutation_id = origin_mutation_id;
                     if let Some(value) = value {
-                        translated.payload_root_index = Some(push_scalar(result, value)?);
+                        translated.payload_root_index =
+                            Some(push_state_change_value(result, value)?);
                     }
                 }
                 core::FlowOutputPayload::HostCommand { name, payload } => {
@@ -3151,9 +3222,11 @@ mod configured_session_seam {
         output: &mut OwnedOutput,
         name: Option<String>,
         event_type: u32,
+        open_url: Option<OwnedOpenUrl>,
         delay_seconds: f32,
         properties: Vec<core::FlowEventProperty>,
     ) -> Result<(), RuntimeFailure> {
+        output.open_url = open_url;
         output.name = name.unwrap_or_default().into_bytes();
         output.event_type = event_type;
         output.delay_seconds = delay_seconds;
@@ -3242,11 +3315,40 @@ mod configured_session_seam {
         });
         Ok(index)
     }
+
+    fn push_state_change_value(
+        result: &mut FlowSessionResultHandle,
+        value: core::FlowStateChangeValue,
+    ) -> Result<u32, RuntimeFailure> {
+        match value {
+            core::FlowStateChangeValue::Scalar(value) => push_scalar(result, value),
+            core::FlowStateChangeValue::ViewModelReference {
+                instance_id,
+                schema_name,
+            } => {
+                let index = u32::try_from(result.value_arena.nodes.len())
+                    .map_err(|_| RuntimeFailure::runtime("value node index overflowed"))?;
+                result.value_arena.nodes.push(OwnedValueNode {
+                    kind: NUX_FLOW_VALUE_KIND_VIEW_MODEL,
+                    number_value: 0.0,
+                    color_value: 0,
+                    bool_value: false,
+                    first_edge: 0,
+                    edge_count: 0,
+                    instance_id: Some(instance_id.get()),
+                    identity_value: 0,
+                    string_value: Vec::new(),
+                    schema_id: schema_name.into_bytes(),
+                });
+                Ok(index)
+            }
+        }
+    }
 }
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Creates one independent screen session using the ABI 1.2 player-selection
+/// Creates one independent screen session using the ABI 1.3 player-selection
 /// and bootstrap-result contract. Creation never performs an observable
 /// advance. The returned result owns player metadata, bounds, catalog, and
 /// bootstrap value views until explicitly freed.
@@ -3285,7 +3387,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "configured session requires ABI 1.2"
+                            "configured session requires ABI 1.3"
                         } else {
                             "configured session descriptor is malformed or oversized"
                         },
@@ -3313,7 +3415,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Performs one fully copied ABI 1.2 operation on the session's pinned worker.
+/// Performs one fully copied ABI 1.3 operation on the session's pinned worker.
 /// Rust never calls Swift reentrantly; ordered outputs are returned in the owned
 /// result. State batches are atomic and pointer batches preserve immediate
 /// subcycles inside their returned `cycle` values.
@@ -3346,7 +3448,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "session operation requires ABI 1.2"
+                            "session operation requires ABI 1.3"
                         } else {
                             "session operation is malformed or exceeds a published bound"
                         },
@@ -3372,7 +3474,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
 }
 
 #[unsafe(no_mangle)]
-/// Returns an ABI 1.2 session result's status, or `NULL_ARGUMENT` for null.
+/// Returns an ABI 1.3 session result's status, or `NULL_ARGUMENT` for null.
 ///
 /// # Safety
 ///
@@ -4299,6 +4401,10 @@ pub unsafe extern "C" fn nux_flow_session_result_output_at(
         let Some(output) = handle.outputs.get(index) else {
             return NuxStatus::NotFound;
         };
+        let (has_open_url, open_url, open_url_target) = output.open_url.as_ref().map_or(
+            (0, NuxByteView::default(), NuxByteView::default()),
+            |value| (1, borrowed_view(&value.url), borrowed_view(&value.target)),
+        );
         unsafe {
             *out_output = NuxFlowOutputView {
                 struct_size: size_u32::<NuxFlowOutputView>(),
@@ -4318,6 +4424,9 @@ pub unsafe extern "C" fn nux_flow_session_result_output_at(
                 name: borrowed_view(&output.name),
                 path: borrowed_view(&output.path),
                 payload: borrowed_view(&output.payload),
+                has_open_url,
+                open_url,
+                open_url_target,
             };
         }
         NuxStatus::Ok
@@ -4460,7 +4569,7 @@ pub unsafe extern "C" fn nux_flow_session_result_diagnostic_at(
 }
 
 #[unsafe(no_mangle)]
-/// Releases one ABI 1.2 session result. Null is a no-op.
+/// Releases one ABI 1.3 session result. Null is a no-op.
 ///
 /// # Safety
 ///
@@ -4479,6 +4588,8 @@ pub unsafe extern "C" fn nux_flow_session_result_free(result: *mut NuxFlowSessio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "apple-product")]
+    use nuxie::flow_session as core;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn bytes(value: &[u8]) -> NuxByteView {
@@ -4492,7 +4603,7 @@ mod tests {
         NuxFlowConfiguredSessionDescriptor {
             struct_size: size_u32::<NuxFlowConfiguredSessionDescriptor>(),
             required_abi_major: 1,
-            minimum_abi_minor: 2,
+            minimum_abi_minor: 3,
             artboard_name: NuxByteView::default(),
             player_name: NuxByteView::default(),
         }
@@ -4502,7 +4613,7 @@ mod tests {
         NuxFlowSessionOperation {
             struct_size: size_u32::<NuxFlowSessionOperation>(),
             required_abi_major: 1,
-            minimum_abi_minor: 2,
+            minimum_abi_minor: 3,
             kind,
             state_batch: ptr::null(),
             pointer_batch: ptr::null(),
@@ -4529,18 +4640,20 @@ mod tests {
     }
 
     #[test]
-    fn abi_12_handshake_preserves_abi_11_compatibility() {
+    fn abi_13_handshake_preserves_structurally_valid_abi_11_and_12_compatibility() {
         assert_eq!(NUX_RUNTIME_ABI_MAJOR, 1);
-        assert_eq!(NUX_RUNTIME_ABI_MINOR, 2);
+        assert_eq!(NUX_RUNTIME_ABI_MINOR, 3);
+        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 3);
         assert_eq!(MINIMUM_SUPPORTED_ABI_MINOR, 1);
         assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(2, 1), NuxStatus::AbiMismatch);
     }
 
     #[test]
-    fn abi_12_layouts_are_fixed_width_and_abi_11_layouts_are_unchanged() {
+    fn abi_13_layouts_preserve_abi_11_and_12_prefixes() {
         assert_eq!(std::mem::size_of::<NuxFlowSessionDescriptor>(), 40);
         assert_eq!(std::mem::size_of::<NuxFrameOperation>(), 40);
         assert_eq!(
@@ -4563,6 +4676,220 @@ mod tests {
         assert_eq!(std::mem::size_of::<NuxFlowPlayerInputView>(), 32);
         assert_eq!(std::mem::size_of::<NuxFlowSchemaPropertyView>(), 80);
         assert_eq!(std::mem::size_of::<NuxFlowEnumLabelView>(), 24);
+        assert_eq!(std::mem::size_of::<NuxFlowOutputView>(), 160);
+        assert_eq!(std::mem::offset_of!(NuxFlowOutputView, has_open_url), 120);
+        assert_eq!(std::mem::offset_of!(NuxFlowOutputView, open_url), 128);
+        assert_eq!(
+            std::mem::offset_of!(NuxFlowOutputView, open_url_target),
+            144
+        );
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn reported_open_url_fields_survive_core_translation_and_c_borrowing_exactly() {
+        let result = configured_session_seam::result_from_core(core::FlowResult {
+            outputs: vec![
+                core::FlowOutput {
+                    sequence: 1,
+                    cycle: 1,
+                    phase: core::FlowOutputPhase::ReportedEvents,
+                    payload: core::FlowOutputPayload::ReportedEvent {
+                        name: Some("Open".to_owned()),
+                        event_type: 131,
+                        url: Some("https://nuxie.example/path?x=1".to_owned()),
+                        target: Some("_self".to_owned()),
+                        delay_seconds: 0.0,
+                        properties: Vec::new(),
+                    },
+                },
+                core::FlowOutput {
+                    sequence: 2,
+                    cycle: 1,
+                    phase: core::FlowOutputPhase::ReportedEvents,
+                    payload: core::FlowOutputPayload::ReportedEvent {
+                        name: Some("Ordinary".to_owned()),
+                        event_type: 128,
+                        url: None,
+                        target: None,
+                        delay_seconds: 0.0,
+                        properties: Vec::new(),
+                    },
+                },
+            ],
+            dirty: false,
+            settled: true,
+            wake_after_seconds: None,
+            snapshot: None,
+            values: None,
+            catalog: None,
+            player_inputs: None,
+            created_instances: Vec::new(),
+        })
+        .expect("valid core outputs must translate");
+        assert_eq!(result.validate(), Ok(()));
+        let result = Box::into_raw(Box::new(result)).cast::<NuxFlowSessionResult>();
+
+        let mut open: NuxFlowOutputView = unsafe { std::mem::zeroed() };
+        open.struct_size = size_u32::<NuxFlowOutputView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_at(result, 0, &mut open) },
+            NuxStatus::Ok
+        );
+        assert_eq!(open.has_open_url, 1);
+        assert_eq!(
+            unsafe { slice::from_raw_parts(open.open_url.data, open.open_url.len as usize) },
+            b"https://nuxie.example/path?x=1"
+        );
+        assert_eq!(
+            unsafe {
+                slice::from_raw_parts(open.open_url_target.data, open.open_url_target.len as usize)
+            },
+            b"_self"
+        );
+
+        let mut ordinary: NuxFlowOutputView = unsafe { std::mem::zeroed() };
+        ordinary.struct_size = size_u32::<NuxFlowOutputView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_at(result, 1, &mut ordinary) },
+            NuxStatus::Ok
+        );
+        assert_eq!(ordinary.has_open_url, 0);
+        assert!(ordinary.open_url.data.is_null());
+        assert_eq!(ordinary.open_url.len, 0);
+        assert!(ordinary.open_url_target.data.is_null());
+        assert_eq!(ordinary.open_url_target.len, 0);
+
+        unsafe { nux_flow_session_result_free(result) };
+    }
+
+    #[test]
+    fn result_validation_rejects_malformed_state_change_payload_roots() {
+        let mut result = FlowSessionResultHandle::empty_success();
+        result.value_arena.nodes.push(OwnedValueNode {
+            kind: NUX_FLOW_VALUE_KIND_VIEW_MODEL,
+            number_value: 0.0,
+            color_value: 0,
+            bool_value: false,
+            first_edge: 0,
+            edge_count: 0,
+            instance_id: None,
+            identity_value: 0,
+            string_value: Vec::new(),
+            schema_id: Vec::new(),
+        });
+        result.outputs.push(OwnedOutput {
+            phase: NUX_FLOW_OUTPUT_PHASE_VIEW_MODEL_CHANGES,
+            kind: NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE,
+            payload_root_index: Some(0),
+            sequence: 1,
+            cycle: 1,
+            origin_mutation_id: None,
+            instance_id: Some(1),
+            event_type: 0,
+            first_event_property: 0,
+            event_property_count: 0,
+            delay_seconds: 0.0,
+            name: Vec::new(),
+            path: b"child".to_vec(),
+            payload: Vec::new(),
+            open_url: None,
+        });
+
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+        result.value_arena.nodes[0].instance_id = Some(2);
+        result.value_arena.nodes[0].schema_id = b"Child".to_vec();
+        assert_eq!(result.validate(), Ok(()));
+
+        result.value_arena.nodes[0].edge_count = 1;
+        result.value_arena.nodes.push(OwnedValueNode {
+            kind: NUX_FLOW_VALUE_KIND_NULL,
+            number_value: 0.0,
+            color_value: 0,
+            bool_value: false,
+            first_edge: 0,
+            edge_count: 0,
+            instance_id: None,
+            identity_value: 0,
+            string_value: Vec::new(),
+            schema_id: Vec::new(),
+        });
+        result.value_arena.edges.push(OwnedValueEdge {
+            node_index: 1,
+            key: b"value".to_vec(),
+        });
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        result.value_arena.edges.clear();
+        result.value_arena.nodes.truncate(1);
+        let root = &mut result.value_arena.nodes[0];
+        root.kind = NUX_FLOW_VALUE_KIND_OBJECT;
+        root.edge_count = 0;
+        root.instance_id = None;
+        root.schema_id.clear();
+        assert_eq!(
+            validate_result_value_node(root),
+            Ok(()),
+            "the generic arena permits a zero-edge object"
+        );
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_LIST;
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_STRING;
+        result.value_arena.nodes[0].string_value = b"scalar".to_vec();
+        assert_eq!(result.validate(), Ok(()));
+
+        result.outputs[0].kind = NUX_FLOW_OUTPUT_KIND_STATE_CHANGE;
+        assert_eq!(result.validate(), Ok(()));
+        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_OBJECT;
+        result.value_arena.nodes[0].string_value.clear();
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_NULL;
+        result.outputs[0].kind = NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT;
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+    }
+
+    #[test]
+    fn result_validation_rejects_open_url_on_other_kinds_and_oversized_fields() {
+        let mut result = FlowSessionResultHandle::empty_success();
+        result.outputs.push(OwnedOutput {
+            phase: NUX_FLOW_OUTPUT_PHASE_RUNTIME_ADVANCE,
+            kind: NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED,
+            payload_root_index: None,
+            sequence: 1,
+            cycle: 1,
+            origin_mutation_id: None,
+            instance_id: None,
+            event_type: 0,
+            first_event_property: 0,
+            event_property_count: 0,
+            delay_seconds: 0.0,
+            name: Vec::new(),
+            path: Vec::new(),
+            payload: Vec::new(),
+            open_url: Some(OwnedOpenUrl {
+                url: b"https://nuxie.example".to_vec(),
+                target: b"_blank".to_vec(),
+            }),
+        });
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        result.outputs[0].phase = NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS;
+        result.outputs[0].kind = NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT;
+        result.outputs[0].open_url.as_mut().unwrap().url =
+            vec![b'x'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize + 1];
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        let open_url = result.outputs[0].open_url.as_mut().unwrap();
+        open_url.url.clear();
+        open_url.target = vec![b'x'; NUX_FLOW_MAX_ID_BYTE_LENGTH as usize + 1];
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+
+        result.outputs[0].open_url.as_mut().unwrap().target = b"new-window".to_vec();
+        assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
     }
 
     #[test]
@@ -4573,12 +4900,17 @@ mod tests {
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        descriptor.minimum_abi_minor = 3;
+        descriptor.minimum_abi_minor = 2;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        descriptor.minimum_abi_minor = 2;
+        descriptor.minimum_abi_minor = 4;
+        assert!(matches!(
+            unsafe { copy_configured_session_descriptor(&descriptor) },
+            Err(NUX_STATUS_ABI_MISMATCH)
+        ));
+        descriptor.minimum_abi_minor = 3;
         descriptor.required_abi_major = 2;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
@@ -5102,6 +5434,7 @@ mod tests {
             name: Vec::new(),
             path: Vec::new(),
             payload: Vec::new(),
+            open_url: None,
         };
         result.outputs = vec![
             output(1, 1, NUX_FLOW_OUTPUT_PHASE_HOST_WORK),
@@ -5819,6 +6152,41 @@ mod tests {
             NuxStatus::Ok
         );
         let child_id = created.instance_id;
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_count(batch_result) },
+            1
+        );
+        assert!(unsafe { nux_flow_session_result_has_values(batch_result) });
+        assert!(unsafe { nux_flow_session_result_value_root_count(batch_result) } >= 2);
+        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxFlowOutputView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_at(batch_result, 0, &mut output) },
+            NuxStatus::Ok
+        );
+        assert_eq!(output.kind, NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE);
+        assert_ne!(output.payload_root_index, NO_VALUE_ROOT);
+        let mut reference = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        assert_eq!(
+            unsafe {
+                nux_flow_session_result_value_node_at(
+                    batch_result,
+                    u64::from(output.payload_root_index),
+                    &mut reference,
+                )
+            },
+            NuxStatus::Ok
+        );
+        assert_eq!(reference.kind, NUX_FLOW_VALUE_KIND_VIEW_MODEL);
+        assert_eq!(reference.has_instance_id, 1);
+        assert_eq!(reference.instance_id, child_id);
+        assert_eq!(reference.edge_count, 0);
+        assert_eq!(
+            unsafe {
+                slice::from_raw_parts(reference.schema_id.data, reference.schema_id.len as usize)
+            },
+            b"Child"
+        );
         unsafe { nux_flow_session_result_free(batch_result) };
 
         let query = NuxFlowQuery {
@@ -5891,7 +6259,7 @@ mod tests {
     }
 
     #[test]
-    fn every_v12_export_has_a_panic_firewall() {
+    fn every_v13_export_has_a_panic_firewall() {
         let source = include_str!("session_v12.rs");
         let mut checked = 0usize;
         for prefix in ["pub unsafe extern \"C\" fn ", "pub extern \"C\" fn "] {
@@ -5903,7 +6271,7 @@ mod tests {
                 assert!(
                     first_statement.starts_with("ffi_guard(")
                         || first_statement.starts_with("ffi_guard_with_session_result("),
-                    "v1.2 export is missing its panic firewall: {}",
+                    "v1.3 export is missing its panic firewall: {}",
                     rest.lines().next().unwrap_or_default()
                 );
                 checked += 1;

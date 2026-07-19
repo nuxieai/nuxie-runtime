@@ -248,11 +248,29 @@ pub enum FlowOutputPhase {
     Render,
 }
 
+/// Typed payload carried by a state-change output. View-model references are
+/// output-only structural values: host scalar mutations continue to accept
+/// [`FlowScalarValue`] and structural replacement uses [`FlowStateMutation::SetViewModel`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum FlowStateChangeValue {
+    Scalar(FlowScalarValue),
+    ViewModelReference {
+        instance_id: FlowInstanceId,
+        schema_name: String,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum FlowOutputPayload {
     ReportedEvent {
         name: Option<String>,
         event_type: u32,
+        /// Present only for an authored OpenURL event. Paired with `target`;
+        /// an empty string remains distinguishable from ordinary-event absence.
+        url: Option<String>,
+        /// Exact Rive target spelling (`_blank`, `_parent`, `_self`, `_top`,
+        /// or empty for an unknown authored target value).
+        target: Option<String>,
         /// Time between the authored event instant and the end of the runtime
         /// advance that produced it. This is overshoot metadata, not a future
         /// delivery deadline.
@@ -262,7 +280,7 @@ pub enum FlowOutputPayload {
     StateChanged {
         instance_id: Option<FlowInstanceId>,
         path: String,
-        value: Option<FlowScalarValue>,
+        value: Option<FlowStateChangeValue>,
         origin_mutation_id: Option<u64>,
     },
     HostCommand {
@@ -905,7 +923,9 @@ impl FlowSession {
 
         let mut next_sequence = self.next_sequence;
         for mutation in &resolved {
-            if let Some((instance_id, path, value)) = mutation_echo(mutation) {
+            if let Some((instance_id, path, value)) =
+                mutation_echo(mutation, &candidate_bootstrap.catalog)?
+            {
                 append_output(
                     &mut result.outputs,
                     &mut next_sequence,
@@ -941,6 +961,7 @@ impl FlowSession {
         self.next_cycle = next_cycle;
         self.next_sequence = next_sequence;
         result.settled = self.is_settled();
+        include_reconciliation_values(&mut result, &self.bootstrap.values);
         Ok(result)
     }
 
@@ -1002,6 +1023,7 @@ impl FlowSession {
                 }
             }
             result.settled = self.is_settled();
+            include_reconciliation_values(&mut result, &self.bootstrap.values);
             Ok(result)
         })();
         match operation_result {
@@ -1036,8 +1058,11 @@ impl FlowSession {
             ));
         }
         self.last_timestamp_seconds = Some(advance.timestamp_seconds);
-        self.run_player_cycle(advance.delta_seconds, advance.render)
-            .map_err(|error| self.poison_after_mutation(error))
+        let mut result = self
+            .run_player_cycle(advance.delta_seconds, advance.render)
+            .map_err(|error| self.poison_after_mutation(error))?;
+        include_reconciliation_values(&mut result, &self.bootstrap.values);
+        Ok(result)
     }
 
     fn poison_after_mutation(&mut self, error: FlowSessionError) -> FlowSessionError {
@@ -1208,7 +1233,11 @@ impl FlowSession {
             FlowOutputPayload::RuntimeAdvanced { delta_seconds },
         )?;
         self.refresh_values()?;
-        let value_changes = diff_value_arenas(&before_values, &self.bootstrap.values)?;
+        let value_changes = diff_value_arenas(
+            &before_values,
+            &self.bootstrap.values,
+            &self.bootstrap.catalog,
+        )?;
         result.dirty |= !value_changes.is_empty();
         for (instance_id, path, value) in value_changes {
             self.push_output(
@@ -1252,7 +1281,11 @@ impl FlowSession {
             )
         })?;
         self.refresh_values()?;
-        let changes = diff_value_arenas(&before_values, &self.bootstrap.values)?;
+        let changes = diff_value_arenas(
+            &before_values,
+            &self.bootstrap.values,
+            &self.bootstrap.catalog,
+        )?;
         let mut result = FlowResult::idle(self.is_settled());
         result.dirty = changed || !changes.is_empty();
         for (instance_id, path, value) in changes {
@@ -1305,10 +1338,14 @@ impl FlowSession {
             .collect();
         let name = event.name().map(ToOwned::to_owned);
         let event_type = event.event_core_type();
+        let url = event.url().map(ToOwned::to_owned);
+        let target = event.target().map(ToOwned::to_owned);
         let delay_seconds = event.seconds_delay();
         let payload = FlowOutputPayload::ReportedEvent {
             name,
             event_type,
+            url,
+            target,
             delay_seconds,
             properties,
         };
@@ -1922,6 +1959,24 @@ fn merge_results(target: &mut FlowResult, mut source: FlowResult) -> Result<(), 
     Ok(())
 }
 
+/// Structural and identity-only changes cannot be reconciled from their
+/// compact output payload alone. Include the operation's final authoritative
+/// arena in the same result, while keeping scalar-only results allocation-free.
+fn include_reconciliation_values(result: &mut FlowResult, values: &FlowValueArena) {
+    let needs_values = result.outputs.iter().any(|output| {
+        matches!(
+            &output.payload,
+            FlowOutputPayload::StateChanged {
+                value: None | Some(FlowStateChangeValue::ViewModelReference { .. }),
+                ..
+            }
+        )
+    });
+    if needs_values {
+        result.values = Some(values.clone());
+    }
+}
+
 fn validate_player_input_snapshot(inputs: &[FlowInputSnapshot]) -> Result<(), FlowSessionError> {
     if inputs.len() > MAX_BATCH_ITEMS {
         return Err(FlowSessionError::new(
@@ -2026,6 +2081,8 @@ fn validate_output_payload(payload: &FlowOutputPayload) -> Result<(), FlowSessio
     match payload {
         FlowOutputPayload::ReportedEvent {
             name,
+            url,
+            target,
             delay_seconds,
             properties,
             ..
@@ -2037,6 +2094,39 @@ fn validate_output_payload(payload: &FlowOutputPayload) -> Result<(), FlowSessio
                 ));
             }
             validate_optional_selector(name.as_deref(), "event name")?;
+            if url.is_some() != target.is_some() {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "OpenURL event URL and target presence must match",
+                ));
+            }
+            if url
+                .as_ref()
+                .is_some_and(|value| value.len() > MAX_STRING_BYTES)
+            {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "OpenURL event URL exceeds 1 MiB",
+                ));
+            }
+            if target
+                .as_ref()
+                .is_some_and(|value| value.len() > MAX_ID_PATH_BYTES)
+            {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "OpenURL event target exceeds identifier limit",
+                ));
+            }
+            if target
+                .as_deref()
+                .is_some_and(|value| !matches!(value, "" | "_blank" | "_parent" | "_self" | "_top"))
+            {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "OpenURL event target is not canonical",
+                ));
+            }
             if properties.len() > MAX_EVENT_PROPERTIES {
                 return Err(FlowSessionError::new(
                     FlowSessionErrorKind::LimitExceeded,
@@ -2051,7 +2141,14 @@ fn validate_output_payload(payload: &FlowOutputPayload) -> Result<(), FlowSessio
         FlowOutputPayload::StateChanged { path, value, .. } => {
             validate_required_id_path(path, "state-change path")?;
             if let Some(value) = value {
-                validate_scalar_value(value, "state change")?;
+                match value {
+                    FlowStateChangeValue::Scalar(value) => {
+                        validate_scalar_value(value, "state change")?
+                    }
+                    FlowStateChangeValue::ViewModelReference { schema_name, .. } => {
+                        validate_required_id_path(schema_name, "state-change schema name")?
+                    }
+                }
             }
         }
         FlowOutputPayload::HostCommand { name, payload } => {
@@ -2114,27 +2211,40 @@ fn state_batch_payload_bytes(batch: &FlowStateBatch) -> Result<usize, FlowSessio
 fn flow_output_payload_bytes(payload: &FlowOutputPayload) -> usize {
     match payload {
         FlowOutputPayload::ReportedEvent {
-            name, properties, ..
-        } => name.as_deref().map(str::len).unwrap_or(0).saturating_add(
-            properties
-                .iter()
-                .map(|property| {
-                    property
-                        .name
-                        .as_deref()
-                        .map(str::len)
-                        .unwrap_or(0)
-                        .saturating_add(match &property.value {
-                            FlowScalarValue::String(value) => value.len(),
-                            _ => 16,
-                        })
-                })
-                .sum::<usize>(),
-        ),
+            name,
+            url,
+            target,
+            properties,
+            ..
+        } => name
+            .as_deref()
+            .map(str::len)
+            .unwrap_or(0)
+            .saturating_add(url.as_deref().map(str::len).unwrap_or(0))
+            .saturating_add(target.as_deref().map(str::len).unwrap_or(0))
+            .saturating_add(
+                properties
+                    .iter()
+                    .map(|property| {
+                        property
+                            .name
+                            .as_deref()
+                            .map(str::len)
+                            .unwrap_or(0)
+                            .saturating_add(match &property.value {
+                                FlowScalarValue::String(value) => value.len(),
+                                _ => 16,
+                            })
+                    })
+                    .sum::<usize>(),
+            ),
         FlowOutputPayload::StateChanged { path, value, .. } => {
             path.len().saturating_add(match value {
-                Some(FlowScalarValue::String(value)) => value.len(),
-                Some(_) => 16,
+                Some(FlowStateChangeValue::Scalar(FlowScalarValue::String(value))) => value.len(),
+                Some(FlowStateChangeValue::ViewModelReference { schema_name, .. }) => {
+                    schema_name.len().saturating_add(16)
+                }
+                Some(FlowStateChangeValue::Scalar(_)) => 16,
                 None => 0,
             })
         }
@@ -2878,25 +2988,59 @@ fn apply_view_model_mutation(
 
 fn mutation_echo(
     mutation: &ResolvedMutation,
-) -> Option<(Option<FlowInstanceId>, String, Option<FlowScalarValue>)> {
+    catalog: &FlowCatalog,
+) -> Result<Option<(Option<FlowInstanceId>, String, Option<FlowStateChangeValue>)>, FlowSessionError>
+{
     match mutation {
-        ResolvedMutation::SetInputBool { name, value } => {
-            Some((None, name.clone(), Some(FlowScalarValue::Bool(*value))))
-        }
-        ResolvedMutation::SetInputNumber { name, value } => {
-            Some((None, name.clone(), Some(FlowScalarValue::Number(*value))))
-        }
-        ResolvedMutation::FireInputTrigger { name } => Some((None, name.clone(), None)),
+        ResolvedMutation::SetInputBool { name, value } => Ok(Some((
+            None,
+            name.clone(),
+            Some(FlowStateChangeValue::Scalar(FlowScalarValue::Bool(*value))),
+        ))),
+        ResolvedMutation::SetInputNumber { name, value } => Ok(Some((
+            None,
+            name.clone(),
+            Some(FlowStateChangeValue::Scalar(FlowScalarValue::Number(
+                *value,
+            ))),
+        ))),
+        ResolvedMutation::FireInputTrigger { name } => Ok(Some((None, name.clone(), None))),
         ResolvedMutation::SetValue {
             instance,
             path,
             value,
-        } => Some((Some(*instance), path.clone(), Some(value.clone()))),
-        ResolvedMutation::SetViewModel { instance, path, .. } => {
-            Some((Some(*instance), path.clone(), None))
+        } => Ok(Some((
+            Some(*instance),
+            path.clone(),
+            Some(FlowStateChangeValue::Scalar(value.clone())),
+        ))),
+        ResolvedMutation::SetViewModel {
+            instance,
+            path,
+            value,
+        } => {
+            let schema_name = catalog
+                .instances
+                .iter()
+                .find(|candidate| candidate.id == *value)
+                .map(|candidate| candidate.schema_name.clone())
+                .ok_or_else(|| {
+                    FlowSessionError::new(
+                        FlowSessionErrorKind::Runtime,
+                        "replacement instance metadata disappeared",
+                    )
+                })?;
+            Ok(Some((
+                Some(*instance),
+                path.clone(),
+                Some(FlowStateChangeValue::ViewModelReference {
+                    instance_id: *value,
+                    schema_name,
+                }),
+            )))
         }
         ResolvedMutation::FireTrigger { instance, path } => {
-            Some((Some(*instance), path.clone(), None))
+            Ok(Some((Some(*instance), path.clone(), None)))
         }
         ResolvedMutation::ListInsert { instance, path, .. }
         | ResolvedMutation::ListRemove { instance, path, .. }
@@ -2904,7 +3048,7 @@ fn mutation_echo(
         | ResolvedMutation::ListMove { instance, path, .. }
         | ResolvedMutation::ListSet { instance, path, .. }
         | ResolvedMutation::ListClear { instance, path } => {
-            Some((Some(*instance), path.clone(), None))
+            Ok(Some((Some(*instance), path.clone(), None)))
         }
     }
 }
@@ -2912,7 +3056,8 @@ fn mutation_echo(
 fn diff_value_arenas(
     before: &FlowValueArena,
     after: &FlowValueArena,
-) -> Result<Vec<(FlowInstanceId, String, Option<FlowScalarValue>)>, FlowSessionError> {
+    catalog: &FlowCatalog,
+) -> Result<Vec<(FlowInstanceId, String, Option<FlowStateChangeValue>)>, FlowSessionError> {
     let mut changes = Vec::new();
     for (instance_id, after_root) in &after.roots {
         let before_root = before
@@ -2927,10 +3072,18 @@ fn diff_value_arenas(
             Some(*after_root),
             *instance_id,
             "",
+            catalog,
             &mut changes,
         )?;
     }
-    Ok(changes)
+    let (mut structural, scalar): (Vec<_>, Vec<_>) = changes.into_iter().partition(|change| {
+        matches!(
+            &change.2,
+            Some(FlowStateChangeValue::ViewModelReference { .. })
+        )
+    });
+    structural.extend(scalar);
+    Ok(structural)
 }
 
 fn diff_value_node(
@@ -2940,7 +3093,8 @@ fn diff_value_node(
     after_id: Option<FlowValueId>,
     instance_id: FlowInstanceId,
     path: &str,
-    changes: &mut Vec<(FlowInstanceId, String, Option<FlowScalarValue>)>,
+    catalog: &FlowCatalog,
+    changes: &mut Vec<(FlowInstanceId, String, Option<FlowStateChangeValue>)>,
 ) -> Result<(), FlowSessionError> {
     let before_value = before_id
         .and_then(|id| before.nodes.iter().find(|node| node.id == id))
@@ -2949,29 +3103,62 @@ fn diff_value_node(
         .and_then(|id| after.nodes.iter().find(|node| node.id == id))
         .map(|node| &node.value);
     match (before_value, after_value) {
-        (Some(FlowValue::ViewModel(before_edges)), Some(FlowValue::ViewModel(after_edges)))
-        | (Some(FlowValue::Object(before_edges)), Some(FlowValue::Object(after_edges))) => {
-            for (name, after_child) in after_edges {
-                let child_path = if path.is_empty() {
-                    name.clone()
-                } else {
-                    format!("{path}/{name}")
-                };
-                validate_required_id_path(&child_path, "state-change path")?;
-                let before_child = before_edges
-                    .iter()
-                    .find(|(candidate, _)| candidate == name)
-                    .map(|(_, id)| *id);
-                diff_value_node(
-                    before,
-                    before_child,
-                    after,
-                    Some(*after_child),
-                    instance_id,
-                    &child_path,
-                    changes,
-                )?;
+        (Some(FlowValue::ViewModel(before_edges)), Some(FlowValue::ViewModel(after_edges))) => {
+            if !path.is_empty() {
+                let before_identity =
+                    before_id.and_then(|id| value_instance_id_for_node(before, id));
+                let after_identity = after_id.and_then(|id| value_instance_id_for_node(after, id));
+                if let Some(after_identity) = after_identity {
+                    if !path.contains('/') && before_identity != Some(after_identity) {
+                        let schema_name = catalog
+                            .instances
+                            .iter()
+                            .find(|candidate| candidate.id == after_identity)
+                            .map(|candidate| candidate.schema_name.clone())
+                            .ok_or_else(|| {
+                                FlowSessionError::new(
+                                    FlowSessionErrorKind::Runtime,
+                                    "replacement instance metadata disappeared",
+                                )
+                            })?;
+                        validate_required_id_path(path, "state-change path")?;
+                        changes.push((
+                            instance_id,
+                            path.to_owned(),
+                            Some(FlowStateChangeValue::ViewModelReference {
+                                instance_id: after_identity,
+                                schema_name,
+                            }),
+                        ));
+                    }
+                    // Linked nested view models own stable arena roots. Treat
+                    // the nested node as an identity boundary so its root is
+                    // the sole source of descendant scalar changes.
+                    return Ok(());
+                }
             }
+            diff_named_value_edges(
+                before,
+                before_edges,
+                after,
+                after_edges,
+                instance_id,
+                path,
+                catalog,
+                changes,
+            )?;
+        }
+        (Some(FlowValue::Object(before_edges)), Some(FlowValue::Object(after_edges))) => {
+            diff_named_value_edges(
+                before,
+                before_edges,
+                after,
+                after_edges,
+                instance_id,
+                path,
+                catalog,
+                changes,
+            )?;
         }
         (Some(FlowValue::List(before_items)), Some(FlowValue::List(after_items))) => {
             let before_identity = before_items
@@ -2997,6 +3184,7 @@ fn diff_value_node(
                     Some(*after_child),
                     instance_id,
                     &child_path,
+                    catalog,
                     changes,
                 )?;
             }
@@ -3006,10 +3194,45 @@ fn diff_value_node(
             changes.push((
                 instance_id,
                 path.to_owned(),
-                flow_scalar_from_arena_value(value),
+                flow_scalar_from_arena_value(value).map(FlowStateChangeValue::Scalar),
             ));
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn diff_named_value_edges(
+    before: &FlowValueArena,
+    before_edges: &[(String, FlowValueId)],
+    after: &FlowValueArena,
+    after_edges: &[(String, FlowValueId)],
+    instance_id: FlowInstanceId,
+    path: &str,
+    catalog: &FlowCatalog,
+    changes: &mut Vec<(FlowInstanceId, String, Option<FlowStateChangeValue>)>,
+) -> Result<(), FlowSessionError> {
+    for (name, after_child) in after_edges {
+        let child_path = if path.is_empty() {
+            name.clone()
+        } else {
+            format!("{path}/{name}")
+        };
+        validate_required_id_path(&child_path, "state-change path")?;
+        let before_child = before_edges
+            .iter()
+            .find(|(candidate, _)| candidate == name)
+            .map(|(_, id)| *id);
+        diff_value_node(
+            before,
+            before_child,
+            after,
+            Some(*after_child),
+            instance_id,
+            &child_path,
+            catalog,
+            changes,
+        )?;
     }
     Ok(())
 }
@@ -3617,6 +3840,159 @@ mod tests {
             return None;
         };
         Some(items.clone())
+    }
+
+    fn outer_reference_diff_fixture(
+        child_b_label: &str,
+    ) -> (FlowValueArena, FlowValueArena, FlowCatalog) {
+        let owner = FlowInstanceId::new(1).expect("owner id");
+        let child_a = FlowInstanceId::new(2).expect("child A id");
+        let child_b = FlowInstanceId::new(3).expect("child B id");
+        let arena = |owner_child, child_b_label: &str| FlowValueArena {
+            roots: vec![
+                (owner, FlowValueId(1)),
+                (child_a, FlowValueId(2)),
+                (child_b, FlowValueId(4)),
+            ],
+            nodes: vec![
+                FlowValueNode {
+                    id: FlowValueId(1),
+                    value: FlowValue::ViewModel(vec![("child".to_owned(), owner_child)]),
+                },
+                FlowValueNode {
+                    id: FlowValueId(2),
+                    value: FlowValue::ViewModel(vec![("label".to_owned(), FlowValueId(3))]),
+                },
+                FlowValueNode {
+                    id: FlowValueId(3),
+                    value: FlowValue::String("same".to_owned()),
+                },
+                FlowValueNode {
+                    id: FlowValueId(4),
+                    value: FlowValue::ViewModel(vec![("label".to_owned(), FlowValueId(5))]),
+                },
+                FlowValueNode {
+                    id: FlowValueId(5),
+                    value: FlowValue::String(child_b_label.to_owned()),
+                },
+            ],
+        };
+        let before = arena(FlowValueId(2), "same");
+        let after = arena(FlowValueId(4), child_b_label);
+        let catalog = FlowCatalog {
+            instances: vec![
+                FlowInstanceMetadata {
+                    id: owner,
+                    schema_name: "Main".to_owned(),
+                    authored_name: None,
+                    is_root: true,
+                },
+                FlowInstanceMetadata {
+                    id: child_a,
+                    schema_name: "Child".to_owned(),
+                    authored_name: None,
+                    is_root: false,
+                },
+                FlowInstanceMetadata {
+                    id: child_b,
+                    schema_name: "Child".to_owned(),
+                    authored_name: None,
+                    is_root: false,
+                },
+            ],
+            root_instance_id: Some(owner),
+            ..FlowCatalog::default()
+        };
+        (before, after, catalog)
+    }
+
+    #[test]
+    fn same_valued_outer_view_model_replacement_emits_its_new_identity() {
+        let (before, after, catalog) = outer_reference_diff_fixture("same");
+        let changes = diff_value_arenas(&before, &after, &catalog).expect("diff references");
+        assert_eq!(
+            changes,
+            vec![(
+                FlowInstanceId::new(1).expect("owner id"),
+                "child".to_owned(),
+                Some(FlowStateChangeValue::ViewModelReference {
+                    instance_id: FlowInstanceId::new(3).expect("child B id"),
+                    schema_name: "Child".to_owned(),
+                }),
+            )]
+        );
+    }
+
+    #[test]
+    fn authored_outer_replacement_result_carries_values_while_scalar_only_result_does_not() {
+        let (before, after, catalog) = outer_reference_diff_fixture("same");
+        let changes = diff_value_arenas(&before, &after, &catalog).expect("diff references");
+        let mut result = FlowResult::idle(false);
+        let mut next_sequence = 1;
+        for (instance_id, path, value) in changes {
+            append_output(
+                &mut result.outputs,
+                &mut next_sequence,
+                1,
+                FlowOutputPhase::ViewModelChanges,
+                FlowOutputPayload::StateChanged {
+                    instance_id: Some(instance_id),
+                    path,
+                    value,
+                    origin_mutation_id: None,
+                },
+            )
+            .expect("append authored replacement");
+        }
+        include_reconciliation_values(&mut result, &after);
+        assert_eq!(result.values.as_ref(), Some(&after));
+
+        let mut scalar_result = FlowResult::idle(false);
+        append_output(
+            &mut scalar_result.outputs,
+            &mut next_sequence,
+            2,
+            FlowOutputPhase::ViewModelChanges,
+            FlowOutputPayload::StateChanged {
+                instance_id: FlowInstanceId::new(1),
+                path: "title".to_owned(),
+                value: Some(FlowStateChangeValue::Scalar(FlowScalarValue::String(
+                    "updated".to_owned(),
+                ))),
+                origin_mutation_id: None,
+            },
+        )
+        .expect("append scalar change");
+        include_reconciliation_values(&mut scalar_result, &after);
+        assert!(scalar_result.values.is_none());
+    }
+
+    #[test]
+    fn differing_outer_view_model_replacement_emits_identity_before_child_values_only_once() {
+        let (before, mut after, catalog) = outer_reference_diff_fixture("different");
+        after.roots.reverse();
+        let changes = diff_value_arenas(&before, &after, &catalog).expect("diff references");
+        assert_eq!(
+            changes,
+            vec![
+                (
+                    FlowInstanceId::new(1).expect("owner id"),
+                    "child".to_owned(),
+                    Some(FlowStateChangeValue::ViewModelReference {
+                        instance_id: FlowInstanceId::new(3).expect("child B id"),
+                        schema_name: "Child".to_owned(),
+                    }),
+                ),
+                (
+                    FlowInstanceId::new(3).expect("child B id"),
+                    "label".to_owned(),
+                    Some(FlowStateChangeValue::Scalar(FlowScalarValue::String(
+                        "different".to_owned(),
+                    ))),
+                ),
+            ],
+            "the linked child root owns descendant changes without an owner-path duplicate",
+        );
     }
 
     fn input_value(session: &mut FlowSession, name: &str) -> FlowScalarValue {
@@ -4262,7 +4638,8 @@ mod tests {
             Some(vec![second_node, first_node])
         );
         assert_eq!(
-            diff_value_arenas(&before, &after).expect("diff equal-valued list identities"),
+            diff_value_arenas(&before, &after, &FlowCatalog::default())
+                .expect("diff equal-valued list identities"),
             vec![(root, "Buttons".to_owned(), None)]
         );
     }
@@ -4451,6 +4828,44 @@ mod tests {
                 .iter()
                 .any(|output| { output.phase == FlowOutputPhase::DelayedEventCallbacks })
         );
+        let mut reported = second
+            .outputs
+            .iter()
+            .filter_map(|output| match &output.payload {
+                FlowOutputPayload::ReportedEvent { url, target, .. } => {
+                    Some((url.clone(), target.clone()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for (timestamp_seconds, delta_seconds) in [(1.0, 1.0), (2.0, 1.0), (2.0, 0.0)] {
+            let result = session
+                .perform(FlowOperation::Advance(FlowAdvance {
+                    timestamp_seconds,
+                    delta_seconds,
+                    render: false,
+                }))
+                .expect("advance through authored state events");
+            reported.extend(
+                result
+                    .outputs
+                    .iter()
+                    .filter_map(|output| match &output.payload {
+                        FlowOutputPayload::ReportedEvent { url, target, .. } => {
+                            Some((url.clone(), target.clone()))
+                        }
+                        _ => None,
+                    }),
+            );
+        }
+        assert!(
+            reported.contains(&(Some(String::new()), Some("_blank".to_owned()),)),
+            "reported event metadata: {reported:?}",
+        );
+        assert!(
+            reported.contains(&(None, None)),
+            "ordinary events must preserve OpenURL metadata absence",
+        );
     }
 
     #[test]
@@ -4554,12 +4969,14 @@ mod tests {
     }
 
     #[test]
-    fn output_validation_rejects_non_finite_and_oversized_scalar_payloads_before_sequence_use() {
+    fn output_validation_rejects_invalid_event_and_scalar_payloads_before_sequence_use() {
         let mut outputs = Vec::new();
         let mut next_sequence = 1;
         let non_finite = FlowOutputPayload::ReportedEvent {
             name: Some("event".to_owned()),
             event_type: 0,
+            url: None,
+            target: None,
             delay_seconds: 0.0,
             properties: vec![FlowEventProperty {
                 name: Some("number".to_owned()),
@@ -4580,7 +4997,9 @@ mod tests {
         let oversized = FlowOutputPayload::StateChanged {
             instance_id: None,
             path: "value".to_owned(),
-            value: Some(FlowScalarValue::String("x".repeat(MAX_STRING_BYTES + 1))),
+            value: Some(FlowStateChangeValue::Scalar(FlowScalarValue::String(
+                "x".repeat(MAX_STRING_BYTES + 1),
+            ))),
             origin_mutation_id: None,
         };
         let oversized_error = append_output(
@@ -4593,6 +5012,71 @@ mod tests {
         .expect_err("oversized scalar strings must be rejected");
 
         assert_eq!(oversized_error.kind(), FlowSessionErrorKind::LimitExceeded);
+
+        let open_url =
+            |url: Option<String>, target: Option<String>| FlowOutputPayload::ReportedEvent {
+                name: Some("open".to_owned()),
+                event_type: 131,
+                url,
+                target,
+                delay_seconds: 0.0,
+                properties: Vec::new(),
+            };
+        let unpaired_error = append_output(
+            &mut outputs,
+            &mut next_sequence,
+            1,
+            FlowOutputPhase::ReportedEvents,
+            open_url(Some("https://nuxie.example".to_owned()), None),
+        )
+        .expect_err("OpenURL fields must be paired");
+        assert_eq!(unpaired_error.kind(), FlowSessionErrorKind::Runtime);
+
+        let oversized_url_error = append_output(
+            &mut outputs,
+            &mut next_sequence,
+            1,
+            FlowOutputPhase::ReportedEvents,
+            open_url(
+                Some("x".repeat(MAX_STRING_BYTES + 1)),
+                Some("_blank".to_owned()),
+            ),
+        )
+        .expect_err("oversized OpenURL URLs must be rejected");
+        assert_eq!(
+            oversized_url_error.kind(),
+            FlowSessionErrorKind::LimitExceeded
+        );
+
+        let oversized_target_error = append_output(
+            &mut outputs,
+            &mut next_sequence,
+            1,
+            FlowOutputPhase::ReportedEvents,
+            open_url(
+                Some("https://nuxie.example".to_owned()),
+                Some("x".repeat(MAX_ID_PATH_BYTES + 1)),
+            ),
+        )
+        .expect_err("oversized OpenURL targets must be rejected");
+        assert_eq!(
+            oversized_target_error.kind(),
+            FlowSessionErrorKind::LimitExceeded
+        );
+
+        let malformed_target_error = append_output(
+            &mut outputs,
+            &mut next_sequence,
+            1,
+            FlowOutputPhase::ReportedEvents,
+            open_url(
+                Some("https://nuxie.example".to_owned()),
+                Some("new-window".to_owned()),
+            ),
+        )
+        .expect_err("noncanonical OpenURL targets must be rejected");
+        assert_eq!(malformed_target_error.kind(), FlowSessionErrorKind::Runtime);
+
         assert!(outputs.is_empty());
         assert_eq!(next_sequence, 1);
     }

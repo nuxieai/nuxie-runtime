@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 _Static_assert(NUX_RUNTIME_ABI_MAJOR == 1, "unexpected runtime ABI major");
-_Static_assert(NUX_RUNTIME_ABI_MINOR == 2, "unexpected runtime ABI minor");
-_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 2,
+_Static_assert(NUX_RUNTIME_ABI_MINOR == 3, "unexpected runtime ABI minor");
+_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 3,
                "unexpected flow-session ABI minor");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY == 1,
                "script authorization values are part of the ABI");
@@ -82,8 +82,8 @@ _Static_assert(offsetof(struct NuxFrameOperation, completion_context) == 24,
 _Static_assert(offsetof(struct NuxFrameOperation, completion_callback) == 32,
                "unexpected NuxFrameOperation.completion_callback offset");
 
-/* ABI 1.2 is additive: freeze every caller-owned input and representative
- * result view while retaining all ABI 1.1 assertions above. */
+/* ABI 1.3 retains every ABI 1.2 caller-owned input and its ABI 1.1 prefix,
+ * while extending result metadata through versioned output records. */
 _Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 40,
                "unexpected NuxFlowConfiguredSessionDescriptor layout");
 _Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
@@ -159,12 +159,18 @@ _Static_assert(sizeof(struct NuxFlowCreatedInstanceView) == 16,
                "unexpected NuxFlowCreatedInstanceView layout");
 _Static_assert(sizeof(struct NuxFlowEventPropertyView) == 40,
                "unexpected NuxFlowEventPropertyView layout");
-_Static_assert(sizeof(struct NuxFlowOutputView) == 120,
+_Static_assert(sizeof(struct NuxFlowOutputView) == 160,
                "unexpected NuxFlowOutputView layout");
 _Static_assert(offsetof(struct NuxFlowOutputView, sequence) == 24,
                "unexpected NuxFlowOutputView.sequence offset");
 _Static_assert(offsetof(struct NuxFlowOutputView, name) == 72,
                "unexpected NuxFlowOutputView.name offset");
+_Static_assert(offsetof(struct NuxFlowOutputView, has_open_url) == 120,
+               "unexpected NuxFlowOutputView.has_open_url offset");
+_Static_assert(offsetof(struct NuxFlowOutputView, open_url) == 128,
+               "unexpected NuxFlowOutputView.open_url offset");
+_Static_assert(offsetof(struct NuxFlowOutputView, open_url_target) == 144,
+               "unexpected NuxFlowOutputView.open_url_target offset");
 
 static void typecheck_product_api(void)
 {

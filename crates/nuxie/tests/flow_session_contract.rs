@@ -11,8 +11,8 @@ use nuxie::{
     File,
     flow_session::{
         FlowInstanceId, FlowInstanceRef, FlowNewInstance, FlowOperation, FlowScalarValue,
-        FlowSession, FlowSessionConfig, FlowSessionErrorKind, FlowStateBatch, FlowStateMutation,
-        FlowValue, FlowValueArena, FlowValueId, FlowValueType,
+        FlowSession, FlowSessionConfig, FlowSessionErrorKind, FlowStateBatch, FlowStateChangeValue,
+        FlowStateMutation, FlowValue, FlowValueArena, FlowValueId, FlowValueType,
     },
 };
 
@@ -171,12 +171,16 @@ fn list_index_properties_round_trip_without_becoming_enums() {
             new_instances: Vec::new(),
         }))
         .expect("set list index");
+    assert!(
+        result.values.is_none(),
+        "scalar-only echoes do not need a reconciliation snapshot"
+    );
 
     assert!(matches!(
         result.outputs.as_slice(),
         [nuxie::flow_session::FlowOutput {
             payload: nuxie::flow_session::FlowOutputPayload::StateChanged {
-                value: Some(FlowScalarValue::ListIndex(7)),
+                value: Some(FlowStateChangeValue::Scalar(FlowScalarValue::ListIndex(7))),
                 origin_mutation_id: Some(41),
                 ..
             },
@@ -223,18 +227,35 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
         }))
         .expect("replace child");
     let child = replacement.created_instances[0].id;
+    let replacement_values = replacement
+        .values
+        .as_ref()
+        .expect("structural replacement result carries authoritative values");
     assert!(matches!(
         replacement.outputs.as_slice(),
         [nuxie::flow_session::FlowOutput {
             payload: nuxie::flow_session::FlowOutputPayload::StateChanged {
                 instance_id: Some(id),
                 path,
-                value: None,
+                value: Some(FlowStateChangeValue::ViewModelReference {
+                    instance_id: replacement_id,
+                    schema_name,
+                }),
                 origin_mutation_id: Some(51),
             },
             ..
-        }] if *id == root && path == "child"
+        }] if *id == root
+            && path == "child"
+            && *replacement_id == child
+            && schema_name == "Child"
     ));
+    let child_root = replacement_values
+        .roots
+        .iter()
+        .find(|(id, _)| *id == child)
+        .map(|(_, root)| *root)
+        .expect("replacement child root in result snapshot");
+    assert_eq!(property_id(replacement_values, root, "child"), child_root);
     let values = session
         .perform(FlowOperation::Query(nuxie::flow_session::FlowQuery::Values))
         .expect("query values")

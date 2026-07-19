@@ -3,7 +3,7 @@ import NuxieRuntime
 func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = nux_runtime_abi_major()
     _ = nux_runtime_abi_minor()
-    _ = nux_runtime_require_abi(1, 2)
+    _ = nux_runtime_require_abi(1, 3)
 
     let byteView = NuxByteView(data: bytes, len: count)
     _ = NuxFlowImportRequest(
@@ -60,7 +60,7 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = NuxFlowConfiguredSessionDescriptor(
         struct_size: UInt32(MemoryLayout<NuxFlowConfiguredSessionDescriptor>.size),
         required_abi_major: 1,
-        minimum_abi_minor: 2,
+        minimum_abi_minor: 3,
         artboard_name: NuxByteView(data: nil, len: 0),
         player_name: NuxByteView(data: nil, len: 0)
     )
@@ -117,7 +117,7 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = NuxFlowSessionOperation(
         struct_size: UInt32(MemoryLayout<NuxFlowSessionOperation>.size),
         required_abi_major: 1,
-        minimum_abi_minor: 2,
+        minimum_abi_minor: 3,
         kind: UInt32(NUX_FLOW_SESSION_OPERATION_KIND_QUERY),
         state_batch: nil,
         pointer_batch: nil,
@@ -153,7 +153,10 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
         delay_seconds: 0,
         name: NuxByteView(data: nil, len: 0),
         path: NuxByteView(data: nil, len: 0),
-        payload: NuxByteView(data: nil, len: 0)
+        payload: NuxByteView(data: nil, len: 0),
+        has_open_url: 0,
+        open_url: NuxByteView(data: nil, len: 0),
+        open_url_target: NuxByteView(data: nil, len: 0)
     )
     var playerInput = NuxFlowPlayerInputView(
         struct_size: UInt32(MemoryLayout<NuxFlowPlayerInputView>.size),

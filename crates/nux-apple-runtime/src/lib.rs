@@ -39,7 +39,7 @@ use std::{
 };
 
 pub const NUX_RUNTIME_ABI_MAJOR: u16 = 1;
-pub const NUX_RUNTIME_ABI_MINOR: u16 = 2;
+pub const NUX_RUNTIME_ABI_MINOR: u16 = 3;
 const MINIMUM_SUPPORTED_ABI_MINOR: u16 = 1;
 
 const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
@@ -2622,6 +2622,8 @@ mod tests {
         assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(2, 0), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::AbiMismatch);
     }
 
     #[cfg(feature = "apple-product")]
@@ -3201,6 +3203,9 @@ mod tests {
         for field in [
             "\"schemaVersion\":1",
             "\"runtimeVersion\"",
+            "\"runtimeAbiMajor\":1",
+            "\"runtimeAbiMinor\":3",
+            "\"flowSessionAbiMinor\":3",
             "\"sourceRevision\"",
             "\"target\"",
             "\"profile\"",

@@ -35,11 +35,11 @@
 
 #define NUX_FLOW_MAX_VALUE_EDGE_COUNT 16384
 
-#define NUX_FLOW_SESSION_ABI_MINOR 2
+#define NUX_FLOW_SESSION_ABI_MINOR 3
 
 #define NUX_RUNTIME_ABI_MAJOR 1
 
-#define NUX_RUNTIME_ABI_MINOR 2
+#define NUX_RUNTIME_ABI_MINOR 3
 
 /**
  * Opaque C handle. It retains the logical render session across detach.
@@ -57,7 +57,7 @@ typedef struct NuxFlowRenderSession NuxFlowRenderSession;
 typedef struct NuxFlowRuntimeContext NuxFlowRuntimeContext;
 
 /**
- * Opaque owned ABI 1.2 result. Every borrowed view returned by an accessor
+ * Opaque owned ABI 1.3 result. Every borrowed view returned by an accessor
  * remains valid until this handle is freed.
  */
 typedef struct NuxFlowSessionResult NuxFlowSessionResult;
@@ -118,7 +118,7 @@ typedef struct NuxFlowSessionDescriptor {
 } NuxFlowSessionDescriptor;
 
 /**
- * ABI 1.2 configured-session descriptor. `minimum_abi_minor` must be 2 for
+ * ABI 1.3 configured-session descriptor. `minimum_abi_minor` must be 3 for
  * this surface. A null `artboard_name` selects the default artboard. A null
  * `player_name` uses the authored fallback policy; a nonempty UTF-8 name
  * explicitly selects a state machine. Linear animations are fallback-only.
@@ -531,6 +531,19 @@ typedef struct NuxFlowOutputView {
   struct NuxByteView name;
   struct NuxByteView path;
   struct NuxByteView payload;
+  /**
+   * Canonical 0/1 presence flag for the paired OpenURL fields.
+   */
+  uint32_t has_open_url;
+  /**
+   * Exact authored URL for a reported OpenURL event. Empty-but-present URLs
+   * are distinguished from absent URLs by `has_open_url`.
+   */
+  struct NuxByteView open_url;
+  /**
+   * Canonical OpenURL target paired with `open_url`.
+   */
+  struct NuxByteView open_url_target;
 } NuxFlowOutputView;
 
 /**
@@ -946,7 +959,7 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
                                          struct NuxOperationResult **out_result);
 
 /**
- * Creates one independent screen session using the ABI 1.2 player-selection
+ * Creates one independent screen session using the ABI 1.3 player-selection
  * and bootstrap-result contract. Creation never performs an observable
  * advance. The returned result owns player metadata, bounds, catalog, and
  * bootstrap value views until explicitly freed.
@@ -973,7 +986,7 @@ NuxStatus nux_flow_render_session_create_configured(const struct NuxFlowRuntimeC
 void nux_flow_render_session_free(struct NuxFlowRenderSession *session);
 
 /**
- * Performs one fully copied ABI 1.2 operation on the session's pinned worker.
+ * Performs one fully copied ABI 1.3 operation on the session's pinned worker.
  * Rust never calls Swift reentrantly; ordered outputs are returned in the owned
  * result. State batches are atomic and pointer batches preserve immediate
  * subcycles inside their returned `cycle` values.
@@ -1095,7 +1108,7 @@ NuxStatus nux_flow_session_result_event_property_at(const struct NuxFlowSessionR
 uint64_t nux_flow_session_result_event_property_count(const struct NuxFlowSessionResult *result);
 
 /**
- * Releases one ABI 1.2 session result. Null is a no-op.
+ * Releases one ABI 1.3 session result. Null is a no-op.
  *
  * # Safety
  *
@@ -1285,7 +1298,7 @@ NuxStatus nux_flow_session_result_schema_property_at(const struct NuxFlowSession
 uint64_t nux_flow_session_result_schema_property_count(const struct NuxFlowSessionResult *result);
 
 /**
- * Returns an ABI 1.2 session result's status, or `NULL_ARGUMENT` for null.
+ * Returns an ABI 1.3 session result's status, or `NULL_ARGUMENT` for null.
  *
  * # Safety
  *

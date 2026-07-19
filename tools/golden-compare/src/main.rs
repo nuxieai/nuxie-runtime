@@ -20,6 +20,13 @@ fn run() -> Result<(), String> {
     if let Some(milestone) = options.milestone.as_deref() {
         corpus.retain(|entry| entry.milestone.as_deref() == Some(milestone));
     }
+    if let Some(status) = options.status {
+        corpus
+            .retain(|entry| entry.effective_status(options.verify_scripted_diagnostics) == status);
+    }
+    if !options.ids.is_empty() {
+        corpus.retain(|entry| options.ids.iter().any(|id| id == &entry.id));
+    }
     if corpus.is_empty() {
         return Err(format!(
             "corpus {} contains no [[file]] entries",
@@ -35,6 +42,8 @@ fn run() -> Result<(), String> {
 
     let mut counts = BTreeMap::<Status, usize>::new();
     let mut exact_segments = 0usize;
+    let mut not_yet_rust_probed = 0usize;
+    let mut not_yet_rust_exact = 0usize;
     let mut parked_by_milestone = BTreeMap::<String, usize>::new();
     let mut failures = Vec::new();
 
@@ -159,32 +168,61 @@ fn run() -> Result<(), String> {
                             entry.id,
                             cpp_stream.len()
                         );
-                        if status == Status::Exact
+                        let run_rust = status == Status::Exact
                             || (status == Status::Diverges && options.verify_divergent_rust)
-                        {
+                            || (status == Status::NotYet && options.probe_not_yet_rust);
+                        if run_rust {
                             match &options.rust_runner {
                                 Some(rust_runner) => {
-                                    let rust_stream =
-                                        run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if status == Status::Diverges {
-                                        println!(
+                                    match run_stream(rust_runner, entry, &file, &corpus_dir) {
+                                        Ok(rust_stream) if status == Status::Diverges => println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
                                             entry.id,
                                             rust_stream.len()
-                                        );
-                                    } else if let Some(difference) = entry
-                                        .verification
-                                        .stream_difference(&rust_stream, &cpp_stream)
-                                    {
-                                        failures.push(format!(
-                                            "{}: stream differs from C++ under {} verification: {difference}",
-                                            entry.id, entry.verification
-                                        ));
+                                        ),
+                                        Ok(rust_stream) if status == Status::NotYet => {
+                                            not_yet_rust_probed += 1;
+                                            if let Some(difference) = entry
+                                                .verification
+                                                .stream_difference(&rust_stream, &cpp_stream)
+                                            {
+                                                println!(
+                                                    "[not-yet] {}: rust differs from C++ under {} verification: {difference}",
+                                                    entry.id, entry.verification
+                                                );
+                                            } else {
+                                                not_yet_rust_exact += 1;
+                                                println!(
+                                                    "[not-yet] {}: rust stream is exact ({} bytes)",
+                                                    entry.id,
+                                                    rust_stream.len()
+                                                );
+                                            }
+                                        }
+                                        Ok(rust_stream) => {
+                                            if let Some(difference) = entry
+                                                .verification
+                                                .stream_difference(&rust_stream, &cpp_stream)
+                                            {
+                                                failures.push(format!(
+                                                    "{}: stream differs from C++ under {} verification: {difference}",
+                                                    entry.id, entry.verification
+                                                ));
+                                            }
+                                        }
+                                        Err(error) if status == Status::NotYet => {
+                                            not_yet_rust_probed += 1;
+                                            println!(
+                                                "[not-yet] {}: rust runner failed: {error}",
+                                                entry.id
+                                            );
+                                        }
+                                        Err(error) => failures.push(format!("{}: {error}", entry.id)),
                                     }
                                 }
                                 None => failures.push(format!(
-                                    "{}: status is exact but --rust-runner was not supplied",
-                                    entry.id
+                                    "{}: rust verification was requested but --rust-runner was not supplied",
+                                    entry.id,
                                 )),
                             }
                         }
@@ -208,6 +246,12 @@ fn run() -> Result<(), String> {
             .unwrap_or(0),
         counts.get(&Status::NotYet).copied().unwrap_or(0),
     );
+    if options.probe_not_yet_rust {
+        println!(
+            "golden-compare not-yet probe: rust-exact={} probed={}",
+            not_yet_rust_exact, not_yet_rust_probed
+        );
+    }
     if !parked_by_milestone.is_empty() {
         let breakdown = parked_by_milestone
             .iter()
@@ -234,8 +278,11 @@ struct Options {
     rust_runner: Option<PathBuf>,
     rive_runtime_dir: PathBuf,
     milestone: Option<String>,
+    status: Option<Status>,
+    ids: Vec<String>,
     verify_unsupported_cpp: bool,
     verify_divergent_rust: bool,
+    probe_not_yet_rust: bool,
     verify_scripted_diagnostics: bool,
 }
 
@@ -247,8 +294,11 @@ impl Options {
             .unwrap_or_else(default_cpp_runner);
         let mut rust_runner = None;
         let mut milestone = None;
+        let mut status = None;
+        let mut ids = Vec::new();
         let mut verify_unsupported_cpp = false;
         let mut verify_divergent_rust = false;
+        let mut probe_not_yet_rust = false;
         let mut verify_scripted_diagnostics = false;
         let mut rive_runtime_dir = env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
@@ -270,12 +320,15 @@ impl Options {
                 "--rust-runner" => rust_runner = Some(PathBuf::from(value(arg)?)),
                 "--rive-runtime-dir" => rive_runtime_dir = PathBuf::from(value(arg)?),
                 "--milestone" => milestone = Some(value(arg)?),
+                "--status" => status = Some(Status::parse(&value(arg)?)?),
+                "--id" => ids.push(value(arg)?),
                 "--verify-unsupported-cpp" => verify_unsupported_cpp = true,
                 "--verify-divergent-rust" => verify_divergent_rust = true,
+                "--probe-not-yet-rust" => probe_not_yet_rust = true,
                 "--verify-scripted-diagnostics" => verify_scripted_diagnostics = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--verify-unsupported-cpp] [--verify-divergent-rust] [--verify-scripted-diagnostics] --cpp-runner <path> [--rust-runner <path>]"
+                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--status exact|diverges|unsupported-feature|not-yet] [--id corpus-id]... [--verify-unsupported-cpp] [--verify-divergent-rust] [--probe-not-yet-rust] [--verify-scripted-diagnostics] --cpp-runner <path> [--rust-runner <path>]"
                     );
                     std::process::exit(0);
                 }
@@ -290,8 +343,11 @@ impl Options {
             rust_runner,
             rive_runtime_dir,
             milestone,
+            status,
+            ids,
             verify_unsupported_cpp,
             verify_divergent_rust,
+            probe_not_yet_rust,
             verify_scripted_diagnostics,
         })
     }
@@ -876,6 +932,29 @@ fn unsupported_diagnostic_matches(stderr: &str, expected_feature: &str) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn options_can_filter_and_probe_not_yet_entries() {
+        let options = Options::parse(vec![
+            "--cpp-runner".to_owned(),
+            "cpp-runner".to_owned(),
+            "--rust-runner".to_owned(),
+            "rust-runner".to_owned(),
+            "--status".to_owned(),
+            "not-yet".to_owned(),
+            "--id".to_owned(),
+            "one".to_owned(),
+            "--id".to_owned(),
+            "two".to_owned(),
+            "--probe-not-yet-rust".to_owned(),
+        ])
+        .unwrap();
+
+        assert_eq!(options.status, Some(Status::NotYet));
+        assert_eq!(options.ids, ["one", "two"]);
+        assert!(options.probe_not_yet_rust);
+        assert_eq!(options.rust_runner, Some(PathBuf::from("rust-runner")));
+    }
 
     #[test]
     fn scripted_status_override_only_applies_in_scripted_mode() {

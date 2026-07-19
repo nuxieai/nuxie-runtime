@@ -183,6 +183,12 @@ fn run() -> Result<String> {
         .iter()
         .any(|object| object.type_name == Some("ScriptInputArtboard"));
     #[cfg(feature = "scripting")]
+    let scripts_allocate_render_paints = artboard_scripts_allocate_render_paints(
+        &runtime,
+        artboard,
+        &extract_script_assets(&runtime),
+    );
+    #[cfg(feature = "scripting")]
     let (script_artboard_render_state, mut paint_cache) = if has_scripted_layout {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         let state = initialize_scripted_drawables_and_realize(
@@ -223,6 +229,23 @@ fn run() -> Result<String> {
                 .realize_pending(&runtime, &graph.artboards, factory.as_factory())
                 .context("failed to allocate initialized script artboard paints")?;
         }
+        (state, cache)
+    } else if scripts_allocate_render_paints {
+        let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
+        let state = initialize_scripted_drawables_and_realize(
+            &runtime,
+            artboard_index,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            factory.as_factory(),
+        )?;
+        let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            factory.as_factory(),
+        );
         (state, cache)
     } else {
         let cache = nuxie_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
@@ -2100,6 +2123,20 @@ fn artboard_scripts_request_context(
     [b"dataContext".as_slice(), b"viewModel", b"rootViewModel"]
         .into_iter()
         .any(|marker| artboard_script_payloads_contain(runtime, artboard, script_assets, marker))
+}
+
+#[cfg(feature = "scripting")]
+fn artboard_scripts_allocate_render_paints(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+) -> bool {
+    // Registering a protocol script evaluates its top-level `Paint` values.
+    // C++ has already done that before its retained artboard paints are
+    // allocated, so preserve that lifecycle only for scripts that can consume
+    // render-paint ids at registration. Keeping the normal cache-first order
+    // otherwise preserves file-owned image decoding order.
+    artboard_script_payloads_contain(runtime, artboard, script_assets, b"Paint")
 }
 
 #[cfg(feature = "scripting")]

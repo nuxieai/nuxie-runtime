@@ -1285,10 +1285,16 @@ impl ArtboardInstance {
                     layout_bounds,
                     render_cache,
                 );
+                let render_opacity = runtime_retained_gradient_render_opacity(
+                    self,
+                    opacity_local,
+                    paint.global_id,
+                    render_cache,
+                );
                 let runtime_paint = runtime_prepare_gradient_paint_command(
                     self,
                     graph,
-                    opacity_local,
+                    render_opacity,
                     container,
                     paint,
                     shape_world,
@@ -2145,10 +2151,16 @@ impl ArtboardInstance {
                 layout_bounds,
                 render_cache,
             );
+            let render_opacity = runtime_retained_gradient_render_opacity(
+                self,
+                opacity_local,
+                paint.global_id,
+                render_cache,
+            );
             let runtime_paint = runtime_prepare_gradient_paint_command(
                 self,
                 graph,
-                opacity_local,
+                render_opacity,
                 container,
                 paint,
                 shape_world,
@@ -10166,16 +10178,12 @@ fn runtime_background_shape_paint_command(
 fn runtime_prepare_gradient_paint_command(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    opacity_local: usize,
+    render_opacity: f32,
     container: &ShapePaintContainerNode,
     paint: &ShapePaintNode,
     shape_world: Mat2D,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> RuntimeShapePaintCommand {
-    let render_opacity = instance
-        .component(opacity_local)
-        .map(|component| component.transform.render_opacity)
-        .unwrap_or(1.0);
     let paint_state = runtime_deform_gradient_paint_state_with_nsliced_node(
         instance,
         graph,
@@ -14321,6 +14329,37 @@ fn runtime_shape_paint_state(
             })
         }
     }
+}
+
+// C++ ShapePaintMutator owns its inherited opacity independently of the
+// TransformComponent. A newly mounted zero-opacity artboard can leave a
+// descendant's RenderOpacity dirt pending; until Shape::update propagates it,
+// the gradient mutator retains its default opacity of 1. Preserve the last
+// shader value in that state instead of eagerly reading the transform's
+// not-yet-propagated value.
+fn runtime_retained_gradient_render_opacity(
+    instance: &ArtboardInstance,
+    opacity_local: usize,
+    paint_global_id: u32,
+    render_cache: &RuntimeRenderPathCache,
+) -> f32 {
+    let Some(component) = instance.component(opacity_local) else {
+        return 1.0;
+    };
+    if !component.dirt.contains(ComponentDirt::RENDER_OPACITY) {
+        return component.transform.render_opacity;
+    }
+    render_cache
+        .gradient_shaders
+        .get(&paint_global_id)
+        .and_then(|entry| match &entry.state {
+            RuntimeShapePaintState::LinearGradient { render_opacity, .. }
+            | RuntimeShapePaintState::RadialGradient { render_opacity, .. } => {
+                Some(*render_opacity)
+            }
+            RuntimeShapePaintState::SolidColor { .. } => None,
+        })
+        .unwrap_or(1.0)
 }
 
 fn shape_paint_container_opacity_local(graph: &ArtboardGraph, container_local: usize) -> usize {
@@ -21681,6 +21720,7 @@ mod tests {
         lines: Cell<usize>,
         closes: Cell<usize>,
         linear_gradients: RefCell<Vec<[f32; 4]>>,
+        linear_gradient_colors: RefCell<Vec<Vec<ColorInt>>>,
     }
 
     struct CountingFactory {
@@ -22007,13 +22047,17 @@ mod tests {
             sy: f32,
             ex: f32,
             ey: f32,
-            _colors: &[ColorInt],
+            colors: &[ColorInt],
             _stops: &[f32],
         ) -> Box<dyn RenderShader> {
             self.stats
                 .linear_gradients
                 .borrow_mut()
                 .push([sx, sy, ex, ey]);
+            self.stats
+                .linear_gradient_colors
+                .borrow_mut()
+                .push(colors.to_vec());
             Box::new(TestRenderShader)
         }
 
@@ -23197,6 +23241,15 @@ mod tests {
         assert!(
             !stats.linear_gradients.borrow().is_empty(),
             "paint-allocation lifecycle must configure the nested child gradient"
+        );
+        assert_eq!(
+            stats
+                .linear_gradient_colors
+                .borrow()
+                .last()
+                .map(|colors| colors.as_slice()),
+            Some([0xffff_0000, 0xff00_00ff].as_slice()),
+            "a zero-opacity host leaves the child's pending gradient mutator at its C++ default opacity"
         );
 
         let ops = Rc::new(RefCell::new(Vec::new()));

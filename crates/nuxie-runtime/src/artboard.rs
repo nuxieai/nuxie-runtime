@@ -448,8 +448,34 @@ impl ArtboardInstance {
     /// queues remain fresh so the transient view cannot advance the scripts.
     pub(crate) fn clone_for_transient_layout(&self) -> Self {
         let mut cloned = self.clone();
+        cloned.restore_transient_occurrence_identities_from(self);
         cloned.restore_transient_script_handles_from(self);
         cloned
+    }
+
+    fn restore_transient_occurrence_identities_from(&mut self, source: &Self) {
+        // A transient layout clone is another view of the same mounted
+        // occurrence, not a newly-instanced artboard. C++ applies layout to
+        // that occurrence in place, so occurrence-keyed render state (notably
+        // TextStylePaint's opacity paint pool) survives across frames.
+        self.instance_identity = RuntimeArtboardInstanceIdentity(source.instance_identity.0);
+        for (local_id, source_nested) in &source.nested_artboards {
+            if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
+                cloned_nested
+                    .child
+                    .restore_transient_occurrence_identities_from(&source_nested.child);
+            }
+        }
+        for (local_id, source_items) in &source.component_list_items {
+            let Some(cloned_items) = self.component_list_items.get_mut(local_id) else {
+                continue;
+            };
+            for (cloned_item, source_item) in cloned_items.iter_mut().zip(source_items) {
+                cloned_item
+                    .child
+                    .restore_transient_occurrence_identities_from(&source_item.child);
+            }
+        }
     }
 
     fn restore_transient_script_handles_from(&mut self, source: &Self) {
@@ -5939,9 +5965,21 @@ mod tests {
             },
         );
 
+        let original_identity = original.instance_identity();
+        let original_nested_identity = original.nested_artboards[&0].child.instance_identity();
         let cloned = original.clone();
         let transient = original.clone_for_transient_layout();
 
+        assert_ne!(cloned.instance_identity(), original_identity);
+        assert_eq!(transient.instance_identity(), original_identity);
+        assert_ne!(
+            cloned.nested_artboards[&0].child.instance_identity(),
+            original_nested_identity
+        );
+        assert_eq!(
+            transient.nested_artboards[&0].child.instance_identity(),
+            original_nested_identity
+        );
         assert!(original.has_script_instance_for_global(7));
         assert!(!cloned.has_script_instance_for_global(7));
         assert!(transient.has_script_instance_for_global(7));

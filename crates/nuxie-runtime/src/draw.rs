@@ -16721,17 +16721,24 @@ fn runtime_stroke_effect_path_commands(
     match effect.type_name {
         "DashPath" => runtime_dash_path_effect_commands(artboard, effect, paint, source),
         "ScriptedPathEffect" => {
-            let output = artboard
-                .apply_scripted_path_effect(
-                    effect.global_id,
-                    runtime_raw_path_from_commands(source),
-                    ScriptNode {
-                        path: None,
-                        paint: Some(script_paint_for_shape(artboard, paint)),
-                    },
-                )
-                .map_err(|_| eprintln!("update function failed"))
-                .ok()?;
+            let output = match artboard.apply_scripted_path_effect(
+                effect.global_id,
+                runtime_raw_path_from_commands(source),
+                ScriptNode {
+                    path: None,
+                    paint: Some(script_paint_for_shape(artboard, paint)),
+                },
+            ) {
+                Ok(output) => output,
+                Err(_) => {
+                    // C++ still exposes the ScriptedEffectPath when scripting
+                    // is unavailable or its update fails. That path was
+                    // rewound before the attempted update, so it is empty
+                    // rather than a signal to fall back to the source path.
+                    eprintln!("update function failed");
+                    return Some(Vec::new());
+                }
+            };
             Some(runtime_path_commands_from_raw_path(&output))
         }
         "TargetEffect" => {

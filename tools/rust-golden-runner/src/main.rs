@@ -1369,6 +1369,29 @@ mod tests {
         .expect("same-time event boundary advances");
         assert_eq!(frame_tail.0.get(), 2);
     }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_data_converter_ignores_the_unbound_asset_sentinel() {
+        let assets = BTreeMap::from([(
+            1,
+            ExtractedScriptAsset {
+                name: "real-converter".to_owned(),
+                scope: ScopeKey::ROOT,
+                is_module: false,
+                payload: Vec::new(),
+            },
+        )]);
+
+        assert!(
+            resolved_scripted_data_converter_asset(&assets, Some(u64::from(u32::MAX))).is_none()
+        );
+        assert_eq!(
+            resolved_scripted_data_converter_asset(&assets, Some(1))
+                .map(|asset| asset.name.as_str()),
+            Some("real-converter")
+        );
+    }
 }
 
 #[derive(Debug)]
@@ -2263,13 +2286,16 @@ fn initialize_scripted_data_converters(
         .into_iter()
         .filter(|converter| converter.type_name == "ScriptedDataConverter")
     {
-        let script_asset_id = converter.uint_property("scriptAssetId").unwrap_or(0);
-        let script = script_assets.get(&script_asset_id).with_context(|| {
-            format!(
-                "ScriptedDataConverter global {} references missing ScriptAsset id {}",
-                converter.id, script_asset_id
-            )
-        })?;
+        // C++ leaves an unbound converter's inherited `scriptAssetId` at its
+        // UINT_MAX default. It is a schema/template record, not a script
+        // instance to initialize; only a resolved ScriptAsset creates the
+        // converter-side generator reference.
+        let Some(script) = resolved_scripted_data_converter_asset(
+            script_assets,
+            converter.uint_property("scriptAssetId"),
+        ) else {
+            continue;
+        };
         let mut script_instance = instantiate_extracted_script(vm, script, host, factory)
             .with_context(|| {
                 format!(
@@ -2312,6 +2338,16 @@ fn initialize_scripted_data_converters(
         instance.set_scripted_data_converter_instance_for_global(converter.id, script_instance);
     }
     Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn resolved_scripted_data_converter_asset<'a>(
+    script_assets: &'a BTreeMap<u64, ExtractedScriptAsset>,
+    script_asset_id: Option<u64>,
+) -> Option<&'a ExtractedScriptAsset> {
+    script_asset_id
+        .filter(|&id| id != u64::from(u32::MAX))
+        .and_then(|id| script_assets.get(&id))
 }
 
 #[cfg(feature = "scripting")]

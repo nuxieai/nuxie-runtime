@@ -574,6 +574,23 @@ impl RuntimeArtboardOwnedContextKey {
                         && stored.context_chain == current.context_chain
                 })
     }
+
+    /// The retained candidate vector is replaced only through the full
+    /// structural check above. Steady-state frame polling therefore only
+    /// needs to observe mutations of those already-bound shared instances.
+    fn matches_candidate_mutations(
+        &self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> bool {
+        self.instances.len() == candidates.len()
+            && self
+                .instances
+                .iter()
+                .zip(candidates)
+                .all(|(stored, current)| {
+                    stored.mutation_generation == current.context.borrow().mutation_generation()
+                })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4978,7 +4995,7 @@ impl ArtboardInstance {
     fn refresh_owned_view_model_artboard_context_if_mutated(&mut self) -> bool {
         if self.artboard_owned_view_model_candidates.is_empty()
             || self.artboard_owned_context_key.as_ref().is_some_and(|key| {
-                key.matches_candidates(&self.artboard_owned_view_model_candidates)
+                key.matches_candidate_mutations(&self.artboard_owned_view_model_candidates)
             })
         {
             return false;

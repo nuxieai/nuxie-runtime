@@ -3272,10 +3272,13 @@ impl ArtboardInstance {
     /// Mirrors `Artboard::advanceInternal` for an outer state-machine update
     /// pass, where `AdvanceNested` is set but `NewFrame` is not.
     fn advance_outer_update_components(&mut self) -> bool {
-        let nested_locals = self.nested_artboard_locals.clone();
         let mut dirty_hosts = Vec::new();
         let mut changed = false;
-        for host_local_id in nested_locals {
+        // C++ walks its retained m_advancingComponents in place. Copy one
+        // retained local ID at a time so child advancement does not require a
+        // per-pass clone of the parent traversal topology.
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local_id = self.nested_artboard_locals[index];
             if self
                 .component(host_local_id)
                 .is_some_and(RuntimeComponent::is_collapsed)

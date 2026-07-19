@@ -1380,6 +1380,13 @@ impl ArtboardInstance {
         mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        // C++ only enters NSlicer mesh preparation for authored slicers. Keep
+        // the empty case ahead of prepared-frame acquisition so ordinary
+        // artboards, including mounted children, do no slice work at draw
+        // time.
+        if graph.n_slicer_details.is_empty() {
+            return Ok(());
+        }
         let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         runtime_prepare_slice_meshes(

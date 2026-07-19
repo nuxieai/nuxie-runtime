@@ -3046,6 +3046,19 @@ impl ArtboardInstance {
             did_update |= nested_did_update;
         }
         if did_update {
+            // C++ `Artboard::updatePass` polls derived target-to-source
+            // bindings after `updateComponents`. The clean-frame epoch may
+            // already have been consumed by the pre-component binding pass,
+            // so wake this post-component pass when a computed numeric source
+            // (currently `Shape.length`) needs the settled transforms.
+            if !self
+                .artboard_data_bind_source_queues
+                .persisting_numeric_sources()
+                .is_empty()
+                && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            {
+                self.mark_artboard_data_bind_work_dirty();
+            }
             self.update_nested_artboard_data_binds_from_hosts();
             self.advance_artboard_data_binds();
         }

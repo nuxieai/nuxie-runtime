@@ -1024,8 +1024,7 @@ impl RuntimeArtboardDataBindSourceQueues {
         &self.persisting_solo_sources
     }
 
-    #[cfg(test)]
-    fn persisting_numeric_sources(&self) -> &[usize] {
+    pub(super) fn persisting_numeric_sources(&self) -> &[usize] {
         &self.persisting_numeric_sources
     }
 }
@@ -6891,6 +6890,92 @@ mod tests {
             ),
         ])
         .expect("font binding fixture imports")
+    }
+
+    fn shape_length_binding_fixture() -> RuntimeFile {
+        let shape_length_key =
+            property_key_for_name("Shape", "length").expect("shape length property key");
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("length".to_owned()),
+                )],
+            ),
+            record(
+                "Artboard",
+                vec![property("Artboard", "viewModelId", AuthoringValue::Uint(0))],
+            ),
+            record(
+                "Shape",
+                vec![
+                    property("Shape", "parentId", AuthoringValue::Uint(0)),
+                    property("Shape", "scaleX", AuthoringValue::Double(2.0)),
+                    property("Shape", "scaleY", AuthoringValue::Double(3.0)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(shape_length_key)),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![0, 0]),
+                    ),
+                    property("DataBindContext", "flags", AuthoringValue::Uint(1)),
+                ],
+            ),
+            record(
+                "Rectangle",
+                vec![
+                    property("Rectangle", "parentId", AuthoringValue::Uint(1)),
+                    property("Rectangle", "width", AuthoringValue::Double(10.0)),
+                    property("Rectangle", "height", AuthoringValue::Double(20.0)),
+                ],
+            ),
+        ])
+        .expect("shape length binding fixture imports")
+    }
+
+    #[test]
+    fn update_pass_repolls_shape_length_after_components_settle() {
+        let file = shape_length_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("shape length graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.artboard_data_bind_values.get(&[0_u32, 0][..]),
+            Some(&RuntimeDataBindGraphValue::Number(160.0)),
+            "C++ polls computed target-to-source bindings again after component transforms settle"
+        );
+
+        let scale_x_key = property_key_for_name("Shape", "scaleX").expect("shape scaleX key");
+        assert!(artboard.set_double_property(1, scale_x_key, 4.0));
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.artboard_data_bind_values.get(&[0_u32, 0][..]),
+            Some(&RuntimeDataBindGraphValue::Number(200.0)),
+            "the clean-frame epoch guard must not suppress C++'s post-component derived-value poll"
+        );
     }
 
     #[test]

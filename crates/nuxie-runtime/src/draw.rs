@@ -10813,16 +10813,18 @@ fn runtime_draw_live_command(
         );
     }
 
-    if runtime_try_draw_world_stroke_shape(
-        runtime,
-        instance,
-        command,
-        factory,
-        renderer,
-        paint_by_global,
-        path_cache,
-        paint_configurations.as_deref_mut(),
-    )? {
+    if command.world_stroke_shape
+        && runtime_try_draw_world_stroke_shape(
+            runtime,
+            instance,
+            command,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+            paint_configurations.as_deref_mut(),
+        )?
+    {
         return Ok(());
     }
 
@@ -11165,7 +11167,7 @@ fn runtime_draw_live_command(
 /// without entering text, layout, local-path, or temporary-paint machinery.
 /// The structural guard keeps effect paths and outer feather offsets on their
 /// exact `ShapePaint::draw` path; every richer form falls through unchanged.
-#[inline(never)]
+#[inline]
 fn runtime_try_draw_world_stroke_shape(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -11288,7 +11290,7 @@ fn runtime_command_is_world_stroke_shape(command: &RuntimeDrawCommand) -> bool {
 /// generic text/effect/feather/layout paint machinery below. The guard is
 /// deliberately structural: a command that needs any richer behavior falls
 /// through to the existing replay path unchanged.
-#[inline(never)]
+#[inline]
 fn runtime_try_draw_simple_solid_shape(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,

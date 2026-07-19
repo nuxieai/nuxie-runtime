@@ -1520,6 +1520,10 @@ fn positive_mod(value: f32, range: f32) -> f32 {
 #[derive(Debug)]
 pub struct LinearAnimationInstance {
     pub(crate) animation_index: usize,
+    /// C++ retains a `const LinearAnimation*` on each instance. Keep the
+    /// immutable Rust animation descriptor alongside the index too, avoiding
+    /// a vector lookup and `Arc`-backed descriptor clone on every apply.
+    animation: RuntimeLinearAnimation,
     pub(crate) time: f32,
     pub(crate) speed_direction: f32,
     pub(crate) total_time: f32,
@@ -1537,6 +1541,7 @@ impl Clone for LinearAnimationInstance {
     fn clone(&self) -> Self {
         Self {
             animation_index: self.animation_index,
+            animation: self.animation.clone(),
             time: self.time,
             speed_direction: self.speed_direction,
             total_time: self.total_time,
@@ -1563,6 +1568,7 @@ impl LinearAnimationInstance {
     ) -> Self {
         Self {
             animation_index,
+            animation: animation.clone(),
             time: animation.start_time_with_speed(speed_multiplier),
             speed_direction: if speed_multiplier >= 0.0 { 1.0 } else { -1.0 },
             total_time: 0.0,
@@ -1733,10 +1739,7 @@ impl LinearAnimationInstance {
     }
 
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
-        let Some(animation) = artboard.linear_animation(self.animation_index).cloned() else {
-            return false;
-        };
-        animation.apply_with_key_frame_values(
+        self.animation.apply_with_key_frame_values(
             artboard,
             self.time,
             mix,

@@ -10387,6 +10387,15 @@ fn runtime_live_command_world_transform(
     path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds)
 }
 
+#[inline]
+fn runtime_text_paint_shape_world(
+    draws_text: bool,
+    shape_world_override: Option<Mat2D>,
+    live_shape_world: Mat2D,
+) -> Option<Mat2D> {
+    draws_text.then(|| shape_world_override.unwrap_or(live_shape_world))
+}
+
 fn runtime_draw_live_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -10708,7 +10717,15 @@ fn runtime_draw_live_command(
         // `shape_world_override`. Read the settled component transform at
         // replay time instead, matching C++ Shape::worldTransform(). A
         // ForegroundLayoutDrawable paints its parent layout path.
-        let paint_shape_world = if paint.shape_world_override.is_some()
+        let paint_shape_world = if let Some(text_shape_world) =
+            runtime_text_paint_shape_world(draws_text, paint.shape_world_override, shape_world)
+        {
+            // Text shaping emits one paint command per run/bucket. Its
+            // override is the run's live glyph transform, not a retained
+            // component-world snapshot, so replacing it with the Text
+            // component transform collapses distinct lines onto one origin.
+            text_shape_world
+        } else if paint.shape_world_override.is_some()
             && command.object_kind == RuntimeDrawCommandObjectKind::ForegroundLayoutDrawable
         {
             command
@@ -19833,6 +19850,27 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_text_paints_preserve_each_run_world_transform() {
+        let live_text_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 184.57031]);
+        let first_run_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 184.57031]);
+        let second_run_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 251.82813]);
+
+        assert_eq!(
+            runtime_text_paint_shape_world(true, Some(first_run_world), live_text_world),
+            Some(first_run_world)
+        );
+        assert_eq!(
+            runtime_text_paint_shape_world(true, Some(second_run_world), live_text_world),
+            Some(second_run_world)
+        );
+        assert_eq!(
+            runtime_text_paint_shape_world(false, Some(second_run_world), live_text_world),
+            None,
+            "non-text overrides are retained structural markers and use live component worlds"
+        );
+    }
 
     #[test]
     fn format_7_2_layout_images_compose_fit_on_top_of_authored_scale() {

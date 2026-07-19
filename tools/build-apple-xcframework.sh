@@ -41,6 +41,16 @@ xcframework_path="${output_root}/NuxieRuntime.xcframework"
 archive_path="${output_root}/NuxieRuntime.xcframework.zip"
 metadata_path="${output_root}/artifact.json"
 
+phase() {
+    printf '\n==> %s\n' "$1"
+}
+
+report_disk() {
+    local available_kib
+    available_kib="$(df -Pk "${output_root}" 2>/dev/null | awk 'NR == 2 { print $4 }' || true)"
+    printf 'disk: available=%s KiB\n' "${available_kib:-unknown}"
+}
+
 if [[ -n "${NUX_APPLE_XCODE_VERSION:-}" && "${xcode_version}" != "${NUX_APPLE_XCODE_VERSION}" ]]; then
     echo "Xcode version ${xcode_version} does not match required ${NUX_APPLE_XCODE_VERSION}" >&2
     exit 6
@@ -82,6 +92,8 @@ rm -rf \
     "${archive_path}" \
     "${metadata_path}"
 mkdir -p "${output_root}" "${build_root}" "${headers_dir}" "${simulator_dir}"
+phase "Prepare deterministic Apple runtime output"
+report_disk
 
 targets=(
     aarch64-apple-ios
@@ -95,6 +107,7 @@ for target in "${targets[@]}"; do
         echo "install it with: rustup target add --toolchain ${rust_toolchain} ${target}" >&2
         exit 3
     fi
+    phase "Build Apple runtime for ${target}"
     IPHONEOS_DEPLOYMENT_TARGET="${deployment_target}" \
     NUX_RUNTIME_BUILD_PROFILE="${profile}" \
     NUX_RUNTIME_SOURCE_REVISION="${runtime_revision}" \
@@ -108,6 +121,7 @@ for target in "${targets[@]}"; do
             --features apple-product \
             --profile "${profile}" \
             --target "${target}"
+    report_disk
 done
 
 device_library="${cargo_target_dir}/aarch64-apple-ios/${profile}/libnux_apple_runtime.a"
@@ -115,6 +129,7 @@ arm_simulator_library="${cargo_target_dir}/aarch64-apple-ios-sim/${profile}/libn
 intel_simulator_library="${cargo_target_dir}/x86_64-apple-ios/${profile}/libnux_apple_runtime.a"
 simulator_library="${simulator_dir}/libnux_apple_runtime.a"
 
+phase "Create the universal simulator library"
 lipo -create \
     "${arm_simulator_library}" \
     "${intel_simulator_library}" \
@@ -124,16 +139,21 @@ cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers_dir}
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/module.modulemap" "${headers_dir}/"
 
+phase "Create the XCFramework"
 xcodebuild -create-xcframework \
     -library "${device_library}" \
     -headers "${headers_dir}" \
     -library "${simulator_library}" \
     -headers "${headers_dir}" \
     -output "${xcframework_path}"
+report_disk
 
+phase "Archive the XCFramework"
 ditto -c -k --sequesterRsrc --keepParent "${xcframework_path}" "${archive_path}"
 checksum="$(swift package compute-checksum "${archive_path}")"
+report_disk
 
+phase "Write artifact provenance"
 printf '{\n  "schemaVersion": 1,\n  "abiMajor": %s,\n  "abiMinor": %s,\n  "runtimeVersion": "%s",\n  "sourceRevision": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "swiftPackageChecksum": "%s"\n}\n' \
     "$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")" \
     "$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")" \
@@ -150,6 +170,8 @@ printf '{\n  "schemaVersion": 1,\n  "abiMajor": %s,\n  "abiMinor": %s,\n  "runti
     "${deployment_target}" \
     "${checksum}" > "${metadata_path}"
 
+phase "Verify the packaged XCFramework"
+report_disk
 "${script_dir}/verify-apple-xcframework.sh" "${xcframework_path}" "${archive_path}" "${metadata_path}"
 
 echo "XCFramework: ${xcframework_path}"

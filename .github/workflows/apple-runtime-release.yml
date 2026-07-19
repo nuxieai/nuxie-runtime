@@ -109,8 +109,42 @@ jobs:
       - name: Test the product ABI and header
         run: make apple-runtime-check
 
+      - name: Reclaim product-check build output before packaging
+        run: |
+          set -euo pipefail
+
+          echo "Apple packaging disk capacity before host-output cleanup"
+          df -h .
+          du -sh target/debug target/release-apple 2>/dev/null || true
+          rm -rf -- target/debug target/release-apple
+          echo "Apple packaging disk capacity after host-output cleanup"
+          df -h .
+
       - name: Assemble and verify the release XCFramework
         run: make apple-runtime-xcframework
+
+      - name: Capture Apple runtime release diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          diagnostics="${RUNNER_TEMP}/apple-runtime-release-diagnostics.txt"
+          {
+            echo "phase=apple-runtime-release-package"
+            echo "commit=${GITHUB_SHA}"
+            df -h .
+            du -sh target 2>/dev/null || true
+            du -sh target/apple-runtime/* 2>/dev/null | sort -h || true
+          } | tee "${diagnostics}"
+
+      - name: Upload Apple runtime release diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-runtime-release-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/apple-runtime-release-diagnostics.txt
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Validate the release artifact metadata
         run: |

@@ -79,8 +79,62 @@ jobs:
       - name: Build and run C smoke test
         run: make capi-smoke
 
-  apple-runtime:
-    name: Apple runtime product boundary
+  apple-runtime-check:
+    name: Apple runtime ABI and header
+    runs-on: macos-14
+    env:
+      NUX_APPLE_XCODE_VERSION: "15.4"
+      NUX_APPLE_XCODE_BUILD: "15F31d"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout nuxie-runtime
+        uses: actions/checkout@v4
+
+      - name: Select the pinned Apple toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${NUX_APPLE_XCODE_VERSION}"
+          test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${NUX_APPLE_XCODE_BUILD}"
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal --component clippy --no-self-update
+          rustup default 1.94.1
+
+      - name: Fetch pinned test assets
+        run: make fixtures
+
+      - name: Test the product ABI and header
+        run: make apple-runtime-check
+
+      - name: Capture Apple runtime check diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          diagnostics="${RUNNER_TEMP}/apple-runtime-check-diagnostics.txt"
+          {
+            echo "phase=apple-runtime-check"
+            echo "commit=${GITHUB_SHA}"
+            df -h .
+            du -sh target 2>/dev/null || true
+            du -sh target/debug target/release-apple 2>/dev/null || true
+          } | tee "${diagnostics}"
+
+      - name: Upload Apple runtime check diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-runtime-check-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/apple-runtime-check-diagnostics.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+  apple-runtime-xcframework:
+    name: Apple runtime XCFramework
     runs-on: macos-14
     env:
       NUX_APPLE_XCODE_VERSION: "15.4"
@@ -101,15 +155,14 @@ jobs:
 
       - name: Install pinned Rust toolchain and Apple targets
         run: |
-          rustup toolchain install 1.94.1 --profile minimal --component clippy --no-self-update
+          rustup toolchain install 1.94.1 --profile minimal --no-self-update
           rustup target add --toolchain 1.94.1 aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
           rustup default 1.94.1
 
-      - name: Fetch pinned test assets
-        run: make fixtures
-
-      - name: Test the product ABI and header
-        run: make apple-runtime-check
+      - name: Report packaging runner capacity
+        run: |
+          echo "phase=apple-runtime-xcframework-start"
+          df -h .
 
       - name: Assemble and verify the release XCFramework
         run: make apple-runtime-xcframework
@@ -122,6 +175,48 @@ jobs:
             target/apple-runtime/NuxieRuntime.xcframework.zip
             target/apple-runtime/artifact.json
           if-no-files-found: error
+
+      - name: Capture Apple runtime packaging diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          diagnostics="${RUNNER_TEMP}/apple-runtime-xcframework-diagnostics.txt"
+          {
+            echo "phase=apple-runtime-xcframework"
+            echo "commit=${GITHUB_SHA}"
+            df -h .
+            du -sh target 2>/dev/null || true
+            du -sh target/apple-runtime/* 2>/dev/null | sort -h || true
+          } | tee "${diagnostics}"
+
+      - name: Upload Apple runtime packaging diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-runtime-xcframework-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/apple-runtime-xcframework-diagnostics.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+  apple-runtime:
+    name: Apple runtime product boundary
+    if: ${{ always() }}
+    needs:
+      - apple-runtime-check
+      - apple-runtime-xcframework
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both Apple runtime gates
+        env:
+          APPLE_RUNTIME_CHECK_RESULT: ${{ needs.apple-runtime-check.result }}
+          APPLE_RUNTIME_XCFRAMEWORK_RESULT: ${{ needs.apple-runtime-xcframework.result }}
+        run: |
+          echo "ABI and header: ${APPLE_RUNTIME_CHECK_RESULT}"
+          echo "XCFramework: ${APPLE_RUNTIME_XCFRAMEWORK_RESULT}"
+          if [[ "${APPLE_RUNTIME_CHECK_RESULT}" != "success" || "${APPLE_RUNTIME_XCFRAMEWORK_RESULT}" != "success" ]]; then
+            exit 1
+          fi
 
   browser-renderer:
     name: Browser WebGPU and WebGL2

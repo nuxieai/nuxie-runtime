@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+phase() {
+    printf '  -> %s\n' "$1"
+}
+
 if [[ $# -ne 3 ]]; then
     echo "usage: verify-apple-xcframework.sh <xcframework> <zip> <artifact-metadata>" >&2
     exit 2
@@ -11,6 +15,7 @@ archive_path="$2"
 metadata_path="$3"
 info_plist="${xcframework_path}/Info.plist"
 
+phase "validate metadata and archive checksum"
 test -f "${info_plist}"
 test -f "${archive_path}"
 test -f "${metadata_path}"
@@ -23,6 +28,7 @@ expected_checksum="$(plutil -extract swiftPackageChecksum raw "${metadata_path}"
 actual_checksum="$(swift package compute-checksum "${archive_path}")"
 test "${actual_checksum}" = "${expected_checksum}"
 
+phase "extract and compare the archive"
 verification_temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-runtime-verify.XXXXXX")"
 trap 'rm -rf "${verification_temp_dir}"' EXIT
 ditto -x -k "${archive_path}" "${verification_temp_dir}"
@@ -33,6 +39,7 @@ diff -rq "${xcframework_path}" "${archived_framework}" >/dev/null
 device_library="$(find "${xcframework_path}" -path '*ios-arm64/libnux_apple_runtime.a' -print -quit)"
 simulator_library="$(find "${xcframework_path}" -path '*ios-arm64_x86_64-simulator/libnux_apple_runtime.a' -print -quit)"
 
+phase "validate architectures and exported ABI"
 test -n "${device_library}"
 test -n "${simulator_library}"
 test "$(lipo -archs "${device_library}")" = "arm64"
@@ -54,6 +61,7 @@ for library in "${device_library}" "${simulator_library}"; do
     grep -Fxq '_rust_eh_personality' <<< "${symbols}"
 done
 
+phase "validate toolchain and embedded provenance"
 source_revision="$(plutil -extract sourceRevision raw "${metadata_path}")"
 build_profile="$(plutil -extract buildProfile raw "${metadata_path}")"
 minimum_ios_version="$(plutil -extract minimumIOSVersion raw "${metadata_path}")"
@@ -112,6 +120,7 @@ verify_public_header_allowlist() {
 
 headers_dir="$(dirname "${device_library}")/Headers"
 simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
+phase "validate the public header boundary"
 verify_public_header_allowlist "${headers_dir}"
 verify_public_header_allowlist "${simulator_headers_dir}"
 for public_header in module.modulemap nux_runtime.generated.h nux_runtime.h; do
@@ -124,6 +133,7 @@ test "$(plutil -extract abiMinor raw "${metadata_path}")" = "${header_abi_minor}
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
+phase "compile the C header smoke test"
 clang -std=c11 -Wall -Wextra -Werror \
     -I"${headers_dir}" \
     -fsyntax-only \
@@ -168,6 +178,7 @@ link_swift_smoke() {
     test "${linked_minos}" = "${minimum_ios_version}"
 }
 
+phase "link the Swift smoke tests"
 link_swift_smoke \
     iphoneos "arm64-apple-ios${minimum_ios_version}" \
     "${headers_dir}" "${device_library}" device-arm64

@@ -236,6 +236,22 @@ pub struct ArtboardInstance {
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum RuntimeEventPropertyValue {
+    Number(f32),
+    Bool(bool),
+    String(Vec<u8>),
+    Color(u32),
+    Enum(u64),
+    Trigger(u64),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeEventProperty {
+    pub name: Option<String>,
+    pub value: RuntimeEventPropertyValue,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
@@ -1002,6 +1018,45 @@ impl ArtboardInstance {
         &self.slots
     }
 
+    /// Snapshot authored custom properties attached to one event, preserving
+    /// their component/local order.
+    pub fn event_properties(&self, event_local_id: usize) -> Vec<RuntimeEventProperty> {
+        self.components
+            .iter()
+            .filter(|component| component.parent_local == Some(event_local_id))
+            .filter_map(|component| {
+                let key = property_key_for_name(component.type_name, "propertyValue")?;
+                let value = match component.type_name {
+                    "CustomPropertyNumber" => RuntimeEventPropertyValue::Number(
+                        self.double_property(component.local_id, key)?,
+                    ),
+                    "CustomPropertyBoolean" => RuntimeEventPropertyValue::Bool(
+                        self.bool_property(component.local_id, key)?,
+                    ),
+                    "CustomPropertyString" => RuntimeEventPropertyValue::String(
+                        self.string_property(component.local_id, key)?.to_vec(),
+                    ),
+                    "CustomPropertyColor" => RuntimeEventPropertyValue::Color(
+                        self.color_property(component.local_id, key)?,
+                    ),
+                    "CustomPropertyEnum" => RuntimeEventPropertyValue::Enum(
+                        self.uint_property(component.local_id, key)?,
+                    ),
+                    "CustomPropertyTrigger" => RuntimeEventPropertyValue::Trigger(
+                        self.uint_property(component.local_id, key)?,
+                    ),
+                    _ => return None,
+                };
+                Some(RuntimeEventProperty {
+                    name: self
+                        .slot(component.local_id)
+                        .and_then(|slot| slot.name.clone()),
+                    value,
+                })
+            })
+            .collect()
+    }
+
     pub fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
         let index = self.slots.get(local_id)?.component_index?;
         Some(&mut self.components[index])
@@ -1066,6 +1121,34 @@ impl ArtboardInstance {
     /// Current root-artboard dimensions after runtime layout and data binding.
     pub fn artboard_dimensions(&self) -> (f32, f32) {
         (self.width, self.height)
+    }
+
+    /// Current authored artboard bounds in artboard coordinates.
+    ///
+    /// Rive stores the origin as normalized fractions of width and height;
+    /// the logical top-left is therefore the negative origin offset.
+    pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
+        (
+            -self.width * self.origin_x,
+            -self.height * self.origin_y,
+            self.width,
+            self.height,
+        )
+    }
+
+    /// Whether authored nested or component-list players still need a future
+    /// advance. Hosts use this independently from the selected root player so
+    /// a static root cannot prematurely settle a playing child artboard.
+    pub fn has_ongoing_nested_work(&self) -> bool {
+        self.nested_artboards
+            .values()
+            .any(RuntimeNestedArtboardInstance::has_ongoing_work)
+            || self.component_list_items.values().flatten().any(|item| {
+                item.state_machine
+                    .as_ref()
+                    .is_some_and(StateMachineInstance::needs_advance)
+                    || item.child.has_ongoing_nested_work()
+            })
     }
 
     pub(crate) fn artboard_property_value(&self, property_type: u64) -> f32 {
@@ -3473,6 +3556,16 @@ impl ArtboardInstance {
 }
 
 impl RuntimeNestedArtboardInstance {
+    fn has_ongoing_work(&self) -> bool {
+        if self.is_paused {
+            return false;
+        }
+        self.animations
+            .iter()
+            .any(|animation| animation.has_ongoing_work(&self.child))
+            || self.child.has_ongoing_nested_work()
+    }
+
     pub(crate) fn bind_owned_view_model_animation_contexts(
         &mut self,
         file: &RuntimeFile,
@@ -3655,6 +3748,18 @@ impl RuntimeNestedArtboardInstance {
 }
 
 impl RuntimeNestedAnimationInstance {
+    fn has_ongoing_work(&self, child: &ArtboardInstance) -> bool {
+        match self {
+            Self::Simple {
+                animation,
+                is_playing,
+                ..
+            } => *is_playing && child.linear_animation_instance_keep_going(animation),
+            Self::Remap { .. } => false,
+            Self::StateMachine { state_machine, .. } => state_machine.needs_advance(),
+        }
+    }
+
     fn advance(
         &mut self,
         child: &mut ArtboardInstance,

@@ -3128,6 +3128,11 @@ impl StateMachineInstance {
         self.reported_events.get(index)
     }
 
+    /// Drain reported events at a host operation seam without advancing.
+    pub fn take_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
+        std::mem::take(&mut self.reported_events)
+    }
+
     pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
         self.default_view_model_triggers
             .get(index)

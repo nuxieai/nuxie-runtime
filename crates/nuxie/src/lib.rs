@@ -22,6 +22,7 @@ use nuxie_runtime::{
     RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
 };
 
+pub mod flow_session;
 mod scene;
 
 pub use scene::*;
@@ -1027,6 +1028,10 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.artboard_dimensions()
     }
 
+    pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
+        self.raw.artboard_bounds()
+    }
+
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
         self.raw.advance_nested_artboards(elapsed_seconds)
     }
@@ -1499,6 +1504,10 @@ impl OwnedArtboardInstance {
 
     pub fn artboard_dimensions(&self) -> (f32, f32) {
         self.raw.artboard_dimensions()
+    }
+
+    pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
+        self.raw.artboard_bounds()
     }
 
     /// Compatibility attachment path for an already-owned instance.

@@ -17,7 +17,9 @@ pub use animation::{
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
     RuntimeKeyedProperty, RuntimeLinearAnimation,
 };
-pub use artboard::{ArtboardInstance, ExternalFontAssetError};
+pub use artboard::{
+    ArtboardInstance, ExternalFontAssetError, RuntimeEventProperty, RuntimeEventPropertyValue,
+};
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,

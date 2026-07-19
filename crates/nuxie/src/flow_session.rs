@@ -12,7 +12,7 @@ use crate::{
 };
 use nuxie_runtime::{
     RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    StateMachineReportedEvent,
+    RuntimeViewModelLinkError, StateMachineReportedEvent,
 };
 
 /// Maximum UTF-8 byte length accepted for an identifier or property path.
@@ -135,6 +135,9 @@ pub enum FlowValueType {
     Number,
     Bool,
     Enum,
+    /// Authored component-list item index. This is an ordinal, not an enum
+    /// identity, even though both are represented by unsigned integers.
+    ListIndex,
     Color,
     Image,
     Object,
@@ -149,6 +152,10 @@ pub enum FlowValueType {
 pub struct FlowPropertySchema {
     pub name: String,
     pub value_type: FlowValueType,
+    /// Authored enum labels in their stable numeric-value order.
+    pub enum_labels: Vec<String>,
+    /// Schema accepted by a nested view-model property.
+    pub referenced_schema_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,6 +204,7 @@ pub enum FlowValue {
     Number(f32),
     Bool(bool),
     Enum(u64),
+    ListIndex(u64),
     Color(u32),
     Image(u64),
     Object(Vec<(String, FlowValueId)>),
@@ -290,6 +298,7 @@ pub enum FlowScalarValue {
     Number(f32),
     Bool(bool),
     Enum(u64),
+    ListIndex(u64),
     Color(u32),
     Image(u64),
     Trigger(u64),
@@ -325,6 +334,13 @@ pub enum FlowStateMutation {
         instance: FlowInstanceRef,
         path: String,
         value: FlowScalarValue,
+    },
+    /// Replaces one outer nested view-model property with an existing shared
+    /// instance. Inner property paths are intentionally unsupported.
+    SetViewModel {
+        instance: FlowInstanceRef,
+        path: String,
+        value: FlowInstanceRef,
     },
     FireTrigger {
         instance: FlowInstanceRef,
@@ -1331,7 +1347,7 @@ fn prepare_value_snapshot(
     let mut discovered = Vec::new();
     let mut traversed_edges = 0_usize;
     for instance in instances.values() {
-        collect_reachable_list_instances(
+        collect_reachable_instances(
             file,
             instance.handle(),
             "",
@@ -1384,7 +1400,7 @@ fn prepare_value_snapshot(
     Ok(builder.arena)
 }
 
-fn collect_reachable_list_instances(
+fn collect_reachable_instances(
     file: &File,
     handle: &RuntimeOwnedViewModelHandle,
     prefix: &str,
@@ -1456,7 +1472,7 @@ fn collect_reachable_list_instances(
                             ));
                         }
                         discovered.push(item.clone());
-                        collect_reachable_list_instances(
+                        collect_reachable_instances(
                             file,
                             &item,
                             "",
@@ -1480,14 +1496,34 @@ fn collect_reachable_list_instances(
                         "reachable value edge limit exceeded",
                     ));
                 }
-                collect_reachable_list_instances(
-                    file,
-                    handle,
-                    &path,
-                    depth.saturating_add(1),
-                    discovered,
-                    traversed_edges,
-                )?;
+                if let Some(linked) = handle.linked_view_model_by_property_name_path(&path) {
+                    if !discovered.iter().any(|existing| existing.ptr_eq(&linked)) {
+                        if discovered.len() >= MAX_INSTANCES {
+                            return Err(FlowSessionError::new(
+                                FlowSessionErrorKind::LimitExceeded,
+                                "reachable instance limit exceeded",
+                            ));
+                        }
+                        discovered.push(linked.clone());
+                        collect_reachable_instances(
+                            file,
+                            &linked,
+                            "",
+                            depth.saturating_add(1),
+                            discovered,
+                            traversed_edges,
+                        )?;
+                    }
+                } else {
+                    collect_reachable_instances(
+                        file,
+                        handle,
+                        &path,
+                        depth.saturating_add(1),
+                        discovered,
+                        traversed_edges,
+                    )?;
+                }
             }
             _ => {}
         }
@@ -1749,7 +1785,7 @@ impl<'a> ValueArenaBuilder<'a> {
                 .map(FlowValue::Enum),
             "ViewModelPropertySymbolListIndex" => raw
                 .symbol_list_index_value_by_property_name_path(path)
-                .map(FlowValue::Enum),
+                .map(FlowValue::ListIndex),
             "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => raw
                 .asset_value_by_property_name_path(path)
                 .map(FlowValue::Image),
@@ -1799,6 +1835,9 @@ impl<'a> ValueArenaBuilder<'a> {
                 self.push(FlowValue::List(item_nodes))
             }
             "ViewModelPropertyViewModel" => {
+                if let Some(linked) = handle.linked_view_model_by_property_name_path(path) {
+                    return self.snapshot_handle(&linked, "", depth.saturating_add(1));
+                }
                 let referenced_index =
                     usize::try_from(property.uint_property("viewModelReferenceId").ok_or_else(
                         || {
@@ -2055,7 +2094,8 @@ fn state_batch_payload_bytes(batch: &FlowStateBatch) -> Result<usize, FlowSessio
             | FlowStateMutation::SetInputNumber { name, .. }
             | FlowStateMutation::FireInputTrigger { name } => (name.as_str(), None),
             FlowStateMutation::SetValue { path, value, .. } => (path.as_str(), Some(value)),
-            FlowStateMutation::FireTrigger { path, .. }
+            FlowStateMutation::SetViewModel { path, .. }
+            | FlowStateMutation::FireTrigger { path, .. }
             | FlowStateMutation::ListInsert { path, .. }
             | FlowStateMutation::ListRemove { path, .. }
             | FlowStateMutation::ListSwap { path, .. }
@@ -2122,6 +2162,11 @@ enum ResolvedMutation {
         instance: FlowInstanceId,
         path: String,
         value: FlowScalarValue,
+    },
+    SetViewModel {
+        instance: FlowInstanceId,
+        path: String,
+        value: FlowInstanceId,
     },
     FireTrigger {
         instance: FlowInstanceId,
@@ -2202,6 +2247,15 @@ fn resolve_mutation(
             path: path.clone(),
             value: value.clone(),
         },
+        FlowStateMutation::SetViewModel {
+            instance,
+            path,
+            value,
+        } => ResolvedMutation::SetViewModel {
+            instance: resolve_instance_ref(*instance, new_ids)?,
+            path: path.clone(),
+            value: resolve_instance_ref(*value, new_ids)?,
+        },
         FlowStateMutation::FireTrigger { instance, path } => ResolvedMutation::FireTrigger {
             instance: resolve_instance_ref(*instance, new_ids)?,
             path: path.clone(),
@@ -2276,6 +2330,9 @@ fn mutation_instance_ids(mutation: &ResolvedMutation) -> Vec<FlowInstanceId> {
         | ResolvedMutation::ListClear { instance, .. } => vec![*instance],
         ResolvedMutation::ListInsert { instance, item, .. }
         | ResolvedMutation::ListSet { instance, item, .. } => vec![*instance, *item],
+        ResolvedMutation::SetViewModel {
+            instance, value, ..
+        } => vec![*instance, *value],
         ResolvedMutation::SetInputBool { .. }
         | ResolvedMutation::SetInputNumber { .. }
         | ResolvedMutation::FireInputTrigger { .. } => Vec::new(),
@@ -2527,6 +2584,18 @@ fn apply_view_model_mutation(
                     }
                     let _ = raw.set_enum_by_property_name_path(path, *value);
                 }
+                FlowScalarValue::ListIndex(value) => {
+                    if raw
+                        .symbol_list_index_source_handle_by_property_name_path(path)
+                        .is_none()
+                    {
+                        return Err(FlowSessionError::new(
+                            FlowSessionErrorKind::NotFound,
+                            format!("list-index property '{path}' was not found"),
+                        ));
+                    }
+                    let _ = raw.set_symbol_list_index_by_property_name_path(path, *value);
+                }
                 FlowScalarValue::Color(value) => {
                     if raw
                         .color_source_handle_by_property_name_path(path)
@@ -2555,6 +2624,57 @@ fn apply_view_model_mutation(
                     return Err(FlowSessionError::new(
                         FlowSessionErrorKind::InvalidArgument,
                         "trigger counters are advanced with FireTrigger",
+                    ));
+                }
+            }
+        }
+        ResolvedMutation::SetViewModel {
+            instance: id,
+            path,
+            value,
+        } => {
+            validate_required_id_path(path, "view-model property path")?;
+            if path.contains('/') {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::InvalidArgument,
+                    "nested view-model replacement currently supports outer properties only",
+                ));
+            }
+            let owner = instance(instances, *id)?;
+            let value = instance(instances, *value)?;
+            match owner
+                .handle()
+                .link_view_model_by_property_name_path(path, value.handle())
+            {
+                Ok(_) => {}
+                Err(RuntimeViewModelLinkError::PropertyNotFound) => {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::NotFound,
+                        format!("view-model property '{path}' was not found"),
+                    ));
+                }
+                Err(RuntimeViewModelLinkError::NestedPathUnsupported) => {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::InvalidArgument,
+                        "nested view-model replacement currently supports outer properties only",
+                    ));
+                }
+                Err(RuntimeViewModelLinkError::SchemaMismatch) => {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::Conflict,
+                        "view-model replacement schema does not match the property",
+                    ));
+                }
+                Err(RuntimeViewModelLinkError::Cycle) => {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::Conflict,
+                        "view-model replacement would create a cycle",
+                    ));
+                }
+                Err(RuntimeViewModelLinkError::BorrowConflict) => {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::Runtime,
+                        "view-model replacement graph is already borrowed",
                     ));
                 }
             }
@@ -2772,6 +2892,9 @@ fn mutation_echo(
             path,
             value,
         } => Some((Some(*instance), path.clone(), Some(value.clone()))),
+        ResolvedMutation::SetViewModel { instance, path, .. } => {
+            Some((Some(*instance), path.clone(), None))
+        }
         ResolvedMutation::FireTrigger { instance, path } => {
             Some((Some(*instance), path.clone(), None))
         }
@@ -2905,6 +3028,7 @@ fn flow_scalar_from_arena_value(value: &FlowValue) -> Option<FlowScalarValue> {
         FlowValue::Number(value) => Some(FlowScalarValue::Number(*value)),
         FlowValue::Bool(value) => Some(FlowScalarValue::Bool(*value)),
         FlowValue::Enum(value) => Some(FlowScalarValue::Enum(*value)),
+        FlowValue::ListIndex(value) => Some(FlowScalarValue::ListIndex(*value)),
         FlowValue::Color(value) => Some(FlowScalarValue::Color(*value)),
         FlowValue::Image(value) => Some(FlowScalarValue::Image(*value)),
         FlowValue::Object(_) | FlowValue::ViewModel(_) | FlowValue::List(_) => None,
@@ -3014,38 +3138,110 @@ fn build_catalog(
 ) -> Result<FlowCatalog, FlowSessionError> {
     let root_instance_id = root_selection.map(|_| FlowInstanceId(1));
     let mut templates = Vec::new();
-    let schemas = file
-        .graph()
-        .view_models
-        .iter()
-        .enumerate()
-        .map(|(view_model_index, schema)| {
-            let schema_name = schema
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("viewModel{view_model_index}"));
-            for (authored_index, instance) in schema.instances.iter().enumerate() {
-                templates.push(FlowInstanceTemplate {
-                    schema_name: schema_name.clone(),
-                    authored_name: instance.name.clone(),
-                    authored_index,
-                });
-            }
-            FlowSchema {
-                name: schema_name,
-                properties: schema
+    let mut schemas = Vec::with_capacity(file.graph().view_models.len());
+    for (view_model_index, schema) in file.graph().view_models.iter().enumerate() {
+        let schema_name = schema
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("viewModel{view_model_index}"));
+        for (authored_index, instance) in schema.instances.iter().enumerate() {
+            templates.push(FlowInstanceTemplate {
+                schema_name: schema_name.clone(),
+                authored_name: instance.name.clone(),
+                authored_index,
+            });
+        }
+        let runtime_schema = file.runtime().view_model(view_model_index).ok_or_else(|| {
+            FlowSessionError::new(
+                FlowSessionErrorKind::Runtime,
+                "catalog view-model schema disappeared",
+            )
+        })?;
+        let mut properties = Vec::with_capacity(schema.properties.len());
+        for (property_index, property) in schema.properties.iter().enumerate() {
+            let Some(name) = property.name.clone() else {
+                continue;
+            };
+            let runtime_property =
+                runtime_schema
                     .properties
-                    .iter()
-                    .filter_map(|property| {
-                        Some(FlowPropertySchema {
-                            name: property.name.clone()?,
-                            value_type: flow_value_type_for_property(property.type_name),
-                        })
-                    })
-                    .collect(),
+                    .get(property_index)
+                    .ok_or_else(|| {
+                        FlowSessionError::new(
+                            FlowSessionErrorKind::Runtime,
+                            "catalog view-model property disappeared",
+                        )
+                    })?;
+            let value_type = flow_value_type_for_property(property.type_name);
+            let mut enum_labels = Vec::new();
+            if value_type == FlowValueType::Enum {
+                while let Some(label) = file
+                    .runtime()
+                    .view_model_property_enum_value_for_index_object(
+                        runtime_property,
+                        enum_labels.len(),
+                    )
+                {
+                    if enum_labels.len() >= MAX_BATCH_ITEMS {
+                        return Err(FlowSessionError::new(
+                            FlowSessionErrorKind::LimitExceeded,
+                            "catalog enum label limit exceeded",
+                        ));
+                    }
+                    enum_labels.push(String::from_utf8(label.to_vec()).map_err(|_| {
+                        FlowSessionError::new(
+                            FlowSessionErrorKind::Runtime,
+                            "catalog enum label is not UTF-8",
+                        )
+                    })?);
+                }
             }
-        })
-        .collect();
+            let referenced_schema_name = if value_type == FlowValueType::ViewModel {
+                let referenced_index = usize::try_from(
+                    runtime_property
+                        .uint_property("viewModelReferenceId")
+                        .ok_or_else(|| {
+                            FlowSessionError::new(
+                                FlowSessionErrorKind::Runtime,
+                                "catalog view-model property has no schema reference id",
+                            )
+                        })?,
+                )
+                .map_err(|_| {
+                    FlowSessionError::new(
+                        FlowSessionErrorKind::Runtime,
+                        "catalog referenced schema id is out of range",
+                    )
+                })?;
+                Some(
+                    file.graph()
+                        .view_models
+                        .get(referenced_index)
+                        .ok_or_else(|| {
+                            FlowSessionError::new(
+                                FlowSessionErrorKind::Runtime,
+                                "catalog referenced schema disappeared",
+                            )
+                        })?
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("viewModel{referenced_index}")),
+                )
+            } else {
+                None
+            };
+            properties.push(FlowPropertySchema {
+                name,
+                value_type,
+                enum_labels,
+                referenced_schema_name,
+            });
+        }
+        schemas.push(FlowSchema {
+            name: schema_name,
+            properties,
+        });
+    }
 
     let instances = root_selection
         .map(|(view_model_index, authored_index)| {
@@ -3091,6 +3287,7 @@ fn validate_catalog(catalog: &FlowCatalog) -> Result<(), FlowSessionError> {
         ));
     }
     let mut property_count = 0_usize;
+    let mut enum_label_count = 0_usize;
     for schema in &catalog.schemas {
         validate_required_id_path(&schema.name, "schema name")?;
         property_count = property_count
@@ -3109,6 +3306,55 @@ fn validate_catalog(catalog: &FlowCatalog) -> Result<(), FlowSessionError> {
         }
         for property in &schema.properties {
             validate_required_id_path(&property.name, "property name")?;
+            enum_label_count = enum_label_count
+                .checked_add(property.enum_labels.len())
+                .ok_or_else(|| {
+                    FlowSessionError::new(
+                        FlowSessionErrorKind::LimitExceeded,
+                        "catalog enum label count overflow",
+                    )
+                })?;
+            if enum_label_count > MAX_BATCH_ITEMS {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "catalog enum label limit exceeded",
+                ));
+            }
+            if property.value_type != FlowValueType::Enum && !property.enum_labels.is_empty() {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "non-enum catalog property contains enum labels",
+                ));
+            }
+            for label in &property.enum_labels {
+                if label.len() > MAX_STRING_BYTES {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::LimitExceeded,
+                        "catalog enum label exceeds string limit",
+                    ));
+                }
+            }
+            if property.value_type != FlowValueType::ViewModel
+                && property.referenced_schema_name.is_some()
+            {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "non-view-model catalog property contains a schema reference",
+                ));
+            }
+            if let Some(referenced_schema_name) = &property.referenced_schema_name {
+                validate_required_id_path(referenced_schema_name, "referenced schema name")?;
+                if !catalog
+                    .schemas
+                    .iter()
+                    .any(|candidate| candidate.name == *referenced_schema_name)
+                {
+                    return Err(FlowSessionError::new(
+                        FlowSessionErrorKind::Runtime,
+                        "catalog property references an unknown schema",
+                    ));
+                }
+            }
         }
     }
     for template in &catalog.templates {
@@ -3152,8 +3398,20 @@ fn catalog_payload_bytes(catalog: &FlowCatalog) -> Result<usize, FlowSessionErro
         checked_payload_add(&mut total, 16)?;
         checked_payload_add(&mut total, schema.name.len())?;
         for property in &schema.properties {
-            checked_payload_add(&mut total, 16)?;
+            checked_payload_add(&mut total, 32)?;
             checked_payload_add(&mut total, property.name.len())?;
+            checked_payload_add(
+                &mut total,
+                property
+                    .referenced_schema_name
+                    .as_deref()
+                    .map(str::len)
+                    .unwrap_or(0),
+            )?;
+            for label in &property.enum_labels {
+                checked_payload_add(&mut total, 8)?;
+                checked_payload_add(&mut total, label.len())?;
+            }
         }
     }
     for template in &catalog.templates {
@@ -3195,6 +3453,7 @@ fn value_arena_payload_bytes(arena: &FlowValueArena) -> Result<usize, FlowSessio
             | FlowValue::Number(_)
             | FlowValue::Bool(_)
             | FlowValue::Enum(_)
+            | FlowValue::ListIndex(_)
             | FlowValue::Color(_)
             | FlowValue::Image(_) => {}
         }
@@ -3259,8 +3518,8 @@ fn flow_value_type_for_property(type_name: &str) -> FlowValueType {
         "ViewModelPropertyEnum"
         | "ViewModelPropertyEnumCustom"
         | "ViewModelPropertyEnumSystem"
-        | "ViewModelPropertySymbolListIndex"
         | "ViewModelPropertyArtboard" => FlowValueType::Enum,
+        "ViewModelPropertySymbolListIndex" => FlowValueType::ListIndex,
         "ViewModelPropertyColor" => FlowValueType::Color,
         "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => FlowValueType::Image,
         "ViewModelPropertyList" => FlowValueType::List,
@@ -4414,7 +4673,7 @@ mod tests {
     fn schema_mapping_uses_canonical_identity_and_trigger_types() {
         assert_eq!(
             flow_value_type_for_property("ViewModelPropertySymbolListIndex"),
-            FlowValueType::Enum
+            FlowValueType::ListIndex
         );
         assert_eq!(
             flow_value_type_for_property("ViewModelPropertyArtboard"),

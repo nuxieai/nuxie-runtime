@@ -89,7 +89,7 @@ pub use view_model::{
     RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelNumberSourceHandle,
     RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
     RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
-    runtime_data_context_lookup_reports,
+    RuntimeViewModelLinkError, runtime_data_context_lookup_reports,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

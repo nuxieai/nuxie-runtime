@@ -143,7 +143,8 @@ typedef uint32_t NuxFlowValueKind;
 
 /**
  * One node in a caller-owned recursive value arena. Array elements require
- * the exact published size. `identity_value` carries enum/image identity;
+ * the exact published size. `identity_value` carries enum/image identity or
+ * an authored component-list item index;
  * caller-supplied object/view-model nodes use `schema_id`, and view-model
  * nodes additionally use `instance_id`. Result view-model nodes always carry
  * stable `instance_id`; `schema_id` is populated when catalog metadata is in
@@ -231,7 +232,7 @@ typedef struct NuxFlowStateMutation {
   NuxFlowStateMutationKind kind;
   struct NuxFlowInstanceReference instance;
   /**
-   * Used by list insert/set and zeroed for other mutation kinds.
+   * Used by list insert/set and view-model replacement; zeroed otherwise.
    */
   struct NuxFlowInstanceReference item;
   struct NuxByteView path;
@@ -443,6 +444,15 @@ typedef struct NuxDiagnosticView {
 } NuxDiagnosticView;
 
 /**
+ * One authored enum label. `value` is its stable numeric enum identity.
+ */
+typedef struct NuxFlowEnumLabelView {
+  uint32_t struct_size;
+  uint32_t value;
+  struct NuxByteView label;
+} NuxFlowEnumLabelView;
+
+/**
  * Borrowed typed property of a reported event.
  */
 typedef struct NuxFlowEventPropertyView {
@@ -594,6 +604,15 @@ typedef struct NuxFlowSchemaPropertyView {
   struct NuxByteView schema_id;
   struct NuxByteView property_id;
   struct NuxByteView name;
+  /**
+   * Accepted nested schema, or an empty view for non-view-model properties.
+   */
+  struct NuxByteView referenced_schema_id;
+  /**
+   * Stable span into the result's flattened enum-label table.
+   */
+  uint32_t first_enum_label;
+  uint32_t enum_label_count;
 } NuxFlowSchemaPropertyView;
 
 /**
@@ -707,6 +726,8 @@ typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST 9
 
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX 12
+
 #define NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL 11
 
 #define NUX_FLOW_SCHEMA_PROPERTY_KIND_NUMBER 2
@@ -747,6 +768,8 @@ typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER 10
 
+#define NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL 12
+
 #define NUX_FLOW_STATE_MUTATION_KIND_TRIGGER 2
 
 #define NUX_FLOW_VALUE_KIND_BOOL 3
@@ -758,6 +781,8 @@ typedef uint32_t NuxScriptAuthorization;
 #define NUX_FLOW_VALUE_KIND_IMAGE 6
 
 #define NUX_FLOW_VALUE_KIND_LIST 9
+
+#define NUX_FLOW_VALUE_KIND_LIST_INDEX 10
 
 #define NUX_FLOW_VALUE_KIND_NULL 0
 
@@ -1028,6 +1053,26 @@ NuxStatus nux_flow_session_result_diagnostic_at(const struct NuxFlowSessionResul
  * A non-null pointer must identify a live result owned by this library.
  */
 uint64_t nux_flow_session_result_diagnostic_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one flattened authored enum label by stable result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_label` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_enum_label_at(const struct NuxFlowSessionResult *result,
+                                                uint64_t index,
+                                                struct NuxFlowEnumLabelView *out_label);
+
+/**
+ * Returns the number of flattened authored enum labels in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_enum_label_count(const struct NuxFlowSessionResult *result);
 
 /**
  * Borrows one flattened typed event property by result order.

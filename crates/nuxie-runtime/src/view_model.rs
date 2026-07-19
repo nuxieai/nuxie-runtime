@@ -1,6 +1,6 @@
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use nuxie_binary::{
     RuntimeDataValue, RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
@@ -1524,6 +1524,13 @@ pub struct RuntimeOwnedViewModelInstance {
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
+    linked_aliases: Vec<RuntimeOwnedViewModelAlias>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelAlias {
+    owner: Weak<RefCell<RuntimeOwnedViewModelInstance>>,
+    property_index: usize,
 }
 
 #[derive(Debug)]
@@ -1598,6 +1605,15 @@ pub struct RuntimeOwnedViewModelHandle {
     instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeViewModelLinkError {
+    PropertyNotFound,
+    NestedPathUnsupported,
+    SchemaMismatch,
+    Cycle,
+    BorrowConflict,
+}
+
 impl RuntimeOwnedViewModelHandle {
     pub fn new(mut instance: RuntimeOwnedViewModelInstance) -> Self {
         instance.reroot_mutation_clock();
@@ -1607,15 +1623,177 @@ impl RuntimeOwnedViewModelHandle {
     }
 
     pub fn borrow(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
+        self.refresh_linked_mirrors();
         self.instance.borrow()
     }
 
     pub fn borrow_mut(&self) -> RefMut<'_, RuntimeOwnedViewModelInstance> {
+        self.refresh_linked_mirrors();
         self.instance.borrow_mut()
+    }
+
+    /// Refresh copied scalar storage for linked children before exposing this
+    /// instance. A linked child normally pushes changes to every owner from
+    /// `mark_mutated`, but that push can be deferred while an owner is already
+    /// borrowed. Retrying at the next handle borrow makes that deferral
+    /// durable instead of leaving the owner's render-facing mirror stale.
+    fn refresh_linked_mirrors(&self) {
+        let links = {
+            let Ok(instance) = self.instance.try_borrow() else {
+                return;
+            };
+            instance
+                .view_models
+                .iter()
+                .filter_map(|property| {
+                    property
+                        .linked_instance
+                        .as_ref()
+                        .map(|linked| (property.property_index, Rc::clone(linked)))
+                })
+                .collect::<Vec<_>>()
+        };
+        for (property_index, linked) in links {
+            let Ok(linked) = linked.try_borrow() else {
+                continue;
+            };
+            let Ok(mut instance) = self.instance.try_borrow_mut() else {
+                continue;
+            };
+            if let Some(property) = instance
+                .view_models
+                .iter_mut()
+                .find(|property| property.property_index == property_index)
+            {
+                property.mirror_linked_instance(&linked);
+            }
+        }
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.instance, &other.instance)
+    }
+
+    /// Returns the retained instance currently assigned to an outer
+    /// view-model property. Nested property paths are intentionally not part
+    /// of this first structural-mutation contract.
+    pub fn linked_view_model_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        if property_path.is_empty() || property_path.contains('/') {
+            return None;
+        }
+        let instance = self.instance.borrow();
+        let property_index = instance.property_index_by_name(property_path)?;
+        let linked = instance
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_index == property_index)?
+            .linked_instance
+            .as_ref()?;
+        Some(Self::from_shared(Rc::clone(linked)))
+    }
+
+    /// Assigns one existing retained instance to an outer view-model property
+    /// without cloning it. The assignment is rejected before mutation when
+    /// its schema is incompatible or the resulting retained graph would
+    /// contain a cycle.
+    pub fn link_view_model_by_property_name_path(
+        &self,
+        property_path: &str,
+        value: &RuntimeOwnedViewModelHandle,
+    ) -> Result<bool, RuntimeViewModelLinkError> {
+        if property_path.is_empty() {
+            return Err(RuntimeViewModelLinkError::PropertyNotFound);
+        }
+        if property_path.contains('/') {
+            return Err(RuntimeViewModelLinkError::NestedPathUnsupported);
+        }
+        let (property_index, expected_schema, old_linked, already_linked) = {
+            let instance = self
+                .instance
+                .try_borrow()
+                .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
+            let property_index = instance
+                .property_index_by_name(property_path)
+                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+            let property = instance
+                .view_models
+                .iter()
+                .find(|view_model| view_model.property_index == property_index)
+                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+            (
+                property_index,
+                property
+                    .referenced_view_model_index
+                    .ok_or(RuntimeViewModelLinkError::SchemaMismatch)?,
+                property.linked_instance.as_ref().map(Rc::clone),
+                property
+                    .linked_instance
+                    .as_ref()
+                    .is_some_and(|current| Rc::ptr_eq(current, &value.instance)),
+            )
+        };
+        let value_schema = value
+            .instance
+            .try_borrow()
+            .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?
+            .view_model_index;
+        if value_schema != expected_schema {
+            return Err(RuntimeViewModelLinkError::SchemaMismatch);
+        }
+        if already_linked {
+            return Ok(false);
+        }
+        drop(
+            value
+                .instance
+                .try_borrow_mut()
+                .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?,
+        );
+        if let Some(old_linked) = &old_linked {
+            drop(
+                old_linked
+                    .try_borrow_mut()
+                    .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?,
+            );
+        }
+        if owned_view_model_graph_reaches_or_cycles(&value.instance, &self.instance) {
+            return Err(RuntimeViewModelLinkError::Cycle);
+        }
+        let value_instance = value
+            .instance
+            .try_borrow()
+            .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
+        let value_clock = Rc::clone(&value_instance.mutation_clock);
+        let mut instance = self
+            .instance
+            .try_borrow_mut()
+            .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
+        let property = instance
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_index == property_index)
+            .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        property.linked_instance = Some(value.shared());
+        property.mirror_linked_instance(&value_instance);
+        instance.merge_mutation_clock(&value_clock);
+        instance.mark_mutated();
+        drop(instance);
+        drop(value_instance);
+        if let Some(old_linked) = old_linked {
+            old_linked
+                .try_borrow_mut()
+                .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?
+                .remove_linked_alias(&self.instance, property_index);
+        }
+        value
+            .instance
+            .try_borrow_mut()
+            .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?
+            .add_linked_alias(&self.instance, property_index);
+        Ok(true)
     }
 
     /// Detach several retained roots as one graph, preserving aliases shared
@@ -1721,7 +1899,7 @@ impl RuntimeOwnedViewModelHandle {
         index: usize,
         item: &RuntimeOwnedViewModelHandle,
     ) -> bool {
-        if owned_view_model_list_graph_reaches_or_cycles(&item.instance, &self.instance) {
+        if owned_view_model_graph_reaches_or_cycles(&item.instance, &self.instance) {
             return false;
         }
         let mut instance = self.instance.borrow_mut();
@@ -1767,7 +1945,7 @@ impl RuntimeOwnedViewModelHandle {
         property_path: &[usize],
         item: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
     ) -> bool {
-        if owned_view_model_list_graph_reaches_or_cycles(&item, &self.instance) {
+        if owned_view_model_graph_reaches_or_cycles(&item, &self.instance) {
             return false;
         }
         let Ok(mut instance) = self.instance.try_borrow_mut() else {
@@ -1782,7 +1960,7 @@ impl RuntimeOwnedViewModelHandle {
         index: usize,
         item: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
     ) -> bool {
-        if owned_view_model_list_graph_reaches_or_cycles(&item, &self.instance) {
+        if owned_view_model_graph_reaches_or_cycles(&item, &self.instance) {
             return false;
         }
         let Ok(mut instance) = self.instance.try_borrow_mut() else {
@@ -1808,7 +1986,27 @@ fn clone_owned_view_model_graph(
         remap_owned_view_model_lists(&original.lists, &mut cloned.lists, memo);
         remap_owned_view_model_child_lists(&original.view_models, &mut cloned.view_models, memo);
     }
+    register_owned_view_model_link_aliases(&candidate);
     candidate
+}
+
+fn register_owned_view_model_link_aliases(owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) {
+    let links = owner
+        .borrow()
+        .view_models
+        .iter()
+        .filter_map(|property| {
+            property
+                .linked_instance
+                .as_ref()
+                .map(|linked| (property.property_index, Rc::clone(linked)))
+        })
+        .collect::<Vec<_>>();
+    for (property_index, linked) in links {
+        let linked_clock = Rc::clone(&linked.borrow().mutation_clock);
+        owner.borrow_mut().merge_mutation_clock(&linked_clock);
+        linked.borrow_mut().add_linked_alias(owner, property_index);
+    }
 }
 
 fn remap_owned_view_model_lists(
@@ -1848,6 +2046,10 @@ fn remap_owned_view_model_child_lists(
         else {
             continue;
         };
+        cloned_child.linked_instance = original_child
+            .linked_instance
+            .as_ref()
+            .map(|linked| clone_owned_view_model_graph(linked, memo));
         remap_owned_view_model_lists(&original_child.lists, &mut cloned_child.lists, memo);
         for (key, cloned_lists) in &mut cloned_child.imported_lists {
             if let Some(original_lists) = original_child.imported_lists.get(key) {
@@ -2222,6 +2424,7 @@ struct RuntimeOwnedViewModelViewModel {
     property_index: usize,
     property_name: String,
     value: RuntimeViewModelPointer,
+    linked_instance: Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
     referenced_view_model_index: Option<usize>,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
@@ -2268,10 +2471,22 @@ impl Clone for RuntimeOwnedViewModelInstance {
             artboards: self.artboards.clone(),
             triggers: self.triggers.clone(),
             view_models: self.view_models.clone(),
+            linked_aliases: Vec::new(),
         };
+        clear_owned_view_model_child_links(&mut cloned.view_models);
         cloned.detach_list_storage();
         cloned.reroot_mutation_clock();
         cloned
+    }
+}
+
+fn clear_owned_view_model_child_links(children: &mut [RuntimeOwnedViewModelViewModel]) {
+    for child in children {
+        child.linked_instance = None;
+        clear_owned_view_model_child_links(&mut child.children);
+        for imported_children in child.imported_children.values_mut() {
+            clear_owned_view_model_child_links(imported_children);
+        }
     }
 }
 
@@ -2320,6 +2535,9 @@ fn replace_owned_view_model_child_clock(
     clock: &Rc<RuntimeOwnedViewModelMutationClock>,
 ) {
     for child in children {
+        if let Some(linked) = &child.linked_instance {
+            linked.borrow_mut().replace_mutation_clock(Rc::clone(clock));
+        }
         replace_owned_view_model_list_clock(&mut child.lists, clock);
         for lists in child.imported_lists.values_mut() {
             replace_owned_view_model_list_clock(lists, clock);
@@ -2349,6 +2567,9 @@ fn collect_owned_view_model_child_list_graph_edges(
     edges: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
 ) -> bool {
     for child in children {
+        if let Some(linked) = &child.linked_instance {
+            edges.push(Rc::clone(linked));
+        }
         if !collect_owned_view_model_list_graph_edges(&child.lists, edges) {
             return false;
         }
@@ -2369,7 +2590,7 @@ fn collect_owned_view_model_child_list_graph_edges(
     true
 }
 
-fn owned_view_model_list_graph_reaches_or_cycles(
+fn owned_view_model_graph_reaches_or_cycles(
     item: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
     target: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
 ) -> bool {
@@ -2415,6 +2636,48 @@ fn owned_view_model_list_graph_reaches_or_cycles(
 }
 
 impl RuntimeOwnedViewModelViewModel {
+    fn mirror_linked_instance(&mut self, source: &RuntimeOwnedViewModelInstance) {
+        macro_rules! replace_active_values {
+            ($owned:ident, $imported:ident) => {
+                match self.value {
+                    RuntimeViewModelPointer::Imported { object_id } => {
+                        self.$imported.insert(object_id, source.$owned.clone());
+                    }
+                    _ => {
+                        self.$owned = source.$owned.clone();
+                    }
+                }
+            };
+        }
+        if matches!(
+            self.value,
+            RuntimeViewModelPointer::Null | RuntimeViewModelPointer::DataContextRoot
+        ) {
+            self.value = RuntimeViewModelPointer::OwnedGenerated {
+                view_model_index: source.view_model_index,
+                property_index: self.property_index,
+                path_key: 0,
+            };
+        }
+        replace_active_values!(numbers, imported_numbers);
+        replace_active_values!(booleans, imported_booleans);
+        replace_active_values!(strings, imported_strings);
+        replace_active_values!(colors, imported_colors);
+        replace_active_values!(enums, imported_enums);
+        replace_active_values!(symbol_list_indices, imported_symbol_list_indices);
+        replace_active_values!(lists, imported_lists);
+        replace_active_values!(assets, imported_assets);
+        replace_active_values!(artboards, imported_artboards);
+        replace_active_values!(triggers, imported_triggers);
+        match self.value {
+            RuntimeViewModelPointer::Imported { object_id } => {
+                self.imported_children
+                    .insert(object_id, source.view_models.clone());
+            }
+            _ => self.children = source.view_models.clone(),
+        }
+    }
+
     fn active_children(&self) -> Option<&[RuntimeOwnedViewModelViewModel]> {
         match self.value {
             RuntimeViewModelPointer::OwnedGenerated { .. } => Some(self.children.as_slice()),
@@ -2673,6 +2936,7 @@ impl RuntimeOwnedViewModelViewModel {
                     .unwrap_or_default(),
                 _ => Vec::new(),
             },
+            linked_aliases: Vec::new(),
         };
         instance.detach_list_storage();
         instance.reroot_mutation_clock();
@@ -4673,6 +4937,7 @@ fn runtime_owned_view_model_property_children(
                     .unwrap_or_default()
                     .to_owned(),
                 value,
+                linked_instance: None,
                 referenced_view_model_index,
                 property_names: referenced_view_model_index
                     .map(|view_model_index| {
@@ -4919,6 +5184,60 @@ impl RuntimeOwnedViewModelInstance {
     fn mark_mutated(&mut self) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         RuntimeOwnedViewModelMutationClock::mark_mutated(&self.mutation_clock);
+        self.synchronize_linked_aliases();
+    }
+
+    fn add_linked_alias(
+        &mut self,
+        owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+        property_index: usize,
+    ) {
+        let weak = Rc::downgrade(owner);
+        if self
+            .linked_aliases
+            .iter()
+            .any(|alias| alias.property_index == property_index && alias.owner.ptr_eq(&weak))
+        {
+            return;
+        }
+        self.linked_aliases.push(RuntimeOwnedViewModelAlias {
+            owner: weak,
+            property_index,
+        });
+    }
+
+    fn remove_linked_alias(
+        &mut self,
+        owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+        property_index: usize,
+    ) {
+        self.linked_aliases.retain(|alias| {
+            alias.property_index != property_index
+                || alias
+                    .owner
+                    .upgrade()
+                    .is_some_and(|candidate| !Rc::ptr_eq(&candidate, owner))
+        });
+    }
+
+    fn synchronize_linked_aliases(&mut self) {
+        self.linked_aliases
+            .retain(|alias| alias.owner.strong_count() != 0);
+        for alias in self.linked_aliases.clone() {
+            let Some(owner) = alias.owner.upgrade() else {
+                continue;
+            };
+            let Ok(mut owner) = owner.try_borrow_mut() else {
+                continue;
+            };
+            if let Some(property) = owner
+                .view_models
+                .iter_mut()
+                .find(|property| property.property_index == alias.property_index)
+            {
+                property.mirror_linked_instance(self);
+            }
+        }
     }
 
     fn detach_list_storage(&mut self) {
@@ -5058,6 +5377,7 @@ impl RuntimeOwnedViewModelInstance {
             artboards,
             triggers,
             view_models,
+            linked_aliases: Vec::new(),
         };
         instance.reroot_mutation_clock();
         Some(instance)
@@ -5065,6 +5385,76 @@ impl RuntimeOwnedViewModelInstance {
 
     fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
         runtime_owned_view_model_property_index_by_name(&self.property_names, property_name)
+    }
+
+    fn mutate_linked_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        mutation: impl FnOnce(&mut RuntimeOwnedViewModelInstance, &[&str]) -> bool,
+    ) -> Option<bool> {
+        if property_path.len() < 2 {
+            return None;
+        }
+        let property_index = self.property_index_by_name(property_path[0])?;
+        let linked = self
+            .view_models
+            .iter()
+            .find(|property| property.property_index == property_index)?
+            .linked_instance
+            .as_ref()
+            .map(Rc::clone)?;
+        let changed = {
+            let Ok(mut linked_instance) = linked.try_borrow_mut() else {
+                return Some(false);
+            };
+            mutation(&mut linked_instance, &property_path[1..])
+        };
+        if changed {
+            let linked_instance = linked.borrow();
+            if let Some(property) = self
+                .view_models
+                .iter_mut()
+                .find(|property| property.property_index == property_index)
+            {
+                property.mirror_linked_instance(&linked_instance);
+            }
+        }
+        Some(changed)
+    }
+
+    fn mutate_linked_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        mutation: impl FnOnce(&mut RuntimeOwnedViewModelInstance, &[usize]) -> bool,
+    ) -> Option<bool> {
+        if property_path.len() < 2 {
+            return None;
+        }
+        let property_index = property_path[0];
+        let linked = self
+            .view_models
+            .iter()
+            .find(|property| property.property_index == property_index)?
+            .linked_instance
+            .as_ref()
+            .map(Rc::clone)?;
+        let changed = {
+            let Ok(mut linked_instance) = linked.try_borrow_mut() else {
+                return Some(false);
+            };
+            mutation(&mut linked_instance, &property_path[1..])
+        };
+        if changed {
+            let linked_instance = linked.borrow();
+            if let Some(property) = self
+                .view_models
+                .iter_mut()
+                .find(|property| property.property_index == property_index)
+            {
+                property.mirror_linked_instance(&linked_instance);
+            }
+        }
+        Some(changed)
     }
 
     pub fn set_number_by_property_index(&mut self, property_index: usize, value: f32) -> bool {
@@ -5149,6 +5539,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_number_by_property_names(&mut self, property_path: &[&str], value: f32) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_number_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_number_by_property_name(property_path[0], value);
         }
@@ -5173,6 +5570,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: f32,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_number_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_number_by_property_index(property_path[0], value);
         }
@@ -5289,6 +5691,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_boolean_by_property_names(&mut self, property_path: &[&str], value: bool) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_boolean_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_boolean_by_property_name(property_path[0], value);
         }
@@ -5313,6 +5722,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: bool,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_boolean_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_boolean_by_property_index(property_path[0], value);
         }
@@ -5429,6 +5843,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_string_by_property_names(&mut self, property_path: &[&str], value: &[u8]) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_string_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_string_by_property_name(property_path[0], value);
         }
@@ -5453,6 +5874,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: &[u8],
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_string_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_string_by_property_index(property_path[0], value);
         }
@@ -5573,6 +5999,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_color_by_property_names(&mut self, property_path: &[&str], value: u32) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_color_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_color_by_property_name(property_path[0], value);
         }
@@ -5597,6 +6030,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: u32,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_color_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_color_by_property_index(property_path[0], value);
         }
@@ -5713,6 +6151,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_enum_by_property_names(&mut self, property_path: &[&str], value: u64) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_enum_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_enum_by_property_name(property_path[0], value);
         }
@@ -5737,6 +6182,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_enum_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_enum_by_property_index(property_path[0], value);
         }
@@ -5869,6 +6319,13 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[&str],
         value: u64,
     ) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_symbol_list_index_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_symbol_list_index_by_property_name(property_path[0], value);
         }
@@ -5894,6 +6351,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_symbol_list_index_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_symbol_list_index_by_property_index(property_path[0], value);
         }
@@ -6195,6 +6657,13 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[&str],
         item_count: usize,
     ) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_list_item_count_by_property_names(path, item_count)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_list_item_count_by_property_name(property_path[0], item_count);
         }
@@ -6219,6 +6688,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         item_count: usize,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_list_item_count_by_property_path(path, item_count)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_list_item_count_by_property_index(property_path[0], item_count);
         }
@@ -6335,6 +6809,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_asset_by_property_names(&mut self, property_path: &[&str], value: u64) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_asset_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_asset_by_property_name(property_path[0], value);
         }
@@ -6359,6 +6840,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_asset_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_asset_by_property_index(property_path[0], value);
         }
@@ -6475,6 +6961,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_artboard_by_property_names(&mut self, property_path: &[&str], value: u64) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_artboard_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_artboard_by_property_name(property_path[0], value);
         }
@@ -6499,6 +6992,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_artboard_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_artboard_by_property_index(property_path[0], value);
         }
@@ -6615,6 +7113,13 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn set_trigger_by_property_names(&mut self, property_path: &[&str], value: u64) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_trigger_by_property_names(path, value)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_trigger_by_property_name(property_path[0], value);
         }
@@ -6639,6 +7144,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_trigger_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_trigger_by_property_index(property_path[0], value);
         }

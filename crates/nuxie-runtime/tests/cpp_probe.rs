@@ -6,7 +6,7 @@ use nuxie_runtime::{
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
     RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
     RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeViewModelLinkError, StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, runtime_data_context_lookup_reports,
     script_view_model_from_owned,
 };
@@ -53554,6 +53554,138 @@ fn script_list_insertion_rejects_transitive_graph_cycles() {
         "insert must enforce the same transitive cycle check as push"
     );
     assert_eq!(script_b.list_len("items"), Some(0));
+}
+
+#[test]
+fn owned_view_model_links_reject_transitive_cycles_atomically() {
+    let bytes = synthetic_runtime_file(8584, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "next");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                0,
+            );
+        });
+    });
+    let runtime = read_runtime_file(&bytes).expect("import recursive view-model schema");
+    let make_handle = || {
+        RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&runtime, 0).expect("generated Root instance"),
+        )
+    };
+    let a = make_handle();
+    let b = make_handle();
+    let c = make_handle();
+
+    assert_eq!(
+        a.link_view_model_by_property_name_path("next", &b),
+        Ok(true)
+    );
+    assert_eq!(
+        b.link_view_model_by_property_name_path("next", &c),
+        Ok(true)
+    );
+    assert_eq!(
+        c.link_view_model_by_property_name_path("next", &a),
+        Err(RuntimeViewModelLinkError::Cycle)
+    );
+    assert!(c.linked_view_model_by_property_name_path("next").is_none());
+    assert!(
+        a.linked_view_model_by_property_name_path("next")
+            .is_some_and(|linked| linked.ptr_eq(&b))
+    );
+}
+
+#[test]
+fn owned_view_model_links_expose_shared_string_state_through_the_parent_path() {
+    let bytes = std::fs::read(
+        PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets")
+        .join("replace_view_model.riv"),
+    )
+    .expect("read replacement fixture");
+    let runtime = read_runtime_file(&bytes).expect("import replacement fixture");
+    let owner = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 1).expect("generated Main instance"),
+    );
+    let child = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 1)
+            .expect("authored Child instance"),
+    );
+
+    assert_eq!(
+        owner.link_view_model_by_property_name_path("child", &child),
+        Ok(true)
+    );
+    assert!(
+        child
+            .borrow_mut()
+            .set_string_by_property_name_path("label", b"shared")
+    );
+    assert_eq!(
+        owner
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"shared"[..])
+    );
+    assert!(
+        owner
+            .borrow_mut()
+            .set_string_by_property_name_path("child/label", b"parent-write")
+    );
+    assert_eq!(
+        child.borrow().string_value_by_property_name_path("label"),
+        Some(&b"parent-write"[..])
+    );
+    let held_owner = owner.borrow();
+    assert!(
+        child
+            .borrow_mut()
+            .set_string_by_property_name_path("label", b"deferred")
+    );
+    assert_eq!(
+        held_owner.string_value_by_property_name_path("child/label"),
+        Some(&b"parent-write"[..])
+    );
+    drop(held_owner);
+    assert_eq!(
+        owner
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"deferred"[..])
+    );
+
+    let detached = RuntimeOwnedViewModelHandle::detached_graph(&[owner.clone(), child.clone()]);
+    assert!(
+        detached[0]
+            .linked_view_model_by_property_name_path("child")
+            .is_some_and(|linked| linked.ptr_eq(&detached[1]))
+    );
+    assert!(
+        detached[1]
+            .borrow_mut()
+            .set_string_by_property_name_path("label", b"detached")
+    );
+    assert_eq!(
+        detached[0]
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"detached"[..])
+    );
+    assert_eq!(
+        owner
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"deferred"[..])
+    );
 }
 
 #[test]

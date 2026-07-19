@@ -25,6 +25,12 @@ _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL == 9,
                "player-input mutation kinds are part of the ABI");
 _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER == 11,
                "player-input mutation kinds are part of the ABI");
+_Static_assert(NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL == 12,
+               "view-model replacement kind is part of the ABI");
+_Static_assert(NUX_FLOW_VALUE_KIND_LIST_INDEX == 10,
+               "list-index value kind is part of the ABI");
+_Static_assert(NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX == 12,
+               "list-index schema kind is part of the ABI");
 _Static_assert(NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE == 1,
                "player-selection branches are part of the ABI");
 _Static_assert(NUX_FLOW_PLAYER_SELECTION_STATIC == 5,
@@ -133,8 +139,16 @@ _Static_assert(sizeof(struct NuxFlowPlayerInputView) == 32,
                "unexpected NuxFlowPlayerInputView layout");
 _Static_assert(sizeof(struct NuxFlowSchemaView) == 48,
                "unexpected NuxFlowSchemaView layout");
-_Static_assert(sizeof(struct NuxFlowSchemaPropertyView) == 56,
+_Static_assert(sizeof(struct NuxFlowSchemaPropertyView) == 80,
                "unexpected NuxFlowSchemaPropertyView layout");
+_Static_assert(offsetof(struct NuxFlowSchemaPropertyView,
+                        referenced_schema_id) == 56,
+               "unexpected referenced-schema offset");
+_Static_assert(offsetof(struct NuxFlowSchemaPropertyView,
+                        first_enum_label) == 72,
+               "unexpected enum-label span offset");
+_Static_assert(sizeof(struct NuxFlowEnumLabelView) == 24,
+               "unexpected NuxFlowEnumLabelView layout");
 _Static_assert(sizeof(struct NuxFlowInstanceTemplateView) == 40,
                "unexpected NuxFlowInstanceTemplateView layout");
 _Static_assert(sizeof(struct NuxFlowInstanceView) == 56,

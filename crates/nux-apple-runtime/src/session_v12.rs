@@ -72,6 +72,7 @@ pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_CLEAR: NuxFlowStateMutationKind = 8;
 pub const NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL: NuxFlowStateMutationKind = 9;
 pub const NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER: NuxFlowStateMutationKind = 10;
 pub const NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER: NuxFlowStateMutationKind = 11;
+pub const NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL: NuxFlowStateMutationKind = 12;
 
 /// Stable-width instance reference used by state mutations.
 pub type NuxFlowInstanceReferenceKind = u32;
@@ -112,6 +113,7 @@ pub const NUX_FLOW_VALUE_KIND_IMAGE: NuxFlowValueKind = 6;
 pub const NUX_FLOW_VALUE_KIND_OBJECT: NuxFlowValueKind = 7;
 pub const NUX_FLOW_VALUE_KIND_VIEW_MODEL: NuxFlowValueKind = 8;
 pub const NUX_FLOW_VALUE_KIND_LIST: NuxFlowValueKind = 9;
+pub const NUX_FLOW_VALUE_KIND_LIST_INDEX: NuxFlowValueKind = 10;
 
 /// Stable-width observable output phase. Phases are monotonic inside one
 /// cycle, and may restart when a pointer batch starts another immediate cycle.
@@ -151,6 +153,7 @@ pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL: NuxFlowSchemaPropertyKind = 
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST: NuxFlowSchemaPropertyKind = 9;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT: NuxFlowSchemaPropertyKind = 10;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL: NuxFlowSchemaPropertyKind = 11;
+pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxFlowSchemaPropertyKind = 12;
 
 /// ABI 1.2 configured-session descriptor. `minimum_abi_minor` must be 2 for
 /// this surface. A null `artboard_name` selects the default artboard. A null
@@ -167,7 +170,8 @@ pub struct NuxFlowConfiguredSessionDescriptor {
 }
 
 /// One node in a caller-owned recursive value arena. Array elements require
-/// the exact published size. `identity_value` carries enum/image identity;
+/// the exact published size. `identity_value` carries enum/image identity or
+/// an authored component-list item index;
 /// caller-supplied object/view-model nodes use `schema_id`, and view-model
 /// nodes additionally use `instance_id`. Result view-model nodes always carry
 /// stable `instance_id`; `schema_id` is populated when catalog metadata is in
@@ -252,7 +256,7 @@ pub struct NuxFlowStateMutation {
     pub struct_size: u32,
     pub kind: NuxFlowStateMutationKind,
     pub instance: NuxFlowInstanceReference,
-    /// Used by list insert/set and zeroed for other mutation kinds.
+    /// Used by list insert/set and view-model replacement; zeroed otherwise.
     pub item: NuxFlowInstanceReference,
     pub path: NuxByteView,
     pub input_name: NuxByteView,
@@ -391,6 +395,20 @@ pub struct NuxFlowSchemaPropertyView {
     pub schema_id: NuxByteView,
     pub property_id: NuxByteView,
     pub name: NuxByteView,
+    /// Accepted nested schema, or an empty view for non-view-model properties.
+    pub referenced_schema_id: NuxByteView,
+    /// Stable span into the result's flattened enum-label table.
+    pub first_enum_label: u32,
+    pub enum_label_count: u32,
+}
+
+/// One authored enum label. `value` is its stable numeric enum identity.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxFlowEnumLabelView {
+    pub struct_size: u32,
+    pub value: u32,
+    pub label: NuxByteView,
 }
 
 /// Borrowed authored instance template. Templates are immutable creation
@@ -806,7 +824,9 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_ENUM | NUX_FLOW_VALUE_KIND_IMAGE => {
+            NUX_FLOW_VALUE_KIND_ENUM
+            | NUX_FLOW_VALUE_KIND_IMAGE
+            | NUX_FLOW_VALUE_KIND_LIST_INDEX => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -1078,6 +1098,15 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && path.is_some()
                     && input_name.is_none()
                     && instance_reference_is_zero(mutation.item)
+                    && mutation.index == 0
+                    && mutation.other_index == 0,
+            ),
+            NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL => (
+                Some(copy_instance_reference(mutation.instance)?),
+                Some(copy_instance_reference(mutation.item)?),
+                value_root_index.is_none()
+                    && path.is_some()
+                    && input_name.is_none()
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
@@ -1457,9 +1486,18 @@ struct OwnedSchema {
 #[derive(Debug, Clone)]
 struct OwnedSchemaProperty {
     kind: NuxFlowSchemaPropertyKind,
+    first_enum_label: u32,
+    enum_label_count: u32,
     schema_id: Vec<u8>,
     property_id: Vec<u8>,
     name: Vec<u8>,
+    referenced_schema_id: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct OwnedEnumLabel {
+    value: u32,
+    label: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -1527,6 +1565,7 @@ struct FlowSessionResultHandle {
     has_catalog: bool,
     schemas: Vec<OwnedSchema>,
     schema_properties: Vec<OwnedSchemaProperty>,
+    enum_labels: Vec<OwnedEnumLabel>,
     instance_templates: Vec<OwnedInstanceTemplate>,
     instances: Vec<OwnedInstance>,
     has_values: bool,
@@ -1552,6 +1591,7 @@ impl FlowSessionResultHandle {
             has_catalog: false,
             schemas: Vec::new(),
             schema_properties: Vec::new(),
+            enum_labels: Vec::new(),
             instance_templates: Vec::new(),
             instances: Vec::new(),
             has_values: false,
@@ -1578,6 +1618,7 @@ impl FlowSessionResultHandle {
             has_catalog: false,
             schemas: Vec::new(),
             schema_properties: Vec::new(),
+            enum_labels: Vec::new(),
             instance_templates: Vec::new(),
             instances: Vec::new(),
             has_values: false,
@@ -1603,6 +1644,7 @@ impl FlowSessionResultHandle {
         if self.schemas.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
             || self.player_inputs.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
             || self.schema_properties.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
+            || self.enum_labels.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
             || self.instance_templates.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
             || self.instances.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
             || self.value_roots.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
@@ -1696,6 +1738,11 @@ impl FlowSessionResultHandle {
             )?;
         }
         for property in &self.schema_properties {
+            let first_enum_label = property.first_enum_label as usize;
+            let enum_label_count = property.enum_label_count as usize;
+            let enum_label_end = first_enum_label
+                .checked_add(enum_label_count)
+                .ok_or(NuxStatus::RuntimeError)?;
             if !matches!(
                 property.kind,
                 NUX_FLOW_SCHEMA_PROPERTY_KIND_STRING
@@ -1703,6 +1750,7 @@ impl FlowSessionResultHandle {
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_BOOL
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_TRIGGER
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM
+                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_COLOR
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_IMAGE
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL
@@ -1711,8 +1759,31 @@ impl FlowSessionResultHandle {
                     | NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL
             ) || property.schema_id.is_empty()
                 || property.property_id.is_empty()
+                || enum_label_end > self.enum_labels.len()
+                || (enum_label_count == 0 && first_enum_label != 0)
+                || (property.kind != NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM && enum_label_count != 0)
+                || (property.kind == NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL
+                    && property.referenced_schema_id.is_empty())
+                || (property.kind != NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL
+                    && !property.referenced_schema_id.is_empty())
             {
                 return Err(NuxStatus::RuntimeError);
+            }
+            if !property.referenced_schema_id.is_empty()
+                && !self
+                    .schemas
+                    .iter()
+                    .any(|schema| schema.schema_id == property.referenced_schema_id)
+            {
+                return Err(NuxStatus::RuntimeError);
+            }
+            for (offset, label) in self.enum_labels[first_enum_label..enum_label_end]
+                .iter()
+                .enumerate()
+            {
+                if label.value != offset as u32 {
+                    return Err(NuxStatus::RuntimeError);
+                }
             }
             charge_result_utf8(
                 &mut payload_bytes,
@@ -1728,6 +1799,18 @@ impl FlowSessionResultHandle {
                 &mut payload_bytes,
                 &property.name,
                 NUX_FLOW_MAX_ID_BYTE_LENGTH,
+            )?;
+            charge_result_utf8(
+                &mut payload_bytes,
+                &property.referenced_schema_id,
+                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+            )?;
+        }
+        for label in &self.enum_labels {
+            charge_result_utf8(
+                &mut payload_bytes,
+                &label.label,
+                NUX_FLOW_MAX_STRING_BYTE_LENGTH,
             )?;
         }
         for template in &self.instance_templates {
@@ -1969,7 +2052,7 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
                 && !has_edges
                 && canonical_edge_start
         }
-        NUX_FLOW_VALUE_KIND_ENUM | NUX_FLOW_VALUE_KIND_IMAGE => {
+        NUX_FLOW_VALUE_KIND_ENUM | NUX_FLOW_VALUE_KIND_IMAGE | NUX_FLOW_VALUE_KIND_LIST_INDEX => {
             number_is_zero
                 && node.color_value == 0
                 && !node.bool_value
@@ -2465,6 +2548,18 @@ mod configured_session_seam {
             NUX_FLOW_STATE_MUTATION_KIND_TRIGGER => {
                 Ok(core::FlowStateMutation::FireTrigger { instance, path })
             }
+            NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL => {
+                Ok(core::FlowStateMutation::SetViewModel {
+                    instance,
+                    path,
+                    value: instance_reference_to_core(item.ok_or_else(|| {
+                        RuntimeFailure::new(
+                            NuxStatus::InvalidArgument,
+                            "view-model replacement value is missing",
+                        )
+                    })?)?,
+                })
+            }
             NUX_FLOW_STATE_MUTATION_KIND_LIST_INSERT => Ok(core::FlowStateMutation::ListInsert {
                 instance,
                 path,
@@ -2543,6 +2638,9 @@ mod configured_session_seam {
             }
             NUX_FLOW_VALUE_KIND_BOOL => Ok(core::FlowScalarValue::Bool(node.bool_value)),
             NUX_FLOW_VALUE_KIND_ENUM => Ok(core::FlowScalarValue::Enum(node.identity_value)),
+            NUX_FLOW_VALUE_KIND_LIST_INDEX => {
+                Ok(core::FlowScalarValue::ListIndex(node.identity_value))
+            }
             NUX_FLOW_VALUE_KIND_COLOR => Ok(core::FlowScalarValue::Color(node.color_value)),
             NUX_FLOW_VALUE_KIND_IMAGE => Ok(core::FlowScalarValue::Image(node.identity_value)),
             _ => Err(RuntimeFailure::new(
@@ -2626,17 +2724,40 @@ mod configured_session_seam {
     ) -> Result<(), RuntimeFailure> {
         result.schemas.clear();
         result.schema_properties.clear();
+        result.enum_labels.clear();
         result.instance_templates.clear();
         result.instances.clear();
         for schema in &catalog.schemas {
             let first_property = u32::try_from(result.schema_properties.len())
                 .map_err(|_| RuntimeFailure::runtime("schema property index overflowed"))?;
             for property in &schema.properties {
+                let first_enum_label = if property.enum_labels.is_empty() {
+                    0
+                } else {
+                    u32::try_from(result.enum_labels.len())
+                        .map_err(|_| RuntimeFailure::runtime("enum label index overflowed"))?
+                };
+                for (value, label) in property.enum_labels.iter().enumerate() {
+                    result.enum_labels.push(OwnedEnumLabel {
+                        value: u32::try_from(value)
+                            .map_err(|_| RuntimeFailure::runtime("enum value overflowed"))?,
+                        label: label.as_bytes().to_vec(),
+                    });
+                }
                 result.schema_properties.push(OwnedSchemaProperty {
                     kind: schema_property_kind_from_core(property.value_type),
+                    first_enum_label,
+                    enum_label_count: u32::try_from(property.enum_labels.len())
+                        .map_err(|_| RuntimeFailure::runtime("enum label count overflowed"))?,
                     schema_id: schema.name.as_bytes().to_vec(),
                     property_id: property.name.as_bytes().to_vec(),
                     name: property.name.as_bytes().to_vec(),
+                    referenced_schema_id: property
+                        .referenced_schema_name
+                        .as_deref()
+                        .unwrap_or_default()
+                        .as_bytes()
+                        .to_vec(),
                 });
             }
             let property_count = u32::try_from(schema.properties.len())
@@ -2685,6 +2806,7 @@ mod configured_session_seam {
             core::FlowValueType::Number => NUX_FLOW_SCHEMA_PROPERTY_KIND_NUMBER,
             core::FlowValueType::Bool => NUX_FLOW_SCHEMA_PROPERTY_KIND_BOOL,
             core::FlowValueType::Enum => NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM,
+            core::FlowValueType::ListIndex => NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX,
             core::FlowValueType::Color => NUX_FLOW_SCHEMA_PROPERTY_KIND_COLOR,
             core::FlowValueType::Image => NUX_FLOW_SCHEMA_PROPERTY_KIND_IMAGE,
             core::FlowValueType::Object => NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT,
@@ -2743,6 +2865,14 @@ mod configured_session_seam {
                     core::FlowValue::Enum(value) => {
                         (NUX_FLOW_VALUE_KIND_ENUM, 0.0, 0, false, *value, Vec::new())
                     }
+                    core::FlowValue::ListIndex(value) => (
+                        NUX_FLOW_VALUE_KIND_LIST_INDEX,
+                        0.0,
+                        0,
+                        false,
+                        *value,
+                        Vec::new(),
+                    ),
                     core::FlowValue::Color(value) => {
                         (NUX_FLOW_VALUE_KIND_COLOR, 0.0, *value, false, 0, Vec::new())
                     }
@@ -2870,6 +3000,7 @@ mod configured_session_seam {
             translated.has_catalog = bootstrap.has_catalog;
             translated.schemas = bootstrap.schemas;
             translated.schema_properties = bootstrap.schema_properties;
+            translated.enum_labels = bootstrap.enum_labels;
             translated.instance_templates = bootstrap.instance_templates;
             translated.instances = bootstrap.instances;
             translated.has_values = bootstrap.has_values;
@@ -3077,6 +3208,14 @@ mod configured_session_seam {
                 core::FlowScalarValue::Enum(value) => {
                     (NUX_FLOW_VALUE_KIND_ENUM, 0.0, 0, false, value, Vec::new())
                 }
+                core::FlowScalarValue::ListIndex(value) => (
+                    NUX_FLOW_VALUE_KIND_LIST_INDEX,
+                    0.0,
+                    0,
+                    false,
+                    value,
+                    Vec::new(),
+                ),
                 core::FlowScalarValue::Color(value) => {
                     (NUX_FLOW_VALUE_KIND_COLOR, 0.0, value, false, 0, Vec::new())
                 }
@@ -3619,6 +3758,75 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_property_at(
                 schema_id: borrowed_view(&property.schema_id),
                 property_id: borrowed_view(&property.property_id),
                 name: borrowed_view(&property.name),
+                referenced_schema_id: borrowed_view(&property.referenced_schema_id),
+                first_enum_label: property.first_enum_label,
+                enum_label_count: property.enum_label_count,
+            };
+        }
+        NuxStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Returns the number of flattened authored enum labels in this result.
+///
+/// # Safety
+///
+/// A non-null pointer must identify a live result owned by this library.
+pub unsafe extern "C" fn nux_flow_session_result_enum_label_count(
+    result: *const NuxFlowSessionResult,
+) -> u64 {
+    ffi_guard(0, || {
+        if result.is_null() {
+            0
+        } else {
+            u64::try_from(
+                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                    .enum_labels
+                    .len(),
+            )
+            .unwrap_or(u64::MAX)
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Borrows one flattened authored enum label by stable result order.
+///
+/// # Safety
+///
+/// `result` must be live. `out_label` must have the exact published size.
+pub unsafe extern "C" fn nux_flow_session_result_enum_label_at(
+    result: *const NuxFlowSessionResult,
+    index: u64,
+    out_label: *mut NuxFlowEnumLabelView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_label.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        if unsafe { read_struct_size(out_label) } != size_u32::<NuxFlowEnumLabelView>() {
+            return NuxStatus::InvalidArgument;
+        }
+        unsafe {
+            ptr::write_bytes(out_label, 0, 1);
+            (*out_label).struct_size = size_u32::<NuxFlowEnumLabelView>();
+        }
+        if result.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let Ok(index) = usize::try_from(index) else {
+            return NuxStatus::NotFound;
+        };
+        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let Some(label) = handle.enum_labels.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe {
+            *out_label = NuxFlowEnumLabelView {
+                struct_size: size_u32::<NuxFlowEnumLabelView>(),
+                value: label.value,
+                label: borrowed_view(&label.label),
             };
         }
         NuxStatus::Ok
@@ -4353,6 +4561,8 @@ mod tests {
         assert_eq!(std::mem::size_of::<NuxFlowSessionOperation>(), 48);
         assert_eq!(std::mem::size_of::<NuxFlowPlayerMetadataView>(), 64);
         assert_eq!(std::mem::size_of::<NuxFlowPlayerInputView>(), 32);
+        assert_eq!(std::mem::size_of::<NuxFlowSchemaPropertyView>(), 80);
+        assert_eq!(std::mem::size_of::<NuxFlowEnumLabelView>(), 24);
     }
 
     #[test]
@@ -5238,6 +5448,443 @@ mod tests {
         unsafe { nux_operation_result_free(legacy_result) };
 
         unsafe {
+            nux_flow_render_session_free(session);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_session_round_trips_list_index_values_as_their_own_abi_kind() {
+        let fixture = std::fs::read(
+            std::path::PathBuf::from(
+                std::env::var_os("RIVE_RUNTIME_DIR")
+                    .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+            )
+            .join("tests/unit_tests/assets/component_list_2.riv"),
+        )
+        .expect("read component-list fixture");
+        let worker = match RuntimeWorker::spawn(fixture) {
+            Ok(worker) => worker,
+            Err(_) => panic!("import fixture"),
+        };
+        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
+            .cast::<NuxFlowRuntimeContext>();
+        let mut descriptor = configured_descriptor();
+        descriptor.artboard_name = bytes(b"Item");
+        let mut session = ptr::null_mut();
+        let mut create_result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_render_session_create_configured(
+                    context,
+                    &descriptor,
+                    &mut session,
+                    &mut create_result,
+                )
+            },
+            NuxStatus::Ok
+        );
+
+        let root_id = (0..unsafe { nux_flow_session_result_instance_count(create_result) })
+            .find_map(|index| {
+                let mut instance: NuxFlowInstanceView = unsafe { std::mem::zeroed() };
+                instance.struct_size = size_u32::<NuxFlowInstanceView>();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_instance_at(create_result, index, &mut instance)
+                    },
+                    NuxStatus::Ok
+                );
+                (instance.is_root == 1).then_some(instance.instance_id)
+            })
+            .expect("root instance id");
+        let initial = (0..unsafe { nux_flow_session_result_value_node_count(create_result) })
+            .find_map(|index| {
+                let mut node = null_node(NUX_FLOW_VALUE_KIND_NULL);
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_value_node_at(create_result, index, &mut node)
+                    },
+                    NuxStatus::Ok
+                );
+                (node.kind == NUX_FLOW_VALUE_KIND_LIST_INDEX).then_some(node.identity_value)
+            });
+        assert_eq!(initial, Some(0));
+        unsafe { nux_flow_session_result_free(create_result) };
+
+        let mut value = null_node(NUX_FLOW_VALUE_KIND_LIST_INDEX);
+        value.identity_value = 7;
+        let arena = NuxFlowValueArena {
+            struct_size: size_u32::<NuxFlowValueArena>(),
+            nodes: &value,
+            node_count: 1,
+            edges: ptr::null(),
+            edge_count: 0,
+        };
+        let zero = NuxFlowInstanceReference {
+            kind: 0,
+            local_id: 0,
+            instance_id: 0,
+        };
+        let mutation = NuxFlowStateMutation {
+            struct_size: size_u32::<NuxFlowStateMutation>(),
+            kind: NUX_FLOW_STATE_MUTATION_KIND_SET,
+            instance: NuxFlowInstanceReference {
+                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING,
+                local_id: 0,
+                instance_id: root_id,
+            },
+            item: zero,
+            path: bytes(b"List Index"),
+            input_name: NuxByteView::default(),
+            value_root_index: 0,
+            index: 0,
+            other_index: 0,
+        };
+        let batch = NuxFlowStateBatch {
+            struct_size: size_u32::<NuxFlowStateBatch>(),
+            has_host_mutation_id: 1,
+            host_mutation_id: 41,
+            value_arena: &arena,
+            new_instances: ptr::null(),
+            new_instance_count: 0,
+            mutations: &mutation,
+            mutation_count: 1,
+        };
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+        request.state_batch = &batch;
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(session, &request, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_flow_session_result_output_count(result) }, 1);
+        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxFlowOutputView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_at(result, 0, &mut output) },
+            NuxStatus::Ok
+        );
+        let mut echoed = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        assert_eq!(
+            unsafe {
+                nux_flow_session_result_value_node_at(
+                    result,
+                    u64::from(output.payload_root_index),
+                    &mut echoed,
+                )
+            },
+            NuxStatus::Ok
+        );
+        assert_eq!(echoed.kind, NUX_FLOW_VALUE_KIND_LIST_INDEX);
+        assert_eq!(echoed.identity_value, 7);
+
+        unsafe {
+            nux_flow_session_result_free(result);
+            nux_flow_render_session_free(session);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_catalog_exposes_enum_labels_and_referenced_schema_ids() {
+        fn view_bytes(view: NuxByteView) -> Vec<u8> {
+            if view.len == 0 {
+                Vec::new()
+            } else {
+                unsafe { slice::from_raw_parts(view.data, view.len as usize) }.to_vec()
+            }
+        }
+
+        fn create(
+            fixture_name: &str,
+            artboard_name: &[u8],
+        ) -> (
+            *mut NuxFlowRuntimeContext,
+            *mut NuxFlowRenderSession,
+            *mut NuxFlowSessionResult,
+        ) {
+            let fixture = std::fs::read(
+                std::path::PathBuf::from(
+                    std::env::var_os("RIVE_RUNTIME_DIR")
+                        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+                )
+                .join("tests/unit_tests/assets")
+                .join(fixture_name),
+            )
+            .expect("read catalog fixture");
+            let worker = match RuntimeWorker::spawn(fixture) {
+                Ok(worker) => worker,
+                Err(_) => panic!("import catalog fixture"),
+            };
+            let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
+                .cast::<NuxFlowRuntimeContext>();
+            let mut descriptor = configured_descriptor();
+            descriptor.artboard_name = bytes(artboard_name);
+            let mut session = ptr::null_mut();
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut session,
+                        &mut result,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            (context, session, result)
+        }
+
+        let (enum_context, enum_session, enum_result) =
+            create("data_binding_test.riv", b"artboard-5");
+        let state = (0..unsafe { nux_flow_session_result_schema_property_count(enum_result) })
+            .find_map(|index| {
+                let mut property: NuxFlowSchemaPropertyView = unsafe { std::mem::zeroed() };
+                property.struct_size = size_u32::<NuxFlowSchemaPropertyView>();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_schema_property_at(
+                            enum_result,
+                            index,
+                            &mut property,
+                        )
+                    },
+                    NuxStatus::Ok
+                );
+                (view_bytes(property.name) == b"state").then_some(property)
+            })
+            .expect("state schema property");
+        assert_eq!(state.kind, NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM);
+        assert!(view_bytes(state.referenced_schema_id).is_empty());
+        assert_eq!(state.enum_label_count, 3);
+        let labels = (0..state.enum_label_count)
+            .map(|offset| {
+                let mut label: NuxFlowEnumLabelView = unsafe { std::mem::zeroed() };
+                label.struct_size = size_u32::<NuxFlowEnumLabelView>();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_enum_label_at(
+                            enum_result,
+                            u64::from(state.first_enum_label + offset),
+                            &mut label,
+                        )
+                    },
+                    NuxStatus::Ok
+                );
+                assert_eq!(label.value, offset);
+                view_bytes(label.label)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            [
+                b"state-red".to_vec(),
+                b"state-green".to_vec(),
+                b"state-blue".to_vec()
+            ]
+        );
+        unsafe {
+            nux_flow_session_result_free(enum_result);
+            nux_flow_render_session_free(enum_session);
+            nux_flow_runtime_context_free(enum_context);
+        }
+
+        let (reference_context, reference_session, reference_result) =
+            create("replace_view_model.riv", b"Artboard");
+        let child = (0..unsafe { nux_flow_session_result_schema_property_count(reference_result) })
+            .find_map(|index| {
+                let mut property: NuxFlowSchemaPropertyView = unsafe { std::mem::zeroed() };
+                property.struct_size = size_u32::<NuxFlowSchemaPropertyView>();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_schema_property_at(
+                            reference_result,
+                            index,
+                            &mut property,
+                        )
+                    },
+                    NuxStatus::Ok
+                );
+                (view_bytes(property.schema_id) == b"Main" && view_bytes(property.name) == b"child")
+                    .then_some(property)
+            })
+            .expect("child schema property");
+        assert_eq!(child.kind, NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL);
+        assert_eq!(view_bytes(child.referenced_schema_id), b"Child");
+        assert_eq!(child.enum_label_count, 0);
+        unsafe {
+            nux_flow_session_result_free(reference_result);
+            nux_flow_render_session_free(reference_session);
+            nux_flow_runtime_context_free(reference_context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_session_replaces_a_nested_view_model_with_a_shared_instance() {
+        let fixture = std::fs::read(
+            std::path::PathBuf::from(
+                std::env::var_os("RIVE_RUNTIME_DIR")
+                    .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+            )
+            .join("tests/unit_tests/assets/replace_view_model.riv"),
+        )
+        .expect("read replacement fixture");
+        let worker = match RuntimeWorker::spawn(fixture) {
+            Ok(worker) => worker,
+            Err(_) => panic!("import replacement fixture"),
+        };
+        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
+            .cast::<NuxFlowRuntimeContext>();
+        let mut descriptor = configured_descriptor();
+        descriptor.artboard_name = bytes(b"Artboard");
+        let mut session = ptr::null_mut();
+        let mut create_result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_render_session_create_configured(
+                    context,
+                    &descriptor,
+                    &mut session,
+                    &mut create_result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        let root_id = (0..unsafe { nux_flow_session_result_instance_count(create_result) })
+            .find_map(|index| {
+                let mut instance: NuxFlowInstanceView = unsafe { std::mem::zeroed() };
+                instance.struct_size = size_u32::<NuxFlowInstanceView>();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_instance_at(create_result, index, &mut instance)
+                    },
+                    NuxStatus::Ok
+                );
+                (instance.is_root == 1).then_some(instance.instance_id)
+            })
+            .expect("root instance");
+        unsafe { nux_flow_session_result_free(create_result) };
+
+        let new_instance = NuxFlowNewInstance {
+            struct_size: size_u32::<NuxFlowNewInstance>(),
+            local_id: 1,
+            schema_name: bytes(b"Child"),
+            authored_instance_name: bytes(b"child-2"),
+        };
+        let mutation = NuxFlowStateMutation {
+            struct_size: size_u32::<NuxFlowStateMutation>(),
+            kind: NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: NuxFlowInstanceReference {
+                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING,
+                local_id: 0,
+                instance_id: root_id,
+            },
+            item: NuxFlowInstanceReference {
+                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_NEW,
+                local_id: 1,
+                instance_id: 0,
+            },
+            path: bytes(b"child"),
+            input_name: NuxByteView::default(),
+            value_root_index: NO_VALUE_ROOT,
+            index: 0,
+            other_index: 0,
+        };
+        let batch = NuxFlowStateBatch {
+            struct_size: size_u32::<NuxFlowStateBatch>(),
+            has_host_mutation_id: 0,
+            host_mutation_id: 0,
+            value_arena: ptr::null(),
+            new_instances: &new_instance,
+            new_instance_count: 1,
+            mutations: &mutation,
+            mutation_count: 1,
+        };
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+        request.state_batch = &batch;
+        let mut batch_result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(session, &request, &mut batch_result) },
+            NuxStatus::Ok
+        );
+        let mut created: NuxFlowCreatedInstanceView = unsafe { std::mem::zeroed() };
+        created.struct_size = size_u32::<NuxFlowCreatedInstanceView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_created_instance_at(batch_result, 0, &mut created) },
+            NuxStatus::Ok
+        );
+        let child_id = created.instance_id;
+        unsafe { nux_flow_session_result_free(batch_result) };
+
+        let query = NuxFlowQuery {
+            struct_size: size_u32::<NuxFlowQuery>(),
+            kind: NUX_FLOW_QUERY_KIND_VALUES,
+        };
+        let query_batch = NuxFlowQueryBatch {
+            struct_size: size_u32::<NuxFlowQueryBatch>(),
+            queries: &query,
+            query_count: 1,
+        };
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_QUERY);
+        request.query_batch = &query_batch;
+        let mut values = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(session, &request, &mut values) },
+            NuxStatus::Ok
+        );
+        let mut root_node_index = None;
+        let mut child_node_index = None;
+        for index in 0..unsafe { nux_flow_session_result_value_root_count(values) } {
+            let mut root: NuxFlowValueRootView = unsafe { std::mem::zeroed() };
+            root.struct_size = size_u32::<NuxFlowValueRootView>();
+            assert_eq!(
+                unsafe { nux_flow_session_result_value_root_at(values, index, &mut root) },
+                NuxStatus::Ok
+            );
+            if root.instance_id == root_id {
+                root_node_index = Some(root.value_root_index);
+            } else if root.instance_id == child_id {
+                child_node_index = Some(root.value_root_index);
+            }
+        }
+        let root_node_index = root_node_index.expect("owner value root");
+        let child_node_index = child_node_index.expect("child value root");
+        let mut root_node = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        assert_eq!(
+            unsafe {
+                nux_flow_session_result_value_node_at(
+                    values,
+                    u64::from(root_node_index),
+                    &mut root_node,
+                )
+            },
+            NuxStatus::Ok
+        );
+        let linked_child = (0..root_node.edge_count).find_map(|offset| {
+            let mut edge: NuxFlowValueEdge = unsafe { std::mem::zeroed() };
+            edge.struct_size = size_u32::<NuxFlowValueEdge>();
+            assert_eq!(
+                unsafe {
+                    nux_flow_session_result_value_edge_at(
+                        values,
+                        u64::from(root_node.first_edge + offset),
+                        &mut edge,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            let key = unsafe { slice::from_raw_parts(edge.key.data, edge.key.len as usize) };
+            (key == b"child").then_some(edge.node_index)
+        });
+        assert_eq!(linked_child, Some(child_node_index));
+
+        unsafe {
+            nux_flow_session_result_free(values);
             nux_flow_render_session_free(session);
             nux_flow_runtime_context_free(context);
         }

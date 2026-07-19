@@ -779,7 +779,15 @@ pub(crate) fn runtime_bindable_numbers(
             data_bind_index,
             data_bind,
             default_instance,
-        ) {
+        )
+        .or_else(|| {
+            runtime_bindable_number_unresolved_view_model_source(
+                file,
+                data_bind_index,
+                data_bind,
+                target.double_property("propertyValue").unwrap_or(0.0),
+            )
+        }) {
             values.entry(target.id).and_modify(|bindable_number| {
                 bindable_number.default_view_model_sources.push(source)
             });
@@ -787,6 +795,27 @@ pub(crate) fn runtime_bindable_numbers(
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_number_unresolved_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+    target_value: f32,
+) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyNumber", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    Some(RuntimeBindableNumberDefaultViewModelSource {
+        data_bind_index,
+        path: path.to_vec(),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
+        converter: runtime_data_bind_graph_converter(file, data_bind),
+        value: RuntimeDataBindGraphValue::Number(target_value),
+        view_model_instance_ids: Vec::new(),
+    })
 }
 
 fn runtime_bindable_number_default_view_model_source(
@@ -1770,7 +1799,71 @@ pub(crate) fn runtime_default_view_model_triggers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use std::sync::Arc;
+
+    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    #[test]
+    fn unresolved_parent_number_bind_retains_its_dynamic_source() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("BindablePropertyNumber", "propertyValue")
+                                .expect("number property key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![1, 0]),
+                    ),
+                    property("DataBindContext", "flags", AuthoringValue::Uint(4)),
+                ],
+            ),
+        ])
+        .expect("unresolved parent binding fixture imports");
+        let data_bind = file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "DataBindContext")
+            .expect("fixture has a data bind");
+
+        let source = runtime_bindable_number_unresolved_view_model_source(&file, 3, data_bind, 7.0)
+            .expect("a parent-relative source is retained before a parent context is available");
+
+        assert_eq!(source.data_bind_index, 3);
+        assert_eq!(source.path, [1, 0]);
+        assert_eq!(source.flags, 4);
+        assert!(source.converter.is_none());
+        assert!(matches!(
+            source.value,
+            RuntimeDataBindGraphValue::Number(7.0)
+        ));
+    }
 
     #[test]
     fn bindable_font_retains_live_payload_for_property_writes_and_replaces_it_for_data_binds() {

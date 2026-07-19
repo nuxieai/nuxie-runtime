@@ -1249,12 +1249,12 @@ fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
     let a = lhs.0;
     let b = rhs.0;
     Mat2D([
-        a[0] * b[0] + a[2] * b[1],
-        a[1] * b[0] + a[3] * b[1],
-        a[0] * b[2] + a[2] * b[3],
-        a[1] * b[2] + a[3] * b[3],
-        a[0] * b[4] + a[2] * b[5] + a[4],
-        a[1] * b[4] + a[3] * b[5] + a[5],
+        a[0].mul_add(b[0], a[2] * b[1]),
+        a[1].mul_add(b[0], a[3] * b[1]),
+        a[0].mul_add(b[2], a[2] * b[3]),
+        a[1].mul_add(b[2], a[3] * b[3]),
+        a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+        a[1].mul_add(b[4], a[3] * b[5]) + a[5],
     ])
 }
 
@@ -1472,6 +1472,29 @@ fn string_value(value: Value) -> Result<String> {
     match value {
         Value::String(value) => Ok(value.to_str()?),
         _ => Err(Error::runtime("expected string")),
+    }
+}
+
+#[cfg(test)]
+mod matrix_tests {
+    use super::*;
+
+    #[test]
+    fn matrix_multiplication_matches_cpp_contraction_order() {
+        let matrix = Mat2D([0.8660254, 0.5, -0.5, 0.8660254, 12.124355, 7.0]);
+        let result = multiply_mat2d(matrix, matrix);
+
+        assert_eq!(
+            result.0.map(f32::to_bits),
+            [
+                0x3eff_ffff,
+                0x3f5d_b3d7,
+                0xbf5d_b3d7,
+                0x3f00_0000,
+                0x4198_feae,
+                0x4198_feae,
+            ]
+        );
     }
 }
 

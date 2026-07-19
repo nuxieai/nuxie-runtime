@@ -16983,7 +16983,10 @@ fn runtime_trim_path_line_effect_commands(
 }
 
 fn positive_unit_mod(value: f32) -> f32 {
-    value.rem_euclid(1.0)
+    // Match C++ `fmodf(fmodf(value, 1) + 1, 1)` exactly. The intermediate
+    // addition is observable at f32 precision even for already-positive
+    // values and feeds directly into trim distances.
+    ((value % 1.0) + 1.0) % 1.0
 }
 
 #[derive(Debug, Clone)]
@@ -17244,7 +17247,9 @@ impl TrimContour {
             return previous_t;
         }
         let ratio = (distance - previous_distance) / denominator;
-        (previous_t + (segment.t - previous_t) * ratio).clamp(previous_t, segment.t)
+        previous_t
+            .mul_add(1.0 - ratio, segment.t * ratio)
+            .clamp(previous_t, segment.t)
     }
 
     fn first_segment_for_original(&self, original_index: usize) -> Option<&TrimMeasuredSegment> {
@@ -17270,7 +17275,7 @@ impl TrimContour {
                 } else {
                     (distance - previous_distance) / denominator
                 };
-                let (tan, _) = normalize_vector((to.0 - from.0, to.1 - from.1));
+                let tan = normalized_vector((to.0 - from.0, to.1 - from.1));
                 (lerp_point(from, to, rel_d), tan)
             }
             TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
@@ -17506,8 +17511,8 @@ impl TrimSegmentKind {
     ) {
         match self {
             Self::Line { from, to } => {
-                let start = lerp_point(from, to, start_t);
-                let end = lerp_point(from, to, end_t);
+                let start = weighted_lerp_point(from, to, start_t);
+                let end = weighted_lerp_point(from, to, end_t);
                 if move_to {
                     commands.push(RuntimePathCommand::Move {
                         x: start.0,
@@ -17746,7 +17751,7 @@ fn cubic_position_tangent(points: [(f32, f32); 4], t: f32) -> ((f32, f32), (f32,
         3.0 * (points[1].0 - points[0].0),
         3.0 * (points[1].1 - points[0].1),
     );
-    let (tan, _) = normalize_vector((
+    let tan = normalized_vector((
         (3.0 * a.0 * t + 2.0 * b.0) * t + c.0,
         (3.0 * a.1 * t + 2.0 * b.1) * t + c.1,
     ));
@@ -17778,16 +17783,16 @@ fn cubic_extract(points: [(f32, f32); 4], start_t: f32, end_t: f32) -> [(f32, f3
 }
 
 fn cubic_subdivide(points: [(f32, f32); 4], t: f32) -> [(f32, f32); 7] {
-    let ab = lerp_point(points[0], points[1], t);
-    let bc = lerp_point(points[1], points[2], t);
-    let cd = lerp_point(points[2], points[3], t);
-    let abc = lerp_point(ab, bc, t);
-    let bcd = lerp_point(bc, cd, t);
+    let ab = weighted_lerp_point(points[0], points[1], t);
+    let bc = weighted_lerp_point(points[1], points[2], t);
+    let cd = weighted_lerp_point(points[2], points[3], t);
+    let abc = weighted_lerp_point(ab, bc, t);
+    let bcd = weighted_lerp_point(bc, cd, t);
     [
         points[0],
         ab,
         abc,
-        lerp_point(abc, bcd, t),
+        weighted_lerp_point(abc, bcd, t),
         bcd,
         cd,
         points[3],
@@ -17797,7 +17802,7 @@ fn cubic_subdivide(points: [(f32, f32); 4], t: f32) -> [(f32, f32); 7] {
 fn distance(from: (f32, f32), to: (f32, f32)) -> f32 {
     let x = to.0 - from.0;
     let y = to.1 - from.1;
-    (x * x + y * y).sqrt()
+    x.mul_add(x, y * y).sqrt()
 }
 
 fn distance_squared(from: (f32, f32), to: (f32, f32)) -> f32 {
@@ -17805,17 +17810,16 @@ fn distance_squared(from: (f32, f32), to: (f32, f32)) -> f32 {
 }
 
 fn vector_length_squared(vector: (f32, f32)) -> f32 {
-    vector.0 * vector.0 + vector.1 * vector.1
+    vector.0.mul_add(vector.0, vector.1 * vector.1)
 }
 
 fn lerp_point(from: (f32, f32), to: (f32, f32), t: f32) -> (f32, f32) {
-    if t == 0.0 {
-        return from;
-    }
-    if t == 1.0 {
-        return to;
-    }
     (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t)
+}
+
+fn weighted_lerp_point(from: (f32, f32), to: (f32, f32), t: f32) -> (f32, f32) {
+    let inverse_t = 1.0 - t;
+    (from.0 * inverse_t + to.0 * t, from.1 * inverse_t + to.1 * t)
 }
 
 fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {
@@ -19732,8 +19736,18 @@ fn normalize_vector(vector: (f32, f32)) -> ((f32, f32), f32) {
     }
 }
 
+fn normalized_vector(vector: (f32, f32)) -> (f32, f32) {
+    let length_squared = vector.0.mul_add(vector.0, vector.1 * vector.1);
+    let scale = if length_squared > 0.0 {
+        1.0 / length_squared.sqrt()
+    } else {
+        1.0
+    };
+    (vector.0 * scale, vector.1 * scale)
+}
+
 fn vector_length(vector: (f32, f32)) -> f32 {
-    (vector.0 * vector.0 + vector.1 * vector.1).sqrt()
+    vector.0.mul_add(vector.0, vector.1 * vector.1).sqrt()
 }
 
 fn scale_and_add_point(point: (f32, f32), vector: (f32, f32), scale: f32) -> (f32, f32) {
@@ -19877,6 +19891,42 @@ mod tests {
             None,
             "non-text overrides are retained structural markers and use live component worlds"
         );
+    }
+
+    #[test]
+    fn positive_unit_mod_matches_cpp_nested_fmod_rounding() {
+        assert_eq!(positive_unit_mod(0.185).to_bits(), 0x3e3d_70a0);
+        assert_eq!(positive_unit_mod(-0.185).to_bits(), 0x3f50_a3d7);
+    }
+
+    #[test]
+    fn line_sampling_matches_cpp_endpoint_and_tangent_evaluation() {
+        let commands = [
+            RuntimePathCommand::Move {
+                x: f32::from_bits(0x424a_32b8),
+                y: f32::from_bits(0x428b_f5bf),
+            },
+            RuntimePathCommand::Line {
+                x: f32::from_bits(0xb5fc_4636),
+                y: f32::from_bits(0x422d_0000),
+            },
+        ];
+        let measure = RuntimePathMeasure::from_commands(&commands);
+        let sample = measure.at_distance(measure.length());
+
+        assert_eq!(sample.pos.0.to_bits(), 0x0000_0000);
+        assert_eq!(sample.pos.1.to_bits(), 0x422d_0000);
+        assert_eq!(sample.tan.0.to_bits(), 0xbf62_4edf);
+        assert_eq!(sample.tan.1.to_bits(), 0xbeef_5680);
+    }
+
+    #[test]
+    fn nested_artboard_will_draw_requires_a_reference_and_nonzero_render_opacity() {
+        assert!(runtime_nested_artboard_will_draw(Some(41), Some(1.0)));
+        assert!(runtime_nested_artboard_will_draw(Some(41), Some(0.5)));
+        assert!(!runtime_nested_artboard_will_draw(Some(41), Some(0.0)));
+        assert!(!runtime_nested_artboard_will_draw(None, Some(1.0)));
+        assert!(!runtime_nested_artboard_will_draw(Some(41), None));
     }
 
     #[test]

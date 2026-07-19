@@ -272,7 +272,7 @@ impl RawPath {
                 path.points
                     .iter()
                     .copied()
-                    .map(|point| transform.transform_point(point)),
+                    .map(|point| map_raw_path_point(transform, point)),
             );
         }
     }
@@ -294,7 +294,7 @@ impl RawPath {
                     .iter()
                     .rev()
                     .copied()
-                    .map(|point| transform.transform_point(point)),
+                    .map(|point| map_raw_path_point(transform, point)),
             );
         }
 
@@ -397,6 +397,17 @@ impl RawPath {
 
     fn mark_mutated(&mut self) {
         self.mutation_id = next_raw_path_mutation_id();
+    }
+}
+
+fn map_raw_path_point(transform: Mat2D, point: Vec2D) -> Vec2D {
+    let [xx, yx, xy, yy, tx, ty] = transform.0;
+    // C++ RawPath::addPath maps in batches through Mat2D::mapPoints. Its SIMD
+    // affine branch groups skew with translation before adding scale and uses
+    // fused multiply-adds on supported targets.
+    Vec2D {
+        x: xx.mul_add(point.x, xy.mul_add(point.y, tx)),
+        y: yy.mul_add(point.y, yx.mul_add(point.x, ty)),
     }
 }
 
@@ -2409,6 +2420,21 @@ mod tests {
         assert_eq!(backwards.points()[0].y.to_bits(), (-0.0_f32).to_bits());
         assert_eq!(backwards.points()[1].x.to_bits(), (-0.0_f32).to_bits());
         assert_eq!(backwards.points()[1].y.to_bits(), (-0.0_f32).to_bits());
+    }
+
+    #[test]
+    fn transformed_path_appends_match_cpp_simd_evaluation_order() {
+        let mut source = RawPath::new();
+        source.move_to(85.5, -61.0);
+
+        let mut transformed = RawPath::new();
+        transformed.add_path(
+            &source,
+            Mat2D([0.8660254, 0.5, -0.5, 0.8660254, 12.124355, 7.0]),
+        );
+
+        assert_eq!(transformed.points()[0].x.to_bits(), 0x42e9_56cc);
+        assert_eq!(transformed.points()[0].y.to_bits(), 0xc044_f68f);
     }
 
     fn assert_backwards_round_trip(path: &RawPath) {

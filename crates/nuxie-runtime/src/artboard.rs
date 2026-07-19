@@ -302,6 +302,10 @@ pub struct ArtboardInstance {
     pub(crate) layout_epoch: u64,
     pub(crate) text_epoch: u64,
     text_affecting_locals: Vec<bool>,
+    // C++ SolidColor mutates its attached RenderPaint when its property dirt
+    // is applied. Renderer resources live outside the Rust instance, so retain
+    // the equivalent per-mutator revision for a cheap draw-time handoff.
+    solid_color_paint_revisions: Vec<u64>,
     pub(crate) draw_order_epoch: u64,
     pub(crate) did_change: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
@@ -674,6 +678,14 @@ impl ArtboardInstance {
         let nested_artboard_locals = nested_artboards.keys().copied().collect::<Vec<_>>();
 
         let text_affecting_locals = build_text_affecting_locals(&slots, &objects);
+        let solid_color_paint_revisions = vec![
+            1;
+            slots
+                .iter()
+                .map(|slot| slot.local_id)
+                .max()
+                .map_or(0, |local_id| local_id.saturating_add(1))
+        ];
         let mut instance = Self {
             instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: dimensions.width,
@@ -757,6 +769,7 @@ impl ArtboardInstance {
             layout_epoch: 1,
             text_epoch: 1,
             text_affecting_locals,
+            solid_color_paint_revisions,
             draw_order_epoch: 1,
             did_change: true,
             layout_constraint_bounds_enabled,
@@ -1427,6 +1440,9 @@ impl ArtboardInstance {
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
             && solid_color_value_property_key() == Some(property_key)
         {
+            if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
+                *revision = revision.wrapping_add(1);
+            }
             // SolidColor mutates its retained paint in place, so it does not
             // invalidate local prepared geometry. A parent preparation frame
             // still needs to observe the nested paint value change.
@@ -2832,6 +2848,13 @@ impl ArtboardInstance {
 
     pub(crate) fn text_epoch(&self) -> u64 {
         self.text_epoch
+    }
+
+    pub(crate) fn solid_color_paint_revision(&self, local_id: usize) -> u64 {
+        self.solid_color_paint_revisions
+            .get(local_id)
+            .copied()
+            .unwrap_or_default()
     }
 
     pub(crate) fn draw_order_epoch(&self) -> u64 {
@@ -5559,6 +5582,14 @@ mod tests {
         let objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
 
         let text_affecting_locals = build_text_affecting_locals(&slots, &objects);
+        let solid_color_paint_revisions = vec![
+            1;
+            slots
+                .iter()
+                .map(|slot| slot.local_id)
+                .max()
+                .map_or(0, |local_id| local_id.saturating_add(1))
+        ];
         ArtboardInstance {
             instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: 0.0,
@@ -5639,6 +5670,7 @@ mod tests {
             layout_epoch: 1,
             text_epoch: 1,
             text_affecting_locals,
+            solid_color_paint_revisions,
             draw_order_epoch: 1,
             did_change: true,
             layout_constraint_bounds_enabled: false,
@@ -6849,6 +6881,7 @@ mod tests {
         let initial_path_epoch = instance.path_epoch();
         let initial_layout_epoch = instance.layout_epoch();
         let initial_draw_order_epoch = instance.draw_order_epoch();
+        let initial_paint_revision = instance.solid_color_paint_revision(0);
 
         assert!(instance.set_color_property(0, color_key, 0xff00_ff00));
 
@@ -6857,6 +6890,7 @@ mod tests {
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert_eq!(instance.layout_epoch(), initial_layout_epoch);
         assert_eq!(instance.draw_order_epoch(), initial_draw_order_epoch);
+        assert!(instance.solid_color_paint_revision(0) > initial_paint_revision);
     }
 
     #[test]

@@ -7910,7 +7910,7 @@ fn runtime_render_image_identity(image: &dyn RenderImage) -> usize {
 
 #[derive(Debug, Clone, PartialEq)]
 struct RuntimeCachedRenderPaintConfiguration {
-    instance_epoch: u64,
+    instance_epoch: u128,
     configuration: RuntimeRenderPaintConfiguration,
 }
 
@@ -7926,7 +7926,7 @@ impl RuntimeRenderPaintConfigurationSlots {
             .and_then(|configuration| configuration.as_ref())
     }
 
-    fn is_current(&self, paint_global_id: u32, instance_epoch: u64) -> bool {
+    fn is_current(&self, paint_global_id: u32, instance_epoch: u128) -> bool {
         self.get(paint_global_id)
             .is_some_and(|configuration| configuration.instance_epoch == instance_epoch)
     }
@@ -11365,7 +11365,7 @@ fn runtime_try_draw_world_stroke_shape(
         .local_id
         .expect("world-stroke shape guard requires a local id");
     let draw_path_revision = runtime_draw_path_revision(instance, RuntimeShapePaintPathKind::World);
-    let paint_configuration_epoch = runtime_world_paint_configuration_epoch(instance);
+    let paint_configuration_epoch = u128::from(runtime_world_paint_configuration_epoch(instance));
 
     for paint in &command.shape_paints {
         let global_id = paint.paint_global_id;
@@ -13961,25 +13961,32 @@ fn runtime_render_paint_configuration(
 fn runtime_paint_configuration_epoch(
     instance: &ArtboardInstance,
     paint: &RuntimeShapePaintCommand,
-) -> u64 {
+) -> u128 {
     if paint.paint_type == RuntimeShapePaintKind::Fill
         && paint.feather_state.is_none()
-        && let Some(render_color) = runtime_current_solid_render_color(instance, paint)
+        && matches!(
+            paint.paint_state,
+            Some(RuntimeShapePaintState::SolidColor { .. })
+        )
     {
         // C++ SolidColor dirties only its attached ShapePaint. A transform on
         // an unrelated component must not make every solid fill reconfigure.
-        // The full fill configuration is style + blend + live render color;
-        // encode those values directly rather than using the artboard-global
-        // cache epoch.
-        return 0x8000_0000_0000_0000
-            | (u64::from(paint.render_blend_mode_value) << 32)
-            | u64::from(render_color);
+        // Retain the same per-mutator dirt revision and combine it with the
+        // command-local opacity/blend values that complete the fill state.
+        let revision = paint
+            .mutator_local
+            .map(|local_id| instance.solid_color_paint_revision(local_id))
+            .unwrap_or_default();
+        return (1_u128 << 127)
+            | (u128::from(revision & 0x7fff_ffff_ffff_ffff) << 64)
+            | (u128::from(paint.render_blend_mode_value) << 32)
+            | u128::from(paint.render_opacity.to_bits());
     }
     let cache_epoch = instance.cache_epoch();
     if paint.paint_space_transform.is_some() {
-        runtime_world_paint_configuration_epoch(instance)
+        u128::from(runtime_world_paint_configuration_epoch(instance))
     } else {
-        cache_epoch
+        u128::from(cache_epoch)
     }
 }
 

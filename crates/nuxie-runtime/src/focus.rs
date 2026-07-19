@@ -829,6 +829,11 @@ impl RuntimeFocusTree {
         tree
     }
 
+    #[inline]
+    pub(crate) fn is_inert(&self) -> bool {
+        self.inert
+    }
+
     pub(crate) fn sync(&mut self, artboard: &ArtboardInstance) {
         if self.inert {
             return;

@@ -393,7 +393,9 @@ impl StateMachineInstance {
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        self.focus.sync(artboard);
+        if !self.focus.is_inert() {
+            self.focus.sync(artboard);
+        }
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
@@ -511,7 +513,9 @@ impl StateMachineInstance {
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        self.focus.sync(artboard);
+        if !self.focus.is_inert() {
+            self.focus.sync(artboard);
+        }
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             self.pointer_down_listener_hits
                 .retain(|hit| hit.pointer_id != pointer_id);
@@ -3687,7 +3691,9 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
     ) -> bool {
-        self.focus.sync(artboard);
+        if !self.focus.is_inert() {
+            self.focus.sync(artboard);
+        }
         self.update_data_binds_for_state_probe();
 
         let data_context_present = self.data_bind_graph.data_context_present();
@@ -3750,7 +3756,9 @@ impl StateMachineInstance {
         elapsed_seconds: f32,
         clear_reported_events: bool,
     ) -> bool {
-        self.focus.sync(artboard);
+        if !self.focus.is_inert() {
+            self.focus.sync(artboard);
+        }
         if self.has_advanced_once
             && elapsed_seconds == 0.0
             && !self.needs_advance

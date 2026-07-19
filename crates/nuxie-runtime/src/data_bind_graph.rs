@@ -400,6 +400,21 @@ impl RuntimeDataBindGraphConverter {
         }
     }
 
+    /// A cloned converter otherwise retains the live script table through its
+    /// shared handle. Isolated evaluators cannot snapshot arbitrary script
+    /// state, so detach it and retain the existing cold/pass-through behavior.
+    pub(crate) fn detach_scripted_instance(&mut self) {
+        match self {
+            Self::Scripted { instance, .. } => *instance = None,
+            Self::Group(converters) => {
+                for converter in converters {
+                    converter.detach_scripted_instance();
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn set_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
         match self {
             RuntimeDataBindGraphConverter::Formula { tokens } => {
@@ -9586,6 +9601,30 @@ mod tests {
         assert_eq!(
             runtime_data_bind_graph_reverse_convert_value(&converter, &input),
             Some(RuntimeDataBindGraphValue::Number(1.5))
+        );
+    }
+
+    #[test]
+    fn detached_converter_clone_does_not_retain_live_script_handle() {
+        let handle = RuntimeScriptInstanceHandle::new(Box::new(DoublingConverter));
+        let live =
+            RuntimeDataBindGraphConverter::Group(vec![RuntimeDataBindGraphConverter::Scripted {
+                global_id: 7,
+                instance: Some(handle),
+            }]);
+        let mut detached = live.clone();
+        detached.detach_scripted_instance();
+        let input = RuntimeDataBindGraphValue::Number(3.0);
+
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(&detached, &input),
+            Some(input.clone()),
+            "the isolated clone retains cold scripted-converter behavior"
+        );
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(&live, &input),
+            Some(RuntimeDataBindGraphValue::Number(6.0)),
+            "detaching the evaluator must not alter the live converter"
         );
     }
 }

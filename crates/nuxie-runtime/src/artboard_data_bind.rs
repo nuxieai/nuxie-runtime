@@ -5124,6 +5124,87 @@ impl ArtboardInstance {
         self.advance_artboard_data_binds_with_elapsed(0.0)
     }
 
+    /// Repoint the isolated paint evaluator's owned-context writes without
+    /// touching the live occurrence. Descendants participate because host
+    /// collection advances their data-bind containers too.
+    pub(crate) fn detach_initial_nested_layout_paint_binding_contexts(&mut self) {
+        let mut detached_handles = Vec::new();
+        self.detach_initial_nested_layout_paint_binding_contexts_recursive(&mut detached_handles);
+    }
+
+    fn detach_initial_nested_layout_paint_binding_contexts_recursive(
+        &mut self,
+        detached_handles: &mut Vec<(RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelHandle)>,
+    ) {
+        for state in self.artboard_shared_data_bind_converter_states.values_mut() {
+            state.converter.detach_scripted_instance();
+        }
+        for converter in self
+            .artboard_property_bindings
+            .iter_mut()
+            .filter_map(|binding| binding.converter.as_mut())
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_formula_token_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_converter_property_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_list_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+        {
+            converter.detach_scripted_instance();
+        }
+        if !self.artboard_owned_view_model_candidates.is_empty() {
+            let candidates = self
+                .artboard_owned_view_model_candidates
+                .iter()
+                .map(|candidate| {
+                    let context = detached_handles
+                        .iter()
+                        .find(|(source, _)| source.ptr_eq(&candidate.context))
+                        .map(|(_, detached)| detached.clone())
+                        .unwrap_or_else(|| {
+                            let detached = RuntimeOwnedViewModelHandle::new(
+                                candidate.context.borrow().clone(),
+                            );
+                            detached_handles.push((candidate.context.clone(), detached.clone()));
+                            detached
+                        });
+                    RuntimeOwnedViewModelBindingCandidate {
+                        context,
+                        context_chain: candidate.context_chain.clone(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            self.artboard_owned_view_model_candidates = candidates.clone();
+            if let Some(file) = self.runtime_file_arc() {
+                self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
+            }
+        }
+
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .detach_initial_nested_layout_paint_binding_contexts_recursive(detached_handles);
+        }
+        for item in self.component_list_items.values_mut().flatten() {
+            item.child
+                .detach_initial_nested_layout_paint_binding_contexts_recursive(detached_handles);
+        }
+    }
+
     pub(crate) fn set_artboard_data_bind_value_for_path(
         &mut self,
         path: &[u32],
@@ -7401,6 +7482,53 @@ mod tests {
             artboard.artboard_data_bind_values.get(&[0_u32, 0][..]),
             Some(&RuntimeDataBindGraphValue::Number(200.0)),
             "the clean-frame epoch guard must not suppress C++'s post-component derived-value poll"
+        );
+    }
+
+    #[test]
+    fn isolated_paint_binding_evaluator_does_not_publish_to_live_owned_context() {
+        let file = shape_length_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("shape length graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("owned context"),
+        );
+
+        artboard.bind_owned_view_model_artboard_contexts(&file, &context);
+        assert_eq!(artboard.artboard_owned_view_model_candidates.len(), 1);
+        assert!(artboard.update_pass());
+        let live_value = context
+            .main()
+            .and_then(|main| main.number_value_by_property_name("length"))
+            .expect("published live shape length");
+        let live_generation = context.main().expect("live context").mutation_generation();
+
+        let mut evaluator = artboard.clone();
+        evaluator.detach_initial_nested_layout_paint_binding_contexts();
+        let scale_x_key = property_key_for_name("Shape", "scaleX").expect("shape scaleX key");
+        assert!(evaluator.set_double_property(1, scale_x_key, 4.0));
+        assert!(evaluator.update_pass());
+
+        assert_eq!(
+            context
+                .main()
+                .and_then(|main| main.number_value_by_property_name("length")),
+            Some(live_value)
+        );
+        assert_eq!(
+            context.main().expect("live context").mutation_generation(),
+            live_generation,
+            "isolated full data-bind evaluation must not publish into the mounted occurrence"
+        );
+        assert!(
+            evaluator.artboard_owned_view_model_candidates[0]
+                .context
+                .borrow()
+                .number_value_by_property_name("length")
+                .is_some_and(|value| value > live_value),
+            "the detached candidate still receives the evaluator's computed result"
         );
     }
 

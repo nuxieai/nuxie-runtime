@@ -1242,6 +1242,84 @@ impl ArtboardInstance {
         )
     }
 
+    /// Capture the shader-only state C++ observes immediately before a
+    /// `NestedArtboardLayout` transfers layout ownership to its mounted child.
+    ///
+    /// The returned frame is deliberately independent of `ArtboardInstance`:
+    /// it cannot retain or execute scripts, mutate view models, traverse a
+    /// nested tree, or provide geometry for drawing.
+    pub(crate) fn capture_initial_nested_layout_paint_frame(
+        &self,
+    ) -> RuntimeInitialNestedLayoutPaintFrame {
+        let Some(graph) = self.runtime_graph() else {
+            return RuntimeInitialNestedLayoutPaintFrame::default();
+        };
+        let mut render_cache = RuntimeRenderPathCache::default();
+        let prepared = render_cache.prepared_artboard_frame(self, graph, self.runtime_file());
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let gradient_preparation = render_cache.gradient_preparation_frame(graph);
+        let mut seen = Vec::new();
+        let mut gradients = Vec::new();
+
+        for local_id in gradient_preparation.dependency_order.iter().copied() {
+            let Some(paints) = gradient_preparation.paints_by_mutator.get(&local_id) else {
+                continue;
+            };
+            for paint_ref in paints {
+                let Some(container) = graph.shape_paint_containers.get(paint_ref.container_index)
+                else {
+                    continue;
+                };
+                let Some(paint) = container.paints.get(paint_ref.paint_index) else {
+                    continue;
+                };
+                if self.runtime_gradient_paint_is_collapsed(container, paint)
+                    || !runtime_mark_seen_u32(&mut seen, paint.global_id)
+                {
+                    continue;
+                }
+                let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+                let shape_world = runtime_shape_paint_container_world_transform(
+                    self,
+                    graph,
+                    container,
+                    layout_bounds,
+                    &mut render_cache,
+                );
+                let render_opacity = runtime_retained_gradient_render_opacity(
+                    self,
+                    opacity_local,
+                    paint.global_id,
+                    &render_cache,
+                );
+                let command = runtime_prepare_gradient_paint_command(
+                    self,
+                    graph,
+                    render_opacity,
+                    container,
+                    paint,
+                    shape_world,
+                    layout_bounds,
+                );
+                let Some(paint_state) = command.paint_state else {
+                    continue;
+                };
+                if matches!(paint_state, RuntimeShapePaintState::SolidColor { .. }) {
+                    continue;
+                }
+                gradients.push(RuntimeInitialGradientPaintState {
+                    paint_global_id: paint.global_id,
+                    paint_state,
+                    inherited_opacity: render_opacity,
+                    opacity_local,
+                    paint_space_transform: command.paint_space_transform,
+                });
+            }
+        }
+
+        RuntimeInitialNestedLayoutPaintFrame { gradients }
+    }
+
     fn prepare_static_artboard_paints_with_filter(
         &self,
         runtime: &RuntimeFile,
@@ -1971,6 +2049,276 @@ impl ArtboardInstance {
         commands
     }
 
+    /// Consume only the one-shot pre-transfer shader frames still owned by
+    /// authoritative descendants. The ordinary paint pass deliberately does
+    /// not run here: the caller must preserve the intermediate parent shader
+    /// that C++ configures before continuing with final child paints.
+    #[allow(clippy::too_many_arguments)]
+    fn drain_pending_initial_nested_layout_paint_frames(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut RuntimeRenderPaints,
+        mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
+        render_cache: &mut RuntimeRenderPathCache,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let prepared = render_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let commands = Arc::clone(&prepared.commands);
+        let layout_bounds = Arc::clone(&prepared.layout_bounds);
+
+        // Match the retained preparation table: first host insertion order,
+        // with the last command for duplicate draw proxies winning.
+        let mut nested_commands = Vec::new();
+        for command in commands.iter() {
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(command)
+            {
+                continue;
+            }
+            let Some(local_id) = command.local_id else {
+                continue;
+            };
+            runtime_upsert_nested_preparation_command(
+                &mut nested_commands,
+                local_id,
+                command.clone(),
+            );
+        }
+        if graph
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent")
+        {
+            for (local_id, command) in self.runtime_nested_artboard_preparation_commands_by_local(
+                graph,
+                layout_bounds.as_ref().as_ref(),
+                render_cache,
+            ) {
+                runtime_upsert_nested_preparation_command(&mut nested_commands, local_id, command);
+            }
+        }
+        for (_, command) in nested_commands {
+            self.drain_pending_initial_nested_layout_paint_host(
+                runtime,
+                artboards,
+                factory,
+                paint_by_global,
+                paint_configurations.as_deref_mut(),
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
+                &command,
+                nested_ancestors,
+            )?;
+        }
+
+        // Component-list rows are mounted in two lifecycle phases. Walk their
+        // authoritative children in the same order so a nested-layout frame
+        // below a row cannot be stranded behind this early-return boundary.
+        let component_lists = runtime_component_list_preparation_commands(commands.as_slice());
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in &component_lists {
+                let Some(local_id) = command.local_id else {
+                    continue;
+                };
+                let Some(items) = self.component_list_items.get(&local_id) else {
+                    continue;
+                };
+                let is_virtualized =
+                    crate::constraints::component_list_virtualization(self, local_id).is_some();
+                let (start, end) = match (phase, is_virtualized) {
+                    (RuntimeComponentListPreparationPhase::Initial, true) => {
+                        (0, items.len().min(1))
+                    }
+                    (RuntimeComponentListPreparationPhase::Initial, false) => (0, items.len()),
+                    (RuntimeComponentListPreparationPhase::DeferredVirtualized, true) => {
+                        (items.len().min(1), items.len())
+                    }
+                    (RuntimeComponentListPreparationPhase::DeferredVirtualized, false) => (0, 0),
+                };
+                for item in &items[start..end] {
+                    if nested_ancestors.contains(&item.child.graph_global_id) {
+                        continue;
+                    }
+                    let Some(child_graph) = item.child.runtime_graph().or_else(|| {
+                        artboards
+                            .iter()
+                            .find(|graph| graph.global_id == item.child.graph_global_id)
+                    }) else {
+                        continue;
+                    };
+                    let cache_key = component_list_render_cache_key(
+                        command.global_id,
+                        command.local_id,
+                        item.child.graph_global_id,
+                        item.logical_index,
+                        item.render_cache_revision,
+                    );
+                    let child_cache = render_cache
+                        .nested_artboards
+                        .get_or_insert_default(cache_key);
+                    if let Some(caches) = nested_paint_caches.as_deref_mut() {
+                        if !caches.contains_key(&cache_key) {
+                            caches.insert(
+                                cache_key,
+                                preallocate_render_paint_cache_for_artboard_instance(
+                                    runtime,
+                                    child_graph,
+                                    artboards,
+                                    factory,
+                                ),
+                            );
+                        }
+                        let child_paints = caches.entry(cache_key).or_default();
+                        item.child
+                            .drain_pending_initial_nested_layout_paint_frames(
+                                runtime,
+                                child_graph,
+                                artboards,
+                                factory,
+                                &mut child_paints.paints,
+                                Some(&mut child_paints.paint_configurations),
+                                Some(&mut child_paints.nested_artboards),
+                                child_cache,
+                                nested_ancestors,
+                            )?;
+                    } else {
+                        item.child
+                            .drain_pending_initial_nested_layout_paint_frames(
+                                runtime,
+                                child_graph,
+                                artboards,
+                                factory,
+                                paint_by_global,
+                                paint_configurations.as_deref_mut(),
+                                None,
+                                child_cache,
+                                nested_ancestors,
+                            )?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn drain_pending_initial_nested_layout_paint_host(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut RuntimeRenderPaints,
+        mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+        nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
+        render_cache: &mut RuntimeRenderPathCache,
+        command: &RuntimeDrawCommand,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let Some(nested) = command
+            .local_id
+            .and_then(|local_id| self.nested_artboards.get(&local_id))
+        else {
+            return Ok(());
+        };
+        let child_graph = nested.child.runtime_graph().or_else(|| {
+            artboards
+                .iter()
+                .find(|graph| graph.global_id == nested.child.graph_global_id)
+        });
+        let Some(child_graph) = child_graph else {
+            return Ok(());
+        };
+        let cache_key = nested_render_cache_key(
+            command.global_id,
+            command.local_id,
+            nested.child.graph_global_id,
+            nested.render_cache_revision,
+        );
+        let child_cache = render_cache
+            .nested_artboards
+            .get_or_insert_default(cache_key);
+        let pending_frame = (command.object_kind
+            == RuntimeDrawCommandObjectKind::NestedArtboardLayout)
+            .then(|| nested.initial_layout_paint_frame.borrow().clone())
+            .flatten();
+
+        if let Some(caches) = nested_paint_caches {
+            if !caches.contains_key(&cache_key) {
+                caches.insert(
+                    cache_key,
+                    preallocate_render_paint_cache_for_artboard_instance(
+                        runtime,
+                        child_graph,
+                        artboards,
+                        factory,
+                    ),
+                );
+            }
+            let child_paints = caches.entry(cache_key).or_default();
+            if let Some(mut frame) = pending_frame {
+                frame.apply_inherited_opacity_from(nested.child.as_ref());
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    &mut child_paints.paints,
+                    Some(&mut child_paints.paint_configurations),
+                    child_cache,
+                )?;
+                nested.initial_layout_paint_frame.replace(None);
+            }
+            nested
+                .child
+                .drain_pending_initial_nested_layout_paint_frames(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    &mut child_paints.paints,
+                    Some(&mut child_paints.paint_configurations),
+                    Some(&mut child_paints.nested_artboards),
+                    child_cache,
+                    nested_ancestors,
+                )?;
+        } else {
+            if let Some(mut frame) = pending_frame {
+                frame.apply_inherited_opacity_from(nested.child.as_ref());
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    child_cache,
+                )?;
+                nested.initial_layout_paint_frame.replace(None);
+            }
+            nested
+                .child
+                .drain_pending_initial_nested_layout_paint_frames(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    None,
+                    child_cache,
+                    nested_ancestors,
+                )?;
+        }
+        Ok(())
+    }
+
     fn prepare_static_nested_artboard_tree_paints(
         &self,
         runtime: &RuntimeFile,
@@ -2054,24 +2402,100 @@ impl ArtboardInstance {
             None => None,
         };
 
+        let initial_layout_paint_frame = if !apply_nested_layout_bounds
+            && command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
+        {
+            nested_instance.and_then(|nested| nested.initial_layout_paint_frame.borrow().clone())
+        } else {
+            None
+        };
+        if let Some(mut frame) = initial_layout_paint_frame {
+            // Parent-to-child opacity settles after layout ownership transfers
+            // but before C++ creates this intermediate shader. Read the
+            // explicitly declared opacity locals from the one live mounted
+            // child at consumption time; no component arrays are copied.
+            if let Some(child) = nested_instance.map(|nested| nested.child.as_ref()) {
+                frame.apply_inherited_opacity_from(child);
+            }
+            if let Some((child_paints, child_configurations, _, child_nested_paints)) =
+                child_paint_caches
+            {
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    child_paints,
+                    Some(child_configurations),
+                    child_cache,
+                )?;
+                if let Some(nested) = nested_instance {
+                    nested.initial_layout_paint_frame.replace(None);
+                    nested
+                        .child
+                        .drain_pending_initial_nested_layout_paint_frames(
+                            runtime,
+                            child_graph,
+                            artboards,
+                            factory,
+                            child_paints,
+                            Some(child_configurations),
+                            child_nested_paints,
+                            child_cache,
+                            child_ancestors,
+                        )?;
+                }
+            } else {
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    child_cache,
+                )?;
+                if let Some(nested) = nested_instance {
+                    nested.initial_layout_paint_frame.replace(None);
+                    nested
+                        .child
+                        .drain_pending_initial_nested_layout_paint_frames(
+                            runtime,
+                            child_graph,
+                            artboards,
+                            factory,
+                            paint_by_global,
+                            paint_configurations.as_deref_mut(),
+                            None,
+                            child_cache,
+                            child_ancestors,
+                        )?;
+                }
+            }
+            return Ok(());
+        }
+
         if let Some(child) = command
             .local_id
             .and_then(|local_id| self.nested_artboards.get(&local_id))
             .map(|nested| nested.child.as_ref())
         {
-            let layout_child;
-            let child = if apply_nested_layout_bounds
-                && command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
+            let nested_layout_child;
+            let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
             {
-                let mut cloned = child.clone_for_transient_layout();
-                runtime_apply_nested_artboard_layout_child_bounds(
-                    &mut cloned,
-                    command,
-                    layout_bounds,
-                )?;
-                runtime_settle_nested_artboard_layout_child(&mut cloned);
-                layout_child = cloned;
-                &layout_child
+                if apply_nested_layout_bounds {
+                    // C++ settles the mounted occurrence after its one-time
+                    // pre-transfer shader boundary. Preserve that pass even
+                    // when update already installed the constraint space:
+                    // pending component/binding dirt belongs to this child.
+                    let mut cloned = child.clone_for_transient_layout();
+                    runtime_apply_nested_artboard_layout_child_bounds(
+                        &mut cloned,
+                        command,
+                        layout_bounds,
+                    )?;
+                    runtime_settle_nested_artboard_layout_child(&mut cloned);
+                    nested_layout_child = cloned;
+                    &nested_layout_child
+                } else {
+                    child
+                }
             } else {
                 child
             };
@@ -7741,6 +8165,67 @@ pub enum RuntimeShapePaintState {
         render_opacity: f32,
         stops: Vec<RuntimeGradientStop>,
     },
+}
+
+/// One shader configuration from C++'s one-time pre-transfer paint phase.
+/// Keeping inherited opacity explicit documents the phase boundary even
+/// though the same scalar has already been applied to `paint_state`'s render
+/// colors.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RuntimeInitialGradientPaintState {
+    paint_global_id: u32,
+    paint_state: RuntimeShapePaintState,
+    inherited_opacity: f32,
+    opacity_local: usize,
+    paint_space_transform: Option<Mat2D>,
+}
+
+/// Narrow, immutable state for the initial nested-layout shader events. This
+/// is consumed once by the renderer and intentionally contains no artboard,
+/// component, geometry, script, or view-model ownership.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct RuntimeInitialNestedLayoutPaintFrame {
+    gradients: Vec<RuntimeInitialGradientPaintState>,
+}
+
+impl RuntimeInitialNestedLayoutPaintFrame {
+    /// Whether the isolated pre-transfer bind dirtied this child's gradient
+    /// paint pass. Once one paint changes, C++ prepares the child's complete
+    /// gradient set in dependency order, not only the changed mutator.
+    pub(crate) fn changed_from(&self, before: &Self) -> bool {
+        self != before
+    }
+
+    pub(crate) fn apply_inherited_opacity_from(&mut self, instance: &ArtboardInstance) {
+        for gradient in &mut self.gradients {
+            let inherited_opacity = instance
+                .component(gradient.opacity_local)
+                .map(|component| component.transform.render_opacity)
+                .unwrap_or(1.0);
+            gradient.inherited_opacity = inherited_opacity;
+            match &mut gradient.paint_state {
+                RuntimeShapePaintState::LinearGradient {
+                    opacity,
+                    render_opacity,
+                    stops,
+                    ..
+                }
+                | RuntimeShapePaintState::RadialGradient {
+                    opacity,
+                    render_opacity,
+                    stops,
+                    ..
+                } => {
+                    *render_opacity = inherited_opacity;
+                    for stop in stops {
+                        stop.render_color =
+                            color_modulate_opacity(stop.color, *opacity * inherited_opacity);
+                    }
+                }
+                RuntimeShapePaintState::SolidColor { .. } => {}
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -13827,8 +14312,12 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
     let bounds = layout_bounds
         .and_then(|bounds| bounds.get(&local_id).copied())
         .context("nested artboard layout missing Taffy bounds")?;
-    child.set_artboard_dimensions(bounds.width, bounds.height);
-    child.enable_layout_constraint_bounds();
+    let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    if assigned_size_changed && child.layout_constraint_bounds_enabled {
+        child.refresh_layout_constraint_bounds();
+    } else {
+        child.enable_layout_constraint_bounds();
+    }
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         child.set_double_property(0, width_key, bounds.width);
     }
@@ -14246,6 +14735,107 @@ fn runtime_configure_paint(
             .map(|feather| feather.strength)
             .unwrap_or(0.0),
     );
+    Ok(())
+}
+
+fn runtime_configure_initial_nested_layout_paint_frame(
+    frame: RuntimeInitialNestedLayoutPaintFrame,
+    factory: &mut dyn RenderFactory,
+    paints: &mut RuntimeRenderPaints,
+    mut configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    render_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    for gradient in frame.gradients {
+        let object_id = gradient.paint_global_id;
+        let (start_x, start_y, end_x, end_y, state_opacity, stops) = match &gradient.paint_state {
+            RuntimeShapePaintState::LinearGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                render_opacity,
+                stops,
+                ..
+            }
+            | RuntimeShapePaintState::RadialGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                render_opacity,
+                stops,
+                ..
+            } => (
+                *start_x,
+                *start_y,
+                *end_x,
+                *end_y,
+                *render_opacity,
+                stops.clone(),
+            ),
+            RuntimeShapePaintState::SolidColor { .. } => continue,
+        };
+        debug_assert_eq!(state_opacity, gradient.inherited_opacity);
+        let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
+            gradient.paint_space_transform,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+        );
+        let paint_state = runtime_shape_paint_state_with_endpoints(
+            gradient.paint_state,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+        );
+        let mut resources = RuntimeGradientShaderResources {
+            factory,
+            shaders: &mut render_cache.gradient_shaders,
+        };
+        let render_paint = paints
+            .paint_mut(gradient.paint_global_id)
+            .with_context(|| {
+                format!(
+                    "missing render paint for initial nested layout gradient {}",
+                    gradient.paint_global_id
+                )
+            })?
+            .as_mut();
+        if let Some(configurations) = configurations.as_deref_mut() {
+            configurations.remove(gradient.paint_global_id);
+        }
+        match paint_state {
+            state @ RuntimeShapePaintState::LinearGradient { .. } => {
+                runtime_configure_linear_gradient(
+                    render_paint,
+                    &mut resources,
+                    object_id,
+                    state,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    &stops,
+                );
+            }
+            state @ RuntimeShapePaintState::RadialGradient { .. } => {
+                runtime_configure_radial_gradient(
+                    render_paint,
+                    &mut resources,
+                    object_id,
+                    state,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    &stops,
+                );
+            }
+            RuntimeShapePaintState::SolidColor { .. } => {}
+        }
+    }
     Ok(())
 }
 
@@ -24707,6 +25297,152 @@ mod tests {
             push_f32(bytes, "ParametricPath", "height", 10.0);
         });
         bytes
+    }
+
+    fn synthetic_nested_layout_gradient_chain_riv() -> Vec<u8> {
+        fn push_gradient_artboard(
+            bytes: &mut Vec<u8>,
+            end_x: f32,
+            nested_artboard_id: Option<u64>,
+        ) {
+            push_object(bytes, "Artboard", |bytes| {
+                push_f32(bytes, "LayoutComponent", "width", 100.0);
+                push_f32(bytes, "LayoutComponent", "height", 100.0);
+            });
+            push_object(bytes, "Shape", |bytes| {
+                push_uint(bytes, "Node", "parentId", 0);
+            });
+            push_object(bytes, "Fill", |bytes| {
+                push_uint(bytes, "Component", "parentId", 1);
+            });
+            push_object(bytes, "LinearGradient", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "LinearGradient", "endX", end_x);
+            });
+            push_object(bytes, "GradientStop", |bytes| {
+                push_uint(bytes, "Component", "parentId", 3);
+                push_color(bytes, "GradientStop", "colorValue", 0xffff_0000);
+                push_f32(bytes, "GradientStop", "position", 0.0);
+            });
+            push_object(bytes, "GradientStop", |bytes| {
+                push_uint(bytes, "Component", "parentId", 3);
+                push_color(bytes, "GradientStop", "colorValue", 0xff00_00ff);
+                push_f32(bytes, "GradientStop", "position", 1.0);
+            });
+            push_object(bytes, "Rectangle", |bytes| {
+                push_uint(bytes, "Node", "parentId", 1);
+                push_f32(bytes, "ParametricPath", "width", 10.0);
+                push_f32(bytes, "ParametricPath", "height", 10.0);
+            });
+            if let Some(artboard_id) = nested_artboard_id {
+                push_object(bytes, "NestedArtboardLayout", |bytes| {
+                    push_uint(bytes, "Node", "parentId", 0);
+                    push_uint(bytes, "NestedArtboard", "artboardId", artboard_id);
+                });
+            }
+        }
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9632);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "NestedArtboardLayout", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_gradient_artboard(&mut bytes, 10.0, Some(2));
+        push_gradient_artboard(&mut bytes, 20.0, None);
+        bytes
+    }
+
+    #[test]
+    fn pending_initial_nested_layout_frames_drain_authoritative_descendants_once() {
+        let bytes = synthetic_nested_layout_gradient_chain_riv();
+        let file = read_runtime_file(&bytes).expect("nested layout chain imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested layout chain graphs");
+        let graph = graphs.artboards.first().expect("parent graph");
+        let instance = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("nested layout chain instance");
+
+        let parent_nested = instance
+            .nested_artboards
+            .values()
+            .next()
+            .expect("parent nested layout host");
+        let parent_frame = parent_nested
+            .child
+            .capture_initial_nested_layout_paint_frame();
+        assert_eq!(parent_frame.gradients.len(), 1);
+        let child_nested = parent_nested
+            .child
+            .nested_artboards
+            .values()
+            .next()
+            .expect("child nested layout host");
+        let child_frame = child_nested
+            .child
+            .capture_initial_nested_layout_paint_frame();
+        assert_eq!(child_frame.gradients.len(), 1);
+        parent_nested
+            .initial_layout_paint_frame
+            .replace(Some(parent_frame));
+        child_nested
+            .initial_layout_paint_frame
+            .replace(Some(child_frame));
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut render_cache = RuntimeRenderPathCache::default();
+        let nested_ancestors = [graph.global_id];
+
+        instance
+            .drain_pending_initial_nested_layout_paint_frames(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache.paints,
+                Some(&mut paint_cache.paint_configurations),
+                Some(&mut paint_cache.nested_artboards),
+                &mut render_cache,
+                &nested_ancestors,
+            )
+            .expect("initial frames drain");
+        assert!(parent_nested.initial_layout_paint_frame.borrow().is_none());
+        assert!(child_nested.initial_layout_paint_frame.borrow().is_none());
+        let first_shader_count = stats.linear_gradients.borrow().len();
+        assert_eq!(first_shader_count, 2);
+
+        instance
+            .drain_pending_initial_nested_layout_paint_frames(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache.paints,
+                Some(&mut paint_cache.paint_configurations),
+                Some(&mut paint_cache.nested_artboards),
+                &mut render_cache,
+                &nested_ancestors,
+            )
+            .expect("second drain is a no-op");
+        assert_eq!(stats.linear_gradients.borrow().len(), first_shader_count);
     }
 
     #[test]

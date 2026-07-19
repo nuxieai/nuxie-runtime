@@ -65,6 +65,10 @@ pub struct StateMachineInstance {
     changed_state_count: usize,
     needs_advance: bool,
     has_advanced_once: bool,
+    // A mounted NestedStateMachine is initialized before its parent binding
+    // settles. C++ gives that occurrence one outer-update probe after the
+    // mounted artboard updates, even when its authored conditions are stable.
+    post_update_probe_pending: bool,
     data_bind_graph: RuntimeDataBindGraph,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
@@ -230,6 +234,7 @@ impl StateMachineInstance {
             changed_state_count: 0,
             needs_advance: false,
             has_advanced_once: false,
+            post_update_probe_pending: false,
             data_bind_graph,
             key_frame_data_bind_graphs,
             pointer_down_listener_hits: Vec::new(),
@@ -3691,6 +3696,7 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
     ) -> bool {
+        self.post_update_probe_pending = false;
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
@@ -3747,6 +3753,15 @@ impl StateMachineInstance {
             self.needs_advance = true;
         }
         changed_state
+    }
+
+    /// Whether C++'s one mandatory initial outer-update probe is still owed.
+    pub(crate) fn post_update_probe_pending(&self) -> bool {
+        self.post_update_probe_pending
+    }
+
+    pub(crate) fn schedule_post_update_probe(&mut self) {
+        self.post_update_probe_pending = true;
     }
 
     fn advance_with_report_mode(

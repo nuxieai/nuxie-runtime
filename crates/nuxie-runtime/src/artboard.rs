@@ -48,7 +48,10 @@ use crate::constraints::{
     runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
 use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
-use crate::draw::{RuntimeLayoutBounds, runtime_apply_component_list_item_layout_bounds};
+use crate::draw::{
+    RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
+    runtime_apply_component_list_item_layout_bounds,
+};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
@@ -312,10 +315,22 @@ pub struct ArtboardInstance {
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) render_cache_revision: u64,
+    /// C++ configures an intermediate shader on the one mounted child before
+    /// `NestedArtboardLayout::takeLayoutData()` permanently transfers layout
+    /// ownership. Retain only that narrow initial paint state until the paint
+    /// cache consumes it; animation, scripts, view models, and geometry remain
+    /// exclusively owned by `child`.
+    pub(crate) initial_layout_paint_frame: RefCell<Option<RuntimeInitialNestedLayoutPaintFrame>>,
+    pub(crate) layout_data_transferred: bool,
+    /// Parent solve that last refreshed the constraint space transferred to
+    /// this mounted child. Child-local layout writes must not refresh that
+    /// space during the same transfer; only a new parent solve (or assigned
+    /// bounds) corresponds to Yoga's `hasNewLayout` lifecycle.
+    layout_data_transfer_key: Option<RuntimeNestedLayoutDataTransferKey>,
     pub(crate) data_bind_path_ids: Option<Vec<u32>>,
     pub(crate) data_bind_path_is_relative: bool,
     pub(crate) stateful_view_model_instance_local: Option<usize>,
@@ -330,6 +345,42 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     speed: f32,
     quantize: f32,
     cumulated_seconds: f32,
+}
+
+impl Clone for RuntimeNestedArtboardInstance {
+    fn clone(&self) -> Self {
+        // A normal artboard clone is a new occurrence. C++ gives that mounted
+        // child a fresh `takeLayoutData()` lifecycle, so it must produce its
+        // own one-time initial paint frame rather than inherit a consumed (or
+        // pending) frame from the source occurrence.
+        let mut child = self.child.as_ref().clone();
+        child.reset_layout_constraint_bounds_for_new_occurrence();
+        Self {
+            child: Box::new(child),
+            render_cache_revision: self.render_cache_revision,
+            initial_layout_paint_frame: RefCell::new(None),
+            layout_data_transferred: false,
+            layout_data_transfer_key: None,
+            data_bind_path_ids: self.data_bind_path_ids.clone(),
+            data_bind_path_is_relative: self.data_bind_path_is_relative,
+            stateful_view_model_instance_local: self.stateful_view_model_instance_local,
+            stateful_view_model_instance_locals_by_id: self
+                .stateful_view_model_instance_locals_by_id
+                .clone(),
+            stateful_view_model_context: self.stateful_view_model_context.clone(),
+            stateful_global_view_model_contexts: self.stateful_global_view_model_contexts.clone(),
+            data_bind_property_source_locals: self.data_bind_property_source_locals.clone(),
+            data_bind_image_source_locals: self.data_bind_image_source_locals.clone(),
+            data_bind_context_source_locals_by_path: self
+                .data_bind_context_source_locals_by_path
+                .clone(),
+            animations: self.animations.clone(),
+            is_paused: self.is_paused,
+            speed: self.speed,
+            quantize: self.quantize,
+            cumulated_seconds: self.cumulated_seconds,
+        }
+    }
 }
 
 /// Mounted nested-artboard occurrences, retained contiguously like C++
@@ -406,11 +457,13 @@ impl RuntimeNestedArtboards {
     }
 
     #[cfg(test)]
-    fn values(&self) -> impl Iterator<Item = &RuntimeNestedArtboardInstance> {
+    pub(crate) fn values(&self) -> impl Iterator<Item = &RuntimeNestedArtboardInstance> {
         self.entries.iter().map(|(_, nested)| nested)
     }
 
-    fn values_mut(&mut self) -> impl Iterator<Item = &mut RuntimeNestedArtboardInstance> {
+    pub(crate) fn values_mut(
+        &mut self,
+    ) -> impl Iterator<Item = &mut RuntimeNestedArtboardInstance> {
         self.entries.iter_mut().map(|(_, nested)| nested)
     }
 }
@@ -519,6 +572,13 @@ struct RuntimeNestedLayoutBoundsCacheKey {
     layout_epoch: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct RuntimeNestedLayoutDataTransferKey {
+    parent_layout: RuntimeNestedLayoutBoundsCacheKey,
+    assigned_bounds: RuntimeLayoutBounds,
+    child_layout_epoch: u64,
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeNestedLayoutBoundsFrame {
     key: RuntimeNestedLayoutBoundsCacheKey,
@@ -546,6 +606,11 @@ enum RuntimeNestedAnimationInstance {
 }
 
 impl ArtboardInstance {
+    fn reset_layout_constraint_bounds_for_new_occurrence(&mut self) {
+        self.layout_constraint_bounds_enabled = false;
+        self.layout_constraint_bounds = None;
+    }
+
     /// Clone used only by draw/layout evaluation of the same concrete
     /// occurrence. Unlike the public occurrence clone, this explicitly keeps
     /// the VM table handles needed to render scripted drawables. Lifecycle
@@ -554,7 +619,37 @@ impl ArtboardInstance {
         let mut cloned = self.clone();
         cloned.restore_transient_occurrence_identities_from(self);
         cloned.restore_transient_script_handles_from(self);
+        cloned.restore_transient_layout_transfer_state_from(self);
         cloned
+    }
+
+    fn restore_transient_layout_transfer_state_from(&mut self, source: &Self) {
+        // Transient draw/layout clones view the same mounted occurrence. Copy
+        // whether layout ownership already transferred, but never copy its
+        // pending one-shot paint frame: only the authoritative instance may
+        // consume that renderer event.
+        self.layout_constraint_bounds_enabled = source.layout_constraint_bounds_enabled;
+        self.layout_constraint_bounds = source.layout_constraint_bounds.clone();
+        for (local_id, source_nested) in source.nested_artboards.iter() {
+            if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
+                cloned_nested.layout_data_transferred = source_nested.layout_data_transferred;
+                cloned_nested.layout_data_transfer_key = source_nested.layout_data_transfer_key;
+                cloned_nested.initial_layout_paint_frame.replace(None);
+                cloned_nested
+                    .child
+                    .restore_transient_layout_transfer_state_from(&source_nested.child);
+            }
+        }
+        for (local_id, source_items) in &source.component_list_items {
+            let Some(cloned_items) = self.component_list_items.get_mut(local_id) else {
+                continue;
+            };
+            for (cloned_item, source_item) in cloned_items.iter_mut().zip(source_items) {
+                cloned_item
+                    .child
+                    .restore_transient_layout_transfer_state_from(&source_item.child);
+            }
+        }
     }
 
     fn restore_transient_occurrence_identities_from(&mut self, source: &Self) {
@@ -2482,7 +2577,13 @@ impl ArtboardInstance {
     }
 
     fn try_change_state_machine_instance(&mut self, instance: &mut StateMachineInstance) -> bool {
-        if !instance.requires_post_update_state_probe() {
+        // Root and component-list machines complete their direct-input
+        // transition loop during ordinary advance. Mounted nested machines
+        // additionally owe one C++-matching outer-update probe.
+        if !instance.post_update_probe_pending()
+            && !instance.needs_advance()
+            && !instance.requires_post_update_state_probe()
+        {
             return false;
         }
         let state_machines = Arc::clone(&self.state_machines);
@@ -2655,8 +2756,9 @@ impl ArtboardInstance {
         {
             return false;
         }
-        let layout_bounds = self.runtime_nested_artboard_layout_bounds();
+        let layout_frame = self.runtime_nested_artboard_layout_bounds_frame();
         let mut changed = self.refresh_component_list_items();
+        let mut initial_layout_paint_evaluations = BTreeMap::new();
         for index in 0..self.nested_artboard_locals.len() {
             let host_local = self.nested_artboard_locals[index];
             if self
@@ -2665,8 +2767,60 @@ impl ArtboardInstance {
             {
                 continue;
             }
-            changed |= self
-                .apply_nested_artboard_layout_bounds(host_local, layout_bounds.as_ref().as_ref());
+            if self
+                .component(host_local)
+                .is_none_or(|component| component.type_name != "NestedArtboardLayout")
+            {
+                continue;
+            }
+            let Some(nested) = self.nested_artboards.get(&host_local) else {
+                continue;
+            };
+            if nested.layout_data_transferred {
+                continue;
+            }
+            if layout_frame
+                .bounds
+                .as_ref()
+                .as_ref()
+                .and_then(|bounds| bounds.get(&host_local))
+                .is_none()
+            {
+                continue;
+            }
+            if nested.initial_layout_paint_frame.borrow().is_none() {
+                // Preserve the queued pre-transfer paint state before the
+                // authoritative mounted child consumes any of it.
+                initial_layout_paint_evaluations.insert(host_local, nested.child.as_ref().clone());
+            }
+        }
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local = self.nested_artboard_locals[index];
+            if self
+                .component(host_local)
+                .is_some_and(RuntimeComponent::is_collapsed)
+            {
+                continue;
+            }
+            let layout_data_transferred = self
+                .nested_artboards
+                .get(&host_local)
+                .is_some_and(|nested| nested.layout_data_transferred);
+            if layout_data_transferred {
+                changed |= self.apply_nested_artboard_layout_bounds(
+                    host_local,
+                    layout_frame.bounds.as_ref().as_ref(),
+                    layout_frame.key,
+                );
+            } else if let Some(paint_evaluation) =
+                initial_layout_paint_evaluations.remove(&host_local)
+            {
+                self.capture_initial_nested_artboard_layout_paint_frame(
+                    host_local,
+                    layout_frame.bounds.as_ref().as_ref(),
+                    paint_evaluation,
+                );
+            }
             let (nested_keep_going, nested_is_dirty) = match nested_events.as_mut() {
                 Some(nested_events) => {
                     let mut reported_events = Vec::new();
@@ -2727,9 +2881,7 @@ impl ArtboardInstance {
         changed
     }
 
-    fn runtime_nested_artboard_layout_bounds(
-        &mut self,
-    ) -> Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>> {
+    fn runtime_nested_artboard_layout_bounds_frame(&mut self) -> RuntimeNestedLayoutBoundsFrame {
         let key = RuntimeNestedLayoutBoundsCacheKey {
             graph_global_id: self.graph_global_id,
             layout_epoch: self.layout_epoch,
@@ -2748,7 +2900,6 @@ impl ArtboardInstance {
         self.nested_layout_bounds
             .as_ref()
             .expect("nested layout bounds frame was just populated")
-            .bounds
             .clone()
     }
 
@@ -2771,10 +2922,80 @@ impl ArtboardInstance {
         self.runtime_taffy_layout_bounds(&graph, Some(runtime.as_ref()))
     }
 
+    fn capture_initial_nested_artboard_layout_paint_frame(
+        &mut self,
+        host_local_id: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        mut paint_evaluation: ArtboardInstance,
+    ) {
+        if !self
+            .component(host_local_id)
+            .is_some_and(|component| component.type_name == "NestedArtboardLayout")
+        {
+            return;
+        }
+        let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&host_local_id).copied())
+        else {
+            return;
+        };
+        // C++ configures paints on this one mounted occurrence before
+        // NestedArtboardLayout transfers its constraint space. Evaluate that
+        // source-side shader state only on a script-free temporary occurrence.
+        paint_evaluation.detach_initial_nested_layout_paint_binding_contexts();
+        paint_evaluation.set_artboard_dimensions(bounds.width, bounds.height);
+        if let Some(width_key) = property_key_for_name("LayoutComponent", "width") {
+            paint_evaluation.set_double_property(0, width_key, bounds.width);
+        }
+        if let Some(height_key) = property_key_for_name("LayoutComponent", "height") {
+            paint_evaluation.set_double_property(0, height_key, bounds.height);
+        }
+        paint_evaluation.update_components();
+        let before_bind = paint_evaluation.capture_initial_nested_layout_paint_frame();
+        paint_evaluation.advance_artboard_data_binds();
+        paint_evaluation.update_components();
+        let frame = paint_evaluation.capture_initial_nested_layout_paint_frame();
+        if !frame.changed_from(&before_bind) {
+            return;
+        }
+        if let Some(nested) = self.nested_artboards.get_mut(&host_local_id)
+            && !nested.layout_data_transferred
+            && nested.initial_layout_paint_frame.borrow().is_none()
+        {
+            nested.initial_layout_paint_frame.replace(Some(frame));
+        }
+    }
+
+    fn apply_nested_artboard_layout_bounds_after_parent_solve(&mut self) -> bool {
+        if !self.nested_artboard_locals.iter().any(|host_local_id| {
+            self.component(*host_local_id)
+                .is_some_and(|component| component.type_name == "NestedArtboardLayout")
+        }) {
+            return false;
+        }
+        let layout_frame = self.runtime_nested_artboard_layout_bounds_frame();
+        let mut changed = false;
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local_id = self.nested_artboard_locals[index];
+            if self
+                .component(host_local_id)
+                .is_some_and(RuntimeComponent::is_collapsed)
+            {
+                continue;
+            }
+            changed |= self.apply_nested_artboard_layout_bounds(
+                host_local_id,
+                layout_frame.bounds.as_ref().as_ref(),
+                layout_frame.key,
+            );
+        }
+        changed
+    }
+
     fn apply_nested_artboard_layout_bounds(
         &mut self,
         host_local_id: usize,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        parent_layout: RuntimeNestedLayoutBoundsCacheKey,
     ) -> bool {
         if !self
             .component(host_local_id)
@@ -2789,11 +3010,34 @@ impl ArtboardInstance {
         let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
             return false;
         };
+
+        let first_transfer = !nested.layout_data_transferred;
+        let refresh_constraint_bounds = nested.layout_data_transfer_key.is_none_or(|key| {
+            key.parent_layout != parent_layout
+                || key.assigned_bounds != bounds
+                || key.child_layout_epoch != nested.child.layout_epoch
+        });
         let mut changed = nested
             .child
             .set_artboard_dimensions(bounds.width, bounds.height);
-        changed |= !nested.child.layout_constraint_bounds_enabled;
-        nested.child.enable_layout_constraint_bounds();
+        if first_transfer {
+            // The recursive host bind above has applied the rounded initial
+            // values but has not yet consumed their component dirt. Settle
+            // that unconstrained component state before taking the one Yoga
+            // layout snapshot owned by the parent.
+            changed |= nested.child.update_components().did_update;
+        }
+
+        // Match NestedArtboardLayout's mounted ordering: the constraint space
+        // exists before its root LayoutComponent width/height dirt is raised.
+        // Reversing these two operations changes the first layout solve.
+        if refresh_constraint_bounds {
+            nested.child.refresh_layout_constraint_bounds();
+            changed = true;
+        } else {
+            changed |= !nested.child.layout_constraint_bounds_enabled;
+            nested.child.enable_layout_constraint_bounds();
+        }
         if let Some(width_key) = property_key_for_name("LayoutComponent", "width") {
             changed |= nested.child.set_double_property(0, width_key, bounds.width);
         }
@@ -2802,9 +3046,19 @@ impl ArtboardInstance {
                 .child
                 .set_double_property(0, height_key, bounds.height);
         }
+        nested.layout_data_transferred = true;
         if changed {
             nested.child.update_pass();
         }
+        // Record after assigned-root writes and their child update pass. Those
+        // writes dirty the transferred root node themselves; only a later
+        // child layout generation should emulate C++ `markHostingLayoutDirty`
+        // and request another parent-owned constraint refresh.
+        nested.layout_data_transfer_key = Some(RuntimeNestedLayoutDataTransferKey {
+            parent_layout,
+            assigned_bounds: bounds,
+            child_layout_epoch: nested.child.layout_epoch,
+        });
         changed
     }
 
@@ -3028,6 +3282,10 @@ impl ArtboardInstance {
         if self.layout_constraint_bounds_enabled {
             return;
         }
+        self.refresh_layout_constraint_bounds();
+    }
+
+    pub(crate) fn refresh_layout_constraint_bounds(&mut self) {
         self.layout_constraint_bounds_enabled = true;
         self.layout_constraint_bounds = self.runtime_graph().and_then(|graph| {
             self.runtime_taffy_layout_bounds(graph, self.runtime_file())
@@ -3288,7 +3546,12 @@ impl ArtboardInstance {
         // before components, with artboard-host children publishing first.
         self.update_nested_artboard_data_binds_from_hosts();
         self.advance_artboard_data_binds();
-        let mut did_update = false;
+        // C++ transfers a NestedArtboardLayout's Yoga node after the first
+        // child-recursive data-bind pass, then reuses that node whenever the
+        // parent Yoga graph reports a new layout. The transfer key keeps later
+        // precise child-local writes from causing a second solve in the same
+        // outer update while still refreshing genuine parent assignments.
+        let mut did_update = self.apply_nested_artboard_layout_bounds_after_parent_solve();
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
@@ -4748,6 +5011,16 @@ impl RuntimeNestedArtboardInstance {
 
         let local_elapsed_seconds = self.calculate_local_elapsed_seconds(elapsed_seconds);
         if local_elapsed_seconds == 0.0 && self.quantize >= 0.0 {
+            // C++ returns before advancing nested animations on a quantized
+            // NewFrame skip, then unconditionally probes nested state machines
+            // during the following non-NewFrame outer pass.
+            for animation in &mut self.animations {
+                if let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } =
+                    animation
+                {
+                    state_machine.schedule_post_update_probe();
+                }
+            }
             return true;
         }
 
@@ -5162,6 +5435,9 @@ fn build_runtime_nested_artboard_instance(
     Ok(RuntimeNestedArtboardInstance {
         child,
         render_cache_revision: 0,
+        initial_layout_paint_frame: RefCell::new(None),
+        layout_data_transferred: false,
+        layout_data_transfer_key: None,
         data_bind_path_ids,
         data_bind_path_is_relative,
         stateful_view_model_instance_local,
@@ -5425,6 +5701,7 @@ fn nested_state_machine_instance(
 ) -> Option<RuntimeNestedAnimationInstance> {
     let state_machine_index = usize::try_from(object.uint_property("animationId")?).ok()?;
     let mut state_machine = child.state_machine_instance(state_machine_index)?;
+    state_machine.schedule_post_update_probe();
     state_machine.bind_default_view_model_context();
     state_machine.advance_data_context();
     apply_authored_nested_input_values(file, graph, local_id, &mut state_machine);
@@ -5821,6 +6098,9 @@ mod tests {
         RuntimeNestedArtboardInstance {
             child: Box::new(child),
             render_cache_revision: 0,
+            initial_layout_paint_frame: RefCell::new(None),
+            layout_data_transferred: false,
+            layout_data_transfer_key: None,
             data_bind_path_ids: None,
             data_bind_path_is_relative: false,
             stateful_view_model_instance_local: None,
@@ -5907,6 +6187,61 @@ mod tests {
             view_model_triggers: Arc::new(Vec::new()),
             transition_duration_bindings: Arc::new(Vec::new()),
         }
+    }
+
+    #[test]
+    fn quantized_nested_skip_schedules_outer_state_probe() {
+        let definition = empty_state_machine(11);
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        let state_machine = StateMachineInstance::new(0, &definition, &child);
+        child.state_machines = Arc::new(vec![definition]);
+        let mut nested = RuntimeNestedArtboardInstance {
+            child: Box::new(child),
+            render_cache_revision: 0,
+            initial_layout_paint_frame: RefCell::new(None),
+            layout_data_transferred: false,
+            layout_data_transfer_key: None,
+            data_bind_path_ids: None,
+            data_bind_path_is_relative: false,
+            stateful_view_model_instance_local: None,
+            stateful_view_model_instance_locals_by_id: BTreeMap::new(),
+            stateful_view_model_context: None,
+            stateful_global_view_model_contexts: BTreeMap::new(),
+            data_bind_property_source_locals: Vec::new(),
+            data_bind_image_source_locals: Vec::new(),
+            data_bind_context_source_locals_by_path: BTreeMap::new(),
+            animations: vec![RuntimeNestedAnimationInstance::StateMachine {
+                local_id: 1,
+                state_machine,
+            }],
+            is_paused: false,
+            speed: 1.0,
+            quantize: 1.0,
+            cumulated_seconds: 0.0,
+        };
+
+        assert!(nested.advance(0.25, None));
+        let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } =
+            &nested.animations[0]
+        else {
+            panic!("nested animation remains a state machine");
+        };
+        assert!(state_machine.post_update_probe_pending());
+    }
+
+    #[test]
+    fn mounted_nested_state_probe_is_consumed_once() {
+        let definition = empty_state_machine(11);
+        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        let mut state_machine = StateMachineInstance::new(0, &definition, &artboard);
+        artboard.state_machines = Arc::new(vec![definition]);
+
+        assert!(!state_machine.post_update_probe_pending());
+        state_machine.schedule_post_update_probe();
+        assert!(state_machine.post_update_probe_pending());
+        assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
+        assert!(!state_machine.post_update_probe_pending());
+        assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
     }
 
     #[test]
@@ -6248,11 +6583,38 @@ mod tests {
                 updates: Rc::new(Cell::new(0)),
             }),
         );
+        child.layout_constraint_bounds_enabled = true;
+        child.layout_constraint_bounds = Some(Arc::new(BTreeMap::from([(
+            0,
+            RuntimeLayoutBounds {
+                x: 1.0,
+                y: 2.0,
+                width: 30.0,
+                height: 40.0,
+            },
+        )])));
         original.nested_artboards.insert(
             0,
             RuntimeNestedArtboardInstance {
                 child: Box::new(child),
                 render_cache_revision: 0,
+                initial_layout_paint_frame: RefCell::new(Some(
+                    RuntimeInitialNestedLayoutPaintFrame::default(),
+                )),
+                layout_data_transferred: true,
+                layout_data_transfer_key: Some(RuntimeNestedLayoutDataTransferKey {
+                    parent_layout: RuntimeNestedLayoutBoundsCacheKey {
+                        graph_global_id: 11,
+                        layout_epoch: 3,
+                    },
+                    assigned_bounds: RuntimeLayoutBounds {
+                        x: 1.0,
+                        y: 2.0,
+                        width: 30.0,
+                        height: 40.0,
+                    },
+                    child_layout_epoch: 5,
+                }),
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
@@ -6285,6 +6647,57 @@ mod tests {
             transient.nested_artboards[&0].child.instance_identity(),
             original_nested_identity
         );
+        assert!(!cloned.nested_artboards[&0].layout_data_transferred);
+        assert!(
+            cloned.nested_artboards[&0]
+                .layout_data_transfer_key
+                .is_none()
+        );
+        assert!(
+            cloned.nested_artboards[&0]
+                .initial_layout_paint_frame
+                .borrow()
+                .is_none()
+        );
+        assert!(transient.nested_artboards[&0].layout_data_transferred);
+        assert_eq!(
+            transient.nested_artboards[&0].layout_data_transfer_key,
+            original.nested_artboards[&0].layout_data_transfer_key
+        );
+        assert!(
+            transient.nested_artboards[&0]
+                .initial_layout_paint_frame
+                .borrow()
+                .is_none()
+        );
+        assert!(
+            !cloned.nested_artboards[&0]
+                .child
+                .layout_constraint_bounds_enabled
+        );
+        assert!(
+            cloned.nested_artboards[&0]
+                .child
+                .layout_constraint_bounds
+                .is_none()
+        );
+        assert!(
+            transient.nested_artboards[&0]
+                .child
+                .layout_constraint_bounds_enabled
+        );
+        assert!(Arc::ptr_eq(
+            transient.nested_artboards[&0]
+                .child
+                .layout_constraint_bounds
+                .as_ref()
+                .expect("transient constraint bounds"),
+            original.nested_artboards[&0]
+                .child
+                .layout_constraint_bounds
+                .as_ref()
+                .expect("source constraint bounds"),
+        ));
         assert!(original.has_script_instance_for_global(7));
         assert!(!cloned.has_script_instance_for_global(7));
         assert!(transient.has_script_instance_for_global(7));
@@ -6355,6 +6768,9 @@ mod tests {
             RuntimeNestedArtboardInstance {
                 child: Box::new(child),
                 render_cache_revision: 0,
+                initial_layout_paint_frame: RefCell::new(None),
+                layout_data_transferred: false,
+                layout_data_transfer_key: None,
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
@@ -6404,6 +6820,9 @@ mod tests {
             RuntimeNestedArtboardInstance {
                 child: Box::new(child),
                 render_cache_revision: 0,
+                initial_layout_paint_frame: RefCell::new(None),
+                layout_data_transferred: false,
+                layout_data_transfer_key: None,
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
@@ -6954,6 +7373,97 @@ mod tests {
     }
 
     #[test]
+    fn nested_layout_constraint_space_refreshes_for_parent_or_child_layout_generation() {
+        let mut host = synthetic_component(0, 0);
+        host.type_name = "NestedArtboardLayout";
+        let mut parent = synthetic_instance(vec![host], vec![0]);
+
+        let mut child_layout = synthetic_component(0, 0);
+        child_layout.type_name = "LayoutComponent";
+        child_layout.dependent_locals.push(1);
+        let child = synthetic_instance(vec![child_layout, synthetic_component(1, 1)], vec![0, 1]);
+        let mut nested = synthetic_nested_artboard_instance(7);
+        nested.child = Box::new(child);
+        parent.nested_artboards.insert(0, nested);
+
+        let assigned_bounds = RuntimeLayoutBounds {
+            x: 4.0,
+            y: 5.0,
+            width: 120.0,
+            height: 80.0,
+        };
+        let layout_bounds = BTreeMap::from([(0, assigned_bounds)]);
+        let first_parent_layout = RuntimeNestedLayoutBoundsCacheKey {
+            graph_global_id: 3,
+            layout_epoch: 9,
+        };
+
+        assert!(parent.apply_nested_artboard_layout_bounds(
+            0,
+            Some(&layout_bounds),
+            first_parent_layout,
+        ));
+        let first_transfer_key = parent.nested_artboards[&0].layout_data_transfer_key;
+        let first_cache_epoch = parent.nested_artboards[&0].child.cache_epoch();
+
+        assert!(!parent.apply_nested_artboard_layout_bounds(
+            0,
+            Some(&layout_bounds),
+            first_parent_layout,
+        ));
+        assert_eq!(
+            parent.nested_artboards[&0].child.cache_epoch(),
+            first_cache_epoch
+        );
+
+        // The assigned root writes from the first transfer are already part of
+        // the stored generation (the identical apply above stabilized). A
+        // later child layout change emulates C++ bubbling
+        // `markHostingLayoutDirty` back to the owner of the Yoga node.
+        parent
+            .nested_artboards
+            .get_mut(&0)
+            .expect("nested child")
+            .child
+            .mark_layout_changed();
+        assert!(parent.apply_nested_artboard_layout_bounds(
+            0,
+            Some(&layout_bounds),
+            first_parent_layout,
+        ));
+        let after_child_refresh = parent.nested_artboards[&0].child.cache_epoch();
+        let after_child_transfer_key = parent.nested_artboards[&0].layout_data_transfer_key;
+        assert_ne!(after_child_transfer_key, first_transfer_key);
+        assert!(!parent.apply_nested_artboard_layout_bounds(
+            0,
+            Some(&layout_bounds),
+            first_parent_layout,
+        ));
+        assert_eq!(
+            parent.nested_artboards[&0].child.cache_epoch(),
+            after_child_refresh
+        );
+
+        let next_parent_layout = RuntimeNestedLayoutBoundsCacheKey {
+            layout_epoch: first_parent_layout.layout_epoch + 1,
+            ..first_parent_layout
+        };
+        assert!(parent.apply_nested_artboard_layout_bounds(
+            0,
+            Some(&layout_bounds),
+            next_parent_layout,
+        ));
+        assert_eq!(
+            parent.nested_artboards[&0]
+                .layout_data_transfer_key
+                .expect("refreshed transfer")
+                .parent_layout,
+            next_parent_layout
+        );
+        assert!(parent.nested_artboards[&0].child.cache_epoch() > after_child_refresh);
+    }
+
+    #[test]
     fn path_epoch_tracks_path_dirt_separately_from_draw_cache_epoch() {
         let component = synthetic_component(0, 0);
         let mut instance = synthetic_instance(vec![component], vec![0]);
@@ -7206,6 +7716,9 @@ mod tests {
                     vec![10],
                 )),
                 render_cache_revision: 0,
+                initial_layout_paint_frame: RefCell::new(None),
+                layout_data_transferred: false,
+                layout_data_transfer_key: None,
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
@@ -7224,17 +7737,13 @@ mod tests {
         );
         instance.nested_artboard_locals.push(0);
 
-        let first_bounds = instance.runtime_nested_artboard_layout_bounds();
-        let first_frame = instance
-            .nested_layout_bounds
-            .as_ref()
-            .expect("nested layout bounds frame")
-            .clone();
+        let first_frame = instance.runtime_nested_artboard_layout_bounds_frame();
+        let first_bounds = first_frame.bounds.clone();
         assert_eq!(first_frame.key.layout_epoch, instance.layout_epoch());
         assert!(Arc::ptr_eq(&first_bounds, &first_frame.bounds));
 
         assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
-        let after_paint = instance.runtime_nested_artboard_layout_bounds();
+        let after_paint = instance.runtime_nested_artboard_layout_bounds_frame();
         assert_eq!(
             instance
                 .nested_layout_bounds
@@ -7244,10 +7753,10 @@ mod tests {
                 .layout_epoch,
             instance.layout_epoch()
         );
-        assert!(Arc::ptr_eq(&first_bounds, &after_paint));
+        assert!(Arc::ptr_eq(&first_bounds, &after_paint.bounds));
 
         assert!(instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
-        let after_layout = instance.runtime_nested_artboard_layout_bounds();
+        let after_layout = instance.runtime_nested_artboard_layout_bounds_frame();
         assert_eq!(
             instance
                 .nested_layout_bounds
@@ -7257,7 +7766,7 @@ mod tests {
                 .layout_epoch,
             instance.layout_epoch()
         );
-        assert!(!Arc::ptr_eq(&first_bounds, &after_layout));
+        assert!(!Arc::ptr_eq(&first_bounds, &after_layout.bounds));
     }
 
     #[test]

@@ -22,14 +22,14 @@ SCRIPTED_RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runn
 PERF_FILE ?= $(RIVE_RUNTIME_DIR)/tests/unit_tests/assets/shapetest.riv
 PERF_SAMPLES ?= 0
 PERF_ITERATIONS ?= 10
-PERF_WARMUPS ?= 1
+PERF_WARMUPS ?= 3
 PERF_CORPUS ?= corpus.toml
 PERF_CORPUS_LIMIT ?= 10
 PERF_CORPUS_IDS ?= advance_blend_mode,ai_assitant,align_target,animated_clipping,animation_reset_cases,spotify_kids_demo
 PERF_CORPUS_SELECTION = $(if $(strip $(PERF_CORPUS_IDS)),--corpus-ids "$(PERF_CORPUS_IDS)",--corpus-limit "$(PERF_CORPUS_LIMIT)")
 PERF_AGGREGATE ?= min
-PERF_MAX_RATIO ?= 2.0
-PERF_BENCHMARK_REPEAT ?= 100
+PERF_MAX_RATIO ?= 1.0
+PERF_BENCHMARK_REPEAT ?= 10000
 PERF_JSON_OUT ?= $(CURDIR)/target/perf-compare.json
 PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-parse HEAD 2>/dev/null || echo unknown) --meta timestamp=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf

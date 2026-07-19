@@ -3,8 +3,10 @@
 The execution contract is `docs/renderer-port-map.md`. This file records only
 current evidence, open gates, and decisions needed by the next session.
 
-**State: R0-R5 and the post-R exactness follow-up are complete.** Phase S has
-not started.
+**State: R0-R5 and the post-R exactness follow-up are complete.** Phase S
+manual cycle 1, the ad hoc sync through upstream `d788e8ec`, is complete. The
+write-capable worker remains paused until a second clean manual cycle is
+recorded.
 
 ## Metric
 

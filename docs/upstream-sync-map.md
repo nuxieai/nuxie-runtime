@@ -2,8 +2,8 @@
 
 Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
 keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
-migration completes. M8 and renderer Phase R are complete. The first run is
-manual. A read-only weekly drift scout may run immediately; the write-capable
+migration completes. M8, renderer Phase R, and the first manual Phase S cycle
+are complete. A read-only weekly drift scout is active; the write-capable
 parity worker remains paused until two clean manual cycles are recorded.
 
 ## Why this works here
@@ -133,18 +133,17 @@ worker is enabled.
 
 ## State
 
-- LAST_SYNCED_SHA: `7c778d13c5d903b3b74eec1dd6bb68a811dea5f2` (the V2
-  snapshot; set by the migration itself)
-- Clean manual cycles completed: 0
+- LAST_SYNCED_SHA: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`
+- Clean manual cycles completed: 1
 - Standing approvals: none
-- Current cycle authorization: on 2026-07-18 the user requested and authorized
-  an ad hoc exact sync through `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
-  including applicable renderer changes and the final pin advance. This
-  authorization expires when that cycle closes.
-- Current cycle status: the implementation audit is closed and the candidate
-  runtime pin is staged in CI. The final full default and scripted candidate
-  ratchets have not yet been recorded, so `LAST_SYNCED_SHA`, the manual-cycle
-  count, and this authorization remain open.
+- Current cycle authorization: closed. The user-authorized ad hoc exact sync
+  through `d788e8ec6e8b598526607d6a1e8818e8b637b60c` completed on
+  2026-07-19; no cycle-scoped authorization remains active.
+- Current cycle status: manual cycle 1 is complete. The default and forced
+  scripted candidate ratchets cover 317 exact files and 647 exact segments,
+  with zero divergences, unsupported features, or not-yet entries. The
+  write-capable Phase S worker remains paused until a second clean manual
+  cycle is recorded.
 - Current-revision pin registry (advance with each completed Phase S cycle):
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`

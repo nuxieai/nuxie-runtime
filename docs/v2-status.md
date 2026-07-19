@@ -5,30 +5,31 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 584 across 263 files (strict
-  exact=573/252; tolerant=11/11; structural=0/0)
-- Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=27, unsupported-feature=5, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  gated=5 and M8=1; the harness bucket is empty
-- Scripted compare: exact=27 / exact-segments=35 / diverges=0 /
-  unsupported-feature=0 across the 27 M8 scripting entries
-- Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
+- Exact-status segments (file × sample): 647 across 317 files.
+- Default candidate compare against upstream `d788e8ec`: exact=317,
+  exact-segments=647, diverges=0, unsupported-feature=0, not-yet=0.
+- Forced-scripted candidate compare against upstream `d788e8ec`: exact=317,
+  exact-segments=647, diverges=0, unsupported-feature=0, not-yet=0.
+- Current milestone: **Phase S manual cycle 1 complete; the write-capable
+  worker remains paused until two clean manual cycles are recorded.**
 
-## M7 Perf Fence
+## Runtime Perf Fence
 
-- Gate command: bare `make perf-hot-loop`, which now uses release/null-renderer
+- Gate command: bare `make perf-hot-loop`, which uses release/null-renderer
   whole-repeat `total_ms` runner timings, min aggregation, the deliberate
-  image-bearing focused corpus, `PERF_ITERATIONS=10`, and
-  `PERF_BENCHMARK_REPEAT=100`. Phase timings remain JSON/console diagnostics
-  but no longer define the aggregate score.
-- Acceptance: three independent invocations must all report aggregate min
-  Rust/C++ <= 2.0, with 1-minute load below about 8 and the C++ min-sum inside
-  its 0.70-0.95 ms sanity band.
+  image-bearing focused corpus, `PERF_ITERATIONS=10`, three warmups, and
+  `PERF_BENCHMARK_REPEAT=10000`. Phase timings remain JSON/console diagnostics
+  but do not define the aggregate score.
+- Acceptance: aggregate min Rust/C++ <= 1.0. The default ratchet is now 1.0,
+  so the command fails closed on any slower-than-C++ aggregate.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: after retained path-composer graph lookups, dense
+- Current standing: closed at aggregate min Rust/C++=0.974427 in the latest
+  clean candidate report (C++=40.581370 ms, Rust=39.543582 ms), below the 1.0
+  parity threshold.
+- Historical optimization record (under the former 2.0 ratchet): after
+  retained path-composer graph lookups, dense
   draw-path slots, graph-scoped dense path-geometry command slots, dense
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
   mesh render-buffer slots, retained image layout local transforms, and
@@ -526,17 +527,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. M0-M8 are complete. The regular ratchet passes at
-   exact=263 / exact-segments=584 / diverges=27 / unsupported-feature=5;
-   the scripting-enabled M8 lane is fully exact at exact=27 /
-   exact-segments=35 / diverges=0 / unsupported-feature=0; `cargo test
-   --workspace` passes.
-2. The full repository history has been rewritten to the sole identity
-   `Levi McCallum <levi@levimccallum.com>`, all `Co-Authored-By` trailers have
-   been removed, and the rewritten history passed tree, inventory, identity,
-   and `git fsck` audits. No V2 work remains.
-3. Do not start Phase R from the V2 goal loop; it requires explicit user
-   activation.
+1. M0-M8 and renderer Phase R are complete. Phase S manual cycle 1 advances
+   the active runtime pin to `d788e8ec`; default and forced-scripted candidate
+   validation are exact across 317 files and 647 segments.
+2. The runtime performance ratchet is 1.0. The latest clean candidate report
+   passes at aggregate min Rust/C++=0.974427.
+3. Keep the write-capable Phase S worker paused until a second clean manual
+   cycle is recorded. The read-only weekly drift scout remains active.
 
 19. M8 OPENED (user decision 2026-07-09; scope in porting-map-v2 #V2-9).
     Queue, in order:
@@ -1027,11 +1024,17 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- There are no active `status = "not-yet"` entries.
-- There is no remaining `milestone = "M6"` parked work; remaining non-exact
-  files are behind explicit `gated` or `harness` diagnostics.
+- There are no active divergence, unsupported-feature, or not-yet manifest
+  entries. Both candidate validation modes are exact across all 317 files and
+  647 segments.
+- Dependency and public-API watches are tracked as non-blocking Phase S work;
+  they are not parity exceptions.
 
-## Backlog (unsupported features awaiting corpus demand)
+## Historical backlog record
+
+The capability notes below predate the exact Phase S closeout and are retained
+for implementation provenance. They do not represent active manifest
+divergences, unsupported features, or not-yet entries.
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until a future external data-binding corpus file requires it.

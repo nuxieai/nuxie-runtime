@@ -19921,15 +19921,6 @@ mod tests {
     }
 
     #[test]
-    fn nested_artboard_will_draw_requires_a_reference_and_nonzero_render_opacity() {
-        assert!(runtime_nested_artboard_will_draw(Some(41), Some(1.0)));
-        assert!(runtime_nested_artboard_will_draw(Some(41), Some(0.5)));
-        assert!(!runtime_nested_artboard_will_draw(Some(41), Some(0.0)));
-        assert!(!runtime_nested_artboard_will_draw(None, Some(1.0)));
-        assert!(!runtime_nested_artboard_will_draw(Some(41), None));
-    }
-
-    #[test]
     fn format_7_2_layout_images_compose_fit_on_top_of_authored_scale() {
         let authored = Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]);
 

@@ -773,6 +773,8 @@ impl RuntimeLinearAnimation {
         let mut changed = false;
         for keyed_object in self.keyed_objects.iter() {
             for keyed_property in &keyed_object.keyed_properties {
+                // CoreRegistry assigns exactly one field type per property,
+                // matching C++ KeyedProperty's single virtual apply dispatch.
                 if let Some(property) = keyed_property.transform_property {
                     let Some(frame_value) =
                         keyed_property.double_frame_value_at(seconds, self.fps, key_frame_values)
@@ -794,8 +796,7 @@ impl RuntimeLinearAnimation {
                         keyed_property.property_key,
                         value,
                     );
-                }
-                if keyed_property.transform_property.is_none() && keyed_property.double_property {
+                } else if keyed_property.double_property {
                     let Some(frame_value) =
                         keyed_property.double_frame_value_at(seconds, self.fps, key_frame_values)
                     else {
@@ -818,8 +819,7 @@ impl RuntimeLinearAnimation {
                         keyed_property.property_key,
                         value,
                     );
-                }
-                if keyed_property.color_property {
+                } else if keyed_property.color_property {
                     let Some(frame_value) =
                         keyed_property.color_frame_value_at(seconds, self.fps, key_frame_values)
                     else {
@@ -842,8 +842,7 @@ impl RuntimeLinearAnimation {
                         keyed_property.property_key,
                         value,
                     );
-                }
-                if keyed_property.bool_property {
+                } else if keyed_property.bool_property {
                     let Some(value) =
                         keyed_property.bool_value_at(seconds, self.fps, key_frame_values)
                     else {
@@ -854,8 +853,7 @@ impl RuntimeLinearAnimation {
                         keyed_property.property_key,
                         value,
                     );
-                }
-                if keyed_property.uint_property {
+                } else if keyed_property.uint_property {
                     let Some(value) = keyed_property.uint_value_at(seconds, self.fps) else {
                         continue;
                     };
@@ -864,8 +862,7 @@ impl RuntimeLinearAnimation {
                         keyed_property.property_key,
                         value,
                     );
-                }
-                if keyed_property.string_property {
+                } else if keyed_property.string_property {
                     let Some(value) =
                         keyed_property.string_value_at(seconds, self.fps, key_frame_values)
                     else {

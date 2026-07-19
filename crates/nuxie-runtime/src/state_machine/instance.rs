@@ -43,6 +43,7 @@ use nuxie_binary::RuntimeFile;
 #[derive(Debug, Clone)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
+    requires_post_update_state_probe: bool,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
     bindable_integers: Vec<StateMachineBindableIntegerInstance>,
@@ -207,6 +208,7 @@ impl StateMachineInstance {
         }
         Self {
             state_machine_index,
+            requires_post_update_state_probe: state_machine.requires_post_update_state_probe(),
             inputs,
             bindable_numbers,
             bindable_integers,
@@ -265,6 +267,10 @@ impl StateMachineInstance {
 
     pub fn state_machine_index(&self) -> usize {
         self.state_machine_index
+    }
+
+    pub(crate) fn requires_post_update_state_probe(&self) -> bool {
+        self.requires_post_update_state_probe
     }
 
     pub fn changed_state_count(&self) -> usize {

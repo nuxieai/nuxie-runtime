@@ -2543,7 +2543,7 @@ impl ArtboardInstance {
                 RuntimeDrawCommandKind::Draw
             }
         };
-        RuntimeDrawCommand {
+        let mut command = RuntimeDrawCommand {
             kind,
             object_kind: RuntimeDrawCommandObjectKind::from_type_name(drawable.type_name),
             local_id,
@@ -2569,7 +2569,10 @@ impl ArtboardInstance {
                 layout_bounds,
                 path_cache,
             ),
-        }
+            simple_solid_shape: false,
+        };
+        command.simple_solid_shape = runtime_command_is_simple_solid_shape(&command);
+        command
     }
 
     fn runtime_retained_draw_world_transform(
@@ -5106,6 +5109,7 @@ pub struct RuntimeDrawCommand {
     pub clipping_shape_local: Option<usize>,
     pub needs_save_operation: bool,
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
+    simple_solid_shape: bool,
 }
 
 #[doc(hidden)]
@@ -10596,36 +10600,16 @@ fn runtime_try_draw_simple_solid_shape(
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
 ) -> Result<bool> {
+    if !command.simple_solid_shape {
+        return Ok(false);
+    }
     let [paint] = command.shape_paints.as_slice() else {
         return Ok(false);
     };
     let (Some(local_id), Some(shape_world)) = (command.local_id, command.world_transform) else {
         return Ok(false);
     };
-    if command.object_kind != RuntimeDrawCommandObjectKind::Other
-        || command.type_name != "Shape"
-        || command.clipping_shape_local.is_some()
-        || !command.needs_save_operation
-        || paint.paint_type != RuntimeShapePaintKind::Fill
-        || paint.path_kind != RuntimeShapePaintPathKind::Local
-        || !matches!(
-            paint.paint_state,
-            Some(RuntimeShapePaintState::SolidColor { .. })
-        )
-        || paint.feather_state.is_some()
-        || paint.paint_space_transform.is_some()
-        || paint.has_effect_path
-        || !paint.effect_path_commands.is_empty()
-        || !paint.needs_save_operation
-        || paint.shape_world_override.is_some()
-        || paint.aliases_local_clockwise_path
-        || paint.uses_temporary_paint
-        || paint.text_path_bucket_slot.is_some()
-        || paint.text_paint_pool.is_some()
-        || paint.ensure_text_paint_pool_after_draw.is_some()
-    {
-        return Ok(false);
-    }
+    debug_assert!(runtime_command_is_simple_solid_shape(command));
 
     let global_id = paint.paint_global_id;
     let paint_configuration_is_current =
@@ -10681,6 +10665,35 @@ fn runtime_try_draw_simple_solid_shape(
     renderer.draw_path(path.as_ref(), render_paint);
     renderer.restore();
     Ok(true)
+}
+
+fn runtime_command_is_simple_solid_shape(command: &RuntimeDrawCommand) -> bool {
+    let [paint] = command.shape_paints.as_slice() else {
+        return false;
+    };
+    command.local_id.is_some()
+        && command.world_transform.is_some()
+        && command.object_kind == RuntimeDrawCommandObjectKind::Other
+        && command.type_name == "Shape"
+        && command.clipping_shape_local.is_none()
+        && command.needs_save_operation
+        && paint.paint_type == RuntimeShapePaintKind::Fill
+        && paint.path_kind == RuntimeShapePaintPathKind::Local
+        && matches!(
+            paint.paint_state,
+            Some(RuntimeShapePaintState::SolidColor { .. })
+        )
+        && paint.feather_state.is_none()
+        && paint.paint_space_transform.is_none()
+        && !paint.has_effect_path
+        && paint.effect_path_commands.is_empty()
+        && paint.needs_save_operation
+        && paint.shape_world_override.is_none()
+        && !paint.aliases_local_clockwise_path
+        && !paint.uses_temporary_paint
+        && paint.text_path_bucket_slot.is_none()
+        && paint.text_paint_pool.is_none()
+        && paint.ensure_text_paint_pool_after_draw.is_none()
 }
 
 fn runtime_draw_scripted_drawable(
@@ -21905,6 +21918,7 @@ mod tests {
             clipping_shape_local: None,
             needs_save_operation: true,
             shape_paints: Vec::new(),
+            simple_solid_shape: false,
         };
         let stats = Rc::new(CountingStats::default());
         let mut factory = CountingFactory {
@@ -21967,6 +21981,7 @@ mod tests {
             clipping_shape_local: None,
             needs_save_operation: true,
             shape_paints: Vec::new(),
+            simple_solid_shape: false,
         };
         let mut factory = CountingFactory {
             stats: Rc::new(CountingStats::default()),

@@ -469,10 +469,11 @@ impl ScriptVm {
             self.install_rive_globals().map_err(script_error)?;
             let chunkname = Self::readable_chunkname(name, scope);
             self.set_chunkname_scope(&chunkname, scope);
-            let generator = self
+            let chunk = self
                 .load_script_asset_payload(&chunkname, payload)
-                .map_err(script_error)?
-                .call(())
+                .map_err(script_error)?;
+            let generator = self
+                .execute_loaded_module(&chunkname, chunk)
                 .map_err(script_error)?;
             Ok(ScriptProgram { generator })
         })
@@ -653,12 +654,36 @@ impl ScriptVm {
 
     /// Load and *execute* a script/module payload, returning what the chunk
     /// returns (protocol scripts return their generator function; utility
-    /// modules return a table) — the spike-sized twin of C++
-    /// `ScriptingVM::registerScript` / `registerModule`
-    /// (`src/lua/rive_lua_libs.cpp`), minus the per-module sandboxed thread
-    /// and require-cache bookkeeping.
+    /// modules return a table) — the twin of C++ `ScriptingVM::loadModule` /
+    /// `executeModule`. Every chunk executes with its own writable global proxy,
+    /// so one ScriptAsset cannot overwrite another ScriptAsset's globals.
     pub fn run_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
-        self.load_bytecode(chunk_name, bytecode)?.call(())
+        let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        self.execute_loaded_module(chunk_name, chunk)
+    }
+
+    /// Execute a loaded script/module with the same environment isolation as
+    /// C++ `loadModule`: the chunk gets a fresh writable globals proxy whose
+    /// reads fall through to the VM's sandboxed Rive globals. C++ installs this
+    /// table on a temporary coroutine; setting the loaded closure environment
+    /// directly preserves the same retained-closure behavior without relying
+    /// on a coroutine after registration returns.
+    fn execute_loaded_module<R: FromLuaMulti>(
+        &self,
+        display_name: &str,
+        chunk: Function,
+    ) -> Result<R> {
+        let environment = self.lua.create_table();
+        let metatable = self.lua.create_table();
+        metatable.set("__index", self.lua.globals())?;
+        metatable.set_readonly(true);
+        environment.set_metatable(Some(metatable))?;
+        if !chunk.set_environment(environment)? {
+            return Err(Error::runtime(format!(
+                "module '{display_name}' could not install its sandbox environment"
+            )));
+        }
+        chunk.call(())
     }
 
     /// Load a raw `ScriptAsset` payload as it appears in a `.riv` file:
@@ -846,11 +871,11 @@ impl ScriptVm {
         {
             return Ok(value);
         }
-        let result: Value = function.call(())?;
+        let display = Self::readable_chunkname(name, scope);
+        let result: Value = self.execute_loaded_module(&display, function)?;
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
-                let display = Self::readable_chunkname(name, scope);
                 return Err(Error::runtime(format!(
                     "module '{display}' must return a table or function, got {other:?}"
                 )));
@@ -1278,10 +1303,11 @@ impl RuntimeScriptingVm for ScriptVm {
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(script_error)?;
-        let generator: Function = self
+        let chunk = self
             .load_script_asset_payload(name, payload)
-            .map_err(script_error)?
-            .call(())
+            .map_err(script_error)?;
+        let generator: Function = self
+            .execute_loaded_module(name, chunk)
             .map_err(script_error)?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
         let context_missing_requested_data = Rc::new(Cell::new(false));
@@ -1600,6 +1626,83 @@ mod context_init_tests {
 
         assert!(!ok);
         assert_eq!(message, "runtime error: expected host error");
+    }
+
+    #[test]
+    fn registered_protocol_chunks_keep_their_writable_globals_isolated() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().expect("Rive globals");
+        let first_chunk = vm
+            .load(
+                "first",
+                r#"
+                CollisionValue = "first"
+                return function()
+                    return { value = CollisionValue }
+                end
+                "#,
+            )
+            .expect("first chunk");
+        let second_chunk = vm
+            .load(
+                "second",
+                r#"
+                CollisionValue = "second"
+                return function()
+                    return { value = CollisionValue }
+                end
+                "#,
+            )
+            .expect("second chunk");
+
+        let first: Function = vm
+            .execute_loaded_module("first", first_chunk)
+            .expect("register first protocol");
+        let second: Function = vm
+            .execute_loaded_module("second", second_chunk)
+            .expect("register second protocol");
+        let first_instance: Table = first.call(()).expect("instantiate first protocol");
+        let second_instance: Table = second.call(()).expect("instantiate second protocol");
+
+        assert_eq!(first_instance.get::<String>("value").unwrap(), "first");
+        assert_eq!(second_instance.get::<String>("value").unwrap(), "second");
+        assert!(matches!(vm.global("CollisionValue").unwrap(), Value::Nil));
+    }
+
+    #[test]
+    fn registered_utility_modules_keep_their_writable_globals_isolated() {
+        let vm = ScriptVm::new();
+        let first = vm
+            .register_source_module_scoped(
+                "first",
+                ScopeKey::ROOT,
+                r#"
+                CollisionValue = "first"
+                return { read = function() return CollisionValue end }
+                "#,
+            )
+            .expect("register first module");
+        let second = vm
+            .register_source_module_scoped(
+                "second",
+                ScopeKey::ROOT,
+                r#"
+                CollisionValue = "second"
+                return { read = function() return CollisionValue end }
+                "#,
+            )
+            .expect("register second module");
+        let Value::Table(first) = first else {
+            panic!("first module did not return a table");
+        };
+        let Value::Table(second) = second else {
+            panic!("second module did not return a table");
+        };
+        let first_read: Function = first.get("read").unwrap();
+        let second_read: Function = second.get("read").unwrap();
+
+        assert_eq!(first_read.call::<String>(()).unwrap(), "first");
+        assert_eq!(second_read.call::<String>(()).unwrap(), "second");
     }
 
     #[test]

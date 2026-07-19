@@ -2717,7 +2717,7 @@ fn instantiate_runtime_mount_with_carry(
         .view_model_default
         .as_ref()
         .map(|default| {
-            let mut value = runtime
+            let value = runtime
                 .instantiate_view_model_instance(default.instance_index)
                 .ok_or(())?;
             let mut slots = Vec::with_capacity(default.numbers.len());
@@ -2752,7 +2752,7 @@ fn instantiate_runtime_mount_with_carry(
 
             let _ = runtime.bind_view_model(&value);
             for machine in &mut machines.values {
-                let _ = machine.bind_owned_view_model_context(value.raw());
+                let _ = machine.bind_owned_view_model_handle(value.handle());
             }
             Ok(RetainedViewModelInstance {
                 authored_instance: default.authored_instance,
@@ -2812,7 +2812,7 @@ fn flush_view_model(live: &mut LiveInstance) -> bool {
     }
     let mut changed = live.runtime.bind_view_model(&view_model.value);
     for machine in &mut live.machines.values {
-        changed |= machine.bind_owned_view_model_context(view_model.value.raw());
+        changed |= machine.bind_owned_view_model_handle(view_model.value.handle());
     }
     view_model.dirty = false;
     changed
@@ -13079,6 +13079,11 @@ mod tests {
         assert_eq!(machine.reported_event_count(), 0);
         assert!(machine.fire_trigger(trigger));
         assert!(instance.advance_with_state_machine(&mut machine, 0.0));
+        assert_eq!(
+            machine.changed_state_count(),
+            1,
+            "the main transition count must survive the outer settlement tail"
+        );
         assert_eq!(
             instance.raw().double_property(1, PROPERTY_WORLD_OPACITY),
             Some(0.8)

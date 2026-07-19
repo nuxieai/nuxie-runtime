@@ -2459,7 +2459,7 @@ impl StateMachineLayerInstance {
         }
     }
 
-    fn update_state(
+    pub(crate) fn update_state(
         &mut self,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,

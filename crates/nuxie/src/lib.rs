@@ -3,6 +3,7 @@
 //! This crate keeps the user-facing surface narrow while the lower-level
 //! crates continue to carry the import, graph, runtime, and renderer details.
 
+use std::cell::{Ref, RefMut};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -17,7 +18,7 @@ use nuxie_binary::read_runtime_file as read_runtime_file_for_facade;
 use nuxie_binary::read_runtime_file_with_scripting as read_runtime_file_for_facade;
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
 };
 
@@ -1194,7 +1195,9 @@ impl<'a> ArtboardInstance<'a> {
     pub fn instantiate_view_model(&self) -> Option<ViewModelInstance> {
         let view_model_index = self.view_model_index()?;
         let raw = RuntimeOwnedViewModelInstance::new(&self.file.runtime, view_model_index)?;
-        Some(ViewModelInstance { raw })
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
     }
 
     /// Instantiate this artboard's view model from the source instance at
@@ -1210,19 +1213,21 @@ impl<'a> ArtboardInstance<'a> {
             view_model_index,
             instance_index,
         )?;
-        Some(ViewModelInstance { raw })
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
     }
 
     /// Bind `view_model` to this artboard's own data binds and its nested
     /// artboard contexts, mirroring `artboard->bindViewModelInstance(...)` in
     /// the C++ runtime.
     ///
-    /// The context is copied into the data-bind graph, so this must be called
-    /// again after mutating `view_model` for the change to reach the next
-    /// [`ArtboardInstance::advance`]. Returns whether the binding changed
-    /// anything. State-machine-driven binds must additionally be bound through
-    /// [`StateMachineInstance::bind_owned_view_model_context`] using
-    /// [`ViewModelInstance::raw`].
+    /// The exact mutable view-model graph is retained by the artboard, so later
+    /// mutations are visible on the next [`ArtboardInstance::advance`] without
+    /// rebinding. State-machine instances created afterward inherit the same
+    /// handle; an already-created machine must be bound explicitly through
+    /// [`StateMachineInstance::bind_owned_view_model_handle`]. Returns whether
+    /// the binding changed anything.
     ///
     pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
         let mut changed = self
@@ -1230,7 +1235,7 @@ impl<'a> ArtboardInstance<'a> {
             .bind_default_view_model_artboard_list_context(&self.file.runtime);
         changed |= self
             .raw
-            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
         changed
     }
 
@@ -1274,7 +1279,9 @@ impl<'a> ArtboardInstance<'a> {
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+        changed |= self
+            .raw
+            .settle_state_machine_update_passes_after_main_advance(state_machines);
         changed
     }
 
@@ -1330,7 +1337,9 @@ impl<'a> ArtboardInstance<'a> {
         }
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
-        changed |= self.raw.update_pass();
+        changed |= self
+            .raw
+            .settle_state_machine_update_passes_after_main_advance(state_machines);
         Ok(changed)
     }
 
@@ -1666,7 +1675,9 @@ impl OwnedArtboardInstance {
     pub fn instantiate_view_model(&self) -> Option<ViewModelInstance> {
         let view_model_index = self.view_model_index()?;
         let raw = RuntimeOwnedViewModelInstance::new(&self.file.runtime, view_model_index)?;
-        Some(ViewModelInstance { raw })
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
     }
 
     /// See [`ArtboardInstance::instantiate_view_model_instance`].
@@ -1680,7 +1691,9 @@ impl OwnedArtboardInstance {
             view_model_index,
             instance_index,
         )?;
-        Some(ViewModelInstance { raw })
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
     }
 
     /// See [`ArtboardInstance::bind_view_model`].
@@ -1690,7 +1703,7 @@ impl OwnedArtboardInstance {
             .bind_default_view_model_artboard_list_context(&self.file.runtime);
         changed |= self
             .raw
-            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
         changed
     }
 
@@ -1724,7 +1737,9 @@ impl OwnedArtboardInstance {
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+        changed |= self
+            .raw
+            .settle_state_machine_update_passes_after_main_advance(state_machines);
         changed
     }
 
@@ -1780,7 +1795,9 @@ impl OwnedArtboardInstance {
         }
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
-        changed |= self.raw.update_pass();
+        changed |= self
+            .raw
+            .settle_state_machine_update_passes_after_main_advance(state_machines);
         Ok(changed)
     }
 
@@ -1862,9 +1879,10 @@ impl OwnedArtboardInstance {
 ///
 /// Instantiate one from an [`ArtboardInstance`], set properties by name path,
 /// bind it with [`ArtboardInstance::bind_view_model`], then advance and draw.
-/// The context owns its own copy of the view model's values, so it does not
-/// borrow the originating [`File`] and can outlive nothing in particular; it is
-/// only meaningful when bound back to the artboard it came from.
+/// The context owns a shared handle to the view model's values. Clones retain
+/// the same mutable graph, and bindings observe later mutations on their next
+/// advance. It does not borrow the originating [`File`] and is only meaningful
+/// when bound back to the artboard it came from.
 ///
 /// Property paths address nested view models with `/` separators (for example
 /// `"child/width"`); a single segment addresses a property on the root view
@@ -1872,37 +1890,46 @@ impl OwnedArtboardInstance {
 /// and its value changed.
 #[derive(Debug, Clone)]
 pub struct ViewModelInstance {
-    raw: RuntimeOwnedViewModelInstance,
+    raw: RuntimeOwnedViewModelHandle,
 }
 
 impl ViewModelInstance {
-    /// Low-level owned context for advanced integrations (for example binding
-    /// through [`StateMachineInstance::bind_owned_view_model_context`]).
-    pub fn raw(&self) -> &RuntimeOwnedViewModelInstance {
-        &self.raw
+    /// Low-level immutable access to the owned context.
+    pub fn raw(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
+        self.raw.borrow()
     }
 
     /// Low-level mutable owned context for advanced integrations.
-    pub fn raw_mut(&mut self) -> &mut RuntimeOwnedViewModelInstance {
-        &mut self.raw
+    pub fn raw_mut(&self) -> RefMut<'_, RuntimeOwnedViewModelInstance> {
+        self.raw.borrow_mut()
+    }
+
+    /// Shared low-level handle for binding this exact mutable graph.
+    pub fn handle(&self) -> &RuntimeOwnedViewModelHandle {
+        &self.raw
     }
 
     /// Set a number property by name path. Returns whether the property existed
     /// and changed.
     pub fn set_number(&mut self, name_path: &str, value: f32) -> bool {
-        self.raw.set_number_by_property_name_path(name_path, value)
+        self.raw
+            .borrow_mut()
+            .set_number_by_property_name_path(name_path, value)
     }
 
     /// Set a boolean property by name path. Returns whether the property existed
     /// and changed.
     pub fn set_bool(&mut self, name_path: &str, value: bool) -> bool {
-        self.raw.set_boolean_by_property_name_path(name_path, value)
+        self.raw
+            .borrow_mut()
+            .set_boolean_by_property_name_path(name_path, value)
     }
 
     /// Set a string property by name path. The value is stored as its UTF-8
     /// bytes. Returns whether the property existed and changed.
     pub fn set_string(&mut self, name_path: &str, value: &str) -> bool {
         self.raw
+            .borrow_mut()
             .set_string_by_property_name_path(name_path, value.as_bytes())
     }
 
@@ -1910,7 +1937,9 @@ impl ViewModelInstance {
     /// whether the property existed and changed. (Enum-by-value-name is not
     /// exposed here because the owned context resolves enums by index.)
     pub fn set_enum(&mut self, name_path: &str, value: u64) -> bool {
-        self.raw.set_enum_by_property_name_path(name_path, value)
+        self.raw
+            .borrow_mut()
+            .set_enum_by_property_name_path(name_path, value)
     }
 }
 

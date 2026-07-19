@@ -20,7 +20,7 @@ use nuxie_runtime::{
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::ScriptVm;
+use nuxie_scripting::vm::{ScopeKey, ScriptVm};
 #[cfg(feature = "scripting")]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -1478,6 +1478,8 @@ fn select_artboard<'a>(
 #[derive(Clone)]
 struct ExtractedScriptAsset {
     name: String,
+    scope: ScopeKey,
+    is_module: bool,
     payload: Vec<u8>,
 }
 
@@ -1929,8 +1931,7 @@ fn initialize_scripted_drawables_for_artboard(
     parent_context_models: Vec<ScriptViewModel>,
     script_context_is_bound: bool,
 ) -> Result<()> {
-    let mut vm = ScriptVm::new();
-    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+    let mut vm = prepare_script_vm(runtime, script_assets, factory)?;
     let bound_context_model = context_model.clone();
     vm.set_default_context_view_model_chain(context_model, parent_context_models);
     let mut host = NoopScriptHost;
@@ -1962,8 +1963,7 @@ fn initialize_scripted_drawables_for_artboard(
                 local_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = vm
-            .instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
+        let mut script_instance = instantiate_extracted_script(&vm, script, &mut host, factory)
             .with_context(|| {
                 format!(
                     "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
@@ -2076,8 +2076,7 @@ fn initialize_scripted_data_converters(
                 converter.id, script_asset_id
             )
         })?;
-        let mut script_instance = vm
-            .instantiate_script_with_factory(&script.name, &script.payload, host, factory)
+        let mut script_instance = instantiate_extracted_script(vm, script, host, factory)
             .with_context(|| {
                 format!(
                     "failed to instantiate ScriptAsset '{}' for ScriptedDataConverter global {}",
@@ -2177,8 +2176,7 @@ fn initialize_state_machine_scripted_objects(
     }
 
     let script_assets = extract_script_assets(runtime);
-    let mut vm = ScriptVm::new();
-    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+    let mut vm = prepare_script_vm(runtime, &script_assets, factory)?;
     let context_model = owned_context
         .and_then(RuntimeOwnedViewModelContext::main)
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
@@ -2201,8 +2199,7 @@ fn initialize_state_machine_scripted_objects(
                 scripted_object.type_name, scripted_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = vm
-            .instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
+        let mut script_instance = instantiate_extracted_script(&vm, script, &mut host, factory)
             .with_context(|| {
                 format!(
                     "failed to instantiate ScriptAsset '{}' for {} global {}",
@@ -2280,61 +2277,124 @@ fn scripted_object_has_view_model_input(
 
 #[cfg(feature = "scripting")]
 fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScriptAsset> {
-    let mut scripts = BTreeMap::new();
-    let script_asset_indices_by_global = runtime
-        .file_assets()
+    runtime
+        .scripting_file_assets_with_contents()
         .into_iter()
-        .enumerate()
-        .filter_map(|(index, object)| {
-            (object.type_name == "ScriptAsset").then_some((object.id, index as u64))
+        .filter(|entry| entry.asset.type_name == "ScriptAsset")
+        .filter_map(|entry| {
+            let payload = entry.contents?;
+            let name = entry.asset.string_property("name").unwrap_or("unnamed");
+            let folder = entry
+                .asset
+                .string_property("folderPath")
+                .unwrap_or_default();
+            Some((
+                entry.ordinal as u64,
+                ExtractedScriptAsset {
+                    name: if folder.is_empty() {
+                        name.to_owned()
+                    } else {
+                        format!("{folder}/{name}")
+                    },
+                    scope: ScopeKey::new(
+                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                        entry
+                            .asset
+                            .uint_property("scopeLibraryVersionId")
+                            .unwrap_or(0),
+                    ),
+                    is_module: entry.asset.bool_property("isModule").unwrap_or(false),
+                    payload: payload.to_vec(),
+                },
+            ))
         })
-        .collect::<BTreeMap<_, _>>();
-    let file_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .map(|object| object.id)
-        .collect::<BTreeSet<_>>();
-    let mut latest_script: Option<(u64, String)> = None;
+        .collect()
+}
 
-    for id in 0..runtime.object_count() {
-        let Some(object) = runtime.object(id) else {
-            continue;
-        };
-        match object.type_name {
-            "ScriptAsset" => {
-                latest_script = Some((
-                    script_asset_indices_by_global
-                        .get(&object.id)
-                        .copied()
-                        .or_else(|| object.uint_property("assetId"))
-                        .unwrap_or(0),
-                    object
-                        .string_property("name")
-                        .unwrap_or("unnamed")
-                        .to_owned(),
-                ));
-            }
-            "FileAssetContents" => {
-                if let Some((asset_id, name)) = latest_script.take()
-                    && let Some(payload) = object.bytes_property("bytes")
-                {
-                    scripts.insert(
-                        asset_id,
-                        ExtractedScriptAsset {
-                            name,
-                            payload: payload.to_vec(),
-                        },
-                    );
-                }
-            }
-            _ if file_asset_globals.contains(&object.id) => {
-                latest_script = None;
-            }
-            _ => {}
-        }
+#[cfg(feature = "scripting")]
+fn prepare_script_vm(
+    runtime: &RuntimeFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    factory: &mut dyn RenderFactory,
+) -> Result<ScriptVm> {
+    let mut vm = ScriptVm::new();
+    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+
+    // LibraryAsset records are serialized, caller-relative dependency pins.
+    // Seed every edge before module top-level code runs so eager and lazy
+    // requires both resolve in the same scope as the C++ scripting context.
+    for entry in runtime
+        .scripting_file_assets_with_contents()
+        .into_iter()
+        .filter(|entry| entry.asset.type_name == "LibraryAsset")
+    {
+        vm.add_import(
+            ScopeKey::new(
+                entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                entry
+                    .asset
+                    .uint_property("scopeLibraryVersionId")
+                    .unwrap_or(0),
+            ),
+            entry.asset.string_property("name").unwrap_or_default(),
+            ScopeKey::new(
+                entry.asset.uint_property("libraryId").unwrap_or(0),
+                entry.asset.uint_property("libraryVersionId").unwrap_or(0),
+            ),
+        );
     }
 
-    scripts
+    // C++ retries module registration until the dependency graph converges.
+    // Preserve the original FileAsset ordering within each pass.
+    let mut pending = script_assets
+        .values()
+        .filter(|asset| asset.is_module)
+        .collect::<Vec<_>>();
+    loop {
+        let before = pending.len();
+        let mut failures = Vec::new();
+        for asset in pending {
+            if let Err(error) = vm.register_module_with_factory_scoped(
+                &asset.name,
+                asset.scope,
+                &asset.payload,
+                factory,
+            ) {
+                failures.push((asset, error));
+            }
+        }
+        if failures.is_empty() {
+            break;
+        }
+        if failures.len() == before {
+            let (asset, error) = failures.remove(0);
+            return Err(anyhow!(
+                "failed to register scoped ScriptAsset module '{}' ({}-{}): {error}",
+                asset.name,
+                asset.scope.library_id,
+                asset.scope.library_version_id,
+            ));
+        }
+        pending = failures.into_iter().map(|(asset, _)| asset).collect();
+    }
+
+    Ok(vm)
+}
+
+#[cfg(feature = "scripting")]
+fn instantiate_extracted_script(
+    vm: &ScriptVm,
+    script: &ExtractedScriptAsset,
+    host: &mut dyn nuxie_runtime::ScriptHost,
+    factory: &mut dyn RenderFactory,
+) -> std::result::Result<Box<dyn nuxie_runtime::ScriptInstance>, ScriptError> {
+    let program = vm.register_protocol_script_with_factory_scoped(
+        &script.name,
+        script.scope,
+        &script.payload,
+        factory,
+    )?;
+    vm.instantiate_registered_script_with_factory(&program, host, factory)
 }
 
 #[cfg(feature = "scripting")]

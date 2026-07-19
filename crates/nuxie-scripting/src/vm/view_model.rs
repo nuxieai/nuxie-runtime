@@ -404,6 +404,16 @@ fn create_scripted_view_model_with_parent(
             }
         })?,
     )?;
+    let get_index_model = model.clone();
+    table.set(
+        "getIndex",
+        lua.create_function(move |_, _self: Table| {
+            Ok(get_index_model
+                .component_list_item_index()
+                .and_then(|index| i64::try_from(index).ok())
+                .unwrap_or(-1))
+        })?,
+    )?;
     let instance_model = model.clone();
     table.set(
         "instance",
@@ -1081,5 +1091,31 @@ mod tests {
         assert!(model.fire_trigger(&trigger));
         assert!(!context.advance_detached());
         assert_eq!(model.trigger(&trigger), Some(1));
+    }
+
+    #[test]
+    fn scripted_view_model_exposes_the_component_list_index() {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/list_index_script_access.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+        let model = nuxie_runtime::script_view_models(&file)
+            .into_values()
+            .find(|model| model.component_list_item_index().is_some())
+            .expect("fixture has an item-index model");
+        let expected = model.component_list_item_index().unwrap() as i64;
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+
+        let actual: i64 = lua
+            .load("return model:getIndex()")
+            .eval()
+            .expect("getIndex runs");
+
+        assert_eq!(actual, expected);
     }
 }

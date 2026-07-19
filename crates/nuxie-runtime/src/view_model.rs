@@ -6135,6 +6135,16 @@ impl RuntimeOwnedViewModelInstance {
         self.set_symbol_list_index_by_property_index(property_index, value)
     }
 
+    /// Current value of the synthetic component-list `itemIndex` symbol.
+    ///
+    /// C++ symbol registration is last-writer-wins; construction keeps that
+    /// winning symbol as the final entry in `symbol_list_indices`.
+    pub fn component_list_item_index(&self) -> Option<u64> {
+        self.symbol_list_indices
+            .last()
+            .map(|symbol_list_index| symbol_list_index.value)
+    }
+
     pub fn symbol_list_index_source_handle_by_property_name(
         &self,
         property_name: &str,

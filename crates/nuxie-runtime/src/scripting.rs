@@ -363,6 +363,11 @@ impl ScriptViewModel {
         self.instance.borrow().boolean_value_by_property_name(name)
     }
 
+    /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
+    pub fn component_list_item_index(&self) -> Option<u64> {
+        self.instance.borrow().component_list_item_index()
+    }
+
     pub fn set_boolean(&self, name: &str, value: bool) -> bool {
         self.instance
             .borrow_mut()

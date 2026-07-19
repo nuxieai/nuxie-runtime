@@ -5235,11 +5235,23 @@ impl ArtboardInstance {
         changed
     }
 
+    #[inline]
     pub(crate) fn advance_artboard_data_binds_with_root_transform(
         &mut self,
         root_transform: Mat2D,
         elapsed_seconds: f32,
     ) -> bool {
+        // Match C++'s cheap clean `DataBindContainer::updateDataBinds` return
+        // before entering the active reconciliation routine. An owned-context
+        // refresh can itself dirty this epoch, so only bypass that refresh when
+        // no candidate exists and always re-read the epoch afterwards.
+        let clean_identity_pass = elapsed_seconds == 0.0
+            && root_transform == Mat2D::IDENTITY
+            && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            && self.artboard_list_bindings.is_empty();
+        if clean_identity_pass && self.artboard_owned_view_model_candidates.is_empty() {
+            return false;
+        }
         let refreshed_owned_context = self.refresh_owned_view_model_artboard_context_if_mutated();
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
@@ -5248,6 +5260,20 @@ impl ArtboardInstance {
         {
             return refreshed_owned_context;
         }
+        self.advance_active_artboard_data_binds_with_root_transform(
+            root_transform,
+            elapsed_seconds,
+            refreshed_owned_context,
+        )
+    }
+
+    #[inline(never)]
+    fn advance_active_artboard_data_binds_with_root_transform(
+        &mut self,
+        root_transform: Mat2D,
+        elapsed_seconds: f32,
+        refreshed_owned_context: bool,
+    ) -> bool {
         let dirty_epoch_at_start = self.artboard_data_bind_dirty_epoch;
         let mut changed = refreshed_owned_context;
         // C++ DataBindContainer::updateDataBind updates converter dependents

@@ -14181,6 +14181,37 @@ mod tests {
     }
 
     #[test]
+    fn batched_raw_path_rebuild_detaches_snapshots_and_invalidates_geometry_keys() {
+        let mut path = WgpuPath {
+            valid: true,
+            raw_path: Arc::new(RawPath::new()),
+            fill_rule: FillRule::NonZero,
+        };
+        path.move_to(1.0, 2.0);
+        path.line_to(3.0, 4.0);
+
+        let snapshot = path.clone();
+        let snapshot_key = PathTransformKey::new(&snapshot, Mat2D::IDENTITY);
+        path.raw_path_mut().rebuild(3, 3, |raw_path| {
+            raw_path.move_to(10.0, 20.0);
+            raw_path.line_to(30.0, 40.0);
+            raw_path.close();
+        });
+
+        assert!(!Arc::ptr_eq(&path.raw_path, &snapshot.raw_path));
+        assert_eq!(
+            PathTransformKey::new(&snapshot, Mat2D::IDENTITY),
+            snapshot_key
+        );
+        assert_ne!(PathTransformKey::new(&path, Mat2D::IDENTITY), snapshot_key);
+        assert_eq!(snapshot.raw_path.points().len(), 2);
+        assert_eq!(
+            path.raw_path.points(),
+            &[Vec2D::new(10.0, 20.0), Vec2D::new(30.0, 40.0)]
+        );
+    }
+
+    #[test]
     fn culls_path_draws_outside_the_cpp_frame_bounds() {
         let mut path = WgpuPath {
             valid: true,

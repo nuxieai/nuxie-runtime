@@ -105,6 +105,53 @@ pub struct RawPath {
     mutation_id: u64,
 }
 
+/// Exclusive builder for replacing a [`RawPath`] as one logical mutation.
+///
+/// The builder only exposes geometry mutators, so a partially rebuilt path
+/// cannot be observed or cloned while its mutation identity remains stable.
+pub struct RawPathBuilder<'a> {
+    raw_path: &'a mut RawPath,
+}
+
+impl RawPathBuilder<'_> {
+    #[inline]
+    pub fn move_to(&mut self, x: f32, y: f32) {
+        self.raw_path.verbs.push(PathVerb::Move);
+        self.raw_path.points.push(Vec2D::new(x, y));
+    }
+
+    #[inline]
+    pub fn line_to(&mut self, x: f32, y: f32) {
+        self.raw_path.inject_implicit_move_if_needed();
+        self.raw_path.verbs.push(PathVerb::Line);
+        self.raw_path.points.push(Vec2D::new(x, y));
+    }
+
+    #[inline]
+    pub fn quad_to(&mut self, ox: f32, oy: f32, x: f32, y: f32) {
+        self.raw_path.inject_implicit_move_if_needed();
+        self.raw_path.verbs.push(PathVerb::Quad);
+        self.raw_path.points.push(Vec2D::new(ox, oy));
+        self.raw_path.points.push(Vec2D::new(x, y));
+    }
+
+    #[inline]
+    pub fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
+        self.raw_path.inject_implicit_move_if_needed();
+        self.raw_path.verbs.push(PathVerb::Cubic);
+        self.raw_path.points.push(Vec2D::new(ox, oy));
+        self.raw_path.points.push(Vec2D::new(ix, iy));
+        self.raw_path.points.push(Vec2D::new(x, y));
+    }
+
+    #[inline]
+    pub fn close(&mut self) {
+        if !self.raw_path.verbs.is_empty() && self.raw_path.verbs.last() != Some(&PathVerb::Close) {
+            self.raw_path.verbs.push(PathVerb::Close);
+        }
+    }
+}
+
 impl PartialEq for RawPath {
     fn eq(&self, other: &Self) -> bool {
         self.verbs == other.verbs && self.points == other.points
@@ -120,7 +167,7 @@ impl RawPath {
         }
     }
 
-    /// Identifies the current geometry snapshot, matching C++ RawPath mutation IDs.
+    /// Identifies the current geometry snapshot, matching C++ `RiveRenderPath` mutation IDs.
     pub fn mutation_id(&self) -> u64 {
         self.mutation_id
     }
@@ -136,6 +183,29 @@ impl RawPath {
 
     pub fn points(&self) -> &[Vec2D] {
         &self.points
+    }
+
+    /// Replaces this path's geometry as one logical mutation.
+    ///
+    /// C++ `RawPath` does not assign mutation identities while commands are
+    /// appended. Its owning `RiveRenderPath` is merely marked dirty and lazily
+    /// receives one new identity when a renderer next consumes it. This scoped
+    /// builder provides the equivalent contract: it renews the snapshot
+    /// identity once, preserves the path allocations, and prevents observers
+    /// from seeing the individual command appends.
+    #[inline]
+    pub fn rebuild(
+        &mut self,
+        verbs: usize,
+        points: usize,
+        build: impl FnOnce(&mut RawPathBuilder<'_>),
+    ) {
+        self.mark_mutated();
+        self.verbs.clear();
+        self.points.clear();
+        self.verbs.reserve(verbs);
+        self.points.reserve(points);
+        build(&mut RawPathBuilder { raw_path: self });
     }
 
     pub fn rewind(&mut self) {
@@ -290,6 +360,7 @@ impl RawPath {
         self.points.truncate(destination_point);
     }
 
+    #[inline]
     fn inject_implicit_move_if_needed(&mut self) {
         if !self.verbs.is_empty() && self.verbs.last() != Some(&PathVerb::Close) {
             return;
@@ -2269,6 +2340,45 @@ mod tests {
         distinct_object.renew_mutation_id();
         assert_eq!(distinct_object, snapshot);
         assert_ne!(distinct_object.mutation_id(), snapshot.mutation_id());
+    }
+
+    #[test]
+    fn raw_path_rebuild_preserves_geometry_and_renews_snapshot_identity() {
+        fn build_fixture(path: &mut RawPathBuilder<'_>) {
+            path.line_to(1.0, 2.0);
+            path.cubic_to(3.0, 4.0, 5.0, 6.0, 7.0, 8.0);
+            path.close();
+            path.close();
+            path.line_to(9.0, 10.0);
+            path.quad_to(11.0, 12.0, 13.0, 14.0);
+        }
+
+        let mut expected = RawPath::new();
+        expected.line_to(1.0, 2.0);
+        expected.cubic_to(3.0, 4.0, 5.0, 6.0, 7.0, 8.0);
+        expected.close();
+        expected.close();
+        expected.line_to(9.0, 10.0);
+        expected.quad_to(11.0, 12.0, 13.0, 14.0);
+
+        let mut rebuilt = RawPath::new();
+        let empty_mutation_id = rebuilt.mutation_id();
+        rebuilt.rebuild(7, 9, build_fixture);
+
+        assert_eq!(rebuilt, expected);
+        assert_ne!(rebuilt.mutation_id(), empty_mutation_id);
+
+        let first_populated_mutation_id = rebuilt.mutation_id();
+        rebuilt.rebuild(7, 9, build_fixture);
+        assert_eq!(rebuilt, expected);
+        assert_ne!(rebuilt.mutation_id(), first_populated_mutation_id);
+
+        let populated_snapshot = rebuilt.clone();
+        rebuilt.rebuild(0, 0, |_| {});
+        assert!(rebuilt.verbs().is_empty());
+        assert!(rebuilt.points().is_empty());
+        assert_ne!(rebuilt.mutation_id(), populated_snapshot.mutation_id());
+        assert_eq!(populated_snapshot, expected);
     }
 
     fn assert_backwards_round_trip(path: &RawPath) {

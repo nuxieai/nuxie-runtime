@@ -10,9 +10,10 @@ use nuxie_graph::{
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
     FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
-    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
+    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RawPathBuilder, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
+    RenderShader, Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
+    Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -13715,10 +13716,10 @@ fn runtime_draw_path_command_replays() -> usize {
 }
 
 fn runtime_rebuild_raw_path_from_commands(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
-    raw_path.rewind();
     let (verbs, points) = runtime_path_command_counts(commands);
-    raw_path.reserve(verbs, points);
-    runtime_append_commands_to_raw_path(raw_path, commands);
+    raw_path.rebuild(verbs, points, |raw_path| {
+        runtime_append_commands_to_raw_path(raw_path, commands);
+    });
 }
 
 fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize) {
@@ -13733,7 +13734,10 @@ fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize
     (commands.len(), points)
 }
 
-fn runtime_append_commands_to_raw_path(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
+fn runtime_append_commands_to_raw_path(
+    raw_path: &mut RawPathBuilder<'_>,
+    commands: &[RuntimePathCommand],
+) {
     for command in commands {
         match *command {
             RuntimePathCommand::Move { x, y } => raw_path.move_to(x, y),

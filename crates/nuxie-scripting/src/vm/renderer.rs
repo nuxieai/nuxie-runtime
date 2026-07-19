@@ -1005,14 +1005,7 @@ impl ScriptedPaint {
             "thickness" => self.set_thickness(number_value(value, "thickness")?),
             "blendMode" => self.set_blend_mode(parse_blend_mode(value)?),
             "feather" => self.set_feather(number_value(value, "feather")?),
-            "gradient" => match value {
-                Value::Nil => self.set_gradient(None),
-                Value::UserData(gradient) => {
-                    let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
-                    self.set_gradient(Some(gradient));
-                }
-                _ => return Err(Error::runtime("expected Gradient userdata or nil")),
-            },
+            "gradient" => self.set_gradient_value(value)?,
             "color" => self.set_color(color_value(value)?),
             _ => {}
         }
@@ -1057,6 +1050,18 @@ impl ScriptedPaint {
     fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
         self.gradient = gradient;
         self.render_paint.shader(self.gradient.as_deref());
+    }
+
+    fn set_gradient_value(&mut self, value: Value) -> Result<()> {
+        match value {
+            Value::Nil => self.set_gradient(None),
+            Value::UserData(gradient) => {
+                let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
+                self.set_gradient(Some(gradient));
+            }
+            _ => return Err(Error::runtime("expected Gradient userdata or nil")),
+        }
+        Ok(())
     }
 }
 
@@ -1111,6 +1116,17 @@ impl UserData for ScriptedPaint {
         fields.add_field_method_set("color", |_, this, value: Value| {
             this.set_color(color_value(value)?);
             Ok(())
+        });
+        fields.add_field_method_get("gradient", |lua, this| {
+            Ok(match &this.gradient {
+                Some(gradient) => {
+                    Value::UserData(lua.create_userdata(ScriptedGradient(Rc::clone(gradient)))?)
+                }
+                None => Value::Nil,
+            })
+        });
+        fields.add_field_method_set("gradient", |_, this, value: Value| {
+            this.set_gradient_value(value)
         });
     }
 

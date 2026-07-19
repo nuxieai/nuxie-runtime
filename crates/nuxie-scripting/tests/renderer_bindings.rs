@@ -98,7 +98,11 @@ fn scripted_draw_can_allocate_and_apply_gradients() {
                        Vector(1, 2), Vector(3, 4),\n\
                        { { position = 0, color = 0xff000000 },\n\
                          { position = 1, color = 0xffffffff } })\n\
-                     renderer:drawPath(path, Paint.with({ gradient = gradient }))\n\
+                     local paint = Paint.with({ gradient = gradient })\n\
+                     local retained = paint.gradient\n\
+                     paint.gradient = nil\n\
+                     paint.gradient = retained\n\
+                     renderer:drawPath(path, paint)\n\
                    end,\n\
                  }\n\
                end",

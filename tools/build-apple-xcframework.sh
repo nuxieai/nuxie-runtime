@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "${script_dir}/.." && pwd)"
-output_root="${1:-${repo_root}/target/apple-runtime}"
+script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd -P "${script_dir}/.." && pwd -P)"
+if [[ $# -gt 0 ]]; then
+    requested_output_root="$1"
+else
+    requested_output_root="${repo_root}/target/apple-runtime"
+fi
+if [[ -z "${requested_output_root}" ]]; then
+    echo "refusing unsafe output path: empty path" >&2
+    exit 2
+fi
+mkdir -p "${requested_output_root}"
+output_root="$(cd -P "${requested_output_root}" && pwd -P)"
+case "${output_root}" in
+    /|"${repo_root}"|"")
+        echo "refusing unsafe output path: ${output_root}" >&2
+        exit 2
+        ;;
+esac
+
 profile="${NUX_APPLE_PROFILE:-release-apple}"
 deployment_target="${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}"
 rust_toolchain="${NUX_APPLE_RUST_TOOLCHAIN:-1.94.1}"
@@ -33,13 +50,6 @@ if [[ -n "${NUX_APPLE_XCODE_BUILD:-}" && "${xcode_build}" != "${NUX_APPLE_XCODE_
     exit 7
 fi
 
-case "${output_root}" in
-    /|"${repo_root}"|"")
-        echo "refusing unsafe output path: ${output_root}" >&2
-        exit 2
-        ;;
-esac
-
 if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     if [[ -z "${runtime_revision}" ]]; then
         runtime_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
@@ -61,6 +71,16 @@ if [[ ! "${runtime_revision}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
     exit 5
 fi
 
+# Keep Cargo's target directory as an incremental build cache, but recreate every
+# directory that is copied into the published artifact. Without this boundary,
+# headers and libraries from an older packaging layout can silently survive into
+# a later XCFramework.
+rm -rf \
+    "${headers_dir}" \
+    "${simulator_dir}" \
+    "${xcframework_path}" \
+    "${archive_path}" \
+    "${metadata_path}"
 mkdir -p "${output_root}" "${build_root}" "${headers_dir}" "${simulator_dir}"
 
 targets=(
@@ -104,7 +124,6 @@ cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers_dir}
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/module.modulemap" "${headers_dir}/"
 
-rm -rf "${xcframework_path}" "${archive_path}"
 xcodebuild -create-xcframework \
     -library "${device_library}" \
     -headers "${headers_dir}" \

@@ -88,10 +88,35 @@ for target_and_library in \
     grep -Fq '"luaurVersion":null' <<< "${provenance}"
 done
 
+expected_public_headers="$(printf '%s\n' \
+    module.modulemap \
+    nux_runtime.generated.h \
+    nux_runtime.h)"
+
+verify_public_header_allowlist() {
+    local headers="$1"
+    local actual_public_headers
+    test -d "${headers}"
+    actual_public_headers="$(
+        cd "${headers}"
+        find . -mindepth 1 -print | sed 's#^\./##' | LC_ALL=C sort
+    )"
+    if [[ "${actual_public_headers}" != "${expected_public_headers}" ]]; then
+        echo "unexpected public header contents in ${headers}" >&2
+        diff -u \
+            <(printf '%s\n' "${expected_public_headers}") \
+            <(printf '%s\n' "${actual_public_headers}") >&2 || true
+        return 1
+    fi
+}
+
 headers_dir="$(dirname "${device_library}")/Headers"
-test -f "${headers_dir}/nux_runtime.h"
-test -f "${headers_dir}/nux_runtime.generated.h"
-test -f "${headers_dir}/module.modulemap"
+simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
+verify_public_header_allowlist "${headers_dir}"
+verify_public_header_allowlist "${simulator_headers_dir}"
+for public_header in module.modulemap nux_runtime.generated.h nux_runtime.h; do
+    cmp "${headers_dir}/${public_header}" "${simulator_headers_dir}/${public_header}"
+done
 header_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")"
 header_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
 test "$(plutil -extract abiMajor raw "${metadata_path}")" = "${header_abi_major}"
@@ -143,7 +168,6 @@ link_swift_smoke() {
     test "${linked_minos}" = "${minimum_ios_version}"
 }
 
-simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
 link_swift_smoke \
     iphoneos "arm64-apple-ios${minimum_ios_version}" \
     "${headers_dir}" "${device_library}" device-arm64

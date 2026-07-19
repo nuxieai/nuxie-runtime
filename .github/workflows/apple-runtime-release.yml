@@ -1,0 +1,260 @@
+name: Apple runtime release
+
+on:
+  push:
+    tags:
+      - "apple-runtime-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apple-runtime-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish the Apple runtime
+    runs-on: macos-14
+    environment: apple-runtime-release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUX_APPLE_XCODE_VERSION: "15.4"
+      NUX_APPLE_XCODE_BUILD: "15F31d"
+      NUX_APPLE_RUST_TOOLCHAIN: "1.94.1"
+      NUX_APPLE_DEPLOYMENT_TARGET: "15.0"
+      NUX_APPLE_PROFILE: "release-apple"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout the tagged runtime source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate the release tag and source revision
+        run: |
+          set -euo pipefail
+
+          test "${GITHUB_REF_TYPE}" = "tag"
+          runtime_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/nux-apple-runtime/Cargo.toml | head -1)"
+          test -n "${runtime_version}"
+          if [[ ! "${runtime_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "crate version is not a release-safe semantic version: ${runtime_version}" >&2
+            exit 1
+          fi
+          expected_tag="apple-runtime-v${runtime_version}"
+          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+            echo "release tag ${GITHUB_REF_NAME} does not match crate version ${runtime_version}; expected ${expected_tag}" >&2
+            exit 1
+          fi
+
+          source_revision="$(git rev-parse --verify HEAD)"
+          tagged_revision="$(git rev-list -n 1 "refs/tags/${GITHUB_REF_NAME}")"
+          test "${source_revision}" = "${tagged_revision}"
+          if [[ ! "${source_revision}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "tag does not resolve to a full Git commit SHA: ${source_revision}" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${source_revision}" refs/remotes/origin/main; then
+            echo "release tag must point to a commit already reachable from origin/main" >&2
+            exit 1
+          fi
+
+          {
+            echo "NUX_RUNTIME_VERSION=${runtime_version}"
+            echo "NUX_RUNTIME_RELEASE_TAG=${expected_tag}"
+            echo "NUX_RUNTIME_SOURCE_REVISION=${source_revision}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Require immutable GitHub releases
+        env:
+          GH_TOKEN: ${{ secrets.NUXIE_RELEASE_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "NUXIE_RELEASE_ADMIN_TOKEN is required with Administration: read access" >&2
+            exit 1
+          fi
+          immutable_releases="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')"
+          if [[ "${immutable_releases}" != "true" ]]; then
+            echo "immutable GitHub releases must be enabled before publishing the Apple runtime" >&2
+            exit 1
+          fi
+
+      - name: Select the pinned Apple toolchain
+        run: |
+          set -euo pipefail
+
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${NUX_APPLE_XCODE_VERSION}"
+          test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${NUX_APPLE_XCODE_BUILD}"
+
+      - name: Install pinned Rust toolchain and Apple targets
+        run: |
+          set -euo pipefail
+
+          rustup toolchain install "${NUX_APPLE_RUST_TOOLCHAIN}" --profile minimal --component clippy --no-self-update
+          rustup target add --toolchain "${NUX_APPLE_RUST_TOOLCHAIN}" aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          rustup default "${NUX_APPLE_RUST_TOOLCHAIN}"
+
+      - name: Fetch pinned test assets
+        run: make fixtures
+
+      - name: Test the product ABI and header
+        run: make apple-runtime-check
+
+      - name: Assemble and verify the release XCFramework
+        run: make apple-runtime-xcframework
+
+      - name: Validate the release artifact metadata
+        run: |
+          set -euo pipefail
+
+          metadata="target/apple-runtime/artifact.json"
+          archive="target/apple-runtime/NuxieRuntime.xcframework.zip"
+          generated_header="crates/nux-apple-runtime/include/nux_runtime.generated.h"
+          packaged_header="target/apple-runtime/NuxieRuntime.xcframework/ios-arm64/Headers/nux_runtime.generated.h"
+          test -f "${metadata}"
+          test -f "${archive}"
+          test -f "${generated_header}"
+          test -f "${packaged_header}"
+          cmp -s "${generated_header}" "${packaged_header}"
+
+          expected_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${packaged_header}")"
+          expected_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${packaged_header}")"
+          test -n "${expected_abi_major}"
+          test -n "${expected_abi_minor}"
+
+          test "$(plutil -extract schemaVersion raw "${metadata}")" = "1"
+          test "$(plutil -extract runtimeVersion raw "${metadata}")" = "${NUX_RUNTIME_VERSION}"
+          test "$(plutil -extract sourceRevision raw "${metadata}")" = "${NUX_RUNTIME_SOURCE_REVISION}"
+          test "$(plutil -extract abiMajor raw "${metadata}")" = "${expected_abi_major}"
+          test "$(plutil -extract abiMinor raw "${metadata}")" = "${expected_abi_minor}"
+          test "$(plutil -extract buildProfile raw "${metadata}")" = "${NUX_APPLE_PROFILE}"
+          test "$(plutil -extract rustToolchain raw "${metadata}")" = "${NUX_APPLE_RUST_TOOLCHAIN}"
+          test "$(plutil -extract xcodeVersion raw "${metadata}")" = "${NUX_APPLE_XCODE_VERSION}"
+          test "$(plutil -extract xcodeBuild raw "${metadata}")" = "${NUX_APPLE_XCODE_BUILD}"
+          test "$(plutil -extract minimumIOSVersion raw "${metadata}")" = "${NUX_APPLE_DEPLOYMENT_TARGET}"
+
+          metadata_checksum="$(plutil -extract swiftPackageChecksum raw "${metadata}")"
+          actual_checksum="$(swift package compute-checksum "${archive}")"
+          test -n "${metadata_checksum}"
+          test "${actual_checksum}" = "${metadata_checksum}"
+
+      - name: Recheck immutable releases before draft creation
+        env:
+          GH_TOKEN: ${{ secrets.NUXIE_RELEASE_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "NUXIE_RELEASE_ADMIN_TOKEN is required with Administration: read access" >&2
+            exit 1
+          fi
+          immutable_releases="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')"
+          if [[ "${immutable_releases}" != "true" ]]; then
+            echo "immutable GitHub releases were disabled before draft creation" >&2
+            exit 1
+          fi
+
+      - name: Create and verify the draft release
+        run: |
+          set -euo pipefail
+
+          if gh release view "${NUX_RUNTIME_RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "release ${NUX_RUNTIME_RELEASE_TAG} already exists; refusing to replace or modify it" >&2
+            exit 1
+          fi
+
+          archive="target/apple-runtime/NuxieRuntime.xcframework.zip"
+          metadata="target/apple-runtime/artifact.json"
+          gh release create "${NUX_RUNTIME_RELEASE_TAG}" \
+            "${archive}" \
+            "${metadata}" \
+            --draft \
+            --verify-tag \
+            --title "Nuxie Apple Runtime v${NUX_RUNTIME_VERSION}" \
+            --notes "Immutable Apple runtime binary release for nuxie-runtime ${NUX_RUNTIME_VERSION}."
+
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json tagName --jq '.tagName')" = "${NUX_RUNTIME_RELEASE_TAG}"
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json isDraft --jq '.isDraft')" = "true"
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json assets --jq '[.assets[] | select(.name == "NuxieRuntime.xcframework.zip")] | length')" = "1"
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json assets --jq '[.assets[] | select(.name == "artifact.json")] | length')" = "1"
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json assets --jq '.assets | length')" = "2"
+
+          verification_dir="$(mktemp -d "${RUNNER_TEMP}/nuxie-runtime-release.XXXXXX")"
+          trap 'rm -rf "${verification_dir}"' EXIT
+          gh release download "${NUX_RUNTIME_RELEASE_TAG}" --dir "${verification_dir}"
+          cmp -s "${archive}" "${verification_dir}/NuxieRuntime.xcframework.zip"
+          cmp -s "${metadata}" "${verification_dir}/artifact.json"
+
+      - name: Revalidate the draft assets before publication
+        run: |
+          set -euo pipefail
+
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json isDraft --jq '.isDraft')" = "true"
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json assets --jq '.assets | length')" = "2"
+          verification_dir="$(mktemp -d "${RUNNER_TEMP}/nuxie-runtime-prepublish.XXXXXX")"
+          trap 'rm -rf "${verification_dir}"' EXIT
+          gh release download "${NUX_RUNTIME_RELEASE_TAG}" --dir "${verification_dir}"
+          cmp -s \
+            target/apple-runtime/NuxieRuntime.xcframework.zip \
+            "${verification_dir}/NuxieRuntime.xcframework.zip"
+          cmp -s \
+            target/apple-runtime/artifact.json \
+            "${verification_dir}/artifact.json"
+
+      - name: Require immutable releases before publication
+        env:
+          GH_TOKEN: ${{ secrets.NUXIE_RELEASE_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "NUXIE_RELEASE_ADMIN_TOKEN is required with Administration: read access" >&2
+            exit 1
+          fi
+          immutable_releases="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')"
+          if [[ "${immutable_releases}" != "true" ]]; then
+            echo "immutable GitHub releases were disabled before publication" >&2
+            exit 1
+          fi
+
+      - name: Publish the verified immutable release
+        run: |
+          set -euo pipefail
+
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json isDraft --jq '.isDraft')" = "true"
+          gh release edit "${NUX_RUNTIME_RELEASE_TAG}" --draft=false
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json isDraft --jq '.isDraft')" = "false"
+          test "$(gh release view "${NUX_RUNTIME_RELEASE_TAG}" --json isImmutable --jq '.isImmutable')" = "true"
+
+      - name: Verify the public immutable assets anonymously
+        run: |
+          set -euo pipefail
+
+          public_dir="$(mktemp -d "${RUNNER_TEMP}/nuxie-runtime-public-release.XXXXXX")"
+          trap 'rm -rf "${public_dir}"' EXIT
+          release_base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${NUX_RUNTIME_RELEASE_TAG}"
+          env -u GH_TOKEN curl --disable --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 \
+            "${release_base}/NuxieRuntime.xcframework.zip" \
+            --output "${public_dir}/NuxieRuntime.xcframework.zip"
+          env -u GH_TOKEN curl --disable --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 \
+            "${release_base}/artifact.json" \
+            --output "${public_dir}/artifact.json"
+
+          cmp -s \
+            target/apple-runtime/NuxieRuntime.xcframework.zip \
+            "${public_dir}/NuxieRuntime.xcframework.zip"
+          cmp -s \
+            target/apple-runtime/artifact.json \
+            "${public_dir}/artifact.json"
+          public_checksum="$(swift package compute-checksum "${public_dir}/NuxieRuntime.xcframework.zip")"
+          published_checksum="$(plutil -extract swiftPackageChecksum raw "${public_dir}/artifact.json")"
+          test "${public_checksum}" = "${published_checksum}"

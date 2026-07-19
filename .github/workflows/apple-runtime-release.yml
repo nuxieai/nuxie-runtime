@@ -134,16 +134,20 @@ jobs:
             df -h .
             du -sh target 2>/dev/null || true
             du -sh target/apple-runtime/* 2>/dev/null | sort -h || true
-            for artifact in \
-              target/apple-runtime/NuxieRuntime.xcframework/Info.plist \
-              target/apple-runtime/artifact.json; do
-              if [[ -f "${artifact}" ]]; then
-                echo "artifact=${artifact}"
-                plutil -p "${artifact}" || true
-              else
-                echo "missing=${artifact}"
-              fi
-            done
+            info_plist="target/apple-runtime/NuxieRuntime.xcframework/Info.plist"
+            metadata="target/apple-runtime/artifact.json"
+            if [[ -f "${info_plist}" ]]; then
+              echo "artifact=${info_plist}"
+              plutil -p "${info_plist}" || true
+            else
+              echo "missing=${info_plist}"
+            fi
+            if [[ -f "${metadata}" ]]; then
+              echo "artifact=${metadata}"
+              python3 -m json.tool "${metadata}" || true
+            else
+              echo "missing=${metadata}"
+            fi
           } | tee "${diagnostics}"
 
       - name: Upload Apple runtime release diagnostics
@@ -164,6 +168,9 @@ jobs:
           archive="target/apple-runtime/NuxieRuntime.xcframework.zip"
           generated_header="crates/nux-apple-runtime/include/nux_runtime.generated.h"
           packaged_header="target/apple-runtime/NuxieRuntime.xcframework/ios-arm64/Headers/nux_runtime.generated.h"
+          metadata_scalar() {
+            python3 tools/json-scalar.py "${metadata}" "$1" "$2"
+          }
           test -f "${metadata}"
           test -f "${archive}"
           test -f "${generated_header}"
@@ -175,18 +182,18 @@ jobs:
           test -n "${expected_abi_major}"
           test -n "${expected_abi_minor}"
 
-          test "$(plutil -extract schemaVersion raw "${metadata}")" = "1"
-          test "$(plutil -extract runtimeVersion raw "${metadata}")" = "${NUX_RUNTIME_VERSION}"
-          test "$(plutil -extract sourceRevision raw "${metadata}")" = "${NUX_RUNTIME_SOURCE_REVISION}"
-          test "$(plutil -extract abiMajor raw "${metadata}")" = "${expected_abi_major}"
-          test "$(plutil -extract abiMinor raw "${metadata}")" = "${expected_abi_minor}"
-          test "$(plutil -extract buildProfile raw "${metadata}")" = "${NUX_APPLE_PROFILE}"
-          test "$(plutil -extract rustToolchain raw "${metadata}")" = "${NUX_APPLE_RUST_TOOLCHAIN}"
-          test "$(plutil -extract xcodeVersion raw "${metadata}")" = "${NUX_APPLE_XCODE_VERSION}"
-          test "$(plutil -extract xcodeBuild raw "${metadata}")" = "${NUX_APPLE_XCODE_BUILD}"
-          test "$(plutil -extract minimumIOSVersion raw "${metadata}")" = "${NUX_APPLE_DEPLOYMENT_TARGET}"
+          test "$(metadata_scalar schemaVersion integer)" = "1"
+          test "$(metadata_scalar runtimeVersion string)" = "${NUX_RUNTIME_VERSION}"
+          test "$(metadata_scalar sourceRevision string)" = "${NUX_RUNTIME_SOURCE_REVISION}"
+          test "$(metadata_scalar abiMajor integer)" = "${expected_abi_major}"
+          test "$(metadata_scalar abiMinor integer)" = "${expected_abi_minor}"
+          test "$(metadata_scalar buildProfile string)" = "${NUX_APPLE_PROFILE}"
+          test "$(metadata_scalar rustToolchain string)" = "${NUX_APPLE_RUST_TOOLCHAIN}"
+          test "$(metadata_scalar xcodeVersion string)" = "${NUX_APPLE_XCODE_VERSION}"
+          test "$(metadata_scalar xcodeBuild string)" = "${NUX_APPLE_XCODE_BUILD}"
+          test "$(metadata_scalar minimumIOSVersion string)" = "${NUX_APPLE_DEPLOYMENT_TARGET}"
 
-          metadata_checksum="$(plutil -extract swiftPackageChecksum raw "${metadata}")"
+          metadata_checksum="$(metadata_scalar swiftPackageChecksum string)"
           actual_checksum="$(swift package compute-checksum "${archive}")"
           test -n "${metadata_checksum}"
           test "${actual_checksum}" = "${metadata_checksum}"
@@ -300,5 +307,5 @@ jobs:
             target/apple-runtime/artifact.json \
             "${public_dir}/artifact.json"
           public_checksum="$(swift package compute-checksum "${public_dir}/NuxieRuntime.xcframework.zip")"
-          published_checksum="$(plutil -extract swiftPackageChecksum raw "${public_dir}/artifact.json")"
+          published_checksum="$(python3 tools/json-scalar.py "${public_dir}/artifact.json" swiftPackageChecksum string)"
           test "${public_checksum}" = "${published_checksum}"

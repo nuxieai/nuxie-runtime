@@ -22,21 +22,25 @@ xcframework_path="$1"
 archive_path="$2"
 metadata_path="$3"
 info_plist="${xcframework_path}/Info.plist"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+
+metadata_scalar() {
+    python3 "${script_dir}/json-scalar.py" "${metadata_path}" "$1" "$2"
+}
 
 phase "validate metadata and archive checksum"
 require_file "${info_plist}"
 require_file "${archive_path}"
 require_file "${metadata_path}"
 plutil -lint "${info_plist}"
-# `plutil -lint` only accepts plist syntax on older supported Xcode hosts,
-# while `-p` validates both plist and JSON inputs.
-if ! plutil -p "${metadata_path}" >/dev/null; then
+if ! python3 -m json.tool "${metadata_path}" >/dev/null; then
     echo "artifact metadata is not valid JSON: ${metadata_path}" >&2
     sed -n '1,200p' "${metadata_path}" >&2
     exit 1
 fi
 
-expected_checksum="$(plutil -extract swiftPackageChecksum raw "${metadata_path}")"
+expected_checksum="$(metadata_scalar swiftPackageChecksum string)"
 actual_checksum="$(swift package compute-checksum "${archive_path}")"
 if [[ "${actual_checksum}" != "${expected_checksum}" ]]; then
     echo "archive checksum does not match artifact metadata" >&2
@@ -79,18 +83,18 @@ for library in "${device_library}" "${simulator_library}"; do
 done
 
 phase "validate toolchain and embedded provenance"
-source_revision="$(plutil -extract sourceRevision raw "${metadata_path}")"
-build_profile="$(plutil -extract buildProfile raw "${metadata_path}")"
-minimum_ios_version="$(plutil -extract minimumIOSVersion raw "${metadata_path}")"
-rust_toolchain="$(plutil -extract rustToolchain raw "${metadata_path}")"
-runtime_version="$(plutil -extract runtimeVersion raw "${metadata_path}")"
-xcode_version="$(plutil -extract xcodeVersion raw "${metadata_path}")"
-xcode_build="$(plutil -extract xcodeBuild raw "${metadata_path}")"
-iphoneos_sdk_version="$(plutil -extract iphoneOSSDKVersion raw "${metadata_path}")"
-iphoneos_sdk_build="$(plutil -extract iphoneOSSDKBuild raw "${metadata_path}")"
-iphonesimulator_sdk_version="$(plutil -extract iphoneSimulatorSDKVersion raw "${metadata_path}")"
-iphonesimulator_sdk_build="$(plutil -extract iphoneSimulatorSDKBuild raw "${metadata_path}")"
-test "$(plutil -extract schemaVersion raw "${metadata_path}")" = "1"
+source_revision="$(metadata_scalar sourceRevision string)"
+build_profile="$(metadata_scalar buildProfile string)"
+minimum_ios_version="$(metadata_scalar minimumIOSVersion string)"
+rust_toolchain="$(metadata_scalar rustToolchain string)"
+runtime_version="$(metadata_scalar runtimeVersion string)"
+xcode_version="$(metadata_scalar xcodeVersion string)"
+xcode_build="$(metadata_scalar xcodeBuild string)"
+iphoneos_sdk_version="$(metadata_scalar iphoneOSSDKVersion string)"
+iphoneos_sdk_build="$(metadata_scalar iphoneOSSDKBuild string)"
+iphonesimulator_sdk_version="$(metadata_scalar iphoneSimulatorSDKVersion string)"
+iphonesimulator_sdk_build="$(metadata_scalar iphoneSimulatorSDKBuild string)"
+test "$(metadata_scalar schemaVersion integer)" = "1"
 test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${xcode_version}"
 test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${xcode_build}"
 test "$(xcrun --sdk iphoneos --show-sdk-version)" = "${iphoneos_sdk_version}"
@@ -145,11 +149,9 @@ for public_header in module.modulemap nux_runtime.generated.h nux_runtime.h; do
 done
 header_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")"
 header_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
-test "$(plutil -extract abiMajor raw "${metadata_path}")" = "${header_abi_major}"
-test "$(plutil -extract abiMinor raw "${metadata_path}")" = "${header_abi_minor}"
+test "$(metadata_scalar abiMajor integer)" = "${header_abi_major}"
+test "$(metadata_scalar abiMinor integer)" = "${header_abi_minor}"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "${script_dir}/.." && pwd)"
 phase "compile the C header smoke test"
 clang -std=c11 -Wall -Wextra -Werror \
     -I"${headers_dir}" \

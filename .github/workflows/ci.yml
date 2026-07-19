@@ -187,16 +187,20 @@ jobs:
             df -h .
             du -sh target 2>/dev/null || true
             du -sh target/apple-runtime/* 2>/dev/null | sort -h || true
-            for artifact in \
-              target/apple-runtime/NuxieRuntime.xcframework/Info.plist \
-              target/apple-runtime/artifact.json; do
-              if [[ -f "${artifact}" ]]; then
-                echo "artifact=${artifact}"
-                plutil -p "${artifact}" || true
-              else
-                echo "missing=${artifact}"
-              fi
-            done
+            info_plist="target/apple-runtime/NuxieRuntime.xcframework/Info.plist"
+            metadata="target/apple-runtime/artifact.json"
+            if [[ -f "${info_plist}" ]]; then
+              echo "artifact=${info_plist}"
+              plutil -p "${info_plist}" || true
+            else
+              echo "missing=${info_plist}"
+            fi
+            if [[ -f "${metadata}" ]]; then
+              echo "artifact=${metadata}"
+              python3 -m json.tool "${metadata}" || true
+            else
+              echo "missing=${metadata}"
+            fi
           } | tee "${diagnostics}"
 
       - name: Upload Apple runtime packaging diagnostics

@@ -1517,8 +1517,7 @@ impl BlendState1DInstance {
             if animation_mix == 0.0 {
                 continue;
             }
-            changed |=
-                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+            changed |= animation.animation.apply(artboard, animation_mix);
         }
         changed
     }
@@ -1662,8 +1661,7 @@ impl BlendStateDirectInstance {
             if animation_mix == 0.0 {
                 continue;
             }
-            changed |=
-                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+            changed |= animation.animation.apply(artboard, animation_mix);
         }
         changed
     }
@@ -2362,6 +2360,24 @@ fn current_animation_reset_double_value(
     }
 }
 
+type StateAnimationInstances = (
+    Option<LinearAnimationInstance>,
+    Option<BlendState1DInstance>,
+    Option<BlendStateDirectInstance>,
+);
+
+fn take_current_animation_instances(
+    current_animation: &mut Option<LinearAnimationInstance>,
+    current_blend_state_1d: &mut Option<BlendState1DInstance>,
+    current_blend_state_direct: &mut Option<BlendStateDirectInstance>,
+) -> StateAnimationInstances {
+    (
+        current_animation.take(),
+        current_blend_state_1d.take(),
+        current_blend_state_direct.take(),
+    )
+}
+
 impl StateMachineLayerInstance {
     pub(crate) fn new(
         layer: &RuntimeStateMachineLayer,
@@ -2864,9 +2880,12 @@ impl StateMachineLayerInstance {
         pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) {
         let previous_state_index = self.current_state_index;
-        let mut previous_animation = self.current_animation.clone();
-        let previous_blend_state_1d = self.current_blend_state_1d.clone();
-        let previous_blend_state_direct = self.current_blend_state_direct.clone();
+        let (mut previous_animation, previous_blend_state_1d, previous_blend_state_direct) =
+            take_current_animation_instances(
+                &mut self.current_animation,
+                &mut self.current_blend_state_1d,
+                &mut self.current_blend_state_direct,
+            );
         let previous_spilled_time = previous_animation
             .as_ref()
             .map(LinearAnimationInstance::spilled_time)
@@ -3229,7 +3248,7 @@ impl StateMachineLayerInstance {
                 .map(|interpolator| interpolator.transform(self.transition_mix_from))
                 .unwrap_or(self.transition_mix_from);
             if let Some(source_animation) = self.transition_source_animation.as_ref() {
-                changed |= artboard.apply_linear_animation_instance(source_animation, mix_from);
+                changed |= source_animation.apply(artboard, mix_from);
             }
             if let Some(source_blend_state) = self.transition_source_blend_state_1d.as_ref() {
                 changed |= source_blend_state.apply(artboard, mix_from);
@@ -3268,6 +3287,92 @@ impl StateMachineLayerInstance {
         } else {
             1.0
         };
-        changed | artboard.apply_linear_animation_instance(animation_instance, mix)
+        changed | animation_instance.apply(artboard, mix)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::animation::RuntimeKeyFrameValue;
+
+    fn empty_animation() -> RuntimeLinearAnimation {
+        RuntimeLinearAnimation {
+            global_id: 1,
+            name: None,
+            fps: 60,
+            duration: 60,
+            speed: 1.0,
+            loop_value: 1,
+            work_start: 0,
+            work_end: 60,
+            enable_work_area: false,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+        }
+    }
+
+    fn animation_instance_with_holder(
+        animation: &RuntimeLinearAnimation,
+        key_frame_global_id: u32,
+        value: f32,
+    ) -> LinearAnimationInstance {
+        let mut instance = LinearAnimationInstance::new(0, animation, 1.0);
+        instance
+            .add_key_frame_value_holder(key_frame_global_id, RuntimeKeyFrameValue::Number(value));
+        instance
+    }
+
+    #[test]
+    fn transition_source_move_preserves_plain_and_blend_animation_holders() {
+        let animation = empty_animation();
+        let mut current_animation = Some(animation_instance_with_holder(&animation, 10, 10.0));
+        let mut current_blend_state_1d = Some(BlendState1DInstance {
+            source: RuntimeBlendState1DSource::Input { input_index: None },
+            animations: vec![BlendAnimation1DInstance {
+                value: 0.0,
+                animation: animation_instance_with_holder(&animation, 20, 20.0),
+                mix: 1.0,
+            }],
+            animation_reset: None,
+        });
+        let mut current_blend_state_direct = Some(BlendStateDirectInstance {
+            animations: vec![BlendAnimationDirectInstance {
+                source: RuntimeDirectBlendSource::MixValue { value: 100.0 },
+                animation: animation_instance_with_holder(&animation, 30, 30.0),
+                mix: 1.0,
+            }],
+        });
+
+        let (previous_animation, previous_blend_state_1d, previous_blend_state_direct) =
+            take_current_animation_instances(
+                &mut current_animation,
+                &mut current_blend_state_1d,
+                &mut current_blend_state_direct,
+            );
+
+        assert!(current_animation.is_none());
+        assert!(current_blend_state_1d.is_none());
+        assert!(current_blend_state_direct.is_none());
+        assert_eq!(
+            previous_animation
+                .as_ref()
+                .and_then(|instance| instance.key_frame_value_holder(10)),
+            Some(&RuntimeKeyFrameValue::Number(10.0))
+        );
+        assert_eq!(
+            previous_blend_state_1d
+                .as_ref()
+                .and_then(|blend| blend.animation_instance(0))
+                .and_then(|instance| instance.key_frame_value_holder(20)),
+            Some(&RuntimeKeyFrameValue::Number(20.0))
+        );
+        assert_eq!(
+            previous_blend_state_direct
+                .as_ref()
+                .and_then(|blend| blend.animation_instance(0))
+                .and_then(|instance| instance.key_frame_value_holder(30)),
+            Some(&RuntimeKeyFrameValue::Number(30.0))
+        );
     }
 }

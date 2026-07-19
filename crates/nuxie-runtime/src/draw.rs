@@ -10694,6 +10694,29 @@ fn runtime_draw_live_command(
 ) -> Result<()> {
     debug_assert_eq!(command.kind, RuntimeDrawCommandKind::Draw);
 
+    // This retained form is deliberately self-contained: it cannot be a
+    // layout proxy, nested artboard, image, script, clip participant, or
+    // world-space stroke. Dispatch it before the generic drawable family so
+    // the overwhelmingly common fill path does not pay for every unrelated
+    // command-kind test on each replay.
+    if command.simple_solid_shape
+        && runtime_try_draw_simple_solid_shape(
+            runtime,
+            instance,
+            graph,
+            command,
+            layout_bounds,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+            paint_configurations.as_deref_mut(),
+            retained_world_is_current,
+        )?
+    {
+        return Ok(());
+    }
+
     if command.object_kind == RuntimeDrawCommandObjectKind::DrawableProxy
         && let Some(layout_local) = command.local_id
         && instance.runtime_layout_component_clip_enabled(layout_local)
@@ -10799,22 +10822,6 @@ fn runtime_draw_live_command(
         paint_by_global,
         path_cache,
         paint_configurations.as_deref_mut(),
-    )? {
-        return Ok(());
-    }
-
-    if runtime_try_draw_simple_solid_shape(
-        runtime,
-        instance,
-        graph,
-        command,
-        layout_bounds,
-        factory,
-        renderer,
-        paint_by_global,
-        path_cache,
-        paint_configurations.as_deref_mut(),
-        retained_world_is_current,
     )? {
         return Ok(());
     }

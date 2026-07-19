@@ -531,8 +531,6 @@ impl FlowSession {
             )
         })?;
         let artboard_name = artboard.name().map(ToOwned::to_owned);
-        let (player_metadata, player_index) =
-            select_player(artboard, config.player_name.as_deref())?;
         let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), artboard_index)
             .map_err(|error| {
                 FlowSessionError::new(FlowSessionErrorKind::Runtime, error.to_string())
@@ -553,44 +551,8 @@ impl FlowSession {
         if let Some(view_model) = root_view_model.as_ref() {
             let _ = instance.bind_view_model(view_model);
         }
-
-        let player = match player_metadata.kind {
-            FlowPlayerKind::StateMachine => {
-                let index = player_index.ok_or_else(|| {
-                    FlowSessionError::new(
-                        FlowSessionErrorKind::Runtime,
-                        "state-machine selection has no index",
-                    )
-                })?;
-                let machine = instance.state_machine_instance(index).ok_or_else(|| {
-                    FlowSessionError::new(
-                        FlowSessionErrorKind::Runtime,
-                        "selected state machine could not be instantiated",
-                    )
-                })?;
-                FlowPlayer::StateMachine(Box::new(machine))
-            }
-            FlowPlayerKind::LinearAnimation => {
-                let index = player_index.ok_or_else(|| {
-                    FlowSessionError::new(
-                        FlowSessionErrorKind::Runtime,
-                        "animation selection has no index",
-                    )
-                })?;
-                let animation =
-                    instance
-                        .raw()
-                        .linear_animation_instance(index)
-                        .ok_or_else(|| {
-                            FlowSessionError::new(
-                                FlowSessionErrorKind::Runtime,
-                                "selected animation could not be instantiated",
-                            )
-                        })?;
-                FlowPlayer::Animation(animation)
-            }
-            FlowPlayerKind::Static => FlowPlayer::Static,
-        };
+        let (player_metadata, player) =
+            select_player(artboard, &instance, config.player_name.as_deref())?;
 
         let (x, y, width, height) = instance.artboard_bounds();
         if !x.is_finite()
@@ -2963,8 +2925,9 @@ fn validate_optional_selector(value: Option<&str>, label: &str) -> Result<(), Fl
 
 fn select_player(
     artboard: crate::Artboard<'_>,
+    instance: &OwnedArtboardInstance,
     explicit_name: Option<&str>,
-) -> Result<(FlowPlayerMetadata, Option<usize>), FlowSessionError> {
+) -> Result<(FlowPlayerMetadata, FlowPlayer), FlowSessionError> {
     if let Some(name) = explicit_name {
         let index = (0..artboard.state_machine_count())
             .find(|index| artboard.state_machine_name(*index) == Some(name))
@@ -2974,6 +2937,12 @@ fn select_player(
                     format!("state machine '{name}' was not found"),
                 )
             })?;
+        let machine = instance.state_machine_instance(index).ok_or_else(|| {
+            FlowSessionError::new(
+                FlowSessionErrorKind::Runtime,
+                "selected state machine could not be instantiated",
+            )
+        })?;
         return Ok((
             FlowPlayerMetadata {
                 kind: FlowPlayerKind::StateMachine,
@@ -2981,11 +2950,13 @@ fn select_player(
                 index: Some(index),
                 name: Some(name.to_owned()),
             },
-            Some(index),
+            FlowPlayer::StateMachine(Box::new(machine)),
         ));
     }
 
-    if let Some(index) = artboard.default_state_machine_index() {
+    if let Some(index) = artboard.default_state_machine_index()
+        && let Some(machine) = instance.state_machine_instance(index)
+    {
         return Ok((
             FlowPlayerMetadata {
                 kind: FlowPlayerKind::StateMachine,
@@ -2993,10 +2964,12 @@ fn select_player(
                 index: Some(index),
                 name: artboard.state_machine_name(index).map(ToOwned::to_owned),
             },
-            Some(index),
+            FlowPlayer::StateMachine(Box::new(machine)),
         ));
     }
-    if artboard.state_machine_count() > 0 {
+    if artboard.state_machine_count() > 0
+        && let Some(machine) = instance.state_machine_instance(0)
+    {
         return Ok((
             FlowPlayerMetadata {
                 kind: FlowPlayerKind::StateMachine,
@@ -3004,10 +2977,12 @@ fn select_player(
                 index: Some(0),
                 name: artboard.state_machine_name(0).map(ToOwned::to_owned),
             },
-            Some(0),
+            FlowPlayer::StateMachine(Box::new(machine)),
         ));
     }
-    if let Some(animation) = artboard.graph().animations.first() {
+    if let Some(animation) = artboard.graph().animations.first()
+        && let Some(animation_instance) = instance.raw().linear_animation_instance(0)
+    {
         return Ok((
             FlowPlayerMetadata {
                 kind: FlowPlayerKind::LinearAnimation,
@@ -3015,7 +2990,7 @@ fn select_player(
                 index: Some(0),
                 name: animation.name.clone(),
             },
-            Some(0),
+            FlowPlayer::Animation(animation_instance),
         ));
     }
     Ok((
@@ -3025,7 +3000,7 @@ fn select_player(
             index: None,
             name: None,
         },
-        None,
+        FlowPlayer::Static,
     ))
 }
 
@@ -3300,6 +3275,8 @@ mod tests {
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
     const SMI_FIXTURE: &[u8] = include_bytes!("../../../fixtures/animation/smi_test.riv");
+    const TWO_ARTBOARDS_FIXTURE: &[u8] =
+        include_bytes!("../../../fixtures/minimal/two_artboards.riv");
 
     fn smi_session() -> FlowSession {
         let file = Arc::new(File::import(SMI_FIXTURE).expect("import SMI fixture"));
@@ -3405,6 +3382,45 @@ mod tests {
         .expect_err("an explicit missing artboard must not fall back");
 
         assert_eq!(error.kind(), FlowSessionErrorKind::NotFound);
+    }
+
+    #[test]
+    fn fallback_skips_an_uninstantiable_authored_state_machine() {
+        let file = Arc::new(File::import(TWO_ARTBOARDS_FIXTURE).expect("import fixture"));
+
+        let (_, bootstrap) = FlowSession::create(
+            file,
+            FlowSessionConfig {
+                artboard_name: Some("Two".to_owned()),
+                player_name: None,
+            },
+        )
+        .expect("fall back to a static artboard");
+
+        assert_eq!(bootstrap.player.kind, FlowPlayerKind::Static);
+        assert_eq!(bootstrap.player.selection, FlowPlayerSelection::Static);
+        assert_eq!(bootstrap.player.index, None);
+        assert_eq!(bootstrap.player.name, None);
+    }
+
+    #[test]
+    fn explicit_uninstantiable_state_machine_does_not_fall_back() {
+        let file = Arc::new(File::import(TWO_ARTBOARDS_FIXTURE).expect("import fixture"));
+
+        let error = FlowSession::create(
+            file,
+            FlowSessionConfig {
+                artboard_name: Some("Two".to_owned()),
+                player_name: Some("Auto Generated State Machine".to_owned()),
+            },
+        )
+        .expect_err("an explicit uninstantiable state machine must fail");
+
+        assert_eq!(error.kind(), FlowSessionErrorKind::Runtime);
+        assert_eq!(
+            error.to_string(),
+            "selected state machine could not be instantiated"
+        );
     }
 
     #[test]

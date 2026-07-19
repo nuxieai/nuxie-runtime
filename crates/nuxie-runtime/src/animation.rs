@@ -7,7 +7,7 @@ use crate::draw::color_lerp;
 use crate::properties::{
     artboard_index_for_graph, mix_value, runtime_object_bool_property_by_key,
     runtime_object_color_property_by_key, runtime_object_double_property_by_key,
-    runtime_object_field_kind_by_key, transform_property_for_key,
+    runtime_object_field_kind_by_key, solid_color_value_property_key, transform_property_for_key,
 };
 use crate::{ArtboardInstance, InstanceSlot, StateMachineReportedEvent, TransformProperty};
 use nuxie_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
@@ -418,6 +418,9 @@ pub(crate) fn build_linear_animations(
                     .unwrap_or(0.0),
                     color_property: core_registry_field_kind_by_property_key(property_key)
                         == Some(CoreRegistryFieldKind::Color),
+                    solid_color_property: target.type_name == "SolidColor"
+                        && solid_color_value_property_key() == Some(property_key),
+                    data_bind_observed: false,
                     color_source_value: runtime_object_color_property_by_key(target, property_key)
                         .unwrap_or(0),
                     bool_property: core_registry_field_kind_by_property_key(property_key)
@@ -827,21 +830,33 @@ impl RuntimeLinearAnimation {
                     };
                     let Some(value) = apply_key_frame_color_mix(frame_value, mix, || {
                         Some(
-                            instance
-                                .color_property(
+                            if keyed_property.solid_color_property {
+                                instance.solid_color_value(keyed_object.target_local_id)
+                            } else {
+                                instance.color_property(
                                     keyed_object.target_local_id,
                                     keyed_property.property_key,
                                 )
-                                .unwrap_or(keyed_property.color_source_value),
+                            }
+                            .unwrap_or(keyed_property.color_source_value),
                         )
                     }) else {
                         continue;
                     };
-                    changed |= instance.set_keyed_color_property(
-                        keyed_object.target_local_id,
-                        keyed_property.property_key,
-                        value,
-                    );
+                    changed |= if keyed_property.solid_color_property {
+                        instance.set_keyed_solid_color_property(
+                            keyed_object.target_local_id,
+                            keyed_property.property_key,
+                            keyed_property.data_bind_observed,
+                            value,
+                        )
+                    } else {
+                        instance.set_keyed_color_property(
+                            keyed_object.target_local_id,
+                            keyed_property.property_key,
+                            value,
+                        )
+                    };
                 } else if keyed_property.bool_property {
                     let Some(value) =
                         keyed_property.bool_value_at(seconds, self.fps, key_frame_values)
@@ -1006,6 +1021,12 @@ pub struct RuntimeKeyedProperty {
     pub double_property: bool,
     pub double_source_value: f32,
     pub color_property: bool,
+    /// The import-time equivalent of C++'s concrete `SolidColor*` target.
+    /// Avoids repeating CoreRegistry/type discovery for every sampled frame.
+    pub(crate) solid_color_property: bool,
+    /// C++ keeps an intrusive observer head on each concrete Core object.
+    /// Rust resolves the equivalent subscription once at artboard build time.
+    pub(crate) data_bind_observed: bool,
     pub color_source_value: u32,
     pub bool_property: bool,
     pub bool_source_value: bool,
@@ -2052,6 +2073,8 @@ mod tests {
             double_property: true,
             double_source_value: 0.0,
             color_property: false,
+            solid_color_property: false,
+            data_bind_observed: false,
             color_source_value: 0,
             bool_property: false,
             bool_source_value: false,

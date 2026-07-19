@@ -874,6 +874,11 @@ impl RuntimeArtboardDataBindSourceQueues {
         !self.by_target_property.is_empty()
     }
 
+    pub(crate) fn observes_target_property(&self, local_id: usize, property_key: u16) -> bool {
+        self.by_target_property
+            .contains_key(&(local_id, property_key))
+    }
+
     pub(super) fn new(
         custom_property_bindings: &[RuntimeArtboardCustomPropertyBindingInstance],
         layout_computed_bindings: &[RuntimeArtboardLayoutComputedBindingInstance],
@@ -7940,6 +7945,9 @@ mod tests {
             &numeric_bindings,
             &solo_bindings,
         );
+
+        assert!(queues.observes_target_property(7, 11));
+        assert!(!queues.observes_target_property(99, 99));
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),

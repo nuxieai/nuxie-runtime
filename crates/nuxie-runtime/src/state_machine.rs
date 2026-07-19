@@ -2342,6 +2342,8 @@ enum AnimationResetEntry {
     Color {
         local_id: usize,
         property_key: u16,
+        solid_color_property: bool,
+        data_bind_observed: bool,
         value: u32,
     },
 }
@@ -2396,18 +2398,23 @@ impl AnimationReset {
                                 .map(|frame| frame.value)
                         } else {
                             Some(
-                                artboard
-                                    .color_property(
+                                if keyed_property.solid_color_property {
+                                    artboard.solid_color_value(keyed_object.target_local_id)
+                                } else {
+                                    artboard.color_property(
                                         keyed_object.target_local_id,
                                         keyed_property.property_key,
                                     )
-                                    .unwrap_or(keyed_property.color_source_value),
+                                }
+                                .unwrap_or(keyed_property.color_source_value),
                             )
                         };
                         if let Some(value) = value {
                             entries.push(AnimationResetEntry::Color {
                                 local_id: keyed_object.target_local_id,
                                 property_key: keyed_property.property_key,
+                                solid_color_property: keyed_property.solid_color_property,
+                                data_bind_observed: keyed_property.data_bind_observed,
                                 value,
                             });
                         }
@@ -2448,9 +2455,20 @@ impl AnimationReset {
                 AnimationResetEntry::Color {
                     local_id,
                     property_key,
+                    solid_color_property,
+                    data_bind_observed,
                     value,
                 } => {
-                    changed |= artboard.set_keyed_color_property(*local_id, *property_key, *value);
+                    changed |= if *solid_color_property {
+                        artboard.set_keyed_solid_color_property(
+                            *local_id,
+                            *property_key,
+                            *data_bind_observed,
+                            *value,
+                        )
+                    } else {
+                        artboard.set_keyed_color_property(*local_id, *property_key, *value)
+                    };
                 }
             }
         }

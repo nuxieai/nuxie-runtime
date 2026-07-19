@@ -710,7 +710,7 @@ impl ArtboardInstance {
             .map(|(_, local_id)| local_id)
             .collect::<Vec<_>>();
         let solos = build_runtime_solos(file, graph);
-        let linear_animations = build_linear_animations(file, graph, &slots);
+        let mut linear_animations = build_linear_animations(file, graph, &slots);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
         let list_follow_path_constraints = build_runtime_list_follow_path_constraints(file, graph);
@@ -749,6 +749,17 @@ impl ArtboardInstance {
             &artboard_numeric_source_bindings,
             &artboard_solo_source_bindings,
         );
+        for animation in &mut linear_animations {
+            for keyed_object in Arc::make_mut(&mut animation.keyed_objects) {
+                for keyed_property in &mut keyed_object.keyed_properties {
+                    keyed_property.data_bind_observed = artboard_data_bind_source_queues
+                        .observes_target_property(
+                            keyed_object.target_local_id,
+                            keyed_property.property_key,
+                        );
+                }
+            }
+        }
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
         retain_runtime_component_layout_topology(&mut components, &component_by_local);
         let nested_artboards = if inserted {
@@ -1516,6 +1527,33 @@ impl ArtboardInstance {
             return false;
         }
         self.after_color_property_set(local_id, property_key, previous, value)
+    }
+
+    /// C++ keyed animations retain a concrete Core pointer, so a known
+    /// `SolidColor::colorValue` write does not rediscover its type or property
+    /// on every frame. Keep the same observer and invalidation effects as the
+    /// generic color setter while skipping branches that cannot apply to a
+    /// SolidColor target (text, view-model, gradient, and layout topology).
+    pub(crate) fn set_keyed_solid_color_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        data_bind_observed: bool,
+        value: u32,
+    ) -> bool {
+        let Some(previous) = self.objects.replace_solid_color_value(local_id, value) else {
+            return false;
+        };
+        if data_bind_observed {
+            self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+        }
+        self.mark_changed();
+        if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
+            *revision = revision.wrapping_add(1);
+        }
+        self.mark_tree_paint_preparation_changed();
+        self.mark_prepared_changed_for_solid_color_visibility(Some(previous), value);
+        true
     }
 
     fn after_color_property_set(
@@ -6709,6 +6747,8 @@ mod tests {
                     double_property: false,
                     double_source_value: 0.0,
                     color_property: false,
+                    solid_color_property: false,
+                    data_bind_observed: false,
                     color_source_value: 0,
                     bool_property: false,
                     bool_source_value: false,
@@ -7084,7 +7124,7 @@ mod tests {
         let initial_draw_order_epoch = instance.draw_order_epoch();
         let initial_paint_revision = instance.solid_color_paint_revision(0);
 
-        assert!(instance.set_color_property(0, color_key, 0xff00_ff00));
+        assert!(instance.set_keyed_solid_color_property(0, color_key, false, 0xff00_ff00));
 
         assert!(instance.cache_epoch() > initial_cache_epoch);
         assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);

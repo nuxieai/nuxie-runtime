@@ -262,12 +262,19 @@ impl RawPath {
         }
         self.mark_mutated();
         self.verbs.extend_from_slice(&path.verbs);
-        self.points.extend(
-            path.points
-                .iter()
-                .copied()
-                .map(|point| transform.transform_point(point)),
-        );
+        if transform == Mat2D::IDENTITY {
+            // C++ passes a null matrix when RenderPath::addRawPath appends an
+            // untransformed path, which copies the points verbatim. Besides
+            // avoiding needless affine work, this preserves signed zero.
+            self.points.extend_from_slice(&path.points);
+        } else {
+            self.points.extend(
+                path.points
+                    .iter()
+                    .copied()
+                    .map(|point| transform.transform_point(point)),
+            );
+        }
     }
 
     pub fn add_path_backwards(&mut self, path: &RawPath, transform: Mat2D) {
@@ -279,13 +286,17 @@ impl RawPath {
         let initial_verb_count = self.verbs.len();
         let initial_point_count = self.points.len();
         self.points.reserve(path.points.len());
-        self.points.extend(
-            path.points
-                .iter()
-                .rev()
-                .copied()
-                .map(|point| transform.transform_point(point)),
-        );
+        if transform == Mat2D::IDENTITY {
+            self.points.extend(path.points.iter().rev().copied());
+        } else {
+            self.points.extend(
+                path.points
+                    .iter()
+                    .rev()
+                    .copied()
+                    .map(|point| transform.transform_point(point)),
+            );
+        }
 
         // Reverse the verbs while moving each close from the end of its
         // original contour to the end of the reversed contour.
@@ -2379,6 +2390,25 @@ mod tests {
         assert!(rebuilt.points().is_empty());
         assert_ne!(rebuilt.mutation_id(), populated_snapshot.mutation_id());
         assert_eq!(populated_snapshot, expected);
+    }
+
+    #[test]
+    fn identity_path_appends_preserve_point_bits() {
+        let mut source = RawPath::new();
+        source.move_to(-0.0, -0.0);
+        source.line_to(1.0, -0.0);
+
+        let mut forward = RawPath::new();
+        forward.add_path(&source, Mat2D::IDENTITY);
+        assert_eq!(forward.points()[0].x.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(forward.points()[0].y.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(forward.points()[1].y.to_bits(), (-0.0_f32).to_bits());
+
+        let mut backwards = RawPath::new();
+        backwards.add_path_backwards(&source, Mat2D::IDENTITY);
+        assert_eq!(backwards.points()[0].y.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(backwards.points()[1].x.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(backwards.points()[1].y.to_bits(), (-0.0_f32).to_bits());
     }
 
     fn assert_backwards_round_trip(path: &RawPath) {

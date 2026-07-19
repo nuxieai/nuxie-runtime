@@ -6,10 +6,17 @@ license.workspace = true
 repository.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[features]
+default = []
+apple-renderer = ["nuxie/renderer"]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }
+
+[build-dependencies]
+cbindgen = "=0.29.2"
 
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]

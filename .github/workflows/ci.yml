@@ -79,6 +79,50 @@ jobs:
       - name: Build and run C smoke test
         run: make capi-smoke
 
+  apple-runtime:
+    name: Apple runtime product boundary
+    runs-on: macos-14
+    env:
+      NUX_APPLE_XCODE_VERSION: "15.4"
+      NUX_APPLE_XCODE_BUILD: "15F31d"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout nuxie-runtime
+        uses: actions/checkout@v4
+
+      - name: Select the pinned Apple toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${NUX_APPLE_XCODE_VERSION}"
+          test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${NUX_APPLE_XCODE_BUILD}"
+
+      - name: Install pinned Rust toolchain and Apple targets
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal --component clippy --no-self-update
+          rustup target add --toolchain 1.94.1 aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          rustup default 1.94.1
+
+      - name: Fetch pinned test assets
+        run: make fixtures
+
+      - name: Test the product ABI and header
+        run: make apple-runtime-check
+
+      - name: Assemble and verify the release XCFramework
+        run: make apple-runtime-xcframework
+
+      - name: Upload the verified Apple runtime candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxie-runtime-apple-${{ github.sha }}
+          path: |
+            target/apple-runtime/NuxieRuntime.xcframework.zip
+            target/apple-runtime/artifact.json
+          if-no-files-found: error
+
   browser-renderer:
     name: Browser WebGPU and WebGL2
     runs-on: macos-14

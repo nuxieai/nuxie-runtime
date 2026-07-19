@@ -32,6 +32,8 @@ mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
 mod skyline;
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+mod surface;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
@@ -102,6 +104,58 @@ pub use webgl2::{WebGl2Factory, WebGl2Frame};
 
 impl Error for RendererError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WgpuDeviceFailureKind {
+    Validation,
+    Internal,
+    OutOfMemory,
+    DeviceLost,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WgpuDeviceFailure {
+    kind: WgpuDeviceFailureKind,
+    message: String,
+}
+
+#[derive(Default)]
+struct DeviceHealth {
+    failure: Mutex<Option<WgpuDeviceFailure>>,
+}
+
+impl DeviceHealth {
+    fn record(&self, failure: WgpuDeviceFailure) {
+        let mut current = self
+            .failure
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let incoming_priority = device_failure_priority(failure.kind);
+        let current_priority = current
+            .as_ref()
+            .map(|failure| device_failure_priority(failure.kind))
+            .unwrap_or(0);
+        if incoming_priority >= current_priority {
+            *current = Some(failure);
+        }
+    }
+
+    fn current(&self) -> Option<WgpuDeviceFailure> {
+        self.failure
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+}
+
+fn device_failure_priority(kind: WgpuDeviceFailureKind) -> u8 {
+    match kind {
+        WgpuDeviceFailureKind::Validation => 1,
+        WgpuDeviceFailureKind::Internal => 2,
+        WgpuDeviceFailureKind::OutOfMemory => 3,
+        WgpuDeviceFailureKind::DeviceLost => 4,
+    }
+}
+
 const MAX_ATOMIC_PATHS: usize = logical_flush::MAX_PATH_COUNT;
 // C++ RenderContextWebGPUImpl only advertises generic storage-buffer atomics.
 // Its clockwiseAtomic interlock mode is unreachable, even when a frame enables
@@ -155,11 +209,15 @@ fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
 }
 
 struct Context {
+    #[allow(dead_code)]
+    instance: wgpu::Instance,
+    #[allow(dead_code)]
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    frame_attachments: FrameAttachmentPool,
     stroke_preparation_scratch: Arc<StrokePreparationScratchPool>,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
+    device_health: Arc<DeviceHealth>,
     adapter_info: WgpuAdapterInfo,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
@@ -240,44 +298,89 @@ impl FrameAttachments {
 }
 
 struct FrameAttachmentPool {
+    state: Mutex<FrameAttachmentPoolState>,
+}
+
+struct FrameAttachmentPoolState {
     width: u32,
     height: u32,
-    available: Mutex<Vec<Arc<FrameAttachments>>>,
+    available: Vec<Arc<FrameAttachments>>,
+}
+
+struct FrameAttachmentLease {
+    pool: Arc<FrameAttachmentPool>,
+    attachments: Arc<FrameAttachments>,
+}
+
+impl FrameAttachmentLease {
+    fn checkout(pool: Arc<FrameAttachmentPool>, device: &wgpu::Device) -> Self {
+        let attachments = pool.checkout(device);
+        Self { pool, attachments }
+    }
+}
+
+impl Drop for FrameAttachmentLease {
+    fn drop(&mut self) {
+        self.pool.recycle(Arc::clone(&self.attachments));
+    }
 }
 
 impl FrameAttachmentPool {
     fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
         Self {
-            width,
-            height,
-            available: Mutex::new(vec![Arc::new(FrameAttachments::new(device, width, height))]),
+            state: Mutex::new(FrameAttachmentPoolState {
+                width,
+                height,
+                available: vec![Arc::new(FrameAttachments::new(device, width, height))],
+            }),
         }
     }
 
     fn checkout(&self, device: &wgpu::Device) -> Arc<FrameAttachments> {
-        self.available
+        let mut state = self
+            .state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state
+            .available
             .pop()
-            .unwrap_or_else(|| Arc::new(FrameAttachments::new(device, self.width, self.height)))
+            .unwrap_or_else(|| Arc::new(FrameAttachments::new(device, state.width, state.height)))
     }
 
     fn recycle(&self, attachments: Arc<FrameAttachments>) {
-        let mut available = self
-            .available
+        let mut state = self
+            .state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if available.len() < MAX_CACHED_FRAME_ATTACHMENTS {
-            available.push(attachments);
+        let size = attachments.target_texture.size();
+        if size.width == state.width
+            && size.height == state.height
+            && state.available.len() < MAX_CACHED_FRAME_ATTACHMENTS
+        {
+            state.available.push(attachments);
         }
+    }
+
+    fn resize(&self, device: &wgpu::Device, width: u32, height: u32) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if state.width == width && state.height == height {
+            return;
+        }
+        state.width = width;
+        state.height = height;
+        state.available = vec![Arc::new(FrameAttachments::new(device, width, height))];
     }
 
     #[cfg(test)]
     fn cached(&self) -> Arc<FrameAttachments> {
         Arc::clone(
-            self.available
+            self.state
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .available
                 .last()
                 .expect("frame attachment pool is empty outside frame execution"),
         )
@@ -285,9 +388,10 @@ impl FrameAttachmentPool {
 
     #[cfg(test)]
     fn cached_len(&self) -> usize {
-        self.available
+        self.state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .available
             .len()
     }
 }
@@ -367,6 +471,7 @@ impl Drop for StrokePreparationScratchLease {
 
 pub struct WgpuFactory {
     context: Arc<Context>,
+    frame_attachments: Arc<FrameAttachmentPool>,
     width: u32,
     height: u32,
     mode: RenderMode,
@@ -390,6 +495,8 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub use surface::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};
 pub use work_metrics::BackendWorkMetrics;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -424,10 +531,20 @@ impl WgpuFactory {
         mode: RenderMode,
     ) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        Self::new_async_with_instance(instance, None, width, height, mode).await
+    }
+
+    async fn new_async_with_instance(
+        instance: wgpu::Instance,
+        compatible_surface: Option<&wgpu::Surface<'_>>,
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+    ) -> Result<Self, RendererError> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: None,
+                compatible_surface,
                 force_fallback_adapter: false,
                 apply_limit_buckets: false,
             })
@@ -465,6 +582,26 @@ impl WgpuFactory {
             })
             .await
             .map_err(|error| RendererError::Device(error.to_string()))?;
+        let device_health = Arc::new(DeviceHealth::default());
+        let uncaptured_health = Arc::clone(&device_health);
+        device.on_uncaptured_error(Arc::new(move |error| {
+            let kind = match &error {
+                wgpu::Error::OutOfMemory { .. } => WgpuDeviceFailureKind::OutOfMemory,
+                wgpu::Error::Validation { .. } => WgpuDeviceFailureKind::Validation,
+                wgpu::Error::Internal { .. } => WgpuDeviceFailureKind::Internal,
+            };
+            uncaptured_health.record(WgpuDeviceFailure {
+                kind,
+                message: error.to_string(),
+            });
+        }));
+        let lost_health = Arc::clone(&device_health);
+        device.set_device_lost_callback(move |reason, message| {
+            lost_health.record(WgpuDeviceFailure {
+                kind: WgpuDeviceFailureKind::DeviceLost,
+                message: format!("{reason:?}: {message}"),
+            });
+        });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-solid-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("solid.wgsl").into()),
@@ -593,15 +730,20 @@ impl WgpuFactory {
         let msaa_stencil_pipeline = msaa_stencil_pipeline::MsaaStencilPipeline::new(&device);
         let feather_lut = feather_lut::FeatherLut::new(&device, &queue);
         let frame_attachments = FrameAttachmentPool::new(&device, width, height);
+        if let Some(failure) = device_health.current() {
+            return Err(RendererError::Device(failure.message));
+        }
         Ok(Self {
             context: Arc::new(Context {
+                instance,
+                adapter,
                 device,
                 queue,
-                frame_attachments,
                 stroke_preparation_scratch: Arc::new(StrokePreparationScratchPool::default()),
                 intersection_board: Mutex::new(intersection_board::IntersectionBoard::new(
                     intersection_board::GroupingType::Disjoint,
                 )),
+                device_health,
                 adapter_info,
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
@@ -621,6 +763,7 @@ impl WgpuFactory {
                 msaa_stencil_pipeline,
                 feather_lut,
             }),
+            frame_attachments: Arc::new(frame_attachments),
             width,
             height,
             mode,
@@ -638,6 +781,10 @@ impl WgpuFactory {
     ) -> WgpuFrame {
         WgpuFrame {
             context: Arc::clone(&self.context),
+            frame_attachments: FrameAttachmentLease::checkout(
+                Arc::clone(&self.frame_attachments),
+                &self.context.device,
+            ),
             width: self.width,
             height: self.height,
             clear_color,
@@ -662,6 +809,52 @@ impl WgpuFactory {
 
     pub fn adapter_info(&self) -> &WgpuAdapterInfo {
         &self.context.adapter_info
+    }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        validate_texture_extent(
+            "render target",
+            width,
+            height,
+            self.context.device.limits().max_texture_dimension_2d,
+        )?;
+        self.frame_attachments
+            .resize(&self.context.device, width, height);
+        self.width = width;
+        self.height = height;
+        Ok(())
+    }
+
+    /// Create a renderer domain for another live screen while reusing the
+    /// adapter, device, queue, and immutable pipelines. Frame attachments and
+    /// dimensions remain private to the returned session factory.
+    pub fn new_session_factory(
+        &self,
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+    ) -> Result<Self, RendererError> {
+        validate_texture_extent(
+            "render target",
+            width,
+            height,
+            self.context.device.limits().max_texture_dimension_2d,
+        )?;
+        Ok(Self {
+            context: Arc::clone(&self.context),
+            frame_attachments: Arc::new(FrameAttachmentPool::new(
+                &self.context.device,
+                width,
+                height,
+            )),
+            width,
+            height,
+            mode,
+        })
     }
 }
 
@@ -1832,6 +2025,7 @@ struct MsaaDrawSchedule {
 
 pub struct WgpuFrame {
     context: Arc<Context>,
+    frame_attachments: FrameAttachmentLease,
     width: u32,
     height: u32,
     clear_color: ColorInt,
@@ -2542,7 +2736,6 @@ impl WgpuFrame {
         Some((updates, parent_id))
     }
 
-    #[cfg(test)]
     fn metrics(&self) -> WgpuFrameMetrics {
         let logical_flushes = u64::try_from(self.logical_flush_starts.len()).unwrap_or(u64::MAX);
         let mut atomic_strategy_partitions = 0_u64;
@@ -2584,7 +2777,7 @@ impl WgpuFrame {
     /// Submits the frame, waits asynchronously for GPU completion, and returns
     /// the offscreen target as tightly packed RGBA pixels.
     pub async fn finish_async(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false, true, true)
+        self.finish_internal(false, false, true, true, None)
             .await
             .map(|(pixels, _, _, _, _, _, _)| pixels)
     }
@@ -2599,21 +2792,17 @@ impl WgpuFrame {
     /// Asynchronously encodes the frame, submits all work, and waits for GPU
     /// completion without copying the render target back to the CPU.
     pub async fn finish_for_benchmark_async(self) -> Result<WgpuFrameMetrics, RendererError> {
-        let draw_calls = self.draw_calls;
-        let logical_flushes = u64::try_from(self.logical_flush_starts.len()).unwrap_or(u64::MAX);
-        let (_, _, _, _, _, backend_work, atomic_strategy_partitions) =
-            self.finish_internal(false, false, true, false).await?;
-        Ok(WgpuFrameMetrics {
-            draw_calls,
-            logical_flushes,
-            atomic_strategy_partitions,
-            backend_work,
-        })
+        let mut metrics = self.metrics();
+        let (_, _, _, _, _, backend_work, _) = self
+            .finish_internal(false, false, true, false, None)
+            .await?;
+        metrics.backend_work = backend_work;
+        Ok(metrics)
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
-        pollster::block_on(self.finish_internal(false, true, true, true))
+        pollster::block_on(self.finish_internal(false, true, true, true, None))
             .map(|(pixels, _, coverage, _, _, _, _)| (pixels, coverage))
     }
 
@@ -2621,14 +2810,37 @@ impl WgpuFrame {
     fn finish_with_atomic_planes(
         self,
     ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
-        pollster::block_on(self.finish_internal(false, true, true, true))
+        pollster::block_on(self.finish_internal(false, true, true, true, None))
             .map(|(pixels, _, coverage, clips, colors, _, _)| (pixels, coverage, clips, colors))
     }
 
     #[cfg(test)]
     fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
-        pollster::block_on(self.finish_internal(false, false, false, true))
+        pollster::block_on(self.finish_internal(false, false, false, true, None))
             .map(|(pixels, _, _, _, _, _, _)| pixels)
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    pub(crate) fn finish_to_texture_view(
+        self,
+        target: &wgpu::TextureView,
+        presenter: &surface::PresentPipeline,
+    ) -> Result<WgpuFrameMetrics, RendererError> {
+        pollster::block_on(self.finish_to_texture_view_async(target, presenter))
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    async fn finish_to_texture_view_async(
+        self,
+        target: &wgpu::TextureView,
+        presenter: &surface::PresentPipeline,
+    ) -> Result<WgpuFrameMetrics, RendererError> {
+        let mut metrics = self.metrics();
+        let (_, _, _, _, _, backend_work, _) = self
+            .finish_internal(false, false, true, false, Some((target, presenter)))
+            .await?;
+        metrics.backend_work = backend_work;
+        Ok(metrics)
     }
 
     async fn finish_internal(
@@ -2637,6 +2849,11 @@ impl WgpuFrame {
         capture_atomic_planes: bool,
         schedule_msaa_draws: bool,
         read_pixels: bool,
+        #[cfg(any(target_os = "ios", target_os = "macos"))] presentation: Option<(
+            &wgpu::TextureView,
+            &surface::PresentPipeline,
+        )>,
+        #[cfg(not(any(target_os = "ios", target_os = "macos")))] _presentation: Option<()>,
     ) -> Result<
         (
             Vec<u8>,
@@ -2652,10 +2869,7 @@ impl WgpuFrame {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
-        let frame_attachments = self
-            .context
-            .frame_attachments
-            .checkout(&self.context.device);
+        let frame_attachments = Arc::clone(&self.frame_attachments.attachments);
         let texture = frame_attachments.target_texture.clone();
         let view = frame_attachments.target_view.clone();
         let multisample_view = frame_attachments.multisample_view.clone();
@@ -6120,6 +6334,10 @@ impl WgpuFrame {
 
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            if let Some((target, presenter)) = presentation {
+                presenter.encode(&self.context.device, &mut encoder, target, &view);
+            }
             tessellation_uploads
                 .borrow_mut()
                 .finish_submission(&encoder);
@@ -6127,6 +6345,11 @@ impl WgpuFrame {
             if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
                 backing.did_submit();
             }
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            if presentation.is_none() {
+                wait_for_submitted_work(&self.context, submission).await?;
+            }
+            #[cfg(not(any(target_os = "ios", target_os = "macos")))]
             wait_for_submitted_work(&self.context, submission).await?;
             tessellation_texture_frame.borrow_mut().recycle();
             #[cfg(feature = "perf-diagnostics")]
@@ -6178,9 +6401,6 @@ impl WgpuFrame {
                 }
             }
             let backend_work = self.work_recorder.snapshot();
-            self.context
-                .frame_attachments
-                .recycle(Arc::clone(&frame_attachments));
             return Ok((
                 Vec::new(),
                 Vec::new(),
@@ -6278,9 +6498,6 @@ impl WgpuFrame {
         let atomic_color_snapshots = read_atomic_snapshots(&pending_atomic_color_readbacks).await?;
         tessellation_texture_frame.borrow_mut().recycle();
         let backend_work = self.work_recorder.snapshot();
-        self.context
-            .frame_attachments
-            .recycle(Arc::clone(&frame_attachments));
         Ok((
             pixels,
             coverage_snapshots,
@@ -12647,20 +12864,20 @@ mod tests {
     fn frame_attachments_are_reused_after_gpu_completion() {
         for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
             let factory = WgpuFactory::new_with_mode(8, 8, mode).unwrap();
-            let initial = factory.context.frame_attachments.cached();
+            let initial = factory.frame_attachments.cached();
 
             factory
                 .begin_frame_for_benchmark(0xff00_0000, false)
                 .finish_for_benchmark()
                 .unwrap();
-            let after_first = factory.context.frame_attachments.cached();
+            let after_first = factory.frame_attachments.cached();
             assert!(Arc::ptr_eq(&initial, &after_first));
 
             factory
                 .begin_frame_for_benchmark(0xff00_0000, false)
                 .finish_for_benchmark()
                 .unwrap();
-            let after_second = factory.context.frame_attachments.cached();
+            let after_second = factory.frame_attachments.cached();
             assert!(Arc::ptr_eq(&initial, &after_second));
         }
     }
@@ -12668,19 +12885,69 @@ mod tests {
     #[test]
     fn frame_attachment_pool_drops_concurrent_overflow() {
         let factory = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa).unwrap();
-        let first = factory
-            .context
-            .frame_attachments
-            .checkout(&factory.context.device);
-        let second = factory
-            .context
-            .frame_attachments
-            .checkout(&factory.context.device);
+        let first = factory.frame_attachments.checkout(&factory.context.device);
+        let second = factory.frame_attachments.checkout(&factory.context.device);
         assert!(!Arc::ptr_eq(&first, &second));
 
-        factory.context.frame_attachments.recycle(first);
-        factory.context.frame_attachments.recycle(second);
-        assert_eq!(factory.context.frame_attachments.cached_len(), 1);
+        factory.frame_attachments.recycle(first);
+        factory.frame_attachments.recycle(second);
+        assert_eq!(factory.frame_attachments.cached_len(), 1);
+    }
+
+    #[test]
+    fn factory_resize_replaces_frame_attachments_and_rejects_zero_extent() {
+        let mut factory = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa).unwrap();
+        let initial = factory.frame_attachments.cached();
+
+        factory.resize(16, 12).unwrap();
+        let resized = factory.frame_attachments.cached();
+
+        assert!(!Arc::ptr_eq(&initial, &resized));
+        assert_eq!(factory.dimensions(), (16, 12));
+        assert!(matches!(
+            factory.resize(0, 12),
+            Err(RendererError::InvalidTextureExtent {
+                label: "render target",
+                width: 0,
+                height: 12,
+                ..
+            })
+        ));
+        assert_eq!(factory.dimensions(), (16, 12));
+    }
+
+    #[test]
+    fn in_flight_frame_keeps_its_original_attachments_across_factory_resize() {
+        let mut factory = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa).unwrap();
+        let old_frame = factory.begin_frame(0xff11_2233);
+
+        factory.resize(16, 12).unwrap();
+
+        let old_pixels = old_frame.finish().unwrap();
+        assert_eq!(old_pixels.len(), 8 * 8 * 4);
+        assert_eq!(factory.dimensions(), (16, 12));
+
+        let new_pixels = factory.begin_frame(0xff44_5566).finish().unwrap();
+        assert_eq!(new_pixels.len(), 16 * 12 * 4);
+        assert_eq!(factory.dimensions(), (16, 12));
+    }
+
+    #[test]
+    fn session_factories_share_gpu_resources_but_not_frame_attachments() {
+        let first = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa).unwrap();
+        let mut second = first.new_session_factory(16, 12, RenderMode::Msaa).unwrap();
+
+        assert!(Arc::ptr_eq(&first.context, &second.context));
+        assert!(!Arc::ptr_eq(
+            &first.frame_attachments,
+            &second.frame_attachments
+        ));
+        assert_eq!(first.dimensions(), (8, 8));
+        assert_eq!(second.dimensions(), (16, 12));
+
+        second.resize(20, 10).unwrap();
+        assert_eq!(first.dimensions(), (8, 8));
+        assert_eq!(second.dimensions(), (20, 10));
     }
 
     #[test]

@@ -1033,6 +1033,11 @@ impl ArtboardInstance {
         true
     }
 
+    /// Current root-artboard dimensions after runtime layout and data binding.
+    pub fn artboard_dimensions(&self) -> (f32, f32) {
+        (self.width, self.height)
+    }
+
     pub(crate) fn artboard_property_value(&self, property_type: u64) -> f32 {
         match property_type {
             0 => self.width,

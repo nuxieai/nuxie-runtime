@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+output_root="${1:-${repo_root}/target/apple-runtime}"
+profile="${NUX_APPLE_PROFILE:-release-apple}"
+deployment_target="${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}"
+rust_toolchain="${NUX_APPLE_RUST_TOOLCHAIN:-1.94.1}"
+rust_cargo="$(rustup which --toolchain "${rust_toolchain}" cargo)"
+rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
+runtime_revision="${NUX_RUNTIME_SOURCE_REVISION:-}"
+xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
+xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
+iphoneos_sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+iphoneos_sdk_build="$(xcrun --sdk iphoneos --show-sdk-build-version)"
+iphonesimulator_sdk_version="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+iphonesimulator_sdk_build="$(xcrun --sdk iphonesimulator --show-sdk-build-version)"
+build_root="${output_root}/build"
+cargo_target_dir="${build_root}/cargo"
+headers_dir="${build_root}/Headers"
+simulator_dir="${build_root}/simulator"
+xcframework_path="${output_root}/NuxieRuntime.xcframework"
+archive_path="${output_root}/NuxieRuntime.xcframework.zip"
+metadata_path="${output_root}/artifact.json"
+
+if [[ -n "${NUX_APPLE_XCODE_VERSION:-}" && "${xcode_version}" != "${NUX_APPLE_XCODE_VERSION}" ]]; then
+    echo "Xcode version ${xcode_version} does not match required ${NUX_APPLE_XCODE_VERSION}" >&2
+    exit 6
+fi
+if [[ -n "${NUX_APPLE_XCODE_BUILD:-}" && "${xcode_build}" != "${NUX_APPLE_XCODE_BUILD}" ]]; then
+    echo "Xcode build ${xcode_build} does not match required ${NUX_APPLE_XCODE_BUILD}" >&2
+    exit 7
+fi
+
+case "${output_root}" in
+    /|"${repo_root}"|"")
+        echo "refusing unsafe output path: ${output_root}" >&2
+        exit 2
+        ;;
+esac
+
+if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ -z "${runtime_revision}" ]]; then
+        runtime_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
+    fi
+    if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" ]]; then
+        if [[ "${NUX_APPLE_ALLOW_DIRTY:-0}" != "1" ]]; then
+            echo "refusing to package a dirty runtime tree" >&2
+            echo "commit the runtime or set NUX_APPLE_ALLOW_DIRTY=1 for a local prototype" >&2
+            exit 4
+        fi
+        runtime_revision="${runtime_revision}-dirty"
+    fi
+elif [[ -z "${runtime_revision}" ]]; then
+    echo "NUX_RUNTIME_SOURCE_REVISION is required outside a Git worktree" >&2
+    exit 8
+fi
+if [[ ! "${runtime_revision}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+    echo "runtime source revision is not metadata-safe: ${runtime_revision}" >&2
+    exit 5
+fi
+
+mkdir -p "${output_root}" "${build_root}" "${headers_dir}" "${simulator_dir}"
+
+targets=(
+    aarch64-apple-ios
+    aarch64-apple-ios-sim
+    x86_64-apple-ios
+)
+
+for target in "${targets[@]}"; do
+    if ! rustup target list --toolchain "${rust_toolchain}" --installed | grep -qx "${target}"; then
+        echo "missing Rust target ${target} for toolchain ${rust_toolchain}" >&2
+        echo "install it with: rustup target add --toolchain ${rust_toolchain} ${target}" >&2
+        exit 3
+    fi
+    IPHONEOS_DEPLOYMENT_TARGET="${deployment_target}" \
+    NUX_RUNTIME_BUILD_PROFILE="${profile}" \
+    NUX_RUNTIME_SOURCE_REVISION="${runtime_revision}" \
+    CARGO_TARGET_DIR="${cargo_target_dir}" \
+    RUSTC="${rust_compiler}" \
+        "${rust_cargo}" build \
+            --manifest-path "${repo_root}/Cargo.toml" \
+            --locked \
+            --package nux-apple-runtime \
+            --no-default-features \
+            --features apple-product \
+            --profile "${profile}" \
+            --target "${target}"
+done
+
+device_library="${cargo_target_dir}/aarch64-apple-ios/${profile}/libnux_apple_runtime.a"
+arm_simulator_library="${cargo_target_dir}/aarch64-apple-ios-sim/${profile}/libnux_apple_runtime.a"
+intel_simulator_library="${cargo_target_dir}/x86_64-apple-ios/${profile}/libnux_apple_runtime.a"
+simulator_library="${simulator_dir}/libnux_apple_runtime.a"
+
+lipo -create \
+    "${arm_simulator_library}" \
+    "${intel_simulator_library}" \
+    -output "${simulator_library}"
+
+cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers_dir}/"
+cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers_dir}/"
+cp "${repo_root}/crates/nux-apple-runtime/include/module.modulemap" "${headers_dir}/"
+
+rm -rf "${xcframework_path}" "${archive_path}"
+xcodebuild -create-xcframework \
+    -library "${device_library}" \
+    -headers "${headers_dir}" \
+    -library "${simulator_library}" \
+    -headers "${headers_dir}" \
+    -output "${xcframework_path}"
+
+ditto -c -k --sequesterRsrc --keepParent "${xcframework_path}" "${archive_path}"
+checksum="$(swift package compute-checksum "${archive_path}")"
+
+printf '{\n  "schemaVersion": 1,\n  "abiMajor": %s,\n  "abiMinor": %s,\n  "runtimeVersion": "%s",\n  "sourceRevision": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "swiftPackageChecksum": "%s"\n}\n' \
+    "$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")" \
+    "$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")" \
+    "$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-apple-runtime/Cargo.toml" | head -1)" \
+    "${runtime_revision}" \
+    "${profile}" \
+    "${rust_toolchain}" \
+    "${xcode_version}" \
+    "${xcode_build}" \
+    "${iphoneos_sdk_version}" \
+    "${iphoneos_sdk_build}" \
+    "${iphonesimulator_sdk_version}" \
+    "${iphonesimulator_sdk_build}" \
+    "${deployment_target}" \
+    "${checksum}" > "${metadata_path}"
+
+"${script_dir}/verify-apple-xcframework.sh" "${xcframework_path}" "${archive_path}" "${metadata_path}"
+
+echo "XCFramework: ${xcframework_path}"
+echo "Archive: ${archive_path}"
+echo "Checksum: ${checksum}"

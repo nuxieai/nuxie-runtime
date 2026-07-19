@@ -9,6 +9,12 @@ use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
 
+/// Increment only for a breaking change to the exported C contract.
+pub const NUX_CAPI_ABI_VERSION: u32 = 1;
+
+const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
+const SOURCE_REVISION: &str = env!("NUX_RUNTIME_SOURCE_REVISION");
+
 /// Panic firewall for the C ABI boundary.
 ///
 /// Every `extern "C"` entry point runs its body through this guard so a Rust
@@ -106,6 +112,7 @@ pub enum NuxStatus {
     NotFound = 3,
     RuntimeError = 4,
     InvalidArgument = 5,
+    AbiMismatch = 6,
 }
 
 pub struct NuxFile {
@@ -161,6 +168,70 @@ impl Default for NuxStringView {
             len: 0,
         }
     }
+}
+
+impl NuxStringView {
+    fn from_static(value: &'static str) -> Self {
+        Self {
+            data: value.as_ptr().cast(),
+            len: value.len(),
+        }
+    }
+}
+
+/// Immutable identity embedded into the shipped runtime binary.
+///
+/// Both strings have process-static lifetime and are not NUL-terminated; C
+/// callers must respect their explicit lengths.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxRuntimeInfo {
+    pub abi_version: u32,
+    pub runtime_version: NuxStringView,
+    pub source_revision: NuxStringView,
+}
+
+impl Default for NuxRuntimeInfo {
+    fn default() -> Self {
+        Self {
+            abi_version: 0,
+            runtime_version: NuxStringView::default(),
+            source_revision: NuxStringView::default(),
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_capi_abi_version() -> u32 {
+    ffi_guard(0, || NUX_CAPI_ABI_VERSION)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_capi_require_abi(required_version: u32) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if required_version == NUX_CAPI_ABI_VERSION {
+            NuxStatus::Ok
+        } else {
+            NuxStatus::AbiMismatch
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_capi_runtime_info(out_info: *mut NuxRuntimeInfo) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_info.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe {
+            *out_info = NuxRuntimeInfo {
+                abi_version: NUX_CAPI_ABI_VERSION,
+                runtime_version: NuxStringView::from_static(RUNTIME_VERSION),
+                source_revision: NuxStringView::from_static(SOURCE_REVISION),
+            };
+        }
+        NuxStatus::Ok
+    })
 }
 
 /// Pointer id reported to the runtime for the single-pointer C surface.

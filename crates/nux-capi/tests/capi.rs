@@ -1,8 +1,9 @@
 use nux_capi::{
-    NuxArtboardInstance, NuxFile, NuxRenderCache, NuxRenderCallbacks, NuxStateMachineInstance,
-    NuxStatus, NuxStringView, NuxViewModelInstance, nux_artboard_instance_advance,
-    nux_artboard_instance_bind_view_model, nux_artboard_instance_draw,
-    nux_artboard_instance_draw_cached, nux_artboard_instance_free, nux_artboard_instance_new,
+    NUX_CAPI_ABI_VERSION, NuxArtboardInstance, NuxFile, NuxRenderCache, NuxRenderCallbacks,
+    NuxRuntimeInfo, NuxStateMachineInstance, NuxStatus, NuxStringView, NuxViewModelInstance,
+    nux_artboard_instance_advance, nux_artboard_instance_bind_view_model,
+    nux_artboard_instance_draw, nux_artboard_instance_draw_cached, nux_artboard_instance_free,
+    nux_artboard_instance_new, nux_capi_abi_version, nux_capi_require_abi, nux_capi_runtime_info,
     nux_file_artboard_animation_count, nux_file_artboard_count, nux_file_artboard_name,
     nux_file_artboard_state_machine_count, nux_file_artboard_state_machine_name, nux_file_free,
     nux_file_import, nux_render_cache_free, nux_render_cache_new,
@@ -49,6 +50,33 @@ fn string_view_to_owned(view: NuxStringView) -> String {
     assert!(!view.data.is_null());
     let bytes = unsafe { std::slice::from_raw_parts(view.data.cast::<u8>(), view.len) };
     std::str::from_utf8(bytes).expect("utf8 name").to_owned()
+}
+
+#[test]
+fn c_api_negotiates_an_exact_abi_and_reports_build_identity() {
+    assert_eq!(unsafe { nux_capi_abi_version() }, NUX_CAPI_ABI_VERSION);
+    assert_eq!(
+        unsafe { nux_capi_require_abi(NUX_CAPI_ABI_VERSION) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_capi_require_abi(NUX_CAPI_ABI_VERSION + 1) },
+        NuxStatus::AbiMismatch
+    );
+
+    let mut info = NuxRuntimeInfo::default();
+    assert_eq!(unsafe { nux_capi_runtime_info(&mut info) }, NuxStatus::Ok);
+    assert_eq!(info.abi_version, NUX_CAPI_ABI_VERSION);
+    assert_eq!(
+        string_view_to_owned(info.runtime_version),
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(!string_view_to_owned(info.source_revision).is_empty());
+
+    assert_eq!(
+        unsafe { nux_capi_runtime_info(std::ptr::null_mut()) },
+        NuxStatus::NullArgument
+    );
 }
 
 #[test]

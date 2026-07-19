@@ -113,6 +113,18 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    CHECK(nux_capi_abi_version() == NUX_CAPI_ABI_VERSION);
+    CHECK(nux_capi_require_abi(NUX_CAPI_ABI_VERSION) == NUX_STATUS_OK);
+    CHECK(nux_capi_require_abi(NUX_CAPI_ABI_VERSION + 1) ==
+          NUX_STATUS_ABI_MISMATCH);
+    NuxRuntimeInfo runtime_info = {0};
+    CHECK(nux_capi_runtime_info(&runtime_info) == NUX_STATUS_OK);
+    CHECK(runtime_info.abi_version == NUX_CAPI_ABI_VERSION);
+    CHECK(runtime_info.runtime_version.data != NULL);
+    CHECK(runtime_info.runtime_version.len > 0);
+    CHECK(runtime_info.source_revision.data != NULL);
+    CHECK(runtime_info.source_revision.len > 0);
+
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
 

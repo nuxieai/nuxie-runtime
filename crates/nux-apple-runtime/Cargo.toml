@@ -1,0 +1,31 @@
+[package]
+name = "nux-apple-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[features]
+default = []
+apple-product = ["nuxie/renderer"]
+
+[dependencies]
+nuxie = { path = "../nuxie", default-features = false }
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
+objc2 = "0.6.4"
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFCGTypes"] }
+objc2-metal = { version = "0.3.2", default-features = false, features = ["MTLDevice", "MTLDrawable", "MTLPixelFormat"] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
+
+[build-dependencies]
+cbindgen = "=0.29.2"
+
+[lints.clippy]
+unwrap_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"

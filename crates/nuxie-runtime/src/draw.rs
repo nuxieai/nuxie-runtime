@@ -24,10 +24,11 @@ use taffy::prelude::{
 use taffy::style::Direction as TaffyDirection;
 
 use crate::properties::{
-    RuntimeLayoutComputedProperty, cached_property_key_for_name, property_key_for_name,
-    runtime_object_explicit_bool_property_by_key, runtime_object_explicit_double_property_by_key,
-    runtime_object_explicit_uint_property_by_key, runtime_object_uint_property_by_key,
-    shape_paint_is_visible_property_key, solid_color_value_property_key,
+    RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
+    property_key_for_name, runtime_object_explicit_bool_property_by_key,
+    runtime_object_explicit_double_property_by_key, runtime_object_explicit_uint_property_by_key,
+    runtime_object_uint_property_by_key, shape_paint_is_visible_property_key,
+    solid_color_value_property_key,
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
@@ -74,6 +75,12 @@ enum RuntimeGradientPaintFilter {
     OnlyLayoutComponents,
     ExcludeRootArtboard,
     OnlyRootArtboard,
+}
+
+#[derive(Clone, Copy)]
+enum RuntimeComponentListPreparationPhase {
+    Initial,
+    DeferredVirtualized,
 }
 
 impl RuntimeGradientPaintFilter {
@@ -528,6 +535,34 @@ fn runtime_nested_artboard_layout_property_key_for_name(property_name: &str) -> 
         "instanceWidth" => cached_runtime_property_key!("NestedArtboardLayout", "instanceWidth"),
         "instanceHeight" => cached_runtime_property_key!("NestedArtboardLayout", "instanceHeight"),
         _ => property_key_for_name("NestedArtboardLayout", property_name),
+    }
+}
+
+fn runtime_component_list_override_property_key_for_name(property_name: &str) -> Option<u16> {
+    match property_name {
+        "artboardId" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "artboardId")
+        }
+        "instanceWidth" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceWidth")
+        }
+        "instanceHeight" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceHeight")
+        }
+        "instanceWidthUnitsValue" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceWidthUnitsValue")
+        }
+        "instanceHeightUnitsValue" => cached_runtime_property_key!(
+            "ArtboardComponentListOverride",
+            "instanceHeightUnitsValue"
+        ),
+        "instanceWidthScaleType" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceWidthScaleType")
+        }
+        "instanceHeightScaleType" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceHeightScaleType")
+        }
+        _ => property_key_for_name("ArtboardComponentListOverride", property_name),
     }
 }
 
@@ -1413,19 +1448,6 @@ impl ArtboardInstance {
         )?;
 
         for command in commands {
-            if command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList {
-                self.prepare_static_component_list_paints(
-                    runtime,
-                    artboards,
-                    factory,
-                    nested_paint_caches.as_deref_mut(),
-                    render_cache,
-                    command,
-                    apply_nested_layout_bounds,
-                    nested_ancestors,
-                )?;
-                continue;
-            }
             if command.referenced_artboard_global.is_none()
                 || !runtime_draw_command_is_nested_artboard(&command)
             {
@@ -1445,6 +1467,22 @@ impl ArtboardInstance {
                 nested_ancestors,
             )?;
         }
+
+        // C++ updates nested artboard hosts recursively before advancing the
+        // owning artboard's DataBindContainer. A nested host can therefore
+        // materialize its component-list children before a list on this
+        // artboard, independent of draw order. Preserve that construction
+        // order because render-paint identity belongs to each child instance.
+        self.prepare_static_component_list_paints_in_lifecycle_order(
+            runtime,
+            artboards,
+            factory,
+            nested_paint_caches.as_deref_mut(),
+            render_cache,
+            commands,
+            apply_nested_layout_bounds,
+            nested_ancestors,
+        )?;
 
         if let Some(preparation) = paint_preparation.as_deref_mut() {
             *preparation = Some(RuntimePaintPreparationFrame {
@@ -1470,6 +1508,47 @@ impl ArtboardInstance {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn prepare_static_component_list_paints_in_lifecycle_order(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
+        render_cache: &mut RuntimeRenderPathCache,
+        commands: &[RuntimeDrawCommand],
+        apply_nested_layout_bounds: bool,
+        nested_ancestors: &BTreeSet<u32>,
+    ) -> Result<()> {
+        let commands = runtime_component_list_preparation_commands(commands);
+        // C++ creates non-virtualized rows during the authored list update,
+        // while a virtualized list first mounts its seed row for layout and
+        // mounts the rest of the visible window after sibling list updates.
+        // Preserve that two-phase instance lifecycle because render-paint
+        // identity is allocated when each child artboard is created.
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in &commands {
+                self.prepare_static_component_list_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                    phase,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn prepare_static_component_list_paints(
         &self,
         runtime: &RuntimeFile,
@@ -1482,14 +1561,25 @@ impl ArtboardInstance {
         command: &RuntimeDrawCommand,
         apply_nested_layout_bounds: bool,
         nested_ancestors: &BTreeSet<u32>,
+        phase: RuntimeComponentListPreparationPhase,
     ) -> Result<()> {
-        let Some(items) = command
-            .local_id
-            .and_then(|local_id| self.component_list_items.get(&local_id))
-        else {
+        let Some(local_id) = command.local_id else {
             return Ok(());
         };
-        for (item_index, item) in items.iter().enumerate() {
+        let Some(items) = self.component_list_items.get(&local_id) else {
+            return Ok(());
+        };
+        let is_virtualized =
+            crate::constraints::component_list_virtualization(self, local_id).is_some();
+        let (start, end) = match (phase, is_virtualized) {
+            (RuntimeComponentListPreparationPhase::Initial, true) => (0, items.len().min(1)),
+            (RuntimeComponentListPreparationPhase::Initial, false) => (0, items.len()),
+            (RuntimeComponentListPreparationPhase::DeferredVirtualized, true) => {
+                (items.len().min(1), items.len())
+            }
+            (RuntimeComponentListPreparationPhase::DeferredVirtualized, false) => (0, 0),
+        };
+        for item in &items[start..end] {
             if nested_ancestors.contains(&item.child.graph_global_id) {
                 continue;
             }
@@ -1505,7 +1595,7 @@ impl ArtboardInstance {
                 command.global_id,
                 command.local_id,
                 item.child.graph_global_id,
-                item_index,
+                item.logical_index,
                 item.render_cache_revision,
             );
             let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
@@ -1794,22 +1884,6 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
-        for command in commands {
-            if command.object_kind != RuntimeDrawCommandObjectKind::ArtboardComponentList {
-                continue;
-            }
-            self.prepare_static_component_list_paints(
-                runtime,
-                artboards,
-                factory,
-                nested_paint_caches.as_deref_mut(),
-                render_cache,
-                command,
-                apply_nested_layout_bounds,
-                nested_ancestors,
-            )?;
-        }
-
         let mut nested_command_by_local = Vec::new();
         for command in commands {
             if command.referenced_artboard_global.is_none()
@@ -1859,6 +1933,16 @@ impl ArtboardInstance {
                     nested_ancestors,
                 )?;
             }
+            self.prepare_static_component_list_paints_in_lifecycle_order(
+                runtime,
+                artboards,
+                factory,
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
+                commands,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )?;
             return Ok(());
         }
 
@@ -1927,6 +2011,17 @@ impl ArtboardInstance {
                 local_id,
             )?;
         }
+
+        self.prepare_static_component_list_paints_in_lifecycle_order(
+            runtime,
+            artboards,
+            factory,
+            nested_paint_caches.as_deref_mut(),
+            render_cache,
+            commands,
+            apply_nested_layout_bounds,
+            nested_ancestors,
+        )?;
 
         Ok(())
     }
@@ -2182,6 +2277,8 @@ impl ArtboardInstance {
 
         let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let component_list_item_bounds = prepared.component_list_item_bounds.as_ref();
+        let component_list_layout_children = prepared.component_list_layout_children.as_ref();
         if let Some(background) = prepared.background.as_ref() {
             runtime_draw_background(
                 runtime,
@@ -2204,6 +2301,8 @@ impl ArtboardInstance {
                 artboards,
                 command,
                 layout_bounds,
+                component_list_item_bounds,
+                component_list_layout_children,
                 factory,
                 renderer,
                 paint_by_global,
@@ -2852,6 +2951,26 @@ impl ArtboardInstance {
         runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
         TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
+    }
+
+    /// Parent-assigned bounds for every currently mounted component-list row.
+    /// C++ obtains the same values by transferring each row artboard's Yoga
+    /// node into the hosting layout before
+    /// `ArtboardComponentList::updateLayoutBounds` writes the result back to
+    /// `m_artboardSizes`.
+    pub(crate) fn runtime_component_list_assigned_layout_bounds(
+        &self,
+    ) -> BTreeMap<usize, Vec<RuntimeLayoutBounds>> {
+        if self.component_list_items.is_empty() {
+            return BTreeMap::new();
+        }
+        let Some(graph) = self.runtime_graph() else {
+            return BTreeMap::new();
+        };
+        TaffyRuntimeLayoutEngine
+            .compute_layout(self, graph, self.runtime_file())
+            .map(|layout| layout.component_list_item_bounds)
+            .unwrap_or_default()
     }
 
     #[doc(hidden)]
@@ -3574,11 +3693,11 @@ impl ArtboardInstance {
                     child_sizes.push((bounds.width, bounds.height));
                 }
                 "ArtboardComponentList" => {
-                    // Ported from C++ `src/artboard_component_list.cpp`
-                    // `ArtboardComponentList::layoutBounds`: non-virtualized
-                    // lists with no instantiated items retain the default
-                    // zero layout size, which makes hug-sized parents collapse.
-                    child_sizes.push((0.0, 0.0));
+                    child_sizes.push(
+                        TaffyRuntimeLayoutEngine
+                            .measure_component_list_layout_child(self, layout_local, *child_local)
+                            .unwrap_or((0.0, 0.0)),
+                    );
                 }
                 "Text" => {
                     if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
@@ -4082,7 +4201,11 @@ impl ArtboardInstance {
                     )?;
                     child_sizes.push((width, height));
                 }
-                "ArtboardComponentList" => child_sizes.push((0.0, 0.0)),
+                "ArtboardComponentList" => child_sizes.push(
+                    TaffyRuntimeLayoutEngine
+                        .measure_component_list_layout_child(self, layout_local, *child_local)
+                        .unwrap_or((0.0, 0.0)),
+                ),
                 "Text" => {
                     if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
                         static_text_constraint_bounds(runtime, graph, self, *child_local)
@@ -4970,10 +5093,137 @@ trait RuntimeLayoutEngine {
 
 struct TaffyRuntimeLayoutEngine;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TaffyMeasureContext {
+    LayoutComponent {
+        local: usize,
+    },
+    ComponentListItem {
+        list_local: usize,
+        item_index: usize,
+        intrinsic_size: Size<f32>,
+    },
+}
+
+#[derive(Default)]
+struct RuntimeComputedLayout {
+    bounds: BTreeMap<usize, RuntimeLayoutBounds>,
+    component_list_item_bounds: BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+}
+
+fn runtime_component_list_item_layout_size(
+    item: &crate::artboard::RuntimeComponentListItemInstance,
+) -> (f32, f32) {
+    item.child
+        .runtime_graph()
+        .and_then(|graph| {
+            item.child
+                .runtime_taffy_layout_bounds(graph, item.child.runtime_file())
+        })
+        .and_then(|bounds| bounds.get(&0).copied())
+        .map(|bounds| (bounds.width, bounds.height))
+        .unwrap_or((item.child.width, item.child.height))
+}
+
+fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64, u64) {
+    fn mix(epoch: &mut u64, value: u64) {
+        *epoch = epoch.wrapping_mul(0x100000001b3) ^ value;
+    }
+
+    fn visit(
+        instance: &ArtboardInstance,
+        layout_epoch: &mut u64,
+        prepared_epoch: &mut u64,
+        visited: &mut BTreeSet<u64>,
+    ) {
+        if !visited.insert(instance.instance_identity()) {
+            return;
+        }
+        for (list_local, items) in &instance.component_list_items {
+            mix(layout_epoch, *list_local as u64);
+            mix(layout_epoch, items.len() as u64);
+            mix(prepared_epoch, *list_local as u64);
+            mix(prepared_epoch, items.len() as u64);
+            for item in items {
+                for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
+                    mix(epoch, item.context.instance_identity());
+                    mix(epoch, item.occurrence_identity);
+                    mix(epoch, item.logical_index as u64);
+                    mix(epoch, item.render_cache_revision);
+                    mix(epoch, u64::from(item.child.graph_global_id));
+                    mix(epoch, item.child.instance_identity());
+                }
+                if let Some((x, y)) = item.virtualized_position {
+                    for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
+                        mix(epoch, u64::from(x.to_bits()));
+                        mix(epoch, u64::from(y.to_bits()));
+                    }
+                }
+                mix(layout_epoch, item.child.layout_epoch());
+                mix(layout_epoch, u64::from(item.child.width.to_bits()));
+                mix(layout_epoch, u64::from(item.child.height.to_bits()));
+                // The prepared frame owns a transient clone of each mounted
+                // child, so it must track all live instance-property writes,
+                // not only prepared-topology changes. For example SolidColor
+                // mutations intentionally bump `cache_epoch` without bumping
+                // `prepared_epoch`; omitting this would keep drawing the
+                // clone's stale paint value.
+                mix(prepared_epoch, item.child.cache_epoch());
+                mix(prepared_epoch, item.child.prepared_epoch());
+                visit(&item.child, layout_epoch, prepared_epoch, visited);
+            }
+        }
+    }
+
+    let mut layout_epoch = 0xcbf29ce484222325;
+    let mut prepared_epoch = 0xcbf29ce484222325;
+    visit(
+        instance,
+        &mut layout_epoch,
+        &mut prepared_epoch,
+        &mut BTreeSet::new(),
+    );
+    (layout_epoch, prepared_epoch)
+}
+
+fn runtime_component_list_layout_children(
+    instance: &ArtboardInstance,
+    item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+) -> BTreeMap<usize, Vec<ArtboardInstance>> {
+    let mut children = BTreeMap::new();
+    for (list_local, items) in &instance.component_list_items {
+        let assigned_bounds = item_bounds.get(list_local);
+        let mut layout_items = Vec::with_capacity(items.len());
+        for (item_index, item) in items.iter().enumerate() {
+            let bounds = assigned_bounds
+                .and_then(|bounds| bounds.get(item_index))
+                .copied()
+                .unwrap_or_else(|| {
+                    let (width, height) = runtime_component_list_item_layout_size(item);
+                    RuntimeLayoutBounds {
+                        x: 0.0,
+                        y: 0.0,
+                        width,
+                        height,
+                    }
+                });
+            item.settled_layout_size
+                .set(Some((bounds.width, bounds.height)));
+            let mut child = item.child.clone_for_transient_layout();
+            runtime_apply_component_list_item_layout_bounds(&mut child, bounds);
+            runtime_settle_nested_artboard_layout_child(&mut child);
+            layout_items.push(child);
+        }
+        children.insert(*list_local, layout_items);
+    }
+    children
+}
+
 #[derive(Default)]
 struct TaffyLayoutBuild {
     nodes_by_local: BTreeMap<usize, NodeId>,
     children_by_local: BTreeMap<usize, Vec<usize>>,
+    component_list_item_nodes: BTreeMap<usize, Vec<NodeId>>,
 }
 
 fn definite_available_space(space: AvailableSpace) -> Option<f32> {
@@ -5010,6 +5260,34 @@ impl TaffyRuntimeLayoutEngine {
         runtime: Option<&RuntimeFile>,
         root_hug: Size<bool>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        self.compute_layout_with_root_hug(instance, graph, runtime, root_hug)
+            .map(|layout| layout.bounds)
+    }
+
+    fn compute_layout(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> Option<RuntimeComputedLayout> {
+        self.compute_layout_with_root_hug(
+            instance,
+            graph,
+            runtime,
+            Size {
+                width: false,
+                height: false,
+            },
+        )
+    }
+
+    fn compute_layout_with_root_hug(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+        root_hug: Size<bool>,
+    ) -> Option<RuntimeComputedLayout> {
         // Ported from C++ `src/layout_component.cpp`
         // `syncStyle`/`syncLayoutChildren`/`calculateLayoutInternal`: translate
         // Rive layout style into the delegated layout engine, then expose the
@@ -5021,7 +5299,7 @@ impl TaffyRuntimeLayoutEngine {
         if root.type_name != "Artboard" {
             return None;
         }
-        let mut taffy = TaffyTree::<usize>::new();
+        let mut taffy = TaffyTree::<TaffyMeasureContext>::new();
         taffy.disable_rounding();
         let mut build = TaffyLayoutBuild::default();
         let root_node =
@@ -5048,25 +5326,53 @@ impl TaffyRuntimeLayoutEngine {
                 root_node,
                 available_space,
                 |known_dimensions, available_space, _node_id, node_context, _style| {
-                    node_context
-                        .and_then(|layout_local| {
-                            self.measure_layout_component(
-                                runtime?,
-                                instance,
-                                graph,
-                                *layout_local,
-                                known_dimensions,
-                                available_space,
-                            )
-                        })
-                        .unwrap_or(Size::ZERO)
+                    match node_context {
+                        Some(TaffyMeasureContext::LayoutComponent { local }) => runtime
+                            .and_then(|runtime| {
+                                self.measure_layout_component(
+                                    runtime,
+                                    instance,
+                                    graph,
+                                    *local,
+                                    known_dimensions,
+                                    available_space,
+                                )
+                            })
+                            .unwrap_or(Size::ZERO),
+                        Some(TaffyMeasureContext::ComponentListItem {
+                            list_local: _,
+                            item_index: _,
+                            intrinsic_size,
+                        }) => Size {
+                            width: known_dimensions.width.unwrap_or(intrinsic_size.width),
+                            height: known_dimensions.height.unwrap_or(intrinsic_size.height),
+                        },
+                        None => Size::ZERO,
+                    }
                 },
             )
             .ok()?;
 
         let mut bounds = BTreeMap::new();
         self.collect_bounds(0, 0.0, 0.0, &taffy, &build, &mut bounds)?;
-        Some(bounds)
+        let mut component_list_item_bounds = BTreeMap::new();
+        for (list_local, nodes) in &build.component_list_item_nodes {
+            let mut item_bounds = Vec::with_capacity(nodes.len());
+            for node in nodes {
+                let layout = taffy.layout(*node).ok()?;
+                item_bounds.push(RuntimeLayoutBounds {
+                    x: layout.location.x,
+                    y: layout.location.y,
+                    width: layout.size.width,
+                    height: layout.size.height,
+                });
+            }
+            component_list_item_bounds.insert(*list_local, item_bounds);
+        }
+        Some(RuntimeComputedLayout {
+            bounds,
+            component_list_item_bounds,
+        })
     }
 
     fn build_node(
@@ -5076,7 +5382,7 @@ impl TaffyRuntimeLayoutEngine {
         runtime: Option<&RuntimeFile>,
         local: usize,
         parent_is_row: bool,
-        taffy: &mut TaffyTree<usize>,
+        taffy: &mut TaffyTree<TaffyMeasureContext>,
         build: &mut TaffyLayoutBuild,
     ) -> Option<NodeId> {
         // Cycle guard: a malformed-but-accepted file can make the layout child
@@ -5148,6 +5454,37 @@ impl TaffyRuntimeLayoutEngine {
                     if !self.zero_sized_component_list_supported(graph, *child_local)? {
                         return None;
                     }
+                    if let Some(items) = instance.component_list_items.get(child_local) {
+                        for (item_index, item) in items.iter().enumerate() {
+                            let intrinsic_size = runtime_component_list_item_layout_size(item);
+                            let item_style = self.component_list_item_style(
+                                instance,
+                                graph,
+                                *child_local,
+                                item,
+                                is_row,
+                            )?;
+                            let item_node = taffy
+                                .new_leaf_with_context(
+                                    item_style,
+                                    TaffyMeasureContext::ComponentListItem {
+                                        list_local: *child_local,
+                                        item_index,
+                                        intrinsic_size: Size {
+                                            width: intrinsic_size.0,
+                                            height: intrinsic_size.1,
+                                        },
+                                    },
+                                )
+                                .ok()?;
+                            child_nodes.push(item_node);
+                            build
+                                .component_list_item_nodes
+                                .entry(*child_local)
+                                .or_default()
+                                .push(item_node);
+                        }
+                    }
                 }
                 "NestedArtboardLayout" => {
                     let child_node = self.build_node(
@@ -5170,7 +5507,9 @@ impl TaffyRuntimeLayoutEngine {
             if runtime.is_some()
                 && self.layout_component_has_intrinsic_static_measure(instance, graph, local)?
             {
-                taffy.new_leaf_with_context(style, local).ok()?
+                taffy
+                    .new_leaf_with_context(style, TaffyMeasureContext::LayoutComponent { local })
+                    .ok()?
             } else {
                 taffy.new_leaf(style).ok()?
             }
@@ -5180,6 +5519,228 @@ impl TaffyRuntimeLayoutEngine {
         build.nodes_by_local.insert(local, node);
         build.children_by_local.insert(local, child_locals);
         Some(node)
+    }
+
+    /// C++ contributes the mounted artboard's root Yoga node directly to the
+    /// hosting layout. Before insertion, `ArtboardComponentListOverride`
+    /// rewrites that root node's width/height scale contract. Keep the
+    /// override on the provider node (rather than on the authored child
+    /// instance) so list lifecycle remains persistent and reversible.
+    fn component_list_item_style(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        list_local: usize,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+        parent_is_row: bool,
+    ) -> Option<Style> {
+        let item_graph = item.child.runtime_graph()?;
+        let mut style = self.style_for_node(&item.child, item_graph, 0, parent_is_row)?;
+        // `style_for_node` fixes a standalone root to the current artboard
+        // dimensions because those dimensions are the root's available
+        // space. A component list instead transfers that root node into the
+        // hosting layout. Restore the authored unit/scale contract here so a
+        // fill root is `auto` and can stretch/shrink to the parent's assigned
+        // row width, exactly as C++ `Artboard::takeLayoutData()` does.
+        if let Some(style_local) = item.child.runtime_layout_component_style_local(0) {
+            style.size = Size {
+                width: self.axis_dimension(&item.child, item_graph, 0, style_local, true)?,
+                height: self.axis_dimension(&item.child, item_graph, 0, style_local, false)?,
+            };
+        }
+        let Some(override_local) =
+            self.component_list_item_override_local(instance, graph, list_local, item)
+        else {
+            return Some(style);
+        };
+
+        let width_scale = self.component_list_override_axis_scale(instance, override_local, true);
+        let height_scale = self.component_list_override_axis_scale(instance, override_local, false);
+        self.apply_component_list_item_axis_override(
+            instance,
+            override_local,
+            item,
+            parent_is_row,
+            true,
+            width_scale,
+            &mut style,
+        )?;
+
+        // Match `StyleOverrider::updateHeightOverride` literally. Upstream's
+        // hug branch currently checks `instanceWidthScaleType`; fixed/fill use
+        // the height scale as expected. Keeping this quirk is required for
+        // byte-exact behavior with the pinned C++ runtime.
+        let effective_height_scale = match height_scale {
+            0 | 1 => Some(height_scale),
+            _ if width_scale == 2 => Some(2),
+            _ => None,
+        };
+        if let Some(height_scale) = effective_height_scale {
+            self.apply_component_list_item_axis_override(
+                instance,
+                override_local,
+                item,
+                parent_is_row,
+                false,
+                height_scale,
+                &mut style,
+            )?;
+        }
+        Some(style)
+    }
+
+    fn component_list_item_override_local(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        list_local: usize,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+    ) -> Option<usize> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == list_local)?;
+        let item_artboard_index = item
+            .child
+            .runtime_file()
+            .zip(item.child.runtime_graph())
+            .and_then(|(file, item_graph)| artboard_index_for_graph(file, item_graph));
+        let artboard_id_key = runtime_component_list_override_property_key_for_name("artboardId")?;
+        let mut default_override = None;
+        for child_local in &component.children {
+            if graph
+                .components
+                .iter()
+                .find(|candidate| candidate.local_id == *child_local)
+                .is_none_or(|candidate| candidate.type_name != "ArtboardComponentListOverride")
+            {
+                continue;
+            }
+            let artboard_id = instance
+                .uint_property(*child_local, artboard_id_key)
+                .unwrap_or(u64::from(u32::MAX));
+            if artboard_id == u64::from(u32::MAX) {
+                default_override = Some(*child_local);
+            } else if usize::try_from(artboard_id).ok() == item_artboard_index {
+                return Some(*child_local);
+            }
+        }
+        default_override
+    }
+
+    fn component_list_override_axis_scale(
+        &self,
+        instance: &ArtboardInstance,
+        override_local: usize,
+        width_axis: bool,
+    ) -> u64 {
+        runtime_component_list_override_property_key_for_name(if width_axis {
+            "instanceWidthScaleType"
+        } else {
+            "instanceHeightScaleType"
+        })
+        .and_then(|key| instance.uint_property(override_local, key))
+        .unwrap_or(0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_component_list_item_axis_override(
+        &self,
+        instance: &ArtboardInstance,
+        override_local: usize,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+        parent_is_row: bool,
+        width_axis: bool,
+        scale: u64,
+        style: &mut Style,
+    ) -> Option<()> {
+        if !matches!(scale, 0 | 1 | 2) {
+            return None;
+        }
+        let value_key = runtime_component_list_override_property_key_for_name(if width_axis {
+            "instanceWidth"
+        } else {
+            "instanceHeight"
+        })?;
+        let units_key = runtime_component_list_override_property_key_for_name(if width_axis {
+            "instanceWidthUnitsValue"
+        } else {
+            "instanceHeightUnitsValue"
+        })?;
+        let configured_value = instance
+            .double_property(override_local, value_key)
+            .unwrap_or(-1.0);
+        let original_value = item
+            .child
+            .runtime_file()
+            .and_then(|file| file.object(item.child.graph_global_id as usize))
+            .and_then(|artboard| {
+                artboard.double_property(if width_axis { "width" } else { "height" })
+            })
+            .unwrap_or(if width_axis {
+                item.child.width
+            } else {
+                item.child.height
+            });
+        let value = if configured_value == -1.0 {
+            original_value
+        } else {
+            configured_value
+        };
+        let units = instance
+            .uint_property(override_local, units_key)
+            .unwrap_or(1);
+        let dimension = match scale {
+            0 => self.dimension_from_unit(value.max(0.0), units)?,
+            1 | 2 => Dimension::auto(),
+            _ => return None,
+        };
+        if width_axis {
+            style.size.width = dimension;
+        } else {
+            style.size.height = dimension;
+        }
+
+        if width_axis == parent_is_row {
+            match scale {
+                0 | 2 => {
+                    style.flex_grow = 0.0;
+                    style.flex_shrink = 0.0;
+                    style.flex_basis = Dimension::auto();
+                }
+                1 => {
+                    style.flex_grow = item.child.runtime_layout_axis_fraction(0, width_axis);
+                    style.flex_shrink = style.flex_grow;
+                    style.flex_basis = item
+                        .child
+                        .runtime_layout_component_style_local(0)
+                        .and_then(|style_local| {
+                            let basis = item
+                                .child
+                                .runtime_layout_style_double(
+                                    style_local,
+                                    RuntimeLayoutStyleProperty::FlexBasis,
+                                )
+                                .unwrap_or(0.0);
+                            let basis_units = item.child.runtime_layout_style_uint_default(
+                                style_local,
+                                RuntimeLayoutStyleProperty::FlexBasisUnitsValue,
+                                3,
+                            );
+                            self.dimension_from_unit(basis, basis_units)
+                        })
+                        .unwrap_or_else(Dimension::auto);
+                }
+                _ => return None,
+            }
+        } else {
+            style.align_self = match scale {
+                1 => Some(AlignSelf::STRETCH),
+                0 | 2 => None,
+                _ => return None,
+            };
+        }
+        Some(())
     }
 
     fn zero_sized_component_list_supported(
@@ -5216,7 +5777,7 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         parent_x: f32,
         parent_y: f32,
-        taffy: &TaffyTree<usize>,
+        taffy: &TaffyTree<TaffyMeasureContext>,
         build: &TaffyLayoutBuild,
         bounds: &mut BTreeMap<usize, RuntimeLayoutBounds>,
     ) -> Option<()> {
@@ -6047,7 +6608,14 @@ impl TaffyRuntimeLayoutEngine {
                 .components
                 .iter()
                 .find(|component| component.local_id == *child_local)
-                .is_some_and(|child| matches!(child.type_name, "Shape" | "Text" | "TextInput"))
+                .is_some_and(|child| {
+                    matches!(child.type_name, "Shape" | "Text" | "TextInput")
+                        || (child.type_name == "ArtboardComponentList"
+                            && instance
+                                .component_list_items
+                                .get(child_local)
+                                .is_some_and(|items| !items.is_empty()))
+                })
         }))
     }
 
@@ -6176,6 +6744,17 @@ impl TaffyRuntimeLayoutEngine {
                     measured.width = measured.width.max(width);
                     measured.height = measured.height.max(height);
                 }
+                "ArtboardComponentList" => {
+                    let Some((width, height)) = self.measure_component_list_layout_child(
+                        instance,
+                        layout_local,
+                        child.local_id,
+                    ) else {
+                        continue;
+                    };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
                 _ => {}
             }
         }
@@ -6183,6 +6762,53 @@ impl TaffyRuntimeLayoutEngine {
             width: known_dimensions.width.unwrap_or(measured.width),
             height: known_dimensions.height.unwrap_or(measured.height),
         })
+    }
+
+    /// C++ exposes each `ArtboardComponentList` row as a layout-provider node
+    /// of the hosting `LayoutComponent`. The current Taffy adapter represents
+    /// intrinsically measured non-layout children through one leaf callback,
+    /// so collapse those repeated nodes to their equivalent no-wrap intrinsic
+    /// extent. Parent padding is deliberately excluded: Taffy applies it from
+    /// the hosting component's style around this measured content box.
+    fn measure_component_list_layout_child(
+        &self,
+        instance: &ArtboardInstance,
+        layout_local: usize,
+        list_local: usize,
+    ) -> Option<(f32, f32)> {
+        let items = instance.component_list_items.get(&list_local)?;
+        if items.is_empty() {
+            return Some((0.0, 0.0));
+        }
+        let style_local = instance.runtime_layout_component_style_local(layout_local)?;
+        let is_row = instance.runtime_layout_style_is_row(style_local);
+        let gap = if is_row {
+            instance
+                .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapHorizontal)
+        } else {
+            instance
+                .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapVertical)
+        }
+        .unwrap_or(0.0);
+        let mut width: f32 = 0.0;
+        let mut height: f32 = 0.0;
+        for item in items {
+            let (item_width, item_height) = runtime_component_list_item_layout_size(item);
+            if is_row {
+                width += item_width;
+                height = height.max(item_height);
+            } else {
+                width = width.max(item_width);
+                height += item_height;
+            }
+        }
+        let total_gap = gap * items.len().saturating_sub(1) as f32;
+        if is_row {
+            width += total_gap;
+        } else {
+            height += total_gap;
+        }
+        Some((width, height))
     }
 
     fn measure_shape_layout_child(
@@ -6913,12 +7539,16 @@ struct RuntimeGeometryCacheKey {
 struct RuntimePreparedArtboardCacheKey {
     graph_global_id: u32,
     prepared_epoch: u64,
+    mounted_component_list_layout_revision: u64,
+    mounted_component_list_prepared_revision: u64,
 }
 
 #[derive(Clone)]
 struct RuntimePreparedArtboardFrame {
     key: RuntimePreparedArtboardCacheKey,
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    component_list_item_bounds: Arc<BTreeMap<usize, Vec<RuntimeLayoutBounds>>>,
+    component_list_layout_children: Arc<BTreeMap<usize, Vec<ArtboardInstance>>>,
     background: Option<RuntimePreparedBackgroundFrame>,
     commands: Arc<Vec<RuntimeDrawCommand>>,
 }
@@ -6946,12 +7576,14 @@ struct RuntimeSortedDrawableOrderFrame {
 struct RuntimeLayoutBoundsCacheKey {
     graph_global_id: u32,
     layout_epoch: u64,
+    mounted_component_list_layout_revision: u64,
 }
 
 #[derive(Clone)]
 struct RuntimeLayoutBoundsFrame {
     key: RuntimeLayoutBoundsCacheKey,
     bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    component_list_item_bounds: Arc<BTreeMap<usize, Vec<RuntimeLayoutBounds>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7502,6 +8134,22 @@ fn runtime_mark_seen_usize(seen: &mut Vec<usize>, value: usize) -> bool {
     true
 }
 
+fn runtime_component_list_preparation_commands(
+    commands: &[RuntimeDrawCommand],
+) -> Vec<&RuntimeDrawCommand> {
+    let mut component_lists = commands
+        .iter()
+        .filter(|command| {
+            command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList
+        })
+        .collect::<Vec<_>>();
+    // `Artboard::updateDataBinds` constructs component-list children in
+    // authored object order, independent of paint/draw sorting. Render-paint
+    // handles therefore have to be allocated by local id as well.
+    component_lists.sort_by_key(|command| command.local_id.unwrap_or(usize::MAX));
+    component_lists
+}
+
 fn runtime_upsert_nested_preparation_command(
     commands: &mut Vec<(usize, RuntimeDrawCommand)>,
     local_id: usize,
@@ -7757,16 +8405,26 @@ impl RuntimeRenderPathCache {
         graph: &ArtboardGraph,
         runtime: Option<&RuntimeFile>,
     ) -> RuntimePreparedArtboardFrame {
+        let (mounted_component_list_layout_revision, mounted_component_list_prepared_revision) =
+            runtime_mounted_component_list_revisions(instance);
         let key = RuntimePreparedArtboardCacheKey {
             graph_global_id: graph.global_id,
             prepared_epoch: instance.prepared_epoch(),
+            mounted_component_list_layout_revision,
+            mounted_component_list_prepared_revision,
         };
         if self
             .prepared_artboard
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let layout_bounds = self.layout_bounds_frame(instance, graph, runtime);
+            let layout_frame = self.layout_bounds_frame(
+                instance,
+                graph,
+                runtime,
+                mounted_component_list_layout_revision,
+            );
+            let layout_bounds = layout_frame.bounds.clone();
             let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
             let commands = instance.draw_commands_with_sorted_drawable_order(
                 graph,
@@ -7776,9 +8434,15 @@ impl RuntimeRenderPathCache {
             );
             let background =
                 runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
+            let component_list_layout_children = Arc::new(runtime_component_list_layout_children(
+                instance,
+                layout_frame.component_list_item_bounds.as_ref(),
+            ));
             self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
                 key,
                 layout_bounds,
+                component_list_item_bounds: layout_frame.component_list_item_bounds,
+                component_list_layout_children,
                 background,
                 commands: Arc::new(commands),
             });
@@ -7822,26 +8486,33 @@ impl RuntimeRenderPathCache {
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         runtime: Option<&RuntimeFile>,
-    ) -> Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>> {
+        mounted_component_list_layout_revision: u64,
+    ) -> RuntimeLayoutBoundsFrame {
         let key = RuntimeLayoutBoundsCacheKey {
             graph_global_id: graph.global_id,
             layout_epoch: instance.layout_epoch(),
+            mounted_component_list_layout_revision,
         };
         if self
             .layout_bounds
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
+            let layout = TaffyRuntimeLayoutEngine.compute_layout(instance, graph, runtime);
+            let (bounds, component_list_item_bounds) = match layout {
+                Some(layout) => (Some(layout.bounds), layout.component_list_item_bounds),
+                None => (None, BTreeMap::new()),
+            };
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
-                bounds: Arc::new(instance.runtime_taffy_layout_bounds(graph, runtime)),
+                bounds: Arc::new(bounds),
+                component_list_item_bounds: Arc::new(component_list_item_bounds),
             });
         }
 
         self.layout_bounds
             .as_ref()
             .expect("layout bounds frame was just populated")
-            .bounds
             .clone()
     }
 
@@ -9255,6 +9926,8 @@ fn runtime_draw_command(
     artboards: &[ArtboardGraph],
     command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
@@ -9349,6 +10022,8 @@ fn runtime_draw_command(
             paint_configurations.as_deref_mut(),
             nested_paint_caches,
             layout_bounds,
+            component_list_item_bounds,
+            component_list_layout_children,
             nested_ancestors,
         );
     }
@@ -10148,6 +10823,8 @@ fn runtime_draw_component_list(
         &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
     >,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
     nested_ancestors: &BTreeSet<u32>,
 ) -> Result<()> {
     let local_id = command
@@ -10156,8 +10833,24 @@ fn runtime_draw_component_list(
     let Some(items) = instance.component_list_items.get(&local_id) else {
         return Ok(());
     };
-    let host_world =
-        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
+    // A virtualized list's row positions already include the scroll window.
+    // C++ therefore draws it in its parent's world space; non-virtualized
+    // lists continue to use their own world transform.
+    let host_transform_local =
+        if crate::constraints::component_list_virtualization(instance, local_id).is_some() {
+            instance
+                .component(local_id)
+                .and_then(|component| component.parent_local)
+                .unwrap_or(local_id)
+        } else {
+            local_id
+        };
+    let host_world = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        host_transform_local,
+        layout_bounds,
+    );
     if command.needs_save_operation {
         renderer.save();
     }
@@ -10173,7 +10866,7 @@ fn runtime_draw_component_list(
                     instance.runtime_layout_component_style_local(parent_local)
                 })
         });
-    let (padding_left, padding_top, gap, is_row) = list_style_local
+    let (padding_left, padding_top, gap_horizontal, gap_vertical, is_row) = list_style_local
         .map(|style_local| {
             (
                 instance
@@ -10194,16 +10887,134 @@ fn runtime_draw_component_list(
                         RuntimeLayoutStyleProperty::GapHorizontal,
                     )
                     .unwrap_or(0.0),
-                instance.runtime_layout_style_uint_default(
-                    style_local,
-                    RuntimeLayoutStyleProperty::FlexDirectionValue,
-                    2,
-                ) == 2,
+                instance
+                    .runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::GapVertical,
+                    )
+                    .unwrap_or(0.0),
+                matches!(
+                    instance.runtime_layout_style_uint_default(
+                        style_local,
+                        RuntimeLayoutStyleProperty::FlexDirectionValue,
+                        2,
+                    ),
+                    2 | 3
+                ),
             )
         })
-        .unwrap_or((0.0, 0.0, 0.0, true));
+        .unwrap_or((0.0, 0.0, 0.0, 0.0, true));
+    let gap = if is_row { gap_horizontal } else { gap_vertical };
+    let uses_hosted_layout = instance
+        .component(local_id)
+        .and_then(|component| component.parent_local)
+        .and_then(|parent_local| instance.component(parent_local))
+        .is_some_and(|parent| matches!(parent.type_name, "Artboard" | "LayoutComponent"));
 
+    let mut item_main_offset = 0.0;
+    let mut item_transforms = Vec::with_capacity(items.len());
     for (item_index, item) in items.iter().enumerate() {
+        let computed_item_bounds = component_list_item_bounds
+            .get(&local_id)
+            .and_then(|bounds| bounds.get(item_index))
+            .copied();
+        let item_size = computed_item_bounds
+            .map(|bounds| (bounds.width, bounds.height))
+            .or_else(|| {
+                component_list_layout_children
+                    .get(&local_id)
+                    .and_then(|children| children.get(item_index))
+                    .map(|child| (child.width, child.height))
+            })
+            .unwrap_or_else(|| runtime_component_list_item_layout_size(item));
+        let (item_x, item_y) = if let Some((virtual_x, virtual_y)) = item.virtualized_position {
+            // The scroll virtualizer owns only the main-axis position. C++
+            // preserves the mounted artboard's settled layout position on the
+            // cross axis (`layoutY` for rows, `layoutX` for columns).
+            if is_row {
+                (
+                    virtual_x,
+                    computed_item_bounds.map_or(virtual_y, |bounds| bounds.y),
+                )
+            } else {
+                (
+                    computed_item_bounds.map_or(virtual_x, |bounds| bounds.x),
+                    virtual_y,
+                )
+            }
+        } else if let Some(bounds) = computed_item_bounds {
+            (bounds.x, bounds.y)
+        } else if is_row {
+            (padding_left + item_main_offset, padding_top)
+        } else {
+            (padding_left, padding_top + item_main_offset)
+        };
+        item_transforms.push(Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            item_x
+                + if uses_hosted_layout {
+                    item_size.0 * item.child.origin_x
+                } else {
+                    0.0
+                },
+            item_y
+                + if uses_hosted_layout {
+                    item_size.1 * item.child.origin_y
+                } else {
+                    0.0
+                },
+        ]));
+        item_main_offset += (if is_row { item_size.0 } else { item_size.1 }) + gap;
+    }
+    if let Some(list_component_index) = instance.component_by_local.get(&local_id).copied() {
+        crate::constraints::constrain_component_list_item_transforms(
+            instance,
+            local_id,
+            list_component_index,
+            &mut item_transforms,
+        );
+    }
+
+    let mut item_indices = (0..items.len()).collect::<Vec<_>>();
+    let draw_indices = items
+        .iter()
+        .map(|item| {
+            runtime
+                .view_model_property_for_symbol(item.context.view_model_index(), 16)
+                .map(|property| {
+                    property
+                        .string_property("name")
+                        .and_then(|name| item.context.number_value_by_property_name(name))
+                        .filter(|value| value.is_finite())
+                        .unwrap_or(0.0)
+                })
+        })
+        .collect::<Vec<_>>();
+    let uses_draw_index_sort = instance
+        .component_list_logical_items
+        .get(&local_id)
+        .is_some_and(|logical_items| {
+            logical_items.iter().any(|item| {
+                runtime
+                    .view_model_property_for_symbol(item.context.view_model_index(), 16)
+                    .is_some()
+            })
+        });
+    if uses_draw_index_sort {
+        item_indices.sort_by(|&a, &b| {
+            draw_indices[a]
+                .unwrap_or(0.0)
+                .partial_cmp(&draw_indices[b].unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| items[a].logical_index.cmp(&items[b].logical_index))
+        });
+    }
+
+    for item_index in item_indices {
+        let item = &items[item_index];
         if nested_ancestors.contains(&item.child.graph_global_id) {
             continue;
         }
@@ -10219,32 +11030,17 @@ fn runtime_draw_component_list(
             command.global_id,
             command.local_id,
             item.child.graph_global_id,
-            item_index,
+            item.logical_index,
             item.render_cache_revision,
         );
         let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
-        let item_offset = if is_row {
-            Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                padding_left + item_index as f32 * (item.child.width + gap),
-                padding_top,
-            ])
-        } else {
-            Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                padding_left,
-                padding_top + item_index as f32 * (item.child.height + gap),
-            ])
-        };
+        let child = component_list_layout_children
+            .get(&local_id)
+            .and_then(|children| children.get(item_index))
+            .unwrap_or(item.child.as_ref());
 
         renderer.save();
-        renderer.transform(runtime_render_mat(item_offset.multiply(item.transform)));
+        renderer.transform(runtime_render_mat(item_transforms[item_index]));
         if let Some(caches) = nested_paint_caches.as_deref_mut() {
             if !caches.contains_key(&cache_key) {
                 caches.insert(
@@ -10258,7 +11054,7 @@ fn runtime_draw_component_list(
                 );
             }
             let child_paint_cache = caches.entry(cache_key).or_default();
-            item.child.prepare_static_artboard_tree_paints_internal(
+            child.prepare_static_artboard_tree_paints_internal(
                 runtime,
                 child_graph,
                 artboards,
@@ -10272,24 +11068,23 @@ fn runtime_draw_component_list(
                 true,
                 &child_ancestors,
             )?;
-            item.child
-                .draw_prepared_static_artboard_internal_with_path_cache(
-                    runtime,
-                    child_graph,
-                    artboards,
-                    factory,
-                    renderer,
-                    &mut child_paint_cache.paints,
-                    image_by_global,
-                    &mut child_paint_cache.meshes,
-                    child_cache,
-                    Some(&mut child_paint_cache.paint_configurations),
-                    Some(&mut child_paint_cache.nested_artboards),
-                    false,
-                    &child_ancestors,
-                )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                &mut child_paint_cache.paints,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+                Some(&mut child_paint_cache.paint_configurations),
+                Some(&mut child_paint_cache.nested_artboards),
+                false,
+                &child_ancestors,
+            )?;
         } else {
-            item.child.prepare_static_artboard_tree_paints_internal(
+            child.prepare_static_artboard_tree_paints_internal(
                 runtime,
                 child_graph,
                 artboards,
@@ -10303,22 +11098,21 @@ fn runtime_draw_component_list(
                 true,
                 &child_ancestors,
             )?;
-            item.child
-                .draw_prepared_static_artboard_internal_with_path_cache(
-                    runtime,
-                    child_graph,
-                    artboards,
-                    factory,
-                    renderer,
-                    paint_by_global,
-                    image_by_global,
-                    mesh_by_local,
-                    child_cache,
-                    paint_configurations.as_deref_mut(),
-                    None,
-                    false,
-                    &child_ancestors,
-                )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                paint_by_global,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
+                paint_configurations.as_deref_mut(),
+                None,
+                false,
+                &child_ancestors,
+            )?;
         }
         renderer.restore();
     }
@@ -10359,10 +11153,16 @@ fn runtime_draw_nested_artboard(
     let nested_instance = command
         .local_id
         .and_then(|local_id| instance.nested_artboards.get(&local_id));
-    let referenced_artboard_global = nested_instance
-        .map(|nested| nested.child.graph_global_id)
-        .or(command.referenced_artboard_global)
-        .context("nested artboard missing referenced artboard")?;
+    let host_has_artboard_data_bind = command
+        .local_id
+        .is_some_and(|local_id| instance.nested_artboard_host_has_artboard_data_bind(local_id));
+    let Some(referenced_artboard_global) = runtime_nested_artboard_referenced_global(
+        nested_instance.map(|nested| nested.child.graph_global_id),
+        command.referenced_artboard_global,
+        host_has_artboard_data_bind,
+    ) else {
+        return Ok(());
+    };
     // Cycle guard (see `nested_ancestors` at the top of this module): mirror of
     // the paint-prep guard for the draw recursion. Skip a nested artboard that is
     // already an ancestor on the current descent path, as C++ Artboard::isAncestor
@@ -10595,6 +11395,14 @@ fn runtime_draw_nested_artboard(
     Ok(())
 }
 
+fn runtime_nested_artboard_referenced_global(
+    mounted: Option<u32>,
+    authored: Option<u32>,
+    host_has_artboard_data_bind: bool,
+) -> Option<u32> {
+    mounted.or_else(|| (!host_has_artboard_data_bind).then_some(authored).flatten())
+}
+
 #[derive(Clone, Copy)]
 struct RuntimeAabb {
     left: f32,
@@ -10798,6 +11606,25 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         child.set_double_property(0, height_key, bounds.height);
     }
     Ok(())
+}
+
+pub(crate) fn runtime_apply_component_list_item_layout_bounds(
+    child: &mut ArtboardInstance,
+    bounds: RuntimeLayoutBounds,
+) -> bool {
+    // `ArtboardComponentList::layoutNode` transfers the mounted artboard's
+    // root Yoga node to the parent. The resulting width/height are therefore
+    // the child's own layout constraints, not merely a draw-time frame.
+    let mut changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    changed |= !child.layout_constraint_bounds_enabled;
+    child.enable_layout_constraint_bounds();
+    if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
+        changed |= child.set_double_property(0, width_key, bounds.width);
+    }
+    if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
+        changed |= child.set_double_property(0, height_key, bounds.height);
+    }
+    changed
 }
 
 fn runtime_settle_nested_artboard_layout_child(child: &mut ArtboardInstance) {
@@ -19045,6 +19872,27 @@ mod tests {
         assert_eq!(
             authored,
             nested_render_cache_key(Some(33), Some(14), 105, 0)
+        );
+    }
+
+    #[test]
+    fn data_bound_nested_host_without_a_mounted_child_suppresses_authored_fallback() {
+        assert_eq!(
+            runtime_nested_artboard_referenced_global(None, Some(41), true),
+            None
+        );
+        assert_eq!(
+            runtime_nested_artboard_referenced_global(None, Some(41), false),
+            Some(41),
+            "an unbound host still instantiates its authored static reference"
+        );
+    }
+
+    #[test]
+    fn data_bound_nested_host_keeps_the_live_outgoing_child_for_an_unresolved_target() {
+        assert_eq!(
+            runtime_nested_artboard_referenced_global(Some(77), Some(41), true),
+            Some(77)
         );
     }
 

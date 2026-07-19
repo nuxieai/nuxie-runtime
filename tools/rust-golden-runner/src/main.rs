@@ -3539,8 +3539,10 @@ fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bo
             && (data_bind.converter_global.is_none()
                 || data_bind.converter_type_name == Some("DataConverterInterpolator")))
         || (data_bind.target_type_name == Some("LayoutComponentStyle")
-            // LayoutComponentStyleBase::displayValuePropertyKey in C++ generated/layout/layout_component_style_base.hpp.
-            && data_bind.property_key == 596
+            // LayoutComponentStyleBase::gapHorizontal/gapVertical/displayValue
+            // property keys. Runtime layout reads all three from instance
+            // storage and invalidates the layout epoch on a data-bind write.
+            && matches!(data_bind.property_key, 498 | 499 | 596)
             && data_bind.converter_global.is_none())
 }
 

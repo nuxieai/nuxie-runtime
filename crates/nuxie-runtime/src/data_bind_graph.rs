@@ -603,6 +603,21 @@ impl RuntimeDataBindGraphConverter {
             _ => false,
         }
     }
+
+    /// Returns the view-model selected by the first number-to-list converter
+    /// in this converter chain. Groups apply left-to-right, and later
+    /// number-to-list converters pass the list produced by the first through.
+    pub(crate) fn number_to_list_view_model_id(&self) -> Option<u64> {
+        match self {
+            RuntimeDataBindGraphConverter::NumberToList { view_model_id, .. } => {
+                Some(*view_model_id)
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => converters
+                .iter()
+                .find_map(RuntimeDataBindGraphConverter::number_to_list_view_model_id),
+            _ => None,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(

@@ -50,9 +50,10 @@ pub use nuxie_renderer::{
 };
 pub use nuxie_runtime::{
     ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
-    RuntimeStateMachineInput, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
-    ScriptModuleFailure, ScriptValue, ScriptingVm, StateMachineInputInstance,
-    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
+    RuntimeOwnedViewModelContext, RuntimeStateMachineInput, ScriptError, ScriptHost,
+    ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent,
 };
 
 #[cfg(feature = "scripting")]
@@ -1083,9 +1084,10 @@ impl<'a> ArtboardInstance<'a> {
     /// The context is copied into the data-bind graph, so this must be called
     /// again after mutating `view_model` for the change to reach the next
     /// [`ArtboardInstance::advance`]. Returns whether the binding changed
-    /// anything. State-machine-driven binds must additionally be bound through
-    /// [`StateMachineInstance::bind_owned_view_model_context`] using
-    /// [`ViewModelInstance::raw`].
+    /// anything. The artboard retains the supplied main context; state machines
+    /// created afterward inherit it automatically. As in C++, global context
+    /// completion belongs to state-machine binding rather than this artboard-
+    /// only API.
     ///
     pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
         let mut changed = self
@@ -1095,6 +1097,12 @@ impl<'a> ArtboardInstance<'a> {
             .raw
             .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
         changed
+    }
+
+    /// Return the main-only context retained by the most recent
+    /// [`ArtboardInstance::bind_view_model`] call.
+    pub fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
+        self.raw.owned_view_model_context()
     }
 
     /// Advance the scene while driving `state_machine`, mirroring the golden
@@ -1528,6 +1536,11 @@ impl OwnedArtboardInstance {
             .raw
             .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
         changed
+    }
+
+    /// See [`ArtboardInstance::owned_view_model_context`].
+    pub fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
+        self.raw.owned_view_model_context()
     }
 
     /// See [`ArtboardInstance::advance_with_state_machine`].

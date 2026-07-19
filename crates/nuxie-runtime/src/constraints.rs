@@ -28,6 +28,23 @@ pub(crate) struct RuntimeScrollConstraint {
     layout_child_locals: Vec<usize>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeComponentListVirtualization {
+    pub(crate) constraint_local: usize,
+    pub(crate) content_local: usize,
+    pub(crate) viewport_local: usize,
+    pub(crate) scroll_offset_x: f32,
+    pub(crate) scroll_offset_y: f32,
+    pub(crate) infinite: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct RuntimeComponentListVirtualItem {
+    pub(crate) logical_index: usize,
+    pub(crate) position_x: f32,
+    pub(crate) position_y: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeFollowPathTargetKind {
     Shape,
@@ -282,23 +299,538 @@ pub(crate) fn apply_list_constraints(
     else {
         return false;
     };
-    let constraints = artboard.list_follow_path_constraints.clone();
-    let changed = constraints
+    let changed = constrain_component_list_item_transforms(
+        artboard,
+        list_local,
+        component_index,
+        &mut item_transforms,
+    );
+    artboard
+        .component_list_item_transforms
+        .insert(list_local, item_transforms);
+    changed
+}
+
+/// Apply list constraints after the hosting layout has assigned each mounted
+/// artboard its base transform. This mirrors C++
+/// `ArtboardComponentList::updateArtboardsWorldTransform` followed by
+/// `ArtboardComponentList::updateConstraints`.
+pub(crate) fn constrain_component_list_item_transforms(
+    artboard: &ArtboardInstance,
+    list_local: usize,
+    list_component_index: usize,
+    item_transforms: &mut [Mat2D],
+) -> bool {
+    // C++ explicitly skips list constraints while the component list is
+    // virtualized. The scroll virtualizer owns row positions in that mode.
+    if component_list_virtualization(artboard, list_local).is_some() {
+        return false;
+    }
+
+    artboard
+        .list_follow_path_constraints
         .iter()
         .filter(|constraint| constraint.list_local == list_local)
         .fold(false, |changed, constraint| {
             changed
                 | apply_list_follow_path_constraint_to_transforms(
                     artboard,
-                    component_index,
+                    list_component_index,
                     &constraint.constraint,
-                    &mut item_transforms,
+                    item_transforms,
                 )
-        });
-    artboard
-        .component_list_item_transforms
-        .insert(list_local, item_transforms);
-    changed
+        })
+}
+
+/// Resolve the live C++ `ArtboardComponentList::virtualizationEnabled`
+/// relationship for one list. A `ScrollConstraint` can be animated or data
+/// bound, so read its current instance properties instead of caching flags at
+/// import time.
+pub(crate) fn component_list_virtualization(
+    artboard: &ArtboardInstance,
+    list_local: usize,
+) -> Option<RuntimeComponentListVirtualization> {
+    let constraint = artboard.scroll_constraints.iter().find(|constraint| {
+        constraint.layout_child_locals.contains(&list_local)
+            && constraint_bool(
+                artboard,
+                constraint.local_id,
+                "ScrollConstraint",
+                "virtualize",
+                false,
+            )
+    })?;
+    let viewport_local = artboard.component(constraint.content_local)?.parent_local?;
+    Some(RuntimeComponentListVirtualization {
+        constraint_local: constraint.local_id,
+        content_local: constraint.content_local,
+        viewport_local,
+        scroll_offset_x: constraint_double(
+            artboard,
+            constraint.local_id,
+            "ScrollConstraint",
+            "scrollOffsetX",
+            0.0,
+        ),
+        scroll_offset_y: constraint_double(
+            artboard,
+            constraint.local_id,
+            "ScrollConstraint",
+            "scrollOffsetY",
+            0.0,
+        ),
+        infinite: constraint_bool(
+            artboard,
+            constraint.local_id,
+            "ScrollConstraint",
+            "infinite",
+            false,
+        ),
+    })
+}
+
+/// Resolve the mounted logical rows and their virtualizer-owned positions for
+/// one component list. C++ keeps every list item and its authored size in
+/// `m_listItems` / `m_artboardSizes`, but only creates `ArtboardInstance`s for
+/// the window selected by `ScrollVirtualizer`.
+pub(crate) fn component_list_virtual_window(
+    artboard: &ArtboardInstance,
+    list_local: usize,
+    item_sizes: &[(f32, f32)],
+) -> Option<Vec<RuntimeComponentListVirtualItem>> {
+    let virtualization = component_list_virtualization(artboard, list_local)?;
+    let constraint = artboard
+        .scroll_constraints
+        .iter()
+        .find(|constraint| constraint.local_id == virtualization.constraint_local)?;
+    let style_local = layout_component_style_local(artboard, virtualization.content_local);
+    let is_horizontal = style_local
+        .and_then(|style_local| {
+            property_key_for_name("LayoutComponentStyle", "flexDirectionValue")
+                .and_then(|key| artboard.uint_property(style_local, key))
+        })
+        .map(|direction| matches!(direction, 2 | 3))
+        .unwrap_or(true);
+    let gap_property = if is_horizontal {
+        "gapHorizontal"
+    } else {
+        "gapVertical"
+    };
+    let gap = style_local
+        .and_then(|style_local| {
+            property_key_for_name("LayoutComponentStyle", gap_property)
+                .and_then(|key| artboard.double_property(style_local, key))
+        })
+        .unwrap_or(0.0);
+    let computed_layout_bounds = artboard
+        .runtime_graph()
+        .and_then(|graph| artboard.runtime_taffy_layout_bounds(graph, artboard.runtime_file()));
+    let layout_bounds = artboard
+        .layout_constraint_bounds
+        .as_deref()
+        .or(computed_layout_bounds.as_ref());
+    let viewport_axis_size = layout_component_axis_size(
+        artboard,
+        layout_bounds,
+        virtualization.viewport_local,
+        is_horizontal,
+    );
+    let direction = constraint_uint(
+        artboard,
+        virtualization.constraint_local,
+        "DraggableConstraint",
+        "directionValue",
+        1,
+    );
+    let subtracts_content_origin = if is_horizontal {
+        direction != 1
+    } else {
+        direction != 0
+    };
+    let content_axis_origin = if subtracts_content_origin {
+        layout_component_axis_origin(layout_bounds, virtualization.content_local, is_horizontal)
+            - layout_component_axis_origin(
+                layout_bounds,
+                virtualization.viewport_local,
+                is_horizontal,
+            )
+    } else {
+        0.0
+    };
+    // C++ `ScrollConstraint::viewportWidth/Height` removes the content's
+    // layout origin on the constrained axis. This is observable when the
+    // content has leading padding/alignment inside the viewport.
+    let viewport_size = scroll_viewport_axis_size(viewport_axis_size, content_axis_origin);
+    let provider_item_sizes = virtualized_provider_item_sizes(
+        artboard,
+        layout_bounds,
+        constraint,
+        Some((list_local, item_sizes)),
+    );
+    let content_size = virtualized_provider_content_size(
+        &provider_item_sizes,
+        is_horizontal,
+        gap,
+        virtualization.infinite,
+    );
+    let raw_scroll_offset = if is_horizontal {
+        virtualization.scroll_offset_x
+    } else {
+        virtualization.scroll_offset_y
+    };
+    let trailing_padding = layout_style_axis_trailing_padding(
+        artboard,
+        layout_component_style_local(artboard, virtualization.viewport_local),
+        is_horizontal,
+    );
+    let scroll_offset = clamped_scroll_offset(
+        raw_scroll_offset,
+        viewport_size,
+        content_size,
+        trailing_padding,
+        virtualization.infinite,
+    );
+
+    let provider_index = constraint
+        .layout_child_locals
+        .iter()
+        .position(|local| *local == list_local)?;
+    Some(
+        component_list_virtual_windows_for_provider_metrics(
+            &provider_item_sizes,
+            is_horizontal,
+            gap,
+            viewport_size,
+            scroll_offset,
+            virtualization.infinite,
+            content_size,
+        )
+        .into_iter()
+        .nth(provider_index)
+        .unwrap_or_default(),
+    )
+}
+
+fn layout_component_style_local(artboard: &ArtboardInstance, layout_local: usize) -> Option<usize> {
+    property_key_for_name("LayoutComponent", "styleId")
+        .and_then(|key| artboard.uint_property(layout_local, key))
+        .and_then(|style_local| usize::try_from(style_local).ok())
+}
+
+fn layout_component_axis_size(
+    artboard: &ArtboardInstance,
+    layout_bounds: Option<&std::collections::BTreeMap<usize, crate::draw::RuntimeLayoutBounds>>,
+    layout_local: usize,
+    horizontal: bool,
+) -> f32 {
+    if let Some(size) = layout_bounds
+        .and_then(|bounds| bounds.get(&layout_local).copied())
+        .map(|bounds| {
+            if horizontal {
+                bounds.width
+            } else {
+                bounds.height
+            }
+        })
+        .filter(|size| size.is_finite() && *size > 0.0)
+    {
+        return size;
+    }
+    let property_name = if horizontal { "width" } else { "height" };
+    let authored_size = property_key_for_name("LayoutComponent", property_name)
+        .and_then(|key| artboard.double_property(layout_local, key))
+        .filter(|size| size.is_finite() && *size > 0.0);
+    if let Some(size) = authored_size {
+        return size;
+    }
+
+    // A root-hosted zero-sized layout fills the artboard in C++/Yoga. This is
+    // the common viewport shape and lets virtualization settle before the
+    // first render-layout cache has been built.
+    if artboard
+        .component(layout_local)
+        .is_some_and(|component| component.parent_local == Some(0))
+    {
+        if horizontal {
+            artboard.width
+        } else {
+            artboard.height
+        }
+    } else {
+        0.0
+    }
+}
+
+fn layout_component_axis_origin(
+    layout_bounds: Option<&std::collections::BTreeMap<usize, crate::draw::RuntimeLayoutBounds>>,
+    layout_local: usize,
+    horizontal: bool,
+) -> f32 {
+    layout_bounds
+        .and_then(|bounds| bounds.get(&layout_local))
+        .map(|bounds| if horizontal { bounds.x } else { bounds.y })
+        .filter(|origin| origin.is_finite())
+        .unwrap_or(0.0)
+}
+
+fn layout_style_axis_trailing_padding(
+    artboard: &ArtboardInstance,
+    style_local: Option<usize>,
+    horizontal: bool,
+) -> f32 {
+    let property = if horizontal {
+        "paddingRight"
+    } else {
+        "paddingBottom"
+    };
+    style_local
+        .and_then(|style_local| {
+            property_key_for_name("LayoutComponentStyle", property)
+                .and_then(|key| artboard.double_property(style_local, key))
+        })
+        .filter(|padding| padding.is_finite())
+        .unwrap_or(0.0)
+}
+
+fn virtualized_provider_item_sizes(
+    artboard: &ArtboardInstance,
+    layout_bounds: Option<&std::collections::BTreeMap<usize, crate::draw::RuntimeLayoutBounds>>,
+    constraint: &RuntimeScrollConstraint,
+    current_list: Option<(usize, &[(f32, f32)])>,
+) -> Vec<Vec<(f32, f32)>> {
+    constraint
+        .layout_child_locals
+        .iter()
+        .map(|provider_local| {
+            if artboard
+                .component(*provider_local)
+                .is_some_and(|component| component.type_name == "ArtboardComponentList")
+            {
+                if current_list.is_some_and(|(list_local, _)| *provider_local == list_local) {
+                    current_list
+                        .map(|(_, item_sizes)| item_sizes.to_vec())
+                        .unwrap_or_default()
+                } else {
+                    artboard
+                        .component_list_logical_items
+                        .get(provider_local)
+                        .map(|items| items.iter().map(|item| item.size).collect())
+                        .unwrap_or_default()
+                }
+            } else {
+                vec![(
+                    layout_component_axis_size(artboard, layout_bounds, *provider_local, true),
+                    layout_component_axis_size(artboard, layout_bounds, *provider_local, false),
+                )]
+            }
+        })
+        .collect()
+}
+
+fn virtualized_provider_content_size(
+    provider_item_sizes: &[Vec<(f32, f32)>],
+    is_horizontal: bool,
+    gap: f32,
+    infinite: bool,
+) -> f32 {
+    // This intentionally follows `ScrollConstraint::contentWidth/Height`, not
+    // merely the flattened node count. Each provider contributes its aggregate
+    // layout bounds, then the content layout contributes the inter-provider
+    // gaps. For non-empty providers this is algebraically the same as one gap
+    // between every flat node; retaining the two levels also matches C++ for an
+    // empty list provider.
+    let providers_extent = provider_item_sizes
+        .iter()
+        .map(|items| {
+            let item_extent = items
+                .iter()
+                .map(|size| {
+                    let value = if is_horizontal { size.0 } else { size.1 };
+                    if value.is_finite() {
+                        value.max(0.0)
+                    } else {
+                        0.0
+                    }
+                })
+                .sum::<f32>();
+            item_extent + gap * items.len().saturating_sub(1) as f32
+        })
+        .sum::<f32>();
+    let inter_provider_gap_count = if infinite {
+        provider_item_sizes.len()
+    } else {
+        provider_item_sizes.len().saturating_sub(1)
+    };
+    providers_extent + gap * inter_provider_gap_count as f32
+}
+
+fn clamped_scroll_offset(
+    raw_offset: f32,
+    viewport_size: f32,
+    content_size: f32,
+    trailing_padding: f32,
+    infinite: bool,
+) -> f32 {
+    if infinite || !raw_offset.is_finite() {
+        return raw_offset;
+    }
+    let max_offset = (viewport_size - content_size - trailing_padding).min(0.0);
+    raw_offset.clamp(max_offset, 0.0)
+}
+
+fn scroll_viewport_axis_size(viewport_size: f32, content_origin: f32) -> f32 {
+    (viewport_size - content_origin).max(0.0)
+}
+
+#[cfg(test)]
+fn component_list_virtual_window_for_metrics(
+    item_sizes: &[(f32, f32)],
+    is_horizontal: bool,
+    gap: f32,
+    viewport_size: f32,
+    scroll_offset: f32,
+    infinite: bool,
+) -> Vec<RuntimeComponentListVirtualItem> {
+    component_list_virtual_windows_for_provider_metrics(
+        &[item_sizes.to_vec()],
+        is_horizontal,
+        gap,
+        viewport_size,
+        scroll_offset,
+        infinite,
+        virtualized_provider_content_size(&[item_sizes.to_vec()], is_horizontal, gap, infinite),
+    )
+    .pop()
+    .unwrap_or_default()
+}
+
+fn component_list_virtual_windows_for_provider_metrics(
+    provider_item_sizes: &[Vec<(f32, f32)>],
+    is_horizontal: bool,
+    gap: f32,
+    viewport_size: f32,
+    scroll_offset: f32,
+    infinite: bool,
+    content_size: f32,
+) -> Vec<Vec<RuntimeComponentListVirtualItem>> {
+    let mut provider_windows = vec![Vec::new(); provider_item_sizes.len()];
+    let flat_items = provider_item_sizes
+        .iter()
+        .enumerate()
+        .flat_map(|(provider_index, items)| {
+            items
+                .iter()
+                .copied()
+                .enumerate()
+                .map(move |(logical_index, size)| (provider_index, logical_index, size))
+        })
+        .collect::<Vec<_>>();
+    let count = flat_items.len();
+    if count == 0 || !viewport_size.is_finite() || viewport_size <= 0.0 {
+        return provider_windows;
+    }
+
+    let axis_size = |index: usize| {
+        let size = if is_horizontal {
+            flat_items[index].2.0
+        } else {
+            flat_items[index].2.1
+        };
+        if size.is_finite() { size.max(0.0) } else { 0.0 }
+    };
+    if !content_size.is_finite() || content_size <= 0.0 {
+        return provider_windows;
+    }
+
+    // Ported from `ScrollVirtualizer::constrain`: the virtualizer consumes the
+    // clamped scroll transform (negative while moving forward) and normalizes
+    // an infinite carousel into one logical content cycle.
+    let normalized_offset = -scroll_offset;
+    let offset = if scroll_offset > 0.0 {
+        if infinite {
+            let multiplier = (scroll_offset / content_size).floor() + 1.0;
+            -(scroll_offset - multiplier * content_size)
+        } else {
+            -scroll_offset
+        }
+    } else {
+        let multiplier = (normalized_offset / content_size).floor();
+        if multiplier > 0.0 {
+            normalized_offset % (multiplier * content_size)
+        } else {
+            normalized_offset
+        }
+    };
+
+    let mut running_size = 0.0;
+    let mut running_offset = 0.0;
+    let mut visible_start = 0usize;
+    let mut found_start = false;
+    for index in 0..count {
+        let size = axis_size(index);
+        if running_size + size > offset {
+            running_offset = running_size - offset;
+            visible_start = index;
+            found_start = true;
+            break;
+        }
+        running_size += size;
+        let next_index = if index + 1 == count { 0 } else { index + 1 };
+        if running_size + gap > offset {
+            running_size += gap;
+            running_offset = running_size - offset;
+            visible_start = next_index;
+            found_start = true;
+            break;
+        }
+        running_size += gap;
+    }
+    if !found_start {
+        return provider_windows;
+    }
+
+    let max_virtual_rows = if infinite {
+        count.saturating_mul(2)
+    } else {
+        count.saturating_sub(visible_start)
+    };
+    let mut mounted = Vec::new();
+    let mut virtual_index = visible_start;
+    for _ in 0..max_virtual_rows {
+        let logical_index = virtual_index % count;
+        let size = axis_size(logical_index);
+        let (provider_index, logical_index, _) = flat_items[logical_index];
+        mounted.push((
+            provider_index,
+            RuntimeComponentListVirtualItem {
+                logical_index,
+                position_x: if is_horizontal { running_offset } else { 0.0 },
+                position_y: if is_horizontal { 0.0 } else { running_offset },
+            },
+        ));
+        if running_size + size + gap >= offset + viewport_size {
+            break;
+        }
+        running_size += size + gap;
+        running_offset += size + gap;
+        virtual_index += 1;
+    }
+
+    // C++ owns one mounted artboard per list-item pointer. An oversized
+    // infinite viewport may encounter an item twice; the later virtual
+    // occurrence updates the same mounted artboard's position.
+    for (provider_index, item) in mounted {
+        let provider_window = &mut provider_windows[provider_index];
+        if let Some(existing) = provider_window
+            .iter_mut()
+            .find(|existing| existing.logical_index == item.logical_index)
+        {
+            *existing = item;
+        } else {
+            provider_window.push(item);
+        }
+    }
+    provider_windows
 }
 
 fn apply_constraint(
@@ -360,26 +892,131 @@ fn apply_scroll_constraint(
         constraint_local,
         "DraggableConstraint",
         "directionValue",
-        0,
+        1,
     );
-    let offset_x = if matches!(direction, 0 | 2) {
-        constraint_double(
+    let infinite = constraint_bool(
+        artboard,
+        constraint_local,
+        "ScrollConstraint",
+        "infinite",
+        false,
+    );
+    let virtualize = constraint_bool(
+        artboard,
+        constraint_local,
+        "ScrollConstraint",
+        "virtualize",
+        false,
+    );
+    let content_style_local =
+        layout_component_style_local(artboard, scroll_constraint.content_local);
+    let main_axis_is_horizontal = content_style_local
+        .and_then(|style_local| {
+            property_key_for_name("LayoutComponentStyle", "flexDirectionValue")
+                .and_then(|key| artboard.uint_property(style_local, key))
+        })
+        .map(|value| matches!(value, 2 | 3))
+        .unwrap_or(true);
+    let gap_horizontal = content_style_local
+        .and_then(|style_local| {
+            property_key_for_name("LayoutComponentStyle", "gapHorizontal")
+                .and_then(|key| artboard.double_property(style_local, key))
+        })
+        .unwrap_or(0.0);
+    let gap_vertical = content_style_local
+        .and_then(|style_local| {
+            property_key_for_name("LayoutComponentStyle", "gapVertical")
+                .and_then(|key| artboard.double_property(style_local, key))
+        })
+        .unwrap_or(0.0);
+    let computed_layout_bounds = artboard
+        .runtime_graph()
+        .and_then(|graph| artboard.runtime_taffy_layout_bounds(graph, artboard.runtime_file()));
+    let layout_bounds = artboard
+        .layout_constraint_bounds
+        .as_deref()
+        .or(computed_layout_bounds.as_ref());
+    let provider_item_sizes =
+        virtualized_provider_item_sizes(artboard, layout_bounds, &scroll_constraint, None);
+    let viewport_local = artboard
+        .component(scroll_constraint.content_local)
+        .and_then(|component| component.parent_local);
+    let clamped_axis_offset = |horizontal: bool, raw_offset: f32| {
+        let Some(viewport_local) = viewport_local else {
+            return raw_offset;
+        };
+        let viewport_axis_size =
+            layout_component_axis_size(artboard, layout_bounds, viewport_local, horizontal);
+        // C++ subtracts the content origin only on axes the constraint can
+        // actually drag (`viewportWidth/Height`).
+        let subtracts_content_origin = if horizontal {
+            direction != 1
+        } else {
+            direction != 0
+        };
+        let content_axis_origin = if subtracts_content_origin {
+            layout_component_axis_origin(layout_bounds, scroll_constraint.content_local, horizontal)
+                - layout_component_axis_origin(layout_bounds, viewport_local, horizontal)
+        } else {
+            0.0
+        };
+        let viewport_size = scroll_viewport_axis_size(viewport_axis_size, content_axis_origin);
+        let content_size = if virtualize && horizontal == main_axis_is_horizontal {
+            virtualized_provider_content_size(
+                &provider_item_sizes,
+                horizontal,
+                if horizontal {
+                    gap_horizontal
+                } else {
+                    gap_vertical
+                },
+                infinite,
+            )
+        } else {
+            layout_component_axis_size(
+                artboard,
+                layout_bounds,
+                scroll_constraint.content_local,
+                horizontal,
+            )
+        };
+        let trailing_padding = layout_style_axis_trailing_padding(
             artboard,
-            constraint_local,
-            "ScrollConstraint",
-            "scrollOffsetX",
-            0.0,
+            layout_component_style_local(artboard, viewport_local),
+            horizontal,
+        );
+        clamped_scroll_offset(
+            raw_offset,
+            viewport_size,
+            content_size,
+            trailing_padding,
+            infinite,
+        )
+    };
+    let offset_x = if matches!(direction, 0 | 2) {
+        clamped_axis_offset(
+            true,
+            constraint_double(
+                artboard,
+                constraint_local,
+                "ScrollConstraint",
+                "scrollOffsetX",
+                0.0,
+            ),
         )
     } else {
         0.0
     };
     let offset_y = if matches!(direction, 1 | 2) {
-        constraint_double(
-            artboard,
-            constraint_local,
-            "ScrollConstraint",
-            "scrollOffsetY",
-            0.0,
+        clamped_axis_offset(
+            false,
+            constraint_double(
+                artboard,
+                constraint_local,
+                "ScrollConstraint",
+                "scrollOffsetY",
+                0.0,
+            ),
         )
     } else {
         0.0
@@ -1945,4 +2582,185 @@ fn local_object_parent(
 
 fn is_bone_type(type_name: &'static str) -> bool {
     type_name == "Bone" || type_name == "RootBone"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        RuntimeComponentListVirtualItem, clamped_scroll_offset,
+        component_list_virtual_window_for_metrics,
+        component_list_virtual_windows_for_provider_metrics, scroll_viewport_axis_size,
+        virtualized_provider_content_size,
+    };
+
+    fn vertical_item(logical_index: usize, y: f32) -> RuntimeComponentListVirtualItem {
+        RuntimeComponentListVirtualItem {
+            logical_index,
+            position_x: 0.0,
+            position_y: y,
+        }
+    }
+
+    #[test]
+    fn virtual_window_mounts_only_rows_intersecting_the_viewport() {
+        let sizes = vec![(200.0, 50.0); 10];
+        assert_eq!(
+            component_list_virtual_window_for_metrics(&sizes, false, -10.0, 100.0, 0.0, true,),
+            vec![
+                vertical_item(0, 0.0),
+                vertical_item(1, 40.0),
+                vertical_item(2, 80.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn virtual_window_preserves_wrapped_infinite_order_and_positions() {
+        let sizes = vec![(200.0, 50.0); 10];
+        assert_eq!(
+            component_list_virtual_window_for_metrics(&sizes, false, -10.0, 100.0, -360.0, true,),
+            vec![
+                vertical_item(8, -40.0),
+                vertical_item(9, 0.0),
+                vertical_item(0, 40.0),
+                vertical_item(1, 80.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn virtual_window_does_not_wrap_a_finite_list() {
+        let sizes = vec![(20.0, 30.0); 4];
+        assert_eq!(
+            component_list_virtual_window_for_metrics(&sizes, true, 5.0, 40.0, -70.0, false,),
+            vec![RuntimeComponentListVirtualItem {
+                logical_index: 3,
+                position_x: 5.0,
+                position_y: 0.0,
+            }]
+        );
+    }
+
+    #[test]
+    fn virtual_window_flattens_ordinary_providers_and_multiple_lists() {
+        let providers = vec![
+            vec![(20.0, 10.0)],
+            vec![(30.0, 10.0), (30.0, 10.0)],
+            vec![(15.0, 10.0)],
+            vec![(25.0, 10.0), (25.0, 10.0)],
+        ];
+        let content_size = virtualized_provider_content_size(&providers, true, 5.0, false);
+        assert_eq!(content_size, 170.0);
+
+        let windows = component_list_virtual_windows_for_provider_metrics(
+            &providers,
+            true,
+            5.0,
+            130.0,
+            -25.0,
+            false,
+            content_size,
+        );
+        assert_eq!(
+            windows[1],
+            vec![
+                RuntimeComponentListVirtualItem {
+                    logical_index: 0,
+                    position_x: 0.0,
+                    position_y: 0.0,
+                },
+                RuntimeComponentListVirtualItem {
+                    logical_index: 1,
+                    position_x: 35.0,
+                    position_y: 0.0,
+                },
+            ]
+        );
+        assert_eq!(
+            windows[3],
+            vec![
+                RuntimeComponentListVirtualItem {
+                    logical_index: 0,
+                    position_x: 90.0,
+                    position_y: 0.0,
+                },
+                RuntimeComponentListVirtualItem {
+                    logical_index: 1,
+                    position_x: 120.0,
+                    position_y: 0.0,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn virtual_window_uses_content_origin_and_clamped_offset() {
+        let viewport_size = scroll_viewport_axis_size(150.0, 20.0);
+        assert_eq!(viewport_size, 130.0);
+        assert_eq!(
+            clamped_scroll_offset(-500.0, viewport_size, 170.0, 10.0, false),
+            -50.0
+        );
+        assert_eq!(
+            clamped_scroll_offset(25.0, viewport_size, 170.0, 10.0, false),
+            0.0
+        );
+        assert_eq!(
+            clamped_scroll_offset(-500.0, viewport_size, 170.0, 10.0, true),
+            -500.0
+        );
+    }
+
+    #[test]
+    fn virtual_window_applies_size_feedback_to_later_rows_without_remounting() {
+        let initial_sizes = vec![(100.0, 20.0); 3];
+        let initial = component_list_virtual_window_for_metrics(
+            &initial_sizes,
+            false,
+            5.0,
+            100.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            initial,
+            vec![
+                vertical_item(0, 0.0),
+                vertical_item(1, 25.0),
+                vertical_item(2, 50.0),
+            ]
+        );
+
+        // The parent assigns row 0 a larger intrinsic height. The visible
+        // topology stays [0, 1, 2], but C++'s same-pass
+        // updateLayoutBounds/constrainVirtualized(true) feedback moves both
+        // later rows before draw.
+        let measured_sizes = vec![(100.0, 40.0), (100.0, 20.0), (100.0, 20.0)];
+        let settled = component_list_virtual_window_for_metrics(
+            &measured_sizes,
+            false,
+            5.0,
+            100.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            settled,
+            vec![
+                vertical_item(0, 0.0),
+                vertical_item(1, 45.0),
+                vertical_item(2, 70.0),
+            ]
+        );
+        assert_eq!(
+            initial
+                .iter()
+                .map(|item| item.logical_index)
+                .collect::<Vec<_>>(),
+            settled
+                .iter()
+                .map(|item| item.logical_index)
+                .collect::<Vec<_>>()
+        );
+    }
 }

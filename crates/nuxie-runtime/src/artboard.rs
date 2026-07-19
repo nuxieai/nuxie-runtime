@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -39,9 +40,10 @@ use crate::constraints::{
     RuntimeFollowPathConstraint, RuntimeIkConstraint, RuntimeListFollowPathConstraint,
     RuntimeScrollConstraint, build_runtime_follow_path_constraints, build_runtime_ik_constraints,
     build_runtime_list_follow_path_constraints, build_runtime_scroll_constraints,
+    component_list_virtual_window,
 };
 use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
-use crate::draw::RuntimeLayoutBounds;
+use crate::draw::{RuntimeLayoutBounds, runtime_apply_component_list_item_layout_bounds};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
@@ -58,7 +60,10 @@ use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
     build_state_machines,
 };
-use crate::view_model::RuntimeOwnedViewModelListHandle;
+use crate::view_model::{
+    RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
+    set_component_list_item_index,
+};
 use crate::{RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance};
 
 /// Rejection from attaching host-supplied bytes to one external `FontAsset`.
@@ -176,6 +181,7 @@ pub struct ArtboardInstance {
     pub(crate) list_follow_path_constraints: Vec<RuntimeListFollowPathConstraint>,
     pub(crate) scroll_constraints: Vec<RuntimeScrollConstraint>,
     pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
+    pub(crate) component_list_logical_items: BTreeMap<usize, Vec<RuntimeComponentListLogicalItem>>,
     pub(crate) component_list_items: BTreeMap<usize, Vec<RuntimeComponentListItemInstance>>,
     pub(crate) component_list_sources: BTreeMap<usize, RuntimeOwnedViewModelListHandle>,
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
@@ -203,6 +209,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_owned_context_key: Option<RuntimeArtboardOwnedContextKey>,
     pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
+    pub(crate) artboard_owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_image_asset_bindings: Vec<RuntimeArtboardImageAssetBindingInstance>,
     pub(crate) artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues,
@@ -242,6 +249,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) data_bind_path_ids: Option<Vec<u32>>,
     pub(crate) data_bind_path_is_relative: bool,
     pub(crate) stateful_view_model_instance_local: Option<usize>,
+    pub(crate) stateful_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
     pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelInstance>,
     pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelInstance>,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
@@ -261,8 +269,26 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) state_machine: Option<StateMachineInstance>,
     pub(crate) context: RuntimeOwnedViewModelInstance,
+    pub(crate) occurrence_identity: u64,
+    pub(crate) logical_index: usize,
+    pub(crate) virtualized_position: Option<(f32, f32)>,
+    /// Last parent-assigned layout size observed while preparing this mounted
+    /// occurrence. C++ writes `Artboard::layoutBounds()` back into the full
+    /// logical `m_artboardSizes` topology after layout; the next list sync
+    /// consumes this value before selecting its virtual window.
+    pub(crate) settled_layout_size: Cell<Option<(f32, f32)>>,
     pub(crate) transform: Mat2D,
     pub(crate) render_cache_revision: u64,
+}
+
+/// Full logical topology retained independently from the mounted artboards,
+/// matching C++ `m_listItems` and `m_artboardSizes`.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeComponentListLogicalItem {
+    pub(crate) occurrence_identity: u64,
+    pub(crate) context: RuntimeOwnedViewModelInstance,
+    pub(crate) size: (f32, f32),
+    pub(crate) mapped_artboard_global: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -506,6 +532,7 @@ impl ArtboardInstance {
             list_follow_path_constraints,
             scroll_constraints,
             component_list_item_transforms: BTreeMap::new(),
+            component_list_logical_items: BTreeMap::new(),
             component_list_items: BTreeMap::new(),
             component_list_sources: BTreeMap::new(),
             ik_constraints,
@@ -534,6 +561,7 @@ impl ArtboardInstance {
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_context_key: None,
             artboard_owned_view_model_context: None,
+            artboard_owned_view_model_candidates: Vec::new(),
             artboard_property_bindings,
             artboard_image_asset_bindings,
             artboard_data_bind_target_queues,
@@ -1357,10 +1385,28 @@ impl ArtboardInstance {
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         let state_machine = self.state_machine(index)?;
         let mut instance = StateMachineInstance::new(index, state_machine, self);
-        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+        if !self.artboard_owned_view_model_candidates.is_empty()
+            && let Some(file) = self
+                .build_context
+                .as_ref()
+                .map(|context| context.file.as_ref())
+        {
+            let contexts = self
+                .artboard_owned_view_model_candidates
+                .iter()
+                .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
+                .collect::<Vec<_>>();
+            instance.bind_owned_view_model_context_chains(file, &contexts);
+        } else if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
             instance.bind_owned_view_model_contexts(context);
         }
         Some(instance)
+    }
+
+    /// The completed ordered view-model context currently retained by this
+    /// artboard, when it was bound through the composite context API.
+    pub fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
+        self.artboard_owned_view_model_context.as_ref()
     }
 
     /// Ported from C++ `src/artboard_component_list.cpp::updateList`,
@@ -1371,18 +1417,6 @@ impl ArtboardInstance {
         list_local_id: usize,
         contexts: Vec<RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        if self
-            .component_list_items
-            .get(&list_local_id)
-            .is_some_and(|existing| {
-                existing.len() == contexts.len()
-                    && existing.iter().zip(&contexts).all(|(item, context)| {
-                        item.context.instance_identity() == context.instance_identity()
-                    })
-            })
-        {
-            return false;
-        }
         let Some(build_context) = self.build_context.clone() else {
             return false;
         };
@@ -1401,14 +1435,31 @@ impl ArtboardInstance {
             return false;
         };
 
-        let mut items = Vec::with_capacity(contexts.len());
-        for context in contexts {
+        let entries = self
+            .component_list_sources
+            .get(&list_local_id)
+            .map(|source| source.item_entries_with_logical_indices(file))
+            .unwrap_or_else(|| {
+                contexts
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, mut instance)| {
+                        set_component_list_item_index(file, &mut instance, index);
+                        RuntimeOwnedViewModelListItemEntry {
+                            // NumberToList owns stable, unique generated VMIs.
+                            occurrence_identity: instance.instance_identity(),
+                            instance,
+                        }
+                    })
+                    .collect()
+            });
+        let resolve_child_graph = |context: &RuntimeOwnedViewModelInstance| {
             let mapped_index = component_list
                 .map_rules
                 .iter()
                 .find(|rule| rule.view_model_id == context.view_model_index() as i64)
                 .and_then(|rule| usize::try_from(rule.artboard_id).ok());
-            let child_graph = mapped_index
+            mapped_index
                 .and_then(|index| build_context.artboards.get(index))
                 .or_else(|| {
                     build_context.artboards.iter().find(|graph| {
@@ -1417,7 +1468,179 @@ impl ArtboardInstance {
                             .and_then(|value| usize::try_from(value).ok())
                             == Some(context.view_model_index())
                     })
+                })
+        };
+
+        let previous_logical = self
+            .component_list_logical_items
+            .remove(&list_local_id)
+            .unwrap_or_default();
+        let mut logical_items = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let mapped_artboard_global =
+                resolve_child_graph(&entry.instance).map(|graph| graph.global_id);
+            let previous = previous_logical.iter().find(|item| {
+                item.occurrence_identity == entry.occurrence_identity
+                    && item.mapped_artboard_global == mapped_artboard_global
+            });
+            let settled_size = self
+                .component_list_items
+                .get(&list_local_id)
+                .and_then(|items| {
+                    items.iter().find(|item| {
+                        item.occurrence_identity == entry.occurrence_identity
+                            && Some(item.child.graph_global_id) == mapped_artboard_global
+                    })
+                })
+                .and_then(|item| item.settled_layout_size.get());
+            let size = settled_size
+                .or_else(|| previous.map(|item| item.size))
+                .unwrap_or_else(|| {
+                    mapped_artboard_global
+                        .and_then(|global_id| file.object(global_id as usize))
+                        .map(|artboard| {
+                            (
+                                artboard.double_property("width").unwrap_or(0.0),
+                                artboard.double_property("height").unwrap_or(0.0),
+                            )
+                        })
+                        .unwrap_or((0.0, 0.0))
                 });
+            logical_items.push(RuntimeComponentListLogicalItem {
+                occurrence_identity: entry.occurrence_identity,
+                context: entry.instance,
+                size,
+                mapped_artboard_global,
+            });
+        }
+        let logical_changed = previous_logical.len() != logical_items.len()
+            || previous_logical
+                .iter()
+                .zip(&logical_items)
+                .any(|(before, after)| {
+                    before.occurrence_identity != after.occurrence_identity
+                        || before.mapped_artboard_global != after.mapped_artboard_global
+                        || before.size != after.size
+                });
+        let sizes = logical_items
+            .iter()
+            .map(|item| item.size)
+            .collect::<Vec<_>>();
+        self.component_list_logical_items
+            .insert(list_local_id, logical_items);
+
+        let desired = component_list_virtual_window(self, list_local_id, &sizes)
+            .map(|window| {
+                window
+                    .into_iter()
+                    .map(|item| (item.logical_index, Some((item.position_x, item.position_y))))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| (0..sizes.len()).map(|index| (index, None)).collect());
+        let logical_items = self
+            .component_list_logical_items
+            .get(&list_local_id)
+            .expect("component-list logical topology was just inserted");
+        let desired = desired
+            .into_iter()
+            .filter(|(index, _)| {
+                logical_items
+                    .get(*index)
+                    .is_some_and(|item| item.mapped_artboard_global.is_some())
+            })
+            .collect::<Vec<_>>();
+        let existing_matches =
+            self.component_list_items
+                .get(&list_local_id)
+                .is_some_and(|existing| {
+                    existing.len() == desired.len()
+                        && existing
+                            .iter()
+                            .zip(&desired)
+                            .all(|(item, (index, position))| {
+                                let logical = &logical_items[*index];
+                                item.logical_index == *index
+                                    && item.occurrence_identity == logical.occurrence_identity
+                                    && item.virtualized_position == *position
+                                    && item.context.instance_identity()
+                                        == logical.context.instance_identity()
+                                    && item.context.mutation_generation()
+                                        == logical.context.mutation_generation()
+                            })
+                });
+        if existing_matches {
+            if logical_changed {
+                self.mark_layout_changed();
+                self.mark_prepared_changed();
+            }
+            return logical_changed;
+        }
+
+        // C++ keys mounted artboards/state machines by the list-item wrapper,
+        // not by its VMI. Preserve overlapping wrapper occurrences across
+        // reorder and virtual-window changes.
+        let previous_items = self
+            .component_list_items
+            .remove(&list_local_id)
+            .unwrap_or_default();
+        let mut reusable_items = previous_items.into_iter().map(Some).collect::<Vec<_>>();
+        let parent_candidates = self.artboard_owned_view_model_candidates.clone();
+        let mut item_context_changed = false;
+        let mut items = Vec::with_capacity(desired.len());
+        for (logical_index, virtualized_position) in desired {
+            let logical = self.component_list_logical_items[&list_local_id][logical_index].clone();
+            let context = logical.context;
+            if let Some(existing_index) = reusable_items.iter().position(|candidate| {
+                candidate
+                    .as_ref()
+                    .is_some_and(|item| item.occurrence_identity == logical.occurrence_identity)
+            }) {
+                let mut item = reusable_items[existing_index]
+                    .take()
+                    .expect("component-list identity match must retain an item");
+                if item.context.instance_identity() != context.instance_identity()
+                    || item.context.mutation_generation() != context.mutation_generation()
+                {
+                    item.context = context.clone();
+                    let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
+                    child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+                    child_candidates.extend(parent_candidates.iter().cloned());
+                    item.child.artboard_owned_view_model_context =
+                        Some(RuntimeOwnedViewModelContext::from_main(context));
+                    item.child
+                        .bind_owned_view_model_artboard_context_candidates(
+                            file,
+                            &child_candidates,
+                            true,
+                            true,
+                        );
+                    if let Some(state_machine) = item.state_machine.as_mut() {
+                        let contexts = child_candidates
+                            .iter()
+                            .map(|candidate| {
+                                (candidate.context.clone(), candidate.context_chain.clone())
+                            })
+                            .collect::<Vec<_>>();
+                        if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
+                            state_machine.advance_data_context();
+                        }
+                    }
+                    item.child.advance_artboard_data_binds_with_elapsed(0.0);
+                    item.child.update_pass();
+                    item_context_changed = true;
+                }
+                item.logical_index = logical_index;
+                item.virtualized_position = virtualized_position;
+                items.push(item);
+                continue;
+            }
+
+            let child_graph = logical.mapped_artboard_global.and_then(|global_id| {
+                build_context
+                    .artboards
+                    .iter()
+                    .find(|graph| graph.global_id == global_id)
+            });
             let Some(child_graph) = child_graph else {
                 continue;
             };
@@ -1432,7 +1655,18 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
-            child.bind_owned_view_model_artboard_context(file, &context);
+            let mut child_candidates =
+                Vec::with_capacity(self.artboard_owned_view_model_candidates.len() + 1);
+            child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+            child_candidates.extend(self.artboard_owned_view_model_candidates.iter().cloned());
+            child.artboard_owned_view_model_context =
+                Some(RuntimeOwnedViewModelContext::from_main(context.clone()));
+            child.bind_owned_view_model_artboard_context_candidates(
+                file,
+                &child_candidates,
+                true,
+                true,
+            );
             let state_machine_index = file
                 .object(child_graph.global_id as usize)
                 .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
@@ -1442,29 +1676,40 @@ impl ArtboardInstance {
             );
             let mut state_machine = child.state_machine_instance(state_machine_index);
             if let Some(state_machine) = state_machine.as_mut() {
-                state_machine.bind_owned_view_model_context(&context);
-                child.advance_state_machine_instance(state_machine, 0.0);
+                // C++ `ArtboardComponentList::linkStateMachineToArtboard`
+                // installs the row DataContext and immediately runs
+                // `updateDataBinds(false)` before the first state advance.
+                // `state_machine_instance` retains the context; settle its
+                // bind graph here so row-dependent transitions start from the
+                // same values rather than their authored defaults. The normal
+                // component-list advance owns the first state advance.
+                state_machine.advance_data_context();
             }
             child.advance_artboard_data_binds_with_elapsed(0.0);
             child.update_pass();
+            let render_cache_revision = logical.occurrence_identity;
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machine,
                 context,
+                occurrence_identity: logical.occurrence_identity,
+                logical_index,
+                virtualized_position,
+                settled_layout_size: Cell::new(None),
                 transform: Mat2D::IDENTITY,
-                render_cache_revision: 0,
+                // Render caches outlive list topology changes. Seed each row
+                // with the stable list-item identity so a same-length
+                // replacement cannot reuse the prior occupant's paint cache.
+                render_cache_revision,
             });
         }
 
-        let changed = self
-            .component_list_items
-            .get(&list_local_id)
-            .is_none_or(|existing| existing.len() != items.len());
         self.component_list_item_transforms.insert(
             list_local_id,
             items.iter().map(|item| item.transform).collect(),
         );
         self.component_list_items.insert(list_local_id, items);
+        let changed = !existing_matches || logical_changed || item_context_changed;
         if changed {
             self.mark_layout_changed();
             self.mark_prepared_changed();
@@ -1490,6 +1735,68 @@ impl ArtboardInstance {
             .fold(false, |changed, (local_id, items)| {
                 self.sync_component_list_items(&file, local_id, items) || changed
             })
+    }
+
+    /// Settle parent-assigned row sizes and immediately rerun the shared scroll
+    /// virtualizer. C++ performs this feedback in
+    /// `ArtboardComponentList::updateLayoutBounds` -> `computeLayoutBounds` ->
+    /// `ScrollConstraint::constrainVirtualized(true)` during the same update
+    /// pass; deferring it until the next draw/advance leaves the old virtual
+    /// window visible for one frame.
+    fn settle_component_list_layout_and_virtualization(&mut self) -> bool {
+        const MAX_LAYOUT_FEEDBACK_PASSES: usize = 8;
+
+        if self.component_list_items.is_empty() {
+            return false;
+        }
+
+        let mut changed = false;
+        for _ in 0..MAX_LAYOUT_FEEDBACK_PASSES {
+            let assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
+            if assigned_bounds.is_empty() {
+                break;
+            }
+
+            let mut size_feedback_changed = false;
+            for (list_local, bounds) in assigned_bounds {
+                let Some(items) = self.component_list_items.get_mut(&list_local) else {
+                    continue;
+                };
+                for (item, bounds) in items.iter_mut().zip(bounds) {
+                    let assigned_size = (bounds.width, bounds.height);
+                    if item.settled_layout_size.get() != Some(assigned_size) {
+                        item.settled_layout_size.set(Some(assigned_size));
+                        size_feedback_changed = true;
+                    }
+                    if runtime_apply_component_list_item_layout_bounds(&mut item.child, bounds) {
+                        // Parent constraints can change a row's own layout and
+                        // therefore its intrinsic size. Settle that child before
+                        // measuring the parent again, using the same finite
+                        // update-pass shape as Artboard::updateLayoutBounds.
+                        for _ in 0..MAX_LAYOUT_FEEDBACK_PASSES {
+                            if !item.child.update_pass() {
+                                break;
+                            }
+                        }
+                        size_feedback_changed = true;
+                    }
+                }
+            }
+
+            if !size_feedback_changed {
+                break;
+            }
+            changed = true;
+            let virtual_window_changed = self.refresh_component_list_items();
+            changed |= virtual_window_changed;
+            // A stable mounted set is not a stable layout. Applying a parent
+            // size can change a hug/intrinsic child, and that new intrinsic
+            // size can alter the next parent assignment and later row
+            // positions without changing any visible indices. Always run the
+            // next bounded measure; only a pass with no size/child feedback is
+            // converged.
+        }
+        changed
     }
 
     pub fn advance_state_machine_instance(
@@ -1718,16 +2025,24 @@ impl ArtboardInstance {
         for items in self.component_list_items.values_mut() {
             for item in items {
                 item.child.queue_script_advance(elapsed_seconds);
+                let mut row_changed = false;
                 if let Some(state_machine) = item.state_machine.as_mut() {
-                    changed |= item
+                    row_changed |= item
                         .child
                         .advance_state_machine_instance(state_machine, elapsed_seconds);
                 }
-                changed |= item
+                row_changed |= item
                     .child
                     .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-                changed |= item.child.advance_nested_artboards(elapsed_seconds);
-                changed |= item.child.update_pass();
+                row_changed |= item.child.advance_nested_artboards(elapsed_seconds);
+                row_changed |= item.child.update_pass();
+                if row_changed {
+                    // The hosting layout must remeasure this row before the
+                    // parent draws; `settle_component_list_layout_and_virtualization`
+                    // consumes the marker in the same outer update pass.
+                    item.settled_layout_size.set(None);
+                }
+                changed |= row_changed;
             }
         }
         changed
@@ -2071,6 +2386,21 @@ impl ArtboardInstance {
             return true;
         }
 
+        if type_name == Some("ArtboardComponentListOverride") {
+            return [
+                "instanceWidth",
+                "instanceHeight",
+                "instanceWidthUnitsValue",
+                "instanceHeightUnitsValue",
+                "instanceWidthScaleType",
+                "instanceHeightScaleType",
+            ]
+            .into_iter()
+            .any(|name| {
+                property_key_for_name("ArtboardComponentListOverride", name) == Some(property_key)
+            });
+        }
+
         if matches!(type_name, Some("Text")) {
             return [
                 "alignValue",
@@ -2264,6 +2594,15 @@ impl ArtboardInstance {
         if did_update {
             self.update_nested_artboard_data_binds_from_hosts();
             self.advance_artboard_data_binds();
+        }
+        if did_update
+            || self
+                .component_list_items
+                .values()
+                .flatten()
+                .any(|item| item.settled_layout_size.get().is_none())
+        {
+            did_update |= self.settle_component_list_layout_and_virtualization();
         }
         did_update
     }
@@ -2997,7 +3336,11 @@ impl ArtboardInstance {
         value: u64,
         force: bool,
     ) -> bool {
-        let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
+        // Mirrors C++ `NestedArtboard::updateArtboard`: `-1` is an explicit
+        // null and tears down the mounted child, while any other target that
+        // cannot be resolved (including the owning artboard itself) leaves the
+        // outgoing child untouched.
+        if value == u64::from(u32::MAX) {
             let changed = self.nested_artboards.remove(&local_id).is_some();
             if changed {
                 self.remove_nested_artboard_local(local_id);
@@ -3006,6 +3349,9 @@ impl ArtboardInstance {
                 self.mark_prepared_changed();
             }
             return changed;
+        }
+        let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
+            return false;
         };
         if !force
             && self
@@ -3016,6 +3362,9 @@ impl ArtboardInstance {
                 })
         {
             return false;
+        }
+        if let Some(existing) = self.nested_artboards.get(&local_id) {
+            nested.reuse_owned_stateful_view_model_context(existing);
         }
         nested.render_cache_revision = self.nested_artboards.get(&local_id).map_or(0, |existing| {
             if existing.child.graph_global_id == nested.child.graph_global_id {
@@ -3389,6 +3738,25 @@ fn component_list_default_state_machine_index(
 }
 
 impl RuntimeNestedArtboardInstance {
+    fn reuse_owned_stateful_view_model_context(&mut self, existing: &Self) -> bool {
+        if self.stateful_view_model_instance_local.is_some()
+            || existing.stateful_view_model_instance_local.is_some()
+        {
+            return false;
+        }
+        let Some(replacement_context) = self.stateful_view_model_context.as_ref() else {
+            return false;
+        };
+        let Some(existing_context) = existing.stateful_view_model_context.as_ref() else {
+            return false;
+        };
+        if replacement_context.view_model_index() != existing_context.view_model_index() {
+            return false;
+        }
+        self.stateful_view_model_context = Some(existing_context.clone());
+        true
+    }
+
     pub(crate) fn bind_owned_view_model_animation_contexts(
         &mut self,
         file: &RuntimeFile,
@@ -3707,21 +4075,43 @@ fn build_runtime_nested_artboard_instance(
     let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
     let data_bind_view_model_instance_locals_by_id =
         build_nested_host_view_model_instance_locals(parent_slots, parent_objects, host_local_id);
-    let stateful_view_model_instance_local = file
+    let is_stateful = property_key_for_name("NestedArtboard", "isStateful")
+        .and_then(|property_key| parent_objects.bool_property(host_local_id, property_key))
+        .unwrap_or(false);
+    let child_view_model_index = file
         .object(child_graph.global_id as usize)
         .and_then(|artboard| artboard.uint_property("viewModelId"))
-        .and_then(|view_model_id| u32::try_from(view_model_id).ok())
+        .and_then(|view_model_id| usize::try_from(view_model_id).ok())
+        .filter(|&view_model_index| file.view_model(view_model_index).is_some());
+    let stateful_view_model_instance_local = is_stateful
+        .then_some(child_view_model_index)
+        .flatten()
+        .and_then(|view_model_index| u32::try_from(view_model_index).ok())
         .and_then(|view_model_id| {
             data_bind_view_model_instance_locals_by_id
                 .get(&view_model_id)
                 .copied()
         });
-    let stateful_view_model_context = stateful_view_model_instance_local.and_then(|local_id| {
-        let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
-        let instance = file.object(slot.source_global_id as usize)?;
-        let view_model_index = usize::try_from(instance.uint_property("viewModelId")?).ok()?;
-        RuntimeOwnedViewModelInstance::from_instance_object(file, view_model_index, instance)
-    });
+    let stateful_view_model_context = if !is_stateful {
+        None
+    } else if let Some(local_id) = stateful_view_model_instance_local {
+        let slot = parent_slots.iter().find(|slot| slot.local_id == local_id);
+        slot.and_then(|slot| file.object(slot.source_global_id as usize))
+            .and_then(|instance| {
+                let view_model_index =
+                    usize::try_from(instance.uint_property("viewModelId")?).ok()?;
+                RuntimeOwnedViewModelInstance::from_instance_object(
+                    file,
+                    view_model_index,
+                    instance,
+                )
+            })
+    } else {
+        child_view_model_index.and_then(|view_model_index| {
+            RuntimeOwnedViewModelInstance::from_instance(file, view_model_index, 0)
+                .or_else(|| RuntimeOwnedViewModelInstance::new(file, view_model_index))
+        })
+    };
     let stateful_global_view_model_contexts = data_bind_view_model_instance_locals_by_id
         .iter()
         .filter_map(|(&view_model_id, &local_id)| {
@@ -3755,6 +4145,7 @@ fn build_runtime_nested_artboard_instance(
         data_bind_path_ids,
         data_bind_path_is_relative,
         stateful_view_model_instance_local,
+        stateful_view_model_instance_locals_by_id: data_bind_view_model_instance_locals_by_id,
         stateful_view_model_context,
         stateful_global_view_model_contexts,
         data_bind_property_source_locals,
@@ -4275,6 +4666,7 @@ mod tests {
             list_follow_path_constraints: Vec::new(),
             scroll_constraints: Vec::new(),
             component_list_item_transforms: BTreeMap::new(),
+            component_list_logical_items: BTreeMap::new(),
             component_list_items: BTreeMap::new(),
             component_list_sources: BTreeMap::new(),
             ik_constraints: Vec::new(),
@@ -4300,6 +4692,7 @@ mod tests {
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_context_key: None,
             artboard_owned_view_model_context: None,
+            artboard_owned_view_model_candidates: Vec::new(),
             artboard_property_bindings: Vec::new(),
             artboard_image_asset_bindings: Vec::new(),
             artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues::default(),
@@ -4329,6 +4722,29 @@ mod tests {
             did_change: true,
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
+        }
+    }
+
+    fn synthetic_nested_artboard_instance(graph_global_id: u32) -> RuntimeNestedArtboardInstance {
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        child.graph_global_id = graph_global_id;
+        RuntimeNestedArtboardInstance {
+            child: Box::new(child),
+            render_cache_revision: 0,
+            data_bind_path_ids: None,
+            data_bind_path_is_relative: false,
+            stateful_view_model_instance_local: None,
+            stateful_view_model_instance_locals_by_id: BTreeMap::new(),
+            stateful_view_model_context: None,
+            stateful_global_view_model_contexts: BTreeMap::new(),
+            data_bind_property_source_locals: Vec::new(),
+            data_bind_image_source_locals: Vec::new(),
+            data_bind_context_source_locals_by_path: BTreeMap::new(),
+            animations: Vec::new(),
+            is_paused: false,
+            speed: 1.0,
+            quantize: -1.0,
+            cumulated_seconds: 0.0,
         }
     }
 
@@ -4371,6 +4787,203 @@ mod tests {
     }
 
     #[test]
+    fn unresolved_nested_artboard_binding_preserves_the_mounted_child() {
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent
+            .nested_artboards
+            .insert(3, synthetic_nested_artboard_instance(77));
+        parent.nested_artboard_locals.push(3);
+
+        // A synthetic instance has no build context, so every non-null id is
+        // unresolvable. C++ keeps the outgoing mounted child in this case.
+        assert!(!parent.set_nested_artboard_artboard_id(3, 12));
+        assert_eq!(
+            parent
+                .nested_artboards
+                .get(&3)
+                .map(|nested| nested.child.graph_global_id),
+            Some(77)
+        );
+        assert_eq!(parent.nested_artboard_locals, [3]);
+    }
+
+    #[test]
+    fn null_then_unresolved_nested_artboard_binding_stays_absent() {
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent
+            .nested_artboards
+            .insert(3, synthetic_nested_artboard_instance(77));
+        parent.nested_artboard_locals.push(3);
+
+        assert!(parent.set_nested_artboard_artboard_id(3, u64::from(u32::MAX)));
+        assert!(!parent.nested_artboards.contains_key(&3));
+        assert!(parent.nested_artboard_locals.is_empty());
+
+        // A later invalid/self target is not an explicit null and therefore
+        // cannot resurrect the authored fallback or a new child.
+        assert!(!parent.set_nested_artboard_artboard_id(3, 0));
+        assert!(!parent.nested_artboards.contains_key(&3));
+        assert!(parent.nested_artboard_locals.is_empty());
+    }
+
+    #[test]
+    fn stateful_nested_source_switch_uses_the_replacement_view_model_default() {
+        let bytes = synthetic_riv(9700, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceNumber",
+                &[("viewModelPropertyId", 0)],
+            );
+            push_synthetic_object(bytes, "ViewModel", &[("viewModelType", 2)]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 2)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1), ("isStateful", 1)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstance",
+                &[("parentId", 1), ("viewModelId", 0)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstance",
+                &[("parentId", 1), ("viewModelId", 2)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+        });
+        let file = read_runtime_file(&bytes).expect("stateful source-switch fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("stateful fixture graphs");
+        let parent_graph = &graph.artboards[0];
+        let host_local_id = parent_graph.nested_artboards[0].local_id;
+        let mut parent =
+            ArtboardInstance::from_graph_with_artboards(&file, parent_graph, &graph.artboards)
+                .expect("parent artboard instance");
+
+        let authored = parent
+            .nested_artboards
+            .get(&host_local_id)
+            .expect("authored nested occurrence");
+        assert_eq!(
+            authored
+                .stateful_view_model_context
+                .as_ref()
+                .map(RuntimeOwnedViewModelInstance::view_model_index),
+            Some(0)
+        );
+        assert!(authored.stateful_view_model_instance_local.is_some());
+
+        assert!(parent.set_nested_artboard_artboard_id(host_local_id, 2));
+        let replacement = parent
+            .nested_artboards
+            .get(&host_local_id)
+            .expect("replacement nested occurrence");
+        assert_eq!(
+            replacement.child.graph_global_id,
+            graph.artboards[2].global_id
+        );
+        assert_eq!(
+            replacement
+                .stateful_view_model_context
+                .as_ref()
+                .map(RuntimeOwnedViewModelInstance::view_model_index),
+            Some(1),
+            "a stateful source switch with no matching authored child must create the replacement VM default"
+        );
+        assert_eq!(replacement.stateful_view_model_instance_local, None);
+        assert_eq!(
+            replacement
+                .stateful_global_view_model_contexts
+                .get(&2)
+                .map(RuntimeOwnedViewModelInstance::view_model_index),
+            Some(2),
+            "the replacement local main remains combined with authored global contexts"
+        );
+
+        let replacement_context_identity = replacement
+            .stateful_view_model_context
+            .as_ref()
+            .expect("generated replacement context")
+            .instance_identity();
+        assert!(
+            parent
+                .nested_artboards
+                .get_mut(&host_local_id)
+                .and_then(|nested| nested.stateful_view_model_context.as_mut())
+                .is_some_and(|context| context.set_number_by_property_index(0, 42.0))
+        );
+        assert!(parent.set_nested_artboard_artboard_id(host_local_id, 3));
+        let same_view_model_replacement = parent
+            .nested_artboards
+            .get(&host_local_id)
+            .expect("same-VM replacement occurrence");
+        assert_eq!(
+            same_view_model_replacement
+                .stateful_view_model_context
+                .as_ref()
+                .map(RuntimeOwnedViewModelInstance::instance_identity),
+            Some(replacement_context_identity),
+            "an owned replacement context survives a source switch to another artboard with the same VM"
+        );
+        assert_eq!(
+            same_view_model_replacement
+                .stateful_view_model_context
+                .as_ref()
+                .and_then(|context| context.number_value_by_slot(0)),
+            Some(42.0),
+            "same-VM reuse preserves runtime mutations"
+        );
+    }
+
+    #[test]
+    fn non_stateful_nested_host_does_not_activate_an_authored_child_view_model() {
+        let bytes = synthetic_riv(9701, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1), ("isStateful", 0)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstance",
+                &[("parentId", 1), ("viewModelId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+        });
+        let file = read_runtime_file(&bytes).expect("non-stateful nested fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("non-stateful fixture graphs");
+        let parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graph.artboards[0],
+            &graph.artboards,
+        )
+        .expect("parent artboard instance");
+        let host_local_id = graph.artboards[0].nested_artboards[0].local_id;
+        let nested = parent
+            .nested_artboards
+            .get(&host_local_id)
+            .expect("authored nested occurrence");
+
+        assert_eq!(nested.stateful_view_model_instance_local, None);
+        assert!(nested.stateful_view_model_context.is_none());
+        assert!(nested.stateful_global_view_model_contexts.is_empty());
+    }
+
+    #[test]
     fn public_artboard_clone_is_cold_but_transient_layout_clone_keeps_scripts() {
         let mut original = synthetic_instance(Vec::new(), Vec::new());
         original.set_script_instance_for_global(
@@ -4396,6 +5009,7 @@ mod tests {
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
+                stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
@@ -4485,6 +5099,7 @@ mod tests {
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
+                stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
@@ -4533,6 +5148,7 @@ mod tests {
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
+                stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
@@ -5060,6 +5676,7 @@ mod tests {
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
                 stateful_view_model_instance_local: None,
+                stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
                 data_bind_property_source_locals: Vec::new(),
@@ -5954,5 +6571,70 @@ mod tests {
             component_list_default_state_machine_index(Some(u64::MAX), 3),
             0
         );
+    }
+
+    #[test]
+    fn component_list_mount_settles_context_without_advancing_the_row_state_machine() {
+        let bytes = synthetic_riv(9702, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyList", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceList",
+                &[("viewModelPropertyId", 0)],
+            );
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", 1), ("viewModelInstanceId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "ArtboardComponentList", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+            push_synthetic_object(bytes, "StateMachine", &[]);
+            push_synthetic_object(bytes, "StateMachineLayer", &[]);
+            push_synthetic_object(bytes, "AnyState", &[]);
+            push_synthetic_object(bytes, "EntryState", &[]);
+            push_synthetic_object(bytes, "StateTransition", &[("stateToId", 2)]);
+            push_synthetic_object(bytes, "ExitState", &[]);
+        });
+        let file = read_runtime_file(&bytes).expect("component-list mount fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("component-list fixture graphs");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graph.artboards[0],
+            &graph.artboards,
+        )
+        .expect("parent artboard instance");
+
+        let list_local_id = graph.artboards[0].component_lists[0].local_id;
+        let row_context = RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+            .expect("component-list row context");
+        assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context]));
+        let mounted = parent
+            .component_list_items
+            .get(&list_local_id)
+            .and_then(|items| items.first())
+            .expect("mounted component-list row");
+        assert_eq!(
+            mounted
+                .state_machine
+                .as_ref()
+                .expect("row default state machine")
+                .changed_state_count(),
+            0,
+            "mount links and settles the row context but leaves state advancement to the normal list pass"
+        );
+
+        parent.advance_nested_artboards(0.0);
+        let advanced = parent.component_list_items[&list_local_id][0]
+            .state_machine
+            .as_ref()
+            .expect("row default state machine");
+        assert_eq!(advanced.changed_state_count(), 1);
     }
 }

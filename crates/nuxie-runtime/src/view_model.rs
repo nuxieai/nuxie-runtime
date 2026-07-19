@@ -1872,13 +1872,57 @@ pub(crate) struct RuntimeOwnedViewModelListHandle {
     value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeOwnedViewModelListItemEntry {
+    pub(crate) occurrence_identity: u64,
+    pub(crate) instance: RuntimeOwnedViewModelInstance,
+}
+
 impl RuntimeOwnedViewModelListHandle {
     pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelInstance> {
         self.value
             .borrow()
             .items
             .iter()
-            .map(|item| item.borrow().clone())
+            .map(|item| item.instance.borrow().clone())
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn item_entries(&self) -> Vec<RuntimeOwnedViewModelListItemEntry> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .map(|item| RuntimeOwnedViewModelListItemEntry {
+                occurrence_identity: item.occurrence_identity,
+                instance: item.instance.borrow().clone(),
+            })
+            .collect()
+    }
+
+    /// Mirrors `ArtboardComponentList::updateList`: immediately before rows
+    /// are mounted, C++ writes each wrapper's current logical position into
+    /// the synthetic `itemIndex` symbol on its view-model instance. Mutate the
+    /// shared list instances before taking the row snapshots so bindings and
+    /// public handles observe the same value.
+    pub(crate) fn item_entries_with_logical_indices(
+        &self,
+        file: &RuntimeFile,
+    ) -> Vec<RuntimeOwnedViewModelListItemEntry> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let mut instance = item.instance.borrow_mut();
+                set_component_list_item_index(file, &mut instance, index);
+                RuntimeOwnedViewModelListItemEntry {
+                    occurrence_identity: item.occurrence_identity,
+                    instance: instance.clone(),
+                }
+            })
             .collect()
     }
 
@@ -1888,7 +1932,7 @@ impl RuntimeOwnedViewModelListHandle {
             .items
             .iter()
             .filter_map(|item| {
-                let item = item.borrow();
+                let item = item.instance.borrow();
                 Some((
                     item.string_value_by_property_name("textContent")?.to_vec(),
                     item.string_value_by_property_name("textStyle")
@@ -1898,6 +1942,25 @@ impl RuntimeOwnedViewModelListHandle {
             })
             .collect()
     }
+}
+
+pub(crate) fn set_component_list_item_index(
+    _file: &RuntimeFile,
+    instance: &mut RuntimeOwnedViewModelInstance,
+    index: usize,
+) -> bool {
+    // `ViewModelInstanceValue::registerSymbol` overwrites the itemIndex
+    // symbol as values are registered. Generated instances register in
+    // property order; imported instances register in instance-value order.
+    // The constructors preserve that winner as the last entry here.
+    let Some(property_index) = instance
+        .symbol_list_indices
+        .last()
+        .map(|symbol_list_index| symbol_list_index.property_index)
+    else {
+        return false;
+    };
+    instance.set_symbol_list_index_by_property_index(property_index, index as u64)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1960,7 +2023,24 @@ struct RuntimeOwnedViewModelList {
 #[derive(Debug, Clone, Default)]
 struct RuntimeOwnedViewModelListValue {
     item_count: usize,
-    items: Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    items: Vec<RuntimeOwnedViewModelListItem>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelListItem {
+    occurrence_identity: u64,
+    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+}
+
+impl RuntimeOwnedViewModelListItem {
+    fn new(instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_OCCURRENCE_IDENTITY: AtomicU64 = AtomicU64::new(0);
+        Self {
+            occurrence_identity: NEXT_OCCURRENCE_IDENTITY.fetch_add(1, Ordering::Relaxed),
+            instance,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2027,6 +2107,16 @@ impl RuntimeOwnedViewModelViewModel {
     fn generated_children_mut(&mut self) -> Option<&mut Vec<RuntimeOwnedViewModelViewModel>> {
         match self.value {
             RuntimeViewModelPointer::OwnedGenerated { .. } => Some(&mut self.children),
+            _ => None,
+        }
+    }
+
+    fn active_children_mut(&mut self) -> Option<&mut Vec<RuntimeOwnedViewModelViewModel>> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => Some(&mut self.children),
+            RuntimeViewModelPointer::Imported { object_id } => {
+                self.imported_children.get_mut(&object_id)
+            }
             _ => None,
         }
     }
@@ -2430,9 +2520,10 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if color.value != value {
-            color.value = value;
+        if color.value == value {
+            return false;
         }
+        color.value = value;
         true
     }
 
@@ -2579,6 +2670,226 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         trigger.value = value;
+        true
+    }
+
+    fn sync_number_by_property_index(&mut self, property_index: usize, value: f32) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.numbers,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_numbers.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_boolean_by_property_index(&mut self, property_index: usize, value: bool) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.booleans,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_booleans.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_string_by_property_index(&mut self, property_index: usize, value: &[u8]) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.strings,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_strings.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value.to_vec();
+        true
+    }
+
+    fn sync_color_by_property_index(&mut self, property_index: usize, value: u32) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.colors,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_colors.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_enum_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.enums,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_enums.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_symbol_list_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        value: u64,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.symbol_list_indices,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_symbol_list_indices.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_asset_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.artboards,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_artboards.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_trigger_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.triggers,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_triggers.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
         true
     }
 }
@@ -3608,7 +3919,8 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
     view_model_index: usize,
     view_model_instance: &RuntimeObject,
 ) -> Vec<RuntimeOwnedViewModelSymbolListIndex> {
-    file.view_model(view_model_index)
+    let mut values: Vec<RuntimeOwnedViewModelSymbolListIndex> = file
+        .view_model(view_model_index)
         .map(|view_model| {
             view_model
                 .properties
@@ -3635,7 +3947,23 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // C++'s symbol table is last-registration-wins, and imported value order
+    // is independent of view-model property order. Move the exact symbol-map
+    // winner to the end so component-list index writes target the same value.
+    if let Some(property_index) = file
+        .view_model_instance_value_for_symbol_object(view_model_instance, 15)
+        .and_then(|value| value.uint_property("viewModelPropertyId"))
+        .and_then(|property_index| usize::try_from(property_index).ok())
+        && let Some(position) = values
+            .iter()
+            .position(|value| value.property_index == property_index)
+    {
+        let value = values.remove(position);
+        values.push(value);
+    }
+    values
 }
 
 fn runtime_owned_view_model_imported_symbol_list_indices(
@@ -3720,7 +4048,11 @@ fn runtime_owned_view_model_lists_for_instance(
                                                 item,
                                             )?;
                                         runtime_owned_view_model_list_item_instance(file, reference)
-                                            .map(|instance| Rc::new(RefCell::new(instance)))
+                                            .map(|instance| {
+                                                RuntimeOwnedViewModelListItem::new(Rc::new(
+                                                    RefCell::new(instance),
+                                                ))
+                                            })
                                     })
                                     .collect::<Vec<_>>();
                                 (item_count, hydrated)
@@ -3886,7 +4218,9 @@ fn runtime_owned_view_model_artboards(
                     (property.type_name == "ViewModelPropertyArtboard").then_some(
                         RuntimeOwnedViewModelArtboard {
                             property_index,
-                            value: 0,
+                            // C++ `ViewModelInstanceArtboardBase` initializes
+                            // an unassigned property to its `-1` sentinel.
+                            value: u64::from(u32::MAX),
                         },
                     )
                 })
@@ -5031,10 +5365,11 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if color.value != value {
-            color.value = value;
-            self.mark_mutated();
+        if color.value == value {
+            return false;
         }
+        color.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -5533,7 +5868,9 @@ impl RuntimeOwnedViewModelInstance {
             self.list_value_by_property_name(property_name)?
                 .borrow()
                 .items
-                .clone(),
+                .iter()
+                .map(|item| Rc::clone(&item.instance))
+                .collect(),
         )
     }
 
@@ -5546,7 +5883,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         let mut list = list.borrow_mut();
-        list.items.push(item);
+        list.items.push(RuntimeOwnedViewModelListItem::new(item));
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
@@ -5564,7 +5901,8 @@ impl RuntimeOwnedViewModelInstance {
         };
         let mut list = list.borrow_mut();
         let index = index.min(list.items.len());
-        list.items.insert(index, item);
+        list.items
+            .insert(index, RuntimeOwnedViewModelListItem::new(item));
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
@@ -5581,7 +5919,7 @@ impl RuntimeOwnedViewModelInstance {
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
-        Some(item)
+        Some(item.instance)
     }
 
     pub(crate) fn shift_list_item_by_property_name(
@@ -5597,7 +5935,7 @@ impl RuntimeOwnedViewModelInstance {
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
-        Some(item)
+        Some(item.instance)
     }
 
     pub(crate) fn swap_list_items_by_property_name(
@@ -5665,11 +6003,12 @@ impl RuntimeOwnedViewModelInstance {
         let mut list = list.borrow_mut();
         let old_len = list.items.len();
         if remove_all {
-            list.items.retain(|candidate| !Rc::ptr_eq(candidate, item));
+            list.items
+                .retain(|candidate| !Rc::ptr_eq(&candidate.instance, item));
         } else if let Some(index) = list
             .items
             .iter()
-            .position(|candidate| Rc::ptr_eq(candidate, item))
+            .position(|candidate| Rc::ptr_eq(&candidate.instance, item))
         {
             list.items.remove(index);
         }
@@ -6429,11 +6768,173 @@ impl RuntimeOwnedViewModelInstance {
             .find(|view_model| view_model.property_index == *property_index)?;
         for property_index in rest {
             view_model = view_model
-                .generated_children_mut()?
+                .active_children_mut()?
                 .iter_mut()
                 .find(|view_model| view_model.property_index == *property_index)?;
         }
         Some(view_model)
+    }
+
+    pub(crate) fn sync_number_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: f32,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_number_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_number_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_boolean_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: bool,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_boolean_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_boolean_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_string_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: &[u8],
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_string_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_string_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_color_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u32,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_color_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_color_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_enum_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_enum_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_enum_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_symbol_list_index_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_symbol_list_index_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_symbol_list_index_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_asset_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_asset_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_asset_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_artboard_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_artboard_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_artboard_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_trigger_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_trigger_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_trigger_by_property_index(*property_index, value);
+        self.track_mutation(changed)
     }
 
     fn view_model_by_property_names_mut(
@@ -7713,6 +8214,111 @@ mod owned_context_tests {
         RuntimeFile::from_authoring_records(records).expect("global context fixture imports")
     }
 
+    fn symbol_list_index_order_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Rows".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertySymbolListIndex",
+                vec![property(
+                    "ViewModelPropertySymbolListIndex",
+                    "name",
+                    AuthoringValue::String("first".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertySymbolListIndex",
+                vec![property(
+                    "ViewModelPropertySymbolListIndex",
+                    "name",
+                    AuthoringValue::String("second".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Default".to_owned()),
+                    ),
+                ],
+            ),
+            // Imported value order deliberately opposes property order. C++
+            // registers `second` and then overwrites itemIndex with `first`.
+            record(
+                "ViewModelInstanceSymbolListIndex",
+                vec![
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(1),
+                    ),
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "propertyValue",
+                        AuthoringValue::Uint(22),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceSymbolListIndex",
+                vec![
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "propertyValue",
+                        AuthoringValue::Uint(11),
+                    ),
+                ],
+            ),
+        ])
+        .expect("symbol-list-index order fixture imports")
+    }
+
+    #[test]
+    fn generated_artboard_property_starts_unassigned() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Main".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyArtboard",
+                vec![property(
+                    "ViewModelPropertyArtboard",
+                    "name",
+                    AuthoringValue::String("artboard".to_owned()),
+                )],
+            ),
+        ])
+        .expect("artboard property fixture imports");
+        let context =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated view-model instance");
+
+        assert_eq!(
+            context.artboard_value_by_property_path(&[0]),
+            Some(u64::from(u32::MAX))
+        );
+    }
+
     #[test]
     fn global_view_models_keep_file_order_and_complete_defaults() {
         let file = global_context_fixture();
@@ -7768,6 +8374,64 @@ mod owned_context_tests {
                 .global_named(&file, "Global Z")
                 .and_then(|instance| instance.number_value_by_property_name("value")),
             Some(20.0)
+        );
+    }
+
+    #[test]
+    fn list_occurrences_keep_wrapper_identity_separate_from_instance_identity() {
+        let file = global_context_fixture();
+        let instance = Rc::new(RefCell::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("main default instance"),
+        ));
+        let handle = RuntimeOwnedViewModelListHandle {
+            value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                item_count: 2,
+                items: vec![
+                    RuntimeOwnedViewModelListItem::new(Rc::clone(&instance)),
+                    RuntimeOwnedViewModelListItem::new(instance),
+                ],
+            })),
+        };
+
+        let entries = handle.item_entries();
+        assert_eq!(entries.len(), 2);
+        assert_ne!(
+            entries[0].occurrence_identity,
+            entries[1].occurrence_identity
+        );
+        assert_eq!(
+            entries[0].instance.instance_identity(),
+            entries[1].instance.instance_identity()
+        );
+    }
+
+    #[test]
+    fn component_list_item_index_uses_cpp_symbol_registration_order() {
+        let file = symbol_list_index_order_fixture();
+        let mut imported =
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0).expect("imported instance");
+
+        assert!(set_component_list_item_index(&file, &mut imported, 7));
+        assert_eq!(
+            imported.symbol_list_index_value_by_property_path(&[0]),
+            Some(7)
+        );
+        assert_eq!(
+            imported.symbol_list_index_value_by_property_path(&[1]),
+            Some(22)
+        );
+
+        let mut generated =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated instance");
+        assert!(set_component_list_item_index(&file, &mut generated, 9));
+        assert_eq!(
+            generated.symbol_list_index_value_by_property_path(&[0]),
+            Some(0)
+        );
+        assert_eq!(
+            generated.symbol_list_index_value_by_property_path(&[1]),
+            Some(9)
         );
     }
 }

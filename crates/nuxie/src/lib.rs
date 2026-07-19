@@ -1235,7 +1235,7 @@ impl<'a> ArtboardInstance<'a> {
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+        changed |= self.raw.settle_state_machine_update_passes();
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -1295,7 +1295,7 @@ impl<'a> ArtboardInstance<'a> {
         }
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
-        changed |= self.raw.update_pass();
+        changed |= self.raw.settle_state_machine_update_passes();
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -1679,7 +1679,7 @@ impl OwnedArtboardInstance {
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+        changed |= self.raw.settle_state_machine_update_passes();
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -1739,7 +1739,7 @@ impl OwnedArtboardInstance {
         }
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
-        changed |= self.raw.update_pass();
+        changed |= self.raw.settle_state_machine_update_passes();
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();

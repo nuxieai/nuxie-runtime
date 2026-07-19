@@ -3040,6 +3040,33 @@ impl ArtboardInstance {
         did_update
     }
 
+    /// Settle the bounded component-update tail used by C++
+    /// `StateMachineInstance::advanceAndApply`.
+    ///
+    /// C++ performs up to five outer update passes and advances nested
+    /// artboards at zero elapsed time between them. That alternation matters
+    /// for deep mounts: a parent pass can publish a host opacity only after
+    /// its child already updated, leaving the grandchild dirty until the next
+    /// outer pass.
+    pub fn settle_state_machine_update_passes(&mut self) -> bool {
+        const MAX_OUTER_PASSES: usize = 5;
+
+        let mut changed = false;
+        for pass in 0..MAX_OUTER_PASSES {
+            let mut pass_changed = false;
+            if pass != 0 {
+                pass_changed |= self.advance_nested_artboards(0.0);
+                pass_changed |= self.advance_artboard_data_binds_with_elapsed(0.0);
+            }
+            pass_changed |= self.update_pass();
+            changed |= pass_changed;
+            if pass != 0 && !pass_changed {
+                break;
+            }
+        }
+        changed
+    }
+
     fn update_nested_artboard_from_host_dirt(
         &mut self,
         host_local_id: usize,
@@ -7363,6 +7390,83 @@ mod tests {
             component_list_default_state_machine_index(Some(u64::MAX), 3),
             0
         );
+    }
+
+    #[test]
+    fn state_machine_frame_settles_deep_nested_render_opacity() {
+        let typed_component = |local_id: usize, graph_order: usize, type_name: &'static str| {
+            let mut component = synthetic_component(local_id, graph_order);
+            component.type_name = type_name;
+            component.transform_property_keys =
+                crate::components::TransformPropertyKeys::for_type(type_name);
+            component
+        };
+
+        let mut leaf_root = typed_component(0, 0, "Artboard");
+        leaf_root.transform.render_opacity = 0.0;
+        let mut leaf = synthetic_instance(vec![leaf_root], vec![0]);
+        let opacity_key = property_key_for_name("Artboard", "opacity").expect("opacity key");
+        assert!(leaf.set_double_property(0, opacity_key, 0.0));
+        leaf.clear_component_dirt(0);
+        leaf.dirt = ComponentDirt::NONE;
+
+        let mut middle_root = typed_component(0, 0, "Artboard");
+        middle_root.transform.render_opacity = 1.0;
+        let mut middle_host = typed_component(1, 1, "NestedArtboard");
+        middle_host.parent_local = Some(0);
+        middle_host.dirt = ComponentDirt::RENDER_OPACITY;
+        let mut middle = synthetic_instance(vec![middle_root, middle_host], vec![1]);
+        let mut leaf_mount = synthetic_nested_artboard_instance(2);
+        leaf_mount.child = Box::new(leaf);
+        middle.nested_artboards.insert(1, leaf_mount);
+        middle.nested_artboard_locals.push(1);
+        middle.dirt = ComponentDirt::COMPONENTS;
+
+        let mut root_component = typed_component(0, 0, "Artboard");
+        root_component.transform.render_opacity = 1.0;
+        let mut root_host = typed_component(1, 1, "NestedArtboard");
+        root_host.parent_local = Some(0);
+        root_host.transform.render_opacity = 1.0;
+        root_host.dirt = ComponentDirt::COMPONENTS;
+        let mut root = synthetic_instance(vec![root_component, root_host], vec![1]);
+        let mut middle_mount = synthetic_nested_artboard_instance(1);
+        middle_mount.child = Box::new(middle);
+        root.nested_artboards.insert(1, middle_mount);
+        root.nested_artboard_locals.push(1);
+
+        root.update_pass();
+
+        let middle = root
+            .nested_artboards
+            .values()
+            .next()
+            .expect("middle occurrence");
+        let leaf = middle
+            .child
+            .nested_artboards
+            .values()
+            .next()
+            .expect("leaf occurrence");
+        let leaf_root = leaf.child.component(0).expect("leaf root component");
+        assert_eq!(leaf_root.transform.render_opacity, 0.0);
+        assert!(leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+
+        root.settle_state_machine_update_passes();
+
+        let middle = root
+            .nested_artboards
+            .values()
+            .next()
+            .expect("middle occurrence");
+        let leaf = middle
+            .child
+            .nested_artboards
+            .values()
+            .next()
+            .expect("leaf occurrence");
+        let leaf_root = leaf.child.component(0).expect("leaf root component");
+        assert_eq!(leaf_root.transform.render_opacity, 1.0);
+        assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
     }
 
     #[test]

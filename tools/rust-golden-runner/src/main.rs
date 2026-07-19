@@ -1407,7 +1407,7 @@ fn select_scene(
 fn advance_scene_to(
     instance: &mut ArtboardInstance,
     runtime: &RuntimeFile,
-    state_machine: Option<&mut StateMachineInstance>,
+    mut state_machine: Option<&mut StateMachineInstance>,
     owned_view_model_context: Option<&RuntimeOwnedViewModelContext>,
     #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
     target_seconds: f32,
@@ -1417,7 +1417,7 @@ fn advance_scene_to(
         bail!("cannot move timeline backwards");
     }
     let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
-    if let Some(state_machine) = state_machine {
+    if let Some(state_machine) = state_machine.as_deref_mut() {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
         if instance.advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine) {
             instance.advance_state_machine_instance(state_machine, 0.0);
@@ -1433,7 +1433,11 @@ fn advance_scene_to(
     instance
         .update_script_instances()
         .context("scripted drawable update failed")?;
-    instance.update_pass();
+    if state_machine.is_some() {
+        instance.settle_state_machine_update_passes();
+    } else {
+        instance.update_pass();
+    }
     #[cfg(feature = "scripting")]
     if let Some(script_frame_tail) = script_frame_tail {
         script_frame_tail.advance_detached_view_models();

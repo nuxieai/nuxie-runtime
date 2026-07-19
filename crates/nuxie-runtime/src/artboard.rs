@@ -40,7 +40,8 @@ use crate::constraints::{
     RuntimeFollowPathConstraint, RuntimeIkConstraint, RuntimeListFollowPathConstraint,
     RuntimeScrollConstraint, build_runtime_follow_path_constraints, build_runtime_ik_constraints,
     build_runtime_list_follow_path_constraints, build_runtime_scroll_constraints,
-    component_list_virtual_window,
+    clear_runtime_scroll_intent_for_direct_offset, component_list_virtual_window,
+    runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
 use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
 use crate::draw::{RuntimeLayoutBounds, runtime_apply_component_list_item_layout_bounds};
@@ -1194,7 +1195,8 @@ impl ArtboardInstance {
     /// the object arena, so a matching property returns its current value
     /// even when the source record omitted that default.
     pub fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
-        self.objects.double_property(local_id, property_key)
+        runtime_scroll_double_property(self, local_id, property_key)
+            .or_else(|| self.objects.double_property(local_id, property_key))
     }
 
     /// Typed property write with dirt propagation — the write path the
@@ -1202,11 +1204,24 @@ impl ArtboardInstance {
     /// embeddings): returns whether a matching property existed and its
     /// value changed; invalidation is handled internally.
     pub fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
+        if let Some(changed) =
+            set_runtime_scroll_double_property(self, local_id, property_key, value)
+        {
+            if !changed {
+                return false;
+            }
+            let _ = self
+                .objects
+                .set_generated_double_property(local_id, property_key, value);
+            return self.after_double_property_set(local_id, property_key, value);
+        }
+        let cleared_intent =
+            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key);
         if !self
             .objects
             .set_double_property(local_id, property_key, value)
         {
-            return false;
+            return cleared_intent;
         }
         self.after_double_property_set(local_id, property_key, value)
     }
@@ -1217,11 +1232,24 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
+        if let Some(changed) =
+            set_runtime_scroll_double_property(self, local_id, property_key, value)
+        {
+            if !changed {
+                return false;
+            }
+            let _ = self
+                .objects
+                .set_generated_double_property(local_id, property_key, value);
+            return self.after_double_property_set(local_id, property_key, value);
+        }
+        let cleared_intent =
+            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key);
         if !self
             .objects
             .set_generated_double_property(local_id, property_key, value)
         {
-            return false;
+            return cleared_intent;
         }
         self.after_double_property_set(local_id, property_key, value)
     }
@@ -3234,6 +3262,21 @@ impl ArtboardInstance {
                 if property_key_for_name("NestedRemapAnimation", "time") == Some(property_key) =>
             {
                 self.set_nested_remap_time(local_id, value)
+            }
+            Some("ScrollConstraint")
+                if [
+                    "scrollOffsetX",
+                    "scrollOffsetY",
+                    "scrollPercentX",
+                    "scrollPercentY",
+                    "scrollIndex",
+                ]
+                .into_iter()
+                .any(|name| {
+                    property_key_for_name("ScrollConstraint", name) == Some(property_key)
+                }) =>
+            {
+                self.mark_constraint_parent_transform_dirty(local_id)
             }
             Some("FollowPathConstraint")
                 if property_key_for_name("FollowPathConstraint", "distance")

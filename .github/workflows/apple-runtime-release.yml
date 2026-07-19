@@ -99,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          rustup toolchain install "${NUX_APPLE_RUST_TOOLCHAIN}" --profile minimal --component clippy --no-self-update
+          rustup toolchain install "${NUX_APPLE_RUST_TOOLCHAIN}" --profile minimal --component clippy --component llvm-tools --no-self-update
           rustup target add --toolchain "${NUX_APPLE_RUST_TOOLCHAIN}" aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
           rustup default "${NUX_APPLE_RUST_TOOLCHAIN}"
 

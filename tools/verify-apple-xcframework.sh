@@ -40,6 +40,17 @@ if ! python3 -m json.tool "${metadata_path}" >/dev/null; then
     exit 1
 fi
 
+rust_toolchain="$(metadata_scalar rustToolchain string)"
+rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
+rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
+rust_sysroot="$("${rust_compiler}" --print sysroot)"
+rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
+if [[ ! -x "${rust_llvm_nm}" ]]; then
+    echo "missing llvm-nm for Rust toolchain ${rust_toolchain}" >&2
+    echo "install it with: rustup component add --toolchain ${rust_toolchain} llvm-tools" >&2
+    exit 1
+fi
+
 expected_checksum="$(metadata_scalar swiftPackageChecksum string)"
 actual_checksum="$(swift package compute-checksum "${archive_path}")"
 if [[ "${actual_checksum}" != "${expected_checksum}" ]]; then
@@ -94,7 +105,7 @@ required_symbols=(
 )
 for library in "${device_library}" "${simulator_library}"; do
     phase "validate exported ABI in $(basename "${library}")"
-    if ! symbols="$(nm -gjU "${library}")"; then
+    if ! symbols="$("${rust_llvm_nm}" -gjU "${library}")"; then
         echo "cannot inspect exported symbols in ${library}" >&2
         exit 1
     fi
@@ -110,7 +121,6 @@ phase "validate toolchain and embedded provenance"
 source_revision="$(metadata_scalar sourceRevision string)"
 build_profile="$(metadata_scalar buildProfile string)"
 minimum_ios_version="$(metadata_scalar minimumIOSVersion string)"
-rust_toolchain="$(metadata_scalar rustToolchain string)"
 runtime_version="$(metadata_scalar runtimeVersion string)"
 xcode_version="$(metadata_scalar xcodeVersion string)"
 xcode_build="$(metadata_scalar xcodeBuild string)"

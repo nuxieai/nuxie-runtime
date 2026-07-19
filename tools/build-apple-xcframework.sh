@@ -26,6 +26,9 @@ deployment_target="${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}"
 rust_toolchain="${NUX_APPLE_RUST_TOOLCHAIN:-1.94.1}"
 rust_cargo="$(rustup which --toolchain "${rust_toolchain}" cargo)"
 rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
+rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
+rust_sysroot="$("${rust_compiler}" --print sysroot)"
+rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
 runtime_revision="${NUX_RUNTIME_SOURCE_REVISION:-}"
 xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
 xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
@@ -40,6 +43,12 @@ simulator_dir="${build_root}/simulator"
 xcframework_path="${output_root}/NuxieRuntime.xcframework"
 archive_path="${output_root}/NuxieRuntime.xcframework.zip"
 metadata_path="${output_root}/artifact.json"
+
+if [[ ! -x "${rust_llvm_nm}" ]]; then
+    echo "missing llvm-nm for Rust toolchain ${rust_toolchain}" >&2
+    echo "install it with: rustup component add --toolchain ${rust_toolchain} llvm-tools" >&2
+    exit 9
+fi
 
 phase() {
     printf '\n==> %s\n' "$1"

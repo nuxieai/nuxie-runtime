@@ -768,20 +768,18 @@ impl RuntimeLinearAnimation {
         for keyed_object in self.keyed_objects.iter() {
             for keyed_property in &keyed_object.keyed_properties {
                 if let Some(property) = keyed_property.transform_property {
-                    let Some(current) = instance.transform_property_with_key(
-                        keyed_object.target_local_id,
-                        property,
-                        keyed_property.property_key,
-                    ) else {
+                    let Some(frame_value) =
+                        keyed_property.double_frame_value_at(seconds, self.fps, key_frame_values)
+                    else {
                         continue;
                     };
-                    let Some(value) = keyed_property.double_value_at(
-                        seconds,
-                        self.fps,
-                        current,
-                        mix,
-                        key_frame_values,
-                    ) else {
+                    let Some(value) = apply_key_frame_double_mix(frame_value, mix, || {
+                        instance.transform_property_with_key(
+                            keyed_object.target_local_id,
+                            property,
+                            keyed_property.property_key,
+                        )
+                    }) else {
                         continue;
                     };
                     changed |= instance.set_transform_property_with_key(
@@ -792,16 +790,21 @@ impl RuntimeLinearAnimation {
                     );
                 }
                 if keyed_property.transform_property.is_none() && keyed_property.double_property {
-                    let current = instance
-                        .double_property(keyed_object.target_local_id, keyed_property.property_key)
-                        .unwrap_or(keyed_property.double_source_value);
-                    let Some(value) = keyed_property.double_value_at(
-                        seconds,
-                        self.fps,
-                        current,
-                        mix,
-                        key_frame_values,
-                    ) else {
+                    let Some(frame_value) =
+                        keyed_property.double_frame_value_at(seconds, self.fps, key_frame_values)
+                    else {
+                        continue;
+                    };
+                    let Some(value) = apply_key_frame_double_mix(frame_value, mix, || {
+                        Some(
+                            instance
+                                .double_property(
+                                    keyed_object.target_local_id,
+                                    keyed_property.property_key,
+                                )
+                                .unwrap_or(keyed_property.double_source_value),
+                        )
+                    }) else {
                         continue;
                     };
                     changed |= instance.set_keyed_double_property(
@@ -811,16 +814,21 @@ impl RuntimeLinearAnimation {
                     );
                 }
                 if keyed_property.color_property {
-                    let current = instance
-                        .color_property(keyed_object.target_local_id, keyed_property.property_key)
-                        .unwrap_or(keyed_property.color_source_value);
-                    let Some(value) = keyed_property.color_value_at(
-                        seconds,
-                        self.fps,
-                        current,
-                        mix,
-                        key_frame_values,
-                    ) else {
+                    let Some(frame_value) =
+                        keyed_property.color_frame_value_at(seconds, self.fps, key_frame_values)
+                    else {
+                        continue;
+                    };
+                    let Some(value) = apply_key_frame_color_mix(frame_value, mix, || {
+                        Some(
+                            instance
+                                .color_property(
+                                    keyed_object.target_local_id,
+                                    keyed_property.property_key,
+                                )
+                                .unwrap_or(keyed_property.color_source_value),
+                        )
+                    }) else {
                         continue;
                     };
                     changed |= instance.set_keyed_color_property(
@@ -1016,13 +1024,38 @@ pub(crate) struct RuntimeKeyedCallback {
     pub(crate) seconds_delay: f32,
 }
 
+// Mirrors KeyFrameDouble::applyDouble and KeyFrameColor::applyColor. Keep the
+// current-value read lazy: C++ writes the sampled keyframe target directly at
+// a full mix, and only reads the property when a partial blend is required.
+fn apply_key_frame_double_mix(
+    value: f32,
+    mix: f32,
+    current: impl FnOnce() -> Option<f32>,
+) -> Option<f32> {
+    if mix == 1.0 {
+        Some(value)
+    } else {
+        current().map(|current| mix_value(current, value, mix))
+    }
+}
+
+fn apply_key_frame_color_mix(
+    value: u32,
+    mix: f32,
+    current: impl FnOnce() -> Option<u32>,
+) -> Option<u32> {
+    if mix == 1.0 {
+        Some(value)
+    } else {
+        current().map(|current| color_lerp(current, value, mix))
+    }
+}
+
 impl RuntimeKeyedProperty {
-    fn double_value_at(
+    fn double_frame_value_at(
         &self,
         seconds: f32,
         fps: u64,
-        current: f32,
-        mix: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<f32> {
         if self.key_frames.is_empty() {
@@ -1056,15 +1089,13 @@ impl RuntimeKeyedProperty {
             self.key_frames.last()?.effective_value(key_frame_values)
         };
 
-        Some(mix_value(current, value, mix))
+        Some(value)
     }
 
-    fn color_value_at(
+    fn color_frame_value_at(
         &self,
         seconds: f32,
         fps: u64,
-        current: u32,
-        mix: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<u32> {
         if self.color_key_frames.is_empty() {
@@ -1102,7 +1133,7 @@ impl RuntimeKeyedProperty {
                 .effective_value(key_frame_values)
         };
 
-        Some(color_lerp(current, value, mix))
+        Some(value)
     }
 
     fn bool_value_at(
@@ -2055,7 +2086,7 @@ mod tests {
         let property = keyed_double_property(10, 1.0, 20, 2.0);
 
         assert_eq!(
-            property.double_value_at(0.5, 10, 0.0, 1.0, instance.key_frame_value_context(),),
+            property.double_frame_value_at(0.5, 10, instance.key_frame_value_context(),),
             Some(150.0)
         );
     }
@@ -2092,8 +2123,40 @@ mod tests {
         ];
 
         assert_eq!(
-            property.color_value_at(0.5, 10, 0, 1.0, instance.key_frame_value_context(),),
+            property.color_frame_value_at(0.5, 10, instance.key_frame_value_context(),),
             Some(color_lerp(bound_from, bound_to, 0.5))
+        );
+    }
+
+    #[test]
+    fn full_key_frame_mix_skips_current_value_reads_for_double_and_color() {
+        let mut read_double = false;
+        assert_eq!(
+            apply_key_frame_double_mix(42.0, 1.0, || {
+                read_double = true;
+                Some(-1.0)
+            }),
+            Some(42.0)
+        );
+        assert!(!read_double);
+
+        let mut read_color = false;
+        assert_eq!(
+            apply_key_frame_color_mix(0xA1B2_C3D4, 1.0, || {
+                read_color = true;
+                Some(0)
+            }),
+            Some(0xA1B2_C3D4)
+        );
+        assert!(!read_color);
+
+        assert_eq!(
+            apply_key_frame_double_mix(42.0, 0.25, || Some(2.0)),
+            Some(12.0)
+        );
+        assert_eq!(
+            apply_key_frame_color_mix(0xFFFF_FFFF, 0.5, || Some(0xFF00_0000)),
+            Some(color_lerp(0xFF00_0000, 0xFFFF_FFFF, 0.5))
         );
     }
 
@@ -2189,15 +2252,15 @@ mod tests {
         *first.key_frame_value_holder_mut(10).unwrap() = RuntimeKeyFrameValue::Number(150.0);
 
         assert_eq!(
-            property.double_value_at(0.0, 10, 0.0, 1.0, first.key_frame_value_context()),
+            property.double_frame_value_at(0.0, 10, first.key_frame_value_context()),
             Some(150.0)
         );
         assert_eq!(
-            property.double_value_at(0.0, 10, 0.0, 1.0, second.key_frame_value_context()),
+            property.double_frame_value_at(0.0, 10, second.key_frame_value_context()),
             Some(200.0)
         );
         assert_eq!(
-            property.double_value_at(0.0, 10, 0.0, 1.0, unbound.key_frame_value_context()),
+            property.double_frame_value_at(0.0, 10, unbound.key_frame_value_context()),
             Some(1.0)
         );
     }

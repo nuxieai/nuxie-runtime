@@ -12435,6 +12435,17 @@ fn runtime_draw_nested_artboard(
                 path_cache,
             )?
         }
+        RuntimeDrawCommandObjectKind::NestedArtboard
+            if persistent_child.is_some() && command.world_transform.is_some() =>
+        {
+            // C++ draws an ordinary mounted NestedArtboard with its settled
+            // `worldTransform()`. Prepared commands already retain that exact
+            // value, so avoid walking the host tree again. Layout and leaf
+            // hosts need their specialized live transforms; an ephemeral
+            // fallback or an unprepared command continues through the path
+            // cache below.
+            command.world_transform.expect("checked above")
+        }
         _ => command
             .local_id
             .map(|local_id| {

@@ -1353,6 +1353,17 @@ impl ArtboardInstance {
             return Ok(());
         }
 
+        if paint_cache.paint_preparation_is_noop {
+            return self.prepare_static_artboard_slice_meshes(
+                runtime,
+                graph,
+                factory,
+                &paint_cache.images,
+                &mut paint_cache.meshes,
+                render_cache,
+            );
+        }
+
         // Seed the nested-artboard cycle guard with the root artboard's global id
         // (see nested_artboard_cycle: the ancestor set that mirrors C++
         // Artboard::isAncestor).
@@ -7678,6 +7689,11 @@ pub struct RuntimeRenderPaintCache {
     // instance paint cache is built instead of walking the retained tree on
     // every frame.
     requires_nested_layout_prepass: bool,
+    // A flat artboard containing only solid paints has no paint work to do
+    // between advance and draw. Keep this conservative: nested/component-list
+    // hosts can materialize child caches during preparation, even when neither
+    // the parent nor child contains a gradient.
+    paint_preparation_is_noop: bool,
     image_decode_error: Option<ImageDecodeError>,
 }
 
@@ -9667,6 +9683,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     let mut cache = RuntimeRenderPaintCache::default();
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
+    cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
     preallocate_artboard_mesh_render_buffer_tree_batch_into(
         runtime,
         graph,
@@ -9705,6 +9722,7 @@ pub fn preallocate_render_paint_cache_for_artboard_instance(
     let mut cache = RuntimeRenderPaintCache::default();
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
+    cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
     preallocate_artboard_render_paint_tree_batch_into(
         runtime,
         graph,
@@ -9730,6 +9748,24 @@ fn runtime_artboard_set_contains_nested_layout(
                 .flat_map(|candidate| candidate.nested_artboards.iter()),
         )
         .any(|host| host.type_name == "NestedArtboardLayout")
+}
+
+fn runtime_artboard_paint_preparation_is_noop(graph: &ArtboardGraph) -> bool {
+    graph.nested_artboards.is_empty()
+        && graph.component_lists.is_empty()
+        && graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| container.paints.iter())
+            .all(|paint| {
+                !matches!(
+                    paint.paint_state,
+                    Some(
+                        ShapePaintStateNode::LinearGradient { .. }
+                            | ShapePaintStateNode::RadialGradient { .. }
+                    )
+                )
+            })
 }
 
 fn pre_source_image_asset_globals(

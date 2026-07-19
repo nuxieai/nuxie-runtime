@@ -419,6 +419,7 @@ struct RuntimeNestedLayoutBoundsFrame {
 #[derive(Debug, Clone)]
 enum RuntimeNestedAnimationInstance {
     Simple {
+        local_id: usize,
         animation: LinearAnimationInstance,
         is_playing: bool,
         speed: f32,
@@ -3395,6 +3396,12 @@ impl ArtboardInstance {
                 };
                 self.set_nested_state_machine_bool(state_machine_local_id, input_id, value)
             }
+            Some("NestedSimpleAnimation")
+                if property_key_for_name("NestedSimpleAnimation", "isPlaying")
+                    == Some(property_key) =>
+            {
+                self.set_nested_simple_animation_is_playing(local_id, value)
+            }
             Some("FollowPathConstraint")
                 if property_key_for_name("FollowPathConstraint", "orient")
                     == Some(property_key) =>
@@ -3719,6 +3726,17 @@ impl ArtboardInstance {
             {
                 self.set_nested_remap_time(local_id, value)
             }
+            Some("NestedSimpleAnimation" | "NestedRemapAnimation")
+                if property_key_for_name("NestedLinearAnimation", "mix") == Some(property_key) =>
+            {
+                self.set_nested_linear_animation_mix(local_id, value)
+            }
+            Some("NestedSimpleAnimation")
+                if property_key_for_name("NestedSimpleAnimation", "speed")
+                    == Some(property_key) =>
+            {
+                self.set_nested_simple_animation_speed(local_id, value)
+            }
             Some("ScrollConstraint")
                 if [
                     "scrollOffsetX",
@@ -4040,6 +4058,24 @@ impl ArtboardInstance {
         self.nested_artboards
             .values_mut()
             .any(|nested| nested.set_remap_time(remap_local_id, time))
+    }
+
+    fn set_nested_linear_animation_mix(&mut self, local_id: usize, value: f32) -> bool {
+        self.nested_artboards
+            .values_mut()
+            .any(|nested| nested.set_animation_mix(local_id, value))
+    }
+
+    fn set_nested_simple_animation_speed(&mut self, local_id: usize, value: f32) -> bool {
+        self.nested_artboards
+            .values_mut()
+            .any(|nested| nested.set_simple_animation_speed(local_id, value))
+    }
+
+    fn set_nested_simple_animation_is_playing(&mut self, local_id: usize, value: bool) -> bool {
+        self.nested_artboards
+            .values_mut()
+            .any(|nested| nested.set_simple_animation_is_playing(local_id, value))
     }
 
     fn advance_nested_remap_animation(&mut self, remap_local_id: usize) -> bool {
@@ -4388,6 +4424,60 @@ impl RuntimeNestedArtboardInstance {
         false
     }
 
+    fn set_animation_mix(&mut self, local_id: usize, value: f32) -> bool {
+        for animation in &mut self.animations {
+            let (animation_local_id, mix) = match animation {
+                RuntimeNestedAnimationInstance::Simple { local_id, mix, .. }
+                | RuntimeNestedAnimationInstance::Remap { local_id, mix, .. } => (local_id, mix),
+                RuntimeNestedAnimationInstance::StateMachine { .. } => continue,
+            };
+            if *animation_local_id != local_id || *mix == value {
+                continue;
+            }
+            *mix = value;
+            return true;
+        }
+        false
+    }
+
+    fn set_simple_animation_speed(&mut self, local_id: usize, value: f32) -> bool {
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::Simple {
+                local_id: animation_local_id,
+                speed,
+                ..
+            } = animation
+            else {
+                continue;
+            };
+            if *animation_local_id != local_id || *speed == value {
+                continue;
+            }
+            *speed = value;
+            return true;
+        }
+        false
+    }
+
+    fn set_simple_animation_is_playing(&mut self, local_id: usize, value: bool) -> bool {
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::Simple {
+                local_id: animation_local_id,
+                is_playing,
+                ..
+            } = animation
+            else {
+                continue;
+            };
+            if *animation_local_id != local_id || *is_playing == value {
+                continue;
+            }
+            *is_playing = value;
+            return true;
+        }
+        false
+    }
+
     fn advance_remap(&mut self, remap_local_id: usize) -> bool {
         for animation in &mut self.animations {
             let RuntimeNestedAnimationInstance::Remap {
@@ -4444,6 +4534,7 @@ impl RuntimeNestedAnimationInstance {
                 is_playing,
                 speed,
                 mix,
+                ..
             } => {
                 let mut changed = false;
                 if *is_playing {
@@ -4724,7 +4815,9 @@ fn runtime_nested_animation_instances(
 
         match object.type_name {
             "NestedSimpleAnimation" => {
-                let Some(animation) = nested_simple_animation_instance(object, child) else {
+                let Some(animation) =
+                    nested_simple_animation_instance(local_object.local_id, object, child)
+                else {
                     continue;
                 };
                 animations.push(animation);
@@ -4867,11 +4960,13 @@ fn property_may_affect_prepared_frame(type_name: Option<&str>, property_key: u16
 }
 
 fn nested_simple_animation_instance(
+    local_id: usize,
     object: &nuxie_binary::RuntimeObject,
     child: &ArtboardInstance,
 ) -> Option<RuntimeNestedAnimationInstance> {
     let animation_index = usize::try_from(object.uint_property("animationId")?).ok()?;
     Some(RuntimeNestedAnimationInstance::Simple {
+        local_id,
         animation: child.linear_animation_instance(animation_index)?,
         is_playing: object.bool_property("isPlaying").unwrap_or(false),
         speed: object.double_property("speed").unwrap_or(1.0),
@@ -6060,6 +6155,88 @@ mod tests {
 
         assert_eq!(instance.components[0].transform.render_opacity, 1.0);
         assert!(instance.prepared_epoch > prepared_epoch);
+    }
+
+    #[test]
+    fn nested_animation_runtime_knobs_follow_keyed_parent_properties() {
+        let animation_instance = |animation_index| {
+            let animation = RuntimeLinearAnimation {
+                global_id: animation_index as u32,
+                name: None,
+                fps: 60,
+                duration: 60,
+                speed: 1.0,
+                loop_value: 0,
+                work_start: 0,
+                work_end: 60,
+                enable_work_area: false,
+                quantize: false,
+                keyed_objects: Arc::new(Vec::new()),
+                key_frame_data_bind_templates: Arc::new(Vec::new()),
+            };
+            LinearAnimationInstance::new(animation_index, &animation, 1.0)
+        };
+
+        let mut host = synthetic_component(0, 0);
+        host.type_name = "NestedArtboard";
+        host.transform_property_keys =
+            crate::components::TransformPropertyKeys::for_type(host.type_name);
+        let mut simple = synthetic_component(1, 1);
+        simple.type_name = "NestedSimpleAnimation";
+        simple.parent_local = Some(0);
+        simple.transform_property_keys =
+            crate::components::TransformPropertyKeys::for_type(simple.type_name);
+        let mut remap = synthetic_component(2, 2);
+        remap.type_name = "NestedRemapAnimation";
+        remap.parent_local = Some(0);
+        remap.transform_property_keys =
+            crate::components::TransformPropertyKeys::for_type(remap.type_name);
+
+        let mut instance = synthetic_instance(vec![host, simple, remap], Vec::new());
+        let mut nested = synthetic_nested_artboard_instance(7);
+        nested.animations = vec![
+            RuntimeNestedAnimationInstance::Simple {
+                local_id: 1,
+                animation: animation_instance(0),
+                is_playing: false,
+                speed: 1.0,
+                mix: 1.0,
+            },
+            RuntimeNestedAnimationInstance::Remap {
+                local_id: 2,
+                animation: animation_instance(1),
+                mix: 1.0,
+            },
+        ];
+        instance.nested_artboards.insert(0, nested);
+
+        let mix_key = property_key_for_name("NestedLinearAnimation", "mix").expect("mix key");
+        let speed_key = property_key_for_name("NestedSimpleAnimation", "speed").expect("speed key");
+        let playing_key =
+            property_key_for_name("NestedSimpleAnimation", "isPlaying").expect("isPlaying key");
+        assert!(instance.set_keyed_double_property(1, mix_key, 0.25));
+        assert!(instance.set_keyed_double_property(2, mix_key, 0.0));
+        assert!(instance.set_keyed_double_property(1, speed_key, 2.0));
+        assert!(instance.set_bool_property(1, playing_key, true));
+
+        let nested = instance.nested_artboards.get(&0).expect("nested host");
+        match &nested.animations[0] {
+            RuntimeNestedAnimationInstance::Simple {
+                is_playing,
+                speed,
+                mix,
+                ..
+            } => {
+                assert!(*is_playing);
+                assert_eq!(*speed, 2.0);
+                assert_eq!(*mix, 0.25);
+            }
+            _ => panic!("expected simple animation"),
+        }
+        match &nested.animations[1] {
+            RuntimeNestedAnimationInstance::Remap { mix, .. } => assert_eq!(*mix, 0.0),
+            _ => panic!("expected remap animation"),
+        }
     }
 
     fn synthetic_component(local_id: usize, graph_order: usize) -> RuntimeComponent {

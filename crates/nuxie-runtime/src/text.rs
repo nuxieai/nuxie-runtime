@@ -2088,10 +2088,12 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
+        let contextual_glyphs =
+            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?;
         let line_widths = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, resolved_runs, font_scale))
-            .collect::<Result<Vec<_>>>()?;
+            .map(|line| Self::styled_line_width(line, &contextual_glyphs))
+            .collect::<Vec<_>>();
         let measured_width = line_widths.iter().copied().fold(0.0f32, f32::max);
         let layout_info = self.static_layout_info(
             runtime,
@@ -2170,8 +2172,7 @@ impl<'a> StaticTextSlice<'a> {
                 StaticTextLineIteration::Skip => continue,
                 StaticTextLineIteration::Stop => break,
             }
-            let mut glyphs =
-                self.styled_line_glyphs(runtime, instance, &line, resolved_runs, font_scale)?;
+            let mut glyphs = Self::styled_line_glyphs(&line, &contextual_glyphs);
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.effective_width(runtime, instance, layout_constraint)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
@@ -2588,11 +2589,11 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+        let contextual_glyphs =
+            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
         let measured_width = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
+            .map(|line| Self::styled_line_width(line, &contextual_glyphs))
             .fold(0.0f32, f32::max);
         let sizing = match purpose {
             StaticTextLayoutBoundsPurpose::Measure => self.authored_sizing(runtime, instance)?,
@@ -3131,11 +3132,11 @@ impl<'a> StaticTextSlice<'a> {
                 scale,
                 letter_spacing,
             )?;
+            let contextual_glyphs =
+                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?;
             let max_width = lines
                 .iter()
-                .map(|line| self.styled_line_width(runtime, instance, line, runs, font_scale))
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
+                .map(|line| Self::styled_line_width(line, &contextual_glyphs))
                 .fold(0.0f32, f32::max);
             let line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, runs, font_scale)?;
@@ -3167,56 +3168,59 @@ impl<'a> StaticTextSlice<'a> {
         Ok(best as f32 / max_size)
     }
 
-    fn styled_line_glyphs(
+    fn styled_resolved_run_glyphs(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
-        let line_start = line.char_start;
-        let line_end = line_start + line.text.chars().count();
         let mut glyphs = Vec::new();
         for run in runs {
-            let run_start = run.char_start;
-            let run_end = run.char_start + run.char_len;
-            let segment_start = line_start.max(run_start);
-            let segment_end = line_end.min(run_end);
-            if segment_start >= segment_end {
-                continue;
-            }
             let style_index = self.style_index_for_local(run.style_local)?;
-            let segment_text = char_slice(
-                line.text,
-                segment_start - line_start,
-                segment_end - line_start,
-            );
-            glyphs.extend(self.styled_text_glyphs_for_style(
-                runtime,
-                instance,
-                segment_text,
-                segment_start,
-                style_index,
-                font_scale,
-            )?);
+            for paragraph in split_static_text_lines(&run.text) {
+                // C++ shapes each paragraph before `BreakLines` and keeps the
+                // resulting advances when a soft wrap slices the glyph run.
+                // In particular, a line-ending glyph retains kerning against
+                // the first glyph on the next visual line.
+                glyphs.extend(self.styled_text_glyphs_for_style(
+                    runtime,
+                    instance,
+                    paragraph.text,
+                    run.char_start + paragraph.char_start,
+                    style_index,
+                    font_scale,
+                )?);
+            }
         }
         Ok(glyphs)
     }
 
-    fn styled_line_width(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
+    fn styled_line_glyphs(
         line: &StaticTextLine<'_>,
-        runs: &[StaticResolvedRun],
-        font_scale: f32,
-    ) -> Result<f32> {
-        Ok(self
-            .styled_line_glyphs(runtime, instance, line, runs, font_scale)?
+        contextual_glyphs: &[StyledTextGlyph],
+    ) -> Vec<StyledTextGlyph> {
+        let range = Self::styled_line_glyph_range(line, contextual_glyphs);
+        contextual_glyphs[range].to_vec()
+    }
+
+    fn styled_line_glyph_range(
+        line: &StaticTextLine<'_>,
+        contextual_glyphs: &[StyledTextGlyph],
+    ) -> std::ops::Range<usize> {
+        let line_start = line.char_start;
+        let line_end = line_start + line.text.chars().count();
+        let start = contextual_glyphs.partition_point(|glyph| glyph.char_index < line_start);
+        let end =
+            start + contextual_glyphs[start..].partition_point(|glyph| glyph.char_index < line_end);
+        start..end
+    }
+
+    fn styled_line_width(line: &StaticTextLine<'_>, contextual_glyphs: &[StyledTextGlyph]) -> f32 {
+        contextual_glyphs[Self::styled_line_glyph_range(line, contextual_glyphs)]
             .iter()
             .map(|glyph| glyph.advance)
-            .sum())
+            .sum()
     }
 
     fn styled_text_glyphs_for_style(
@@ -3420,13 +3424,11 @@ impl<'a> StaticTextSlice<'a> {
             )?;
             line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+            let contextual_glyphs =
+                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
             measured_width = lines
                 .iter()
-                .map(|line| {
-                    self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale)
-                })
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
+                .map(|line| Self::styled_line_width(line, &contextual_glyphs))
                 .fold(0.0f32, f32::max);
         }
 
@@ -5078,12 +5080,6 @@ fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
         .saturating_sub(1)
 }
 
-fn char_slice(text: &str, start: usize, end: usize) -> &str {
-    let start_byte = char_byte_index(text, start);
-    let end_byte = char_byte_index(text, end);
-    &text[start_byte..end_byte]
-}
-
 fn char_byte_index(text: &str, char_index: usize) -> usize {
     text.char_indices()
         .nth(char_index)
@@ -5964,7 +5960,10 @@ mod tests {
         );
         assert_ne!(
             (expected.0.to_bits(), expected.1.to_bits()),
-            (mapped_then_lerped.0.to_bits(), mapped_then_lerped.1.to_bits())
+            (
+                mapped_then_lerped.0.to_bits(),
+                mapped_then_lerped.1.to_bits()
+            )
         );
 
         pen.move_to(start.0, start.1);
@@ -5972,7 +5971,10 @@ mod tests {
         let RuntimePathCommand::Cubic { x1, y1, .. } = pen.commands[1] else {
             panic!("quadratic outline did not emit a cubic command");
         };
-        assert_eq!((x1.to_bits(), y1.to_bits()), (expected.0.to_bits(), expected.1.to_bits()));
+        assert_eq!(
+            (x1.to_bits(), y1.to_bits()),
+            (expected.0.to_bits(), expected.1.to_bits())
+        );
     }
 
     #[test]
@@ -6103,6 +6105,44 @@ mod tests {
 
         assert_close(measured.2, 80.0);
         assert_close(controlled.2, 200.0);
+    }
+
+    #[test]
+    fn soft_wrap_retains_contextual_advance_from_paragraph_shape() {
+        let contextual_glyphs = vec![
+            StyledTextGlyph {
+                glyph_id: 1,
+                char_index: 0,
+                char_len: 1,
+                style_index: 0,
+                advance: 650.0,
+                scale: 1.0,
+            },
+            StyledTextGlyph {
+                glyph_id: 2,
+                char_index: 1,
+                char_len: 1,
+                style_index: 0,
+                advance: 1_194.0,
+                scale: 1.0,
+            },
+        ];
+        let first_line = StaticTextLine {
+            text: "t",
+            char_start: 0,
+            line_index: 0,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
+        };
+
+        let glyphs = StaticTextSlice::styled_line_glyphs(&first_line, &contextual_glyphs);
+
+        assert_eq!(glyphs.len(), 1);
+        assert_eq!(glyphs[0].advance, 650.0);
+        assert_eq!(
+            StaticTextSlice::styled_line_width(&first_line, &contextual_glyphs),
+            650.0
+        );
     }
 
     #[test]

@@ -680,6 +680,34 @@ impl ArtboardInstance {
         self.script_instances_by_global.contains_key(&global_id)
     }
 
+    /// Rearm a scripted drawable's `advance` callback after an input event.
+    ///
+    /// This is the Rust lifecycle seam for C++ `ScriptedDrawable::wakeAdvance`:
+    /// pointer, keyboard, gamepad, and text events can make a previously idle
+    /// script active again and invalidate its paint output.
+    pub fn wake_script_advance_for_global(&mut self, global_id: u32) -> bool {
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            return false;
+        };
+        if handle
+            .borrow_mut()
+            .has_method(ScriptMethod::Advance)
+            .unwrap_or(false)
+        {
+            self.script_advances_active.insert(global_id);
+        }
+
+        if let Some(local_id) = self
+            .components
+            .iter()
+            .find(|component| component.global_id == global_id)
+            .map(|component| component.local_id)
+        {
+            self.add_dirt(local_id, ComponentDirt::PAINT, false);
+        }
+        true
+    }
+
     pub fn graph_global_id(&self) -> u32 {
         self.graph_global_id
     }
@@ -726,6 +754,10 @@ impl ArtboardInstance {
         let mut host = NoopScriptHost;
         for (index, global_id) in pending.iter().copied().enumerate() {
             if self.script_path_effect_globals.contains(&global_id) {
+                continue;
+            }
+            if self.script_component_is_collapsed(global_id) {
+                self.script_updates_pending.insert(global_id);
                 continue;
             }
             let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
@@ -788,6 +820,12 @@ impl ArtboardInstance {
         let mut did_advance = false;
         let mut host = NoopScriptHost;
         for (index, global_id) in active.iter().copied().enumerate() {
+            if !self.script_path_effect_globals.contains(&global_id)
+                && self.script_component_is_collapsed(global_id)
+            {
+                self.script_advances_active.insert(global_id);
+                continue;
+            }
             let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
                 continue;
             };
@@ -805,11 +843,26 @@ impl ArtboardInstance {
             };
             if result == ScriptValue::Bool(true) {
                 self.script_advances_active.insert(global_id);
-                self.script_updates_pending.insert(global_id);
+                if !self.script_path_effect_globals.contains(&global_id)
+                    && let Some(local_id) = self
+                        .components
+                        .iter()
+                        .find(|component| component.global_id == global_id)
+                        .map(|component| component.local_id)
+                {
+                    self.add_dirt(local_id, ComponentDirt::PAINT, false);
+                }
                 did_advance = true;
             }
         }
         Ok(did_advance)
+    }
+
+    fn script_component_is_collapsed(&self, global_id: u32) -> bool {
+        self.components
+            .iter()
+            .find(|component| component.global_id == global_id)
+            .is_some_and(RuntimeComponent::is_collapsed)
     }
 
     /// Queue one exact advance step for replay when a renderer factory is
@@ -4534,6 +4587,11 @@ mod tests {
         seconds: Rc<RefCell<Vec<f32>>>,
     }
 
+    struct AdvanceAndUpdateScriptInstance {
+        advances: Rc<Cell<usize>>,
+        updates: Rc<Cell<usize>>,
+    }
+
     struct FailOnceAdvanceScriptInstance {
         attempts: Rc<RefCell<Vec<f32>>>,
         should_fail: Rc<Cell<bool>>,
@@ -4586,6 +4644,42 @@ mod tests {
                 .expect("advance receives seconds");
             self.seconds.borrow_mut().push(seconds);
             Ok(ScriptValue::Bool(true))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for AdvanceAndUpdateScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(matches!(
+                method,
+                ScriptMethod::Advance | ScriptMethod::Update
+            ))
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            match method {
+                ScriptMethod::Advance => {
+                    self.advances.set(self.advances.get() + 1);
+                    Ok(ScriptValue::Bool(true))
+                }
+                ScriptMethod::Update => {
+                    self.updates.set(self.updates.get() + 1);
+                    Ok(ScriptValue::Nil)
+                }
+                _ => unreachable!("only declared script methods are called"),
+            }
         }
 
         fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
@@ -5290,6 +5384,116 @@ mod tests {
                 .expect("reactivated advance")
         );
         assert_eq!(advances.get(), 3);
+    }
+
+    #[test]
+    fn collapsed_scripted_component_defers_update_and_advance_until_visible() {
+        let mut instance = synthetic_instance(
+            vec![synthetic_component(0, 0), synthetic_component(1, 1)],
+            vec![0, 1],
+        );
+        let inits = Rc::new(Cell::new(0));
+        let updates = Rc::new(Cell::new(0));
+        instance.set_script_instance_for_global(
+            0,
+            Box::new(UpdateScriptInstance {
+                inits: Rc::clone(&inits),
+                updates: Rc::clone(&updates),
+            }),
+        );
+        let advances = Rc::new(Cell::new(0));
+        instance.set_script_instance_for_global(
+            1,
+            Box::new(AdvanceScriptInstance {
+                advances: Rc::clone(&advances),
+            }),
+        );
+
+        assert!(instance.collapse_component(0, true));
+        assert!(instance.collapse_component(1, true));
+        assert!(
+            !instance
+                .update_script_instances()
+                .expect("collapsed update is deferred")
+        );
+        assert!(
+            !instance
+                .advance_script_instances(0.1)
+                .expect("collapsed advance is deferred")
+        );
+        assert_eq!(updates.get(), 0);
+        assert_eq!(advances.get(), 0);
+
+        assert!(instance.collapse_component(0, false));
+        assert!(instance.collapse_component(1, false));
+        assert!(
+            instance
+                .update_script_instances()
+                .expect("deferred update runs when visible")
+        );
+        assert!(
+            instance
+                .advance_script_instances(0.1)
+                .expect("armed advance runs when visible")
+        );
+        assert_eq!(updates.get(), 1);
+        assert_eq!(advances.get(), 1);
+    }
+
+    #[test]
+    fn waking_a_parked_script_advance_rearms_it_and_marks_paint_dirty() {
+        let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        let advances = Rc::new(Cell::new(0));
+        instance.set_script_instance_for_global(
+            0,
+            Box::new(AdvanceScriptInstance {
+                advances: Rc::clone(&advances),
+            }),
+        );
+
+        assert!(instance.advance_script_instances(0.1).unwrap());
+        assert!(!instance.advance_script_instances(0.1).unwrap());
+        instance.clear_component_dirt(0);
+
+        assert!(instance.wake_script_advance_for_global(0));
+        assert!(
+            instance
+                .component(0)
+                .expect("scripted drawable component")
+                .dirt
+                .contains(ComponentDirt::PAINT)
+        );
+        assert!(instance.advance_script_instances(0.1).unwrap());
+        assert_eq!(advances.get(), 3);
+    }
+
+    #[test]
+    fn successful_script_advance_invalidates_paint_without_calling_update() {
+        let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        let advances = Rc::new(Cell::new(0));
+        let updates = Rc::new(Cell::new(0));
+        instance.set_script_instance_for_global(
+            0,
+            Box::new(AdvanceAndUpdateScriptInstance {
+                advances: Rc::clone(&advances),
+                updates: Rc::clone(&updates),
+            }),
+        );
+        assert!(instance.update_script_instances().unwrap());
+        assert_eq!(updates.get(), 1);
+        instance.clear_component_dirt(0);
+
+        assert!(instance.advance_script_instances(0.1).unwrap());
+        assert_eq!(advances.get(), 1);
+        assert!(
+            instance
+                .component(0)
+                .expect("scripted drawable component")
+                .dirt
+                .contains(ComponentDirt::PAINT)
+        );
+        assert!(!instance.update_script_instances().unwrap());
+        assert_eq!(updates.get(), 1);
     }
 
     #[test]

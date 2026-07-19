@@ -2358,7 +2358,13 @@ pub(super) fn build_artboard_nested_host_bindings(
                     .data_bind_is_name_based_for_object(data_bind.object)
                     .unwrap_or(false),
                 owned_context_source_path: None,
-                artboard_value_applied: true,
+                // C++ DataBindViewModel::update bypasses the generated
+                // NestedArtboard::artboardId equality guard and calls
+                // NestedArtboard::updateArtboard even when the first bound
+                // value equals the authored source. Preserve that first
+                // clone so instance-owned paints and state have the same
+                // lifetime as C++.
+                artboard_value_applied: false,
             })
         })
         .collect()
@@ -6976,6 +6982,124 @@ mod tests {
             Some(&RuntimeDataBindGraphValue::Number(200.0)),
             "the clean-frame epoch guard must not suppress C++'s post-component derived-value poll"
         );
+    }
+
+    fn same_artboard_binding_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyArtboard",
+                vec![property(
+                    "ViewModelPropertyArtboard",
+                    "name",
+                    AuthoringValue::String("child".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![property(
+                    "ViewModelInstance",
+                    "viewModelId",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+            record(
+                "ViewModelInstanceArtboard",
+                vec![
+                    property(
+                        "ViewModelInstanceArtboard",
+                        "parentId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceArtboard",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceArtboard",
+                        "propertyValue",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(100.0)),
+                    property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "NestedArtboard",
+                vec![
+                    property("NestedArtboard", "parentId", AuthoringValue::Uint(0)),
+                    property("NestedArtboard", "artboardId", AuthoringValue::Uint(1)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("NestedArtboard", "artboardId")
+                                .expect("artboardId key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![0, 0]),
+                    ),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(50.0)),
+                    property("Artboard", "height", AuthoringValue::Double(50.0)),
+                ],
+            ),
+        ])
+        .expect("same-artboard binding fixture imports")
+    }
+
+    #[test]
+    fn first_artboard_binding_recreates_an_equal_authored_nested_source() {
+        let file = same_artboard_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard builds");
+        let host_local = graph.nested_artboards[0].local_id;
+        let original_identity = artboard.nested_artboards[&host_local]
+            .child
+            .instance_identity();
+        let context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("serialized view model instance builds");
+
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+
+        let replacement = &artboard.nested_artboards[&host_local];
+        assert_ne!(replacement.child.instance_identity(), original_identity);
+        assert_eq!(replacement.render_cache_revision, 1);
     }
 
     #[test]

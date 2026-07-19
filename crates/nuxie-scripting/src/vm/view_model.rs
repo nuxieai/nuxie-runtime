@@ -6,7 +6,9 @@ use std::rc::{Rc, Weak};
 use luaur_rt::{
     Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
-use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty};
+use nuxie_runtime::{
+    RuntimeOwnedViewModelInstance, ScriptImage, ScriptViewModel, ScriptViewModelProperty,
+};
 
 type ViewModelInstance = Rc<RefCell<RuntimeOwnedViewModelInstance>>;
 type ViewModelInstanceWeak = Weak<RefCell<RuntimeOwnedViewModelInstance>>;
@@ -414,6 +416,18 @@ fn create_scripted_view_model_with_parent(
                 .unwrap_or(-1))
         })?,
     )?;
+    let get_image_model = model.clone();
+    table.set(
+        "getImage",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_image_model.property(&name) {
+                Some(ScriptViewModelProperty::Image) => lua
+                    .create_userdata(ScriptedPropertyImage::new(get_image_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let instance_model = model.clone();
     table.set(
         "instance",
@@ -454,6 +468,9 @@ fn create_scripted_view_model_with_parent(
             }
             ScriptViewModelProperty::Trigger => {
                 lua.create_userdata(ScriptedPropertyTrigger::new(model.clone(), name.clone()))?
+            }
+            ScriptViewModelProperty::Image => {
+                lua.create_userdata(ScriptedPropertyImage::new(model.clone(), name.clone()))?
             }
             ScriptViewModelProperty::List => {
                 lua.create_userdata(ScriptedPropertyList::new(model.clone(), name.clone()))?
@@ -603,6 +620,41 @@ impl UserData for ScriptedPropertyString {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("getString", |_, this, ()| {
             Ok(this.model.string(&this.name).unwrap_or_default())
+        });
+    }
+}
+
+struct ScriptedImage(ScriptImage);
+
+impl UserData for ScriptedImage {}
+
+struct ScriptedPropertyImage {
+    model: ScriptViewModel,
+    name: String,
+}
+
+impl ScriptedPropertyImage {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        Self { model, name }
+    }
+}
+
+impl UserData for ScriptedPropertyImage {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |lua, this| {
+            Ok(match this.model.image(&this.name) {
+                Some(image) => Value::UserData(lua.create_userdata(ScriptedImage(image))?),
+                None => Value::Nil,
+            })
+        });
+        fields.add_field_method_set("value", |_, this, value: Value| {
+            let image = match value {
+                Value::Nil => None,
+                Value::UserData(image) => Some(image.borrow::<ScriptedImage>()?.0),
+                _ => return Err(luaur_rt::Error::runtime("expected Image userdata or nil")),
+            };
+            this.model.set_image(&this.name, image);
+            Ok(())
         });
     }
 }
@@ -774,6 +826,16 @@ impl UserData for ScriptedContext {
                 parents: this.parents.clone(),
             })
             .map(Value::UserData)
+        });
+        methods.add_method("image", |lua, this, name: String| {
+            let Some(model) = this.model.borrow().clone() else {
+                this.missing_requested_data.set(true);
+                return Ok(Value::Nil);
+            };
+            Ok(match model.image_asset_named(&name) {
+                Some(image) => Value::UserData(lua.create_userdata(ScriptedImage(image))?),
+                None => Value::Nil,
+            })
         });
     }
 }
@@ -1117,5 +1179,97 @@ mod tests {
             .expect("getIndex runs");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn scripted_images_round_trip_between_context_and_view_model_properties() {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/image_scripting_property_value.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+        let (view_model_name, instance_name) = file
+            .view_models()
+            .into_iter()
+            .find_map(|view_model| {
+                if !view_model
+                    .properties
+                    .iter()
+                    .any(|property| property.type_name == "ViewModelPropertyAssetImage")
+                {
+                    return None;
+                }
+                Some((
+                    view_model.object.string_property("name")?.to_owned(),
+                    view_model
+                        .instances
+                        .first()?
+                        .object
+                        .string_property("name")?
+                        .to_owned(),
+                ))
+            })
+            .expect("fixture has an authored image view model");
+        let definition = nuxie_runtime::script_view_models(&file)
+            .remove(&view_model_name)
+            .expect("script view model is registered");
+        let model = definition
+            .named_instance(Some(&instance_name))
+            .expect("authored instance is selectable");
+        let property_name = model
+            .properties()
+            .iter()
+            .find_map(|(name, kind)| {
+                (*kind == ScriptViewModelProperty::Image && model.image(name).is_some())
+                    .then(|| name.clone())
+            })
+            .expect("authored instance has an image property");
+        let current = model.image(&property_name).expect("property has an image");
+        let (asset_name, expected) = file
+            .file_assets()
+            .into_iter()
+            .enumerate()
+            .find_map(|(index, asset)| {
+                let index = u64::try_from(index).ok()?;
+                (asset.type_name == "ImageAsset" && index != current.file_asset_index()).then(|| {
+                    (
+                        asset.string_property("name").unwrap().to_owned(),
+                        index,
+                    )
+                })
+            })
+            .expect("fixture has a replacement image");
+
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(Some(model.clone()))),
+                Vec::new(),
+                Rc::clone(&missing_requested_data),
+            ))
+            .expect("scripted context");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("context", context).unwrap();
+        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        lua.globals().set("assetName", asset_name).unwrap();
+
+        lua.load(
+            "local property = model:getImage(propertyName)\n\
+             assert(property ~= nil)\n\
+             property.value = context:image(assetName)\n\
+             assert(property.value ~= nil)",
+        )
+        .exec()
+        .expect("image property script runs");
+
+        assert_eq!(
+            model.image(&property_name).unwrap().file_asset_index(),
+            expected
+        );
+        assert!(!missing_requested_data.get());
     }
 }

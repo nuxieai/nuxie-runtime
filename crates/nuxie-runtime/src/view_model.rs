@@ -6634,6 +6634,11 @@ impl RuntimeOwnedViewModelInstance {
         self.set_asset_by_property_index(property_index, value)
     }
 
+    pub fn asset_value_by_property_name(&self, property_name: &str) -> Option<u64> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.asset_value_by_property_index(property_index)
+    }
+
     pub fn asset_source_handle_by_property_name(
         &self,
         property_name: &str,

@@ -49,7 +49,7 @@ pub use objects::InstanceSlot;
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptListenerInvocation,
-    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode, ScriptPaint,
+    ScriptImage, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode, ScriptPaint,
     ScriptPointerEventKind, ScriptValue, ScriptViewModel, ScriptViewModelProperty, ScriptingVm,
     bound_script_artboard_input, bound_script_input_value, bound_script_view_model,
     script_node_for_artboard, script_view_model_from_owned, script_view_models,

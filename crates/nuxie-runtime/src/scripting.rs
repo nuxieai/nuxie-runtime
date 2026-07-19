@@ -283,6 +283,22 @@ pub struct ScriptViewModel {
     ancestors: Rc<Vec<usize>>,
 }
 
+/// An image selected from the runtime file's dense asset registry.
+///
+/// C++ exposes a retained `RenderImage` through Lua. The runtime-neutral seam
+/// retains its registry identity instead; assigning the handle to an image
+/// property resolves to the same decoded file asset during data binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptImage {
+    file_asset_index: u64,
+}
+
+impl ScriptImage {
+    pub fn file_asset_index(self) -> u64 {
+        self.file_asset_index
+    }
+}
+
 impl ScriptViewModel {
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
         self.properties.get(name).copied()
@@ -361,6 +377,44 @@ impl ScriptViewModel {
 
     pub fn boolean(&self, name: &str) -> Option<bool> {
         self.instance.borrow().boolean_value_by_property_name(name)
+    }
+
+    pub fn image(&self, name: &str) -> Option<ScriptImage> {
+        if self.property(name) != Some(ScriptViewModelProperty::Image) {
+            return None;
+        }
+        let file_asset_index = self.instance.borrow().asset_value_by_property_name(name)?;
+        let asset = self
+            .file
+            .file_asset(usize::try_from(file_asset_index).ok()?)?;
+        (asset.type_name == "ImageAsset").then_some(ScriptImage { file_asset_index })
+    }
+
+    pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
+        self.file
+            .file_assets()
+            .into_iter()
+            .enumerate()
+            .find(|(_, asset)| {
+                asset.type_name == "ImageAsset" && asset.string_property("name") == Some(name)
+            })
+            .and_then(|(file_asset_index, _)| {
+                u64::try_from(file_asset_index)
+                    .ok()
+                    .map(|file_asset_index| ScriptImage { file_asset_index })
+            })
+    }
+
+    pub fn set_image(&self, name: &str, image: Option<ScriptImage>) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Image) {
+            return false;
+        }
+        let file_asset_index = image
+            .map(ScriptImage::file_asset_index)
+            .unwrap_or(u64::from(u32::MAX));
+        self.instance
+            .borrow_mut()
+            .set_asset_by_property_name(name, file_asset_index)
     }
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
@@ -545,6 +599,7 @@ pub enum ScriptViewModelProperty {
     String,
     Boolean,
     Trigger,
+    Image,
     List,
     ViewModel,
 }
@@ -609,6 +664,7 @@ fn build_script_view_model_shared(
                 "ViewModelPropertyString" => ScriptViewModelProperty::String,
                 "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
+                "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
                 "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
                 _ => return None,

@@ -1043,7 +1043,28 @@ impl ArtboardInstance {
         sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimeDrawCommand> {
-        let mut commands = Vec::new();
+        self.draw_commands_with_sorted_drawable_order_reusing(
+            graph,
+            layout_bounds,
+            sorted_drawable_order,
+            path_cache,
+            Vec::new(),
+        )
+    }
+
+    /// Rebuild a prepared command list while retaining its outer allocation
+    /// when the caller can hand it back exclusively. Command contents still
+    /// come from the current instance, so every prepared-frame invalidation
+    /// keeps its existing output and dirt semantics.
+    fn draw_commands_with_sorted_drawable_order_reusing(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        sorted_drawable_order: &[SortedDrawableNode],
+        path_cache: &mut RuntimeRenderPathCache,
+        mut commands: Vec<RuntimeDrawCommand>,
+    ) -> Vec<RuntimeDrawCommand> {
+        commands.clear();
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
         let mut empty_clips = 0i32;
 
@@ -8604,6 +8625,16 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
+            // The frame is only retained by this cache between calls.  When
+            // no reader has kept a temporary Arc alive, recover the command
+            // vector's allocation for this rebuild.  A held reader simply
+            // takes the established fresh-vector path.
+            let reusable_commands = self
+                .prepared_artboard
+                .take()
+                .and_then(Arc::into_inner)
+                .and_then(|frame| Arc::into_inner(frame.commands))
+                .unwrap_or_default();
             let layout_frame = self.layout_bounds_frame(
                 instance,
                 graph,
@@ -8612,11 +8643,12 @@ impl RuntimeRenderPathCache {
             );
             let layout_bounds = layout_frame.bounds.clone();
             let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
-            let commands = instance.draw_commands_with_sorted_drawable_order(
+            let commands = instance.draw_commands_with_sorted_drawable_order_reusing(
                 graph,
                 layout_bounds.as_ref().as_ref(),
                 sorted_drawable_order.as_slice(),
                 self,
+                reusable_commands,
             );
             let background =
                 runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());

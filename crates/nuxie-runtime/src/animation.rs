@@ -343,6 +343,7 @@ pub(crate) fn build_linear_animations(
                 quantize: object.bool_property("quantize").unwrap_or(false),
                 keyed_objects: Arc::new(Vec::new()),
                 key_frame_data_bind_templates: Arc::new(Vec::new()),
+                has_keyed_callbacks: false,
             });
             current_animation = Some(animations.len() - 1);
             current_keyed_object = None;
@@ -575,6 +576,7 @@ pub(crate) fn build_linear_animations(
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            animations[animation_index].has_keyed_callbacks = true;
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
@@ -695,6 +697,10 @@ pub struct RuntimeLinearAnimation {
     pub quantize: bool,
     pub keyed_objects: Arc<Vec<RuntimeKeyedObject>>,
     pub(crate) key_frame_data_bind_templates: Arc<Vec<RuntimeKeyFrameDataBindTemplate>>,
+    /// Authored callback frames are immutable after import. Retain their
+    /// presence so ordinary animations do not enter Rust's deferred callback
+    /// collection path on every advance.
+    pub(crate) has_keyed_callbacks: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2032,6 +2038,7 @@ mod tests {
             quantize: false,
             keyed_objects: Arc::new(Vec::new()),
             key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
         }
     }
 
@@ -2432,6 +2439,7 @@ mod tests {
             quantize: false,
             keyed_objects: Arc::new(Vec::new()),
             key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
         };
 
         assert_eq!(animation.duration_seconds(), 0.0);

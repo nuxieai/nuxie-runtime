@@ -1869,6 +1869,9 @@ impl ArtboardInstance {
             let Some(animation) = self.linear_animation(instance.animation_index) else {
                 return false;
             };
+            if !animation.has_keyed_callbacks {
+                return instance.advance(animation, elapsed_seconds);
+            }
             let mut keyed_callbacks = Vec::new();
             let changed = instance.advance_with_events(
                 animation,
@@ -5354,6 +5357,7 @@ fn apply_authored_nested_input_values(
 mod tests {
     use super::*;
     use crate::Mat2D;
+    use crate::animation::{RuntimeKeyFrameCallback, RuntimeKeyedObject, RuntimeKeyedProperty};
     use crate::components::{
         RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
         reset_solo_mapping_work, solo_mapping_work,
@@ -6486,6 +6490,7 @@ mod tests {
                 quantize: false,
                 keyed_objects: Arc::new(Vec::new()),
                 key_frame_data_bind_templates: Arc::new(Vec::new()),
+                has_keyed_callbacks: false,
             };
             LinearAnimationInstance::new(animation_index, &animation, 1.0)
         };
@@ -6570,6 +6575,81 @@ mod tests {
             graph_order,
             dirt: ComponentDirt::NONE,
             transform: TransformRuntimeState::default(),
+        }
+    }
+
+    fn callback_route_animation(has_keyed_callbacks: bool) -> RuntimeLinearAnimation {
+        let keyed_objects = if has_keyed_callbacks {
+            vec![RuntimeKeyedObject {
+                global_id: 1,
+                object_id: 0,
+                target_local_id: 0,
+                keyed_properties: vec![RuntimeKeyedProperty {
+                    global_id: 2,
+                    property_key: 0,
+                    transform_property: None,
+                    double_property: false,
+                    double_source_value: 0.0,
+                    color_property: false,
+                    color_source_value: 0,
+                    bool_property: false,
+                    bool_source_value: false,
+                    uint_property: false,
+                    string_property: false,
+                    callback_event: Some(StateMachineReportedEvent {
+                        event_local_index: 0,
+                        event_core_type: 0,
+                        name: Some("callback".to_owned()),
+                        seconds_delay: 0.0,
+                    }),
+                    key_frames: Vec::new(),
+                    color_key_frames: Vec::new(),
+                    bool_key_frames: Vec::new(),
+                    uint_key_frames: Vec::new(),
+                    string_key_frames: Vec::new(),
+                    callback_key_frames: vec![RuntimeKeyFrameCallback {
+                        global_id: 3,
+                        frame: 1,
+                    }],
+                }],
+            }]
+        } else {
+            Vec::new()
+        };
+        RuntimeLinearAnimation {
+            global_id: 0,
+            name: None,
+            fps: 1,
+            duration: 2,
+            speed: 1.0,
+            loop_value: 0,
+            work_start: 0,
+            work_end: 2,
+            enable_work_area: false,
+            quantize: false,
+            keyed_objects: Arc::new(keyed_objects),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks,
+        }
+    }
+
+    #[test]
+    fn animation_advance_routes_only_callback_definitions_through_event_reporting() {
+        for (has_keyed_callbacks, expected_events) in [(false, 0), (true, 1)] {
+            let mut artboard = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+            artboard.linear_animations = vec![callback_route_animation(has_keyed_callbacks)];
+            let mut animation = artboard
+                .linear_animation_instance(0)
+                .expect("test animation instance");
+            let mut events = Vec::new();
+
+            assert!(artboard.advance_linear_animation_instance_with_events(
+                &mut animation,
+                1.0,
+                &mut events,
+            ));
+            assert_eq!(animation.time(), 1.0);
+            assert_eq!(events.len(), expected_events);
         }
     }
 

@@ -3508,6 +3508,7 @@ mod tests {
             quantize: false,
             keyed_objects: Arc::new(Vec::new()),
             key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
         }
     }
 

@@ -1342,6 +1342,17 @@ impl ArtboardInstance {
         paint_cache: &mut RuntimeRenderPaintCache,
         render_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        // C++ Artboard::drawInternal returns before touching retained paths
+        // when the artboard itself is transparent. Besides avoiding needless
+        // work, this keeps an as-yet unsettled instance from retaining local
+        // paths against its all-identity construction transforms.
+        if self
+            .component(0)
+            .is_some_and(|component| component.transform.render_opacity == 0.0)
+        {
+            return Ok(());
+        }
+
         // Seed the nested-artboard cycle guard with the root artboard's global id
         // (see nested_artboard_cycle: the ancestor set that mirrors C++
         // Artboard::isAncestor).
@@ -21289,6 +21300,71 @@ mod tests {
         assert!(
             Arc::ptr_eq(&prepared_before.commands, &prepared_after.commands),
             "transform-only writes must retain local draw-command topology"
+        );
+    }
+
+    #[test]
+    fn invisible_unsettled_artboard_does_not_retain_preupdate_local_paths() {
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic local-paint riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic local-paint graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        assert_eq!(instance.component(0).unwrap().transform.render_opacity, 0.0);
+        assert!(instance.set_transform_property(4, TransformProperty::Y, 0.25));
+
+        let mut factory = nuxie_render_api::NullFactory::new();
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("invisible prepare succeeds");
+
+        instance.update_pass();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("settled prepare succeeds");
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        let shape = prepared
+            .commands
+            .iter()
+            .find(|command| command.local_id == Some(1))
+            .expect("prepared shape command");
+        let first_path = &shape
+            .shape_paints
+            .first()
+            .expect("prepared shape paint")
+            .path_commands;
+
+        assert!(
+            matches!(
+                first_path.first(),
+                Some(RuntimePathCommand::Move { x, y })
+                    if *x == -40.0 && *y == -39.75
+            ),
+            "the first visible frame must include the rectangle's authored local y: {first_path:?}"
         );
     }
 

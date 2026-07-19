@@ -254,6 +254,33 @@ fn run() -> Result<String> {
         artboard,
         options.state_machine.as_deref(),
     )?;
+    let mut owned_view_model_context =
+        selected_artboard_owned_view_model_context(&runtime, artboard_index);
+    if let Some(context) = owned_view_model_context.as_ref() {
+        bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
+    } else {
+        instance.bind_default_view_model_artboard_list_context(&runtime);
+    }
+    #[cfg(feature = "scripting")]
+    if let Some(state) = script_artboard_render_state.as_ref() {
+        // `Artboard::bindViewModelInstance` rehydrates inputs against the new
+        // DataContext, but candidate C++ preserves an already-completed user
+        // init. Only cold-deferred scripts initialize during this bind.
+        bind_scripted_drawable_context(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            state,
+            factory.as_factory(),
+            owned_view_model_context
+                .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main),
+            true,
+        )?;
+    }
+    // Candidate C++ binds the artboard before `defaultStateMachine()`, so the
+    // state-machine instance attaches to the already-populated DataContext.
     let mut state_machine = scene
         .state_machine_index
         .map(|index| {
@@ -262,8 +289,6 @@ fn run() -> Result<String> {
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
-    let mut owned_view_model_context =
-        selected_artboard_owned_view_model_context(&runtime, artboard_index);
     #[cfg(feature = "scripting")]
     if let (Some(state_machine_index), Some(state_machine)) =
         (scene.state_machine_index, state_machine.as_mut())
@@ -278,36 +303,20 @@ fn run() -> Result<String> {
             script_artboard_render_state.as_ref(),
         )?;
     }
-    instance.bind_default_view_model_artboard_list_context(&runtime);
-    #[cfg(feature = "scripting")]
-    if let Some(state) = script_artboard_render_state.as_ref() {
-        // Mirrors RIVLoader's Artboard::bindViewModelInstance rehydration.
-        rebind_scripted_drawables(
-            &runtime,
-            artboard,
-            &graph.artboards,
-            &mut instance,
-            state,
-            factory.as_factory(),
-            owned_view_model_context
-                .as_ref()
-                .and_then(RuntimeOwnedViewModelContext::main),
-        )?;
-    }
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
             state_machine.bind_owned_view_model_contexts(context);
         }
         state_machine.advance_data_context();
     }
-    if let Some(context) = owned_view_model_context.as_ref() {
-        bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
-    }
     #[cfg(feature = "scripting")]
-    if owned_view_model_context.is_some()
+    if state_machine.is_some()
         && let Some(state) = script_artboard_render_state.as_ref()
     {
-        rebind_scripted_drawables(
+        // `Scene::bindViewModelInstance` repoints the DataContext shared by
+        // the candidate artboard and state machine. Attached artboard scripts
+        // hydrate once more, while their completed user init remains set.
+        bind_scripted_drawable_context(
             &runtime,
             artboard,
             &graph.artboards,
@@ -317,6 +326,7 @@ fn run() -> Result<String> {
             owned_view_model_context
                 .as_ref()
                 .and_then(RuntimeOwnedViewModelContext::main),
+            false,
         )?;
     }
     #[cfg(feature = "scripting")]
@@ -2630,7 +2640,7 @@ fn hydrate_script_inputs(
 }
 
 #[cfg(feature = "scripting")]
-fn rebind_scripted_drawables(
+fn bind_scripted_drawable_context(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
@@ -2638,6 +2648,7 @@ fn rebind_scripted_drawables(
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
     factory: &mut dyn RenderFactory,
     owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
+    initialize_deferred: bool,
 ) -> Result<()> {
     let context_view_model = owned_view_model_context
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
@@ -2661,21 +2672,23 @@ fn rebind_scripted_drawables(
             Rc::clone(render_state),
             owned_view_model_context,
         )?;
-        if owned_view_model_context.is_some() {
+        if initialize_deferred
+            && scripted_object_has_view_model_input(
+                runtime,
+                artboard,
+                artboards,
+                local_object.local_id,
+            )
+        {
             instance
                 .reinitialize_script_instance_with_factory(local_object.global_id, factory)
-                .context("scripted drawable rebind init failed")?;
+                .context("deferred scripted drawable init failed")?;
         }
-    }
-    if owned_view_model_context.is_none() {
-        instance
-            .update_script_instances()
-            .context("scripted drawable rebind update failed")?;
     }
     render_state
         .borrow_mut()
         .realize_pending(runtime, artboards, factory)
-        .context("failed to allocate rebound script artboard paints")
+        .context("failed to allocate bound script artboard paints")
 }
 
 #[cfg(feature = "scripting")]

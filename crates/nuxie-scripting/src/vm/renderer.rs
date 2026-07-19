@@ -15,8 +15,8 @@ use luaur_rt::{
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, PathVerb, RawPath,
-    RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
-    Vec2D,
+    RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, RenderShader, Renderer,
+    StrokeCap, StrokeJoin, Vec2D,
 };
 use nuxie_runtime::{
     RuntimeContourMeasure, RuntimePathMeasure, ScriptAnimation, ScriptAnimationTime,
@@ -60,6 +60,7 @@ impl RendererBindings {
         install_color_global(lua)?;
         install_mat2d_global(lua)?;
         install_path_global(lua)?;
+        self.install_gradient_global(lua)?;
         self.install_paint_global(lua)?;
         Ok(())
     }
@@ -130,6 +131,55 @@ impl RendererBindings {
 
         table.set_readonly(true);
         lua.globals().set("Paint", table)?;
+        Ok(())
+    }
+
+    fn install_gradient_global(&self, lua: &Lua) -> Result<()> {
+        let table = lua.create_table();
+
+        let bindings = self.clone();
+        table.set(
+            "linear",
+            lua.create_function(
+                move |lua, (from, to, stops): (LuaVector, LuaVector, Table)| {
+                    let (colors, positions) = gradient_stops(stops)?;
+                    let shader = bindings.with_factory(|factory| {
+                        Ok(factory.make_linear_gradient(
+                            from.x(),
+                            from.y(),
+                            to.x(),
+                            to.y(),
+                            &colors,
+                            &positions,
+                        ))
+                    })?;
+                    lua.create_userdata(ScriptedGradient(Rc::from(shader)))
+                },
+            )?,
+        )?;
+
+        let bindings = self.clone();
+        table.set(
+            "radial",
+            lua.create_function(
+                move |lua, (center, radius, stops): (LuaVector, f32, Table)| {
+                    let (colors, positions) = gradient_stops(stops)?;
+                    let shader = bindings.with_factory(|factory| {
+                        Ok(factory.make_radial_gradient(
+                            center.x(),
+                            center.y(),
+                            radius,
+                            &colors,
+                            &positions,
+                        ))
+                    })?;
+                    lua.create_userdata(ScriptedGradient(Rc::from(shader)))
+                },
+            )?,
+        )?;
+
+        table.set_readonly(true);
+        lua.globals().set("Gradient", table)?;
         Ok(())
     }
 
@@ -902,6 +952,7 @@ struct ScriptedPaint {
     cap: StrokeCap,
     feather: f32,
     blend_mode: BlendMode,
+    gradient: Option<Rc<dyn RenderShader>>,
 }
 
 impl ScriptedPaint {
@@ -916,6 +967,7 @@ impl ScriptedPaint {
             cap: StrokeCap::Butt,
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
+            gradient: None,
         }
     }
 
@@ -933,6 +985,7 @@ impl ScriptedPaint {
         copy.set_cap(source.cap);
         copy.set_feather(source.feather);
         copy.set_blend_mode(source.blend_mode);
+        copy.set_gradient(source.gradient.clone());
         copy
     }
 
@@ -952,7 +1005,14 @@ impl ScriptedPaint {
             "thickness" => self.set_thickness(number_value(value, "thickness")?),
             "blendMode" => self.set_blend_mode(parse_blend_mode(value)?),
             "feather" => self.set_feather(number_value(value, "feather")?),
-            "gradient" => self.render_paint.shader(None),
+            "gradient" => match value {
+                Value::Nil => self.set_gradient(None),
+                Value::UserData(gradient) => {
+                    let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
+                    self.set_gradient(Some(gradient));
+                }
+                _ => return Err(Error::runtime("expected Gradient userdata or nil")),
+            },
             "color" => self.set_color(color_value(value)?),
             _ => {}
         }
@@ -993,6 +1053,26 @@ impl ScriptedPaint {
         self.blend_mode = blend_mode;
         self.render_paint.blend_mode(blend_mode);
     }
+
+    fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
+        self.gradient = gradient;
+        self.render_paint.shader(self.gradient.as_deref());
+    }
+}
+
+struct ScriptedGradient(Rc<dyn RenderShader>);
+
+impl UserData for ScriptedGradient {}
+
+fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
+    let mut colors = Vec::with_capacity(stops.raw_len());
+    let mut positions = Vec::with_capacity(stops.raw_len());
+    for stop in stops.sequence_values::<Table>() {
+        let stop = stop?;
+        positions.push(stop.get("position")?);
+        colors.push(stop.get("color")?);
+    }
+    Ok((colors, positions))
 }
 
 impl UserData for ScriptedPaint {

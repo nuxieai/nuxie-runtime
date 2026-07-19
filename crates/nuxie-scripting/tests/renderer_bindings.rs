@@ -80,3 +80,47 @@ fn scripted_mat2d_multiplication_matches_rive_composition_order() {
     assert_eq!(result.get::<f32>("tx").unwrap(), 3.0);
     assert_eq!(result.get::<f32>("ty").unwrap(), 4.0);
 }
+
+#[test]
+fn scripted_draw_can_allocate_and_apply_gradients() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    let chunk = vm
+        .load(
+            "scripted-gradient",
+            "return function(_)\n\
+                 return {\n\
+                   draw = function(self, renderer)\n\
+                     local path = Path.new()\n\
+                     path:moveTo(Vector(0, 0))\n\
+                     path:lineTo(Vector(10, 0))\n\
+                     local gradient = Gradient.linear(\n\
+                       Vector(1, 2), Vector(3, 4),\n\
+                       { { position = 0, color = 0xff000000 },\n\
+                         { position = 1, color = 0xffffffff } })\n\
+                     renderer:drawPath(path, Paint.with({ gradient = gradient }))\n\
+                   end,\n\
+                 }\n\
+               end",
+        )
+        .unwrap();
+    let generator: luaur_rt::Function = chunk.call(()).unwrap();
+    let table: luaur_rt::Table = generator.call(luaur_rt::Value::Nil).unwrap();
+    let mut instance = vm.script_instance_from_table(table);
+    let mut host = NoopScriptHost;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+
+    instance
+        .call_draw(&mut factory, &mut renderer, &mut host)
+        .unwrap();
+
+    let stream = factory.stream();
+    assert!(
+        stream.contains(
+            "makeLinearGradient id=1 start=(1,2) end=(3,4) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]"
+        ),
+        "{stream}"
+    );
+    assert!(stream.contains("shader=1"), "{stream}");
+}

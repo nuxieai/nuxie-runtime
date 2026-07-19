@@ -2606,8 +2606,10 @@ impl ArtboardInstance {
                 path_cache,
             ),
             simple_solid_shape: false,
+            world_stroke_shape: false,
         };
         command.simple_solid_shape = runtime_command_is_simple_solid_shape(&command);
+        command.world_stroke_shape = runtime_command_is_world_stroke_shape(&command);
         command
     }
 
@@ -5161,6 +5163,7 @@ pub struct RuntimeDrawCommand {
     pub needs_save_operation: bool,
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
     simple_solid_shape: bool,
+    world_stroke_shape: bool,
 }
 
 #[doc(hidden)]
@@ -10418,6 +10421,19 @@ fn runtime_draw_command(
         );
     }
 
+    if runtime_try_draw_world_stroke_shape(
+        runtime,
+        instance,
+        command,
+        factory,
+        renderer,
+        paint_by_global,
+        path_cache,
+        paint_configurations.as_deref_mut(),
+    )? {
+        return Ok(());
+    }
+
     if runtime_try_draw_simple_solid_shape(
         runtime,
         instance,
@@ -10737,6 +10753,129 @@ fn runtime_draw_command(
     }
 
     Ok(())
+}
+
+/// Replay the retained world-space stroke shape used by C++ `Shape::draw`
+/// without entering text, layout, local-path, or temporary-paint machinery.
+/// The structural guard keeps effect paths and outer feather offsets on their
+/// exact `ShapePaint::draw` path; every richer form falls through unchanged.
+#[inline(never)]
+fn runtime_try_draw_world_stroke_shape(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    command: &RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+) -> Result<bool> {
+    if !command.world_stroke_shape {
+        return Ok(false);
+    }
+    debug_assert!(runtime_command_is_world_stroke_shape(command));
+    let Some(configurations) = paint_configurations else {
+        return Ok(false);
+    };
+    let local_id = command
+        .local_id
+        .expect("world-stroke shape guard requires a local id");
+    let draw_path_revision = runtime_draw_path_revision(instance, RuntimeShapePaintPathKind::World);
+    let paint_configuration_epoch = runtime_world_paint_configuration_epoch(instance);
+
+    for paint in &command.shape_paints {
+        let global_id = paint.paint_global_id;
+        let paint_configuration_is_current =
+            configurations.is_current(global_id, paint_configuration_epoch);
+        if !paint_configuration_is_current {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .paint_mut(global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_mut();
+            runtime_configure_paint_with_cache(
+                render_paint,
+                configurations,
+                global_id,
+                instance,
+                object,
+                paint,
+            )?;
+        }
+
+        let effect_or_shape_path_commands = if paint.has_effect_path {
+            &paint.effect_path_commands
+        } else {
+            &paint.path_commands
+        };
+        let mut saved = !paint.needs_save_operation;
+        if let Some(feather) = paint.feather_state.as_ref()
+            && runtime_feather_has_offset(feather)
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
+
+        let prepared_raw_path = paint
+            .prepared_raw_path
+            .as_ref()
+            .filter(|_| !paint.has_effect_path);
+        let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+            RuntimeDrawPathCacheKey {
+                kind: RuntimeDrawPathCacheKind::Draw,
+                path_kind: RuntimeShapePaintPathKind::World,
+                local_id: Some(if paint.has_effect_path {
+                    paint.paint_local
+                } else {
+                    local_id
+                }),
+                path_index: paint.path_slot_index,
+            },
+            draw_path_revision,
+            factory,
+            effect_or_shape_path_commands,
+            RenderFillRule::Clockwise,
+            None,
+            prepared_raw_path,
+        );
+        let render_paint = paint_by_global
+            .paint(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
+            .as_ref();
+        renderer.draw_path(path.as_ref(), render_paint);
+        if saved && paint.needs_save_operation {
+            renderer.restore();
+        }
+    }
+    Ok(true)
+}
+
+fn runtime_command_is_world_stroke_shape(command: &RuntimeDrawCommand) -> bool {
+    command.kind == RuntimeDrawCommandKind::Draw
+        && command.object_kind == RuntimeDrawCommandObjectKind::Other
+        && command.type_name == "Shape"
+        && command.local_id.is_some()
+        && command.clipping_shape_local.is_none()
+        && !command.shape_paints.is_empty()
+        && command.shape_paints.iter().all(|paint| {
+            paint.paint_type == RuntimeShapePaintKind::Stroke
+                && paint.path_kind == RuntimeShapePaintPathKind::World
+                && paint.paint_space_transform.is_some()
+                && paint
+                    .feather_state
+                    .as_ref()
+                    .is_none_or(|feather| !feather.inner)
+                && !paint.aliases_local_clockwise_path
+                && !paint.uses_temporary_paint
+                && paint.text_path_bucket_slot.is_none()
+                && paint.text_paint_pool.is_none()
+                && paint.ensure_text_paint_pool_after_draw.is_none()
+        })
 }
 
 /// Replay the overwhelmingly common retained-shape form without entering the
@@ -13224,12 +13363,16 @@ fn runtime_paint_configuration_epoch(
     }
     let cache_epoch = instance.cache_epoch();
     if paint.paint_space_transform.is_some() {
-        (0xcbf29ce484222325u64 ^ cache_epoch)
-            .wrapping_mul(0x100000001b3)
-            .wrapping_add(instance.prepared_epoch())
+        runtime_world_paint_configuration_epoch(instance)
     } else {
         cache_epoch
     }
+}
+
+fn runtime_world_paint_configuration_epoch(instance: &ArtboardInstance) -> u64 {
+    (0xcbf29ce484222325u64 ^ instance.cache_epoch())
+        .wrapping_mul(0x100000001b3)
+        .wrapping_add(instance.prepared_epoch())
 }
 
 fn runtime_configure_paint_with_cache(
@@ -20419,6 +20562,47 @@ mod tests {
     }
 
     #[test]
+    fn prepared_world_stroke_uses_direct_shape_replay() {
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        let command = prepared
+            .commands
+            .iter()
+            .find(|command| command.type_name == "Shape")
+            .expect("synthetic artboard prepares its shape");
+
+        assert!(
+            command.world_stroke_shape,
+            "an effect-free world-space gradient stroke should bypass generic shape replay"
+        );
+
+        let mut inner_feather = command.clone();
+        inner_feather.shape_paints[0].feather_state = Some(RuntimeFeatherState {
+            feather_local: 0,
+            space_value: 0,
+            strength: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            inner: true,
+            inner_path_commands: vec![RuntimePathCommand::Move { x: 0.0, y: 0.0 }],
+        });
+        assert!(
+            !runtime_command_is_world_stroke_shape(&inner_feather),
+            "inner feather clipping must stay on generic ShapePaint replay"
+        );
+    }
+
+    #[test]
     fn world_shape_paint_render_path_cache_follows_transform_writes() {
         use crate::TransformProperty;
 
@@ -22136,6 +22320,7 @@ mod tests {
             needs_save_operation: true,
             shape_paints: Vec::new(),
             simple_solid_shape: false,
+            world_stroke_shape: false,
         };
         let stats = Rc::new(CountingStats::default());
         let mut factory = CountingFactory {
@@ -22199,6 +22384,7 @@ mod tests {
             needs_save_operation: true,
             shape_paints: Vec::new(),
             simple_solid_shape: false,
+            world_stroke_shape: false,
         };
         let mut factory = CountingFactory {
             stats: Rc::new(CountingStats::default()),

@@ -2518,7 +2518,11 @@ impl ArtboardInstance {
         property: TransformProperty,
         value: f32,
     ) -> bool {
-        let Some(index) = self.component_by_local.get(&local_id).copied() else {
+        let Some(index) = self
+            .slots
+            .get(local_id)
+            .and_then(|slot| slot.component_index)
+        else {
             return false;
         };
         let property_key = self.components[index].transform_property_key(property);
@@ -2535,7 +2539,11 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
-        let Some(index) = self.component_by_local.get(&local_id).copied() else {
+        let Some(index) = self
+            .slots
+            .get(local_id)
+            .and_then(|slot| slot.component_index)
+        else {
             return false;
         };
         if !self.components[index].capabilities.transform {
@@ -6757,6 +6765,24 @@ mod tests {
         assert!(instance.did_change());
 
         assert!(!instance.set_transform_property(0, TransformProperty::X, 12.0));
+    }
+
+    #[test]
+    fn transform_property_mutation_rejects_missing_dense_local() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
+        let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+
+        assert!(!instance.set_transform_property(1, TransformProperty::X, 12.0));
+        assert!(!instance.set_transform_property_with_key(
+            1,
+            TransformProperty::X,
+            node_x_key,
+            12.0,
+        ));
+        assert_eq!(
+            instance.transform_property(0, TransformProperty::X),
+            Some(0.0)
+        );
     }
 
     #[test]

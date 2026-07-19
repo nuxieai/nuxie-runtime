@@ -9500,7 +9500,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     // meshes are cloned. Script-enabled callers use the dedicated helpers and
     // realize script-hosted children at the point the script requests them.
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, true,
+        runtime, graph, artboards, factory, false, true, false,
     )
 }
 
@@ -9511,7 +9511,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, true,
+        runtime, graph, artboards, factory, false, true, true,
     )
 }
 
@@ -9522,7 +9522,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_pa
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, false,
+        runtime, graph, artboards, factory, false, false, true,
     )
 }
 
@@ -9533,6 +9533,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     factory: &mut dyn RenderFactory,
     include_script_input_artboards: bool,
     allocate_source_paints: bool,
+    scripting_file_assets: bool,
 ) -> RuntimeRenderPaintCache {
     let image_asset_globals = runtime
         .file_assets()
@@ -9540,8 +9541,13 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         .filter(|asset| asset.type_name == "ImageAsset")
         .map(|asset| asset.id)
         .collect::<Vec<_>>();
-    let pre_source_image_assets =
-        pre_source_image_asset_globals(runtime, graph, artboards, &image_asset_globals);
+    let pre_source_image_assets = pre_source_image_asset_globals(
+        runtime,
+        graph,
+        artboards,
+        &image_asset_globals,
+        scripting_file_assets,
+    );
     let mut images = RuntimeRenderImages::default();
     let mut image_decode_error = None;
     for asset_global in image_asset_globals
@@ -9641,17 +9647,22 @@ fn pre_source_image_asset_globals(
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     image_asset_globals: &[u32],
+    scripting_file_assets: bool,
 ) -> BTreeSet<u32> {
-    let mut pre_source_assets = import_stack_pre_source_image_asset_globals(runtime)
-        .into_iter()
-        .collect::<BTreeSet<_>>();
+    let mut pre_source_assets =
+        import_stack_pre_source_image_asset_globals(runtime, scripting_file_assets)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
     let heuristic_count =
         heuristic_pre_source_image_decode_count(graph, artboards, image_asset_globals.len());
     pre_source_assets.extend(image_asset_globals.iter().copied().take(heuristic_count));
     pre_source_assets
 }
 
-fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32> {
+fn import_stack_pre_source_image_asset_globals(
+    runtime: &RuntimeFile,
+    scripting_file_assets: bool,
+) -> Vec<u32> {
     let mut pre_source_assets = Vec::new();
     let mut latest_image_asset = None;
 
@@ -9659,7 +9670,7 @@ fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32
         if object.type_name == "Artboard" {
             break;
         }
-        if !runtime_object_uses_golden_file_asset_stack(object) {
+        if !runtime_object_uses_golden_file_asset_stack(object, scripting_file_assets) {
             continue;
         }
 
@@ -9676,14 +9687,14 @@ fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32
     pre_source_assets
 }
 
-fn runtime_object_uses_golden_file_asset_stack(object: &RuntimeObject) -> bool {
-    // The C++ golden runner is built without scripting, so ScriptAsset and
-    // ShaderAsset do not enter the WITH_RIVE_SCRIPTING FileAsset stack cases
-    // and must not displace a pending image importer here.
+fn runtime_object_uses_golden_file_asset_stack(
+    object: &RuntimeObject,
+    scripting_file_assets: bool,
+) -> bool {
     matches!(
         object.type_name,
         "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
-    )
+    ) || scripting_file_assets && matches!(object.type_name, "ScriptAsset" | "ShaderAsset")
 }
 
 fn heuristic_pre_source_image_decode_count(
@@ -20055,6 +20066,93 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+
+    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn authoring_property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+        AuthoringProperty {
+            key: crate::properties::property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    #[test]
+    fn scripted_file_assets_displace_pending_image_importers() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(10),
+                )],
+            ),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![1]),
+                )],
+            ),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(11),
+                )],
+            ),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![2]),
+                )],
+            ),
+            authoring_record("ScriptAsset", Vec::new()),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![3]),
+                )],
+            ),
+            authoring_record("Artboard", Vec::new()),
+        ])
+        .expect("file-asset import-order fixture imports");
+        let image_globals = file
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "ImageAsset")
+            .map(|asset| asset.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(image_globals.len(), 2);
+        assert_eq!(
+            import_stack_pre_source_image_asset_globals(&file, false),
+            vec![image_globals[0]],
+            "a non-scripting importer leaves the final image pending"
+        );
+        assert_eq!(
+            import_stack_pre_source_image_asset_globals(&file, true),
+            image_globals,
+            "WITH_RIVE_SCRIPTING treats ScriptAsset as the next FileAsset importer"
+        );
+    }
 
     #[test]
     fn retained_text_paints_preserve_each_run_world_transform() {

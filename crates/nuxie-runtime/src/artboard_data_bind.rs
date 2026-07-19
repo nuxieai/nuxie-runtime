@@ -4963,20 +4963,36 @@ impl ArtboardInstance {
         self.advance_artboard_data_binds_with_root_transform(Mat2D::IDENTITY, elapsed_seconds)
     }
 
+    fn refresh_owned_view_model_artboard_context_if_mutated(&mut self) -> bool {
+        if self.artboard_owned_view_model_candidates.is_empty()
+            || self.artboard_owned_context_key.as_ref().is_some_and(|key| {
+                key.matches_candidates(&self.artboard_owned_view_model_candidates)
+            })
+        {
+            return false;
+        }
+        let Some(file) = self.runtime_file_arc() else {
+            return false;
+        };
+        let candidates = self.artboard_owned_view_model_candidates.clone();
+        self.bind_owned_view_model_artboard_context_candidates(&file, &candidates, true, true)
+    }
+
     pub(crate) fn advance_artboard_data_binds_with_root_transform(
         &mut self,
         root_transform: Mat2D,
         elapsed_seconds: f32,
     ) -> bool {
+        let refreshed_owned_context = self.refresh_owned_view_model_artboard_context_if_mutated();
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
             && self.artboard_list_bindings.is_empty()
         {
-            return false;
+            return refreshed_owned_context;
         }
         let dirty_epoch_at_start = self.artboard_data_bind_dirty_epoch;
-        let mut changed = false;
+        let mut changed = refreshed_owned_context;
         // C++ DataBindContainer::updateDataBind updates converter dependents
         // before applying a target-to-source binding.
         changed |= self.update_artboard_formula_token_bindings();
@@ -7150,6 +7166,36 @@ mod tests {
             Some(live.as_ref()),
             "assigning a file index preserves the private live font, while resolution lets the file asset win"
         );
+    }
+
+    #[test]
+    fn shared_owned_context_mutations_refresh_without_an_explicit_rebind() {
+        let file = font_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("font binding graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+                .expect("serialized view model instance builds"),
+        );
+
+        assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+
+        let live: Arc<[u8]> = vec![5, 6, 7, 8].into();
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live)))
+        );
+        assert!(artboard.advance_artboard_data_binds());
+
+        let refreshed = artboard
+            .text_style_font_override(2)
+            .expect("shared mutation refreshed the font override");
+        assert_eq!(refreshed.live_font_bytes(), Some(live.as_ref()));
     }
 
     fn list_binding(

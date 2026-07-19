@@ -8956,8 +8956,12 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
+    // In a non-scripting runtime ScriptInputArtboard is inert: C++ never
+    // realizes its referenced artboard, so none of that child's paints or
+    // meshes are cloned. Script-enabled callers use the dedicated helpers and
+    // realize script-hosted children at the point the script requests them.
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, true, true,
+        runtime, graph, artboards, factory, false, true,
     )
 }
 

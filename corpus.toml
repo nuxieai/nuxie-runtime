@@ -1407,7 +1407,7 @@ features = ["type-key:114:StateMachineListenerSingle", "type-key:128:Event", "ty
 id = "reset_shared_viewmodel_instance_test"
 path = "tests/unit_tests/assets/reset_shared_viewmodel_instance_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]

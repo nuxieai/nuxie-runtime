@@ -2860,6 +2860,7 @@ pub(crate) struct RuntimeDataBindGraphStatefulAdvance {
 pub(crate) enum RuntimeDataBindGraphApplyPhase {
     BeforeStatefulAdvance,
     AfterStatefulAdvance,
+    UpdateDataBindsFalse,
     Immediate,
     PublicUpdate,
 }
@@ -8545,6 +8546,19 @@ impl RuntimeDataBindGraph {
             if !source.bound {
                 continue;
             }
+            if matches!(phase, RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse)
+                && !source.applies_source_to_target()
+            {
+                // Pure target-to-source bindings are still enrolled in C++'s
+                // dirty queue. updateDataBinds(false) drains their dirt
+                // without pulling the target value.
+                source.target_to_source_dirty = false;
+                source.source_to_target_dirty_after_immediate = false;
+                source.source_to_target_dirty_after_target_to_source = false;
+                source.reconcile_pending = false;
+                source.defer_source_to_target_until_next_update = false;
+                continue;
+            }
             if !source.applies_source_to_target() {
                 continue;
             }
@@ -8579,6 +8593,7 @@ impl RuntimeDataBindGraph {
                     phase,
                     RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
+                        | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
             let delayed_view_model_apply = !source.is_main_to_source()
                 && source.source_to_target_dirty_after_immediate
@@ -8587,6 +8602,7 @@ impl RuntimeDataBindGraph {
                     phase,
                     RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
+                        | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
             if source.target_origin
                 && !source.source_to_target_dirty_after_target_to_source
@@ -8596,8 +8612,17 @@ impl RuntimeDataBindGraph {
                 // Target-only dirt must not run source->target and clobber the
                 // just-authored target. This is the Rust equivalent of
                 // DataBind::update gating on ComponentDirt::Bindings.
-                skipped_dirty_binding |=
-                    source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+                if matches!(phase, RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse) {
+                    // C++ updateDataBinds(false) still clears target-only
+                    // dirt even though applyTargetToSource is disabled.
+                    source.target_to_source_dirty = false;
+                    source.source_to_target_dirty_after_immediate = false;
+                    source.reconcile_pending = false;
+                    source.defer_source_to_target_until_next_update = false;
+                } else {
+                    skipped_dirty_binding |= source.target_to_source_dirty
+                        || source.source_to_target_dirty_after_immediate;
+                }
                 continue;
             }
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
@@ -9155,7 +9180,8 @@ impl RuntimeDataBindGraphSourceNode {
             // so the post-step pass here must not re-apply stateful bindings
             // a frame early.
             RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance => true,
-            RuntimeDataBindGraphApplyPhase::Immediate
+            RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
+            | RuntimeDataBindGraphApplyPhase::Immediate
             | RuntimeDataBindGraphApplyPhase::PublicUpdate => false,
         }
     }
@@ -9404,6 +9430,34 @@ mod tests {
 
     struct DoublingConverter;
 
+    fn graph_with_number_binding(flags: u64) -> RuntimeDataBindGraph {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut bindings = Vec::new();
+        RuntimeDataBindGraph::push_default_view_model_binding(
+            &mut sources,
+            &mut targets,
+            &mut bindings,
+            0,
+            &[1],
+            flags,
+            None,
+            RuntimeDataBindGraphTarget::Number { global_id: 7 },
+            RuntimeDataBindGraphValue::Number(3.0),
+        );
+        RuntimeDataBindGraph {
+            context_kind: RuntimeDataBindGraphContextKind::DefaultViewModel,
+            default_view_model_bindings_dirty: true,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            sources,
+            targets,
+            default_view_model_bindings: bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
+        }
+    }
+
     #[test]
     fn data_bind_precedence_flag_is_independent_from_direction() {
         assert!(!data_bind_flags_source_to_target_runs_first(0));
@@ -9418,6 +9472,60 @@ mod tests {
                 | DATA_BIND_FLAG_TWO_WAY
                 | DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST
         ));
+    }
+
+    #[test]
+    fn false_update_applies_pending_source_reconciliation() {
+        let mut graph = graph_with_number_binding(0);
+        graph.sources[0].mark_reconcile_dirty();
+
+        let updates = graph.take_default_view_model_binding_updates(
+            true,
+            RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+        );
+
+        let [(target, value)] = updates.as_slice() else {
+            panic!("expected one source-to-target update");
+        };
+        assert!(matches!(
+            target,
+            RuntimeDataBindGraphTarget::Number { global_id: 7 }
+        ));
+        assert_eq!(value, &RuntimeDataBindGraphValue::Number(3.0));
+        assert!(!graph.default_view_model_bindings_dirty);
+        assert!(!graph.sources[0].reconcile_pending);
+    }
+
+    #[test]
+    fn false_update_discards_target_only_dirt_without_pulling_it() {
+        let mut graph = graph_with_number_binding(DATA_BIND_FLAG_DIRECTION_TO_SOURCE);
+        graph.sources[0].mark_target_dirty();
+
+        let updates = graph.take_default_view_model_binding_updates(
+            true,
+            RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+        );
+
+        assert!(updates.is_empty());
+        assert!(!graph.default_view_model_bindings_dirty);
+        assert!(!graph.sources[0].target_to_source_dirty);
+        assert!(!graph.sources[0].source_to_target_dirty_after_immediate);
+    }
+
+    #[test]
+    fn false_update_applies_source_dirt_deferred_by_public_update() {
+        let mut graph = graph_with_number_binding(0);
+        graph.sources[0].source_to_target_dirty_after_target_to_source = true;
+        graph.sources[0].defer_source_to_target_until_next_update = true;
+
+        let updates = graph.take_default_view_model_binding_updates(
+            true,
+            RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+        );
+
+        assert_eq!(updates.len(), 1);
+        assert!(!graph.sources[0].defer_source_to_target_until_next_update);
+        assert!(!graph.default_view_model_bindings_dirty);
     }
 
     impl ScriptInstance for DoublingConverter {

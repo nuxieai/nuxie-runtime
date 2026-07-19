@@ -1,6 +1,9 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
@@ -248,6 +251,7 @@ pub struct ArtboardInstance {
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
     build_context: Option<RuntimeArtboardBuildContext>,
+    pub(crate) nested_context_source_tree_cache: Cell<Option<(u64, bool)>>,
     nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
@@ -358,6 +362,8 @@ struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
     artboards: Arc<Vec<ArtboardGraph>>,
     artboard_index_by_global: Arc<Vec<Option<usize>>>,
+    nested_structure_epoch: Arc<AtomicU64>,
+    paint_preparation_epoch: Arc<AtomicU64>,
 }
 
 fn build_artboard_index_by_global(artboards: &[ArtboardGraph]) -> Vec<Option<usize>> {
@@ -510,6 +516,8 @@ impl ArtboardInstance {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.clone()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(&artboards)),
+            nested_structure_epoch: Arc::new(AtomicU64::new(0)),
+            paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
         };
         Self::from_graph_inner(
             file,
@@ -530,6 +538,8 @@ impl ArtboardInstance {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.to_vec()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(artboards)),
+            nested_structure_epoch: Arc::new(AtomicU64::new(0)),
+            paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
         };
         Self::from_graph_inner(
             file,
@@ -705,6 +715,7 @@ impl ArtboardInstance {
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: graph.global_id,
             build_context,
+            nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
@@ -1273,6 +1284,35 @@ impl ArtboardInstance {
             .map(|context| Arc::clone(&context.file))
     }
 
+    pub(crate) fn nested_structure_epoch(&self) -> Option<u64> {
+        self.build_context
+            .as_ref()
+            .map(|context| context.nested_structure_epoch.load(Ordering::Relaxed))
+    }
+
+    pub(crate) fn tree_paint_preparation_epoch(&self) -> Option<u64> {
+        self.build_context
+            .as_ref()
+            .map(|context| context.paint_preparation_epoch.load(Ordering::Relaxed))
+    }
+
+    fn mark_tree_paint_preparation_changed(&self) {
+        if let Some(context) = self.build_context.as_ref() {
+            context
+                .paint_preparation_epoch
+                .fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn mark_nested_structure_changed(&self) {
+        self.nested_context_source_tree_cache.set(None);
+        if let Some(context) = self.build_context.as_ref() {
+            context
+                .nested_structure_epoch
+                .fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
     pub(crate) fn runtime_graph(&self) -> Option<&ArtboardGraph> {
         self.runtime_graph_for_global(self.graph_global_id)
     }
@@ -1384,6 +1424,14 @@ impl ArtboardInstance {
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
         self.mark_text_changed_for_local(local_id);
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
+            && solid_color_value_property_key() == Some(property_key)
+        {
+            // SolidColor mutates its retained paint in place, so it does not
+            // invalidate local prepared geometry. A parent preparation frame
+            // still needs to observe the nested paint value change.
+            self.mark_tree_paint_preparation_changed();
+        }
         self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         self.apply_color_property_changed(local_id, property_key);
         true
@@ -2796,10 +2844,12 @@ impl ArtboardInstance {
     pub(crate) fn mark_prepared_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
         self.command_epoch = self.command_epoch.wrapping_add(1);
+        self.mark_tree_paint_preparation_changed();
     }
 
     fn mark_world_transform_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
+        self.mark_tree_paint_preparation_changed();
     }
 
     pub(crate) fn enable_layout_constraint_bounds(&mut self) {
@@ -3170,6 +3220,9 @@ impl ArtboardInstance {
                 }
             }
             changed |= self.advance_outer_update_components();
+            for state_machine in state_machines.iter_mut() {
+                state_machine.reset_advanced_data_context();
+            }
             if !self.has_dirt(ComponentDirt::COMPONENTS) {
                 break;
             }
@@ -4026,6 +4079,7 @@ impl ArtboardInstance {
             let changed = self.nested_artboards.remove(&local_id).is_some();
             if changed {
                 self.remove_nested_artboard_local(local_id);
+                self.mark_nested_structure_changed();
                 self.artboard_owned_context_key = None;
                 self.stateful_nested_view_model_contexts_dirty = true;
                 self.mark_artboard_data_bind_work_dirty();
@@ -4059,6 +4113,7 @@ impl ArtboardInstance {
         });
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
+        self.mark_nested_structure_changed();
         if let Some(file) = self.runtime_file_arc() {
             self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
         }
@@ -5526,6 +5581,7 @@ mod tests {
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
             build_context: None,
+            nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),

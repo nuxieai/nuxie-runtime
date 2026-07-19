@@ -3526,18 +3526,38 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_view_model_targets_to_sources(&self.bindable_view_models);
             self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
-            for trigger in &mut self.view_model_triggers {
-                trigger.reset();
-            }
-            self.data_bind_graph.reset_bound_trigger_sources();
-            if self
-                .data_bind_graph
-                .default_view_model_source_context_bound()
-            {
-                self.sync_default_view_model_triggers_from_active();
-            }
+            self.reset_advanced_data_context();
         }
         true
+    }
+
+    pub(crate) fn reset_advanced_data_context(&mut self) {
+        if !self.data_bind_graph.default_view_model_context_bound() {
+            return;
+        }
+        for trigger in &mut self.view_model_triggers {
+            trigger.reset();
+        }
+        self.data_bind_graph.reset_bound_trigger_sources();
+        if self
+            .data_bind_graph
+            .default_view_model_source_context_bound()
+        {
+            self.sync_default_view_model_triggers_from_active();
+        }
+    }
+
+    /// Mirrors C++ `DataBindContainer::updateDataBinds(false)` for a
+    /// transition probe. Dirty source-to-target values must be visible to the
+    /// conditions, but a zero-time outer settlement pass must not poll or
+    /// write target-to-source bindings.
+    fn update_data_binds_for_state_probe(&mut self) {
+        if self.data_bind_graph.default_view_model_context_bound() {
+            self.apply_default_view_model_bindings(
+                true,
+                RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+            );
+        }
     }
 
     pub fn update_data_binds_apply_target_to_source(&mut self) -> bool {
@@ -3662,7 +3682,7 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
     ) -> bool {
         self.focus.sync(artboard);
-        self.advance_data_context();
+        self.update_data_binds_for_state_probe();
 
         let data_context_present = self.data_bind_graph.data_context_present();
         let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();

@@ -3619,7 +3619,14 @@ impl ArtboardInstance {
     }
 
     fn nested_artboard_tree_has_context_source_bindings(&self) -> bool {
-        self.nested_artboard_locals.iter().any(|host_local_id| {
+        let structure_epoch = self.nested_structure_epoch();
+        if let (Some(epoch), Some((cached_epoch, cached_value))) =
+            (structure_epoch, self.nested_context_source_tree_cache.get())
+            && cached_epoch == epoch
+        {
+            return cached_value;
+        }
+        let has_bindings = self.nested_artboard_locals.iter().any(|host_local_id| {
             self.nested_artboards
                 .get(host_local_id)
                 .is_some_and(|nested| {
@@ -3628,7 +3635,12 @@ impl ArtboardInstance {
                             .child
                             .nested_artboard_tree_has_context_source_bindings()
                 })
-        })
+        });
+        if let Some(epoch) = structure_epoch {
+            self.nested_context_source_tree_cache
+                .set(Some((epoch, has_bindings)));
+        }
+        has_bindings
     }
 
     fn collect_nested_artboard_context_source_values(

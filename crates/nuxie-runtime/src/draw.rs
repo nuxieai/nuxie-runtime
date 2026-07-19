@@ -1456,6 +1456,7 @@ impl ArtboardInstance {
             } else {
                 0
             };
+        let preparation_tree_epoch = self.tree_paint_preparation_epoch();
         if paint_preparation
             .as_ref()
             .and_then(|preparation| preparation.as_ref())
@@ -1464,6 +1465,7 @@ impl ArtboardInstance {
                     preparation_graph_global_id,
                     preparation_instance_epoch,
                     preparation_world_epoch,
+                    preparation_tree_epoch,
                 )
             })
         {
@@ -1479,8 +1481,9 @@ impl ArtboardInstance {
             graph_global_id: preparation_graph_global_id,
             instance_epoch: preparation_instance_epoch,
             world_epoch: preparation_world_epoch,
-            nested_epoch: if defer_layout_gradients {
-                self.runtime_nested_paint_preparation_epoch(commands)
+            nested_epoch: if has_nested_artboards {
+                preparation_tree_epoch
+                    .unwrap_or_else(|| self.runtime_nested_paint_preparation_epoch(commands))
             } else {
                 0
             },
@@ -7859,8 +7862,10 @@ impl RuntimePaintPreparationFrame {
         graph_global_id: u32,
         instance_epoch: u64,
         world_epoch: u64,
+        tree_epoch: Option<u64>,
     ) -> bool {
-        !self.has_nested_artboards
+        (!self.has_nested_artboards
+            || tree_epoch.is_some_and(|tree_epoch| self.key.nested_epoch == tree_epoch))
             && self.key.graph_global_id == graph_global_id
             && self.key.instance_epoch == instance_epoch
             && self.key.world_epoch == world_epoch

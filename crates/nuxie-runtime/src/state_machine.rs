@@ -916,6 +916,24 @@ struct RuntimeTransitionAnimationRef<'a> {
     animation: &'a RuntimeLinearAnimation,
 }
 
+pub(crate) struct TransitionEvaluationContext<'a> {
+    scripted_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    focus: &'a RuntimeFocusTree,
+    bindable_numbers: &'a [StateMachineBindableNumberInstance],
+    bindable_integers: &'a [StateMachineBindableIntegerInstance],
+    bindable_colors: &'a [StateMachineBindableColorInstance],
+    bindable_strings: &'a [StateMachineBindableStringInstance],
+    bindable_enums: &'a [StateMachineBindableEnumInstance],
+    bindable_assets: &'a [StateMachineBindableAssetInstance],
+    bindable_artboards: &'a [StateMachineBindableArtboardInstance],
+    bindable_triggers: &'a [StateMachineBindableTriggerInstance],
+    bindable_view_models: &'a [StateMachineBindableViewModelInstance],
+    bindable_booleans: &'a [StateMachineBindableBooleanInstance],
+    data_context_present: bool,
+    data_context_view_model_bound: bool,
+    layer_index: usize,
+}
+
 impl RuntimeStateTransition {
     const DISABLED: u64 = 1 << 0;
     const DURATION_IS_PERCENTAGE: u64 = 1 << 1;
@@ -933,47 +951,14 @@ impl RuntimeStateTransition {
 
     fn allow(
         &self,
-        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
-        focus: &RuntimeFocusTree,
         inputs: &[StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         view_model_triggers: &[StateMachineViewModelTriggerInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
-        layer_index: usize,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
         for condition in &self.conditions {
-            if !condition.evaluate(
-                scripted_instances,
-                artboard,
-                focus,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
-                layer_index,
-            ) {
+            if !condition.evaluate(context, artboard, inputs, view_model_triggers) {
                 return TransitionAllowance::No;
             }
         }
@@ -983,14 +968,14 @@ impl RuntimeStateTransition {
 
     fn allow_direct_inputs(
         &self,
+        context: &TransitionEvaluationContext<'_>,
         inputs: &[StateMachineInputInstance],
-        layer_index: usize,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
         debug_assert!(self.direct_input_conditions_only);
         for condition in &self.conditions {
             if !condition
-                .evaluate_direct_input(inputs, layer_index)
+                .evaluate_direct_input(inputs, context.layer_index)
                 .unwrap_or(false)
             {
                 return TransitionAllowance::No;
@@ -1109,13 +1094,17 @@ impl RuntimeStateTransition {
 
     fn use_inputs(
         &self,
+        context: &TransitionEvaluationContext<'_>,
         inputs: &mut [StateMachineInputInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
-        layer_index: usize,
     ) {
         for condition in &self.conditions {
-            condition.use_input(inputs, bindable_triggers, view_model_triggers, layer_index);
+            condition.use_input(
+                inputs,
+                context.bindable_triggers,
+                view_model_triggers,
+                context.layer_index,
+            );
         }
     }
 }
@@ -2553,27 +2542,13 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn advance(
         &mut self,
-        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
-        focus: &RuntimeFocusTree,
         layer: &RuntimeStateMachineLayer,
         key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
         elapsed_seconds: f32,
-        layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         transition_durations: &[StateMachineTransitionDurationInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
         pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
@@ -2585,13 +2560,13 @@ impl StateMachineLayerInstance {
             layer,
             elapsed_seconds,
             inputs,
-            bindable_numbers,
+            context.bindable_numbers,
             reported_events,
         );
         let input_changed = self.update_transition_mix(
             elapsed_seconds,
             inputs,
-            data_context_view_model_bound,
+            context.data_context_view_model_bound,
             view_model_triggers,
             reported_events,
             pending_view_model_actions,
@@ -2601,7 +2576,7 @@ impl StateMachineLayerInstance {
             layer,
             elapsed_seconds,
             inputs,
-            bindable_numbers,
+            context.bindable_numbers,
             reported_events,
         );
         self.apply_animations(artboard, key_frame_data_bind_graphs);
@@ -2609,25 +2584,11 @@ impl StateMachineLayerInstance {
         let mut changed_state = false;
         for _ in 0..100 {
             if !self.update_state(
-                scripted_instances,
+                context,
                 artboard,
-                focus,
                 layer,
-                layer_index,
                 inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
                 transition_durations,
-                data_context_present,
-                data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
                 pending_view_model_actions,
@@ -2653,25 +2614,11 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn update_state(
         &mut self,
-        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
-        focus: &RuntimeFocusTree,
         layer: &RuntimeStateMachineLayer,
-        layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         transition_durations: &[StateMachineTransitionDurationInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
         pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
@@ -2681,26 +2628,12 @@ impl StateMachineLayerInstance {
         }
         self.waiting_for_exit = false;
         if self.try_change_state(
-            scripted_instances,
+            context,
             artboard,
-            focus,
             layer,
             layer.any_state_index,
-            layer_index,
             inputs,
-            bindable_numbers,
-            bindable_integers,
-            bindable_colors,
-            bindable_strings,
-            bindable_enums,
-            bindable_assets,
-            bindable_artboards,
-            bindable_triggers,
-            bindable_view_models,
-            bindable_booleans,
             transition_durations,
-            data_context_present,
-            data_context_view_model_bound,
             view_model_triggers,
             reported_events,
             pending_view_model_actions,
@@ -2708,26 +2641,12 @@ impl StateMachineLayerInstance {
             return true;
         }
         self.try_change_state(
-            scripted_instances,
+            context,
             artboard,
-            focus,
             layer,
             self.current_state_index,
-            layer_index,
             inputs,
-            bindable_numbers,
-            bindable_integers,
-            bindable_colors,
-            bindable_strings,
-            bindable_enums,
-            bindable_assets,
-            bindable_artboards,
-            bindable_triggers,
-            bindable_view_models,
-            bindable_booleans,
             transition_durations,
-            data_context_present,
-            data_context_view_model_bound,
             view_model_triggers,
             reported_events,
             pending_view_model_actions,
@@ -2736,26 +2655,12 @@ impl StateMachineLayerInstance {
 
     fn try_change_state(
         &mut self,
-        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
-        focus: &RuntimeFocusTree,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
-        layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         transition_durations: &[StateMachineTransitionDurationInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
         pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
@@ -2769,40 +2674,26 @@ impl StateMachineLayerInstance {
 
         if state.uses_random_transition_selection() {
             let Some((transition_index, state_to_index)) = self.find_random_transition(
-                scripted_instances,
+                context,
                 artboard,
-                focus,
                 state,
                 state_index,
-                layer_index,
                 inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
                 view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
             ) else {
                 return false;
             };
             let transition = &state.transitions[transition_index];
-            transition.use_inputs(inputs, bindable_triggers, view_model_triggers, layer_index);
+            transition.use_inputs(context, inputs, view_model_triggers);
             self.change_state(
                 artboard,
                 layer,
                 transition,
                 state_to_index,
                 inputs,
-                bindable_numbers,
+                context.bindable_numbers,
                 transition_durations,
-                data_context_view_model_bound,
+                context.data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
                 pending_view_model_actions,
@@ -2826,27 +2717,13 @@ impl StateMachineLayerInstance {
                 self.current_state_index == Some(state_index),
             );
             let allowance = if transition.direct_input_conditions_only {
-                transition.allow_direct_inputs(inputs, layer_index, animation_from)
+                transition.allow_direct_inputs(context, inputs, animation_from)
             } else {
                 transition.allow(
-                    scripted_instances,
+                    context,
                     artboard,
-                    focus,
                     inputs,
-                    bindable_numbers,
-                    bindable_integers,
-                    bindable_colors,
-                    bindable_strings,
-                    bindable_enums,
-                    bindable_assets,
-                    bindable_artboards,
-                    bindable_triggers,
-                    bindable_view_models,
-                    bindable_booleans,
                     view_model_triggers,
-                    data_context_present,
-                    data_context_view_model_bound,
-                    layer_index,
                     animation_from,
                 )
             };
@@ -2860,16 +2737,16 @@ impl StateMachineLayerInstance {
                     self.waiting_for_exit = false;
                 }
             }
-            transition.use_inputs(inputs, bindable_triggers, view_model_triggers, layer_index);
+            transition.use_inputs(context, inputs, view_model_triggers);
             self.change_state(
                 artboard,
                 layer,
                 transition,
                 state_to_index,
                 inputs,
-                bindable_numbers,
+                context.bindable_numbers,
                 transition_durations,
-                data_context_view_model_bound,
+                context.data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
                 pending_view_model_actions,
@@ -2881,26 +2758,12 @@ impl StateMachineLayerInstance {
 
     fn find_random_transition(
         &mut self,
-        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
-        focus: &RuntimeFocusTree,
         state: &RuntimeLayerState,
         state_index: usize,
-        layer_index: usize,
         inputs: &[StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         view_model_triggers: &[StateMachineViewModelTriggerInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
     ) -> Option<(usize, usize)> {
         let mut weighted_candidates = Vec::new();
         let mut total_weight = 0_u64;
@@ -2923,27 +2786,13 @@ impl StateMachineLayerInstance {
                 self.current_state_index == Some(state_index),
             );
             let allowance = if transition.direct_input_conditions_only {
-                transition.allow_direct_inputs(inputs, layer_index, animation_from)
+                transition.allow_direct_inputs(context, inputs, animation_from)
             } else {
                 transition.allow(
-                    scripted_instances,
+                    context,
                     artboard,
-                    focus,
                     inputs,
-                    bindable_numbers,
-                    bindable_integers,
-                    bindable_colors,
-                    bindable_strings,
-                    bindable_enums,
-                    bindable_assets,
-                    bindable_artboards,
-                    bindable_triggers,
-                    bindable_view_models,
-                    bindable_booleans,
                     view_model_triggers,
-                    data_context_present,
-                    data_context_view_model_bound,
-                    layer_index,
                     animation_from,
                 )
             };

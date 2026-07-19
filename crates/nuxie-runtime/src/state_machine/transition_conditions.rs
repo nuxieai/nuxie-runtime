@@ -1,17 +1,13 @@
 use super::{
-    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
-    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
-    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
-    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
-    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
-    StateMachineInputInstance, StateMachineViewModelTriggerInstance, bindable_artboard_value,
+    StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableTriggerInstance, StateMachineInputInstance,
+    StateMachineViewModelTriggerInstance, TransitionEvaluationContext, bindable_artboard_value,
     bindable_asset_value, bindable_boolean_value, bindable_color_value, bindable_enum_value,
     bindable_integer_value, bindable_number_value, bindable_string_value,
     bindable_trigger_source_global_id, bindable_trigger_value, bindable_view_model_value,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
-use crate::focus::RuntimeFocusTree;
 use crate::properties::{
     property_key_for_name, runtime_object_bool_property_by_key,
     runtime_object_color_property_by_key, runtime_object_double_property_by_key,
@@ -982,25 +978,28 @@ impl RuntimeTransitionCondition {
 
     pub(super) fn evaluate(
         &self,
-        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
-        focus: &RuntimeFocusTree,
         inputs: &[StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         view_model_triggers: &[StateMachineViewModelTriggerInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
-        layer_index: usize,
     ) -> bool {
+        let &TransitionEvaluationContext {
+            scripted_instances,
+            focus,
+            bindable_numbers,
+            bindable_integers,
+            bindable_colors,
+            bindable_strings,
+            bindable_enums,
+            bindable_assets,
+            bindable_artboards,
+            bindable_triggers,
+            bindable_view_models,
+            bindable_booleans,
+            data_context_present,
+            data_context_view_model_bound,
+            layer_index,
+        } = context;
         match self {
             Self::Focus {
                 target_local_id,

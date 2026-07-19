@@ -5552,6 +5552,8 @@ struct TextOutlinePen {
     transform: Mat2D,
     current: Option<(f32, f32)>,
     contour_start: Option<(f32, f32)>,
+    current_outline: Option<(f32, f32)>,
+    contour_start_outline: Option<(f32, f32)>,
 }
 
 impl TextOutlinePen {
@@ -5566,27 +5568,53 @@ impl TextOutlinePen {
             transform,
             current: None,
             contour_start: None,
+            current_outline: None,
+            contour_start_outline: None,
         }
     }
 
-    fn map(&self, x: f32, y: f32) -> (f32, f32) {
-        let point = (self.x + x * self.scale, self.y - y * self.scale);
+    fn normalize_outline_point(x: f32, y: f32) -> (f32, f32) {
+        let inverse_shape_scale = 1.0 / TEXT_SHAPE_SCALE_F32;
+        (x * inverse_shape_scale, -y * inverse_shape_scale)
+    }
+
+    fn map_normalized(&self, x: f32, y: f32) -> (f32, f32) {
+        let font_size = self.scale * TEXT_SHAPE_SCALE_F32;
+        if self.transform == Mat2D::IDENTITY {
+            // C++ first records HarfBuzz outlines in em units, then maps the
+            // normalized path with the font-size matrix. Preserve its scale-
+            // and-translate operation order here.
+            let glyph_center = self.center_x - self.x;
+            let translation_x = -glyph_center + (self.x + glyph_center);
+            return (
+                font_size.mul_add(x, translation_x),
+                font_size.mul_add(y, self.y),
+            );
+        }
+        let point = (self.x + x * font_size, self.y + y * font_size);
         let transformed = self
             .transform
             .transform_point(point.0 - self.center_x, point.1 - self.center_y);
         (self.center_x + transformed.0, self.center_y + transformed.1)
     }
+
+    fn map(&self, x: f32, y: f32) -> ((f32, f32), (f32, f32)) {
+        let outline = Self::normalize_outline_point(x, y);
+        (self.map_normalized(outline.0, outline.1), outline)
+    }
 }
 
 impl OutlinePen for TextOutlinePen {
     fn move_to(&mut self, x: f32, y: f32) {
-        let point = self.map(x, y);
+        let (point, outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Move {
             x: point.0,
             y: point.1,
         });
         self.current = Some(point);
         self.contour_start = Some(point);
+        self.current_outline = Some(outline);
+        self.contour_start_outline = Some(outline);
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
@@ -5594,46 +5622,59 @@ impl OutlinePen for TextOutlinePen {
             // C++ RawPath collapses zero-size glyph contours to move/close pairs.
             return;
         }
-        let point = self.map(x, y);
+        let (point, outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Line {
             x: point.0,
             y: point.1,
         });
         self.current = Some(point);
+        self.current_outline = Some(outline);
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         if self.scale == 0.0 {
             return;
         }
-        let Some(current) = self.current else {
+        let Some(current_outline) = self.current_outline else {
             self.move_to(x, y);
             return;
         };
-        let control = self.map(cx0, cy0);
-        let end = self.map(x, y);
-        let x1 = current.0 + (control.0 - current.0) * (2.0 / 3.0);
-        let y1 = current.1 + (control.1 - current.1) * (2.0 / 3.0);
-        let x2 = end.0 + (control.0 - end.0) * (2.0 / 3.0);
-        let y2 = end.1 + (control.1 - end.1) * (2.0 / 3.0);
+        let control_outline = Self::normalize_outline_point(cx0, cy0);
+        let end_outline = Self::normalize_outline_point(x, y);
+        // C++ converts HarfBuzz quadratic contours to cubics before applying
+        // the glyph matrix. Doing the lerps after mapping is algebraically
+        // equivalent but rounds hundreds of text control points differently.
+        let t = 2.0 / 3.0;
+        let control1_outline = (
+            current_outline.0 + (control_outline.0 - current_outline.0) * t,
+            current_outline.1 + (control_outline.1 - current_outline.1) * t,
+        );
+        let control2_outline = (
+            end_outline.0 + (control_outline.0 - end_outline.0) * t,
+            end_outline.1 + (control_outline.1 - end_outline.1) * t,
+        );
+        let control1 = self.map_normalized(control1_outline.0, control1_outline.1);
+        let control2 = self.map_normalized(control2_outline.0, control2_outline.1);
+        let end = self.map_normalized(end_outline.0, end_outline.1);
         self.commands.push(RuntimePathCommand::Cubic {
-            x1,
-            y1,
-            x2,
-            y2,
+            x1: control1.0,
+            y1: control1.1,
+            x2: control2.0,
+            y2: control2.1,
             x3: end.0,
             y3: end.1,
         });
         self.current = Some(end);
+        self.current_outline = Some(end_outline);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
         if self.scale == 0.0 {
             return;
         }
-        let control0 = self.map(cx0, cy0);
-        let control1 = self.map(cx1, cy1);
-        let end = self.map(x, y);
+        let (control0, _) = self.map(cx0, cy0);
+        let (control1, _) = self.map(cx1, cy1);
+        let (end, end_outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Cubic {
             x1: control0.0,
             y1: control0.1,
@@ -5643,6 +5684,7 @@ impl OutlinePen for TextOutlinePen {
             y3: end.1,
         });
         self.current = Some(end);
+        self.current_outline = Some(end_outline);
     }
 
     fn close(&mut self) {
@@ -5657,6 +5699,7 @@ impl OutlinePen for TextOutlinePen {
         }
         self.commands.push(RuntimePathCommand::Close);
         self.current = self.contour_start;
+        self.current_outline = self.contour_start_outline;
     }
 }
 
@@ -5890,6 +5933,46 @@ mod tests {
             (actual - expected).abs() <= 0.001,
             "expected {expected}, got {actual}"
         );
+    }
+
+    #[test]
+    fn quadratic_outline_conversion_precedes_glyph_mapping() {
+        let mut pen = TextOutlinePen::new(
+            0.1,
+            0.0,
+            12.3 / TEXT_SHAPE_SCALE_F32,
+            0.1,
+            0.0,
+            Mat2D::IDENTITY,
+        );
+        let start = (-2047.0, 119.0);
+        let control = (-987.0, -37.0);
+        let end = (805.0, -91.0);
+        let start_outline = TextOutlinePen::normalize_outline_point(start.0, start.1);
+        let control_outline = TextOutlinePen::normalize_outline_point(control.0, control.1);
+        let t = 2.0 / 3.0;
+        let expected_outline = (
+            start_outline.0 + (control_outline.0 - start_outline.0) * t,
+            start_outline.1 + (control_outline.1 - start_outline.1) * t,
+        );
+        let expected = pen.map_normalized(expected_outline.0, expected_outline.1);
+        let mapped_start = pen.map(start.0, start.1).0;
+        let mapped_control = pen.map(control.0, control.1).0;
+        let mapped_then_lerped = (
+            mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
+            mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
+        );
+        assert_ne!(
+            (expected.0.to_bits(), expected.1.to_bits()),
+            (mapped_then_lerped.0.to_bits(), mapped_then_lerped.1.to_bits())
+        );
+
+        pen.move_to(start.0, start.1);
+        pen.quad_to(control.0, control.1, end.0, end.1);
+        let RuntimePathCommand::Cubic { x1, y1, .. } = pen.commands[1] else {
+            panic!("quadratic outline did not emit a cubic command");
+        };
+        assert_eq!((x1.to_bits(), y1.to_bits()), (expected.0.to_bits(), expected.1.to_bits()));
     }
 
     #[test]

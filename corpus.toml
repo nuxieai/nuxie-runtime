@@ -1658,7 +1658,8 @@ features = ["type-key:122:NestedTrigger", "type-key:123:NestedBool", "type-key:1
 id = "solar-system"
 path = "tests/unit_tests/assets/solar-system.riv"
 samples = [0.0]
-status = "unsupported-feature"
+status = "exact"
+verification = "rejects-malformed"
 milestone = "gated"
 features = ["import-error:drawable-object-13-Shape-has-invalid-blendModeValue-5"]
 

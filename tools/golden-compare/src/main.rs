@@ -41,7 +41,7 @@ fn run() -> Result<(), String> {
     for entry in &corpus {
         let status = entry.effective_status(options.verify_scripted_diagnostics);
         *counts.entry(status).or_default() += 1;
-        if status == Status::Exact {
+        if status == Status::Exact && entry.verification != VerificationMode::RejectsMalformed {
             exact_segments += entry.samples.len();
         }
         if status == Status::UnsupportedFeature {
@@ -105,6 +105,48 @@ fn run() -> Result<(), String> {
                             entry.id
                         )),
                     }
+                }
+            }
+            Status::Exact if entry.verification == VerificationMode::RejectsMalformed => {
+                let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                let expected_rust_error = entry
+                    .import_error_feature()
+                    .expect("rejects-malformed entries are validated before execution");
+
+                match run_malformed_rejection(
+                    &options.cpp_runner,
+                    entry,
+                    &file,
+                    &corpus_dir,
+                    RunnerKind::Cpp,
+                    expected_rust_error,
+                ) {
+                    Ok(()) => println!(
+                        "[exact] {}: c++ rejected malformed import as expected",
+                        entry.id
+                    ),
+                    Err(error) => failures.push(format!("{}: {error}", entry.id)),
+                }
+
+                match &options.rust_runner {
+                    Some(rust_runner) => match run_malformed_rejection(
+                        rust_runner,
+                        entry,
+                        &file,
+                        &corpus_dir,
+                        RunnerKind::Rust,
+                        expected_rust_error,
+                    ) {
+                        Ok(()) => println!(
+                            "[exact] {}: rust rejected the same malformed import as expected",
+                            entry.id
+                        ),
+                        Err(error) => failures.push(format!("{}: {error}", entry.id)),
+                    },
+                    None => failures.push(format!(
+                        "{}: rejects-malformed verification requires --rust-runner",
+                        entry.id
+                    )),
                 }
             }
             Status::NotYet | Status::Diverges | Status::Exact => {
@@ -314,7 +356,27 @@ impl CorpusEntry {
                 return Err(format!("entry {} samples must be sorted", self.id));
             }
         }
+        if self.verification == VerificationMode::RejectsMalformed {
+            if self.status != Status::Exact {
+                return Err(format!(
+                    "entry {} uses rejects-malformed verification but is not exact",
+                    self.id
+                ));
+            }
+            if self.import_error_feature().is_none_or(str::is_empty) {
+                return Err(format!(
+                    "entry {} uses rejects-malformed verification without an import-error feature",
+                    self.id
+                ));
+            }
+        }
         Ok(())
+    }
+
+    fn import_error_feature(&self) -> Option<&str> {
+        self.features
+            .iter()
+            .find_map(|feature| feature.strip_prefix("import-error:"))
     }
 
     fn rust_runner_unsupported_feature(&self) -> Option<&str> {
@@ -385,6 +447,7 @@ enum VerificationMode {
     Exact,
     Tolerant(f64),
     Structural,
+    RejectsMalformed,
 }
 
 impl VerificationMode {
@@ -392,6 +455,7 @@ impl VerificationMode {
         match value {
             "exact" => Ok(Self::Exact),
             "structural" => Ok(Self::Structural),
+            "rejects-malformed" => Ok(Self::RejectsMalformed),
             _ => {
                 let Some(inner) = value
                     .strip_prefix("tolerant(")
@@ -424,6 +488,9 @@ impl VerificationMode {
             Self::Structural => {
                 stream_difference_with_epsilon(left, right, STRUCTURAL_FLOAT_EPSILON)
             }
+            Self::RejectsMalformed => Some(
+                "rejects-malformed verifies runner failures rather than render streams".to_owned(),
+            ),
         }
     }
 }
@@ -434,6 +501,7 @@ impl Display for VerificationMode {
             Self::Exact => formatter.write_str("exact"),
             Self::Tolerant(epsilon) => write!(formatter, "tolerant({epsilon})"),
             Self::Structural => formatter.write_str("structural"),
+            Self::RejectsMalformed => formatter.write_str("rejects-malformed"),
         }
     }
 }
@@ -892,6 +960,10 @@ mod tests {
             VerificationMode::parse("tolerant(0.25)").unwrap(),
             VerificationMode::Tolerant(0.25)
         );
+        assert_eq!(
+            VerificationMode::parse("rejects-malformed").unwrap(),
+            VerificationMode::RejectsMalformed
+        );
         assert!(VerificationMode::parse("tolerant(-0.1)").is_err());
         assert!(VerificationMode::parse("tolerant(nan)").is_err());
         assert!(VerificationMode::parse("loose").is_err());
@@ -924,6 +996,85 @@ mod tests {
     }
 
     #[test]
+    fn malformed_rejection_requires_the_expected_failure_category() {
+        let cpp_error = "golden-runner error: bad riv file; import result=2\n";
+        let rust_error = concat!(
+            "rust-golden-runner error: failed to import runtime file: ",
+            "drawable object 13 (Shape) has invalid blendModeValue 5\n"
+        );
+        let expected = "drawable-object-13-Shape-has-invalid-blendModeValue-5";
+
+        assert!(
+            validate_malformed_rejection(RunnerKind::Cpp, false, Some(1), "", cpp_error, expected)
+                .is_ok()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(1),
+                "",
+                rust_error,
+                expected,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Cpp,
+                false,
+                Some(1),
+                "",
+                "golden-runner error: bad riv file; import result=1\n",
+                expected,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(1),
+                "",
+                rust_error,
+                "a-different-import-error",
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(101),
+                "",
+                "thread panicked\n",
+                expected,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(RunnerKind::Cpp, false, None, "", cpp_error, expected,)
+                .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Cpp,
+                false,
+                Some(1),
+                "rive-golden-stream-v1\n",
+                cpp_error,
+                expected,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(RunnerKind::Cpp, true, Some(0), "", "", expected,)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn corpus_parser_accepts_verification_mode() {
         let path = std::env::temp_dir().join(format!(
             "golden-compare-verification-{}-{}.toml",
@@ -943,6 +1094,14 @@ samples = [0.0]
 status = "exact"
 verification = "tolerant(0.25)"
 features = []
+
+[[file]]
+id = "malformed"
+path = "tests/unit_tests/assets/malformed.riv"
+samples = [0.0]
+status = "exact"
+verification = "rejects-malformed"
+features = ["import-error:invalid-object"]
 "#,
         )
         .unwrap();
@@ -950,8 +1109,9 @@ features = []
         let entries = parse_corpus(&path).unwrap();
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(entries.len(), 1);
+        assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
+        assert_eq!(entries[1].verification, VerificationMode::RejectsMalformed);
     }
 
     fn f32_hex(values: &[f32]) -> String {
@@ -993,6 +1153,104 @@ fn run_stream(
         ));
     };
     Ok(stdout[stream_start..].to_owned())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunnerKind {
+    Cpp,
+    Rust,
+}
+
+fn run_malformed_rejection(
+    runner: &Path,
+    entry: &CorpusEntry,
+    file: &Path,
+    corpus_dir: &Path,
+    runner_kind: RunnerKind,
+    expected_rust_error: &str,
+) -> Result<(), String> {
+    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let output = command
+        .output()
+        .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    validate_malformed_rejection(
+        runner_kind,
+        output.status.success(),
+        output.status.code(),
+        &stdout,
+        &stderr,
+        expected_rust_error,
+    )
+    .map_err(|reason| {
+        format!(
+            "{} did not produce the expected malformed-import rejection: {reason}\n{}",
+            runner.display(),
+            stderr
+        )
+    })
+}
+
+fn validate_malformed_rejection(
+    runner_kind: RunnerKind,
+    success: bool,
+    exit_code: Option<i32>,
+    stdout: &str,
+    stderr: &str,
+    expected_rust_error: &str,
+) -> Result<(), String> {
+    if success {
+        return Err("runner succeeded".to_owned());
+    }
+    if exit_code != Some(1) {
+        return Err(match exit_code {
+            Some(code) => format!("runner exited with unexpected code {code}"),
+            None => "runner terminated without an exit code (for example, by signal)".to_owned(),
+        });
+    }
+    if stdout.contains("rive-golden-stream-v1\n") {
+        return Err("runner emitted a golden stream before failing".to_owned());
+    }
+
+    let matches_expected_import_failure = match runner_kind {
+        RunnerKind::Cpp => cpp_malformed_diagnostic_matches(stderr),
+        RunnerKind::Rust => rust_malformed_diagnostic_matches(stderr, expected_rust_error),
+    };
+    if !matches_expected_import_failure {
+        return Err("runner emitted a non-import failure diagnostic".to_owned());
+    }
+    Ok(())
+}
+
+fn cpp_malformed_diagnostic_matches(stderr: &str) -> bool {
+    const MARKER: &str = "bad riv file; import result=";
+    stderr.lines().any(|line| {
+        line.split_once(MARKER)
+            .and_then(|(_, result)| result.split_whitespace().next())
+            .is_some_and(|result| result == "2")
+    })
+}
+
+fn rust_malformed_diagnostic_matches(stderr: &str, expected_error: &str) -> bool {
+    stderr.contains("rust-golden-runner error:")
+        && stderr.contains("failed to import runtime file:")
+        && !expected_error.is_empty()
+        && normalize_import_error(stderr)
+            .to_ascii_lowercase()
+            .contains(&expected_error.to_ascii_lowercase())
+}
+
+fn normalize_import_error(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn run_unsupported_diagnostic(

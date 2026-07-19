@@ -13,6 +13,10 @@ fn main() {
 
 fn run() -> Result<()> {
     let options = Options::parse(env::args().skip(1).collect())?;
+    generate(options)
+}
+
+fn generate(options: Options) -> Result<()> {
     let existing = match options.existing.as_ref() {
         Some(path) if path.exists() => parse_existing(path)?,
         _ => BTreeMap::new(),
@@ -52,13 +56,24 @@ fn run() -> Result<()> {
                     .to_owned(),
                 type_key_features(&runtime),
             ),
-            Err(error) => (
-                "unsupported-feature".to_owned(),
-                vec![format!(
-                    "import-error:{}",
-                    normalize_feature(&error.to_string())
-                )],
-            ),
+            Err(error) => {
+                let preserves_verified_rejection = previous.is_some_and(|entry| {
+                    entry.status == "exact"
+                        && entry.verification.as_deref() == Some("rejects-malformed")
+                });
+                (
+                    if preserves_verified_rejection {
+                        "exact"
+                    } else {
+                        "unsupported-feature"
+                    }
+                    .to_owned(),
+                    vec![format!(
+                        "import-error:{}",
+                        normalize_feature(&error.to_string())
+                    )],
+                )
+            }
         };
         if let Some(previous) = previous {
             for feature in previous.features.iter().filter(|feature| {
@@ -313,4 +328,72 @@ fn quoted(value: &str) -> String {
     }
     out.push('"');
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn regeneration_preserves_manually_verified_malformed_rejections() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "generate-corpus-rejects-malformed-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let assets_dir = test_dir.join("assets");
+        let existing_path = test_dir.join("existing.toml");
+        let output_path = test_dir.join("output.toml");
+        std::fs::create_dir_all(&assets_dir).unwrap();
+        std::fs::write(assets_dir.join("verified.riv"), []).unwrap();
+        std::fs::write(assets_dir.join("ordinary.riv"), []).unwrap();
+        std::fs::write(
+            &existing_path,
+            r#"
+[[file]]
+id = "verified"
+path = "tests/unit_tests/assets/verified.riv"
+samples = [0.0]
+status = "exact"
+verification = "rejects-malformed"
+features = ["import-error:old-diagnostic"]
+
+[[file]]
+id = "ordinary"
+path = "tests/unit_tests/assets/ordinary.riv"
+samples = [0.0]
+status = "exact"
+features = []
+"#,
+        )
+        .unwrap();
+
+        generate(Options {
+            assets_dir,
+            existing: Some(existing_path),
+            out: Some(output_path.clone()),
+            relative_prefix: "tests/unit_tests/assets".to_owned(),
+        })
+        .unwrap();
+
+        let regenerated = parse_existing(&output_path).unwrap();
+        let verified = regenerated.get("verified").unwrap();
+        assert_eq!(verified.status, "exact");
+        assert_eq!(verified.verification.as_deref(), Some("rejects-malformed"));
+        assert!(
+            verified
+                .features
+                .iter()
+                .any(|feature| feature.starts_with("import-error:"))
+        );
+
+        let ordinary = regenerated.get("ordinary").unwrap();
+        assert_eq!(ordinary.status, "unsupported-feature");
+        assert_eq!(ordinary.verification, None);
+
+        std::fs::remove_dir_all(test_dir).ok();
+    }
 }

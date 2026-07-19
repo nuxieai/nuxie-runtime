@@ -1518,12 +1518,14 @@ fn resolve_nested_schema_index(
                     "nested view-model path disappeared",
                 )
             })?;
-        schema_index = usize::try_from(property.uint_property("viewModelId").ok_or_else(|| {
-            FlowSessionError::new(
-                FlowSessionErrorKind::Runtime,
-                "nested view-model property has no schema id",
-            )
-        })?)
+        schema_index = usize::try_from(property.uint_property("viewModelReferenceId").ok_or_else(
+            || {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "nested view-model property has no schema reference id",
+                )
+            },
+        )?)
         .map_err(|_| {
             FlowSessionError::new(
                 FlowSessionErrorKind::Runtime,
@@ -1798,12 +1800,14 @@ impl<'a> ValueArenaBuilder<'a> {
             }
             "ViewModelPropertyViewModel" => {
                 let referenced_index =
-                    usize::try_from(property.uint_property("viewModelId").ok_or_else(|| {
-                        FlowSessionError::new(
-                            FlowSessionErrorKind::Runtime,
-                            "nested view-model property has no schema id",
-                        )
-                    })?)
+                    usize::try_from(property.uint_property("viewModelReferenceId").ok_or_else(
+                        || {
+                            FlowSessionError::new(
+                                FlowSessionErrorKind::Runtime,
+                                "nested view-model property has no schema reference id",
+                            )
+                        },
+                    )?)
                     .map_err(|_| {
                         FlowSessionError::new(
                             FlowSessionErrorKind::Runtime,

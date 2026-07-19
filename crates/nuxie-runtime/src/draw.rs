@@ -118,6 +118,9 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
             cached_runtime_property_key!("WorldTransformComponent", "parentId")
         }
         ("Fill", "fillRule") => cached_runtime_property_key!("Fill", "fillRule"),
+        ("ClippingShape", "fillRule") => {
+            cached_runtime_property_key!("ClippingShape", "fillRule")
+        }
         ("Stroke", "thickness") => {
             static KEY: OnceLock<Option<u16>> = OnceLock::new();
             cached_property_key_for_name(&KEY, "Stroke", "thickness")
@@ -672,7 +675,12 @@ impl ArtboardInstance {
                             runtime_path_contains(
                                 commands.as_slice(),
                                 point,
-                                runtime_geometry_fill_rule(clipping_shape.fill_rule),
+                                runtime_geometry_fill_rule(
+                                    runtime_live_clipping_shape_fill_rule_value(
+                                        self,
+                                        clipping_shape,
+                                    ),
+                                ),
                             )
                         })
                         .unwrap_or(true);
@@ -13314,7 +13322,10 @@ fn runtime_draw_clip_start(
         path_cache.clipping_shape_path_commands(instance, graph, clipping_shape, layout_bounds);
     // Ported from src/shapes/clipping_shape.cpp: each ClippingShape owns a
     // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
-    let fill_rule = runtime_fill_rule_for_value(clipping_shape.fill_rule);
+    let fill_rule = runtime_fill_rule_for_value(runtime_live_clipping_shape_fill_rule_value(
+        instance,
+        clipping_shape,
+    ));
     let key = path_cache.retained_world_render_path_key(instance, graph, fill_rule);
     let path = path_cache.clipping_shape_path(
         key,
@@ -13866,6 +13877,17 @@ fn runtime_live_shape_paint_fill_rule(
         .and_then(|key| instance.uint_property(paint.local_id, key))
         .unwrap_or(paint.fill_rule);
     runtime_fill_rule_for_value(live_value)
+}
+
+// C++ `ClippingShape::update` rewinds its cached world path with the live
+// animatable/data-bound fillRule. The graph node is only an import snapshot.
+fn runtime_live_clipping_shape_fill_rule_value(
+    instance: &ArtboardInstance,
+    clipping_shape: &ClippingShapeNode,
+) -> u64 {
+    runtime_draw_property_key_for_name("ClippingShape", "fillRule")
+        .and_then(|key| instance.uint_property(clipping_shape.local_id, key))
+        .unwrap_or(clipping_shape.fill_rule)
 }
 
 fn runtime_make_path_from_raw_path(
@@ -21409,6 +21431,94 @@ mod tests {
     }
 
     #[test]
+    fn clipping_render_path_uses_live_fill_rule() {
+        let bytes = synthetic_clip_geometry_riv(Some(20.0));
+        let file = read_runtime_file(&bytes).expect("synthetic live-clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic live-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let clipping_shape_local = graph
+            .clipping_shapes
+            .first()
+            .expect("synthetic riv has a clipping shape")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let mut factory = CountingFactory {
+            stats: Rc::new(CountingStats::default()),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let mut renderer = PathGeometryRecordingRenderer::default();
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first draw succeeds");
+        assert_eq!(
+            renderer.clip_fill_rules.last(),
+            Some(&RenderFillRule::NonZero)
+        );
+
+        let fill_rule_key = property_key_for_name("ClippingShape", "fillRule")
+            .expect("ClippingShape.fillRule property key");
+        assert!(instance.set_uint_property(clipping_shape_local, fill_rule_key, 2));
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second draw succeeds");
+        assert_eq!(
+            renderer.clip_fill_rules.last(),
+            Some(&RenderFillRule::Clockwise),
+            "C++ rewinds ClippingShape paths with the live fillRule"
+        );
+    }
+
+    #[test]
     fn layout_shape_paint_render_path_cache_follows_layout_epoch() {
         let bytes = synthetic_painted_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic painted-layout riv imports");
@@ -22276,6 +22386,7 @@ mod tests {
     struct PathGeometryRecordingRenderer {
         draw_paths: Vec<Vec<(f32, f32)>>,
         clip_paths: Vec<Vec<(f32, f32)>>,
+        clip_fill_rules: Vec<RenderFillRule>,
     }
 
     impl PathGeometryRecordingRenderer {
@@ -22304,6 +22415,12 @@ mod tests {
 
         fn clip_path(&mut self, path: &dyn RenderPath) {
             self.clip_paths.push(Self::path_points(path));
+            self.clip_fill_rules.push(
+                path.as_any()
+                    .downcast_ref::<CountingRenderPath>()
+                    .expect("counting render path")
+                    .fill_rule,
+            );
         }
 
         fn draw_image(

@@ -187,6 +187,16 @@ jobs:
             df -h .
             du -sh target 2>/dev/null || true
             du -sh target/apple-runtime/* 2>/dev/null | sort -h || true
+            for artifact in \
+              target/apple-runtime/NuxieRuntime.xcframework/Info.plist \
+              target/apple-runtime/artifact.json; do
+              if [[ -f "${artifact}" ]]; then
+                echo "artifact=${artifact}"
+                plutil -p "${artifact}" || true
+              else
+                echo "missing=${artifact}"
+              fi
+            done
           } | tee "${diagnostics}"
 
       - name: Upload Apple runtime packaging diagnostics

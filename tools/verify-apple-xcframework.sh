@@ -5,6 +5,14 @@ phase() {
     printf '  -> %s\n' "$1"
 }
 
+require_file() {
+    local path="$1"
+    if [[ ! -f "${path}" ]]; then
+        echo "required Apple runtime artifact is missing: ${path}" >&2
+        return 1
+    fi
+}
+
 if [[ $# -ne 3 ]]; then
     echo "usage: verify-apple-xcframework.sh <xcframework> <zip> <artifact-metadata>" >&2
     exit 2
@@ -16,17 +24,26 @@ metadata_path="$3"
 info_plist="${xcframework_path}/Info.plist"
 
 phase "validate metadata and archive checksum"
-test -f "${info_plist}"
-test -f "${archive_path}"
-test -f "${metadata_path}"
-plutil -lint "${info_plist}" >/dev/null
+require_file "${info_plist}"
+require_file "${archive_path}"
+require_file "${metadata_path}"
+plutil -lint "${info_plist}"
 # `plutil -lint` only accepts plist syntax on older supported Xcode hosts,
 # while `-p` validates both plist and JSON inputs.
-plutil -p "${metadata_path}" >/dev/null
+if ! plutil -p "${metadata_path}" >/dev/null; then
+    echo "artifact metadata is not valid JSON: ${metadata_path}" >&2
+    sed -n '1,200p' "${metadata_path}" >&2
+    exit 1
+fi
 
 expected_checksum="$(plutil -extract swiftPackageChecksum raw "${metadata_path}")"
 actual_checksum="$(swift package compute-checksum "${archive_path}")"
-test "${actual_checksum}" = "${expected_checksum}"
+if [[ "${actual_checksum}" != "${expected_checksum}" ]]; then
+    echo "archive checksum does not match artifact metadata" >&2
+    echo "expected: ${expected_checksum}" >&2
+    echo "actual:   ${actual_checksum}" >&2
+    exit 1
+fi
 
 phase "extract and compare the archive"
 verification_temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-runtime-verify.XXXXXX")"

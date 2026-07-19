@@ -468,13 +468,17 @@ impl CorpusEntry {
     }
 
     fn requires_scripted_runner(&self) -> bool {
-        self.features
-            .iter()
-            .any(|feature| feature == "scripted-runner-only")
+        self.rust_execute_scripts || self.has_scripted_runner_only_feature()
     }
 
     fn executes_scripts_in_rust(&self) -> bool {
-        self.rust_execute_scripts
+        self.rust_execute_scripts || self.has_scripted_runner_only_feature()
+    }
+
+    fn has_scripted_runner_only_feature(&self) -> bool {
+        self.features
+            .iter()
+            .any(|feature| feature == "scripted-runner-only")
     }
 
     fn effective_status(&self, scripted: bool) -> Status {
@@ -1215,6 +1219,13 @@ samples = [0.0]
 status = "exact"
 verification = "rejects-malformed"
 features = ["import-error:invalid-object"]
+
+[[file]]
+id = "scripted"
+path = "tests/unit_tests/assets/scripted.riv"
+samples = [0.0]
+status = "exact"
+features = ["scripted-runner-only", "scripted-status:exact"]
 "#,
         )
         .unwrap();
@@ -1222,11 +1233,18 @@ features = ["import-error:invalid-object"]
         let entries = parse_corpus(&path).unwrap();
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(entries.len(), 2);
+        assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
         assert!(entries[0].rust_execute_scripts);
+        assert!(entries[0].requires_scripted_runner());
+        assert!(entries[0].executes_scripts_in_rust());
         assert!(!entries[1].rust_execute_scripts);
         assert_eq!(entries[1].verification, VerificationMode::RejectsMalformed);
+        assert!(!entries[1].requires_scripted_runner());
+        assert!(!entries[1].executes_scripts_in_rust());
+        assert!(!entries[2].rust_execute_scripts);
+        assert!(entries[2].requires_scripted_runner());
+        assert!(entries[2].executes_scripts_in_rust());
     }
 
     fn f32_hex(values: &[f32]) -> String {

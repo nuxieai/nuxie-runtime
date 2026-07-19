@@ -248,7 +248,7 @@ impl RenderPaint for DropTrackedRenderPaint {
 
 struct FailFirstImageDecodeFactory {
     inner: RecordingFactory,
-    fail_next_image_decode: bool,
+    fail_image_decode_on_attempt: Option<usize>,
     decode_attempts: usize,
     images_created: Rc<Cell<usize>>,
     images_dropped: Rc<Cell<usize>>,
@@ -258,9 +258,13 @@ struct FailFirstImageDecodeFactory {
 
 impl FailFirstImageDecodeFactory {
     fn new() -> Self {
+        Self::failing_on_attempt(1)
+    }
+
+    fn failing_on_attempt(attempt: usize) -> Self {
         Self {
             inner: RecordingFactory::new(),
-            fail_next_image_decode: true,
+            fail_image_decode_on_attempt: Some(attempt),
             decode_attempts: 0,
             images_created: Rc::new(Cell::new(0)),
             images_dropped: Rc::new(Cell::new(0)),
@@ -328,7 +332,8 @@ impl Factory for FailFirstImageDecodeFactory {
         data: &[u8],
     ) -> std::result::Result<Box<dyn RenderImage>, ImageDecodeError> {
         self.decode_attempts += 1;
-        if std::mem::take(&mut self.fail_next_image_decode) {
+        if self.fail_image_decode_on_attempt == Some(self.decode_attempts) {
+            self.fail_image_decode_on_attempt = None;
             return Err(ImageDecodeError);
         }
         let image = self.inner.decode_image(data)?;
@@ -355,6 +360,16 @@ fn external_fixture(name: &str) -> Vec<u8> {
     .join("tests/unit_tests/assets")
     .join(name);
     std::fs::read(&path).expect("read external fixture")
+}
+
+fn external_asset_fixture(relative: &str) -> Vec<u8> {
+    let path = PathBuf::from(
+        std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+    )
+    .join("tests/unit_tests/assets")
+    .join(relative);
+    std::fs::read(&path).expect("read external asset fixture")
 }
 
 /// Instantiate artboard 0, optionally set a view-model property before binding,
@@ -454,6 +469,91 @@ fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning(
     drop(cache);
     assert_eq!(factory.images_created.get(), factory.images_dropped.get());
     assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+}
+
+#[test]
+fn file_owned_external_images_decode_lazily_and_retry_without_poisoning() {
+    let mut file = File::import(&external_asset_fixture("out_of_band/walle.riv"))
+        .expect("import out-of-band image fixture");
+    let image_asset_ids = file
+        .runtime()
+        .file_assets()
+        .into_iter()
+        .filter(|asset| asset.type_name == "ImageAsset")
+        .map(|asset| {
+            u32::try_from(
+                asset
+                    .uint_property("assetId")
+                    .expect("image asset has a semantic id"),
+            )
+            .expect("semantic id fits u32")
+        })
+        .collect::<Vec<_>>();
+    assert!(!image_asset_ids.is_empty());
+    let image_bytes = external_asset_fixture("out_of_band/eve-317.png");
+    for asset_id in image_asset_ids {
+        file.attach_external_image_asset_bytes(asset_id, image_bytes.clone())
+            .expect("attach external image bytes");
+    }
+
+    let mut instance = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("instantiate image artboard");
+    let mut factory = FailFirstImageDecodeFactory::failing_on_attempt(2);
+    let mut cache = instance.new_render_cache();
+    assert_eq!(factory.decode_attempts, 0, "attachment stays decode-free");
+
+    let mut renderer = factory.inner.make_renderer();
+    let first = instance
+        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
+        .expect_err("first external image decode fails at draw time");
+    assert!(first.downcast_ref::<ImageDecodeError>().is_some());
+    assert_eq!(factory.decode_attempts, 2);
+    assert!(factory.images_created.get() > 0);
+    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    assert!(factory.paints_created.get() > 0);
+    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+
+    instance
+        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
+        .expect("the same cache retries external image decoding");
+    assert!(factory.decode_attempts >= 4);
+    assert!(factory.images_created.get() > factory.images_dropped.get());
+}
+
+#[test]
+fn embedded_image_contents_remain_authoritative_over_external_bytes() {
+    let mut file = File::import(&external_fixture("in_band_asset.riv"))
+        .expect("import embedded image fixture");
+    let image_asset_ids = file
+        .runtime()
+        .file_assets()
+        .into_iter()
+        .filter(|asset| asset.type_name == "ImageAsset")
+        .filter_map(|asset| asset.uint_property("assetId"))
+        .map(|asset_id| u32::try_from(asset_id).expect("semantic id fits u32"))
+        .collect::<Vec<_>>();
+    assert!(!image_asset_ids.is_empty());
+    for asset_id in image_asset_ids {
+        file.attach_external_image_asset_bytes(asset_id, vec![0xde, 0xad, 0xbe, 0xef])
+            .expect("attach ignored external bytes");
+    }
+
+    let mut instance = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("instantiate artboard");
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+    instance
+        .draw(&mut factory, &mut renderer)
+        .expect("embedded image draws");
+    let stream = factory.stream();
+    assert!(stream.contains("decodeImage"));
+    assert!(!stream.contains("data=deadbeef"));
 }
 
 #[test]

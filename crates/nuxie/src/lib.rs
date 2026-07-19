@@ -3,13 +3,11 @@
 //! This crate keeps the user-facing surface narrow while the lower-level
 //! crates continue to carry the import, graph, runtime, and renderer details.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[cfg(feature = "scripting")]
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, VecDeque},
-};
+use std::{cell::RefCell, collections::VecDeque};
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
@@ -21,7 +19,6 @@ use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache,
     RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
-    preallocate_render_paint_cache_for_artboard_tree,
 };
 
 mod scene;
@@ -660,16 +657,62 @@ fn queue_root_script_advance(
 pub struct File {
     runtime: RuntimeFile,
     graph: GraphFile,
+    external_image_assets: BTreeMap<u32, Arc<[u8]>>,
+    external_font_assets: BTreeMap<u32, Arc<[u8]>>,
     #[cfg(feature = "scripting")]
     scripts: RefCell<FileScriptRuntime>,
 }
+
+/// Rejection from attaching host-provided bytes to a semantic file asset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalAssetError {
+    UnknownAsset {
+        asset_id: u32,
+    },
+    WrongAssetKind {
+        asset_id: u32,
+        expected: &'static str,
+        actual: &'static str,
+    },
+    InvalidFont {
+        asset_id: u32,
+    },
+}
+
+impl std::fmt::Display for ExternalAssetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownAsset { asset_id } => {
+                write!(formatter, "file has no asset with semantic id {asset_id}")
+            }
+            Self::WrongAssetKind {
+                asset_id,
+                expected,
+                actual,
+            } => write!(formatter, "asset {asset_id} is {actual}, not {expected}"),
+            Self::InvalidFont { asset_id } => {
+                write!(formatter, "asset {asset_id} bytes are not a valid font")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ExternalAssetError {}
 
 impl std::fmt::Debug for File {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut debug = formatter.debug_struct("File");
         debug
             .field("runtime", &self.runtime)
-            .field("graph", &self.graph);
+            .field("graph", &self.graph)
+            .field(
+                "external_image_asset_count",
+                &self.external_image_assets.len(),
+            )
+            .field(
+                "external_font_asset_count",
+                &self.external_font_assets.len(),
+            );
         #[cfg(feature = "scripting")]
         debug.field("scripts", &self.scripts);
         debug.finish()
@@ -688,6 +731,8 @@ impl Clone for File {
         Self {
             runtime,
             graph,
+            external_image_assets: self.external_image_assets.clone(),
+            external_font_assets: self.external_font_assets.clone(),
             #[cfg(feature = "scripting")]
             scripts,
         }
@@ -733,7 +778,84 @@ impl File {
             scripts: RefCell::new(FileScriptRuntime::new(&runtime, _allow_unsigned_execution)),
             runtime,
             graph,
+            external_image_assets: BTreeMap::new(),
+            external_font_assets: BTreeMap::new(),
         })
+    }
+
+    /// Attach already-loaded bytes to an external `ImageAsset` identity.
+    ///
+    /// This performs no I/O or decoding. `asset_id` is the serialized
+    /// `FileAsset.assetId`, not an asset-list ordinal. Decode remains lazy
+    /// until the first draw, and embedded file contents remain authoritative.
+    pub fn attach_external_image_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalAssetError> {
+        self.validate_external_asset_kind(asset_id, "ImageAsset")?;
+        let bytes = Arc::<[u8]>::from(bytes);
+        if self
+            .external_image_assets
+            .get(&asset_id)
+            .is_some_and(|current| current.as_ref() == bytes.as_ref())
+        {
+            return Ok(());
+        }
+        self.external_image_assets.insert(asset_id, bytes);
+        Ok(())
+    }
+
+    /// Attach validated bytes to an external `FontAsset` identity.
+    ///
+    /// This performs no I/O. `asset_id` is the serialized
+    /// `FileAsset.assetId`, not an asset-list ordinal. Call this before sharing
+    /// the file through [`Arc`]; every subsequently instantiated root and
+    /// child artboard receives the same immutable snapshot. Embedded file
+    /// contents remain authoritative during text layout.
+    pub fn attach_external_font_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalAssetError> {
+        self.validate_external_asset_kind(asset_id, "FontAsset")?;
+        if !RuntimeArtboardInstance::external_font_bytes_are_parseable(&bytes) {
+            return Err(ExternalAssetError::InvalidFont { asset_id });
+        }
+        let bytes = Arc::<[u8]>::from(bytes);
+        if self
+            .external_font_assets
+            .get(&asset_id)
+            .is_some_and(|current| current.as_ref() == bytes.as_ref())
+        {
+            return Ok(());
+        }
+        self.external_font_assets.insert(asset_id, bytes);
+        Ok(())
+    }
+
+    fn validate_external_asset_kind(
+        &self,
+        asset_id: u32,
+        expected: &'static str,
+    ) -> std::result::Result<(), ExternalAssetError> {
+        let Some(actual) = self
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.uint_property("assetId") == Some(u64::from(asset_id)))
+            .map(|asset| asset.type_name)
+        else {
+            return Err(ExternalAssetError::UnknownAsset { asset_id });
+        };
+        if actual != expected {
+            return Err(ExternalAssetError::WrongAssetKind {
+                asset_id,
+                expected,
+                actual,
+            });
+        }
+        Ok(())
     }
 
     /// Low-level imported file data for advanced integrations.
@@ -818,10 +940,11 @@ impl<'a> Artboard<'a> {
     }
 
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
-        let raw = RuntimeArtboardInstance::from_graph_with_artboards(
+        let raw = RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
             &self.file.runtime,
             self.graph(),
             &self.file.graph.artboards,
+            &self.file.external_font_assets,
         )
         .with_context(|| {
             format!(
@@ -863,13 +986,19 @@ fn ensure_render_paint_cache_for_draw(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
+    external_image_assets: &BTreeMap<u32, Arc<[u8]>>,
     factory: &mut dyn Factory,
 ) -> std::result::Result<(), ImageDecodeError> {
     if retained.is_some() {
         return Ok(());
     }
-    let candidate =
-        preallocate_render_paint_cache_for_artboard_tree(runtime, artboard, artboards, factory);
+    let candidate = RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
+        runtime,
+        artboard,
+        artboards,
+        external_image_assets,
+        factory,
+    );
     if let Some(error) = candidate.image_decode_error() {
         return Err(error);
     }
@@ -1248,6 +1377,7 @@ impl<'a> ArtboardInstance<'a> {
             &self.file.runtime,
             artboard,
             &self.file.graph.artboards,
+            &self.file.external_image_assets,
             factory,
         )?;
         #[cfg(feature = "scripting")]
@@ -1309,10 +1439,11 @@ impl OwnedArtboardInstance {
             let artboard = file
                 .artboard(artboard_index)
                 .with_context(|| format!("artboard index {artboard_index} out of range"))?;
-            RuntimeArtboardInstance::from_graph_with_artboards(
+            RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
                 &file.runtime,
                 artboard.graph(),
                 &file.graph.artboards,
+                &file.external_font_assets,
             )
             .with_context(|| {
                 format!(
@@ -1361,21 +1492,42 @@ impl OwnedArtboardInstance {
         self.raw.artboard_dimensions()
     }
 
-    /// Attach host-supplied bytes to an external `FontAsset` in this instance.
+    /// Compatibility attachment path for an already-owned instance.
     ///
-    /// This performs no I/O. `asset_id` is the published, file-wide
-    /// `FileAsset.assetId`, not the asset-list ordinal. The runtime validates
-    /// the identity, asset kind, and both font parsing backends before changing
-    /// the instance. Embedded font contents remain authoritative. In the
-    /// current E2 subset the attachment is local to this instance; nested
-    /// artboard instances do not inherit it.
+    /// New integrations should attach bytes to [`File`] before wrapping it in
+    /// [`Arc`]. This method copy-on-writes the owned file when necessary and
+    /// refreshes the complete current tree plus its future child-build
+    /// contexts, so the attachment is no longer root-instance-local.
     pub fn attach_font_asset_bytes(
         &mut self,
         asset_id: u32,
         bytes: Vec<u8>,
     ) -> std::result::Result<(), ExternalFontAssetError> {
-        self.raw
-            .attach_external_font_asset_bytes(asset_id, Arc::<[u8]>::from(bytes))
+        let (external_font_assets, changed) = {
+            let file = Arc::make_mut(&mut self.file);
+            let changed = file
+                .external_font_assets
+                .get(&asset_id)
+                .is_none_or(|current| current.as_ref() != bytes.as_slice());
+            file.attach_external_font_asset_bytes(asset_id, bytes)
+                .map_err(|error| match error {
+                    ExternalAssetError::UnknownAsset { asset_id } => {
+                        ExternalFontAssetError::UnknownAsset { asset_id }
+                    }
+                    ExternalAssetError::WrongAssetKind {
+                        asset_id, actual, ..
+                    } => ExternalFontAssetError::WrongAssetKind { asset_id, actual },
+                    ExternalAssetError::InvalidFont { asset_id } => {
+                        ExternalFontAssetError::InvalidFont { asset_id }
+                    }
+                })?;
+            (file.external_font_assets.clone(), changed)
+        };
+        if changed {
+            self.raw
+                .replace_external_font_asset_snapshot(&external_font_assets);
+        }
+        Ok(())
     }
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
@@ -1665,6 +1817,7 @@ impl OwnedArtboardInstance {
             &self.file.runtime,
             artboard,
             &self.file.graph.artboards,
+            &self.file.external_image_assets,
             factory,
         )?;
         #[cfg(feature = "scripting")]
@@ -1768,6 +1921,27 @@ mod owned_instance_tests {
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
 
+    fn external_fixture(relative: &str) -> Vec<u8> {
+        let path = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets")
+        .join(relative);
+        std::fs::read(path).expect("read external fixture")
+    }
+
+    fn first_semantic_asset_id(file: &File, kind: &str) -> u32 {
+        let value = file
+            .runtime()
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.type_name == kind)
+            .and_then(|asset| asset.uint_property("assetId"))
+            .unwrap_or_else(|| panic!("fixture has no semantic {kind} id"));
+        u32::try_from(value).expect("semantic asset id fits u32")
+    }
+
     fn stream_of(draw: impl FnOnce(&mut RecordingFactory) -> Result<()>) -> String {
         let mut factory = RecordingFactory::new();
         draw(&mut factory).expect("draw succeeds");
@@ -1845,5 +2019,107 @@ mod owned_instance_tests {
         // Nonexistent property key: the typed write path must report false
         // (no match), never panic.
         assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
+    }
+
+    #[test]
+    fn file_external_asset_store_validates_ids_and_replaces_deterministically() {
+        let mut image_file =
+            File::import(&external_fixture("hosted_image_file.riv")).expect("import image file");
+        let image_id = first_semantic_asset_id(&image_file, "ImageAsset");
+        assert_eq!(
+            image_file.attach_external_image_asset_bytes(u32::MAX, vec![1]),
+            Err(ExternalAssetError::UnknownAsset { asset_id: u32::MAX })
+        );
+        assert_eq!(
+            image_file.attach_external_font_asset_bytes(image_id, vec![1]),
+            Err(ExternalAssetError::WrongAssetKind {
+                asset_id: image_id,
+                expected: "FontAsset",
+                actual: "ImageAsset",
+            })
+        );
+
+        image_file
+            .attach_external_image_asset_bytes(image_id, vec![1, 2, 3])
+            .expect("attach image bytes");
+        let first_image = Arc::clone(
+            image_file
+                .external_image_assets
+                .get(&image_id)
+                .expect("stored image"),
+        );
+        image_file
+            .attach_external_image_asset_bytes(image_id, vec![1, 2, 3])
+            .expect("repeat identical image bytes");
+        assert!(Arc::ptr_eq(
+            &first_image,
+            image_file
+                .external_image_assets
+                .get(&image_id)
+                .expect("same stored image")
+        ));
+        image_file
+            .attach_external_image_asset_bytes(image_id, vec![4, 5])
+            .expect("replace image bytes");
+        assert_eq!(
+            image_file
+                .external_image_assets
+                .get(&image_id)
+                .map(AsRef::as_ref),
+            Some(&[4, 5][..])
+        );
+
+        let mut font_file =
+            File::import(&external_fixture("hosted_font_file.riv")).expect("import font file");
+        let font_id = first_semantic_asset_id(&font_file, "FontAsset");
+        assert_eq!(
+            font_file.attach_external_font_asset_bytes(font_id, b"not a font".to_vec()),
+            Err(ExternalAssetError::InvalidFont { asset_id: font_id })
+        );
+        assert!(!font_file.external_font_assets.contains_key(&font_id));
+
+        let first_font_bytes = external_fixture("fonts/Inter_18pt-Regular.ttf");
+        font_file
+            .attach_external_font_asset_bytes(font_id, first_font_bytes.clone())
+            .expect("attach valid font");
+        let first_font = Arc::clone(
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("stored font"),
+        );
+        font_file
+            .attach_external_font_asset_bytes(font_id, first_font_bytes)
+            .expect("repeat identical font bytes");
+        assert!(Arc::ptr_eq(
+            &first_font,
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("same stored font")
+        ));
+
+        let replacement_font = external_fixture("Montserrat.ttf");
+        font_file
+            .attach_external_font_asset_bytes(font_id, replacement_font.clone())
+            .expect("replace valid font");
+        assert_eq!(
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .map(AsRef::as_ref),
+            Some(replacement_font.as_slice())
+        );
+        let cloned_file = font_file.clone();
+        assert!(Arc::ptr_eq(
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("source font"),
+            cloned_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("cloned font")
+        ));
     }
 }

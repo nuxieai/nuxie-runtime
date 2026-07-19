@@ -148,7 +148,7 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "bindable_focus_tree_swap"
 path = "tests/unit_tests/assets/bindable_focus_tree_swap.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:487:ListenerViewModelChange", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard"]
 
 [[file]]
@@ -771,14 +771,14 @@ features = ["scripted-status:exact", "type-key:106:FileAssetContents", "type-key
 id = "global_variables_test"
 path = "tests/unit_tests/assets/global_variables_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:452:NestedArtboardLayout", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:568:DataConverterNumberToList", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:95:NestedStateMachine"]
 
 [[file]]
 id = "global_viewmodels_test"
 path = "tests/unit_tests/assets/global_viewmodels_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
 
 [[file]]
@@ -886,7 +886,7 @@ features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileA
 id = "image_fit_alignment_updated_test"
 path = "tests/unit_tests/assets/image_fit_alignment_updated_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:585:ViewModelPropertyAssetImage", "type-key:587:ViewModelInstanceAssetImage", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
@@ -1954,7 +1954,7 @@ features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileA
 id = "swappable_artboards_focus"
 path = "tests/unit_tests/assets/swappable_artboards_focus.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:51:Polygon", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:8:Triangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
 
 [[file]]

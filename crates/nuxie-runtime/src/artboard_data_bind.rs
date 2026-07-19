@@ -3808,6 +3808,52 @@ impl ArtboardInstance {
         changed
     }
 
+    /// Rebinds a freshly mounted nested occurrence to the parent context that
+    /// was active when its artboard asset changed.
+    ///
+    /// C++ `NestedArtboard::updateArtboard` mounts the replacement and then
+    /// immediately calls `bindViewModelInstance` (or propagates its existing
+    /// `DataContext`). The replacement must therefore observe the same local
+    /// main/globals plus inherited-parent ordering as an initially mounted
+    /// nested artboard, without waiting for the parent scene to be rebound.
+    pub(crate) fn rebind_owned_view_model_context_after_nested_artboard_swap(
+        &mut self,
+        file: &RuntimeFile,
+        host_local_id: usize,
+    ) -> bool {
+        if self.artboard_owned_view_model_candidates.is_empty() {
+            return false;
+        }
+        let inherited_candidates = self.owned_view_model_context_candidates_for_nested_host(
+            file,
+            &self.artboard_owned_view_model_candidates,
+            host_local_id,
+            true,
+        );
+        let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+            return false;
+        };
+
+        let mut candidates = Vec::new();
+        if let Some(context) = nested.stateful_view_model_context.clone() {
+            candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+        }
+        candidates.extend(
+            nested
+                .stateful_global_view_model_contexts
+                .values()
+                .map(RuntimeOwnedViewModelBindingCandidate::root),
+        );
+        candidates.extend(inherited_candidates);
+
+        let mut changed =
+            nested.bind_owned_view_model_animation_context_candidates(file, &candidates);
+        changed |= nested
+            .child
+            .bind_owned_view_model_artboard_context_candidates(file, &candidates, true, true);
+        changed
+    }
+
     fn bind_owned_view_model_component_list_context_candidates(
         &mut self,
         file: &RuntimeFile,

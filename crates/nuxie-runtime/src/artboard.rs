@@ -3849,6 +3849,9 @@ impl ArtboardInstance {
         });
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
+        if let Some(file) = self.runtime_file_arc() {
+            self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
+        }
         self.artboard_owned_context_key = None;
         self.stateful_nested_view_model_contexts_dirty = true;
         self.mark_artboard_data_bind_work_dirty();
@@ -4947,7 +4950,10 @@ mod tests {
         RuntimeDataBindGraphConverter, runtime_data_bind_graph_reverse_convert_value,
     };
     use crate::properties::property_key_for_name;
-    use nuxie_binary::{BytesValue, FieldValue, RuntimeObject, RuntimeProperty, read_runtime_file};
+    use nuxie_binary::{
+        AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
+        RuntimeProperty, read_runtime_file,
+    };
     use nuxie_graph::GraphFile;
     use nuxie_render_api::RecordingFactory;
     use nuxie_schema::definition_by_name;
@@ -5275,6 +5281,28 @@ mod tests {
         }
     }
 
+    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn authoring_property(
+        type_name: &str,
+        property_name: &str,
+        value: AuthoringValue,
+    ) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, property_name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}")),
+            value,
+        }
+    }
+
     fn empty_state_machine(global_id: u32) -> RuntimeStateMachine {
         RuntimeStateMachine {
             global_id,
@@ -5351,6 +5379,115 @@ mod tests {
         assert!(!parent.set_nested_artboard_artboard_id(3, 0));
         assert!(!parent.nested_artboards.contains_key(&3));
         assert!(parent.nested_artboard_locals.is_empty());
+    }
+
+    #[test]
+    fn nested_artboard_swap_immediately_inherits_the_active_parent_context() {
+        let number_key = property_key_for_name("Rectangle", "width").expect("rectangle width");
+        let artboard = || {
+            authoring_record(
+                "Artboard",
+                vec![authoring_property(
+                    "Artboard",
+                    "viewModelId",
+                    AuthoringValue::Uint(0),
+                )],
+            )
+        };
+        let bound_rectangle = |width| {
+            vec![
+                authoring_record(
+                    "Rectangle",
+                    vec![
+                        authoring_property("Rectangle", "parentId", AuthoringValue::Uint(0)),
+                        authoring_property("Rectangle", "width", AuthoringValue::Double(width)),
+                    ],
+                ),
+                authoring_record(
+                    "DataBindContext",
+                    vec![
+                        authoring_property(
+                            "DataBindContext",
+                            "propertyKey",
+                            AuthoringValue::Uint(u64::from(number_key)),
+                        ),
+                        authoring_property(
+                            "DataBindContext",
+                            "sourcePathIds",
+                            AuthoringValue::Bytes(vec![0, 0]),
+                        ),
+                    ],
+                ),
+            ]
+        };
+        let mut records = vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
+                "ViewModel",
+                vec![authoring_property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            authoring_record(
+                "ViewModelPropertyNumber",
+                vec![authoring_property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("width".to_owned()),
+                )],
+            ),
+            artboard(),
+            authoring_record(
+                "NestedArtboard",
+                vec![
+                    authoring_property("NestedArtboard", "parentId", AuthoringValue::Uint(0)),
+                    authoring_property("NestedArtboard", "artboardId", AuthoringValue::Uint(1)),
+                ],
+            ),
+            artboard(),
+        ];
+        records.extend(bound_rectangle(1.0));
+        records.push(artboard());
+        records.extend(bound_rectangle(2.0));
+        let file = RuntimeFile::from_authoring_records(records)
+            .expect("nested replacement fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested replacement graphs");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("parent artboard instance");
+        let host_local_id = graphs.artboards[0].nested_artboards[0].local_id;
+        let mut context = RuntimeOwnedViewModelInstance::new(&file, 0).expect("owned context");
+        assert!(context.set_number_by_property_index(0, 42.0));
+
+        assert!(parent.bind_owned_view_model_artboard_context(&file, &context));
+        assert_eq!(
+            parent
+                .nested_artboards
+                .get(&host_local_id)
+                .and_then(|nested| nested.child.artboard_data_bind_values.get(&[0, 0][..])),
+            Some(&RuntimeDataBindGraphValue::Number(42.0)),
+            "the authored child establishes that the synthetic binding resolves"
+        );
+
+        assert!(parent.set_nested_artboard_artboard_id(host_local_id, 2));
+        let replacement = parent
+            .nested_artboards
+            .get(&host_local_id)
+            .expect("replacement nested occurrence");
+        assert_eq!(
+            replacement.child.graph_global_id,
+            graphs.artboards[2].global_id
+        );
+        assert_eq!(
+            replacement.child.artboard_data_bind_values.get(&[0, 0][..]),
+            Some(&RuntimeDataBindGraphValue::Number(42.0)),
+            "C++ binds the existing DataContext during NestedArtboard::updateArtboard"
+        );
     }
 
     #[test]

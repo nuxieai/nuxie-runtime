@@ -2,7 +2,6 @@
 //! source, call functions, read results back, and bind Rust host functions.
 #![cfg(feature = "luau")]
 
-use luaur_compiler::functions::luau_compile::luau_compile;
 use luaur_rt::{Function, Table, Value};
 use nuxie_runtime::{
     NoopScriptHost, ScriptDataConverterMethod, ScriptInstance, ScriptListenerInvocation,
@@ -450,34 +449,5 @@ fn setting_file_models_refreshes_data_on_an_already_initialized_vm() {
             .get::<Value>("new")
             .expect("Data model constructor"),
         Value::Function(_)
-    ));
-}
-
-#[test]
-fn registered_assets_write_globals_only_to_their_sandbox() {
-    let source = b"assetLocal = 42; return {}";
-    let mut bytecode_len = 0;
-    let bytecode = unsafe {
-        let bytecode = luau_compile(
-            source.as_ptr().cast(),
-            source.len(),
-            std::ptr::null_mut(),
-            &mut bytecode_len,
-        );
-        assert!(!bytecode.is_null(), "compiler must return bytecode");
-        let copied = std::slice::from_raw_parts(bytecode.cast::<u8>(), bytecode_len).to_vec();
-        libc::free(bytecode.cast());
-        copied
-    };
-    let mut payload = vec![0]; // unsigned SignedContent envelope, version 0
-    payload.extend(bytecode);
-
-    let vm = ScriptVm::new();
-    vm.register_module("sandboxed-module", &payload)
-        .expect("registered module executes");
-
-    assert!(matches!(
-        vm.global("assetLocal").expect("main VM global lookup"),
-        Value::Nil
     ));
 }

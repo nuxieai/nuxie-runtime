@@ -36,5 +36,3 @@ luaur-vm = { version = "=0.1.8", optional = true }
 # real .riv files in tests. dev-dependency only: nuxie-binary never becomes
 # part of nuxie-scripting's public dependency surface.
 nuxie-binary = { path = "../nuxie-binary" }
-luaur-compiler = "=0.1.8"
-libc = "0.2"

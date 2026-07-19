@@ -1518,6 +1518,15 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
             property_key_for_name("FollowPathConstraint", "distance") == Some(property_key)
                 && data_bind.converter_type_name == Some("DataConverterRangeMapper")
         }
+        Some("ScrollConstraint") => [
+            "scrollOffsetX",
+            "scrollOffsetY",
+            "scrollPercentX",
+            "scrollPercentY",
+            "scrollIndex",
+        ]
+        .into_iter()
+        .any(|name| property_key_for_name("ScrollConstraint", name) == Some(property_key)),
         Some("Text") => {
             [
                 "alignValue",
@@ -6087,5 +6096,37 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered, vec![0.2, 0.5, 0.8]);
+    }
+
+    #[test]
+    fn static_text_preflight_accepts_runtime_scroll_bindings() {
+        for property_name in [
+            "scrollOffsetX",
+            "scrollOffsetY",
+            "scrollPercentX",
+            "scrollPercentY",
+            "scrollIndex",
+        ] {
+            let data_bind = DataBindNode {
+                global_id: 1,
+                type_name: "DataBind",
+                property_key: u64::from(
+                    property_key_for_name("ScrollConstraint", property_name)
+                        .expect("scroll property exists"),
+                ),
+                flags: 0,
+                converter_id: 0,
+                converter_global: None,
+                converter_type_name: None,
+                converter_duration: None,
+                target_global: Some(2),
+                target_type_name: Some("ScrollConstraint"),
+                target_local: Some(2),
+            };
+            assert!(
+                static_text_data_bind_supported(&data_bind),
+                "{property_name} should reach the runtime scroll binding path"
+            );
+        }
     }
 }

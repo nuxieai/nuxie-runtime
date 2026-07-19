@@ -9500,7 +9500,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     // meshes are cloned. Script-enabled callers use the dedicated helpers and
     // realize script-hosted children at the point the script requests them.
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, true, false,
+        runtime, graph, artboards, factory, false, true, false, None,
     )
 }
 
@@ -9511,7 +9511,28 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, true, true,
+        runtime, graph, artboards, factory, false, true, true, None,
+    )
+}
+
+/// Mirrors C++ file import followed by `File::registerScripts()` before an
+/// artboard instance clones its retained paints and mesh buffers.
+pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    mut register_file_scripts: impl FnMut(&mut dyn RenderFactory),
+) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        false,
+        true,
+        true,
+        Some(&mut register_file_scripts),
     )
 }
 
@@ -9522,7 +9543,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_pa
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false, false, true,
+        runtime, graph, artboards, factory, false, false, true, None,
     )
 }
 
@@ -9534,6 +9555,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     include_script_input_artboards: bool,
     allocate_source_paints: bool,
     scripting_file_assets: bool,
+    file_registration: Option<&mut dyn FnMut(&mut dyn RenderFactory)>,
 ) -> RuntimeRenderPaintCache {
     let image_asset_globals = runtime
         .file_assets()
@@ -9574,6 +9596,9 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     }
     let mut source_meshes =
         preallocate_source_mesh_render_buffers_for_artboards(runtime, artboards, factory, &images);
+    if let Some(register_file_scripts) = file_registration {
+        register_file_scripts(factory);
+    }
     let mut cache = RuntimeRenderPaintCache::default();
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);

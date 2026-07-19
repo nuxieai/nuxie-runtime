@@ -38,6 +38,7 @@ pub use draw::{
     preallocate_render_paint_cache_for_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
+    preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration,
     preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
     preallocate_source_render_paints, runtime_path_commands_from_raw_path,
 };

@@ -4,7 +4,9 @@
 #include <stdint.h>
 
 _Static_assert(NUX_RUNTIME_ABI_MAJOR == 1, "unexpected runtime ABI major");
-_Static_assert(NUX_RUNTIME_ABI_MINOR == 1, "unexpected runtime ABI minor");
+_Static_assert(NUX_RUNTIME_ABI_MINOR == 2, "unexpected runtime ABI minor");
+_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 2,
+               "unexpected flow-session ABI minor");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY == 1,
                "script authorization values are part of the ABI");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED == 2,
@@ -17,6 +19,16 @@ _Static_assert(NUX_SURFACE_DISPOSITION_PRESENTED == 1,
                "surface disposition values are part of the ABI");
 _Static_assert(NUX_SURFACE_DISPOSITION_FATAL == 9,
                "surface disposition values are part of the ABI");
+_Static_assert(NUX_FLOW_QUERY_KIND_PLAYER_INPUTS == 4,
+               "player-input query kind is part of the ABI");
+_Static_assert(NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL == 9,
+               "player-input mutation kinds are part of the ABI");
+_Static_assert(NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER == 11,
+               "player-input mutation kinds are part of the ABI");
+_Static_assert(NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE == 1,
+               "player-selection branches are part of the ABI");
+_Static_assert(NUX_FLOW_PLAYER_SELECTION_STATIC == 5,
+               "player-selection branches are part of the ABI");
 _Static_assert(sizeof(NuxStatus) == sizeof(uint32_t),
                "NuxStatus must remain a 32-bit ABI value");
 _Static_assert(sizeof(NuxSurfaceDisposition) == sizeof(uint32_t),
@@ -64,6 +76,82 @@ _Static_assert(offsetof(struct NuxFrameOperation, completion_context) == 24,
 _Static_assert(offsetof(struct NuxFrameOperation, completion_callback) == 32,
                "unexpected NuxFrameOperation.completion_callback offset");
 
+/* ABI 1.2 is additive: freeze every caller-owned input and representative
+ * result view while retaining all ABI 1.1 assertions above. */
+_Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 40,
+               "unexpected NuxFlowConfiguredSessionDescriptor layout");
+_Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
+                        artboard_name) == 8,
+               "unexpected configured artboard-name offset");
+_Static_assert(sizeof(struct NuxFlowValueNode) == 88,
+               "unexpected NuxFlowValueNode layout");
+_Static_assert(offsetof(struct NuxFlowValueNode, instance_id) == 40,
+               "unexpected NuxFlowValueNode.instance_id offset");
+_Static_assert(offsetof(struct NuxFlowValueNode, string_value) == 56,
+               "unexpected NuxFlowValueNode.string_value offset");
+_Static_assert(sizeof(struct NuxFlowValueEdge) == 24,
+               "unexpected NuxFlowValueEdge layout");
+_Static_assert(sizeof(struct NuxFlowValueArena) == 40,
+               "unexpected NuxFlowValueArena layout");
+_Static_assert(sizeof(struct NuxFlowNewInstance) == 40,
+               "unexpected NuxFlowNewInstance layout");
+_Static_assert(sizeof(struct NuxFlowInstanceReference) == 16,
+               "unexpected NuxFlowInstanceReference layout");
+_Static_assert(sizeof(struct NuxFlowStateMutation) == 88,
+               "unexpected NuxFlowStateMutation layout");
+_Static_assert(offsetof(struct NuxFlowStateMutation, path) == 40,
+               "unexpected NuxFlowStateMutation.path offset");
+_Static_assert(offsetof(struct NuxFlowStateMutation, input_name) == 56,
+               "unexpected NuxFlowStateMutation.input_name offset");
+_Static_assert(sizeof(struct NuxFlowStateBatch) == 56,
+               "unexpected NuxFlowStateBatch layout");
+_Static_assert(offsetof(struct NuxFlowStateBatch, value_arena) == 16,
+               "unexpected NuxFlowStateBatch.value_arena offset");
+_Static_assert(sizeof(struct NuxFlowPointerEvent) == 20,
+               "unexpected NuxFlowPointerEvent layout");
+_Static_assert(sizeof(struct NuxFlowPointerBatch) == 24,
+               "unexpected NuxFlowPointerBatch layout");
+_Static_assert(sizeof(struct NuxFlowAdvanceOperation) == 48,
+               "unexpected NuxFlowAdvanceOperation layout");
+_Static_assert(offsetof(struct NuxFlowAdvanceOperation, apple_drawable) == 24,
+               "unexpected NuxFlowAdvanceOperation.apple_drawable offset");
+_Static_assert(sizeof(struct NuxFlowQuery) == 8,
+               "unexpected NuxFlowQuery layout");
+_Static_assert(sizeof(struct NuxFlowQueryBatch) == 24,
+               "unexpected NuxFlowQueryBatch layout");
+_Static_assert(sizeof(struct NuxFlowSessionOperation) == 48,
+               "unexpected NuxFlowSessionOperation layout");
+_Static_assert(offsetof(struct NuxFlowSessionOperation, state_batch) == 16,
+               "unexpected NuxFlowSessionOperation.state_batch offset");
+_Static_assert(sizeof(struct NuxFlowPlayerMetadataView) == 64,
+               "unexpected NuxFlowPlayerMetadataView layout");
+_Static_assert(offsetof(struct NuxFlowPlayerMetadataView, selection) == 8,
+               "unexpected NuxFlowPlayerMetadataView.selection offset");
+_Static_assert(offsetof(struct NuxFlowPlayerMetadataView, artboard_name) == 16,
+               "unexpected NuxFlowPlayerMetadataView.artboard_name offset");
+_Static_assert(sizeof(struct NuxFlowPlayerInputView) == 32,
+               "unexpected NuxFlowPlayerInputView layout");
+_Static_assert(sizeof(struct NuxFlowSchemaView) == 48,
+               "unexpected NuxFlowSchemaView layout");
+_Static_assert(sizeof(struct NuxFlowSchemaPropertyView) == 56,
+               "unexpected NuxFlowSchemaPropertyView layout");
+_Static_assert(sizeof(struct NuxFlowInstanceTemplateView) == 40,
+               "unexpected NuxFlowInstanceTemplateView layout");
+_Static_assert(sizeof(struct NuxFlowInstanceView) == 56,
+               "unexpected NuxFlowInstanceView layout");
+_Static_assert(sizeof(struct NuxFlowValueRootView) == 16,
+               "unexpected NuxFlowValueRootView layout");
+_Static_assert(sizeof(struct NuxFlowCreatedInstanceView) == 16,
+               "unexpected NuxFlowCreatedInstanceView layout");
+_Static_assert(sizeof(struct NuxFlowEventPropertyView) == 40,
+               "unexpected NuxFlowEventPropertyView layout");
+_Static_assert(sizeof(struct NuxFlowOutputView) == 120,
+               "unexpected NuxFlowOutputView layout");
+_Static_assert(offsetof(struct NuxFlowOutputView, sequence) == 24,
+               "unexpected NuxFlowOutputView.sequence offset");
+_Static_assert(offsetof(struct NuxFlowOutputView, name) == 72,
+               "unexpected NuxFlowOutputView.name offset");
+
 static void typecheck_product_api(void)
 {
     uint16_t (*abi_major)(void) = nux_runtime_abi_major;
@@ -78,6 +166,12 @@ static void typecheck_product_api(void)
                                 struct NuxFlowRenderSession**,
                                 struct NuxOperationResult**) =
         nux_flow_render_session_create;
+    NuxStatus (*create_configured_session)(
+        const struct NuxFlowRuntimeContext*,
+        const struct NuxFlowConfiguredSessionDescriptor*,
+        struct NuxFlowRenderSession**,
+        struct NuxFlowSessionResult**) =
+        nux_flow_render_session_create_configured;
     NuxStatus (*attach_surface)(const struct NuxFlowRenderSession*,
                                 const struct NuxAppleSurfaceDescriptor*,
                                 struct NuxAppleSurface**,
@@ -95,6 +189,38 @@ static void typecheck_product_api(void)
                          const struct NuxFrameOperation*,
                          struct NuxOperationResult**) =
         nux_flow_render_session_advance;
+    NuxStatus (*perform)(const struct NuxFlowRenderSession*,
+                         const struct NuxFlowSessionOperation*,
+                         struct NuxFlowSessionResult**) =
+        nux_flow_render_session_perform;
+    NuxStatus (*session_result_status)(const struct NuxFlowSessionResult*) =
+        nux_flow_session_result_status;
+    NuxStatus (*player_metadata)(const struct NuxFlowSessionResult*,
+                                 struct NuxFlowPlayerMetadataView*) =
+        nux_flow_session_result_player_metadata;
+    uint64_t (*player_input_count)(const struct NuxFlowSessionResult*) =
+        nux_flow_session_result_player_input_count;
+    NuxStatus (*player_input_at)(const struct NuxFlowSessionResult*,
+                                 uint64_t,
+                                 struct NuxFlowPlayerInputView*) =
+        nux_flow_session_result_player_input_at;
+    uint64_t (*value_node_count)(const struct NuxFlowSessionResult*) =
+        nux_flow_session_result_value_node_count;
+    NuxStatus (*value_node_at)(const struct NuxFlowSessionResult*,
+                               uint64_t,
+                               struct NuxFlowValueNode*) =
+        nux_flow_session_result_value_node_at;
+    uint64_t (*output_count)(const struct NuxFlowSessionResult*) =
+        nux_flow_session_result_output_count;
+    NuxStatus (*output_at)(const struct NuxFlowSessionResult*,
+                           uint64_t,
+                           struct NuxFlowOutputView*) =
+        nux_flow_session_result_output_at;
+    NuxStatus (*wake_after_seconds)(const struct NuxFlowSessionResult*,
+                                    double*) =
+        nux_flow_session_result_wake_after_seconds;
+    void (*free_session_result)(struct NuxFlowSessionResult*) =
+        nux_flow_session_result_free;
     NuxScriptAuthorization (*script_authorization)(
         const struct NuxOperationResult*) =
         nux_operation_result_script_authorization;
@@ -112,10 +238,22 @@ static void typecheck_product_api(void)
     (void)require_abi;
     (void)create_context;
     (void)create_session;
+    (void)create_configured_session;
     (void)attach_surface;
     (void)reattach_surface;
     (void)copy_metal_device;
     (void)advance;
+    (void)perform;
+    (void)session_result_status;
+    (void)player_metadata;
+    (void)player_input_count;
+    (void)player_input_at;
+    (void)value_node_count;
+    (void)value_node_at;
+    (void)output_count;
+    (void)output_at;
+    (void)wake_after_seconds;
+    (void)free_session_result;
     (void)script_authorization;
     (void)authenticated_key_id;
     (void)diagnostic_count;

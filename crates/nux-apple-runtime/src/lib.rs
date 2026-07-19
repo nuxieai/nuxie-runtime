@@ -2,6 +2,9 @@
 
 #[cfg(feature = "apple-product")]
 mod artifact;
+mod session_v12;
+
+pub use session_v12::*;
 
 #[cfg(all(feature = "apple-product", panic = "abort"))]
 compile_error!(
@@ -21,9 +24,9 @@ use artifact::{
 };
 #[cfg(feature = "apple-product")]
 use nuxie::{
-    ApplePresentationCompletion, AppleSurface, ArtboardRenderCache, File, Mat2D,
-    OwnedArtboardInstance, RenderMode, Renderer, StateMachineInstance, SurfaceDisposition,
-    WgpuFactory,
+    ApplePresentationCompletion, AppleSurface, ArtboardRenderCache, File, Mat2D, RenderMode,
+    Renderer, SurfaceDisposition, WgpuFactory,
+    flow_session::{FlowSession, FlowSessionConfig, FlowSessionErrorKind},
 };
 #[cfg(feature = "apple-product")]
 use std::{
@@ -36,7 +39,7 @@ use std::{
 };
 
 pub const NUX_RUNTIME_ABI_MAJOR: u16 = 1;
-pub const NUX_RUNTIME_ABI_MINOR: u16 = 1;
+pub const NUX_RUNTIME_ABI_MINOR: u16 = 2;
 const MINIMUM_SUPPORTED_ABI_MINOR: u16 = 1;
 
 const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
@@ -280,10 +283,9 @@ pub struct NuxFlowSessionDescriptor {
     pub struct_size: u32,
     /// UTF-8 authored artboard name. A null view selects the default artboard.
     pub artboard_name: NuxByteView,
-    /// UTF-8 authored state-machine name. A null view selects the authored
-    /// default, falling back to state-machine zero. Slice 1 advances the base
-    /// artboard update when no state machine exists; linear-animation fallback
-    /// is added with the product-complete player selection operation.
+    /// UTF-8 authored state-machine name. A null view uses the shared authored
+    /// fallback policy: default state machine, state-machine zero, linear
+    /// animation zero, then a static artboard.
     pub state_machine_name: NuxByteView,
 }
 
@@ -422,9 +424,9 @@ struct WorkerState {
 #[cfg(feature = "apple-product")]
 struct SessionState {
     is_fatal: bool,
-    instance: OwnedArtboardInstance,
-    state_machine: Option<StateMachineInstance>,
-    render_cache: ArtboardRenderCache,
+    flow_session: FlowSession,
+    render_cache: Option<ArtboardRenderCache>,
+    legacy_timestamp_seconds: f64,
     #[cfg(test)]
     render_attempts: usize,
     attachment: Option<SurfaceState>,
@@ -587,6 +589,20 @@ impl RuntimeFailure {
 }
 
 #[cfg(feature = "apple-product")]
+fn runtime_failure_from_flow_session(
+    error: nuxie::flow_session::FlowSessionError,
+) -> RuntimeFailure {
+    let status = match error.kind() {
+        FlowSessionErrorKind::NotFound => NuxStatus::NotFound,
+        FlowSessionErrorKind::InvalidArgument
+        | FlowSessionErrorKind::LimitExceeded
+        | FlowSessionErrorKind::Conflict => NuxStatus::InvalidArgument,
+        FlowSessionErrorKind::Runtime => NuxStatus::RuntimeError,
+    };
+    RuntimeFailure::new(status, error.message())
+}
+
+#[cfg(feature = "apple-product")]
 impl WorkerState {
     fn new(file: File) -> Self {
         Self {
@@ -622,54 +638,23 @@ impl WorkerState {
         artboard_name: Option<String>,
         state_machine_name: Option<String>,
     ) -> Result<SessionId, RuntimeFailure> {
-        let artboard_index = match artboard_name {
-            Some(name) => self
-                .file
-                .artboard_named(&name)
-                .map(|artboard| artboard.index())
-                .ok_or_else(|| {
-                    RuntimeFailure::new(
-                        NuxStatus::NotFound,
-                        format!("artboard `{name}` was not found"),
-                    )
-                })?,
-            None => self
-                .file
-                .default_artboard()
-                .map(|artboard| artboard.index())
-                .ok_or_else(|| {
-                    RuntimeFailure::new(NuxStatus::NotFound, "artifact has no default artboard")
-                })?,
-        };
-        let instance =
-            OwnedArtboardInstance::instantiate(Arc::clone(&self.file), artboard_index)
-                .map_err(|error| RuntimeFailure::new(NuxStatus::NotFound, error.to_string()))?;
-        let state_machine = match state_machine_name {
-            Some(name) => {
-                let artboard = instance.artboard();
-                let index = (0..artboard.state_machine_count())
-                    .find(|index| artboard.state_machine_name(*index) == Some(name.as_str()));
-                index
-                    .and_then(|index| instance.state_machine_instance(index))
-                    .map(Some)
-                    .ok_or_else(|| {
-                        RuntimeFailure::new(
-                            NuxStatus::NotFound,
-                            format!("state machine `{name}` was not found"),
-                        )
-                    })?
-            }
-            None => instance.default_state_machine_instance(),
-        };
-        let render_cache = instance.new_render_cache();
+        let (flow_session, _) = FlowSession::create(
+            Arc::clone(&self.file),
+            FlowSessionConfig {
+                artboard_name,
+                player_name: state_machine_name,
+            },
+        )
+        .map_err(runtime_failure_from_flow_session)?;
+        let render_cache = flow_session.new_render_cache();
         let id = self.allocate_session_id()?;
         self.sessions.insert(
             id,
             SessionState {
                 is_fatal: false,
-                instance,
-                state_machine,
-                render_cache,
+                flow_session,
+                render_cache: Some(render_cache),
+                legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
                 render_attempts: 0,
                 attachment: None,
@@ -792,12 +777,16 @@ impl WorkerState {
 
 #[cfg(feature = "apple-product")]
 fn centered_contain_transform(
+    artboard_x: f32,
+    artboard_y: f32,
     artboard_width: f32,
     artboard_height: f32,
     viewport_width: u32,
     viewport_height: u32,
 ) -> Result<Mat2D, RuntimeFailure> {
-    if !artboard_width.is_finite()
+    if !artboard_x.is_finite()
+        || !artboard_y.is_finite()
+        || !artboard_width.is_finite()
         || !artboard_height.is_finite()
         || artboard_width <= 0.0
         || artboard_height <= 0.0
@@ -811,8 +800,8 @@ fn centered_contain_transform(
     let viewport_width = viewport_width as f32;
     let viewport_height = viewport_height as f32;
     let scale = (viewport_width / artboard_width).min(viewport_height / artboard_height);
-    let offset_x = (viewport_width - artboard_width * scale) * 0.5;
-    let offset_y = (viewport_height - artboard_height * scale) * 0.5;
+    let offset_x = (viewport_width - artboard_width * scale) * 0.5 - artboard_x * scale;
+    let offset_y = (viewport_height - artboard_height * scale) * 0.5 - artboard_y * scale;
     if !scale.is_finite() || !offset_x.is_finite() || !offset_y.is_finite() || scale <= 0.0 {
         return Err(RuntimeFailure::runtime(
             "centered contain transform is not finite",
@@ -1704,13 +1693,23 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
             match session.token.worker.call(Some(session_id), move |state| {
                 state.require_live_session(session_id)?;
                 let session = state.session_mut(session_id)?;
-                let changed = if let Some(state_machine) = session.state_machine.as_mut() {
-                    session
-                        .instance
-                        .advance_with_state_machine(state_machine, elapsed_seconds)
-                } else {
-                    session.instance.advance(elapsed_seconds)
-                };
+                let timestamp_seconds =
+                    session.legacy_timestamp_seconds + f64::from(elapsed_seconds);
+                if !timestamp_seconds.is_finite() {
+                    return Err(RuntimeFailure::runtime("legacy timestamp overflowed"));
+                }
+                let result = session
+                    .flow_session
+                    .perform(nuxie::flow_session::FlowOperation::Advance(
+                        nuxie::flow_session::FlowAdvance {
+                            timestamp_seconds,
+                            delta_seconds: elapsed_seconds,
+                            render,
+                        },
+                    ))
+                    .map_err(runtime_failure_from_flow_session)?;
+                session.legacy_timestamp_seconds = timestamp_seconds;
+                let changed = result.dirty;
                 if !render {
                     return Ok((NuxSurfaceDisposition::None, changed));
                 }
@@ -1726,10 +1725,12 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                     return Ok((surface_disposition(disposition), changed));
                 }
                 let (viewport_width, viewport_height) = attachment.surface.dimensions();
-                let (artboard_width, artboard_height) = session.instance.artboard_dimensions();
+                let bounds = session.flow_session.artboard_bounds();
                 let presentation_transform = centered_contain_transform(
-                    artboard_width,
-                    artboard_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     viewport_width,
                     viewport_height,
                 )?;
@@ -1739,14 +1740,13 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 {
                     session.render_attempts = session.render_attempts.saturating_add(1);
                 }
+                let render_cache = session
+                    .render_cache
+                    .get_or_insert_with(|| session.flow_session.new_render_cache());
                 session
-                    .instance
-                    .draw_with_render_cache(
-                        &mut attachment.factory,
-                        &mut frame,
-                        &mut session.render_cache,
-                    )
-                    .map_err(|error| RuntimeFailure::runtime(format!("{error:#}")))?;
+                    .flow_session
+                    .draw(&mut attachment.factory, &mut frame, render_cache)
+                    .map_err(runtime_failure_from_flow_session)?;
                 let drawable = ptr::with_exposed_provenance_mut::<c_void>(drawable_identity);
                 let completion = completion.into_renderer_completion();
                 let (disposition, _metrics) = unsafe {
@@ -2621,7 +2621,7 @@ mod tests {
         assert_eq!(nux_runtime_require_abi(1, 0), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(2, 0), NuxStatus::AbiMismatch);
-        assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
     }
 
     #[cfg(feature = "apple-product")]
@@ -3442,15 +3442,22 @@ mod tests {
     #[test]
     fn centered_contain_transform_scales_and_letterboxes_the_artboard() {
         assert_eq!(
-            centered_contain_transform(100.0, 50.0, 300, 300).expect("valid contain transform"),
+            centered_contain_transform(0.0, 0.0, 100.0, 50.0, 300, 300)
+                .expect("valid contain transform"),
             Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 75.0])
         );
         assert_eq!(
-            centered_contain_transform(100.0, 200.0, 300, 300).expect("valid contain transform"),
+            centered_contain_transform(0.0, 0.0, 100.0, 200.0, 300, 300)
+                .expect("valid contain transform"),
             Mat2D([1.5, 0.0, 0.0, 1.5, 75.0, 0.0])
         );
-        assert!(centered_contain_transform(0.0, 50.0, 300, 300).is_err());
-        assert!(centered_contain_transform(100.0, f32::NAN, 300, 300).is_err());
+        assert_eq!(
+            centered_contain_transform(10.0, -5.0, 100.0, 50.0, 300, 300)
+                .expect("valid offset contain transform"),
+            Mat2D([3.0, 0.0, 0.0, 3.0, -30.0, 90.0])
+        );
+        assert!(centered_contain_transform(0.0, 0.0, 0.0, 50.0, 300, 300).is_err());
+        assert!(centered_contain_transform(0.0, 0.0, 100.0, f32::NAN, 300, 300).is_err());
     }
 
     #[test]

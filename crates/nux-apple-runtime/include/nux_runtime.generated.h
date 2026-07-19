@@ -9,9 +9,37 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define NUX_FLOW_MAX_BATCH_ITEM_COUNT 4096
+
+#define NUX_FLOW_MAX_EVENT_PROPERTY_COUNT 256
+
+#define NUX_FLOW_MAX_ID_BYTE_LENGTH 4096
+
+#define NUX_FLOW_MAX_INSTANCE_COUNT 4096
+
+#define NUX_FLOW_MAX_LIST_ITEM_COUNT 4096
+
+#define NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH 4194304
+
+#define NUX_FLOW_MAX_OUTPUT_COUNT 4096
+
+#define NUX_FLOW_MAX_PATH_BYTE_LENGTH 4096
+
+#define NUX_FLOW_MAX_POINTER_COUNT 32
+
+#define NUX_FLOW_MAX_QUERY_COUNT 4096
+
+#define NUX_FLOW_MAX_STRING_BYTE_LENGTH 1048576
+
+#define NUX_FLOW_MAX_VALUE_DEPTH 32
+
+#define NUX_FLOW_MAX_VALUE_EDGE_COUNT 16384
+
+#define NUX_FLOW_SESSION_ABI_MINOR 2
+
 #define NUX_RUNTIME_ABI_MAJOR 1
 
-#define NUX_RUNTIME_ABI_MINOR 1
+#define NUX_RUNTIME_ABI_MINOR 2
 
 /**
  * Opaque C handle. It retains the logical render session across detach.
@@ -27,6 +55,12 @@ typedef struct NuxFlowRenderSession NuxFlowRenderSession;
  * Opaque C handle. Its storage is private and retained by child handles.
  */
 typedef struct NuxFlowRuntimeContext NuxFlowRuntimeContext;
+
+/**
+ * Opaque owned ABI 1.2 result. Every borrowed view returned by an accessor
+ * remains valid until this handle is freed.
+ */
+typedef struct NuxFlowSessionResult NuxFlowSessionResult;
 
 typedef struct NuxOperationResult NuxOperationResult;
 
@@ -76,13 +110,229 @@ typedef struct NuxFlowSessionDescriptor {
    */
   struct NuxByteView artboard_name;
   /**
-   * UTF-8 authored state-machine name. A null view selects the authored
-   * default, falling back to state-machine zero. Slice 1 advances the base
-   * artboard update when no state machine exists; linear-animation fallback
-   * is added with the product-complete player selection operation.
+   * UTF-8 authored state-machine name. A null view uses the shared authored
+   * fallback policy: default state machine, state-machine zero, linear
+   * animation zero, then a static artboard.
    */
   struct NuxByteView state_machine_name;
 } NuxFlowSessionDescriptor;
+
+/**
+ * ABI 1.2 configured-session descriptor. `minimum_abi_minor` must be 2 for
+ * this surface. A null `artboard_name` selects the default artboard. A null
+ * `player_name` uses the authored fallback policy; a nonempty UTF-8 name
+ * explicitly selects a state machine. Linear animations are fallback-only.
+ */
+typedef struct NuxFlowConfiguredSessionDescriptor {
+  uint32_t struct_size;
+  uint16_t required_abi_major;
+  uint16_t minimum_abi_minor;
+  struct NuxByteView artboard_name;
+  struct NuxByteView player_name;
+} NuxFlowConfiguredSessionDescriptor;
+
+/**
+ * Stable-width generic session-operation kind.
+ */
+typedef uint32_t NuxFlowSessionOperationKind;
+
+/**
+ * Stable-width recursive value kind.
+ */
+typedef uint32_t NuxFlowValueKind;
+
+/**
+ * One node in a caller-owned recursive value arena. Array elements require
+ * the exact published size. `identity_value` carries enum/image identity;
+ * caller-supplied object/view-model nodes use `schema_id`, and view-model
+ * nodes additionally use `instance_id`. Result view-model nodes always carry
+ * stable `instance_id`; `schema_id` is populated when catalog metadata is in
+ * the same result. Composite children occupy `first_edge..edge_count`.
+ */
+typedef struct NuxFlowValueNode {
+  uint32_t struct_size;
+  NuxFlowValueKind kind;
+  double number_value;
+  uint32_t color_value;
+  /**
+   * Canonical false/true values are exactly 0 and 1.
+   */
+  uint32_t bool_value;
+  uint32_t first_edge;
+  uint32_t edge_count;
+  /**
+   * Canonical 0/1 presence flag for `instance_id`.
+   */
+  uint32_t has_instance_id;
+  uint64_t instance_id;
+  uint64_t identity_value;
+  struct NuxByteView string_value;
+  struct NuxByteView schema_id;
+} NuxFlowValueNode;
+
+/**
+ * One edge in a caller-owned recursive value arena. Object and view-model
+ * edges require a nonempty UTF-8 key; list edges require an empty key.
+ */
+typedef struct NuxFlowValueEdge {
+  uint32_t struct_size;
+  uint32_t node_index;
+  struct NuxByteView key;
+} NuxFlowValueEdge;
+
+typedef struct NuxFlowValueArena {
+  uint32_t struct_size;
+  const struct NuxFlowValueNode *nodes;
+  uint64_t node_count;
+  const struct NuxFlowValueEdge *edges;
+  uint64_t edge_count;
+} NuxFlowValueArena;
+
+/**
+ * One host-created view-model instance available to all mutations in the
+ * same atomic batch. `local_id` is referenced by `NEW` instance references
+ * and is resolved to a stable runtime ID only if the entire batch commits.
+ */
+typedef struct NuxFlowNewInstance {
+  uint32_t struct_size;
+  uint32_t local_id;
+  struct NuxByteView schema_name;
+  /**
+   * Null selects schema defaults; a name selects an authored template.
+   */
+  struct NuxByteView authored_instance_name;
+} NuxFlowNewInstance;
+
+/**
+ * Stable-width canonical-state mutation kind.
+ */
+typedef uint32_t NuxFlowStateMutationKind;
+
+/**
+ * Stable-width instance reference used by state mutations.
+ */
+typedef uint32_t NuxFlowInstanceReferenceKind;
+
+typedef struct NuxFlowInstanceReference {
+  NuxFlowInstanceReferenceKind kind;
+  uint32_t local_id;
+  uint64_t instance_id;
+} NuxFlowInstanceReference;
+
+/**
+ * One canonical-state mutation. `index` and `other_index` are interpreted by
+ * list operations. A value root is required by scalar set and must be
+ * `UINT32_MAX` for mutations without a scalar value. List insert/set select
+ * their view-model item through `item` instead. Player-input operations use
+ * `input_name` and require `instance`, `item`, and `path` to be zero/absent.
+ */
+typedef struct NuxFlowStateMutation {
+  uint32_t struct_size;
+  NuxFlowStateMutationKind kind;
+  struct NuxFlowInstanceReference instance;
+  /**
+   * Used by list insert/set and zeroed for other mutation kinds.
+   */
+  struct NuxFlowInstanceReference item;
+  struct NuxByteView path;
+  struct NuxByteView input_name;
+  uint32_t value_root_index;
+  uint32_t index;
+  uint32_t other_index;
+} NuxFlowStateMutation;
+
+/**
+ * One all-or-nothing canonical-state batch. Rust prevalidates the complete
+ * batch, including sequential list effects, before applying any mutation.
+ */
+typedef struct NuxFlowStateBatch {
+  uint32_t struct_size;
+  /**
+   * Canonical 0/1 presence flag for `host_mutation_id`.
+   */
+  uint32_t has_host_mutation_id;
+  uint64_t host_mutation_id;
+  const struct NuxFlowValueArena *value_arena;
+  const struct NuxFlowNewInstance *new_instances;
+  uint64_t new_instance_count;
+  const struct NuxFlowStateMutation *mutations;
+  uint64_t mutation_count;
+} NuxFlowStateBatch;
+
+/**
+ * Stable-width pointer command. Coordinates are already inverse-mapped into
+ * artboard space and are never clamped by the runtime.
+ */
+typedef uint32_t NuxFlowPointerEventKind;
+
+typedef struct NuxFlowPointerEvent {
+  uint32_t struct_size;
+  NuxFlowPointerEventKind kind;
+  /**
+   * Positive session-scoped pointer identity, passed losslessly to runtime.
+   */
+  int32_t pointer_id;
+  float x;
+  float y;
+} NuxFlowPointerEvent;
+
+typedef struct NuxFlowPointerBatch {
+  uint32_t struct_size;
+  const struct NuxFlowPointerEvent *events;
+  uint64_t event_count;
+} NuxFlowPointerBatch;
+
+/**
+ * One app-clock advance. The first delta after create/resume is zero. A live
+ * Apple drawable and completion pair are borrowed only for the synchronous
+ * perform call and follow the same exactly-once completion contract as ABI
+ * 1.1's frame operation.
+ */
+typedef struct NuxFlowAdvanceOperation {
+  uint32_t struct_size;
+  double timestamp_seconds;
+  float delta_seconds;
+  /**
+   * Canonical false/true values are exactly 0 and 1.
+   */
+  uint32_t render;
+  void *apple_drawable;
+  void *completion_context;
+  void (*completion_callback)(void *context);
+} NuxFlowAdvanceOperation;
+
+/**
+ * Stable-width query kind. Query results populate the result's borrowed
+ * bootstrap, value, catalog, and player-input views; queries do not emit
+ * ordered output records.
+ */
+typedef uint32_t NuxFlowQueryKind;
+
+typedef struct NuxFlowQuery {
+  uint32_t struct_size;
+  NuxFlowQueryKind kind;
+} NuxFlowQuery;
+
+typedef struct NuxFlowQueryBatch {
+  uint32_t struct_size;
+  const struct NuxFlowQuery *queries;
+  uint64_t query_count;
+} NuxFlowQueryBatch;
+
+/**
+ * Tagged generic operation. Exactly the pointer selected by `kind` must be
+ * non-null and the other payload pointers must be null.
+ */
+typedef struct NuxFlowSessionOperation {
+  uint32_t struct_size;
+  uint16_t required_abi_major;
+  uint16_t minimum_abi_minor;
+  NuxFlowSessionOperationKind kind;
+  const struct NuxFlowStateBatch *state_batch;
+  const struct NuxFlowPointerBatch *pointer_batch;
+  const struct NuxFlowAdvanceOperation *advance;
+  const struct NuxFlowQueryBatch *query_batch;
+} NuxFlowSessionOperation;
 
 typedef struct NuxFlowAuthorizationKey {
   uint32_t struct_size;
@@ -168,6 +418,15 @@ typedef struct NuxFlowImportRequest {
 } NuxFlowImportRequest;
 
 /**
+ * Mapping returned after an atomic batch commits host-created instances.
+ */
+typedef struct NuxFlowCreatedInstanceView {
+  uint32_t struct_size;
+  uint32_t local_id;
+  uint64_t instance_id;
+} NuxFlowCreatedInstanceView;
+
+/**
  * Stable-width structured diagnostic severity.
  */
 typedef uint32_t NuxDiagnosticSeverity;
@@ -184,14 +443,177 @@ typedef struct NuxDiagnosticView {
 } NuxDiagnosticView;
 
 /**
- * Stable-width script authorization result set during artifact import.
+ * Borrowed typed property of a reported event.
  */
-typedef uint32_t NuxScriptAuthorization;
+typedef struct NuxFlowEventPropertyView {
+  uint32_t struct_size;
+  uint32_t value_root_index;
+  /**
+   * Canonical 0/1 presence flag for `trigger_count`.
+   */
+  uint32_t has_trigger_count;
+  uint64_t trigger_count;
+  /**
+   * Null when the authored event property has no name.
+   */
+  struct NuxByteView name;
+} NuxFlowEventPropertyView;
+
+/**
+ * Borrowed stable external instance record owned by a session result.
+ */
+typedef struct NuxFlowInstanceView {
+  uint32_t struct_size;
+  uint32_t value_root_index;
+  uint32_t is_root;
+  uint64_t instance_id;
+  struct NuxByteView schema_id;
+  struct NuxByteView name;
+} NuxFlowInstanceView;
+
+/**
+ * Borrowed authored instance template. Templates are immutable creation
+ * recipes and are not addressable live instances.
+ */
+typedef struct NuxFlowInstanceTemplateView {
+  uint32_t struct_size;
+  uint32_t authored_index;
+  struct NuxByteView schema_id;
+  struct NuxByteView authored_name;
+} NuxFlowInstanceTemplateView;
+
+/**
+ * Stable-width observable output phase. Phases are monotonic inside one
+ * cycle, and may restart when a pointer batch starts another immediate cycle.
+ */
+typedef uint32_t NuxFlowOutputPhase;
+
+/**
+ * Stable-width output payload family.
+ */
+typedef uint32_t NuxFlowOutputKind;
+
+/**
+ * Borrowed exact-order output owned by a session result. `payload_root_index`
+ * is `UINT32_MAX` when the item has no typed arena payload.
+ */
+typedef struct NuxFlowOutputView {
+  uint32_t struct_size;
+  NuxFlowOutputPhase phase;
+  NuxFlowOutputKind kind;
+  uint32_t payload_root_index;
+  /**
+   * Canonical 0/1 presence flag for `origin_mutation_id`.
+   */
+  uint32_t has_origin_mutation_id;
+  /**
+   * Canonical 0/1 presence flag for `instance_id`.
+   */
+  uint32_t has_instance_id;
+  uint64_t sequence;
+  uint64_t cycle;
+  uint64_t origin_mutation_id;
+  uint64_t instance_id;
+  uint32_t event_type;
+  uint32_t first_event_property;
+  uint32_t event_property_count;
+  float delay_seconds;
+  struct NuxByteView name;
+  struct NuxByteView path;
+  struct NuxByteView payload;
+} NuxFlowOutputView;
+
+/**
+ * Stable-width state-machine input kind returned by a player-input query.
+ */
+typedef uint32_t NuxFlowPlayerInputKind;
+
+/**
+ * Borrowed state-machine input snapshot. `name` is null only for an unnamed
+ * authored input. The value root is owned by the same session result.
+ */
+typedef struct NuxFlowPlayerInputView {
+  uint32_t struct_size;
+  NuxFlowPlayerInputKind kind;
+  uint32_t value_root_index;
+  struct NuxByteView name;
+} NuxFlowPlayerInputView;
+
+/**
+ * Stable-width selected-player kind.
+ */
+typedef uint32_t NuxFlowPlayerKind;
+
+/**
+ * Stable-width branch used by deterministic player selection.
+ */
+typedef uint32_t NuxFlowPlayerSelection;
+
+/**
+ * Borrowed selected-player metadata owned by a session result.
+ */
+typedef struct NuxFlowPlayerMetadataView {
+  uint32_t struct_size;
+  NuxFlowPlayerKind kind;
+  NuxFlowPlayerSelection selection;
+  /**
+   * Authored player index, or `UINT32_MAX` for a static artboard.
+   */
+  uint32_t player_index;
+  struct NuxByteView artboard_name;
+  struct NuxByteView player_name;
+  float min_x;
+  float min_y;
+  float max_x;
+  float max_y;
+} NuxFlowPlayerMetadataView;
+
+/**
+ * Borrowed view-model schema record owned by a session result.
+ */
+typedef struct NuxFlowSchemaView {
+  uint32_t struct_size;
+  uint32_t first_property;
+  uint32_t property_count;
+  struct NuxByteView schema_id;
+  struct NuxByteView name;
+} NuxFlowSchemaView;
+
+/**
+ * Stable-width schema property kind. Values intentionally share the recursive
+ * value-kind vocabulary where the property is directly representable.
+ */
+typedef uint32_t NuxFlowSchemaPropertyKind;
+
+/**
+ * Borrowed schema-property record owned by a session result.
+ */
+typedef struct NuxFlowSchemaPropertyView {
+  uint32_t struct_size;
+  NuxFlowSchemaPropertyKind kind;
+  struct NuxByteView schema_id;
+  struct NuxByteView property_id;
+  struct NuxByteView name;
+} NuxFlowSchemaPropertyView;
 
 /**
  * Stable-width C presentation outcome.
  */
 typedef uint32_t NuxSurfaceDisposition;
+
+/**
+ * One root binding from a stable external instance to a value-arena node.
+ */
+typedef struct NuxFlowValueRootView {
+  uint32_t struct_size;
+  uint32_t value_root_index;
+  uint64_t instance_id;
+} NuxFlowValueRootView;
+
+/**
+ * Stable-width script authorization result set during artifact import.
+ */
+typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_DIAGNOSTIC_SEVERITY_DEBUG 0
 
@@ -202,6 +624,154 @@ typedef uint32_t NuxSurfaceDisposition;
 #define NUX_FLOW_EXTERNAL_ASSET_KIND_FONT 2
 
 #define NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE 1
+
+#define NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING 1
+
+#define NUX_FLOW_INSTANCE_REFERENCE_KIND_NEW 2
+
+#define NUX_FLOW_OUTPUT_KIND_HOST_COMMAND 5
+
+#define NUX_FLOW_OUTPUT_KIND_METADATA 8
+
+#define NUX_FLOW_OUTPUT_KIND_QUERY_RESULT 7
+
+#define NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST 6
+
+#define NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT 2
+
+#define NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED 9
+
+#define NUX_FLOW_OUTPUT_KIND_STATE_CHANGE 3
+
+#define NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE 4
+
+/**
+ * Reserved for the runtime's ordering contract; current Rive event delays are
+ * overshoot metadata and do not schedule callbacks into this phase.
+ */
+#define NUX_FLOW_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS 0
+
+#define NUX_FLOW_OUTPUT_PHASE_HOST_WORK 4
+
+#define NUX_FLOW_OUTPUT_PHASE_RENDER 5
+
+#define NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS 1
+
+#define NUX_FLOW_OUTPUT_PHASE_RUNTIME_ADVANCE 2
+
+#define NUX_FLOW_OUTPUT_PHASE_VIEW_MODEL_CHANGES 3
+
+#define NUX_FLOW_PLAYER_INPUT_KIND_BOOL 1
+
+#define NUX_FLOW_PLAYER_INPUT_KIND_NUMBER 2
+
+#define NUX_FLOW_PLAYER_INPUT_KIND_TRIGGER 3
+
+#define NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION 2
+
+#define NUX_FLOW_PLAYER_KIND_STATE_MACHINE 1
+
+#define NUX_FLOW_PLAYER_KIND_STATIC 3
+
+#define NUX_FLOW_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE 2
+
+#define NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE 1
+
+#define NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION 4
+
+#define NUX_FLOW_PLAYER_SELECTION_FIRST_STATE_MACHINE 3
+
+#define NUX_FLOW_PLAYER_SELECTION_STATIC 5
+
+#define NUX_FLOW_POINTER_EVENT_KIND_CANCEL 4
+
+#define NUX_FLOW_POINTER_EVENT_KIND_DOWN 1
+
+#define NUX_FLOW_POINTER_EVENT_KIND_EXIT 5
+
+#define NUX_FLOW_POINTER_EVENT_KIND_MOVE 2
+
+#define NUX_FLOW_POINTER_EVENT_KIND_UP 3
+
+#define NUX_FLOW_QUERY_KIND_BOOTSTRAP 1
+
+#define NUX_FLOW_QUERY_KIND_CATALOG 3
+
+#define NUX_FLOW_QUERY_KIND_PLAYER_INPUTS 4
+
+#define NUX_FLOW_QUERY_KIND_VALUES 2
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_BOOL 3
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_COLOR 6
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM 5
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_IMAGE 7
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST 9
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL 11
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_NUMBER 2
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT 10
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_STRING 1
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_TRIGGER 4
+
+#define NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL 8
+
+#define NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE 3
+
+#define NUX_FLOW_SESSION_OPERATION_KIND_POINTER_BATCH 2
+
+#define NUX_FLOW_SESSION_OPERATION_KIND_QUERY 4
+
+#define NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH 1
+
+#define NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER 11
+
+#define NUX_FLOW_STATE_MUTATION_KIND_LIST_CLEAR 8
+
+#define NUX_FLOW_STATE_MUTATION_KIND_LIST_INSERT 3
+
+#define NUX_FLOW_STATE_MUTATION_KIND_LIST_MOVE 6
+
+#define NUX_FLOW_STATE_MUTATION_KIND_LIST_REMOVE 4
+
+#define NUX_FLOW_STATE_MUTATION_KIND_LIST_SET 7
+
+#define NUX_FLOW_STATE_MUTATION_KIND_LIST_SWAP 5
+
+#define NUX_FLOW_STATE_MUTATION_KIND_SET 1
+
+#define NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL 9
+
+#define NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER 10
+
+#define NUX_FLOW_STATE_MUTATION_KIND_TRIGGER 2
+
+#define NUX_FLOW_VALUE_KIND_BOOL 3
+
+#define NUX_FLOW_VALUE_KIND_COLOR 5
+
+#define NUX_FLOW_VALUE_KIND_ENUM 4
+
+#define NUX_FLOW_VALUE_KIND_IMAGE 6
+
+#define NUX_FLOW_VALUE_KIND_LIST 9
+
+#define NUX_FLOW_VALUE_KIND_NULL 0
+
+#define NUX_FLOW_VALUE_KIND_NUMBER 2
+
+#define NUX_FLOW_VALUE_KIND_OBJECT 7
+
+#define NUX_FLOW_VALUE_KIND_STRING 1
+
+#define NUX_FLOW_VALUE_KIND_VIEW_MODEL 8
 
 #define NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED 2
 
@@ -355,6 +925,22 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
                                          struct NuxOperationResult **out_result);
 
 /**
+ * Creates one independent screen session using the ABI 1.2 player-selection
+ * and bootstrap-result contract. Creation never performs an observable
+ * advance. The returned result owns player metadata, bounds, catalog, and
+ * bootstrap value views until explicitly freed.
+ *
+ * # Safety
+ *
+ * `context` must be live. Non-null pointers must be properly aligned and valid
+ * for this synchronous call. Output pointers must address writable storage.
+ */
+NuxStatus nux_flow_render_session_create_configured(const struct NuxFlowRuntimeContext *context,
+                                                    const struct NuxFlowConfiguredSessionDescriptor *descriptor,
+                                                    struct NuxFlowRenderSession **out_session,
+                                                    struct NuxFlowSessionResult **out_result);
+
+/**
  * Releases one render-session handle. Null is a no-op.
  *
  * # Safety
@@ -364,6 +950,21 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
  * Child surfaces may remain alive.
  */
 void nux_flow_render_session_free(struct NuxFlowRenderSession *session);
+
+/**
+ * Performs one fully copied ABI 1.2 operation on the session's pinned worker.
+ * Rust never calls Swift reentrantly; ordered outputs are returned in the owned
+ * result. State batches are atomic and pointer batches preserve immediate
+ * subcycles inside their returned `cycle` values.
+ *
+ * # Safety
+ *
+ * `session` must be live. The operation and every selected nested array/view
+ * must remain readable for this synchronous call. `out_result` must be writable.
+ */
+NuxStatus nux_flow_render_session_perform(const struct NuxFlowRenderSession *session,
+                                          const struct NuxFlowSessionOperation *operation,
+                                          struct NuxFlowSessionResult **out_result);
 
 /**
  * Imports one verified visual artifact into a retained runtime context.
@@ -390,6 +991,316 @@ NuxStatus nux_flow_runtime_context_create(const struct NuxFlowImportRequest *req
  * same handle. Child handles may remain alive.
  */
 void nux_flow_runtime_context_free(struct NuxFlowRuntimeContext *context);
+
+/**
+ * Borrows one local-to-stable instance mapping by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_created` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_created_instance_at(const struct NuxFlowSessionResult *result,
+                                                      uint64_t index,
+                                                      struct NuxFlowCreatedInstanceView *out_created);
+
+/**
+ * Returns the number of local-to-stable instance mappings created by a batch.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_created_instance_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one structured diagnostic by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_diagnostic` must have ABI 1.1's exact frozen
+ * diagnostic-view size; returned byte views expire when `result` is freed.
+ */
+NuxStatus nux_flow_session_result_diagnostic_at(const struct NuxFlowSessionResult *result,
+                                                uint64_t index,
+                                                struct NuxDiagnosticView *out_diagnostic);
+
+/**
+ * Returns the number of phase-ordered diagnostics in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_diagnostic_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one flattened typed event property by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_property` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_event_property_at(const struct NuxFlowSessionResult *result,
+                                                    uint64_t index,
+                                                    struct NuxFlowEventPropertyView *out_property);
+
+/**
+ * Returns the number of flattened typed event properties in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_event_property_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Releases one ABI 1.2 session result. Null is a no-op.
+ *
+ * # Safety
+ *
+ * A non-null pointer must be an owned result returned by this library and must
+ * not have been freed before. No borrowed view may be used after this call.
+ */
+void nux_flow_session_result_free(struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one stable external instance by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_instance` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_instance_at(const struct NuxFlowSessionResult *result,
+                                              uint64_t index,
+                                              struct NuxFlowInstanceView *out_instance);
+
+/**
+ * Returns the number of stable external instances in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_instance_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one authored immutable instance template by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_template` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_instance_template_at(const struct NuxFlowSessionResult *result,
+                                                       uint64_t index,
+                                                       struct NuxFlowInstanceTemplateView *out_template);
+
+/**
+ * Returns the number of authored immutable instance templates in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_instance_template_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Dirty and settled are independent runtime facts; this returns dirty only.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+bool nux_flow_session_result_is_dirty(const struct NuxFlowSessionResult *result);
+
+/**
+ * Dirty and settled are independent runtime facts; this returns settled only.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+bool nux_flow_session_result_is_settled(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one exact-order output by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_output` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_output_at(const struct NuxFlowSessionResult *result,
+                                            uint64_t index,
+                                            struct NuxFlowOutputView *out_output);
+
+/**
+ * Returns the number of exact-order outputs in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_output_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one state-machine input snapshot by authored order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_input` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_player_input_at(const struct NuxFlowSessionResult *result,
+                                                  uint64_t index,
+                                                  struct NuxFlowPlayerInputView *out_input);
+
+/**
+ * Returns the number of state-machine inputs returned by a player-input query.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_player_input_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows bootstrap player metadata and exact authored artboard bounds.
+ * Returns `NOT_FOUND` for operation results that do not carry bootstrap data.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_metadata` must be writable with its exact
+ * published `struct_size`; returned views expire when `result` is freed.
+ */
+NuxStatus nux_flow_session_result_player_metadata(const struct NuxFlowSessionResult *result,
+                                                  struct NuxFlowPlayerMetadataView *out_metadata);
+
+/**
+ * Borrows one schema by stable result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_schema` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_schema_at(const struct NuxFlowSessionResult *result,
+                                            uint64_t index,
+                                            struct NuxFlowSchemaView *out_schema);
+
+/**
+ * Returns the number of view-model schemas in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_schema_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one flattened schema property by stable result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_property` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_schema_property_at(const struct NuxFlowSessionResult *result,
+                                                     uint64_t index,
+                                                     struct NuxFlowSchemaPropertyView *out_property);
+
+/**
+ * Returns the number of flattened schema properties in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_schema_property_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Returns an ABI 1.2 session result's status, or `NULL_ARGUMENT` for null.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+NuxStatus nux_flow_session_result_status(const struct NuxFlowSessionResult *result);
+
+/**
+ * Returns the exact Apple-surface disposition for this operation.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+NuxSurfaceDisposition nux_flow_session_result_surface_disposition(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one result-owned value edge by arena index.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_edge` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_value_edge_at(const struct NuxFlowSessionResult *result,
+                                                uint64_t index,
+                                                struct NuxFlowValueEdge *out_edge);
+
+/**
+ * Returns the number of edges in the result-owned value arena.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_value_edge_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one result-owned value node by arena index.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_node` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_value_node_at(const struct NuxFlowSessionResult *result,
+                                                uint64_t index,
+                                                struct NuxFlowValueNode *out_node);
+
+/**
+ * Returns the number of nodes in the result-owned value arena.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_value_node_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Borrows one instance-to-value root by result order.
+ *
+ * # Safety
+ *
+ * `result` must be live. `out_root` must have the exact published size.
+ */
+NuxStatus nux_flow_session_result_value_root_at(const struct NuxFlowSessionResult *result,
+                                                uint64_t index,
+                                                struct NuxFlowValueRootView *out_root);
+
+/**
+ * Returns the number of instance-to-value roots in this result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_flow_session_result_value_root_count(const struct NuxFlowSessionResult *result);
+
+/**
+ * Writes the optional nonnegative app-clock delay until runtime work is due.
+ * Returns `NOT_FOUND` when no wake is scheduled.
+ *
+ * # Safety
+ *
+ * `result` must be live and `out_wake_after_seconds` writable.
+ */
+NuxStatus nux_flow_session_result_wake_after_seconds(const struct NuxFlowSessionResult *result,
+                                                     double *out_wake_after_seconds);
 
 /**
  * Borrows the authenticated key ID stored by an import result.

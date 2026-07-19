@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use harfrust::{
-    Direction, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance,
-    Tag as HarfTag, UnicodeBuffer,
+    Direction, Feature, FontRef as HarfFontRef, Script as HarfScript, ShapeOptions, ShaperData,
+    ShaperInstance, Tag as HarfTag, UnicodeBuffer,
 };
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{
@@ -17,6 +17,8 @@ use skrifa::raw::TableProvider;
 use skrifa::setting::VariationSetting;
 use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaTag};
 use std::collections::BTreeSet;
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProperty};
 
 use crate::data_bind_flags_apply_source_to_target;
 use crate::draw::{
@@ -5370,6 +5372,58 @@ struct TextGlyph {
     advance: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CxxScriptRun<'a> {
+    text: &'a str,
+    byte_start: usize,
+    script: HarfScript,
+}
+
+fn cxx_script_runs(text: &str) -> Vec<CxxScriptRun<'_>> {
+    let Some((_, first_character)) = text.char_indices().next() else {
+        return Vec::new();
+    };
+
+    // Exact port of the script-boundary half of
+    // `HBFont::onShapeText`. The first code point starts a run with its raw
+    // Unicode Script value. Common, inherited, and non-spacing characters
+    // after that inherit the preceding run's script.
+    let mut runs = Vec::with_capacity(1);
+    let mut run_byte_start = 0;
+    let mut last_script = harfrust_script_for_unicode_script(first_character.script());
+    for (byte_index, character) in text.char_indices().skip(1) {
+        let unicode_script = if character.general_category() == GeneralCategory::NonspacingMark {
+            UnicodeScript::Inherited
+        } else {
+            character.script()
+        };
+        let mut script = harfrust_script_for_unicode_script(unicode_script);
+        if script == harfrust::script::COMMON || script == harfrust::script::INHERITED {
+            script = last_script;
+        }
+        if script != last_script {
+            runs.push(CxxScriptRun {
+                text: &text[run_byte_start..byte_index],
+                byte_start: run_byte_start,
+                script: last_script,
+            });
+            run_byte_start = byte_index;
+            last_script = script;
+        }
+    }
+    runs.push(CxxScriptRun {
+        text: &text[run_byte_start..],
+        byte_start: run_byte_start,
+        script: last_script,
+    });
+    runs
+}
+
+fn harfrust_script_for_unicode_script(script: UnicodeScript) -> HarfScript {
+    HarfScript::from_iso15924_tag(HarfTag::from_u32(script.as_iso15924_tag()))
+        .unwrap_or(harfrust::script::UNKNOWN)
+}
+
 #[derive(Clone)]
 struct StyledTextGlyph {
     glyph_id: u32,
@@ -5410,9 +5464,29 @@ fn shape_text_glyphs(
     text: &str,
     disable_legacy_kern: bool,
 ) -> Vec<TextGlyph> {
+    let mut glyphs = Vec::new();
+    for run in cxx_script_runs(text) {
+        let cluster_offset = u32::try_from(run.byte_start).unwrap_or(u32::MAX);
+        let mut run_glyphs =
+            shape_cxx_script_run_glyphs(shaper, run.text, run.script, disable_legacy_kern);
+        for glyph in &mut run_glyphs {
+            glyph.cluster = glyph.cluster.saturating_add(cluster_offset);
+        }
+        glyphs.extend(run_glyphs);
+    }
+    glyphs
+}
+
+fn shape_cxx_script_run_glyphs(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    script: HarfScript,
+    disable_legacy_kern: bool,
+) -> Vec<TextGlyph> {
     let mut buffer = UnicodeBuffer::new();
     buffer.push_str(text);
     buffer.set_direction(Direction::LeftToRight);
+    buffer.set_script(script);
     buffer.guess_segment_properties();
     let kern_off = [Feature::new(HarfTag::new(b"kern"), 0, ..)];
     let shape_options = ShapeOptions::new().scale(Some(TEXT_SHAPE_SCALE));
@@ -5974,6 +6048,46 @@ mod tests {
         assert_eq!(
             (x1.to_bits(), y1.to_bits()),
             (expected.0.to_bits(), expected.1.to_bits())
+        );
+    }
+
+    #[test]
+    fn cxx_script_itemization_keeps_leading_common_text_separate() {
+        let runs = cxx_script_runs("[RIVE] EULAV LAITINI [END]");
+        assert_eq!(
+            runs,
+            vec![
+                CxxScriptRun {
+                    text: "[",
+                    byte_start: 0,
+                    script: harfrust::script::COMMON,
+                },
+                CxxScriptRun {
+                    text: "RIVE] EULAV LAITINI [END]",
+                    byte_start: 1,
+                    script: harfrust::script::LATIN,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn cxx_script_itemization_propagates_common_and_nonspacing_marks() {
+        let runs = cxx_script_runs("A \u{05b0}\u{05d0}");
+        assert_eq!(
+            runs,
+            vec![
+                CxxScriptRun {
+                    text: "A \u{05b0}",
+                    byte_start: 0,
+                    script: harfrust::script::LATIN,
+                },
+                CxxScriptRun {
+                    text: "\u{05d0}",
+                    byte_start: 4,
+                    script: harfrust::script::HEBREW,
+                },
+            ]
         );
     }
 

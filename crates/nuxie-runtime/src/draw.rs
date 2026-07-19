@@ -1353,6 +1353,10 @@ impl ArtboardInstance {
             return Ok(());
         }
 
+        if !paint_cache.needs_paint_preparation(self, graph) {
+            return Ok(());
+        }
+
         if paint_cache.paint_preparation_is_noop {
             return self.prepare_static_artboard_slice_meshes(
                 runtime,
@@ -7898,6 +7902,34 @@ impl RuntimeRenderPaints {
 }
 
 impl RuntimeRenderPaintCache {
+    /// Returns whether this retained cache has paint or slice resources that
+    /// must be refreshed before its next draw.
+    ///
+    /// Solid colors update their retained render paints during draw, matching
+    /// C++ `SolidColor::colorValueChanged`. A solid-only tree therefore only
+    /// needs the recursive preparation pass on its first mounted structure and
+    /// after that structure changes. Gradients stay conservative, and authored
+    /// NSlicers always run their mesh preparation work.
+    #[inline]
+    pub fn needs_paint_preparation(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+    ) -> bool {
+        if !graph.n_slicer_details.is_empty() {
+            return true;
+        }
+        if self.paint_preparation_is_noop {
+            return false;
+        }
+        if self.paint_preparation_is_solid_only_tree {
+            let nested_structure_epoch = instance.nested_structure_epoch();
+            return nested_structure_epoch.is_none()
+                || self.solid_only_tree_structure_epoch != nested_structure_epoch;
+        }
+        true
+    }
+
     pub fn root_paints_mut(&mut self) -> &mut RuntimeRenderPaints {
         &mut self.paints
     }
@@ -22326,6 +22358,56 @@ mod tests {
         assert!(!runtime_artboard_set_paint_preparation_is_solid_only(
             &gradient_graphs.artboards
         ));
+    }
+
+    #[test]
+    fn paint_preparation_gate_preserves_first_use_structure_changes_and_nslicer_work() {
+        let solid_file = read_runtime_file(&synthetic_painted_layout_geometry_riv())
+            .expect("synthetic solid-only riv imports");
+        let solid_graphs =
+            GraphFile::from_runtime_file(&solid_file).expect("synthetic solid-only graphs");
+        let solid_graph = solid_graphs.artboards.first().expect("solid artboard");
+        let solid_instance =
+            ArtboardInstance::from_graph(&solid_file, solid_graph).expect("solid instance builds");
+
+        let mut flat_cache = RuntimeRenderPaintCache {
+            paint_preparation_is_noop: true,
+            ..RuntimeRenderPaintCache::default()
+        };
+        assert!(!flat_cache.needs_paint_preparation(&solid_instance, solid_graph));
+
+        flat_cache.paint_preparation_is_noop = false;
+        flat_cache.paint_preparation_is_solid_only_tree = true;
+        assert!(
+            flat_cache.needs_paint_preparation(&solid_instance, solid_graph),
+            "the first mounted solid-only structure must be prepared"
+        );
+        let structure_epoch = solid_instance
+            .nested_structure_epoch()
+            .expect("graph-backed instance has a structure epoch");
+        flat_cache.solid_only_tree_structure_epoch = Some(structure_epoch);
+        assert!(!flat_cache.needs_paint_preparation(&solid_instance, solid_graph));
+        flat_cache.solid_only_tree_structure_epoch = Some(structure_epoch.wrapping_sub(1));
+        assert!(
+            flat_cache.needs_paint_preparation(&solid_instance, solid_graph),
+            "a mounted-tree structure change must reopen preparation"
+        );
+
+        let nslicer_file =
+            read_runtime_file(&synthetic_image_nslicer_riv()).expect("synthetic NSlicer imports");
+        let nslicer_graphs =
+            GraphFile::from_runtime_file(&nslicer_file).expect("synthetic NSlicer graphs");
+        let nslicer_graph = nslicer_graphs.artboards.first().expect("NSlicer artboard");
+        let nslicer_instance = ArtboardInstance::from_graph(&nslicer_file, nslicer_graph)
+            .expect("NSlicer instance builds");
+        let nslicer_cache = RuntimeRenderPaintCache {
+            paint_preparation_is_noop: true,
+            ..RuntimeRenderPaintCache::default()
+        };
+        assert!(
+            nslicer_cache.needs_paint_preparation(&nslicer_instance, nslicer_graph),
+            "authored NSlicer mesh work must never be hidden by the paint fast path"
+        );
     }
 
     #[test]

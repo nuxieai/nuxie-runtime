@@ -529,16 +529,18 @@ fn run() -> Result<String> {
                     factory.as_factory(),
                 )?;
             }
-            timed_result(options.benchmark, &mut prepare_elapsed, || {
-                instance.prepare_static_artboard_tree_paints(
-                    &runtime,
-                    artboard,
-                    &graph.artboards,
-                    factory.as_factory(),
-                    &mut paint_cache,
-                    &mut path_cache,
-                )
-            })?;
+            if paint_cache.needs_paint_preparation(&instance, artboard) {
+                timed_result(options.benchmark, &mut prepare_elapsed, || {
+                    instance.prepare_static_artboard_tree_paints(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        factory.as_factory(),
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )
+                })?;
+            }
             factory.add_sample(*sample);
             timed_result(options.benchmark, &mut draw_elapsed, || {
                 instance
@@ -728,14 +730,16 @@ fn run_benchmark_repeat_pass(
     // loaded, before the benchmark clock starts. Prime Rust's lazy retained
     // topology at the same lifecycle boundary; the first timed advance still
     // invalidates every dynamic value that differs from the authored state.
-    instance.prepare_static_artboard_tree_paints(
-        runtime,
-        artboard,
-        &graph.artboards,
-        &mut factory,
-        &mut paint_cache,
-        &mut path_cache,
-    )?;
+    if paint_cache.needs_paint_preparation(&instance, artboard) {
+        instance.prepare_static_artboard_tree_paints(
+            runtime,
+            artboard,
+            &graph.artboards,
+            &mut factory,
+            &mut paint_cache,
+            &mut path_cache,
+        )?;
+    }
     let mut renderer = factory.make_renderer();
 
     let mut advance_elapsed = Duration::ZERO;
@@ -759,16 +763,18 @@ fn run_benchmark_repeat_pass(
                         &mut current_seconds,
                     )
                 })?;
-                timed_result(true, &mut prepare_elapsed, || {
-                    instance.prepare_static_artboard_tree_paints(
-                        runtime,
-                        artboard,
-                        &graph.artboards,
-                        &mut factory,
-                        &mut paint_cache,
-                        &mut path_cache,
-                    )
-                })?;
+                if paint_cache.needs_paint_preparation(&instance, artboard) {
+                    timed_result(true, &mut prepare_elapsed, || {
+                        instance.prepare_static_artboard_tree_paints(
+                            runtime,
+                            artboard,
+                            &graph.artboards,
+                            &mut factory,
+                            &mut paint_cache,
+                            &mut path_cache,
+                        )
+                    })?;
+                }
                 timed_result(true, &mut draw_elapsed, || {
                     instance
                         .draw_prepared_static_artboard_with_render_cache(
@@ -793,14 +799,16 @@ fn run_benchmark_repeat_pass(
                     *sample,
                     &mut current_seconds,
                 )?;
-                instance.prepare_static_artboard_tree_paints(
-                    runtime,
-                    artboard,
-                    &graph.artboards,
-                    &mut factory,
-                    &mut paint_cache,
-                    &mut path_cache,
-                )?;
+                if paint_cache.needs_paint_preparation(&instance, artboard) {
+                    instance.prepare_static_artboard_tree_paints(
+                        runtime,
+                        artboard,
+                        &graph.artboards,
+                        &mut factory,
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )?;
+                }
                 instance
                     .draw_prepared_static_artboard_with_render_cache(
                         runtime,
@@ -2007,33 +2015,36 @@ impl ScriptArtboard for RunnerScriptArtboard {
                     factory,
                 )
             });
-        let result = self
-            .instance
-            .prepare_static_artboard_tree_paints(
-                &self.runtime,
-                graph,
-                &self.artboards,
-                factory,
-                &mut paint_cache,
-                &mut self.path_cache,
-            )
-            .map_err(|error| ScriptError::new(error.to_string()))
-            .and_then(|()| {
-                let result = self
-                    .instance
-                    .draw_prepared_static_artboard_with_render_cache_and_origin(
-                        &self.runtime,
-                        graph,
-                        &self.artboards,
-                        factory,
-                        renderer,
-                        &mut paint_cache,
-                        &mut self.path_cache,
-                        self.frame_origin,
-                    )
-                    .map_err(|error| ScriptError::new(error.to_string()));
-                result
-            });
+        let result = if paint_cache.needs_paint_preparation(&self.instance, graph) {
+            self.instance
+                .prepare_static_artboard_tree_paints(
+                    &self.runtime,
+                    graph,
+                    &self.artboards,
+                    factory,
+                    &mut paint_cache,
+                    &mut self.path_cache,
+                )
+                .map_err(|error| ScriptError::new(error.to_string()))
+        } else {
+            Ok(())
+        }
+        .and_then(|()| {
+            let result = self
+                .instance
+                .draw_prepared_static_artboard_with_render_cache_and_origin(
+                    &self.runtime,
+                    graph,
+                    &self.artboards,
+                    factory,
+                    renderer,
+                    &mut paint_cache,
+                    &mut self.path_cache,
+                    self.frame_origin,
+                )
+                .map_err(|error| ScriptError::new(error.to_string()));
+            result
+        });
         self.render_state
             .borrow_mut()
             .caches

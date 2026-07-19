@@ -1366,16 +1366,18 @@ impl<'a> ArtboardInstance<'a> {
             .as_mut()
             .context("render paint cache disappeared after successful allocation")?;
         self.raw.update_pass();
-        self.raw
-            .prepare_static_artboard_tree_paints(
-                &self.file.runtime,
-                artboard,
-                &self.file.graph.artboards,
-                factory,
-                paint,
-                &mut cache.path,
-            )
-            .context("failed to prepare Rive paints")?;
+        if paint.needs_paint_preparation(&self.raw, artboard) {
+            self.raw
+                .prepare_static_artboard_tree_paints(
+                    &self.file.runtime,
+                    artboard,
+                    &self.file.graph.artboards,
+                    factory,
+                    paint,
+                    &mut cache.path,
+                )
+                .context("failed to prepare Rive paints")?;
+        }
         self.raw
             .draw_prepared_static_artboard_with_render_cache(
                 &self.file.runtime,
@@ -1804,16 +1806,18 @@ impl OwnedArtboardInstance {
             .as_mut()
             .context("render paint cache disappeared after successful allocation")?;
         self.raw.update_pass();
-        self.raw
-            .prepare_static_artboard_tree_paints(
-                &self.file.runtime,
-                artboard,
-                &self.file.graph.artboards,
-                factory,
-                paint,
-                &mut cache.path,
-            )
-            .context("failed to prepare Rive paints")?;
+        if paint.needs_paint_preparation(&self.raw, artboard) {
+            self.raw
+                .prepare_static_artboard_tree_paints(
+                    &self.file.runtime,
+                    artboard,
+                    &self.file.graph.artboards,
+                    factory,
+                    paint,
+                    &mut cache.path,
+                )
+                .context("failed to prepare Rive paints")?;
+        }
         self.raw
             .draw_prepared_static_artboard_with_render_cache(
                 &self.file.runtime,

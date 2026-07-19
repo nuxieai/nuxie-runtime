@@ -1678,6 +1678,7 @@ struct RunnerScriptArtboardRenderState {
     next_instance_id: u64,
     pending: Vec<(u64, usize)>,
     caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
+    deferred_script_inits: BTreeSet<u32>,
     detached_view_model_frames: Vec<DetachedViewModelFrame>,
 }
 
@@ -1700,6 +1701,14 @@ impl RunnerScriptArtboardRenderState {
         self.next_instance_id += 1;
         self.pending.push((instance_id, artboard_index));
         instance_id
+    }
+
+    fn defer_script_init(&mut self, global_id: u32) {
+        self.deferred_script_inits.insert(global_id);
+    }
+
+    fn take_deferred_script_init(&mut self, global_id: u32) -> bool {
+        self.deferred_script_inits.remove(&global_id)
     }
 
     fn realize_pending(
@@ -2190,6 +2199,11 @@ fn initialize_scripted_drawables_for_artboard(
         let has_init = script_instance
             .has_method(ScriptMethod::Init)
             .context("failed to inspect script init method")?;
+        if defer_cold_hydration && has_init {
+            render_state
+                .borrow_mut()
+                .defer_script_init(local_object.global_id);
+        }
         if !defer_cold_hydration {
             hydrate_script_inputs(
                 runtime,
@@ -2207,11 +2221,14 @@ fn initialize_scripted_drawables_for_artboard(
                         // failures to the scripted object: it reports the Lua error,
                         // disposes that occurrence, and lets the file keep running.
                         eprintln!(":: {error}");
-                        false
+                        continue;
                     }
                 };
                 if !initialized {
-                    continue;
+                    script_instance.invalidate_for_init_retry();
+                    render_state
+                        .borrow_mut()
+                        .defer_script_init(local_object.global_id);
                 }
             }
         } else if has_init {
@@ -2737,10 +2754,33 @@ fn bind_scripted_drawable_context(
             Rc::clone(render_state),
             owned_view_model_context,
         )?;
-        if init_pending {
-            instance
+        // C++'s `hydrateScriptInputs` calls user `init` only until it has
+        // succeeded once. A plain root view-model bind therefore must not
+        // replay `init` for every drawable; only scripts whose cold hydration
+        // was intentionally deferred need their first post-bind init here.
+        if init_pending
+            && owned_view_model_context.is_some()
+            && render_state
+                .borrow_mut()
+                .take_deferred_script_init(local_object.global_id)
+        {
+            match instance
                 .reinitialize_script_instance_with_factory(local_object.global_id, factory)
-                .context("deferred scripted drawable init failed")?;
+            {
+                Ok(true) => {}
+                Ok(false) => render_state
+                    .borrow_mut()
+                    .defer_script_init(local_object.global_id),
+                Err(error) => {
+                    // C++ contains user init failures on the scripted object.
+                    // Keep the occurrence cold so a later context bind can
+                    // recreate it without aborting the file.
+                    eprintln!(":: {error}");
+                    render_state
+                        .borrow_mut()
+                        .defer_script_init(local_object.global_id);
+                }
+            }
         }
     }
     render_state

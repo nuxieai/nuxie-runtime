@@ -2373,7 +2373,10 @@ impl ArtboardInstance {
                 }
 
                 if sorted_drawable_is_nested_artboard(drawable.type_name) {
-                    return drawable.referenced_artboard_global.is_some();
+                    return runtime_nested_artboard_will_draw(
+                        drawable.referenced_artboard_global,
+                        self.runtime_drawable_render_opacity(drawable),
+                    );
                 }
 
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
@@ -18190,6 +18193,13 @@ fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     )
 }
 
+fn runtime_nested_artboard_will_draw(
+    referenced_artboard_global: Option<u32>,
+    render_opacity: Option<f32>,
+) -> bool {
+    referenced_artboard_global.is_some_and(|_| render_opacity.is_some_and(|opacity| opacity != 0.0))
+}
+
 fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool {
     command.object_kind.is_nested_artboard() || command.referenced_artboard_global.is_some()
 }
@@ -18197,6 +18207,15 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nested_artboard_will_draw_requires_a_reference_and_nonzero_render_opacity() {
+        assert!(runtime_nested_artboard_will_draw(Some(41), Some(1.0)));
+        assert!(runtime_nested_artboard_will_draw(Some(41), Some(0.5)));
+        assert!(!runtime_nested_artboard_will_draw(Some(41), Some(0.0)));
+        assert!(!runtime_nested_artboard_will_draw(None, Some(1.0)));
+        assert!(!runtime_nested_artboard_will_draw(Some(41), None));
+    }
 
     #[test]
     fn format_7_2_layout_images_compose_fit_on_top_of_authored_scale() {

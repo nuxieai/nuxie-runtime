@@ -605,6 +605,10 @@ enum RuntimeNestedAnimationInstance {
     },
 }
 
+fn state_machine_requires_outer_update_probe(instance: &StateMachineInstance) -> bool {
+    instance.post_update_probe_pending() || instance.requires_post_update_state_probe()
+}
+
 impl ArtboardInstance {
     fn reset_layout_constraint_bounds_for_new_occurrence(&mut self) {
         self.layout_constraint_bounds_enabled = false;
@@ -2580,10 +2584,7 @@ impl ArtboardInstance {
         // Root and component-list machines complete their direct-input
         // transition loop during ordinary advance. Mounted nested machines
         // additionally owe one C++-matching outer-update probe.
-        if !instance.post_update_probe_pending()
-            && !instance.needs_advance()
-            && !instance.requires_post_update_state_probe()
-        {
+        if !state_machine_requires_outer_update_probe(instance) {
             return false;
         }
         let state_machines = Arc::clone(&self.state_machines);
@@ -4689,8 +4690,14 @@ impl ArtboardInstance {
         input_id: usize,
         value: bool,
     ) -> bool {
-        self.nested_state_machine_mut(state_machine_local_id)
-            .is_some_and(|state_machine| state_machine.set_bool(input_id, value))
+        let Some(state_machine) = self.nested_state_machine_mut(state_machine_local_id) else {
+            return false;
+        };
+        if !state_machine.set_bool(input_id, value) {
+            return false;
+        }
+        state_machine.schedule_post_update_probe();
+        true
     }
 
     fn set_nested_state_machine_number(
@@ -4699,8 +4706,14 @@ impl ArtboardInstance {
         input_id: usize,
         value: f32,
     ) -> bool {
-        self.nested_state_machine_mut(state_machine_local_id)
-            .is_some_and(|state_machine| state_machine.set_number(input_id, value))
+        let Some(state_machine) = self.nested_state_machine_mut(state_machine_local_id) else {
+            return false;
+        };
+        if !state_machine.set_number(input_id, value) {
+            return false;
+        }
+        state_machine.schedule_post_update_probe();
+        true
     }
 
     fn fire_nested_state_machine_trigger(
@@ -4708,8 +4721,14 @@ impl ArtboardInstance {
         state_machine_local_id: usize,
         input_id: usize,
     ) -> bool {
-        self.nested_state_machine_mut(state_machine_local_id)
-            .is_some_and(|state_machine| state_machine.fire_trigger(input_id))
+        let Some(state_machine) = self.nested_state_machine_mut(state_machine_local_id) else {
+            return false;
+        };
+        if !state_machine.fire_trigger(input_id) {
+            return false;
+        }
+        state_machine.schedule_post_update_probe();
+        true
     }
 
     fn set_nested_remap_time(&mut self, remap_local_id: usize, time: f32) -> bool {
@@ -5773,6 +5792,10 @@ mod tests {
         RuntimeDataBindGraphConverter, runtime_data_bind_graph_reverse_convert_value,
     };
     use crate::properties::property_key_for_name;
+    use crate::state_machine::{
+        RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState,
+        RuntimeStateMachineInput, RuntimeStateMachineLayer,
+    };
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
         RuntimeProperty, read_runtime_file,
@@ -6187,6 +6210,111 @@ mod tests {
             view_model_triggers: Arc::new(Vec::new()),
             transition_duration_bindings: Arc::new(Vec::new()),
         }
+    }
+
+    fn direct_input_blend_state_machine(global_id: u32) -> RuntimeStateMachine {
+        let mut state_machine = empty_state_machine(global_id);
+        state_machine.inputs = Arc::new(vec![RuntimeStateMachineInput::new_number(
+            1,
+            Some("blend".to_owned()),
+            0.0,
+        )]);
+        state_machine.layers = Arc::new(vec![RuntimeStateMachineLayer {
+            global_id: 2,
+            name: None,
+            states: vec![RuntimeLayerState {
+                global_id: Some(3),
+                type_name: Some("BlendState1DInput"),
+                animation_index: None,
+                blend_state_1d: Some(RuntimeBlendState1D {
+                    source: RuntimeBlendState1DSource::Input {
+                        input_index: Some(0),
+                    },
+                    animations: Vec::new(),
+                }),
+                blend_state_direct: None,
+                speed: 1.0,
+                flags: 0,
+                fire_actions: Vec::new(),
+                listener_actions: Vec::new(),
+                transitions: Vec::new(),
+            }],
+            entry_state_index: Some(0),
+            any_state_index: None,
+        }]);
+        state_machine
+    }
+
+    #[test]
+    fn ordinary_direct_input_blend_does_not_require_outer_state_probe() {
+        let definition = direct_input_blend_state_machine(11);
+        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        let mut state_machine = StateMachineInstance::new(0, &definition, &artboard);
+        artboard.state_machines = Arc::new(vec![definition]);
+
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
+        assert!(state_machine.needs_advance());
+        assert!(!state_machine.requires_post_update_state_probe());
+        assert!(!state_machine.post_update_probe_pending());
+        assert!(!state_machine_requires_outer_update_probe(&state_machine));
+
+        state_machine.schedule_post_update_probe();
+        assert!(state_machine_requires_outer_update_probe(&state_machine));
+        assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
+        assert!(!state_machine.post_update_probe_pending());
+    }
+
+    #[test]
+    fn nested_host_input_write_schedules_outer_state_probe() {
+        let mut definition = empty_state_machine(11);
+        definition.inputs = Arc::new(vec![
+            RuntimeStateMachineInput::new_bool(1, Some("enabled".to_owned()), false),
+            RuntimeStateMachineInput::new_number(2, Some("amount".to_owned()), 0.0),
+            RuntimeStateMachineInput::new_trigger(3, Some("fire".to_owned())),
+        ]);
+        let mut nested = synthetic_nested_artboard_instance(22);
+        let bool_state_machine = StateMachineInstance::new(0, &definition, &nested.child);
+        let number_state_machine = StateMachineInstance::new(0, &definition, &nested.child);
+        let trigger_state_machine = StateMachineInstance::new(0, &definition, &nested.child);
+        nested.child.state_machines = Arc::new(vec![definition]);
+        nested.animations.extend([
+            RuntimeNestedAnimationInstance::StateMachine {
+                local_id: 7,
+                state_machine: bool_state_machine,
+            },
+            RuntimeNestedAnimationInstance::StateMachine {
+                local_id: 8,
+                state_machine: number_state_machine,
+            },
+            RuntimeNestedAnimationInstance::StateMachine {
+                local_id: 9,
+                state_machine: trigger_state_machine,
+            },
+        ]);
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.nested_artboards.insert(3, nested);
+
+        assert!(parent.set_nested_state_machine_bool(7, 0, true));
+        assert!(
+            parent
+                .nested_state_machine_mut(7)
+                .expect("mounted nested state machine")
+                .post_update_probe_pending()
+        );
+        assert!(parent.set_nested_state_machine_number(8, 1, 1.0));
+        assert!(
+            parent
+                .nested_state_machine_mut(8)
+                .expect("mounted nested state machine")
+                .post_update_probe_pending()
+        );
+        assert!(parent.fire_nested_state_machine_trigger(9, 2));
+        assert!(
+            parent
+                .nested_state_machine_mut(9)
+                .expect("mounted nested state machine")
+                .post_update_probe_pending()
+        );
     }
 
     #[test]

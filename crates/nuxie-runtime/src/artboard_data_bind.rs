@@ -821,6 +821,11 @@ pub(super) struct RuntimeArtboardDataBindSourceQueues {
 }
 
 impl RuntimeArtboardDataBindSourceQueues {
+    #[inline]
+    fn has_target_properties(&self) -> bool {
+        !self.by_target_property.is_empty()
+    }
+
     pub(super) fn new(
         custom_property_bindings: &[RuntimeArtboardCustomPropertyBindingInstance],
         layout_computed_bindings: &[RuntimeArtboardLayoutComputedBindingInstance],
@@ -3580,6 +3585,12 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
+        if !self
+            .artboard_data_bind_source_queues
+            .has_target_properties()
+        {
+            return false;
+        }
         let enqueued = self
             .artboard_data_bind_source_queues
             .enqueue_target_property(

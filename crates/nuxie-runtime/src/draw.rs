@@ -8647,6 +8647,7 @@ pub struct RuntimeRenderPathCache {
     clip_paths: RuntimeRetainedRenderPathSlots,
     layout_clip_paths: RuntimeRetainedRenderPathSlots,
     text_clip_paths: RuntimeRetainedRenderPathSlots,
+    simple_solid_draw_paths: RuntimeSimpleSolidDrawPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
     shape_paint_paths: RuntimeShapePaintPathCommandSlots,
@@ -9171,6 +9172,13 @@ struct RuntimeCachedDrawPath {
     fill_rule: RenderFillRule,
 }
 
+struct RuntimeSimpleSolidDrawPath {
+    path: Box<dyn RenderPath>,
+    raw_path: Arc<RawPath>,
+    revision: RuntimeDrawPathRevision,
+    fill_rule: RenderFillRule,
+}
+
 enum RuntimeCachedDrawRawPath {
     Owned(RawPath),
     Prepared(Arc<RawPath>),
@@ -9227,6 +9235,22 @@ impl RuntimeRetainedRenderPathSlots {
             self.by_local.resize_with(local_id + 1, || None);
         }
         &mut self.by_local[local_id]
+    }
+}
+
+#[derive(Default)]
+struct RuntimeSimpleSolidDrawPathSlots {
+    // A RuntimeRenderPathCache follows one mounted artboard. Nested artboards
+    // receive child caches from RuntimeRenderPathCache::nested_artboards.
+    by_shape_local: Vec<Option<RuntimeSimpleSolidDrawPath>>,
+}
+
+impl RuntimeSimpleSolidDrawPathSlots {
+    fn slot_mut(&mut self, shape_local: usize) -> &mut Option<RuntimeSimpleSolidDrawPath> {
+        if self.by_shape_local.len() <= shape_local {
+            self.by_shape_local.resize_with(shape_local + 1, || None);
+        }
+        &mut self.by_shape_local[shape_local]
     }
 }
 
@@ -10094,6 +10118,42 @@ impl RuntimeRenderPathCache {
             .background_paths
             .slot_mut(key.graph_global_id, local_id);
         runtime_cached_retained_render_path(slot, key, factory, commands)
+    }
+
+    fn simple_solid_draw_path(
+        &mut self,
+        shape_local: usize,
+        revision: RuntimeDrawPathRevision,
+        factory: &mut dyn RenderFactory,
+        prepared_raw_path: &Arc<RawPath>,
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        let cached = self
+            .simple_solid_draw_paths
+            .slot_mut(shape_local)
+            .get_or_insert_with(|| RuntimeSimpleSolidDrawPath {
+                path: runtime_make_path_from_raw_path(
+                    factory,
+                    prepared_raw_path.as_ref(),
+                    RenderFillRule::Clockwise,
+                ),
+                raw_path: prepared_raw_path.clone(),
+                revision,
+                fill_rule: RenderFillRule::Clockwise,
+            });
+        if cached.revision != revision {
+            cached.raw_path = prepared_raw_path.clone();
+            runtime_rebuild_path_from_raw_path_preserving_fill_rule(
+                cached.path.as_mut(),
+                cached.raw_path.as_ref(),
+            );
+            cached.revision = revision;
+        }
+        if cached.fill_rule != fill_rule {
+            cached.path.fill_rule(fill_rule);
+            cached.fill_rule = fill_rule;
+        }
+        &mut cached.path
     }
 
     fn draw_path(
@@ -12056,6 +12116,9 @@ fn runtime_try_draw_simple_solid_shape(
     let Some(local_id) = command.local_id else {
         return Ok(false);
     };
+    let Some(prepared_raw_path) = paint.prepared_raw_path.as_ref() else {
+        return Ok(false);
+    };
     let shape_world = runtime_live_command_world_transform(
         instance,
         graph,
@@ -12100,20 +12163,12 @@ fn runtime_try_draw_simple_solid_shape(
 
     renderer.save();
     renderer.transform(runtime_render_mat(shape_world));
-    debug_assert!(paint.prepared_raw_path.is_some());
-    let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
-        RuntimeDrawPathCacheKey {
-            kind: RuntimeDrawPathCacheKind::Draw,
-            path_kind: RuntimeShapePaintPathKind::Local,
-            local_id: Some(local_id),
-            path_index: paint.path_slot_index,
-        },
+    let path = path_cache.simple_solid_draw_path(
+        local_id,
         runtime_draw_path_revision(instance, RuntimeShapePaintPathKind::Local),
         factory,
-        &paint.path_commands,
-        RenderFillRule::Clockwise,
-        Some(paint.fill_rule),
-        paint.prepared_raw_path.as_ref(),
+        prepared_raw_path,
+        paint.fill_rule,
     );
     let render_paint = paint_by_global
         .paint(global_id)
@@ -12151,6 +12206,7 @@ fn runtime_command_is_simple_solid_shape(command: &RuntimeDrawCommand) -> bool {
         && paint.text_path_bucket_slot.is_none()
         && paint.text_paint_pool.is_none()
         && paint.ensure_text_paint_pool_after_draw.is_none()
+        && paint.prepared_raw_path.is_some()
 }
 
 fn runtime_draw_scripted_drawable(
@@ -24449,6 +24505,221 @@ mod tests {
                 "restore",
             ]
         );
+    }
+
+    #[test]
+    fn simple_solid_draw_path_retains_path_across_revision_and_fill_rule_changes() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ]));
+        reset_runtime_draw_path_command_replays();
+
+        let first_id = cache
+            .simple_solid_draw_path(
+                7,
+                revision,
+                &mut factory,
+                &raw_path,
+                RenderFillRule::EvenOdd,
+            )
+            .as_any()
+            .downcast_ref::<CountingRenderPath>()
+            .expect("counting path")
+            .id;
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 1);
+        assert_eq!(stats.fill_rules.get(), 2);
+
+        let second_id = cache
+            .simple_solid_draw_path(
+                7,
+                revision,
+                &mut factory,
+                &raw_path,
+                RenderFillRule::EvenOdd,
+            )
+            .as_any()
+            .downcast_ref::<CountingRenderPath>()
+            .expect("counting path")
+            .id;
+        assert_eq!(second_id, first_id);
+        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 1);
+        assert_eq!(stats.fill_rules.get(), 2);
+
+        let changed_raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 2.0, y: 2.0 },
+            RuntimePathCommand::Close,
+        ]));
+        let (third_id, third_verbs, third_points, third_fill_rule) = {
+            let path = cache.simple_solid_draw_path(
+                7,
+                RuntimeDrawPathRevision {
+                    path_epoch: 11,
+                    ..revision
+                },
+                &mut factory,
+                &changed_raw_path,
+                RenderFillRule::EvenOdd,
+            );
+            let path = path
+                .as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path");
+            (
+                path.id,
+                path.raw_path.verbs().len(),
+                path.raw_path.points().len(),
+                path.fill_rule,
+            )
+        };
+        assert_eq!(third_id, first_id, "RenderPath identity remains retained");
+        assert_eq!(third_verbs, 3);
+        assert_eq!(third_points, 2);
+        assert_eq!(third_fill_rule, RenderFillRule::EvenOdd);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 2);
+        assert_eq!(stats.add_raw_paths.get(), 2);
+        assert_eq!(stats.fill_rules.get(), 2);
+        assert_eq!(runtime_draw_path_command_replays(), 0);
+
+        let changed_revision = RuntimeDrawPathRevision {
+            path_epoch: 11,
+            ..revision
+        };
+        cache.simple_solid_draw_path(
+            7,
+            changed_revision,
+            &mut factory,
+            &changed_raw_path,
+            RenderFillRule::Clockwise,
+        );
+        cache.simple_solid_draw_path(
+            7,
+            changed_revision,
+            &mut factory,
+            &changed_raw_path,
+            RenderFillRule::Clockwise,
+        );
+        assert_eq!(stats.fill_rules.get(), 3);
+    }
+
+    #[test]
+    fn simple_solid_draw_path_slots_are_direct_by_shape_local() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ]));
+        let path_id =
+            |cache: &mut RuntimeRenderPathCache, factory: &mut CountingFactory, shape_local| {
+                cache
+                    .simple_solid_draw_path(
+                        shape_local,
+                        revision,
+                        factory,
+                        &raw_path,
+                        RenderFillRule::Clockwise,
+                    )
+                    .as_any()
+                    .downcast_ref::<CountingRenderPath>()
+                    .expect("counting path")
+                    .id
+            };
+
+        let local_seven_id = path_id(&mut cache, &mut factory, 7);
+        let local_eight_id = path_id(&mut cache, &mut factory, 8);
+        assert_ne!(local_eight_id, local_seven_id);
+        assert_eq!(path_id(&mut cache, &mut factory, 7), local_seven_id);
+        assert_eq!(stats.make_empty_paths.get(), 2);
+    }
+
+    #[test]
+    fn simple_solid_draw_paths_survive_alternating_parent_and_nested_graphs() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut root_cache = RuntimeRenderPathCache::default();
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ]));
+        let child_a_key = nested_render_cache_key(Some(100), Some(10), 42, 1);
+        let child_b_key = nested_render_cache_key(Some(101), Some(11), 43, 1);
+        let path_id = |cache: &mut RuntimeRenderPathCache, factory: &mut CountingFactory| {
+            cache
+                .simple_solid_draw_path(7, revision, factory, &raw_path, RenderFillRule::Clockwise)
+                .as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        let root_id = path_id(&mut root_cache, &mut factory);
+        let child_a_id = path_id(
+            root_cache
+                .nested_artboards
+                .get_or_insert_default(child_a_key),
+            &mut factory,
+        );
+        let child_b_id = path_id(
+            root_cache
+                .nested_artboards
+                .get_or_insert_default(child_b_key),
+            &mut factory,
+        );
+
+        assert_eq!(path_id(&mut root_cache, &mut factory), root_id);
+        assert_eq!(
+            path_id(
+                root_cache
+                    .nested_artboards
+                    .get_or_insert_default(child_a_key),
+                &mut factory,
+            ),
+            child_a_id,
+        );
+        assert_eq!(
+            path_id(
+                root_cache
+                    .nested_artboards
+                    .get_or_insert_default(child_b_key),
+                &mut factory,
+            ),
+            child_b_id,
+        );
+        assert_eq!(stats.make_empty_paths.get(), 3);
     }
 
     #[test]

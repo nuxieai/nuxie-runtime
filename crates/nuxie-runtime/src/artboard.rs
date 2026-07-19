@@ -2216,6 +2216,7 @@ impl ArtboardInstance {
         self.component_list_items.insert(list_local_id, items);
         let changed = !existing_matches || logical_changed || item_context_changed;
         if changed {
+            self.mark_nested_structure_changed();
             self.mark_layout_changed();
             self.mark_prepared_changed();
         }
@@ -2642,6 +2643,8 @@ impl ArtboardInstance {
         let mut changed = nested
             .child
             .set_artboard_dimensions(bounds.width, bounds.height);
+        changed |= !nested.child.layout_constraint_bounds_enabled;
+        nested.child.enable_layout_constraint_bounds();
         if let Some(width_key) = property_key_for_name("LayoutComponent", "width") {
             changed |= nested.child.set_double_property(0, width_key, bounds.width);
         }

@@ -2845,7 +2845,7 @@ impl ArtboardInstance {
         false
     }
 
-    fn runtime_component_is_collapsed_for_draw(&self, local_id: usize) -> bool {
+    pub(crate) fn runtime_component_is_collapsed_for_draw(&self, local_id: usize) -> bool {
         let Some(component) = self.component(local_id) else {
             return false;
         };
@@ -3367,6 +3367,60 @@ impl ArtboardInstance {
             .compute_layout(self, graph, self.runtime_file())
             .map(|layout| layout.component_list_item_bounds)
             .unwrap_or_default()
+    }
+
+    /// Root transforms for mounted component-list artboards.
+    ///
+    /// C++ gives each row artboard an `ArtboardHost`; `Node::computedRoot*`
+    /// therefore walks through `ArtboardComponentList::hostTransformPoint`.
+    /// Rust renders row artboards as retained child instances, so reuse the
+    /// exact row transforms used by the draw path when polling their computed
+    /// data-bind sources.
+    pub(crate) fn runtime_component_list_child_root_transforms(
+        &self,
+        root_transform: Mat2D,
+    ) -> BTreeMap<usize, Vec<Mat2D>> {
+        if self.component_list_items.is_empty() {
+            return BTreeMap::new();
+        }
+        let Some(graph) = self.runtime_graph() else {
+            return BTreeMap::new();
+        };
+        let assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
+        self.component_list_items
+            .keys()
+            .copied()
+            .map(|list_local| {
+                let host_transform_local = if crate::constraints::component_list_virtualization(
+                    self, list_local,
+                )
+                .is_some()
+                {
+                    self.component(list_local)
+                        .and_then(|component| component.parent_local)
+                        .unwrap_or(list_local)
+                } else {
+                    list_local
+                };
+                let host_world = self.runtime_component_world_transform_with_bounds(
+                    host_transform_local,
+                    graph,
+                    layout_bounds.as_ref(),
+                );
+                let host_root = root_transform.multiply(host_world);
+                let item_transforms = runtime_component_list_item_local_transforms(
+                    self,
+                    list_local,
+                    assigned_bounds.get(&list_local).map(Vec::as_slice),
+                    None,
+                )
+                .into_iter()
+                .map(|item_transform| host_root.multiply(item_transform))
+                .collect();
+                (list_local, item_transforms)
+            })
+            .collect()
     }
 
     #[doc(hidden)]
@@ -12796,56 +12850,15 @@ fn runtime_legacy_image_layout_scale_key(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn runtime_draw_component_list(
-    runtime: &RuntimeFile,
+fn runtime_component_list_item_local_transforms(
     instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-    command: &RuntimeDrawCommand,
-    factory: &mut dyn RenderFactory,
-    renderer: &mut dyn Renderer,
-    paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
-    path_cache: &mut RuntimeRenderPathCache,
-    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
-    mut nested_paint_caches: Option<
-        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
-    >,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
-    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
-    nested_ancestors: &[u32],
-) -> Result<()> {
-    let local_id = command
-        .local_id
-        .context("component-list draw command missing local id")?;
+    local_id: usize,
+    component_list_item_bounds: Option<&[RuntimeLayoutBounds]>,
+    component_list_layout_children: Option<&[ArtboardInstance]>,
+) -> Vec<Mat2D> {
     let Some(items) = instance.component_list_items.get(&local_id) else {
-        return Ok(());
+        return Vec::new();
     };
-    // A virtualized list's row positions already include the scroll window.
-    // C++ therefore draws it in its parent's world space; non-virtualized
-    // lists continue to use their own world transform.
-    let host_transform_local =
-        if crate::constraints::component_list_virtualization(instance, local_id).is_some() {
-            instance
-                .component(local_id)
-                .and_then(|component| component.parent_local)
-                .unwrap_or(local_id)
-        } else {
-            local_id
-        };
-    let host_world = path_cache.component_world_transform_with_bounds(
-        instance,
-        graph,
-        host_transform_local,
-        layout_bounds,
-    );
-    if command.needs_save_operation {
-        renderer.save();
-    }
-    renderer.transform(runtime_render_mat(host_world));
-
     let list_style_local = instance
         .runtime_layout_component_style_local(local_id)
         .or_else(|| {
@@ -12900,27 +12913,26 @@ fn runtime_draw_component_list(
         .and_then(|component| component.parent_local)
         .and_then(|parent_local| instance.component(parent_local))
         .is_some_and(|parent| matches!(parent.type_name, "Artboard" | "LayoutComponent"));
+    let node_x_key = runtime_draw_property_key_for_name("Node", "x");
+    let node_y_key = runtime_draw_property_key_for_name("Node", "y");
 
     let mut item_main_offset = 0.0;
     let mut item_transforms = Vec::with_capacity(items.len());
     for (item_index, item) in items.iter().enumerate() {
         let computed_item_bounds = component_list_item_bounds
-            .get(&local_id)
             .and_then(|bounds| bounds.get(item_index))
             .copied();
         let item_size = computed_item_bounds
             .map(|bounds| (bounds.width, bounds.height))
             .or_else(|| {
                 component_list_layout_children
-                    .get(&local_id)
                     .and_then(|children| children.get(item_index))
                     .map(|child| (child.width, child.height))
             })
             .unwrap_or_else(|| runtime_component_list_item_layout_size(item));
         let (item_x, item_y) = if let Some((virtual_x, virtual_y)) = item.virtualized_position {
             // The scroll virtualizer owns only the main-axis position. C++
-            // preserves the mounted artboard's settled layout position on the
-            // cross axis (`layoutY` for rows, `layoutX` for columns).
+            // preserves the mounted artboard's settled cross-axis position.
             if is_row {
                 (
                     virtual_x,
@@ -12934,6 +12946,19 @@ fn runtime_draw_component_list(
             }
         } else if let Some(bounds) = computed_item_bounds {
             (bounds.x, bounds.y)
+        } else if !uses_hosted_layout {
+            // C++ `ArtboardComponentList::updateArtboardsWorldTransform` uses
+            // `Artboard::worldBounds()` when there is no layout parent. Those
+            // bounds begin at the mounted artboard root's authored Node x/y;
+            // they are not a sequential intrinsic-size layout.
+            (
+                node_x_key
+                    .and_then(|key| item.child.double_property(0, key))
+                    .unwrap_or(0.0),
+                node_y_key
+                    .and_then(|key| item.child.double_property(0, key))
+                    .unwrap_or(0.0),
+            )
         } else if is_row {
             (padding_left + item_main_offset, padding_top)
         } else {
@@ -12967,6 +12992,68 @@ fn runtime_draw_component_list(
             &mut item_transforms,
         );
     }
+    item_transforms
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_component_list(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    command: &RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    mut nested_paint_caches: Option<
+        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    >,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
+    nested_ancestors: &[u32],
+) -> Result<()> {
+    let local_id = command
+        .local_id
+        .context("component-list draw command missing local id")?;
+    let Some(items) = instance.component_list_items.get(&local_id) else {
+        return Ok(());
+    };
+    // A virtualized list's row positions already include the scroll window.
+    // C++ therefore draws it in its parent's world space; non-virtualized
+    // lists continue to use their own world transform.
+    let host_transform_local =
+        if crate::constraints::component_list_virtualization(instance, local_id).is_some() {
+            instance
+                .component(local_id)
+                .and_then(|component| component.parent_local)
+                .unwrap_or(local_id)
+        } else {
+            local_id
+        };
+    let host_world = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        host_transform_local,
+        layout_bounds,
+    );
+    if command.needs_save_operation {
+        renderer.save();
+    }
+    renderer.transform(runtime_render_mat(host_world));
+
+    let item_transforms = runtime_component_list_item_local_transforms(
+        instance,
+        local_id,
+        component_list_item_bounds.get(&local_id).map(Vec::as_slice),
+        component_list_layout_children
+            .get(&local_id)
+            .map(Vec::as_slice),
+    );
 
     let mut item_indices = (0..items.len()).collect::<Vec<_>>();
     let draw_indices = items

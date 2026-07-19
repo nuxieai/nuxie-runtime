@@ -56,6 +56,10 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make golden-compare
 
+      - name: Run forced-scripted golden compare
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make scripted-golden-compare
+
       - name: Run Rust workspace tests
         working-directory: ${{ github.workspace }}/rive-rust
         run: cargo test --workspace
@@ -114,6 +118,9 @@ jobs:
       # Do not relabel the checked-in Phase R Dawn references. Advancing this
       # oracle requires a separate deterministic regeneration and review.
       RIVE_RUNTIME_REF: 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
+      # Shader provenance advanced independently during the Phase S sync.
+      # Keep it separate from the historical pixel oracle above.
+      RIVE_SHADER_RUNTIME_REF: d788e8ec6e8b598526607d6a1e8818e8b637b60c
     defaults:
       run:
         shell: bash
@@ -128,6 +135,13 @@ jobs:
           repository: rive-app/rive-runtime
           ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
+
+      - name: Checkout renderer shader source runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_SHADER_RUNTIME_REF }}
+          path: rive-runtime-shaders
 
       - name: Install Rust stable
         run: |
@@ -154,6 +168,8 @@ jobs:
           cargo install naga-cli --version 30.0.0 --locked
 
       - name: Verify renderer shader provenance
+        env:
+          RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime-shaders
         run: make renderer-shaders-check
 
       - name: Verify vendored wgpu backend and downstream graph
@@ -221,8 +237,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Optional perf artifact: continue-on-error keeps this job from affecting
-  # the workflow's pass/fail status.
+  # Optional performance ratchet: continue-on-error preserves the existing
+  # non-blocking CI policy, while the command itself still fails closed above
+  # the 1.0 Rust/C++ threshold and publishes its full JSON evidence.
   perf-json:
     name: Perf JSON artifact (optional)
     runs-on: macos-14
@@ -255,10 +272,10 @@ jobs:
           RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh release
           echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
 
-      - name: Generate perf JSON
+      - name: Run runtime parity ratchet and generate perf JSON
         working-directory: ${{ github.workspace }}/rive-rust
         run: |
-          make perf-json PERF_JSON_META="--meta build_profile=release --meta git_sha=${GITHUB_SHA} --meta timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          make perf-hot-loop PERF_JSON_META="--meta build_profile=release --meta git_sha=${GITHUB_SHA} --meta timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
       - name: Upload perf JSON artifact
         if: always()

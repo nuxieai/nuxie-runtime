@@ -1076,8 +1076,13 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         true,
     );
-    let text_style_axis_tag =
-        resolve_named_property("TextStyleAxis", "tag", "TextStyleAxis", FieldKind::Uint, false);
+    let text_style_axis_tag = resolve_named_property(
+        "TextStyleAxis",
+        "tag",
+        "TextStyleAxis",
+        FieldKind::Uint,
+        false,
+    );
     let text_style_axis_value = resolve_named_property(
         "TextStyleAxis",
         "axisValue",

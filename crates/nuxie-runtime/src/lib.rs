@@ -48,10 +48,10 @@ pub use focus::{
 pub use objects::InstanceSlot;
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
-    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptListenerInvocation,
-    ScriptImage, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode, ScriptPaint,
-    ScriptPointerEventKind, ScriptValue, ScriptViewModel, ScriptViewModelProperty, ScriptingVm,
-    bound_script_artboard_input, bound_script_input_value, bound_script_view_model,
+    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptImage, ScriptInstance,
+    ScriptListenerInvocation, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
+    ScriptPaint, ScriptPointerEventKind, ScriptValue, ScriptViewModel, ScriptViewModelProperty,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_view_model,
     script_node_for_artboard, script_view_model_from_owned, script_view_models,
 };
 pub use state_machine::{
@@ -87,11 +87,12 @@ pub use view_model::{
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelEnumSourceHandle,
-    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListSourceHandle,
-    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
-    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
-    RuntimeOwnedViewModelViewModelSourceHandle, runtime_data_context_lookup_reports,
-    runtime_global_view_model_indices, runtime_global_view_model_names,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelNumberSourceHandle,
+    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
+    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
+    runtime_data_context_lookup_reports, runtime_global_view_model_indices,
+    runtime_global_view_model_names,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

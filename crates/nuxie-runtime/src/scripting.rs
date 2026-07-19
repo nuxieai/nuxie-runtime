@@ -10,7 +10,10 @@ use nuxie_render_api::{
 };
 
 use crate::properties::property_key_for_name;
-use crate::{ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelInstance};
+use crate::{
+    ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance,
+};
 
 /// Runtime-owned scripting error type.
 ///
@@ -277,7 +280,7 @@ fn script_blend_mode(value: u32) -> BlendMode {
 pub struct ScriptViewModel {
     properties: BTreeMap<String, ScriptViewModelProperty>,
     nested_view_models: BTreeMap<String, ScriptViewModel>,
-    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    instance: RuntimeOwnedViewModelHandle,
     file: Rc<RuntimeFile>,
     view_model_index: usize,
     ancestors: Rc<Vec<usize>>,
@@ -339,7 +342,11 @@ impl ScriptViewModel {
     }
 
     pub fn owned_instance(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
-        Rc::clone(&self.instance)
+        self.instance.shared()
+    }
+
+    pub fn owned_handle(&self) -> RuntimeOwnedViewModelHandle {
+        self.instance.clone()
     }
 
     pub fn number(&self, name: &str) -> Option<f32> {
@@ -450,7 +457,7 @@ impl ScriptViewModel {
     /// without invoking script listeners, embedded view models recurse, and
     /// shared list instances recurse exactly once even if the graph cycles.
     pub fn advance_script_frame(&self) -> bool {
-        Self::advance_owned_instance(&self.instance)
+        Self::advance_owned_instance(&self.instance.shared())
     }
 
     /// Advance a shared owned instance without requiring its schema wrapper.
@@ -507,7 +514,7 @@ impl ScriptViewModel {
         build_script_view_model_shared(
             Rc::clone(&self.file),
             view_model_index,
-            item,
+            RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
         )
     }
@@ -515,13 +522,13 @@ impl ScriptViewModel {
     pub fn push_list_item(&self, name: &str, item: &ScriptViewModel) -> bool {
         self.instance
             .borrow_mut()
-            .push_list_item_by_property_name(name, Rc::clone(&item.instance))
+            .push_list_item_by_property_name(name, item.instance.shared())
     }
 
     pub fn insert_list_item(&self, name: &str, index: usize, item: &ScriptViewModel) -> bool {
         self.instance
             .borrow_mut()
-            .insert_list_item_by_property_name(name, index, Rc::clone(&item.instance))
+            .insert_list_item_by_property_name(name, index, item.instance.shared())
     }
 
     pub fn pop_list_item(&self, name: &str) -> Option<Self> {
@@ -533,7 +540,7 @@ impl ScriptViewModel {
         build_script_view_model_shared(
             Rc::clone(&self.file),
             view_model_index,
-            item,
+            RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
         )
     }
@@ -547,7 +554,7 @@ impl ScriptViewModel {
         build_script_view_model_shared(
             Rc::clone(&self.file),
             view_model_index,
-            item,
+            RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
         )
     }
@@ -571,9 +578,10 @@ impl ScriptViewModel {
     }
 
     pub fn remove_list_item(&self, name: &str, item: &ScriptViewModel, remove_all: bool) -> bool {
+        let item = item.instance.shared();
         self.instance
             .borrow_mut()
-            .remove_list_items_by_identity(name, &item.instance, remove_all)
+            .remove_list_items_by_identity(name, &item, remove_all)
     }
 }
 
@@ -622,10 +630,10 @@ pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewMode
 
 pub fn script_view_model_from_owned(
     file: &RuntimeFile,
-    instance: &RuntimeOwnedViewModelInstance,
+    instance: &RuntimeOwnedViewModelHandle,
 ) -> Option<ScriptViewModel> {
-    let view_model_index = instance.view_model_index();
-    build_script_view_model(
+    let view_model_index = instance.borrow().view_model_index();
+    build_script_view_model_shared(
         Rc::new(file.clone()),
         view_model_index,
         instance.clone(),
@@ -642,7 +650,7 @@ fn build_script_view_model(
     build_script_view_model_shared(
         file,
         view_model_index,
-        Rc::new(RefCell::new(instance)),
+        RuntimeOwnedViewModelHandle::new(instance),
         ancestors,
     )
 }
@@ -650,7 +658,7 @@ fn build_script_view_model(
 fn build_script_view_model_shared(
     file: Rc<RuntimeFile>,
     view_model_index: usize,
-    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    instance: RuntimeOwnedViewModelHandle,
     ancestors: &[usize],
 ) -> Option<ScriptViewModel> {
     let view_model = file.view_model(view_model_index)?;

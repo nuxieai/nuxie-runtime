@@ -7,14 +7,14 @@ use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{
     RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelInstance, RuntimeStateMachine, RuntimeTransitionInterpolator,
-    RuntimeViewModelPointer, ScriptValue, StateMachineBindableArtboardInstance,
-    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
-    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
-    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
-    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
-    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
-    StateMachineTransitionDurationInstance,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
+    RuntimeTransitionInterpolator, RuntimeViewModelPointer, ScriptValue,
+    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
+    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
+    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
+    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
+    StateMachineBindableViewModelInstance, StateMachineTransitionDurationInstance,
     runtime_view_model_view_model_property_path_for_name_path,
 };
 
@@ -1358,7 +1358,7 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
             let value = context
                 .instances()
                 .find_map(|instance| {
-                    runtime_owned_view_model_number_value_for_source_path(instance, source_path)
+                    runtime_owned_view_model_number_value_for_source_path(&instance, source_path)
                 })
                 .unwrap_or(0.0);
             if *operation_value == value {
@@ -1380,7 +1380,7 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
 
 fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
     converter: &mut RuntimeDataBindGraphConverter,
-    contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+    contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
 ) -> bool {
     match converter {
         RuntimeDataBindGraphConverter::OperationViewModel {
@@ -1393,7 +1393,10 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_cont
             let value = contexts
                 .iter()
                 .find_map(|(context, _)| {
-                    runtime_owned_view_model_number_value_for_source_path(context, source_path)
+                    runtime_owned_view_model_number_value_for_source_path(
+                        &context.borrow(),
+                        source_path,
+                    )
                 })
                 .unwrap_or(0.0);
             if *operation_value == value {
@@ -2899,7 +2902,7 @@ impl RuntimeDataBindGraphValue {
     ) -> Option<Self> {
         context
             .instances()
-            .find_map(|instance| self.resolve_from_owned_view_model_instance(instance, path))
+            .find_map(|instance| self.resolve_from_owned_view_model_instance(&instance, path))
     }
 
     pub(crate) fn resolve_from_owned_view_model_instance(
@@ -3873,14 +3876,15 @@ impl RuntimeDataBindGraph {
     pub(crate) fn bind_owned_view_model_context_chains(
         &mut self,
         file: &RuntimeFile,
-        contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+        contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
     ) -> bool {
         for source in &mut self.sources {
             if let Some(value) = contexts.iter().find_map(|(context, context_chain)| {
+                let context = context.borrow();
                 context_chain.iter().find_map(|context_path| {
                     source.value.resolve_from_owned_view_model_context_path(
                         file,
-                        context,
+                        &context,
                         context_path,
                         &source.path,
                     )

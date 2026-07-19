@@ -13,8 +13,8 @@ use crate::{
     RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
     RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
     RuntimeDefaultViewModelViewModelSourceHandle, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, ScriptError, ScriptInstance,
-    ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    ScriptError, ScriptInstance, ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
     runtime_default_view_model_artboard_property_path_for_name,
     runtime_default_view_model_artboard_property_path_for_name_path,
     runtime_default_view_model_asset_property_path_for_name,
@@ -3336,7 +3336,7 @@ impl StateMachineInstance {
         }
         self.sync_bindable_font_assets_from_owned_contexts(context);
         if let Some(main) = context.main() {
-            self.bind_active_owned_view_model_triggers(main);
+            self.bind_active_owned_view_model_triggers(&main);
         } else {
             self.reset_active_view_model_triggers();
         }
@@ -3368,7 +3368,7 @@ impl StateMachineInstance {
     pub(crate) fn bind_owned_view_model_context_chains(
         &mut self,
         file: &RuntimeFile,
-        contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+        contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
     ) -> bool {
         if !self
             .data_bind_graph
@@ -3381,7 +3381,7 @@ impl StateMachineInstance {
         }
         self.sync_bindable_font_assets_from_owned_context_chains(file, contexts);
         if let Some((main, _)) = contexts.first() {
-            self.bind_active_owned_view_model_triggers(main);
+            self.bind_active_owned_view_model_triggers(&main.borrow());
         } else {
             self.reset_active_view_model_triggers();
         }
@@ -3448,7 +3448,7 @@ impl StateMachineInstance {
     ) {
         self.sync_bindable_font_assets(|source| {
             context.instances().find_map(|instance| {
-                runtime_owned_font_asset_value_for_state_machine_source(instance, &source.path)
+                runtime_owned_font_asset_value_for_state_machine_source(&instance, &source.path)
                     .cloned()
             })
         });
@@ -3477,10 +3477,11 @@ impl StateMachineInstance {
     fn sync_bindable_font_assets_from_owned_context_chains(
         &mut self,
         file: &RuntimeFile,
-        contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+        contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
     ) {
         self.sync_bindable_font_assets(|source| {
             contexts.iter().find_map(|(context, context_chain)| {
+                let context = context.borrow();
                 context_chain.iter().find_map(|context_path| {
                     context
                         .font_asset_value_by_context_source_path(

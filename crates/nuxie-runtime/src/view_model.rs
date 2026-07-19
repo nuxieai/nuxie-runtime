@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -1527,6 +1527,50 @@ pub struct RuntimeOwnedViewModelInstance {
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
 }
 
+/// Shared ownership for one mutable runtime-owned view-model instance.
+///
+/// C++ passes `rcp<ViewModelInstance>` through data contexts and scripting.
+/// Keeping the shared identity explicit here prevents a context clone or a
+/// script wrapper from silently forking the instance's mutable values.
+#[derive(Debug, Clone)]
+pub struct RuntimeOwnedViewModelHandle {
+    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+}
+
+impl RuntimeOwnedViewModelHandle {
+    pub fn new(instance: RuntimeOwnedViewModelInstance) -> Self {
+        Self {
+            instance: Rc::new(RefCell::new(instance)),
+        }
+    }
+
+    pub fn borrow(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
+        self.instance.borrow()
+    }
+
+    pub fn borrow_mut(&self) -> RefMut<'_, RuntimeOwnedViewModelInstance> {
+        self.instance.borrow_mut()
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.instance, &other.instance)
+    }
+
+    pub(crate) fn from_shared(instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> Self {
+        Self { instance }
+    }
+
+    pub(crate) fn shared(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
+        Rc::clone(&self.instance)
+    }
+}
+
+impl From<RuntimeOwnedViewModelInstance> for RuntimeOwnedViewModelHandle {
+    fn from(instance: RuntimeOwnedViewModelInstance) -> Self {
+        Self::new(instance)
+    }
+}
+
 /// The ordered set of owned view-model instances visible to an artboard or
 /// state machine.
 ///
@@ -1537,8 +1581,8 @@ pub struct RuntimeOwnedViewModelInstance {
 /// installed as an override for a global slot.
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeOwnedViewModelContext {
-    main: Option<RuntimeOwnedViewModelInstance>,
-    global_slots: BTreeMap<usize, RuntimeOwnedViewModelInstance>,
+    main: Option<RuntimeOwnedViewModelHandle>,
+    global_slots: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
 }
 
 impl RuntimeOwnedViewModelContext {
@@ -1547,6 +1591,10 @@ impl RuntimeOwnedViewModelContext {
     }
 
     pub fn from_main(main: RuntimeOwnedViewModelInstance) -> Self {
+        Self::from_main_handle(RuntimeOwnedViewModelHandle::new(main))
+    }
+
+    pub fn from_main_handle(main: RuntimeOwnedViewModelHandle) -> Self {
         Self {
             main: Some(main),
             global_slots: BTreeMap::new(),
@@ -1557,55 +1605,83 @@ impl RuntimeOwnedViewModelContext {
         self.main.is_none() && self.global_slots.is_empty()
     }
 
-    pub fn main(&self) -> Option<&RuntimeOwnedViewModelInstance> {
+    pub fn main(&self) -> Option<Ref<'_, RuntimeOwnedViewModelInstance>> {
+        self.main.as_ref().map(RuntimeOwnedViewModelHandle::borrow)
+    }
+
+    pub fn main_mut(&self) -> Option<RefMut<'_, RuntimeOwnedViewModelInstance>> {
+        self.main
+            .as_ref()
+            .map(RuntimeOwnedViewModelHandle::borrow_mut)
+    }
+
+    pub fn main_handle(&self) -> Option<&RuntimeOwnedViewModelHandle> {
         self.main.as_ref()
     }
 
-    pub fn main_mut(&mut self) -> Option<&mut RuntimeOwnedViewModelInstance> {
-        self.main.as_mut()
+    pub fn set_main(&mut self, main: RuntimeOwnedViewModelInstance) {
+        self.set_main_handle(RuntimeOwnedViewModelHandle::new(main));
     }
 
-    pub fn set_main(&mut self, main: RuntimeOwnedViewModelInstance) {
+    pub fn set_main_handle(&mut self, main: RuntimeOwnedViewModelHandle) {
         self.main = Some(main);
     }
 
-    pub fn take_main(&mut self) -> Option<RuntimeOwnedViewModelInstance> {
+    pub fn take_main(&mut self) -> Option<RuntimeOwnedViewModelHandle> {
         self.main.take()
     }
 
     /// Returns instances in C++ `DataContext::viewModelInstances()` order:
     /// main first, then globals by their file view-model slot.
-    pub fn instances(&self) -> impl Iterator<Item = &RuntimeOwnedViewModelInstance> {
+    pub fn instances(&self) -> impl Iterator<Item = Ref<'_, RuntimeOwnedViewModelInstance>> {
+        self.handles().map(RuntimeOwnedViewModelHandle::borrow)
+    }
+
+    pub fn handles(&self) -> impl Iterator<Item = &RuntimeOwnedViewModelHandle> {
         self.main.iter().chain(self.global_slots.values())
     }
 
-    pub fn global_slot(&self, view_model_index: usize) -> Option<&RuntimeOwnedViewModelInstance> {
-        self.global_slots.get(&view_model_index)
+    pub fn global_slot(
+        &self,
+        view_model_index: usize,
+    ) -> Option<Ref<'_, RuntimeOwnedViewModelInstance>> {
+        self.global_slots
+            .get(&view_model_index)
+            .map(RuntimeOwnedViewModelHandle::borrow)
     }
 
     pub fn global_slot_mut(
-        &mut self,
+        &self,
         view_model_index: usize,
-    ) -> Option<&mut RuntimeOwnedViewModelInstance> {
-        self.global_slots.get_mut(&view_model_index)
+    ) -> Option<RefMut<'_, RuntimeOwnedViewModelInstance>> {
+        self.global_slots
+            .get(&view_model_index)
+            .map(RuntimeOwnedViewModelHandle::borrow_mut)
+    }
+
+    pub fn global_slot_handle(
+        &self,
+        view_model_index: usize,
+    ) -> Option<&RuntimeOwnedViewModelHandle> {
+        self.global_slots.get(&view_model_index)
     }
 
     pub fn global_named(
         &self,
         file: &RuntimeFile,
         name: &str,
-    ) -> Option<&RuntimeOwnedViewModelInstance> {
+    ) -> Option<Ref<'_, RuntimeOwnedViewModelInstance>> {
         let slot = runtime_global_view_model_index_named(file, name)?;
-        self.global_slots.get(&slot)
+        self.global_slot(slot)
     }
 
     pub fn global_named_mut(
-        &mut self,
+        &self,
         file: &RuntimeFile,
         name: &str,
-    ) -> Option<&mut RuntimeOwnedViewModelInstance> {
+    ) -> Option<RefMut<'_, RuntimeOwnedViewModelInstance>> {
         let slot = runtime_global_view_model_index_named(file, name)?;
-        self.global_slots.get_mut(&slot)
+        self.global_slot_mut(slot)
     }
 
     /// Installs `instance` into the named global slot. The instance's own view
@@ -1619,6 +1695,20 @@ impl RuntimeOwnedViewModelContext {
         let Some(slot) = runtime_global_view_model_index_named(file, name) else {
             return false;
         };
+        self.global_slots
+            .insert(slot, RuntimeOwnedViewModelHandle::new(instance));
+        true
+    }
+
+    pub fn set_global_named_handle(
+        &mut self,
+        file: &RuntimeFile,
+        name: &str,
+        instance: RuntimeOwnedViewModelHandle,
+    ) -> bool {
+        let Some(slot) = runtime_global_view_model_index_named(file, name) else {
+            return false;
+        };
         self.global_slots.insert(slot, instance);
         true
     }
@@ -1628,6 +1718,20 @@ impl RuntimeOwnedViewModelContext {
         file: &RuntimeFile,
         view_model_index: usize,
         instance: RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        if !runtime_view_model_is_global(file, view_model_index) {
+            return false;
+        }
+        self.global_slots
+            .insert(view_model_index, RuntimeOwnedViewModelHandle::new(instance));
+        true
+    }
+
+    pub fn set_global_slot_handle(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: RuntimeOwnedViewModelHandle,
     ) -> bool {
         if !runtime_view_model_is_global(file, view_model_index) {
             return false;
@@ -1653,7 +1757,7 @@ impl RuntimeOwnedViewModelContext {
                 if let Some(instance) =
                     runtime_default_owned_view_model_instance(file, view_model_index)
                 {
-                    self.main = Some(instance);
+                    self.main = Some(RuntimeOwnedViewModelHandle::new(instance));
                     changed = true;
                 }
             }
@@ -1666,7 +1770,8 @@ impl RuntimeOwnedViewModelContext {
             else {
                 continue;
             };
-            self.global_slots.insert(view_model_index, instance);
+            self.global_slots
+                .insert(view_model_index, RuntimeOwnedViewModelHandle::new(instance));
             changed = true;
         }
         changed
@@ -1892,16 +1997,16 @@ pub(crate) struct RuntimeOwnedViewModelListHandle {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeOwnedViewModelListItemEntry {
     pub(crate) occurrence_identity: u64,
-    pub(crate) instance: RuntimeOwnedViewModelInstance,
+    pub(crate) instance: RuntimeOwnedViewModelHandle,
 }
 
 impl RuntimeOwnedViewModelListHandle {
-    pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelInstance> {
+    pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelHandle> {
         self.value
             .borrow()
             .items
             .iter()
-            .map(|item| item.instance.borrow().clone())
+            .map(|item| RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance)))
             .collect()
     }
 
@@ -1913,7 +2018,7 @@ impl RuntimeOwnedViewModelListHandle {
             .iter()
             .map(|item| RuntimeOwnedViewModelListItemEntry {
                 occurrence_identity: item.occurrence_identity,
-                instance: item.instance.borrow().clone(),
+                instance: RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance)),
             })
             .collect()
     }
@@ -1933,11 +2038,11 @@ impl RuntimeOwnedViewModelListHandle {
             .iter()
             .enumerate()
             .map(|(index, item)| {
-                let mut instance = item.instance.borrow_mut();
-                set_component_list_item_index(file, &mut instance, index);
+                let instance = RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance));
+                set_component_list_item_index(file, &mut instance.borrow_mut(), index);
                 RuntimeOwnedViewModelListItemEntry {
                     occurrence_identity: item.occurrence_identity,
-                    instance: instance.clone(),
+                    instance,
                 }
             })
             .collect()
@@ -9422,7 +9527,7 @@ mod owned_context_tests {
         assert_eq!(
             context
                 .instances()
-                .map(RuntimeOwnedViewModelInstance::view_model_index)
+                .map(|instance| instance.view_model_index())
                 .collect::<Vec<_>>(),
             vec![1, 0, 2]
         );
@@ -9453,7 +9558,7 @@ mod owned_context_tests {
         assert_eq!(
             context
                 .instances()
-                .map(RuntimeOwnedViewModelInstance::view_model_index)
+                .map(|instance| instance.view_model_index())
                 .collect::<Vec<_>>(),
             vec![1, 1, 2]
         );
@@ -9489,8 +9594,38 @@ mod owned_context_tests {
             entries[1].occurrence_identity
         );
         assert_eq!(
-            entries[0].instance.instance_identity(),
-            entries[1].instance.instance_identity()
+            entries[0].instance.borrow().instance_identity(),
+            entries[1].instance.borrow().instance_identity()
+        );
+        assert!(entries[0].instance.ptr_eq(&entries[1].instance));
+    }
+
+    #[test]
+    fn owned_context_clones_retain_main_handle_identity_and_mutations() {
+        let file = global_context_fixture();
+        let handle = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("main default instance"),
+        );
+        let context = RuntimeOwnedViewModelContext::from_main_handle(handle.clone());
+        let alias = context.clone();
+
+        assert!(
+            context
+                .main_handle()
+                .is_some_and(|main| main.ptr_eq(&handle))
+        );
+        assert!(alias.main_handle().is_some_and(|main| main.ptr_eq(&handle)));
+        assert!(
+            alias
+                .main_mut()
+                .is_some_and(|mut main| main.set_number_by_property_name("value", 42.0))
+        );
+        assert_eq!(
+            context
+                .main()
+                .and_then(|main| main.number_value_by_property_name("value")),
+            Some(42.0)
         );
     }
 

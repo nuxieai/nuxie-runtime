@@ -66,7 +66,9 @@ use crate::view_model::{
     RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
     set_component_list_item_index,
 };
-use crate::{RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance};
+use crate::{
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+};
 
 /// Rejection from attaching host-supplied bytes to one external `FontAsset`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -328,7 +330,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
 pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) state_machine: Option<StateMachineInstance>,
-    pub(crate) context: RuntimeOwnedViewModelInstance,
+    pub(crate) context: RuntimeOwnedViewModelHandle,
     pub(crate) occurrence_identity: u64,
     pub(crate) logical_index: usize,
     pub(crate) virtualized_position: Option<(f32, f32)>,
@@ -346,7 +348,7 @@ pub(crate) struct RuntimeComponentListItemInstance {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeComponentListLogicalItem {
     pub(crate) occurrence_identity: u64,
-    pub(crate) context: RuntimeOwnedViewModelInstance,
+    pub(crate) context: RuntimeOwnedViewModelHandle,
     pub(crate) size: (f32, f32),
     pub(crate) mapped_artboard_global: Option<u32>,
 }
@@ -1856,7 +1858,7 @@ impl ArtboardInstance {
         &mut self,
         file: &RuntimeFile,
         list_local_id: usize,
-        contexts: Vec<RuntimeOwnedViewModelInstance>,
+        contexts: Vec<RuntimeOwnedViewModelHandle>,
     ) -> bool {
         let Some(build_context) = self.build_context.clone() else {
             return false;
@@ -1884,11 +1886,12 @@ impl ArtboardInstance {
                 contexts
                     .into_iter()
                     .enumerate()
-                    .map(|(index, mut instance)| {
-                        set_component_list_item_index(file, &mut instance, index);
+                    .map(|(index, instance)| {
+                        set_component_list_item_index(file, &mut instance.borrow_mut(), index);
+                        let occurrence_identity = instance.borrow().instance_identity();
                         RuntimeOwnedViewModelListItemEntry {
                             // NumberToList owns stable, unique generated VMIs.
-                            occurrence_identity: instance.instance_identity(),
+                            occurrence_identity,
                             instance,
                         }
                     })
@@ -1919,7 +1922,7 @@ impl ArtboardInstance {
         let mut logical_items = Vec::with_capacity(entries.len());
         for entry in entries {
             let mapped_artboard_global =
-                resolve_child_graph(&entry.instance).map(|graph| graph.global_id);
+                resolve_child_graph(&entry.instance.borrow()).map(|graph| graph.global_id);
             let previous = previous_logical.iter().find(|item| {
                 item.occurrence_identity == entry.occurrence_identity
                     && item.mapped_artboard_global == mapped_artboard_global
@@ -2003,10 +2006,10 @@ impl ArtboardInstance {
                                 item.logical_index == *index
                                     && item.occurrence_identity == logical.occurrence_identity
                                     && item.virtualized_position == *position
-                                    && item.context.instance_identity()
-                                        == logical.context.instance_identity()
-                                    && item.context.mutation_generation()
-                                        == logical.context.mutation_generation()
+                                    && item.context.borrow().instance_identity()
+                                        == logical.context.borrow().instance_identity()
+                                    && item.context.borrow().mutation_generation()
+                                        == logical.context.borrow().mutation_generation()
                             })
                 });
         if existing_matches {
@@ -2039,15 +2042,17 @@ impl ArtboardInstance {
                 let mut item = reusable_items[existing_index]
                     .take()
                     .expect("component-list identity match must retain an item");
-                if item.context.instance_identity() != context.instance_identity()
-                    || item.context.mutation_generation() != context.mutation_generation()
+                if item.context.borrow().instance_identity() != context.borrow().instance_identity()
+                    || item.context.borrow().mutation_generation()
+                        != context.borrow().mutation_generation()
                 {
                     item.context = context.clone();
                     let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
-                    child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+                    child_candidates
+                        .push(RuntimeOwnedViewModelBindingCandidate::root_handle(&context));
                     child_candidates.extend(parent_candidates.iter().cloned());
                     item.child.artboard_owned_view_model_context =
-                        Some(RuntimeOwnedViewModelContext::from_main(context));
+                        Some(RuntimeOwnedViewModelContext::from_main_handle(context));
                     item.child
                         .bind_owned_view_model_artboard_context_candidates(
                             file,
@@ -2098,10 +2103,11 @@ impl ArtboardInstance {
             };
             let mut child_candidates =
                 Vec::with_capacity(self.artboard_owned_view_model_candidates.len() + 1);
-            child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+            child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(&context));
             child_candidates.extend(self.artboard_owned_view_model_candidates.iter().cloned());
-            child.artboard_owned_view_model_context =
-                Some(RuntimeOwnedViewModelContext::from_main(context.clone()));
+            child.artboard_owned_view_model_context = Some(
+                RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
+            );
             child.bind_owned_view_model_artboard_context_candidates(
                 file,
                 &child_candidates,
@@ -7887,14 +7893,17 @@ mod tests {
         .expect("parent artboard instance");
 
         let list_local_id = graph.artboards[0].component_lists[0].local_id;
-        let row_context = RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
-            .expect("component-list row context");
-        assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context]));
+        let row_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("component-list row context"),
+        );
+        assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context.clone()],));
         let mounted = parent
             .component_list_items
             .get(&list_local_id)
             .and_then(|items| items.first())
             .expect("mounted component-list row");
+        assert!(mounted.context.ptr_eq(&row_context));
         assert_eq!(
             mounted
                 .state_machine

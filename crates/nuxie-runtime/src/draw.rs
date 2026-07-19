@@ -5461,7 +5461,7 @@ fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64
             mix(prepared_epoch, items.len() as u64);
             for item in items {
                 for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
-                    mix(epoch, item.context.instance_identity());
+                    mix(epoch, item.context.borrow().instance_identity());
                     mix(epoch, item.occurrence_identity);
                     mix(epoch, item.logical_index as u64);
                     mix(epoch, item.render_cache_revision);
@@ -12735,11 +12735,11 @@ fn runtime_draw_component_list(
         .iter()
         .map(|item| {
             runtime
-                .view_model_property_for_symbol(item.context.view_model_index(), 16)
+                .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
                 .map(|property| {
                     property
                         .string_property("name")
-                        .and_then(|name| item.context.number_value_by_property_name(name))
+                        .and_then(|name| item.context.borrow().number_value_by_property_name(name))
                         .filter(|value| value.is_finite())
                         .unwrap_or(0.0)
                 })
@@ -12751,7 +12751,7 @@ fn runtime_draw_component_list(
         .is_some_and(|logical_items| {
             logical_items.iter().any(|item| {
                 runtime
-                    .view_model_property_for_symbol(item.context.view_model_index(), 16)
+                    .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
                     .is_some()
             })
         });

@@ -16,8 +16,8 @@ use nuxie_runtime::{
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
-    NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue, ScriptViewModel,
-    preallocate_render_paint_cache_for_artboard_instance,
+    NoopScriptHost, RuntimeOwnedViewModelHandle, ScriptArtboard, ScriptError, ScriptMethod,
+    ScriptValue, ScriptViewModel, preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_source_render_paints,
 };
@@ -285,7 +285,7 @@ fn run() -> Result<String> {
             factory.as_factory(),
             owned_view_model_context
                 .as_ref()
-                .and_then(RuntimeOwnedViewModelContext::main),
+                .and_then(RuntimeOwnedViewModelContext::main_handle),
             true,
         )?;
     }
@@ -335,7 +335,7 @@ fn run() -> Result<String> {
             factory.as_factory(),
             owned_view_model_context
                 .as_ref()
-                .and_then(RuntimeOwnedViewModelContext::main),
+                .and_then(RuntimeOwnedViewModelContext::main_handle),
             false,
         )?;
     }
@@ -472,7 +472,7 @@ fn run() -> Result<String> {
                     state,
                     owned_view_model_context
                         .as_ref()
-                        .and_then(RuntimeOwnedViewModelContext::main),
+                        .and_then(RuntimeOwnedViewModelContext::main_handle),
                     &mut bound_script_artboards,
                 )?;
                 state.borrow_mut().realize_pending(
@@ -535,7 +535,7 @@ fn refresh_bound_script_artboard_inputs(
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelHandle>,
     current_artboards: &mut BTreeMap<u32, u64>,
 ) -> Result<()> {
     let Some(context) = owned_view_model_context else {
@@ -563,7 +563,7 @@ fn refresh_bound_script_artboard_inputs(
             continue;
         };
         let Some(bound_artboard_id) =
-            nuxie_runtime::bound_script_artboard_input(runtime, context, input)
+            nuxie_runtime::bound_script_artboard_input(runtime, &context.borrow(), input)
         else {
             continue;
         };
@@ -1161,27 +1161,31 @@ fn apply_input_event(
     };
     match event.kind {
         InputKind::PointerDown => {
-            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_down_with_owned_view_model_context(
                     instance,
                     event.x,
                     event.y,
                     event.pointer_id,
-                    context,
+                    &mut context,
                 );
             } else {
                 state_machine.pointer_down(instance, event.x, event.y, event.pointer_id);
             }
         }
         InputKind::PointerMove => {
-            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_move_with_owned_view_model_context(
                     instance,
                     event.x,
                     event.y,
                     event.seconds,
                     event.pointer_id,
-                    context,
+                    &mut context,
                 );
             } else {
                 state_machine.pointer_move(
@@ -1194,26 +1198,30 @@ fn apply_input_event(
             }
         }
         InputKind::PointerUp => {
-            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_up_with_owned_view_model_context(
                     instance,
                     event.x,
                     event.y,
                     event.pointer_id,
-                    context,
+                    &mut context,
                 );
             } else {
                 state_machine.pointer_up(instance, event.x, event.y, event.pointer_id);
             }
         }
         InputKind::PointerExit => {
-            if let Some(context) = owned_view_model_context.and_then(|context| context.main_mut()) {
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_exit_with_owned_view_model_context(
                     instance,
                     event.x,
                     event.y,
                     event.pointer_id,
-                    context,
+                    &mut context,
                 );
             } else {
                 state_machine.pointer_exit(instance, event.x, event.y, event.pointer_id);
@@ -1750,7 +1758,7 @@ impl RunnerScriptArtboard {
             state_machine,
             view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
                 .as_ref()
-                .and_then(RuntimeOwnedViewModelContext::main)
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
                 .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context)),
             width: object
                 .and_then(|object| object.double_property("width"))
@@ -2428,7 +2436,7 @@ fn initialize_state_machine_scripted_objects(
     let mut vm = prepare_script_vm(runtime, &script_assets, factory)?;
     let registered_programs = BTreeMap::new();
     let context_model = owned_context
-        .and_then(RuntimeOwnedViewModelContext::main)
+        .and_then(RuntimeOwnedViewModelContext::main_handle)
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
     vm.set_default_context_view_model(context_model);
     let mut host = NoopScriptHost;
@@ -2474,7 +2482,7 @@ fn initialize_state_machine_scripted_objects(
             let value = owned_context
                 .and_then(RuntimeOwnedViewModelContext::main)
                 .and_then(|context| {
-                    nuxie_runtime::bound_script_input_value(runtime, context, input)
+                    nuxie_runtime::bound_script_input_value(runtime, &context, input)
                 })
                 .or_else(|| default_script_input_value(input));
             if let Some(value) = value {
@@ -2518,7 +2526,7 @@ fn selected_script_view_model(
 ) -> Option<ScriptViewModel> {
     selected_artboard_owned_view_model_context(runtime, artboard_index)
         .as_ref()
-        .and_then(RuntimeOwnedViewModelContext::main)
+        .and_then(RuntimeOwnedViewModelContext::main_handle)
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
 }
 
@@ -2765,7 +2773,7 @@ fn bind_scripted_drawable_context(
     instance: &mut ArtboardInstance,
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
     factory: &mut dyn RenderFactory,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelHandle>,
     _initialize_deferred: bool,
 ) -> Result<()> {
     let context_view_model = owned_view_model_context
@@ -2819,7 +2827,7 @@ fn rehydrate_script_inputs(
     scripted_global_id: u32,
     instance: &mut ArtboardInstance,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelHandle>,
 ) -> Result<()> {
     for global_id in artboard_object_range(runtime, artboard, artboards) {
         let Some(object) = runtime.object(global_id) else {
@@ -2851,7 +2859,7 @@ fn rehydrate_script_inputs(
         }
         if type_name == "ScriptInputViewModelProperty" {
             let Some(view_model) = owned_view_model_context.and_then(|context| {
-                nuxie_runtime::bound_script_view_model(runtime, context, object)
+                nuxie_runtime::bound_script_view_model(runtime, &context.borrow(), object)
             }) else {
                 continue;
             };
@@ -2861,7 +2869,9 @@ fn rehydrate_script_inputs(
             continue;
         }
         let value = owned_view_model_context
-            .and_then(|context| nuxie_runtime::bound_script_input_value(runtime, context, object))
+            .and_then(|context| {
+                nuxie_runtime::bound_script_input_value(runtime, &context.borrow(), object)
+            })
             .or_else(|| match type_name {
                 "ScriptInputBoolean" => {
                     object.bool_property("propertyValue").map(ScriptValue::Bool)

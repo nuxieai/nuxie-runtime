@@ -10629,8 +10629,11 @@ fn runtime_draw_live_command(
     if let (Some(text_local), Some(path_commands)) =
         (text_local, text_clip_path_commands.as_deref())
     {
+        // C++ `Text::m_clipPath` is a default `ShapePaintPath`, whose default
+        // fill rule is clockwise. Keep text overflow clips distinct from
+        // ordinary non-zero shape paths in the retained cache.
         let key =
-            path_cache.retained_world_render_path_key(instance, graph, RenderFillRule::NonZero);
+            path_cache.retained_world_render_path_key(instance, graph, RenderFillRule::Clockwise);
         let clip_path = path_cache.text_clip_path(key, text_local, factory, path_commands);
         renderer.clip_path(clip_path.as_ref());
     }

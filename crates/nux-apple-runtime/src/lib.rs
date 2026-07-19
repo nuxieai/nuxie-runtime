@@ -318,6 +318,8 @@ struct SessionState {
     instance: OwnedArtboardInstance,
     state_machine: Option<StateMachineInstance>,
     render_cache: ArtboardRenderCache,
+    #[cfg(test)]
+    render_attempts: usize,
     attachment: Option<SurfaceState>,
 }
 
@@ -464,6 +466,8 @@ impl WorkerState {
                 instance,
                 state_machine,
                 render_cache,
+                #[cfg(test)]
+                render_attempts: 0,
                 attachment: None,
             },
         );
@@ -1386,6 +1390,9 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 if viewport_width == 0 || viewport_height == 0 {
                     return Ok((NUX_SURFACE_DISPOSITION_SKIPPED_ZERO_SIZE, changed));
                 }
+                if drawable_identity == 0 {
+                    return Ok((NUX_SURFACE_DISPOSITION_SKIPPED_TIMEOUT, changed));
+                }
                 let (artboard_width, artboard_height) = session.instance.artboard_dimensions();
                 let presentation_transform = centered_contain_transform(
                     artboard_width,
@@ -1395,6 +1402,10 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 )?;
                 let mut frame = attachment.factory.begin_frame(0x0000_0000);
                 frame.transform(presentation_transform);
+                #[cfg(test)]
+                {
+                    session.render_attempts = session.render_attempts.saturating_add(1);
+                }
                 session
                     .instance
                     .draw_with_render_cache(
@@ -2087,6 +2098,22 @@ mod tests {
                 NUX_SURFACE_DISPOSITION_SKIPPED_TIMEOUT
             );
             unsafe { nux_operation_result_free(result) };
+            let session_handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+            let session_id = session_handle.token.id;
+            let render_attempts = session_handle
+                .token
+                .worker
+                .call(Some(session_id), move |state| {
+                    state
+                        .session(session_id)
+                        .map(|session| session.render_attempts)
+                })
+                .expect("worker must report render attempts")
+                .expect("render session must remain live");
+            assert_eq!(
+                render_attempts, 0,
+                "a missing drawable must skip frame construction and drawing"
+            );
 
             let drawable = layer
                 .nextDrawable()

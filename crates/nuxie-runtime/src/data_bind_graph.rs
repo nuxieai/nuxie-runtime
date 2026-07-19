@@ -3158,6 +3158,10 @@ impl RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraph {
+    pub(crate) fn has_bindings(&self) -> bool {
+        !self.sources.is_empty()
+    }
+
     pub(crate) fn attach_scripted_instances(
         &mut self,
         instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,

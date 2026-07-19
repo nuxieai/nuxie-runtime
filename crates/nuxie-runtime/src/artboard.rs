@@ -272,6 +272,12 @@ pub struct ArtboardInstance {
     pub(crate) artboard_text_list_bindings: Vec<RuntimeArtboardTextListBindingInstance>,
     pub(crate) artboard_context_source_values_scratch: Vec<RuntimeArtboardContextSourceValue>,
     pub(crate) artboard_nested_child_context_updates_scratch: Vec<RuntimeNestedChildContextUpdate>,
+    /// C++ nested artboards retain authored view-model instances by pointer,
+    /// so clean frames do not reconcile detached copies. Rust only needs the
+    /// full ordered reconciliation after a source value or context changes.
+    pub(crate) stateful_nested_view_model_contexts_dirty: bool,
+    pub(crate) artboard_data_bind_dirty_epoch: u64,
+    pub(crate) artboard_data_bind_processed_epoch: u64,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
     has_legacy_image_layout_scales: Cell<bool>,
@@ -283,6 +289,8 @@ pub struct ArtboardInstance {
     pub(crate) prepared_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
+    pub(crate) text_epoch: u64,
+    text_affecting_locals: Vec<bool>,
     pub(crate) draw_order_epoch: u64,
     pub(crate) did_change: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
@@ -342,6 +350,58 @@ pub(crate) struct RuntimeComponentListLogicalItem {
 struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
     artboards: Arc<Vec<ArtboardGraph>>,
+    artboard_index_by_global: Arc<Vec<Option<usize>>>,
+}
+
+fn build_artboard_index_by_global(artboards: &[ArtboardGraph]) -> Vec<Option<usize>> {
+    let slot_count = artboards
+        .iter()
+        .filter_map(|graph| usize::try_from(graph.global_id).ok())
+        .max()
+        .map_or(0, |maximum| maximum.saturating_add(1));
+    let mut indices = vec![None; slot_count];
+    for (index, graph) in artboards.iter().enumerate() {
+        if let Ok(global_id) = usize::try_from(graph.global_id)
+            && let Some(slot) = indices.get_mut(global_id)
+        {
+            *slot = Some(index);
+        }
+    }
+    indices
+}
+
+fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectArena) -> Vec<bool> {
+    let mut result = vec![false; slots.len()];
+    let Some(parent_key) = property_key_for_name("Component", "parentId") else {
+        return result;
+    };
+    for slot in slots {
+        let mut current_local = slot.local_id;
+        let mut remaining = slots.len().saturating_add(1);
+        while remaining != 0 {
+            remaining -= 1;
+            if matches!(
+                slots.get(current_local).and_then(|slot| slot.type_name),
+                Some("Text" | "TextInput")
+            ) {
+                if let Some(affects_text) = result.get_mut(slot.local_id) {
+                    *affects_text = true;
+                }
+                break;
+            }
+            let Some(parent_local) = objects
+                .uint_property(current_local, parent_key)
+                .and_then(|parent| usize::try_from(parent).ok())
+            else {
+                break;
+            };
+            if parent_local == current_local || parent_local >= slots.len() {
+                break;
+            }
+            current_local = parent_local;
+        }
+    }
+    result
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -415,6 +475,7 @@ impl ArtboardInstance {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.clone()),
+            artboard_index_by_global: Arc::new(build_artboard_index_by_global(&artboards)),
         };
         Self::from_graph_inner(
             file,
@@ -434,6 +495,7 @@ impl ArtboardInstance {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.to_vec()),
+            artboard_index_by_global: Arc::new(build_artboard_index_by_global(artboards)),
         };
         Self::from_graph_inner(
             file,
@@ -567,6 +629,7 @@ impl ArtboardInstance {
         }
         let nested_artboard_locals = nested_artboards.keys().copied().collect::<Vec<_>>();
 
+        let text_affecting_locals = build_text_affecting_locals(&slots, &objects);
         let mut instance = Self {
             instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: dimensions.width,
@@ -632,6 +695,9 @@ impl ArtboardInstance {
             artboard_text_list_bindings,
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
+            stateful_nested_view_model_contexts_dirty: true,
+            artboard_data_bind_dirty_epoch: 1,
+            artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
             has_legacy_image_layout_scales: Cell::new(false),
@@ -643,6 +709,8 @@ impl ArtboardInstance {
             prepared_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
+            text_epoch: 1,
+            text_affecting_locals,
             draw_order_epoch: 1,
             did_change: true,
             layout_constraint_bounds_enabled,
@@ -693,6 +761,7 @@ impl ArtboardInstance {
             return Ok(());
         }
         self.external_font_assets.insert(asset_id, bytes);
+        self.mark_text_changed();
         self.mark_path_changed();
         self.mark_layout_changed();
         Ok(())
@@ -802,6 +871,9 @@ impl ArtboardInstance {
             &mut dyn ScriptHost,
         ) -> Result<ScriptValue, ScriptError>,
     ) -> Result<bool, ScriptError> {
+        if self.script_updates_pending.is_empty() {
+            return Ok(self.refresh_component_list_items());
+        }
         let pending = std::mem::take(&mut self.script_updates_pending)
             .into_iter()
             .collect::<Vec<_>>();
@@ -1135,12 +1207,17 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn runtime_graph(&self) -> Option<&ArtboardGraph> {
-        let graph_global_id = self.graph_global_id;
-        self.build_context
-            .as_ref()?
-            .artboards
-            .iter()
-            .find(|graph| graph.global_id == graph_global_id)
+        self.runtime_graph_for_global(self.graph_global_id)
+    }
+
+    pub(crate) fn runtime_graph_for_global(&self, graph_global_id: u32) -> Option<&ArtboardGraph> {
+        let context = self.build_context.as_ref()?;
+        let index = context
+            .artboard_index_by_global
+            .get(usize::try_from(graph_global_id).ok()?)
+            .copied()
+            .flatten()?;
+        context.artboards.get(index)
     }
 
     pub fn update_order(&self) -> &[usize] {
@@ -1169,6 +1246,7 @@ impl ArtboardInstance {
         }
         self.width = width;
         self.height = height;
+        self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_layout_changed();
         true
@@ -1232,7 +1310,9 @@ impl ArtboardInstance {
         value: u32,
     ) -> bool {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+        self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
+        self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         self.apply_color_property_changed(local_id, property_key);
         true
@@ -1254,7 +1334,9 @@ impl ArtboardInstance {
             return false;
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+        self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
+        self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
@@ -1291,6 +1373,7 @@ impl ArtboardInstance {
             return false;
         }
         self.image_asset_overrides.insert(local_id, asset_global);
+        self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_prepared_changed();
         true
@@ -1516,7 +1599,9 @@ impl ArtboardInstance {
         value: f32,
     ) -> bool {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+        self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
+        self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
@@ -1541,7 +1626,9 @@ impl ArtboardInstance {
             return false;
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+        self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
+        self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
@@ -1583,7 +1670,9 @@ impl ArtboardInstance {
             return false;
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+        self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
+        self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
@@ -2001,6 +2090,9 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn refresh_component_list_items(&mut self) -> bool {
+        if self.component_list_sources.is_empty() {
+            return false;
+        }
         let Some(file) = self
             .build_context
             .as_ref()
@@ -2263,6 +2355,12 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
     ) -> bool {
+        if self.nested_artboard_locals.is_empty()
+            && self.component_list_items.is_empty()
+            && self.component_list_sources.is_empty()
+        {
+            return false;
+        }
         let layout_bounds = self.runtime_nested_artboard_layout_bounds();
         let mut changed = self.refresh_component_list_items();
         for index in 0..self.nested_artboard_locals.len() {
@@ -2275,32 +2373,36 @@ impl ArtboardInstance {
             }
             changed |= self
                 .apply_nested_artboard_layout_bounds(host_local, layout_bounds.as_ref().as_ref());
-            let nested_needs_update = match nested_events.as_mut() {
+            let (nested_keep_going, nested_is_dirty) = match nested_events.as_mut() {
                 Some(nested_events) => {
                     let mut reported_events = Vec::new();
-                    let nested_needs_update = self
+                    let (nested_keep_going, nested_is_dirty) = self
                         .nested_artboards
                         .get_mut(&host_local)
                         .map(|nested| {
-                            nested.advance(elapsed_seconds, Some(&mut reported_events))
-                                || nested.child.has_dirt(ComponentDirt::COMPONENTS)
+                            let keep_going =
+                                nested.advance(elapsed_seconds, Some(&mut reported_events));
+                            let is_dirty = nested.child.has_dirt(ComponentDirt::COMPONENTS);
+                            (keep_going, is_dirty)
                         })
-                        .unwrap_or(false);
+                        .unwrap_or((false, false));
                     if !reported_events.is_empty() {
                         (**nested_events).push((host_local, reported_events));
                     }
-                    nested_needs_update
+                    (nested_keep_going, nested_is_dirty)
                 }
                 None => self
                     .nested_artboards
                     .get_mut(&host_local)
                     .map(|nested| {
-                        nested.advance(elapsed_seconds, None)
-                            || nested.child.has_dirt(ComponentDirt::COMPONENTS)
+                        let keep_going = nested.advance(elapsed_seconds, None);
+                        let is_dirty = nested.child.has_dirt(ComponentDirt::COMPONENTS);
+                        (keep_going, is_dirty)
                     })
-                    .unwrap_or(false),
+                    .unwrap_or((false, false)),
             };
-            if nested_needs_update {
+            changed |= nested_keep_going;
+            if nested_is_dirty {
                 changed = true;
                 self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
             }
@@ -2455,6 +2557,7 @@ impl ArtboardInstance {
         if !object_changed && !legacy_scale_changed {
             return false;
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
 
         match property {
             TransformProperty::Opacity => {
@@ -2568,6 +2671,10 @@ impl ArtboardInstance {
         self.layout_epoch
     }
 
+    pub(crate) fn text_epoch(&self) -> u64 {
+        self.text_epoch
+    }
+
     pub(crate) fn draw_order_epoch(&self) -> u64 {
         self.draw_order_epoch
     }
@@ -2575,6 +2682,20 @@ impl ArtboardInstance {
     fn mark_changed(&mut self) {
         self.did_change = true;
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
+    }
+
+    pub(crate) fn mark_artboard_data_bind_work_dirty(&mut self) {
+        self.artboard_data_bind_dirty_epoch = self.artboard_data_bind_dirty_epoch.wrapping_add(1);
+    }
+
+    fn mark_stateful_nested_view_model_contexts_dirty_for_local(&mut self, local_id: usize) {
+        if self
+            .slot(local_id)
+            .and_then(|slot| slot.type_name)
+            .is_some_and(|type_name| type_name.starts_with("ViewModelInstance"))
+        {
+            self.stateful_nested_view_model_contexts_dirty = true;
+        }
     }
 
     pub(crate) fn mark_prepared_changed(&mut self) {
@@ -2610,6 +2731,21 @@ impl ArtboardInstance {
     pub(crate) fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
         self.mark_prepared_changed();
+    }
+
+    fn mark_text_changed(&mut self) {
+        self.text_epoch = self.text_epoch.wrapping_add(1);
+    }
+
+    fn mark_text_changed_for_local(&mut self, local_id: usize) {
+        if self
+            .text_affecting_locals
+            .get(local_id)
+            .copied()
+            .unwrap_or(false)
+        {
+            self.mark_text_changed();
+        }
     }
 
     fn mark_draw_order_changed(&mut self) {
@@ -2818,6 +2954,7 @@ impl ArtboardInstance {
         }
         self.mark_path_changed();
         self.mark_layout_changed();
+        self.mark_artboard_data_bind_work_dirty();
         self.on_component_dirty(local_id);
         self.apply_component_collapse_changed(local_id);
         true
@@ -3668,6 +3805,8 @@ impl ArtboardInstance {
             if changed {
                 self.remove_nested_artboard_local(local_id);
                 self.artboard_owned_context_key = None;
+                self.stateful_nested_view_model_contexts_dirty = true;
+                self.mark_artboard_data_bind_work_dirty();
                 self.mark_changed();
                 self.mark_prepared_changed();
             }
@@ -3699,6 +3838,8 @@ impl ArtboardInstance {
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
         self.artboard_owned_context_key = None;
+        self.stateful_nested_view_model_contexts_dirty = true;
+        self.mark_artboard_data_bind_work_dirty();
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
         self.mark_prepared_changed();
@@ -5013,6 +5154,7 @@ mod tests {
         }
         let objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
 
+        let text_affecting_locals = build_text_affecting_locals(&slots, &objects);
         ArtboardInstance {
             instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: 0.0,
@@ -5075,6 +5217,9 @@ mod tests {
             artboard_text_list_bindings: Vec::new(),
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
+            stateful_nested_view_model_contexts_dirty: true,
+            artboard_data_bind_dirty_epoch: 1,
+            artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
             has_legacy_image_layout_scales: Cell::new(false),
@@ -5086,6 +5231,8 @@ mod tests {
             prepared_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
+            text_epoch: 1,
+            text_affecting_locals,
             draw_order_epoch: 1,
             did_change: true,
             layout_constraint_bounds_enabled: false,

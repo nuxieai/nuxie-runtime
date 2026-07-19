@@ -5710,11 +5710,6 @@ fn static_text_parent_chain_supported(
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
-    let file_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .map(|asset| asset.id)
-        .collect::<BTreeSet<_>>();
     let mut after_asset = false;
     for object in runtime.objects.iter().flatten() {
         if object.id == asset_global {
@@ -5724,11 +5719,13 @@ fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option
         if !after_asset {
             continue;
         }
-        if file_asset_globals.contains(&object.id) {
-            return None;
-        }
         if object.type_name == "FileAssetContents" {
             return object.bytes_property("bytes");
+        }
+        if definition_by_name(object.type_name)
+            .is_some_and(|definition| definition.is_a("FileAsset"))
+        {
+            return None;
         }
     }
     None

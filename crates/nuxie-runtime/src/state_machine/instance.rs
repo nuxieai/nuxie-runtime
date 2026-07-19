@@ -63,6 +63,7 @@ pub struct StateMachineInstance {
     pending_view_model_actions: Vec<RuntimeScheduledListenerAction>,
     changed_state_count: usize,
     needs_advance: bool,
+    has_advanced_once: bool,
     data_bind_graph: RuntimeDataBindGraph,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
@@ -186,7 +187,7 @@ impl StateMachineInstance {
         let mut data_bind_graph = RuntimeDataBindGraph::new(state_machine);
         data_bind_graph
             .attach_scripted_instances(&artboard.scripted_data_converter_instances_by_global);
-        let key_frame_data_bind_graphs = artboard
+        let mut key_frame_data_bind_graphs = artboard
             .linear_animations
             .iter()
             .map(|animation| {
@@ -200,7 +201,10 @@ impl StateMachineInstance {
                     graph
                 })
             })
-            .collect();
+            .collect::<Vec<_>>();
+        if key_frame_data_bind_graphs.iter().all(Option::is_none) {
+            key_frame_data_bind_graphs.clear();
+        }
         Self {
             state_machine_index,
             inputs,
@@ -223,6 +227,7 @@ impl StateMachineInstance {
             pending_view_model_actions: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
+            has_advanced_once: false,
             data_bind_graph,
             key_frame_data_bind_graphs,
             pointer_down_listener_hits: Vec::new(),
@@ -3654,22 +3659,42 @@ impl StateMachineInstance {
         clear_reported_events: bool,
     ) -> bool {
         self.focus.sync(artboard);
+        if self.has_advanced_once
+            && elapsed_seconds == 0.0
+            && !self.needs_advance
+            && self.scripted_instances_by_global.is_empty()
+        {
+            if clear_reported_events {
+                self.reported_events.clear();
+            }
+            self.changed_state_count = 0;
+            return false;
+        }
+        self.has_advanced_once = true;
         if clear_reported_events {
             self.reported_events.clear();
         }
         self.changed_state_count = 0;
         self.needs_advance = false;
-        self.apply_default_view_model_bindings(
-            true,
-            RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
-        );
-        let data_bind_advance = self
-            .data_bind_graph
-            .advance_stateful_converters(elapsed_seconds);
-        self.apply_default_view_model_bindings(
-            true,
-            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance,
-        );
+        let has_data_bindings = self.data_bind_graph.has_bindings();
+        if has_data_bindings {
+            self.apply_default_view_model_bindings(
+                true,
+                RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
+            );
+        }
+        let data_bind_advance = if has_data_bindings {
+            self.data_bind_graph
+                .advance_stateful_converters(elapsed_seconds)
+        } else {
+            Default::default()
+        };
+        if has_data_bindings {
+            self.apply_default_view_model_bindings(
+                true,
+                RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance,
+            );
+        }
         let data_context_present = self.data_bind_graph.data_context_present();
         let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
         let mut keep_going = false;

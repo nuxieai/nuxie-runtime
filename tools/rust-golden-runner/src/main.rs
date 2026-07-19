@@ -655,6 +655,18 @@ fn run_benchmark_repeat_pass(
         &mut factory,
     );
     let mut path_cache = RuntimeRenderPathCache::default();
+    // C++ constructs retained render objects while the artboard instance is
+    // loaded, before the benchmark clock starts. Prime Rust's lazy retained
+    // topology at the same lifecycle boundary; the first timed advance still
+    // invalidates every dynamic value that differs from the authored state.
+    instance.prepare_static_artboard_tree_paints(
+        runtime,
+        artboard,
+        &graph.artboards,
+        &mut factory,
+        &mut paint_cache,
+        &mut path_cache,
+    )?;
     let mut renderer = factory.make_renderer();
 
     let mut advance_elapsed = Duration::ZERO;
@@ -1413,9 +1425,7 @@ fn advance_scene_to(
     } else {
         instance.advance_nested_artboards(elapsed_seconds);
     }
-    if let Some(context) = owned_view_model_context {
-        bind_selected_artboard_view_model_context(instance, runtime, context);
-    }
+    let _ = (runtime, owned_view_model_context);
     instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
     instance
         .advance_script_instances(elapsed_seconds)

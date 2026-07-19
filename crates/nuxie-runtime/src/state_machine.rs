@@ -2,6 +2,7 @@ use crate::ArtboardInstance;
 use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
+use crate::components::TransformProperty;
 use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
 use crate::focus::RuntimeFocusTree;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
@@ -2287,6 +2288,7 @@ enum AnimationResetEntry {
     Double {
         local_id: usize,
         property_key: u16,
+        transform_property: Option<TransformProperty>,
         value: f32,
     },
     Color {
@@ -2334,6 +2336,7 @@ impl AnimationReset {
                             entries.push(AnimationResetEntry::Double {
                                 local_id: keyed_object.target_local_id,
                                 property_key: keyed_property.property_key,
+                                transform_property: keyed_property.transform_property,
                                 value,
                             });
                         }
@@ -2379,9 +2382,20 @@ impl AnimationReset {
                 AnimationResetEntry::Double {
                     local_id,
                     property_key,
+                    transform_property,
                     value,
                 } => {
-                    changed |= artboard.set_keyed_double_property(*local_id, *property_key, *value);
+                    changed |= match transform_property {
+                        Some(transform_property) => artboard.set_transform_property_with_key(
+                            *local_id,
+                            *transform_property,
+                            *property_key,
+                            *value,
+                        ),
+                        None => {
+                            artboard.set_keyed_double_property(*local_id, *property_key, *value)
+                        }
+                    };
                 }
                 AnimationResetEntry::Color {
                     local_id,
@@ -3362,6 +3376,9 @@ impl StateMachineLayerInstance {
     }
 
     fn prepare_key_frame_data_binds(&mut self, graphs: &[Option<crate::RuntimeDataBindGraph>]) {
+        if graphs.is_empty() {
+            return;
+        }
         Self::for_each_animation_instance_mut(self, |instance| {
             let prototype = graphs
                 .get(instance.animation_index)
@@ -3375,6 +3392,9 @@ impl StateMachineLayerInstance {
         graphs: &[Option<crate::RuntimeDataBindGraph>],
         elapsed_seconds: f32,
     ) -> bool {
+        if graphs.is_empty() {
+            return false;
+        }
         let mut keep_going = false;
         Self::for_each_animation_instance_mut(self, |instance| {
             let prototype = graphs

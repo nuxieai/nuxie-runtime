@@ -3536,7 +3536,7 @@ impl ArtboardInstance {
         &mut self,
         local_id: usize,
         property_key: u16,
-    ) {
+    ) -> bool {
         let enqueued = self
             .artboard_data_bind_source_queues
             .enqueue_target_property(
@@ -3544,6 +3544,7 @@ impl ArtboardInstance {
                 property_key,
                 self.artboard_data_bind_suppressed_target_data_bind,
             );
+        let did_enqueue = !enqueued.is_empty();
         for data_bind_index in enqueued {
             if let Some(state) = self
                 .artboard_shared_data_bind_converter_states
@@ -3552,9 +3553,16 @@ impl ArtboardInstance {
                 state.target_origin = true;
             }
         }
+        if did_enqueue {
+            self.mark_artboard_data_bind_work_dirty();
+        }
+        did_enqueue
     }
 
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
+        if self.nested_artboard_locals.is_empty() {
+            return false;
+        }
         let mut changed = false;
         let mut values = std::mem::take(&mut self.artboard_context_source_values_scratch);
         self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY, &mut values);
@@ -3712,6 +3720,10 @@ impl ArtboardInstance {
             self.artboard_owned_view_model_candidates = candidates.to_vec();
         }
         let rebind_self = self.retain_owned_view_model_context_candidates(candidates);
+        if rebind_self {
+            self.mark_artboard_data_bind_work_dirty();
+            self.stateful_nested_view_model_contexts_dirty = true;
+        }
         let mut changed = if bind_self && rebind_self {
             let mut changed = self.refresh_artboard_converter_dependents(|converter| {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
@@ -3853,6 +3865,10 @@ impl ArtboardInstance {
                 }];
         }
         let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
+        if rebind_self {
+            self.mark_artboard_data_bind_work_dirty();
+            self.stateful_nested_view_model_contexts_dirty = true;
+        }
         let mut changed = if bind_self && rebind_self {
             let mut changed = self.refresh_artboard_converter_dependents(|converter| {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
@@ -4819,6 +4835,7 @@ impl ArtboardInstance {
         if self.artboard_data_bind_values.get(path) == Some(&value) {
             return false;
         }
+        self.mark_artboard_data_bind_work_dirty();
         if let RuntimeDataBindGraphValue::Asset(file_asset_index) = &value {
             for binding in self
                 .artboard_image_asset_bindings
@@ -4880,6 +4897,14 @@ impl ArtboardInstance {
         root_transform: Mat2D,
         elapsed_seconds: f32,
     ) -> bool {
+        if elapsed_seconds == 0.0
+            && root_transform == Mat2D::IDENTITY
+            && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            && self.artboard_list_bindings.is_empty()
+        {
+            return false;
+        }
+        let dirty_epoch_at_start = self.artboard_data_bind_dirty_epoch;
         let mut changed = false;
         // C++ DataBindContainer::updateDataBind updates converter dependents
         // before applying a target-to-source binding.
@@ -4973,6 +4998,9 @@ impl ArtboardInstance {
         changed |= self.apply_artboard_solo_bindings();
         changed |= self.apply_artboard_nested_host_bindings();
         changed |= self.sync_nested_child_artboard_data_contexts();
+        if self.artboard_data_bind_dirty_epoch == dirty_epoch_at_start {
+            self.artboard_data_bind_processed_epoch = dirty_epoch_at_start;
+        }
         changed
     }
 
@@ -6323,6 +6351,9 @@ impl ArtboardInstance {
     }
 
     fn sync_stateful_nested_view_model_contexts(&mut self) -> bool {
+        if !std::mem::replace(&mut self.stateful_nested_view_model_contexts_dirty, false) {
+            return false;
+        }
         let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
             return false;
         };

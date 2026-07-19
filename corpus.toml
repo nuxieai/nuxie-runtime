@@ -679,7 +679,7 @@ features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor",
 id = "focus_test"
 path = "tests/unit_tests/assets/focus_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:1037:FocusActionClear", "type-key:1038:TransitionFocusCondition", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:652:FocusActionTarget", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:667:TransitionPropertyComponentComparator", "type-key:7:Rectangle"]
 
 [[file]]
@@ -1205,7 +1205,7 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "nested_artboard_origin_override_test"
 path = "tests/unit_tests/assets/nested_artboard_origin_override_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:1039:NestedArtboardOrigin", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:535:DataConverterBooleanNegate", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
 
 [[file]]

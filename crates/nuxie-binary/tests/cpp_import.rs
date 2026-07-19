@@ -10054,7 +10054,7 @@ fn cpp_data_converter_lifecycle_methods_are_tracked_by_binary_import_model() {
         &mark_dirty,
         &[
             "if(m_parentDataBind!=nullptr){",
-            "m_parentDataBind->addDirt(ComponentDirt::Dependents|ComponentDirt::Bindings,false);",
+            "m_parentDataBind->addDirt(ComponentDirt::Dependents|(m_parentDataBind->targetOrigin()?ComponentDirt::BindingsTarget:ComponentDirt::Bindings),false);",
         ],
         "DataConverter::markConverterDirty changed; audit RuntimeFile::data_converter_mark_dirty_effect",
     );
@@ -10488,7 +10488,7 @@ fn cpp_data_bind_context_binding_methods_are_tracked_by_binary_import_model() {
             "else{",
             "unbind();",
             "else{",
-            "addDirt(ComponentDirt::Bindings,true);",
+            "addDirt(reconcileDirt(),true);",
             "if(m_dataConverter!=nullptr){",
             "m_dataConverter->bindFromContext(dataContext,this);",
         ],
@@ -10503,6 +10503,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
     let data_bind_header_path =
         reference_runtime_dir().join("include/rive/data_bind/data_bind.hpp");
     let source_path = reference_runtime_dir().join("src/data_bind/data_bind.cpp");
+    let core_source_path = reference_runtime_dir().join("src/core.cpp");
     let component_source_path = reference_runtime_dir().join("src/component.cpp");
     let artboard_source_path = reference_runtime_dir().join("src/artboard.cpp");
     let state_machine_instance_source_path =
@@ -10511,16 +10512,18 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         || !component_dirt_path.exists()
         || !data_bind_header_path.exists()
         || !source_path.exists()
+        || !core_source_path.exists()
         || !component_source_path.exists()
         || !artboard_source_path.exists()
         || !state_machine_instance_source_path.exists()
     {
         eprintln!(
-            "skipping C++ data-bind flag audit; reference files not found at {}, {}, {}, {}, {}, {}, and {}; set RIVE_RUNTIME_DIR",
+            "skipping C++ data-bind flag audit; reference files not found at {}, {}, {}, {}, {}, {}, {}, and {}; set RIVE_RUNTIME_DIR",
             include_path.display(),
             component_dirt_path.display(),
             data_bind_header_path.display(),
             source_path.display(),
+            core_source_path.display(),
             component_source_path.display(),
             artboard_source_path.display(),
             state_machine_instance_source_path.display()
@@ -10570,6 +10573,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "LayoutStyle=1<<11,",
             "Bindings=1<<12,",
             "NSlicer=1<<13,",
+            "BindingsTarget=1<<13,",
             "ScriptUpdate=1<<14,",
             "Clipping=1<<15,",
             "Filthy=0xFFFE",
@@ -10589,6 +10593,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "InPersistingList=1<<2,",
             "SuppressDirt=1<<3,",
             "Observing=1<<4,",
+            "TargetOrigin=1<<5,",
         ],
         "DataBind internal flag layout changed; audit Rust data-bind runtime-state helpers",
     );
@@ -10783,9 +10788,22 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "if(toSource()&&m_target!=nullptr&&targetSupportsPush()){",
             "m_target->addPropertyObserver(this);",
             "setFlag(Flag::Observing,true);",
-            "addDirt(ComponentDirt::Bindings,true);",
+            "addDirt(reconcileDirt(),true);",
         ],
         "DataBind::bind changed; audit RuntimeFile::data_bind_bind_effect",
+    );
+
+    let reconcile_dirt = compact_cpp_function_body(&compact_source, "DataBind::reconcileDirt()")
+        .unwrap_or_else(|| {
+            panic!(
+                "missing DataBind::reconcileDirt in {}",
+                source_path.display()
+            )
+        });
+    assert_eq!(
+        reconcile_dirt,
+        "return(toTarget()?ComponentDirt::Bindings:ComponentDirt::None)|(toSource()?ComponentDirt::BindingsTarget:ComponentDirt::None);",
+        "DataBind::reconcileDirt changed; audit RuntimeFile::data_bind_reconcile_dirt"
     );
 
     let target = compact_cpp_function_body(&compact_source, "DataBind::target(Core*value)")
@@ -10834,6 +10852,14 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         &[
             "if(hasFlag(Flag::SuppressDirt)||(m_Dirt&value)==value){",
             "return;",
+            "boolhasSource=enums::is_flag_set(value,ComponentDirt::Bindings);",
+            "boolhasTarget=enums::is_flag_set(value,ComponentDirt::BindingsTarget);",
+            "if(hasSource&&hasTarget){",
+            "setFlag(Flag::TargetOrigin,!sourceToTargetRunsFirst());",
+            "elseif(hasTarget){",
+            "setFlag(Flag::TargetOrigin,true);",
+            "elseif(hasSource){",
+            "setFlag(Flag::TargetOrigin,false);",
             "m_Dirt|=value;",
             "if(enums::is_flag_set(m_Dirt,ComponentDirt::Dependents)&&m_ContextValue!=nullptr){",
             "m_ContextValue->invalidate();",
@@ -10841,6 +10867,31 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "m_container->addDirtyDataBind(this);",
         ],
         "DataBind::addDirt changed; audit RuntimeFile::data_bind_add_dirt_effect",
+    );
+
+    let core_source = std::fs::read_to_string(&core_source_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", core_source_path.display()));
+    let compact_core_source = compact_cpp_source(&core_source);
+    let notify_property_changed = compact_cpp_function_body(
+        &compact_core_source,
+        "Core::notifyPropertyChanged(uint16_tpropertyKey)",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing Core::notifyPropertyChanged in {}",
+            core_source_path.display()
+        )
+    });
+    assert_compact_contains_in_order(
+        &notify_property_changed,
+        &[
+            "if(m_firstObserver==nullptr){",
+            "return;",
+            "for(DataBind*o=m_firstObserver;o!=nullptr;o=o->nextObserver()){",
+            "if(o->propertyKey()==propertyKey){",
+            "o->addDirt(ComponentDirt::BindingsTarget,false);",
+        ],
+        "Core::notifyPropertyChanged changed; audit target-origin DataBind dirt modeling",
     );
 
     let initialize = compact_cpp_function_body(&compact_source, "DataBind::initialize()")
@@ -11134,12 +11185,13 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "autod=dataBind->dirt();",
             "if((d&ComponentDirt::Dependents)==ComponentDirt::Dependents){",
             "dataBind->updateDependents();",
-            "if(applyTargetToSource&&!dataBind->sourceToTargetRunsFirst()){",
+            "boolwantsTargetToSource=applyTargetToSource&&(dataBind->inPersistingList()||(d&ComponentDirt::BindingsTarget)==ComponentDirt::BindingsTarget);",
+            "if(wantsTargetToSource&&!dataBind->sourceToTargetRunsFirst()){",
             "dataBind->updateSourceBinding();",
             "if(d!=ComponentDirt::None){",
             "dataBind->dirt(ComponentDirt::None);",
             "dataBind->update(d);",
-            "if(applyTargetToSource&&dataBind->sourceToTargetRunsFirst()){",
+            "if(wantsTargetToSource&&dataBind->sourceToTargetRunsFirst()){",
             "dataBind->updateSourceBinding();",
         ],
         "DataBindContainer::updateDataBind order changed; audit RuntimeFile::data_bind_update_effect",
@@ -12132,6 +12184,7 @@ fn cpp_file_read_loop_matches_import_stack_model() {
         "StateMachineListenerSingle::typeKey",
         "StateTransition::typeKey",
         "TransitionArtboardCondition::typeKey",
+        "TransitionFocusCondition::typeKey",
         "TransitionViewModelCondition::typeKey",
         "ViewModel::typeKey",
         "ViewModelInstance::typeKey",

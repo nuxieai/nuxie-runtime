@@ -38,6 +38,7 @@ impl ComponentDirt {
     pub const LAYOUT_STYLE: Self = Self(1 << 11);
     pub const BINDINGS: Self = Self(1 << 12);
     pub const N_SLICER: Self = Self(1 << 13);
+    pub const BINDINGS_TARGET: Self = Self(1 << 13);
     pub const SCRIPT_UPDATE: Self = Self(1 << 14);
     pub const CLIPPING: Self = Self(1 << 15);
     pub const FILTHY: Self = Self(0xFFFE);
@@ -48,6 +49,17 @@ impl ComponentDirt {
 
     pub fn contains(self, flag: Self) -> bool {
         (self.0 & flag.0) == flag.0
+    }
+}
+
+#[cfg(test)]
+mod component_dirt_tests {
+    use super::ComponentDirt;
+
+    #[test]
+    fn bindings_target_matches_cpp_dirt_bit() {
+        assert_eq!(ComponentDirt::BINDINGS_TARGET.0, 1 << 13);
+        assert_eq!(ComponentDirt::BINDINGS_TARGET.0, ComponentDirt::N_SLICER.0);
     }
 }
 

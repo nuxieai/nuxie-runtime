@@ -3323,12 +3323,35 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
         Some(RuntimeDataConverterMarkDirtyEffect {
             parent_add_dirt_effect: Some(RuntimeDataBindAddDirtEffect {
                 dirt: RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+                target_origin: false,
                 changed: true,
                 invalidates_context_value: true,
                 requests_dirty_update: true,
             }),
         }),
-        "C++ DataConverter::markConverterDirty marks parent DataBind Dependents|Bindings dirt"
+        "C++ DataConverter::markConverterDirty preserves a source-originated parent direction"
+    );
+    assert_eq!(
+        file.data_converter_mark_dirty_effect_with_origin(
+            3,
+            Some(4),
+            RuntimeComponentDirt::NONE,
+            true,
+            false,
+            false,
+            true,
+            true,
+        ),
+        Some(RuntimeDataConverterMarkDirtyEffect {
+            parent_add_dirt_effect: Some(RuntimeDataBindAddDirtEffect {
+                dirt: RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS_TARGET,
+                target_origin: true,
+                changed: true,
+                invalidates_context_value: true,
+                requests_dirty_update: true,
+            }),
+        }),
+        "C++ DataConverter::markConverterDirty preserves a target-originated parent direction"
     );
     assert_eq!(
         file.data_converter_property_change_effect(
@@ -3346,6 +3369,7 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
             mark_converter_dirty_effect: RuntimeDataConverterMarkDirtyEffect {
                 parent_add_dirt_effect: Some(RuntimeDataBindAddDirtEffect {
                     dirt: RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+                    target_origin: false,
                     changed: true,
                     invalidates_context_value: true,
                     requests_dirty_update: true,
@@ -3370,6 +3394,7 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
             mark_converter_dirty_effect: RuntimeDataConverterMarkDirtyEffect {
                 parent_add_dirt_effect: Some(RuntimeDataBindAddDirtEffect {
                     dirt: RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+                    target_origin: false,
                     changed: true,
                     invalidates_context_value: false,
                     requests_dirty_update: true,
@@ -3470,6 +3495,7 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
             mark_converter_dirty_effect: RuntimeDataConverterMarkDirtyEffect {
                 parent_add_dirt_effect: Some(RuntimeDataBindAddDirtEffect {
                     dirt: RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+                    target_origin: false,
                     changed: true,
                     invalidates_context_value: true,
                     requests_dirty_update: true,
@@ -4052,6 +4078,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::NONE,
+            target_origin: false,
             changed: false,
             invalidates_context_value: false,
             requests_dirty_update: false,
@@ -4070,6 +4097,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::NONE,
+            target_origin: false,
             changed: false,
             invalidates_context_value: false,
             requests_dirty_update: false,
@@ -4088,6 +4116,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::BINDINGS,
+            target_origin: false,
             changed: false,
             invalidates_context_value: false,
             requests_dirty_update: false,
@@ -4106,6 +4135,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::DEPENDENTS,
+            target_origin: false,
             changed: true,
             invalidates_context_value: true,
             requests_dirty_update: true,
@@ -4124,6 +4154,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+            target_origin: false,
             changed: true,
             invalidates_context_value: true,
             requests_dirty_update: true,
@@ -4142,6 +4173,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::DEPENDENTS,
+            target_origin: false,
             changed: true,
             invalidates_context_value: false,
             requests_dirty_update: true,
@@ -4160,6 +4192,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::BINDINGS,
+            target_origin: false,
             changed: true,
             invalidates_context_value: false,
             requests_dirty_update: false,
@@ -4178,6 +4211,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         ),
         Some(RuntimeDataBindAddDirtEffect {
             dirt: RuntimeComponentDirt::BINDINGS,
+            target_origin: false,
             changed: true,
             invalidates_context_value: false,
             requests_dirty_update: false,
@@ -4285,13 +4319,14 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             adds_target_observer: true,
             observing_after: true,
             add_dirt_effect: RuntimeDataBindAddDirtEffect {
-                dirt: RuntimeComponentDirt::BINDINGS,
+                dirt: RuntimeComponentDirt::BINDINGS_TARGET,
+                target_origin: true,
                 changed: true,
                 invalidates_context_value: false,
                 requests_dirty_update: true,
             },
         }),
-        "C++ DataBind::bind creates a source-typed context value, subscribes push-capable toSource targets, and marks Bindings dirt"
+        "C++ DataBind::bind creates a source-typed context value, subscribes push-capable toSource targets, and marks target-direction reconcile dirt"
     );
     assert_eq!(
         file.data_bind_bind_effect(
@@ -4312,10 +4347,11 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             adds_target_observer: true,
             observing_after: true,
             add_dirt_effect: RuntimeDataBindAddDirtEffect {
-                dirt: RuntimeComponentDirt::BINDINGS,
-                changed: false,
+                dirt: RuntimeComponentDirt::BINDINGS | RuntimeComponentDirt::BINDINGS_TARGET,
+                target_origin: true,
+                changed: true,
                 invalidates_context_value: false,
-                requests_dirty_update: false,
+                requests_dirty_update: true,
             },
         }),
         "C++ DataBind::bind deletes the old context value and re-subscribes an existing observer before re-marking dirt"
@@ -4339,7 +4375,8 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             adds_target_observer: true,
             observing_after: true,
             add_dirt_effect: RuntimeDataBindAddDirtEffect {
-                dirt: RuntimeComponentDirt::BINDINGS,
+                dirt: RuntimeComponentDirt::BINDINGS_TARGET,
+                target_origin: true,
                 changed: true,
                 invalidates_context_value: false,
                 requests_dirty_update: true,
@@ -4504,15 +4541,15 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         Some(RuntimeDataBindUpdateEffect {
             calls_update_dependents: false,
             updates_converter_dependents: false,
-            applies_target_to_source_before_update: true,
+            applies_target_to_source_before_update: false,
             clears_dirt: false,
             applies_source_to_target: false,
             source_to_target_is_main_direction: false,
             suppresses_dirt_while_applying_source_to_target: false,
             applies_target_to_source_after_update: false,
-            target_to_source_is_main_direction: true,
+            target_to_source_is_main_direction: false,
         }),
-        "C++ DataBindContainer::updateDataBind calls updateSourceBinding before update even when dirt is none"
+        "push-driven C++ binds do not run target-to-source without target-origin dirt"
     );
     assert_eq!(
         file.data_bind_update_effect(
@@ -4526,15 +4563,15 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         Some(RuntimeDataBindUpdateEffect {
             calls_update_dependents: true,
             updates_converter_dependents: false,
-            applies_target_to_source_before_update: true,
+            applies_target_to_source_before_update: false,
             clears_dirt: true,
             applies_source_to_target: false,
             source_to_target_is_main_direction: false,
             suppresses_dirt_while_applying_source_to_target: false,
             applies_target_to_source_after_update: false,
-            target_to_source_is_main_direction: true,
+            target_to_source_is_main_direction: false,
         }),
-        "toSource binds update dependents, apply target-to-source before update, then clear dirt"
+        "source-originated converter dirt updates dependents without reopening target-to-source"
     );
     assert_eq!(
         file.data_bind_update_effect(3, RuntimeComponentDirt::BINDINGS, false, true, true, true),
@@ -4666,7 +4703,8 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             adds_target_observer: false,
             observing_after: false,
             add_dirt_effect: RuntimeDataBindAddDirtEffect {
-                dirt: RuntimeComponentDirt::BINDINGS,
+                dirt: RuntimeComponentDirt::BINDINGS_TARGET,
+                target_origin: true,
                 changed: true,
                 invalidates_context_value: false,
                 requests_dirty_update: true,
@@ -4730,6 +4768,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             observing_after: false,
             add_dirt_effect: RuntimeDataBindAddDirtEffect {
                 dirt: RuntimeComponentDirt::BINDINGS,
+                target_origin: false,
                 changed: true,
                 invalidates_context_value: false,
                 requests_dirty_update: true,
@@ -4819,7 +4858,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         Some(RuntimeDataBindUpdateEffect {
             calls_update_dependents: false,
             updates_converter_dependents: false,
-            applies_target_to_source_before_update: true,
+            applies_target_to_source_before_update: false,
             clears_dirt: true,
             applies_source_to_target: true,
             source_to_target_is_main_direction: true,
@@ -4827,7 +4866,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             applies_target_to_source_after_update: false,
             target_to_source_is_main_direction: false,
         }),
-        "twoWay binds apply target-to-source first, then source-to-target as the main direction"
+        "source-originated TwoWay dirt applies only source-to-target"
     );
     assert_eq!(
         file.data_bind_update_queue(16),
@@ -4852,10 +4891,10 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             applies_source_to_target: false,
             source_to_target_is_main_direction: false,
             suppresses_dirt_while_applying_source_to_target: false,
-            applies_target_to_source_after_update: true,
-            target_to_source_is_main_direction: true,
+            applies_target_to_source_after_update: false,
+            target_to_source_is_main_direction: false,
         }),
-        "SourceToTargetRunsFirst moves target-to-source after DataBind::update"
+        "source-originated dirt does not run target-to-source even when that direction is ordered last"
     );
     assert_eq!(
         file.data_bind_update_queue(17),
@@ -5050,6 +5089,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
                 observing_after: false,
                 add_dirt_effect: RuntimeDataBindAddDirtEffect {
                     dirt: RuntimeComponentDirt::BINDINGS,
+                    target_origin: false,
                     changed: true,
                     invalidates_context_value: false,
                     requests_dirty_update: true,
@@ -5090,6 +5130,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             unbind_effect: None,
             add_dirt_effect: Some(RuntimeDataBindAddDirtEffect {
                 dirt: RuntimeComponentDirt::BINDINGS,
+                target_origin: false,
                 changed: true,
                 invalidates_context_value: false,
                 requests_dirty_update: true,
@@ -5356,7 +5397,8 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             adds_target_observer: true,
             observing_after: true,
             add_dirt_effect: RuntimeDataBindAddDirtEffect {
-                dirt: RuntimeComponentDirt::BINDINGS,
+                dirt: RuntimeComponentDirt::BINDINGS_TARGET,
+                target_origin: true,
                 changed: true,
                 invalidates_context_value: false,
                 requests_dirty_update: true,
@@ -5421,6 +5463,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
                 observing_after: false,
                 add_dirt_effect: RuntimeDataBindAddDirtEffect {
                     dirt: RuntimeComponentDirt::BINDINGS,
+                    target_origin: false,
                     changed: true,
                     invalidates_context_value: false,
                     requests_dirty_update: true,
@@ -5474,6 +5517,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
                 observing_after: false,
                 add_dirt_effect: RuntimeDataBindAddDirtEffect {
                     dirt: RuntimeComponentDirt::BINDINGS,
+                    target_origin: false,
                     changed: true,
                     invalidates_context_value: false,
                     requests_dirty_update: true,
@@ -5515,6 +5559,188 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             }),
         Some(vec![13, 15, 16, 17])
     );
+}
+
+#[test]
+fn runtime_data_bind_reconcile_dirt_covers_each_supported_direction() {
+    let node_x_key = u64::from(property_key_for_name("Node", "x"));
+    let file = read_runtime_file(&synthetic_runtime_file(4342, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        for flags in [2, 2 | 8, 0, 1] {
+            push_object_with_properties(bytes, "Shape", |bytes| {
+                push_uint_property(bytes, "Shape", "parentId", 0);
+            });
+            push_object_with_properties(bytes, "DataBind", |bytes| {
+                push_uint_property(bytes, "DataBind", "propertyKey", node_x_key);
+                push_uint_property(bytes, "DataBind", "flags", flags);
+            });
+        }
+    }))
+    .expect("synthetic directional data-bind stream imports");
+
+    assert_eq!(
+        file.data_bind_reconcile_dirt(3),
+        Some(RuntimeComponentDirt::BINDINGS | RuntimeComponentDirt::BINDINGS_TARGET)
+    );
+    assert_eq!(
+        file.data_bind_reconcile_dirt(5),
+        Some(RuntimeComponentDirt::BINDINGS | RuntimeComponentDirt::BINDINGS_TARGET),
+        "precedence changes order, not the directions participating in reconcile"
+    );
+    assert_eq!(
+        file.data_bind_reconcile_dirt(7),
+        Some(RuntimeComponentDirt::BINDINGS)
+    );
+    assert_eq!(
+        file.data_bind_reconcile_dirt(9),
+        Some(RuntimeComponentDirt::BINDINGS_TARGET)
+    );
+
+    let source_origin = file
+        .data_bind_add_dirt_effect_with_origin(
+            3,
+            RuntimeComponentDirt::NONE,
+            true,
+            RuntimeComponentDirt::BINDINGS,
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("source-origin dirt effect");
+    assert!(!source_origin.target_origin);
+
+    let target_origin = file
+        .data_bind_add_dirt_effect_with_origin(
+            3,
+            RuntimeComponentDirt::NONE,
+            false,
+            RuntimeComponentDirt::BINDINGS_TARGET,
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("target-origin dirt effect");
+    assert!(target_origin.target_origin);
+
+    let suppressed = file
+        .data_bind_add_dirt_effect_with_origin(
+            3,
+            RuntimeComponentDirt::NONE,
+            true,
+            RuntimeComponentDirt::BINDINGS,
+            true,
+            false,
+            true,
+            true,
+        )
+        .expect("suppressed dirt effect");
+    assert!(suppressed.target_origin);
+    assert!(!suppressed.changed);
+
+    let already_marked = file
+        .data_bind_add_dirt_effect_with_origin(
+            3,
+            RuntimeComponentDirt::BINDINGS,
+            true,
+            RuntimeComponentDirt::BINDINGS,
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("already-marked dirt effect");
+    assert!(already_marked.target_origin);
+    assert!(!already_marked.changed);
+
+    let target_first_reconcile = file
+        .data_bind_add_dirt_effect_with_origin(
+            3,
+            RuntimeComponentDirt::NONE,
+            false,
+            file.data_bind_reconcile_dirt(3)
+                .expect("target-first reconcile dirt"),
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("target-first reconcile effect");
+    assert!(target_first_reconcile.target_origin);
+
+    let source_first_reconcile = file
+        .data_bind_add_dirt_effect_with_origin(
+            5,
+            RuntimeComponentDirt::NONE,
+            true,
+            file.data_bind_reconcile_dirt(5)
+                .expect("source-first reconcile dirt"),
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("source-first reconcile effect");
+    assert!(!source_first_reconcile.target_origin);
+
+    let target_first_update = file
+        .data_bind_update_effect_with_persisting_state(
+            3,
+            RuntimeComponentDirt::BINDINGS | RuntimeComponentDirt::BINDINGS_TARGET,
+            true,
+            false,
+            true,
+            true,
+            true,
+        )
+        .expect("target-first reconcile update");
+    assert!(target_first_update.applies_target_to_source_before_update);
+    assert!(target_first_update.applies_source_to_target);
+    assert!(!target_first_update.applies_target_to_source_after_update);
+
+    let source_first_update = file
+        .data_bind_update_effect_with_persisting_state(
+            5,
+            RuntimeComponentDirt::BINDINGS | RuntimeComponentDirt::BINDINGS_TARGET,
+            true,
+            false,
+            true,
+            true,
+            true,
+        )
+        .expect("source-first reconcile update");
+    assert!(!source_first_update.applies_target_to_source_before_update);
+    assert!(source_first_update.applies_source_to_target);
+    assert!(source_first_update.applies_target_to_source_after_update);
+
+    let source_only_update = file
+        .data_bind_update_effect_with_persisting_state(
+            3,
+            RuntimeComponentDirt::BINDINGS,
+            true,
+            false,
+            true,
+            true,
+            true,
+        )
+        .expect("source-only update");
+    assert!(!source_only_update.applies_target_to_source_before_update);
+    assert!(source_only_update.applies_source_to_target);
+
+    let polled_update = file
+        .data_bind_update_effect_with_persisting_state(
+            9,
+            RuntimeComponentDirt::NONE,
+            true,
+            true,
+            true,
+            true,
+            true,
+        )
+        .expect("persisting target-to-source update");
+    assert!(polled_update.applies_target_to_source_before_update);
 }
 
 #[test]

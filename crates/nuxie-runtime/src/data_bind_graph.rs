@@ -19,6 +19,7 @@ use crate::{
 
 pub(crate) const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
 pub(crate) const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
+pub(crate) const DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST: u64 = 1 << 3;
 
 pub(crate) fn data_bind_flags_apply_source_to_target(flags: u64) -> bool {
     flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0
@@ -26,6 +27,10 @@ pub(crate) fn data_bind_flags_apply_source_to_target(flags: u64) -> bool {
 
 pub(crate) fn data_bind_flags_apply_target_to_source(flags: u64) -> bool {
     flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
+}
+
+pub(crate) fn data_bind_flags_source_to_target_runs_first(flags: u64) -> bool {
+    flags & DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST != 0
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +154,18 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) flags: u64,
     pub(crate) bound: bool,
     pub(crate) target_to_source_dirty: bool,
+    /// Direction of the change currently in flight. Mirrors C++ DataBind's
+    /// TargetOrigin flag so stateful converters keep re-dirtying the same
+    /// direction after the per-update dirt has been consumed.
+    pub(crate) target_origin: bool,
+    /// Bind/rebind dirt has not yet passed through a state-machine
+    /// updateDataBinds(false) equivalent. `advance_data_context` alone must
+    /// not consume it; an explicit source/target mutation supersedes it.
+    pub(crate) reconcile_pending: bool,
+    /// Source dirt raised while a public target-to-source pass is already in
+    /// progress. C++ leaves observer binds dirty for the next update instead
+    /// of applying them in the same updateDataBinds(true) traversal.
+    pub(crate) defer_source_to_target_until_next_update: bool,
     pub(crate) source_to_target_dirty_after_immediate: bool,
     pub(crate) source_to_target_dirty_after_target_to_source: bool,
     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
@@ -666,6 +683,18 @@ pub(crate) fn runtime_data_bind_graph_converter_contains_source_change_random(
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_contains_source_change_random),
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_converter_contains_interpolator(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::Interpolator { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .iter()
+            .any(runtime_data_bind_graph_converter_contains_interpolator),
         _ => false,
     }
 }
@@ -3342,6 +3371,9 @@ impl RuntimeDataBindGraph {
             flags,
             bound: true,
             target_to_source_dirty: false,
+            target_origin: false,
+            reconcile_pending: false,
+            defer_source_to_target_until_next_update: false,
             source_to_target_dirty_after_immediate: false,
             source_to_target_dirty_after_target_to_source: false,
             converter,
@@ -3414,6 +3446,7 @@ impl RuntimeDataBindGraph {
                 runtime_data_bind_graph_reset_operation_view_model_converter_to_default(converter);
             }
             source.reset_converter_state();
+            source.mark_reconcile_dirty();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::DefaultViewModel;
         self.imported_view_model_context = None;
@@ -3560,6 +3593,7 @@ impl RuntimeDataBindGraph {
                 );
             }
             source.reset_converter_state();
+            source.mark_reconcile_dirty();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
         self.imported_view_model_context = Some(RuntimeImportedViewModelContextKey {
@@ -3590,6 +3624,7 @@ impl RuntimeDataBindGraph {
                 );
             }
             source.reset_converter_state();
+            source.mark_reconcile_dirty();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
@@ -3617,6 +3652,7 @@ impl RuntimeDataBindGraph {
                 );
             }
             source.reset_converter_state();
+            source.mark_reconcile_dirty();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
@@ -3650,6 +3686,7 @@ impl RuntimeDataBindGraph {
                 );
             }
             source.reset_converter_state();
+            source.mark_reconcile_dirty();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
@@ -3685,6 +3722,7 @@ impl RuntimeDataBindGraph {
                 );
             }
             source.reset_converter_state();
+            source.mark_reconcile_dirty();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
@@ -4788,6 +4826,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Asset(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -4837,6 +4876,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Artboard(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -4939,6 +4979,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::List { item_count };
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -5028,6 +5069,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::ViewModel(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -6180,24 +6222,18 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut defer_source_to_target = false;
         let Some(source) = self.sources.get_mut(binding.source.0) else {
             return false;
         };
         if !source.applies_target_to_source() {
             return false;
         }
-        if source.is_main_to_source() {
-            source.target_to_source_dirty = true;
-        } else if source.applies_source_to_target() {
-            source.source_to_target_dirty_after_immediate = true;
-            defer_source_to_target = true;
-        } else {
-            return false;
-        }
-        if defer_source_to_target {
-            self.mark_default_view_model_bindings_dirty();
-        }
+        // C++ Core::notifyPropertyChanged marks BindingsTarget regardless of
+        // the authored main direction. Latch the origin only when this dirt is
+        // newly added; an already-dirty or suppressed self-notify must not
+        // flip an in-flight source-originated conversion.
+        source.mark_target_dirty();
+        self.mark_default_view_model_bindings_dirty();
         true
     }
 
@@ -6754,6 +6790,13 @@ impl RuntimeDataBindGraph {
             let advance = source.advance_stateful_converter(elapsed_seconds);
             changed |= advance.changed;
             keep_going |= advance.keep_going;
+            if advance.changed {
+                if source.target_origin {
+                    source.target_to_source_dirty = true;
+                } else {
+                    source.mark_source_dirty_after_target_to_source();
+                }
+            }
         }
         if changed {
             self.mark_default_view_model_bindings_dirty();
@@ -6786,7 +6829,7 @@ impl RuntimeDataBindGraph {
         if !self.default_view_model_source_context_bound() {
             return false;
         }
-        let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
         let mut applied_target_to_source = false;
         let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
@@ -6824,29 +6867,35 @@ impl RuntimeDataBindGraph {
             };
             if !include_deferred_main_to_target
                 && source.is_main_to_source()
-                && matches!(
-                    source.converter.as_ref(),
-                    Some(
+                && source.applies_source_to_target()
+                && source.converter.as_ref().is_some_and(|converter| {
+                    matches!(
+                        converter,
                         RuntimeDataBindGraphConverter::Formula { .. }
                             | RuntimeDataBindGraphConverter::Group(_)
-                            | RuntimeDataBindGraphConverter::Interpolator { .. }
                             | RuntimeDataBindGraphConverter::ListToLength
-                    )
-                )
+                            | RuntimeDataBindGraphConverter::Rounder { .. }
+                            | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
+                    ) && !runtime_data_bind_graph_converter_contains_interpolator(converter)
+                })
             {
+                // The probe/runtime's main-to-source setter seam invokes
+                // updateSourceBinding directly. A successful source write then
+                // notifies this TwoWay bind as source-originated dirt before
+                // updateDataBinds(false), so the converted source is re-applied
+                // to the target in that same update.
+                source.mark_source_dirty_after_target_to_source();
                 applied_target_to_source = true;
-                source.source_to_target_dirty_after_target_to_source = true;
             }
             if include_deferred_main_to_target {
                 applied_target_to_source = true;
-                source.source_to_target_dirty_after_target_to_source = true;
             }
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
-            for source in &mut self.sources {
+        for (origin_source_index, path, value) in updates {
+            for (source_index, source) in self.sources.iter_mut().enumerate() {
                 if !source.bound || source.path != path {
                     continue;
                 }
@@ -6886,20 +6935,13 @@ impl RuntimeDataBindGraph {
                     _ => false,
                 };
                 if source_changed {
-                    source.reset_formula_random_state_for_source_change();
-                    if source.is_main_to_source()
-                        && matches!(
-                            source.converter.as_ref(),
-                            Some(
-                                RuntimeDataBindGraphConverter::Formula { .. }
-                                    | RuntimeDataBindGraphConverter::Group(_)
-                                    | RuntimeDataBindGraphConverter::Interpolator { .. }
-                                    | RuntimeDataBindGraphConverter::Rounder { .. }
-                                    | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
-                            )
-                        )
-                    {
-                        source.source_to_target_dirty_after_target_to_source = true;
+                    source.reset_formula_random_state_for_target_change();
+                    if source.applies_source_to_target() && source_index != origin_source_index {
+                        if include_deferred_main_to_target {
+                            source.mark_source_dirty_after_public_target_to_source();
+                        } else {
+                            source.mark_source_dirty_after_target_to_source();
+                        }
                     }
                     changed = true;
                 }
@@ -6978,7 +7020,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, u64)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7009,12 +7051,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7025,7 +7067,7 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 let RuntimeDataBindGraphValue::SymbolListIndex(default_value) =
                     &mut source.default_value
@@ -7034,8 +7076,12 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7109,7 +7155,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, bool)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, bool)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7140,12 +7186,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7159,12 +7205,16 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 if *default_value != value {
                     *default_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7245,7 +7295,7 @@ impl RuntimeDataBindGraph {
         if !self.default_view_model_source_context_bound() {
             return false;
         }
-        let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7276,12 +7326,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7296,12 +7346,16 @@ impl RuntimeDataBindGraph {
                 };
                 if source_value.as_slice() != value.as_slice() {
                     *source_value = value.clone();
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 if default_value.as_slice() != value.as_slice() {
                     *default_value = value.clone();
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7374,7 +7428,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, u32)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, u32)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7405,12 +7459,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7420,7 +7474,7 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 let RuntimeDataBindGraphValue::Color(default_value) = &mut source.default_value
                 else {
@@ -7428,8 +7482,12 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7502,7 +7560,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, u64)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7533,12 +7591,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7548,7 +7606,7 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 let RuntimeDataBindGraphValue::Enum(default_value) = &mut source.default_value
                 else {
@@ -7556,8 +7614,12 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7630,7 +7692,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, u64)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7661,12 +7723,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7676,7 +7738,7 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 let RuntimeDataBindGraphValue::Asset(default_value) = &mut source.default_value
                 else {
@@ -7684,8 +7746,12 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7759,7 +7825,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, u64)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7790,12 +7856,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -7805,7 +7871,7 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 let RuntimeDataBindGraphValue::Artboard(default_value) = &mut source.default_value
                 else {
@@ -7813,8 +7879,12 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -7951,7 +8021,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
 
-        let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
+        let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -7982,12 +8052,12 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
-            updates.push((source.path.clone(), value));
+            updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
-        for (path, value) in updates {
+        for (origin_source_index, path, value) in updates {
+            let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
@@ -8002,12 +8072,16 @@ impl RuntimeDataBindGraph {
                 };
                 if *source_value != *value {
                     *source_value = *value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
                 if *default_value != *value {
                     *default_value = *value;
-                    changed = true;
+                    source_changed_for_path = true;
                 }
+            }
+            if source_changed_for_path {
+                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                changed = true;
             }
         }
 
@@ -8076,6 +8150,7 @@ impl RuntimeDataBindGraph {
                     source_changed = true;
                 }
                 if source_changed {
+                    source.reconcile_pending = false;
                     source.source_to_target_dirty_after_target_to_source = true;
                     changed = true;
                 }
@@ -8127,7 +8202,6 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             applied_target_to_source = true;
-            source.source_to_target_dirty_after_target_to_source = true;
             updates.push((source.path.clone(), value));
         }
 
@@ -8166,6 +8240,21 @@ impl RuntimeDataBindGraph {
         applied_target_to_source
     }
 
+    fn mark_public_target_to_source_observers_dirty(
+        &mut self,
+        origin_source_index: usize,
+        path: &[u32],
+    ) {
+        for (source_index, source) in self.sources.iter_mut().enumerate() {
+            if source_index == origin_source_index || !source.bound || source.path != path {
+                continue;
+            }
+            if source.applies_source_to_target() {
+                source.mark_source_dirty_after_public_target_to_source();
+            }
+        }
+    }
+
     pub(crate) fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -8187,6 +8276,58 @@ impl RuntimeDataBindGraph {
             if !source.applies_source_to_target() {
                 continue;
             }
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            if !source.reconcile_pending
+                && !source.source_to_target_dirty_after_immediate
+                && !source.source_to_target_dirty_after_target_to_source
+            {
+                continue;
+            }
+            if source.defer_source_to_target_until_next_update
+                && matches!(
+                    phase,
+                    RuntimeDataBindGraphApplyPhase::Immediate
+                        | RuntimeDataBindGraphApplyPhase::PublicUpdate
+                )
+            {
+                skipped_dirty_binding = true;
+                continue;
+            }
+            if source.reconcile_pending
+                && matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
+            {
+                skipped_dirty_binding = true;
+                continue;
+            }
+            let delayed_main_to_source_apply = source.is_main_to_source()
+                && source.source_to_target_dirty_after_immediate
+                && matches!(
+                    phase,
+                    RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
+                        | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
+                );
+            let delayed_view_model_apply = !source.is_main_to_source()
+                && source.source_to_target_dirty_after_immediate
+                && matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. })
+                && matches!(
+                    phase,
+                    RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
+                        | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
+                );
+            if source.target_origin
+                && !source.source_to_target_dirty_after_target_to_source
+                && !delayed_main_to_source_apply
+                && !delayed_view_model_apply
+            {
+                // Target-only dirt must not run source->target and clobber the
+                // just-authored target. This is the Rust equivalent of
+                // DataBind::update gating on ComponentDirt::Bindings.
+                skipped_dirty_binding |=
+                    source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+                continue;
+            }
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
                 && source.is_main_to_source()
                 && !source.source_to_target_dirty_after_target_to_source
@@ -8204,13 +8345,11 @@ impl RuntimeDataBindGraph {
             }
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
                 && source.source_to_target_dirty_after_immediate
+                && !source.source_to_target_dirty_after_target_to_source
             {
                 skipped_dirty_binding = true;
                 continue;
             }
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
             if matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. })
                 && !targets.include_view_models
             {
@@ -8230,7 +8369,8 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
-            let Some(value) = source.converted_value(&mut formula_random_source) else {
+            let converted_value = source.converted_value(&mut formula_random_source);
+            let Some(value) = converted_value else {
                 continue;
             };
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
@@ -8244,6 +8384,8 @@ impl RuntimeDataBindGraph {
             targets.apply_default_view_model_binding(&target.target, &value);
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
+            source.reconcile_pending = false;
+            source.defer_source_to_target_until_next_update = false;
         }
         self.formula_random_source = formula_random_source;
         self.default_view_model_bindings_dirty = skipped_dirty_binding;
@@ -8261,6 +8403,79 @@ impl RuntimeDataBindGraphSourceNode {
 
     fn is_main_to_source(&self) -> bool {
         self.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
+    }
+
+    fn source_to_target_runs_first(&self) -> bool {
+        data_bind_flags_source_to_target_runs_first(self.flags)
+    }
+
+    fn mark_target_dirty(&mut self) {
+        if self.reconcile_pending {
+            // An explicit target edit supersedes the initial bind/rebind
+            // reconciliation. Those dirt bits came from DataBind::bind, not
+            // from a source notification, so carrying the source bit forward
+            // would immediately write the stale source back over the edit.
+            self.target_to_source_dirty = false;
+            self.source_to_target_dirty_after_immediate = false;
+            self.source_to_target_dirty_after_target_to_source = false;
+            self.defer_source_to_target_until_next_update = false;
+        }
+        self.reconcile_pending = false;
+        // The public-update path is the Rust equivalent of C++
+        // updateDataBinds(true). Main-to-source bindables also have an
+        // immediate target->source seam in the probe/runtime API, while a
+        // main-to-target TwoWay bind must preserve target dirt until that
+        // public update instead of treating it as source dirt.
+        let target_dirty = if self.is_main_to_source() {
+            &mut self.target_to_source_dirty
+        } else {
+            &mut self.source_to_target_dirty_after_immediate
+        };
+        if *target_dirty {
+            return;
+        }
+        *target_dirty = true;
+        self.target_origin = true;
+        if !self.source_to_target_runs_first() {
+            self.source_to_target_dirty_after_target_to_source = false;
+            self.defer_source_to_target_until_next_update = false;
+        }
+    }
+
+    fn mark_source_dirty_after_target_to_source(&mut self) {
+        self.defer_source_to_target_until_next_update = false;
+        if self.source_to_target_dirty_after_target_to_source {
+            return;
+        }
+        self.source_to_target_dirty_after_target_to_source = true;
+        self.target_origin = false;
+    }
+
+    fn mark_source_dirty_after_public_target_to_source(&mut self) {
+        self.source_to_target_dirty_after_target_to_source = true;
+        self.target_origin = false;
+        self.defer_source_to_target_until_next_update = true;
+    }
+
+    fn mark_reconcile_dirty(&mut self) {
+        let source_dirty = self.applies_source_to_target();
+        let target_dirty = self.applies_target_to_source();
+        // A bind/rebind carries both C++ dirt bits, but the state-machine
+        // advance path calls updateDataBinds(false): it applies source dirt
+        // and clears the reconcile target dirt without pulling target->source.
+        // Keep that target bit in the deferred slot so `advance_data_context`
+        // does not mistake reconciliation for the probe API's explicit
+        // main-to-source target mutation seam.
+        self.target_to_source_dirty = false;
+        self.source_to_target_dirty_after_immediate = target_dirty;
+        self.source_to_target_dirty_after_target_to_source = source_dirty;
+        self.defer_source_to_target_until_next_update = false;
+        self.target_origin = match (source_dirty, target_dirty) {
+            (true, true) => !self.source_to_target_runs_first(),
+            (false, true) => true,
+            _ => false,
+        };
+        self.reconcile_pending = true;
     }
 
     fn suppresses_explicit_list_target_reapply_after_formula(&self) -> bool {
@@ -8589,6 +8804,17 @@ impl RuntimeDataBindGraphSourceNode {
     }
 
     fn reset_formula_random_state_for_source_change(&mut self) {
+        let defer_until_next_update = matches!(self.value, RuntimeDataBindGraphValue::ViewModel(_));
+        self.target_origin = false;
+        self.reconcile_pending = false;
+        self.defer_source_to_target_until_next_update = defer_until_next_update;
+        if self.applies_source_to_target() {
+            self.source_to_target_dirty_after_target_to_source = true;
+        }
+        self.reset_formula_random_state_for_target_change();
+    }
+
+    fn reset_formula_random_state_for_target_change(&mut self) {
         if self
             .converter
             .as_ref()
@@ -8873,6 +9099,22 @@ mod tests {
     use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod};
 
     struct DoublingConverter;
+
+    #[test]
+    fn data_bind_precedence_flag_is_independent_from_direction() {
+        assert!(!data_bind_flags_source_to_target_runs_first(0));
+        assert!(!data_bind_flags_source_to_target_runs_first(
+            DATA_BIND_FLAG_DIRECTION_TO_SOURCE | DATA_BIND_FLAG_TWO_WAY
+        ));
+        assert!(data_bind_flags_source_to_target_runs_first(
+            DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST
+        ));
+        assert!(data_bind_flags_source_to_target_runs_first(
+            DATA_BIND_FLAG_DIRECTION_TO_SOURCE
+                | DATA_BIND_FLAG_TWO_WAY
+                | DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST
+        ));
+    }
 
     impl ScriptInstance for DoublingConverter {
         fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {

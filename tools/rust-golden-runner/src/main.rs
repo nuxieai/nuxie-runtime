@@ -3504,6 +3504,12 @@ fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bo
     if data_bind.target_type_name == Some("SolidColor") {
         return true;
     }
+    if data_bind.target_type_name == Some("CustomPropertyColor")
+        // CustomPropertyColorBase::propertyValuePropertyKey.
+        && data_bind.property_key == 836
+    {
+        return true;
+    }
     if data_bind.target_type_name == Some("ArtboardComponentList")
         // ArtboardComponentListBase::listSourcePropertyKey in C++ generated/artboard_component_list_base.hpp.
         && data_bind.property_key == 800
@@ -3686,12 +3692,10 @@ fn nested_child_data_bind_unsupported_feature(
 fn solid_color_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
     // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
     const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
-    let source_to_target = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
-        || data_bind.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0;
+    // RuntimeDataBindGraph now mirrors both C++ directions and converter
+    // families for typed Color values. Keep this guard structural only so the
+    // golden comparison, rather than a stale allow-list, proves behavior.
     data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY
-        && source_to_target
-        && (data_bind.converter_global.is_none()
-            || data_bind.converter_type_name == Some("DataConverterInterpolator"))
 }
 
 fn custom_property_enum_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {

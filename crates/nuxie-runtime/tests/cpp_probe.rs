@@ -22063,7 +22063,7 @@ fn state_machine_default_viewmodel_non_number_formula_random_function_group_targ
         {
             let expected_counts = match (case_label, source_kind) {
                 (
-                    "source_change",
+                    "always" | "source_change",
                     FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Trigger),
                 ) => [1, 1, 2, 2],
                 _ => [1, 1, 1, 1],
@@ -40672,7 +40672,6 @@ fn operation_viewmodel_owned_color_source_mutation_fallback_matches_cpp_probe() 
             false,
         );
     let amount = 0.4_f32;
-    let initial_color = 0xff00_0000_u32;
     let color = 0xff33_6699_u32;
     let args = [
         "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
@@ -40706,10 +40705,6 @@ fn operation_viewmodel_owned_color_source_mutation_fallback_matches_cpp_probe() 
     assert!(
         context.set_number_by_property_index(0, amount),
         "{label} failed to set owned primary number"
-    );
-    assert!(
-        context.set_color_by_property_index(1, initial_color),
-        "{label} failed to set initial owned secondary color"
     );
     assert!(
         state_machine.bind_owned_view_model_context(&context),
@@ -41869,7 +41864,6 @@ fn operation_viewmodel_group_owned_color_source_mutation_fallback_matches_cpp_pr
             true,
         );
     let amount = 0.4_f32;
-    let initial_color = 0xff00_0000_u32;
     let color = 0xff33_6699_u32;
     let args = [
         "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
@@ -41903,10 +41897,6 @@ fn operation_viewmodel_group_owned_color_source_mutation_fallback_matches_cpp_pr
     assert!(
         context.set_number_by_property_index(0, amount),
         "{label} failed to set owned primary number"
-    );
-    assert!(
-        context.set_color_by_property_index(1, initial_color),
-        "{label} failed to set initial owned secondary color"
     );
     assert!(
         state_machine.bind_owned_view_model_context(&context),

@@ -59,6 +59,7 @@ pub struct RuntimeDataBindCollapseEffect {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeDataBindAddDirtEffect {
     pub dirt: RuntimeComponentDirt,
+    pub target_origin: bool,
     pub changed: bool,
     pub invalidates_context_value: bool,
     pub requests_dirty_update: bool,
@@ -344,6 +345,7 @@ impl RuntimeComponentDirt {
     pub const LAYOUT_STYLE: Self = Self(1 << 11);
     pub const BINDINGS: Self = Self(1 << 12);
     pub const NSLICER: Self = Self(1 << 13);
+    pub const BINDINGS_TARGET: Self = Self(1 << 13);
     pub const SCRIPT_UPDATE: Self = Self(1 << 14);
     pub const CLIPPING: Self = Self(1 << 15);
     pub const FILTHY: Self = Self(0xFFFE);
@@ -1401,11 +1403,36 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
+        self.data_converter_mark_dirty_effect_with_origin(
+            data_converter_index,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_mark_dirty_effect_with_origin(
+        &self,
+        data_converter_index: usize,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
-        self.data_converter_mark_dirty_effect_for_object(
+        self.data_converter_mark_dirty_effect_for_object_with_origin(
             data_converter,
             parent_data_bind_id,
             parent_current_dirt,
+            parent_target_origin,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
@@ -1424,12 +1451,42 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
+        self.data_converter_mark_dirty_effect_for_object_with_origin(
+            data_converter,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_mark_dirty_effect_for_object_with_origin(
+        &self,
+        data_converter: &RuntimeObject,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
         self.validate_data_converter(data_converter)?;
         let parent_add_dirt_effect = match parent_data_bind_id {
-            Some(parent_data_bind_id) => Some(self.data_bind_add_dirt_effect(
+            Some(parent_data_bind_id) => Some(self.data_bind_add_dirt_effect_with_origin(
                 parent_data_bind_id,
                 parent_current_dirt,
-                RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+                parent_target_origin,
+                RuntimeComponentDirt::DEPENDENTS
+                    | if parent_target_origin {
+                        RuntimeComponentDirt::BINDINGS_TARGET
+                    } else {
+                        RuntimeComponentDirt::BINDINGS
+                    },
                 parent_suppress_dirt,
                 parent_is_collapsed,
                 parent_has_context_value,
@@ -1453,12 +1510,39 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
+        self.data_converter_property_change_effect_with_origin(
+            data_converter_index,
+            property_name,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_property_change_effect_with_origin(
+        &self,
+        data_converter_index: usize,
+        property_name: &str,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
-        self.data_converter_property_change_effect_for_object(
+        self.data_converter_property_change_effect_for_object_with_origin(
             data_converter,
             property_name,
             parent_data_bind_id,
             parent_current_dirt,
+            parent_target_origin,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
@@ -1478,6 +1562,32 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
+        self.data_converter_property_change_effect_for_object_with_origin(
+            data_converter,
+            property_name,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_property_change_effect_for_object_with_origin(
+        &self,
+        data_converter: &RuntimeObject,
+        property_name: &str,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
         self.validate_data_converter(data_converter)?;
         if !cpp_data_converter_property_change_marks_dirty(data_converter, property_name) {
             return None;
@@ -1486,10 +1596,11 @@ impl RuntimeFile {
         Some(cpp_data_converter_property_change_effect(
             data_converter,
             property_name,
-            self.data_converter_mark_dirty_effect_for_object(
+            self.data_converter_mark_dirty_effect_for_object_with_origin(
                 data_converter,
                 parent_data_bind_id,
                 parent_current_dirt,
+                parent_target_origin,
                 parent_suppress_dirt,
                 parent_is_collapsed,
                 parent_has_context_value,
@@ -1513,12 +1624,45 @@ impl RuntimeFile {
         data_bind_in_dirty_list: bool,
         is_processing: bool,
     ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
+        self.data_converter_add_dirty_data_bind_effect_with_origin(
+            data_converter_index,
+            data_bind_id,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+            data_bind_in_persisting_list,
+            data_bind_in_dirty_list,
+            is_processing,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_add_dirty_data_bind_effect_with_origin(
+        &self,
+        data_converter_index: usize,
+        data_bind_id: usize,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+        data_bind_in_persisting_list: bool,
+        data_bind_in_dirty_list: bool,
+        is_processing: bool,
+    ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
-        self.data_converter_add_dirty_data_bind_effect_for_object(
+        self.data_converter_add_dirty_data_bind_effect_for_object_with_origin(
             data_converter,
             data_bind_id,
             parent_data_bind_id,
             parent_current_dirt,
+            parent_target_origin,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
@@ -1544,15 +1688,49 @@ impl RuntimeFile {
         data_bind_in_dirty_list: bool,
         is_processing: bool,
     ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
-        let mark_converter_dirty_effect = self.data_converter_mark_dirty_effect_for_object(
+        self.data_converter_add_dirty_data_bind_effect_for_object_with_origin(
             data_converter,
+            data_bind_id,
             parent_data_bind_id,
             parent_current_dirt,
+            false,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
             parent_has_container,
-        )?;
+            data_bind_in_persisting_list,
+            data_bind_in_dirty_list,
+            is_processing,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_add_dirty_data_bind_effect_for_object_with_origin(
+        &self,
+        data_converter: &RuntimeObject,
+        data_bind_id: usize,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+        data_bind_in_persisting_list: bool,
+        data_bind_in_dirty_list: bool,
+        is_processing: bool,
+    ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
+        let mark_converter_dirty_effect = self
+            .data_converter_mark_dirty_effect_for_object_with_origin(
+                data_converter,
+                parent_data_bind_id,
+                parent_current_dirt,
+                parent_target_origin,
+                parent_suppress_dirt,
+                parent_is_collapsed,
+                parent_has_context_value,
+                parent_has_container,
+            )?;
         let container_add_dirty_effect = self.data_bind_container_add_dirty_effect(
             data_bind_id,
             data_bind_in_persisting_list,
@@ -2449,6 +2627,19 @@ impl RuntimeFile {
         Some(cpp_data_bind_source_to_target_runs_first(data_bind))
     }
 
+    pub fn data_bind_reconcile_dirt(&self, data_bind_id: usize) -> Option<RuntimeComponentDirt> {
+        let data_bind = self.object(data_bind_id)?;
+        self.data_bind_reconcile_dirt_for_object(data_bind)
+    }
+
+    pub fn data_bind_reconcile_dirt_for_object(
+        &self,
+        data_bind: &RuntimeObject,
+    ) -> Option<RuntimeComponentDirt> {
+        self.validate_data_bind(data_bind)?;
+        Some(cpp_data_bind_reconcile_dirt(data_bind))
+    }
+
     pub fn data_bind_is_name_based(&self, data_bind_id: usize) -> Option<bool> {
         let data_bind = self.object(data_bind_id)?;
         self.data_bind_is_name_based_for_object(data_bind)
@@ -2559,10 +2750,34 @@ impl RuntimeFile {
         has_context_value: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindAddDirtEffect> {
+        self.data_bind_add_dirt_effect_with_origin(
+            data_bind_id,
+            current_dirt,
+            false,
+            added_dirt,
+            suppress_dirt,
+            is_collapsed,
+            has_context_value,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_add_dirt_effect_with_origin(
+        &self,
+        data_bind_id: usize,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        added_dirt: RuntimeComponentDirt,
+        suppress_dirt: bool,
+        is_collapsed: bool,
+        has_context_value: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindAddDirtEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_add_dirt_effect_for_object(
+        self.data_bind_add_dirt_effect_for_object_with_origin(
             data_bind,
             current_dirt,
+            current_target_origin,
             added_dirt,
             suppress_dirt,
             is_collapsed,
@@ -2581,10 +2796,35 @@ impl RuntimeFile {
         has_context_value: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindAddDirtEffect> {
+        self.data_bind_add_dirt_effect_for_object_with_origin(
+            data_bind,
+            current_dirt,
+            false,
+            added_dirt,
+            suppress_dirt,
+            is_collapsed,
+            has_context_value,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_add_dirt_effect_for_object_with_origin(
+        &self,
+        data_bind: &RuntimeObject,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        added_dirt: RuntimeComponentDirt,
+        suppress_dirt: bool,
+        is_collapsed: bool,
+        has_context_value: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindAddDirtEffect> {
         self.validate_data_bind(data_bind)?;
         Some(cpp_data_bind_add_dirt_effect(
             current_dirt,
+            current_target_origin,
             added_dirt,
+            cpp_data_bind_source_to_target_runs_first(data_bind),
             suppress_dirt,
             is_collapsed,
             has_context_value,
@@ -2671,14 +2911,40 @@ impl RuntimeFile {
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindBindEffect> {
+        self.data_bind_bind_effect_with_origin(
+            data_bind_id,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_bind_effect_with_origin(
+        &self,
+        data_bind_id: usize,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindBindEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_bind_effect_for_object(
+        self.data_bind_bind_effect_for_object_with_origin(
             data_bind,
             source_data_type,
             has_target,
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
         )
@@ -2692,6 +2958,31 @@ impl RuntimeFile {
         is_observing: bool,
         has_context_value: bool,
         current_dirt: RuntimeComponentDirt,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindBindEffect> {
+        self.data_bind_bind_effect_for_object_with_origin(
+            data_bind,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_bind_effect_for_object_with_origin(
+        &self,
+        data_bind: &RuntimeObject,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindBindEffect> {
@@ -2712,6 +3003,7 @@ impl RuntimeFile {
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
             target_supports_push,
@@ -2893,8 +3185,43 @@ impl RuntimeFile {
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindContextBindEffect> {
+        self.data_bind_context_bind_effect_with_origin(
+            data_bind_id,
+            source_path_is_resolved,
+            has_data_context,
+            lookup_has_source,
+            source_matches_lookup,
+            has_source,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_context_bind_effect_with_origin(
+        &self,
+        data_bind_id: usize,
+        source_path_is_resolved: bool,
+        has_data_context: bool,
+        lookup_has_source: bool,
+        source_matches_lookup: bool,
+        has_source: bool,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindContextBindEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_context_bind_effect_for_object(
+        self.data_bind_context_bind_effect_for_object_with_origin(
             data_bind,
             source_path_is_resolved,
             has_data_context,
@@ -2906,6 +3233,7 @@ impl RuntimeFile {
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
         )
@@ -2924,6 +3252,41 @@ impl RuntimeFile {
         is_observing: bool,
         has_context_value: bool,
         current_dirt: RuntimeComponentDirt,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindContextBindEffect> {
+        self.data_bind_context_bind_effect_for_object_with_origin(
+            data_bind,
+            source_path_is_resolved,
+            has_data_context,
+            lookup_has_source,
+            source_matches_lookup,
+            has_source,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_context_bind_effect_for_object_with_origin(
+        &self,
+        data_bind: &RuntimeObject,
+        source_path_is_resolved: bool,
+        has_data_context: bool,
+        lookup_has_source: bool,
+        source_matches_lookup: bool,
+        has_source: bool,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindContextBindEffect> {
@@ -2961,6 +3324,7 @@ impl RuntimeFile {
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
             target_supports_push,
@@ -2977,10 +3341,34 @@ impl RuntimeFile {
         has_target: bool,
     ) -> Option<RuntimeDataBindUpdateEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_update_effect_for_object(
+        let in_persisting_list = self.data_bind_uses_persisting_list_for_object(data_bind)?;
+        self.data_bind_update_effect_for_object_with_persisting_state(
             data_bind,
             dirt,
             apply_target_to_source,
+            in_persisting_list,
+            has_source,
+            has_context_value,
+            has_target,
+        )
+    }
+
+    pub fn data_bind_update_effect_with_persisting_state(
+        &self,
+        data_bind_id: usize,
+        dirt: RuntimeComponentDirt,
+        apply_target_to_source: bool,
+        in_persisting_list: bool,
+        has_source: bool,
+        has_context_value: bool,
+        has_target: bool,
+    ) -> Option<RuntimeDataBindUpdateEffect> {
+        let data_bind = self.object(data_bind_id)?;
+        self.data_bind_update_effect_for_object_with_persisting_state(
+            data_bind,
+            dirt,
+            apply_target_to_source,
+            in_persisting_list,
             has_source,
             has_context_value,
             has_target,
@@ -2996,6 +3384,28 @@ impl RuntimeFile {
         has_context_value: bool,
         has_target: bool,
     ) -> Option<RuntimeDataBindUpdateEffect> {
+        let in_persisting_list = self.data_bind_uses_persisting_list_for_object(data_bind)?;
+        self.data_bind_update_effect_for_object_with_persisting_state(
+            data_bind,
+            dirt,
+            apply_target_to_source,
+            in_persisting_list,
+            has_source,
+            has_context_value,
+            has_target,
+        )
+    }
+
+    pub fn data_bind_update_effect_for_object_with_persisting_state(
+        &self,
+        data_bind: &RuntimeObject,
+        dirt: RuntimeComponentDirt,
+        apply_target_to_source: bool,
+        in_persisting_list: bool,
+        has_source: bool,
+        has_context_value: bool,
+        has_target: bool,
+    ) -> Option<RuntimeDataBindUpdateEffect> {
         self.validate_data_bind(data_bind)?;
         Some(cpp_data_bind_update_effect(
             data_bind,
@@ -3003,6 +3413,7 @@ impl RuntimeFile {
                 .is_some(),
             dirt,
             apply_target_to_source,
+            in_persisting_list,
             has_source,
             has_context_value,
             has_target,
@@ -9162,6 +9573,17 @@ fn cpp_data_bind_source_to_target_runs_first(object: &RuntimeObject) -> bool {
         .is_some_and(|flags| flags & DATA_BIND_SOURCE_TO_TARGET_RUNS_FIRST_FLAG != 0)
 }
 
+fn cpp_data_bind_reconcile_dirt(data_bind: &RuntimeObject) -> RuntimeComponentDirt {
+    let mut dirt = RuntimeComponentDirt::NONE;
+    if cpp_data_bind_to_target(data_bind) {
+        dirt |= RuntimeComponentDirt::BINDINGS;
+    }
+    if cpp_data_bind_to_source(data_bind) {
+        dirt |= RuntimeComponentDirt::BINDINGS_TARGET;
+    }
+    dirt
+}
+
 fn cpp_data_bind_to_source(object: &RuntimeObject) -> bool {
     const DATA_BIND_TO_SOURCE_FLAG: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY_FLAG: u64 = 1 << 1;
@@ -9225,7 +9647,9 @@ fn cpp_data_bind_collapse_effect(
 
 fn cpp_data_bind_add_dirt_effect(
     current_dirt: RuntimeComponentDirt,
+    current_target_origin: bool,
     added_dirt: RuntimeComponentDirt,
+    source_to_target_runs_first: bool,
     suppress_dirt: bool,
     is_collapsed: bool,
     has_context_value: bool,
@@ -9234,15 +9658,25 @@ fn cpp_data_bind_add_dirt_effect(
     if suppress_dirt || current_dirt.contains(added_dirt) {
         return RuntimeDataBindAddDirtEffect {
             dirt: current_dirt,
+            target_origin: current_target_origin,
             changed: false,
             invalidates_context_value: false,
             requests_dirty_update: false,
         };
     }
 
+    let added_source_dirt = added_dirt.contains(RuntimeComponentDirt::BINDINGS);
+    let added_target_dirt = added_dirt.contains(RuntimeComponentDirt::BINDINGS_TARGET);
+    let target_origin = match (added_source_dirt, added_target_dirt) {
+        (true, true) => !source_to_target_runs_first,
+        (false, true) => true,
+        (true, false) => false,
+        (false, false) => current_target_origin,
+    };
     let dirt = current_dirt | added_dirt;
     RuntimeDataBindAddDirtEffect {
         dirt,
+        target_origin,
         changed: true,
         invalidates_context_value: dirt.contains(RuntimeComponentDirt::DEPENDENTS)
             && has_context_value,
@@ -9353,6 +9787,7 @@ fn cpp_data_bind_bind_effect(
     is_observing: bool,
     has_context_value: bool,
     current_dirt: RuntimeComponentDirt,
+    current_target_origin: bool,
     is_collapsed: bool,
     has_container: bool,
     target_supports_push: bool,
@@ -9379,7 +9814,9 @@ fn cpp_data_bind_bind_effect(
         },
         add_dirt_effect: cpp_data_bind_add_dirt_effect(
             current_dirt,
-            RuntimeComponentDirt::BINDINGS,
+            current_target_origin,
+            cpp_data_bind_reconcile_dirt(data_bind),
+            cpp_data_bind_source_to_target_runs_first(data_bind),
             false,
             is_collapsed,
             context_value_type.is_some(),
@@ -9508,6 +9945,7 @@ fn cpp_data_bind_context_bind_effect(
     is_observing: bool,
     has_context_value: bool,
     current_dirt: RuntimeComponentDirt,
+    current_target_origin: bool,
     is_collapsed: bool,
     has_container: bool,
     target_supports_push: bool,
@@ -9541,7 +9979,9 @@ fn cpp_data_bind_context_bind_effect(
         effect.branch = RuntimeDataBindContextBindBranch::AddDirtExistingSource;
         effect.add_dirt_effect = Some(cpp_data_bind_add_dirt_effect(
             current_dirt,
-            RuntimeComponentDirt::BINDINGS,
+            current_target_origin,
+            cpp_data_bind_reconcile_dirt(data_bind),
+            cpp_data_bind_source_to_target_runs_first(data_bind),
             false,
             is_collapsed,
             has_context_value,
@@ -9567,6 +10007,7 @@ fn cpp_data_bind_context_bind_effect(
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
             target_supports_push,
@@ -9591,12 +10032,15 @@ fn cpp_data_bind_update_effect(
     has_converter: bool,
     dirt: RuntimeComponentDirt,
     apply_target_to_source: bool,
+    in_persisting_list: bool,
     has_source: bool,
     has_context_value: bool,
     has_target: bool,
 ) -> RuntimeDataBindUpdateEffect {
     let calls_update_dependents = dirt.contains(RuntimeComponentDirt::DEPENDENTS);
-    let can_apply_target_to_source = apply_target_to_source
+    let wants_target_to_source = apply_target_to_source
+        && (in_persisting_list || dirt.contains(RuntimeComponentDirt::BINDINGS_TARGET));
+    let can_apply_target_to_source = wants_target_to_source
         && cpp_data_bind_to_source(data_bind)
         && has_target
         && has_context_value;

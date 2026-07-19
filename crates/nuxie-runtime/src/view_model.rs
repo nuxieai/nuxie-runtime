@@ -6599,7 +6599,8 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         instance_index: usize,
     ) -> bool {
-        let Some(view_model) = self.view_model_by_property_path_mut(property_path) else {
+        let Some(view_model) = self.relinkable_view_model_by_property_path_mut(property_path)
+        else {
             return false;
         };
         let Some(object_id) = view_model
@@ -6769,6 +6770,24 @@ impl RuntimeOwnedViewModelInstance {
         for property_index in rest {
             view_model = view_model
                 .active_children_mut()?
+                .iter_mut()
+                .find(|view_model| view_model.property_index == *property_index)?;
+        }
+        Some(view_model)
+    }
+
+    fn relinkable_view_model_by_property_path_mut(
+        &mut self,
+        property_path: &[usize],
+    ) -> Option<&mut RuntimeOwnedViewModelViewModel> {
+        let (property_index, rest) = property_path.split_first()?;
+        let mut view_model = self
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_index == *property_index)?;
+        for property_index in rest {
+            view_model = view_model
+                .generated_children_mut()?
                 .iter_mut()
                 .find(|view_model| view_model.property_index == *property_index)?;
         }

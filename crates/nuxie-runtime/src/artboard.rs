@@ -1544,7 +1544,11 @@ impl ArtboardInstance {
             .get()
             .then(|| self.legacy_image_layout_public_scale(local_id, property_key))
             .flatten()
-            .or_else(|| runtime_scroll_double_property(self, local_id, property_key))
+            .or_else(|| {
+                (!self.scroll_constraints.is_empty())
+                    .then(|| runtime_scroll_double_property(self, local_id, property_key))
+                    .flatten()
+            })
             .or_else(|| self.objects.double_property(local_id, property_key))
     }
 
@@ -1647,19 +1651,22 @@ impl ArtboardInstance {
     /// embeddings): returns whether a matching property existed and its
     /// value changed; invalidation is handled internally.
     pub fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
-        if let Some(changed) =
-            set_runtime_scroll_double_property(self, local_id, property_key, value)
-        {
-            if !changed {
-                return false;
+        let cleared_intent = if self.scroll_constraints.is_empty() {
+            false
+        } else {
+            if let Some(changed) =
+                set_runtime_scroll_double_property(self, local_id, property_key, value)
+            {
+                if !changed {
+                    return false;
+                }
+                let _ = self
+                    .objects
+                    .set_generated_double_property(local_id, property_key, value);
+                return self.after_double_property_set(local_id, property_key, value);
             }
-            let _ = self
-                .objects
-                .set_generated_double_property(local_id, property_key, value);
-            return self.after_double_property_set(local_id, property_key, value);
-        }
-        let cleared_intent =
-            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key);
+            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key)
+        };
         if self.has_legacy_image_layout_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
         {
@@ -1682,19 +1689,22 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
-        if let Some(changed) =
-            set_runtime_scroll_double_property(self, local_id, property_key, value)
-        {
-            if !changed {
-                return false;
+        let cleared_intent = if self.scroll_constraints.is_empty() {
+            false
+        } else {
+            if let Some(changed) =
+                set_runtime_scroll_double_property(self, local_id, property_key, value)
+            {
+                if !changed {
+                    return false;
+                }
+                let _ = self
+                    .objects
+                    .set_generated_double_property(local_id, property_key, value);
+                return self.after_double_property_set(local_id, property_key, value);
             }
-            let _ = self
-                .objects
-                .set_generated_double_property(local_id, property_key, value);
-            return self.after_double_property_set(local_id, property_key, value);
-        }
-        let cleared_intent =
-            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key);
+            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key)
+        };
         if self.has_legacy_image_layout_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
         {

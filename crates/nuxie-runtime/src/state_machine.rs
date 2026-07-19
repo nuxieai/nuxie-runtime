@@ -305,6 +305,18 @@ pub(crate) fn build_state_machines(
                                             let interpolator = transition.interpolator.and_then(
                                                 RuntimeTransitionInterpolator::from_object,
                                             );
+                                            let conditions = transition
+                                                .conditions
+                                                .iter()
+                                                .filter_map(|condition| {
+                                                    RuntimeTransitionCondition::from_object(
+                                                        file, graph, condition,
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>();
+                                            let direct_input_conditions_only = conditions
+                                                .iter()
+                                                .all(RuntimeTransitionCondition::is_direct_input);
                                             RuntimeStateTransition {
                                                 global_id: transition.object.id,
                                                 state_to_index: transition.state_to_index,
@@ -327,15 +339,8 @@ pub(crate) fn build_state_machines(
                                                     .uint_property("randomWeight")
                                                     .unwrap_or(1),
                                                 condition_count: transition.conditions.len(),
-                                                conditions: transition
-                                                    .conditions
-                                                    .iter()
-                                                    .filter_map(|condition| {
-                                                        RuntimeTransitionCondition::from_object(
-                                                            file, graph, condition,
-                                                        )
-                                                    })
-                                                    .collect(),
+                                                conditions,
+                                                direct_input_conditions_only,
                                                 fire_actions: transition
                                                     .fire_actions
                                                     .iter()
@@ -892,6 +897,7 @@ pub(crate) struct RuntimeStateTransition {
     pub(crate) random_weight: u64,
     pub(crate) condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
+    direct_input_conditions_only: bool,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
     pub(crate) interpolator: Option<RuntimeTransitionInterpolator>,
@@ -966,6 +972,31 @@ impl RuntimeStateTransition {
             }
         }
 
+        self.allow_exit_time(animation_from)
+    }
+
+    fn allow_direct_inputs(
+        &self,
+        inputs: &[StateMachineInputInstance],
+        layer_index: usize,
+        animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
+    ) -> TransitionAllowance {
+        debug_assert!(self.direct_input_conditions_only);
+        for condition in &self.conditions {
+            if !condition
+                .evaluate_direct_input(inputs, layer_index)
+                .unwrap_or(false)
+            {
+                return TransitionAllowance::No;
+            }
+        }
+        self.allow_exit_time(animation_from)
+    }
+
+    fn allow_exit_time(
+        &self,
+        animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
+    ) -> TransitionAllowance {
         if self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME
             && let Some(animation_from) = animation_from
         {
@@ -2770,27 +2801,32 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            match transition.allow(
-                scripted_instances,
-                artboard,
-                focus,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
-                layer_index,
-                animation_from,
-            ) {
+            let allowance = if transition.direct_input_conditions_only {
+                transition.allow_direct_inputs(inputs, layer_index, animation_from)
+            } else {
+                transition.allow(
+                    scripted_instances,
+                    artboard,
+                    focus,
+                    inputs,
+                    bindable_numbers,
+                    bindable_integers,
+                    bindable_colors,
+                    bindable_strings,
+                    bindable_enums,
+                    bindable_assets,
+                    bindable_artboards,
+                    bindable_triggers,
+                    bindable_view_models,
+                    bindable_booleans,
+                    view_model_triggers,
+                    data_context_present,
+                    data_context_view_model_bound,
+                    layer_index,
+                    animation_from,
+                )
+            };
+            match allowance {
                 TransitionAllowance::No => continue,
                 TransitionAllowance::WaitingForExit => {
                     self.waiting_for_exit = true;
@@ -2862,27 +2898,32 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            match transition.allow(
-                scripted_instances,
-                artboard,
-                focus,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
-                layer_index,
-                animation_from,
-            ) {
+            let allowance = if transition.direct_input_conditions_only {
+                transition.allow_direct_inputs(inputs, layer_index, animation_from)
+            } else {
+                transition.allow(
+                    scripted_instances,
+                    artboard,
+                    focus,
+                    inputs,
+                    bindable_numbers,
+                    bindable_integers,
+                    bindable_colors,
+                    bindable_strings,
+                    bindable_enums,
+                    bindable_assets,
+                    bindable_artboards,
+                    bindable_triggers,
+                    bindable_view_models,
+                    bindable_booleans,
+                    view_model_triggers,
+                    data_context_present,
+                    data_context_view_model_bound,
+                    layer_index,
+                    animation_from,
+                )
+            };
+            match allowance {
                 TransitionAllowance::No => {}
                 TransitionAllowance::WaitingForExit => {
                     waiting_for_exit = true;

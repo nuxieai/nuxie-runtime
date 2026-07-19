@@ -235,6 +235,13 @@ pub(super) enum RuntimeTransitionCondition {
 }
 
 impl RuntimeTransitionCondition {
+    pub(super) fn is_direct_input(&self) -> bool {
+        matches!(
+            self,
+            Self::Bool { .. } | Self::Number { .. } | Self::Trigger { .. }
+        )
+    }
+
     pub(super) fn can_change_during_artboard_update(&self) -> bool {
         // Ordinary state-machine inputs are fully consumed by the bounded
         // transition loop inside `StateMachineLayerInstance::advance`.
@@ -1417,6 +1424,41 @@ impl RuntimeTransitionCondition {
                 op,
                 threshold,
             } => op.compare(artboard.artboard_property_value(*property_type), *threshold),
+        }
+    }
+
+    pub(super) fn evaluate_direct_input(
+        &self,
+        inputs: &[StateMachineInputInstance],
+        layer_index: usize,
+    ) -> Option<bool> {
+        match self {
+            Self::Bool { input_index, op } => {
+                let value = inputs
+                    .get(*input_index)
+                    .and_then(StateMachineInputInstance::bool_value);
+                Some(value.is_none_or(|value| {
+                    (value && *op == TransitionConditionOp::Equal)
+                        || (!value && *op == TransitionConditionOp::NotEqual)
+                }))
+            }
+            Self::Number {
+                input_index,
+                op,
+                value,
+            } => {
+                let input_value = inputs
+                    .get(*input_index)
+                    .and_then(StateMachineInputInstance::number_value);
+                Some(input_value.is_none_or(|input_value| op.compare(input_value, *value)))
+            }
+            Self::Trigger { input_index } => Some(
+                inputs
+                    .get(*input_index)
+                    .and_then(|input| input.trigger_is_fireable_for_layer(layer_index))
+                    .unwrap_or(true),
+            ),
+            _ => None,
         }
     }
 

@@ -5553,7 +5553,10 @@ mod tests {
 
         instance.replace_external_font_asset_snapshot(&external_fonts);
 
-        let nested = instance.nested_artboards.get(&7).expect("nested child exists");
+        let nested = instance
+            .nested_artboards
+            .get(&7)
+            .expect("nested child exists");
         assert_eq!(
             nested.child.external_font_asset_bytes(7),
             Some(&*font_bytes)

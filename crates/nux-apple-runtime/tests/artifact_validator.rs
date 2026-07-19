@@ -580,18 +580,13 @@ fn manifest_asset_declarations_share_the_public_1024_item_limit() {
             })
         })
         .collect::<Vec<_>>();
-    let manifest_bytes = manifest_bytes_with_assets(
-        &artifact_bytes,
-        json!({ "images": images, "fonts": [] }),
-    );
+    let manifest_bytes =
+        manifest_bytes_with_assets(&artifact_bytes, json!({ "images": images, "fonts": [] }));
 
-    let error = validate_flow_artifact_import(signed_input_for(
-        artifact_bytes,
-        manifest_bytes,
-        Vec::new(),
-    ))
-    .err()
-    .expect("oversized declaration catalog must fail before RIV matching");
+    let error =
+        validate_flow_artifact_import(signed_input_for(artifact_bytes, manifest_bytes, Vec::new()))
+            .err()
+            .expect("oversized declaration catalog must fail before RIV matching");
 
     assert_eq!(error.code, "artifact.asset.too_many_declarations");
 }
@@ -613,30 +608,20 @@ fn manifest_controlled_identity_and_asset_names_are_bounded() {
         "assets": { "images": [], "fonts": [] },
     }))
     .expect("manifest encodes");
-    let identity_error = validate_flow_artifact_import(signed_input_for(
-        artifact_bytes,
-        manifest_bytes,
-        Vec::new(),
-    ))
-    .err()
-    .expect("oversized identity must fail before interpolation");
+    let identity_error =
+        validate_flow_artifact_import(signed_input_for(artifact_bytes, manifest_bytes, Vec::new()))
+            .err()
+            .expect("oversized identity must fail before interpolation");
     assert_eq!(identity_error.code, "artifact.identity.invalid_flow_id");
 
     let artifact_bytes = external_asset_riv();
     let oversized_unique_name = "n".repeat(4_097);
-    let manifest_bytes = image_declaration(
-        &artifact_bytes,
-        b"image",
-        false,
-        &oversized_unique_name,
-    );
-    let name_error = validate_flow_artifact_import(signed_input_for(
-        artifact_bytes,
-        manifest_bytes,
-        Vec::new(),
-    ))
-    .err()
-    .expect("oversized unique name must fail before diagnostics");
+    let manifest_bytes =
+        image_declaration(&artifact_bytes, b"image", false, &oversized_unique_name);
+    let name_error =
+        validate_flow_artifact_import(signed_input_for(artifact_bytes, manifest_bytes, Vec::new()))
+            .err()
+            .expect("oversized unique name must fail before diagnostics");
     assert_eq!(name_error.code, "artifact.asset.invalid_declaration");
 }
 

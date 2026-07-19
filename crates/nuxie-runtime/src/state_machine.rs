@@ -1507,6 +1507,15 @@ impl BlendState1DInstance {
             .map(|animation| &animation.animation)
     }
 
+    fn for_each_animation_instance_mut(
+        &mut self,
+        mut callback: impl FnMut(&mut LinearAnimationInstance),
+    ) {
+        for animation in &mut self.animations {
+            callback(&mut animation.animation);
+        }
+    }
+
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         let mut changed = false;
         if let Some(reset) = self.animation_reset.as_ref() {
@@ -1652,6 +1661,15 @@ impl BlendStateDirectInstance {
         self.animations
             .get(index)
             .map(|animation| &animation.animation)
+    }
+
+    fn for_each_animation_instance_mut(
+        &mut self,
+        mut callback: impl FnMut(&mut LinearAnimationInstance),
+    ) {
+        for animation in &mut self.animations {
+            callback(&mut animation.animation);
+        }
     }
 
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
@@ -2424,6 +2442,7 @@ impl StateMachineLayerInstance {
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
         elapsed_seconds: f32,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
@@ -2444,6 +2463,8 @@ impl StateMachineLayerInstance {
         reported_events: &mut Vec<StateMachineReportedEvent>,
         pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> StateMachineLayerAdvance {
+        let key_frame_data_bind_keep_going =
+            self.advance_key_frame_data_binds(key_frame_data_bind_graphs, elapsed_seconds);
         self.advance_current_animation(
             artboard,
             layer,
@@ -2468,7 +2489,7 @@ impl StateMachineLayerInstance {
             bindable_numbers,
             reported_events,
         );
-        self.apply_animations(artboard);
+        self.apply_animations(artboard, key_frame_data_bind_graphs);
 
         let mut changed_state = false;
         for _ in 0..100 {
@@ -2498,7 +2519,7 @@ impl StateMachineLayerInstance {
                 break;
             }
             changed_state = true;
-            self.apply_animations(artboard);
+            self.apply_animations(artboard, key_frame_data_bind_graphs);
         }
 
         StateMachineLayerAdvance {
@@ -2507,6 +2528,7 @@ impl StateMachineLayerInstance {
             keep_going: changed_state
                 || input_changed
                 || !pending_view_model_actions.is_empty()
+                || key_frame_data_bind_keep_going
                 || self.is_transitioning()
                 || self.waiting_for_exit
                 || self.current_animation_keep_going,
@@ -3237,7 +3259,12 @@ impl StateMachineLayerInstance {
         )
     }
 
-    fn apply_animations(&self, artboard: &mut ArtboardInstance) -> bool {
+    fn apply_animations(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) -> bool {
+        self.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
         let mut changed = false;
         if self.is_transitioning() {
             if let Some(reset) = self.transition_animation_reset.as_ref() {
@@ -3289,6 +3316,54 @@ impl StateMachineLayerInstance {
         };
         changed | animation_instance.apply(artboard, mix)
     }
+
+    fn prepare_key_frame_data_binds(&mut self, graphs: &[Option<crate::RuntimeDataBindGraph>]) {
+        Self::for_each_animation_instance_mut(self, |instance| {
+            let prototype = graphs
+                .get(instance.animation_index)
+                .and_then(Option::as_ref);
+            instance.prepare_key_frame_data_binds(prototype);
+        });
+    }
+
+    fn advance_key_frame_data_binds(
+        &mut self,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+        elapsed_seconds: f32,
+    ) -> bool {
+        let mut keep_going = false;
+        Self::for_each_animation_instance_mut(self, |instance| {
+            let prototype = graphs
+                .get(instance.animation_index)
+                .and_then(Option::as_ref);
+            keep_going |= instance.advance_key_frame_data_binds(prototype, elapsed_seconds);
+        });
+        keep_going
+    }
+
+    fn for_each_animation_instance_mut(
+        &mut self,
+        mut callback: impl FnMut(&mut LinearAnimationInstance),
+    ) {
+        if let Some(animation) = self.current_animation.as_mut() {
+            callback(animation);
+        }
+        if let Some(blend) = self.current_blend_state_1d.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+        if let Some(blend) = self.current_blend_state_direct.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+        if let Some(animation) = self.transition_source_animation.as_mut() {
+            callback(animation);
+        }
+        if let Some(blend) = self.transition_source_blend_state_1d.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+        if let Some(blend) = self.transition_source_blend_state_direct.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3309,6 +3384,7 @@ mod tests {
             enable_work_area: false,
             quantize: false,
             keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
         }
     }
 

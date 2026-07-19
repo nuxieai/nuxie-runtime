@@ -1411,6 +1411,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         return false;
     };
     match data_bind.target_type_name {
+        Some(
+            target_type @ ("KeyFrameDouble" | "KeyFrameColor" | "KeyFrameBool" | "KeyFrameString"),
+        ) => property_key_for_name(target_type, "value") == Some(property_key),
         Some("TextValueRun") => property_key_for_name("TextValueRun", "text") == Some(property_key),
         Some("SolidColor") => {
             property_key_for_name("SolidColor", "colorValue") == Some(property_key)
@@ -6126,6 +6129,37 @@ mod tests {
             assert!(
                 static_text_data_bind_supported(&data_bind),
                 "{property_name} should reach the runtime scroll binding path"
+            );
+        }
+    }
+
+    #[test]
+    fn static_text_preflight_accepts_supported_key_frame_value_bindings() {
+        for target_type_name in [
+            "KeyFrameDouble",
+            "KeyFrameColor",
+            "KeyFrameBool",
+            "KeyFrameString",
+        ] {
+            let data_bind = DataBindNode {
+                global_id: 1,
+                type_name: "DataBind",
+                property_key: u64::from(
+                    property_key_for_name(target_type_name, "value")
+                        .expect("keyframe value property exists"),
+                ),
+                flags: 0,
+                converter_id: 0,
+                converter_global: None,
+                converter_type_name: None,
+                converter_duration: None,
+                target_global: Some(2),
+                target_type_name: Some(target_type_name),
+                target_local: Some(2),
+            };
+            assert!(
+                static_text_data_bind_supported(&data_bind),
+                "{target_type_name}.value should reach the runtime keyframe binding path"
             );
         }
     }

@@ -44,6 +44,29 @@ pub(crate) struct RuntimeDataBindGraph {
     pub(crate) imported_view_model_context: Option<RuntimeImportedViewModelContextKey>,
     pub(crate) imported_view_model_overrides:
         BTreeMap<RuntimeImportedViewModelOverrideKey, RuntimeViewModelPointer>,
+    /// Monotonically identifies source/context changes for graphs used as
+    /// keyframe-binding prototypes. Concrete animation instances use this to
+    /// copy source dirt without sharing converter or random state.
+    key_frame_source_revision: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeKeyFrameDataBindTemplate {
+    pub(crate) data_bind_index: usize,
+    pub(crate) key_frame_global_id: u32,
+    pub(crate) target: RuntimeKeyFrameDataBindTarget,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) default_value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeKeyFrameDataBindTarget {
+    Number,
+    Color,
+    Boolean,
+    String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +113,16 @@ impl Default for RuntimeDataBindGraphFormulaRandomSource {
 }
 
 impl RuntimeDataBindGraphFormulaRandomSource {
+    fn fresh_clone(&self) -> Self {
+        Self {
+            values: self.values.clone(),
+            next_index: 0,
+            call_count: 0,
+            seeded_values: self.seeded_values,
+            fallback_seed: 1,
+        }
+    }
+
     pub(crate) fn set_values(&mut self, values: &[f32]) {
         self.values.clear();
         self.values.extend_from_slice(values);
@@ -2835,6 +2868,10 @@ pub(crate) enum RuntimeDataBindGraphTarget {
     Trigger { global_id: u32 },
     ViewModel { global_id: u32 },
     TransitionDuration { transition_global_id: u32 },
+    KeyFrameNumber { global_id: u32 },
+    KeyFrameColor { global_id: u32 },
+    KeyFrameBoolean { global_id: u32 },
+    KeyFrameString { global_id: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -3350,7 +3387,116 @@ impl RuntimeDataBindGraph {
             default_view_model_bindings,
             imported_view_model_context: None,
             imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
         }
+    }
+
+    pub(crate) fn new_key_frame_bindings(
+        templates: &[RuntimeKeyFrameDataBindTemplate],
+    ) -> Option<Self> {
+        if templates.is_empty() {
+            return None;
+        }
+
+        let mut sources = Vec::with_capacity(templates.len());
+        let mut targets = Vec::with_capacity(templates.len());
+        let mut default_view_model_bindings = Vec::with_capacity(templates.len());
+        for template in templates {
+            let target = match template.target {
+                RuntimeKeyFrameDataBindTarget::Number => {
+                    RuntimeDataBindGraphTarget::KeyFrameNumber {
+                        global_id: template.key_frame_global_id,
+                    }
+                }
+                RuntimeKeyFrameDataBindTarget::Color => RuntimeDataBindGraphTarget::KeyFrameColor {
+                    global_id: template.key_frame_global_id,
+                },
+                RuntimeKeyFrameDataBindTarget::Boolean => {
+                    RuntimeDataBindGraphTarget::KeyFrameBoolean {
+                        global_id: template.key_frame_global_id,
+                    }
+                }
+                RuntimeKeyFrameDataBindTarget::String => {
+                    RuntimeDataBindGraphTarget::KeyFrameString {
+                        global_id: template.key_frame_global_id,
+                    }
+                }
+            };
+            Self::push_default_view_model_binding(
+                &mut sources,
+                &mut targets,
+                &mut default_view_model_bindings,
+                template.data_bind_index,
+                &template.path,
+                template.flags,
+                template.converter.clone(),
+                target,
+                template.default_value.clone(),
+            );
+        }
+        default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
+
+        Some(Self {
+            context_kind: RuntimeDataBindGraphContextKind::None,
+            default_view_model_bindings_dirty: false,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            sources,
+            targets,
+            default_view_model_bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
+        })
+    }
+
+    pub(crate) fn clone_for_key_frame_instance(&self) -> Self {
+        let mut clone = self.clone();
+        clone.reset_converter_states();
+        clone.formula_random_source = self.formula_random_source.fresh_clone();
+        if clone.default_view_model_context_bound() {
+            for source in &mut clone.sources {
+                source.mark_reconcile_dirty();
+            }
+            clone.default_view_model_bindings_dirty = true;
+        }
+        clone
+    }
+
+    pub(crate) fn key_frame_source_revision(&self) -> u64 {
+        self.key_frame_source_revision
+    }
+
+    /// Copies only shared source/context state from a prototype graph. The
+    /// receiver retains its converter state and random sequence, which must be
+    /// isolated per concrete LinearAnimationInstance.
+    pub(crate) fn sync_key_frame_sources_from(&mut self, prototype: &Self) {
+        if self.key_frame_source_revision == prototype.key_frame_source_revision {
+            return;
+        }
+        self.context_kind = prototype.context_kind;
+        self.imported_view_model_context = prototype.imported_view_model_context;
+        self.imported_view_model_overrides = prototype.imported_view_model_overrides.clone();
+
+        for (source, prototype_source) in self.sources.iter_mut().zip(&prototype.sources) {
+            let source_changed = source.bound != prototype_source.bound
+                || source.value != prototype_source.value
+                || source.default_value != prototype_source.default_value;
+            source.bound = prototype_source.bound;
+            source.value = prototype_source.value.clone();
+            source.default_value = prototype_source.default_value.clone();
+            if source.converter != prototype_source.converter {
+                source.converter = prototype_source.converter.clone();
+                source.reset_converter_state();
+            }
+            if source_changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+            if source.bound {
+                source.mark_reconcile_dirty();
+            }
+        }
+        self.default_view_model_bindings_dirty = self.default_view_model_context_bound();
+        self.key_frame_source_revision = prototype.key_frame_source_revision;
     }
 
     pub(crate) fn push_default_view_model_binding(
@@ -3422,6 +3568,7 @@ impl RuntimeDataBindGraph {
 
     pub(crate) fn mark_default_view_model_bindings_dirty(&mut self) {
         self.default_view_model_bindings_dirty = true;
+        self.key_frame_source_revision = self.key_frame_source_revision.wrapping_add(1);
     }
 
     pub(crate) fn bind_empty_data_context(&mut self) -> bool {
@@ -3432,6 +3579,7 @@ impl RuntimeDataBindGraph {
         self.context_kind = RuntimeDataBindGraphContextKind::Empty;
         self.imported_view_model_context = None;
         self.default_view_model_bindings_dirty = false;
+        self.key_frame_source_revision = self.key_frame_source_revision.wrapping_add(1);
         true
     }
 
@@ -3774,6 +3922,17 @@ impl RuntimeDataBindGraph {
             return false;
         };
 
+        self.set_active_view_model_source_for_path(&path, value)
+    }
+
+    pub(crate) fn set_active_view_model_source_for_path(
+        &mut self,
+        path: &[u32],
+        value: RuntimeDataBindGraphValue,
+    ) -> bool {
+        if !self.default_view_model_context_bound() {
+            return false;
+        }
         let update_default = self.default_view_model_source_context_bound();
         let mut changed = false;
         for source in self.sources.iter_mut().filter(|source| {
@@ -8255,14 +8414,15 @@ impl RuntimeDataBindGraph {
         }
     }
 
-    pub(crate) fn apply_default_view_model_bindings(
+    fn take_default_view_model_binding_updates(
         &mut self,
-        mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+        include_view_models: bool,
         phase: RuntimeDataBindGraphApplyPhase,
-    ) {
+    ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
         if !self.default_view_model_context_bound() || !self.default_view_model_bindings_dirty {
-            return;
+            return Vec::new();
         }
+        let mut updates = Vec::new();
         let mut skipped_dirty_binding = false;
         let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
@@ -8351,7 +8511,7 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             if matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. })
-                && !targets.include_view_models
+                && !include_view_models
             {
                 skipped_dirty_binding = true;
                 continue;
@@ -8381,7 +8541,7 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
-            targets.apply_default_view_model_binding(&target.target, &value);
+            updates.push((target.target, value));
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
             source.reconcile_pending = false;
@@ -8389,6 +8549,38 @@ impl RuntimeDataBindGraph {
         }
         self.formula_random_source = formula_random_source;
         self.default_view_model_bindings_dirty = skipped_dirty_binding;
+        updates
+    }
+
+    pub(crate) fn apply_default_view_model_bindings(
+        &mut self,
+        mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+        phase: RuntimeDataBindGraphApplyPhase,
+    ) {
+        let include_view_models = targets.include_view_models;
+        for (target, value) in
+            self.take_default_view_model_binding_updates(include_view_models, phase)
+        {
+            targets.apply_default_view_model_binding(&target, &value);
+        }
+    }
+
+    pub(crate) fn take_key_frame_binding_updates(
+        &mut self,
+        phase: RuntimeDataBindGraphApplyPhase,
+    ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
+        self.take_default_view_model_binding_updates(false, phase)
+            .into_iter()
+            .filter(|(target, _)| {
+                matches!(
+                    target,
+                    RuntimeDataBindGraphTarget::KeyFrameNumber { .. }
+                        | RuntimeDataBindGraphTarget::KeyFrameColor { .. }
+                        | RuntimeDataBindGraphTarget::KeyFrameBoolean { .. }
+                        | RuntimeDataBindGraphTarget::KeyFrameString { .. }
+                )
+            })
+            .collect()
     }
 }
 

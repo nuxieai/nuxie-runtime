@@ -3561,6 +3561,17 @@ fn nested_stateful_view_model_object(
 }
 
 fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
+    if matches!(
+        (data_bind.target_type_name, data_bind.property_key),
+        (Some("KeyFrameDouble"), 70)
+            | (Some("KeyFrameColor"), 88)
+            | (Some("KeyFrameBool"), 181)
+            | (Some("KeyFrameString"), 280)
+    ) {
+        // State-machine-driven nested animation instances use the same typed
+        // keyframe value-holder binding path as root artboards.
+        return true;
+    }
     if data_bind.target_type_name == Some("SolidColor") {
         return true;
     }

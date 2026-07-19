@@ -1,3 +1,8 @@
+use crate::artboard_data_bind::build_key_frame_data_bind_templates;
+use crate::data_bind_graph::{
+    RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphTarget,
+    RuntimeKeyFrameDataBindTemplate,
+};
 use crate::draw::color_lerp;
 use crate::properties::{
     artboard_index_for_graph, mix_value, runtime_object_bool_property_by_key,
@@ -337,6 +342,7 @@ pub(crate) fn build_linear_animations(
                 enable_work_area: object.bool_property("enableWorkArea").unwrap_or(false),
                 quantize: object.bool_property("quantize").unwrap_or(false),
                 keyed_objects: Arc::new(Vec::new()),
+                key_frame_data_bind_templates: Arc::new(Vec::new()),
             });
             current_animation = Some(animations.len() - 1);
             current_keyed_object = None;
@@ -583,6 +589,43 @@ pub(crate) fn build_linear_animations(
         }
     }
 
+    let templates = build_key_frame_data_bind_templates(file, artboard_index);
+    if !templates.is_empty() {
+        for animation in &mut animations {
+            let key_frame_ids = animation
+                .keyed_objects
+                .iter()
+                .flat_map(|object| &object.keyed_properties)
+                .flat_map(|property| {
+                    property
+                        .key_frames
+                        .iter()
+                        .map(|frame| frame.global_id)
+                        .chain(
+                            property
+                                .color_key_frames
+                                .iter()
+                                .map(|frame| frame.global_id),
+                        )
+                        .chain(property.bool_key_frames.iter().map(|frame| frame.global_id))
+                        .chain(
+                            property
+                                .string_key_frames
+                                .iter()
+                                .map(|frame| frame.global_id),
+                        )
+                })
+                .collect::<std::collections::HashSet<_>>();
+            animation.key_frame_data_bind_templates = Arc::new(
+                templates
+                    .iter()
+                    .filter(|template| key_frame_ids.contains(&template.key_frame_global_id))
+                    .cloned()
+                    .collect(),
+            );
+        }
+    }
+
     animations
 }
 
@@ -651,6 +694,7 @@ pub struct RuntimeLinearAnimation {
     pub enable_work_area: bool,
     pub quantize: bool,
     pub keyed_objects: Arc<Vec<RuntimeKeyedObject>>,
+    pub(crate) key_frame_data_bind_templates: Arc<Vec<RuntimeKeyFrameDataBindTemplate>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1454,6 +1498,8 @@ pub struct LinearAnimationInstance {
     pub(crate) did_loop: bool,
     pub(crate) loop_value: Option<u64>,
     key_frame_value_holders: Option<Box<HashMap<u32, RuntimeKeyFrameValue>>>,
+    key_frame_data_bind_graph: Option<Box<RuntimeDataBindGraph>>,
+    key_frame_prototype_revision: u64,
 }
 
 impl Clone for LinearAnimationInstance {
@@ -1472,6 +1518,8 @@ impl Clone for LinearAnimationInstance {
             // A copied LAI starts unbound; state transitions move the outgoing
             // instance when they need to preserve its concrete binding identity.
             key_frame_value_holders: None,
+            key_frame_data_bind_graph: None,
+            key_frame_prototype_revision: 0,
         }
     }
 }
@@ -1493,7 +1541,130 @@ impl LinearAnimationInstance {
             did_loop: false,
             loop_value: None,
             key_frame_value_holders: None,
+            key_frame_data_bind_graph: None,
+            key_frame_prototype_revision: 0,
         }
+    }
+
+    fn initialize_key_frame_data_bind_graph(&mut self, prototype: &RuntimeDataBindGraph) {
+        if self.key_frame_data_bind_graph.is_some() {
+            return;
+        }
+        for target in &prototype.targets {
+            let (global_id, value) = match target.target {
+                RuntimeDataBindGraphTarget::KeyFrameNumber { global_id } => {
+                    (global_id, RuntimeKeyFrameValue::Number(0.0))
+                }
+                RuntimeDataBindGraphTarget::KeyFrameColor { global_id } => {
+                    (global_id, RuntimeKeyFrameValue::Color(0xFF1D1D1D))
+                }
+                RuntimeDataBindGraphTarget::KeyFrameBoolean { global_id } => {
+                    (global_id, RuntimeKeyFrameValue::Boolean(false))
+                }
+                RuntimeDataBindGraphTarget::KeyFrameString { global_id } => {
+                    (global_id, RuntimeKeyFrameValue::String(Vec::new()))
+                }
+                _ => continue,
+            };
+            self.add_key_frame_value_holder(global_id, value);
+        }
+        self.key_frame_data_bind_graph = Some(Box::new(prototype.clone_for_key_frame_instance()));
+        self.key_frame_prototype_revision = prototype.key_frame_source_revision();
+    }
+
+    fn sync_key_frame_data_bind_graph(&mut self, prototype: &RuntimeDataBindGraph) {
+        self.initialize_key_frame_data_bind_graph(prototype);
+        if self.key_frame_prototype_revision == prototype.key_frame_source_revision() {
+            return;
+        }
+        if let Some(graph) = self.key_frame_data_bind_graph.as_deref_mut() {
+            graph.sync_key_frame_sources_from(prototype);
+        }
+        self.key_frame_prototype_revision = prototype.key_frame_source_revision();
+    }
+
+    fn apply_key_frame_data_bind_updates(
+        &mut self,
+        updates: Vec<(RuntimeDataBindGraphTarget, crate::RuntimeDataBindGraphValue)>,
+    ) -> bool {
+        let mut changed = false;
+        for (target, value) in updates {
+            let (global_id, value) = match (target, value) {
+                (
+                    RuntimeDataBindGraphTarget::KeyFrameNumber { global_id },
+                    crate::RuntimeDataBindGraphValue::Number(value),
+                ) => (global_id, RuntimeKeyFrameValue::Number(value)),
+                (
+                    RuntimeDataBindGraphTarget::KeyFrameColor { global_id },
+                    crate::RuntimeDataBindGraphValue::Color(value),
+                ) => (global_id, RuntimeKeyFrameValue::Color(value)),
+                (
+                    RuntimeDataBindGraphTarget::KeyFrameBoolean { global_id },
+                    crate::RuntimeDataBindGraphValue::Boolean(value),
+                ) => (global_id, RuntimeKeyFrameValue::Boolean(value)),
+                (
+                    RuntimeDataBindGraphTarget::KeyFrameString { global_id },
+                    crate::RuntimeDataBindGraphValue::String(value),
+                ) => (global_id, RuntimeKeyFrameValue::String(value)),
+                _ => continue,
+            };
+            let Some(holder) = self.key_frame_value_holder_mut(global_id) else {
+                continue;
+            };
+            if *holder != value {
+                *holder = value;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    pub(crate) fn prepare_key_frame_data_binds(
+        &mut self,
+        prototype: Option<&RuntimeDataBindGraph>,
+    ) -> bool {
+        let Some(prototype) = prototype else {
+            return false;
+        };
+        self.sync_key_frame_data_bind_graph(prototype);
+        let updates = self
+            .key_frame_data_bind_graph
+            .as_deref_mut()
+            .map(|graph| {
+                graph.take_key_frame_binding_updates(
+                    RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
+                )
+            })
+            .unwrap_or_default();
+        self.apply_key_frame_data_bind_updates(updates)
+    }
+
+    pub(crate) fn advance_key_frame_data_binds(
+        &mut self,
+        prototype: Option<&RuntimeDataBindGraph>,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let Some(prototype) = prototype else {
+            return false;
+        };
+        let mut keep_going = false;
+        let mut changed = self.prepare_key_frame_data_binds(Some(prototype));
+        if let Some(graph) = self.key_frame_data_bind_graph.as_deref_mut() {
+            let advance = graph.advance_stateful_converters(elapsed_seconds);
+            changed |= advance.changed;
+            keep_going |= advance.keep_going;
+        }
+        let updates = self
+            .key_frame_data_bind_graph
+            .as_deref_mut()
+            .map(|graph| {
+                graph.take_key_frame_binding_updates(
+                    RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance,
+                )
+            })
+            .unwrap_or_default();
+        changed |= self.apply_key_frame_data_bind_updates(updates);
+        changed || keep_going
     }
 
     pub(crate) fn add_key_frame_value_holder(
@@ -1794,6 +1965,24 @@ impl LinearAnimationInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_bind_graph::{
+        RuntimeDataBindGraphConverter, RuntimeDataBindGraphFormulaToken,
+        RuntimeKeyFrameDataBindTarget,
+    };
+
+    fn number_key_frame_binding(
+        converter: Option<RuntimeDataBindGraphConverter>,
+    ) -> RuntimeKeyFrameDataBindTemplate {
+        RuntimeKeyFrameDataBindTemplate {
+            data_bind_index: 0,
+            key_frame_global_id: 10,
+            target: RuntimeKeyFrameDataBindTarget::Number,
+            path: vec![0, 0],
+            flags: 0,
+            converter,
+            default_value: crate::RuntimeDataBindGraphValue::Number(0.0),
+        }
+    }
 
     fn animation_with_work_area(enable_work_area: bool) -> RuntimeLinearAnimation {
         RuntimeLinearAnimation {
@@ -1808,6 +1997,7 @@ mod tests {
             enable_work_area,
             quantize: false,
             keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
         }
     }
 
@@ -2035,6 +2225,114 @@ mod tests {
     }
 
     #[test]
+    fn state_machine_key_frame_graph_updates_one_instance_without_binding_standalone_clones() {
+        let animation = animation_with_work_area(false);
+        let mut prototype =
+            RuntimeDataBindGraph::new_key_frame_bindings(&[number_key_frame_binding(None)])
+                .expect("keyframe binding graph");
+        assert!(prototype.bind_default_view_model_context());
+        assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
+
+        let mut state_machine_instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        assert!(state_machine_instance.prepare_key_frame_data_binds(Some(&prototype)));
+        assert_eq!(
+            state_machine_instance.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(10.0))
+        );
+
+        assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 20.0));
+        assert!(state_machine_instance.prepare_key_frame_data_binds(Some(&prototype)));
+        assert_eq!(
+            state_machine_instance.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(20.0))
+        );
+
+        let standalone_clone = state_machine_instance.clone();
+        assert!(standalone_clone.key_frame_data_bind_graph.is_none());
+        assert!(standalone_clone.key_frame_value_holders.is_none());
+    }
+
+    #[test]
+    fn key_frame_formula_random_state_is_isolated_per_animation_instance() {
+        let animation = animation_with_work_area(false);
+        let converter = RuntimeDataBindGraphConverter::Formula {
+            tokens: vec![RuntimeDataBindGraphFormulaToken::Function {
+                function_type: 16,
+                arguments_count: 0,
+                random_mode: 1,
+            }],
+        };
+        let mut prototype =
+            RuntimeDataBindGraph::new_key_frame_bindings(&[number_key_frame_binding(Some(
+                converter,
+            ))])
+            .expect("keyframe binding graph");
+        prototype.set_formula_random_values(&[0.25, 0.75]);
+        assert!(prototype.bind_default_view_model_context());
+
+        let mut first = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut second = LinearAnimationInstance::new(0, &animation, 1.0);
+        first.prepare_key_frame_data_binds(Some(&prototype));
+        second.prepare_key_frame_data_binds(Some(&prototype));
+
+        assert_eq!(
+            first.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(0.25))
+        );
+        assert_eq!(
+            second.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(0.25))
+        );
+        assert_ne!(
+            first
+                .key_frame_data_bind_graph
+                .as_deref()
+                .map(|graph| graph as *const RuntimeDataBindGraph),
+            second
+                .key_frame_data_bind_graph
+                .as_deref()
+                .map(|graph| graph as *const RuntimeDataBindGraph)
+        );
+        assert_eq!(
+            first
+                .key_frame_data_bind_graph
+                .as_deref()
+                .map(RuntimeDataBindGraph::formula_random_call_count),
+            Some(1)
+        );
+        assert_eq!(
+            second
+                .key_frame_data_bind_graph
+                .as_deref()
+                .map(RuntimeDataBindGraph::formula_random_call_count),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn empty_context_uses_cpp_typed_key_frame_holder_defaults() {
+        let animation = animation_with_work_area(false);
+        let template = RuntimeKeyFrameDataBindTemplate {
+            data_bind_index: 0,
+            key_frame_global_id: 30,
+            target: RuntimeKeyFrameDataBindTarget::Color,
+            path: vec![0, 0],
+            flags: 0,
+            converter: None,
+            default_value: crate::RuntimeDataBindGraphValue::Color(0),
+        };
+        let mut prototype = RuntimeDataBindGraph::new_key_frame_bindings(&[template])
+            .expect("keyframe binding graph");
+        assert!(prototype.bind_empty_data_context());
+        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        instance.prepare_key_frame_data_binds(Some(&prototype));
+        assert_eq!(
+            instance.key_frame_value_holder(30),
+            Some(&RuntimeKeyFrameValue::Color(0xFF1D1D1D))
+        );
+    }
+
+    #[test]
     fn duration_seconds_respects_enabled_work_area() {
         let animation = animation_with_work_area(true);
 
@@ -2067,6 +2365,7 @@ mod tests {
             enable_work_area: false,
             quantize: false,
             keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
         };
 
         assert_eq!(animation.duration_seconds(), 0.0);

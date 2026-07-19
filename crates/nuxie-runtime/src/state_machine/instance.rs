@@ -61,6 +61,7 @@ pub struct StateMachineInstance {
     changed_state_count: usize,
     needs_advance: bool,
     data_bind_graph: RuntimeDataBindGraph,
+    key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
     pointer_positions: Vec<RuntimePointerPosition>,
@@ -181,6 +182,21 @@ impl StateMachineInstance {
         let mut data_bind_graph = RuntimeDataBindGraph::new(state_machine);
         data_bind_graph
             .attach_scripted_instances(&artboard.scripted_data_converter_instances_by_global);
+        let key_frame_data_bind_graphs = artboard
+            .linear_animations
+            .iter()
+            .map(|animation| {
+                RuntimeDataBindGraph::new_key_frame_bindings(
+                    &animation.key_frame_data_bind_templates,
+                )
+                .map(|mut graph| {
+                    graph.attach_scripted_instances(
+                        &artboard.scripted_data_converter_instances_by_global,
+                    );
+                    graph
+                })
+            })
+            .collect();
         Self {
             state_machine_index,
             inputs,
@@ -204,6 +220,7 @@ impl StateMachineInstance {
             changed_state_count: 0,
             needs_advance: false,
             data_bind_graph,
+            key_frame_data_bind_graphs,
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
@@ -1458,15 +1475,69 @@ impl StateMachineInstance {
             .map(|bindable_trigger| bindable_trigger.value)
     }
 
+    fn set_key_frame_default_number_source_for_path(&mut self, path: &[u32], value: f32) -> bool {
+        self.key_frame_data_bind_graphs
+            .iter_mut()
+            .flatten()
+            .fold(false, |changed, graph| {
+                graph.set_default_view_model_number_source_for_path(path, value) || changed
+            })
+    }
+
+    fn set_key_frame_default_boolean_source_for_path(&mut self, path: &[u32], value: bool) -> bool {
+        self.key_frame_data_bind_graphs
+            .iter_mut()
+            .flatten()
+            .fold(false, |changed, graph| {
+                graph.set_default_view_model_boolean_source_for_path(path, value) || changed
+            })
+    }
+
+    fn set_key_frame_default_string_source_for_path(&mut self, path: &[u32], value: &[u8]) -> bool {
+        self.key_frame_data_bind_graphs
+            .iter_mut()
+            .flatten()
+            .fold(false, |changed, graph| {
+                graph.set_default_view_model_string_source_for_path(path, value) || changed
+            })
+    }
+
+    fn set_key_frame_default_color_source_for_path(&mut self, path: &[u32], value: u32) -> bool {
+        self.key_frame_data_bind_graphs
+            .iter_mut()
+            .flatten()
+            .fold(false, |changed, graph| {
+                graph.set_default_view_model_color_source_for_path(path, value) || changed
+            })
+    }
+
+    fn set_key_frame_active_source_for_path(
+        &mut self,
+        path: &[u32],
+        value: RuntimeDataBindGraphValue,
+    ) -> bool {
+        self.key_frame_data_bind_graphs
+            .iter_mut()
+            .flatten()
+            .fold(false, |changed, graph| {
+                graph.set_active_view_model_source_for_path(path, value.clone()) || changed
+            })
+    }
+
     pub fn set_default_view_model_number_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
         value: f32,
     ) -> bool {
-        if !self
+        let path = self
             .data_bind_graph
-            .set_default_view_model_number_source_for_data_bind(data_bind_index, value)
-        {
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
+            .data_bind_graph
+            .set_default_view_model_number_source_for_data_bind(data_bind_index, value);
+        let key_frame_changed = path
+            .is_some_and(|path| self.set_key_frame_default_number_source_for_path(&path, value));
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1497,10 +1568,12 @@ impl StateMachineInstance {
         handle: &RuntimeDefaultViewModelNumberSourceHandle,
         value: f32,
     ) -> bool {
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_number_source_for_path(&handle.path, value)
-        {
+            .set_default_view_model_number_source_for_path(&handle.path, value);
+        let key_frame_changed =
+            self.set_key_frame_default_number_source_for_path(&handle.path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1518,10 +1591,11 @@ impl StateMachineInstance {
         else {
             return false;
         };
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_number_source_for_path(&path, value)
-        {
+            .set_default_view_model_number_source_for_path(&path, value);
+        let key_frame_changed = self.set_key_frame_default_number_source_for_path(&path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1539,10 +1613,11 @@ impl StateMachineInstance {
         else {
             return false;
         };
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_boolean_source_for_path(&path, value)
-        {
+            .set_default_view_model_boolean_source_for_path(&path, value);
+        let key_frame_changed = self.set_key_frame_default_boolean_source_for_path(&path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1573,10 +1648,12 @@ impl StateMachineInstance {
         handle: &RuntimeDefaultViewModelBooleanSourceHandle,
         value: bool,
     ) -> bool {
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_boolean_source_for_path(&handle.path, value)
-        {
+            .set_default_view_model_boolean_source_for_path(&handle.path, value);
+        let key_frame_changed =
+            self.set_key_frame_default_boolean_source_for_path(&handle.path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1588,10 +1665,15 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: bool,
     ) -> bool {
-        if !self
+        let path = self
             .data_bind_graph
-            .set_default_view_model_boolean_source_for_data_bind(data_bind_index, value)
-        {
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
+            .data_bind_graph
+            .set_default_view_model_boolean_source_for_data_bind(data_bind_index, value);
+        let key_frame_changed = path
+            .is_some_and(|path| self.set_key_frame_default_boolean_source_for_path(&path, value));
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1609,10 +1691,11 @@ impl StateMachineInstance {
         else {
             return false;
         };
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_string_source_for_path(&path, value)
-        {
+            .set_default_view_model_string_source_for_path(&path, value);
+        let key_frame_changed = self.set_key_frame_default_string_source_for_path(&path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1643,10 +1726,12 @@ impl StateMachineInstance {
         handle: &RuntimeDefaultViewModelStringSourceHandle,
         value: &[u8],
     ) -> bool {
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_string_source_for_path(&handle.path, value)
-        {
+            .set_default_view_model_string_source_for_path(&handle.path, value);
+        let key_frame_changed =
+            self.set_key_frame_default_string_source_for_path(&handle.path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1658,10 +1743,15 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: &[u8],
     ) -> bool {
-        if !self
+        let path = self
             .data_bind_graph
-            .set_default_view_model_string_source_for_data_bind(data_bind_index, value)
-        {
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
+            .data_bind_graph
+            .set_default_view_model_string_source_for_data_bind(data_bind_index, value);
+        let key_frame_changed = path
+            .is_some_and(|path| self.set_key_frame_default_string_source_for_path(&path, value));
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1679,10 +1769,11 @@ impl StateMachineInstance {
         else {
             return false;
         };
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_color_source_for_path(&path, value)
-        {
+            .set_default_view_model_color_source_for_path(&path, value);
+        let key_frame_changed = self.set_key_frame_default_color_source_for_path(&path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1713,10 +1804,12 @@ impl StateMachineInstance {
         handle: &RuntimeDefaultViewModelColorSourceHandle,
         value: u32,
     ) -> bool {
-        if !self
+        let changed = self
             .data_bind_graph
-            .set_default_view_model_color_source_for_path(&handle.path, value)
-        {
+            .set_default_view_model_color_source_for_path(&handle.path, value);
+        let key_frame_changed =
+            self.set_key_frame_default_color_source_for_path(&handle.path, value);
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -1728,10 +1821,15 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u32,
     ) -> bool {
-        if !self
+        let path = self
             .data_bind_graph
-            .set_default_view_model_color_source_for_data_bind(data_bind_index, value)
-        {
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
+            .data_bind_graph
+            .set_default_view_model_color_source_for_data_bind(data_bind_index, value);
+        let key_frame_changed =
+            path.is_some_and(|path| self.set_key_frame_default_color_source_for_path(&path, value));
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2417,14 +2515,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: f32,
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_imported_view_model_context_number_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::Number(value),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2437,14 +2544,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: f32,
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_owned_view_model_context_number_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::Number(value),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2477,14 +2593,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: bool,
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_owned_view_model_context_boolean_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::Boolean(value),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2513,14 +2638,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u32,
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_owned_view_model_context_color_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::Color(value),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2533,14 +2667,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: &[u8],
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_owned_view_model_context_string_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::String(value.to_vec()),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2698,14 +2841,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: bool,
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_imported_view_model_context_boolean_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::Boolean(value),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2718,14 +2870,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: &[u8],
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_imported_view_model_context_string_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::String(value.to_vec()),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2738,14 +2899,23 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u32,
     ) -> bool {
-        if !self
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        let changed = self
             .data_bind_graph
             .set_imported_view_model_context_color_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,
+            );
+        let key_frame_changed = path.is_some_and(|path| {
+            self.set_key_frame_active_source_for_path(
+                &path,
+                RuntimeDataBindGraphValue::Color(value),
             )
-        {
+        });
+        if !changed && !key_frame_changed {
             return false;
         }
         self.needs_advance = true;
@@ -2935,6 +3105,9 @@ impl StateMachineInstance {
         if !self.data_bind_graph.bind_empty_data_context() {
             return false;
         }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_empty_data_context();
+        }
         self.needs_advance = true;
         true
     }
@@ -2943,6 +3116,9 @@ impl StateMachineInstance {
         if !self.data_bind_graph.bind_default_view_model_context() {
             return false;
         }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_default_view_model_context();
+        }
         self.bind_active_default_view_model_triggers();
         self.needs_advance = true;
         true
@@ -2950,6 +3126,10 @@ impl StateMachineInstance {
 
     pub fn set_data_bind_formula_random_values(&mut self, values: &[f32]) {
         self.data_bind_graph.set_formula_random_values(values);
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.set_formula_random_values(values);
+            graph.mark_default_view_model_bindings_dirty();
+        }
     }
 
     pub fn data_bind_formula_random_call_count(&self) -> usize {
@@ -2969,6 +3149,9 @@ impl StateMachineInstance {
         ) {
             return false;
         }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_view_model_instance_context(file, view_model_index, instance_index);
+        }
         self.bind_active_imported_view_model_triggers(file, view_model_index, instance_index, None);
         self.needs_advance = true;
         true
@@ -2984,6 +3167,9 @@ impl StateMachineInstance {
             .bind_imported_view_model_context(file, context)
         {
             return false;
+        }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_imported_view_model_context(file, context);
         }
         self.bind_active_imported_view_model_triggers(
             file,
@@ -3002,6 +3188,9 @@ impl StateMachineInstance {
         if !self.data_bind_graph.bind_owned_view_model_context(context) {
             return false;
         }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_owned_view_model_context(context);
+        }
         self.bind_active_owned_view_model_triggers(context);
         self.needs_advance = true;
         true
@@ -3013,6 +3202,9 @@ impl StateMachineInstance {
     ) -> bool {
         if !self.data_bind_graph.bind_owned_view_model_contexts(context) {
             return false;
+        }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_owned_view_model_contexts(context);
         }
         if let Some(main) = context.main() {
             self.bind_active_owned_view_model_triggers(main);
@@ -3035,6 +3227,9 @@ impl StateMachineInstance {
         {
             return false;
         }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_owned_view_model_context_chain(file, context, context_chain);
+        }
         self.bind_active_owned_view_model_triggers(context);
         self.needs_advance = true;
         true
@@ -3050,6 +3245,9 @@ impl StateMachineInstance {
             .bind_owned_view_model_context_chains(file, contexts)
         {
             return false;
+        }
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.bind_owned_view_model_context_chains(file, contexts);
         }
         if let Some((main, _)) = contexts.first() {
             self.bind_active_owned_view_model_triggers(main);
@@ -3255,6 +3453,7 @@ impl StateMachineInstance {
                     &self.scripted_instances_by_global,
                     artboard,
                     layer,
+                    &self.key_frame_data_bind_graphs,
                     elapsed_seconds,
                     layer_index,
                     &mut self.inputs,

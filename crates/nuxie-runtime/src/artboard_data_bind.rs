@@ -1,6 +1,7 @@
 use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
     RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphRangeMapperProperty,
+    RuntimeKeyFrameDataBindTarget, RuntimeKeyFrameDataBindTemplate,
     data_bind_flags_source_to_target_runs_first, runtime_data_bind_graph_convert_value,
     runtime_data_bind_graph_converter, runtime_data_bind_graph_converter_contains_global_id,
     runtime_data_bind_graph_converter_contains_source_change_random,
@@ -26,6 +27,66 @@ use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{FieldKind, definition_by_type_key};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
+
+pub(crate) fn build_key_frame_data_bind_templates(
+    file: &RuntimeFile,
+    artboard_index: usize,
+) -> Vec<RuntimeKeyFrameDataBindTemplate> {
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+    let mut claimed_targets = BTreeSet::new();
+    let mut templates = Vec::new();
+
+    for (data_bind_index, data_bind) in file
+        .artboard_data_binds(artboard_index)
+        .into_iter()
+        .enumerate()
+    {
+        let Some(target) = data_bind.target else {
+            continue;
+        };
+        let holder_target = match target.type_name {
+            "KeyFrameDouble" => RuntimeKeyFrameDataBindTarget::Number,
+            "KeyFrameColor" => RuntimeKeyFrameDataBindTarget::Color,
+            "KeyFrameBool" => RuntimeKeyFrameDataBindTarget::Boolean,
+            "KeyFrameString" => RuntimeKeyFrameDataBindTarget::String,
+            // C++ intentionally leaves KeyFrameUint/KeyFrameId unbound.
+            _ => continue,
+        };
+        // C++ firstBindByTarget.emplace keeps the first authored bind even if
+        // another bind to the same shared keyframe follows it.
+        if !claimed_targets.insert(target.id) {
+            continue;
+        }
+        let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind.object) else {
+            continue;
+        };
+        let holder_default = match holder_target {
+            RuntimeKeyFrameDataBindTarget::Number => RuntimeDataBindGraphValue::Number(0.0),
+            RuntimeKeyFrameDataBindTarget::Color => RuntimeDataBindGraphValue::Color(0xFF1D1D1D),
+            RuntimeKeyFrameDataBindTarget::Boolean => RuntimeDataBindGraphValue::Boolean(false),
+            RuntimeKeyFrameDataBindTarget::String => RuntimeDataBindGraphValue::String(Vec::new()),
+        };
+        let default_value = default_instance
+            .as_ref()
+            .and_then(|default_instance| {
+                file.data_context_view_model_property_for_instance(default_instance.object, &path)
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+            })
+            .or_else(|| runtime_created_view_model_value_for_declared_path(file, &path))
+            .unwrap_or(holder_default);
+
+        templates.push(RuntimeKeyFrameDataBindTemplate {
+            data_bind_index,
+            key_frame_global_id: target.id,
+            target: holder_target,
+            path: path.to_vec(),
+            flags: data_bind.object.uint_property("flags").unwrap_or(0),
+            converter: runtime_data_bind_graph_converter(file, data_bind.object),
+            default_value,
+        });
+    }
+    templates
+}
 
 macro_rules! cached_runtime_data_bind_property_key {
     ($type_name:literal, $property_name:literal) => {{

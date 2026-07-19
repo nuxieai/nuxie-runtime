@@ -375,9 +375,15 @@ pub(crate) fn build_state_machines(
                         let entry_state_index = states
                             .iter()
                             .position(|state| state.type_name == Some("EntryState"));
-                        let any_state_index = states
-                            .iter()
-                            .position(|state| state.type_name == Some("AnyState"));
+                        // An AnyState with no outgoing transitions can never
+                        // change the layer. Keep it in the imported state list
+                        // for identity/index parity, but omit its steady-state
+                        // probe. This is the retained equivalent of resolving
+                        // an empty C++ StateInstance once instead of walking it
+                        // before the current state on every advance.
+                        let any_state_index = states.iter().position(|state| {
+                            state.type_name == Some("AnyState") && !state.transitions.is_empty()
+                        });
                         RuntimeStateMachineLayer {
                             global_id: layer.object.id,
                             name: layer.object.string_property("name").map(ToOwned::to_owned),

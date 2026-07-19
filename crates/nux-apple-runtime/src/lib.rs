@@ -1386,13 +1386,14 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                     .attachment
                     .as_mut()
                     .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
+                if let Some(disposition) = attachment
+                    .surface
+                    .preflight_present(&attachment.factory, drawable_identity != 0)
+                    .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
+                {
+                    return Ok((surface_disposition(disposition), changed));
+                }
                 let (viewport_width, viewport_height) = attachment.surface.dimensions();
-                if viewport_width == 0 || viewport_height == 0 {
-                    return Ok((NUX_SURFACE_DISPOSITION_SKIPPED_ZERO_SIZE, changed));
-                }
-                if drawable_identity == 0 {
-                    return Ok((NUX_SURFACE_DISPOSITION_SKIPPED_TIMEOUT, changed));
-                }
                 let (artboard_width, artboard_height) = session.instance.artboard_dimensions();
                 let presentation_transform = centered_contain_transform(
                     artboard_width,
@@ -2174,6 +2175,16 @@ mod tests {
             assert_eq!(
                 unsafe { nux_apple_surface_detach(surface, &mut result) },
                 NuxStatus::Ok
+            );
+            unsafe { nux_operation_result_free(result) };
+
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_advance(session, &no_drawable_operation, &mut result)
+                },
+                NuxStatus::SurfaceError,
+                "a detached surface must fail before considering zero size or drawable availability"
             );
             unsafe { nux_operation_result_free(result) };
 

@@ -204,6 +204,31 @@ impl AppleSurface {
         Ok(Retained::into_raw(device).cast())
     }
 
+    /// Checks whether presentation must fail or can finish without building a frame.
+    ///
+    /// Callers that can avoid frame construction use this to preserve the same
+    /// device-health, attachment, zero-size, and drawable-availability ordering
+    /// as [`Self::present`]. `None` means a drawable-backed frame is required.
+    pub fn preflight_present(
+        &self,
+        factory: &WgpuFactory,
+        drawable_available: bool,
+    ) -> Result<Option<SurfaceDisposition>, SurfaceError> {
+        if let Some(disposition) = device_failure_disposition(factory)? {
+            return Ok(Some(disposition));
+        }
+        if !self.attached {
+            return Err(SurfaceError::Unsupported("surface is not attached"));
+        }
+        if self.width == 0 || self.height == 0 {
+            return Ok(Some(SurfaceDisposition::SkippedZeroSize));
+        }
+        if !drawable_available {
+            return Ok(Some(SurfaceDisposition::SkippedTimeout));
+        }
+        Ok(None)
+    }
+
     /// Renders and schedules presentation into a main-actor-acquired drawable.
     /// A null drawable is the bounded no-drawable outcome, not an error.
     ///
@@ -219,14 +244,8 @@ impl AppleSurface {
         completion: Option<ApplePresentationCompletion>,
     ) -> Result<(SurfaceDisposition, WgpuFrameMetrics), SurfaceError> {
         let mut completion = completion;
-        if let Some(disposition) = device_failure_disposition(factory)? {
+        if let Some(disposition) = self.preflight_present(factory, !drawable.is_null())? {
             return Ok((disposition, frame.metrics()));
-        }
-        if !self.attached {
-            return Err(SurfaceError::Unsupported("surface is not attached"));
-        }
-        if self.width == 0 || self.height == 0 {
-            return Ok((SurfaceDisposition::SkippedZeroSize, frame.metrics()));
         }
         let Some(drawable) = NonNull::new(drawable) else {
             return Ok((SurfaceDisposition::SkippedTimeout, frame.metrics()));

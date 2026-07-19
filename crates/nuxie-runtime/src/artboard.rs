@@ -2209,6 +2209,14 @@ impl ArtboardInstance {
         instance.advance_preserving_reported_events(self, state_machine, elapsed_seconds)
     }
 
+    fn try_change_state_machine_instance(&mut self, instance: &mut StateMachineInstance) -> bool {
+        let state_machines = Arc::clone(&self.state_machines);
+        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
+            return false;
+        };
+        instance.try_change_state(self, state_machine)
+    }
+
     /// Advance several state-machine instances on this artboard while
     /// advancing nested artboards only once for the frame.
     ///
@@ -3056,26 +3064,94 @@ impl ArtboardInstance {
     /// Settle the bounded component-update tail used by C++
     /// `StateMachineInstance::advanceAndApply`.
     ///
-    /// C++ performs up to five outer update passes and advances nested
-    /// artboards at zero elapsed time between them. That alternation matters
-    /// for deep mounts: a parent pass can publish a host opacity only after
-    /// its child already updated, leaving the grandchild dirty until the next
-    /// outer pass.
+    /// C++ performs up to five outer update passes. Between passes it advances
+    /// nested state changes without replaying ordinary nested animations, then
+    /// bubbles remaining component dirt back through each host. That
+    /// alternation matters for deep mounts: a parent pass can publish a host
+    /// opacity only after its child already updated, leaving the grandchild
+    /// dirty until the next outer pass.
     pub fn settle_state_machine_update_passes(&mut self) -> bool {
+        self.settle_state_machine_update_passes_with_state_machines(&mut [])
+    }
+
+    /// Variant of [`Self::settle_state_machine_update_passes`] that also
+    /// probes the root state machines between component passes.
+    pub fn settle_state_machine_update_passes_with_state_machines(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+    ) -> bool {
         const MAX_OUTER_PASSES: usize = 5;
 
         let mut changed = false;
-        for pass in 0..MAX_OUTER_PASSES {
-            let mut pass_changed = false;
-            if pass != 0 {
-                pass_changed |= self.advance_nested_artboards(0.0);
-                pass_changed |= self.advance_artboard_data_binds_with_elapsed(0.0);
+        for _ in 0..MAX_OUTER_PASSES {
+            changed |= self.update_pass();
+            for state_machine in state_machines.iter_mut() {
+                if self.try_change_state_machine_instance(state_machine) {
+                    changed = true;
+                    changed |=
+                        self.advance_state_machine_instance_preserving_events(state_machine, 0.0);
+                }
             }
-            pass_changed |= self.update_pass();
-            changed |= pass_changed;
-            if pass != 0 && !pass_changed {
+            changed |= self.advance_outer_update_components();
+            if !self.has_dirt(ComponentDirt::COMPONENTS) {
                 break;
             }
+        }
+        changed
+    }
+
+    /// Mirrors `Artboard::advanceInternal` for an outer state-machine update
+    /// pass, where `AdvanceNested` is set but `NewFrame` is not.
+    fn advance_outer_update_components(&mut self) -> bool {
+        let nested_locals = self.nested_artboard_locals.clone();
+        let mut dirty_hosts = Vec::new();
+        let mut changed = false;
+        for host_local_id in nested_locals {
+            if self
+                .component(host_local_id)
+                .is_some_and(RuntimeComponent::is_collapsed)
+            {
+                continue;
+            }
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            changed |= nested.advance_outer_update();
+            if nested.child.has_dirt(ComponentDirt::COMPONENTS) {
+                dirty_hosts.push(host_local_id);
+            }
+        }
+
+        let mut dirty_component_lists = Vec::new();
+        for (list_local_id, items) in &mut self.component_list_items {
+            let mut list_dirty = false;
+            for item in items {
+                let mut item_changed = false;
+                if let Some(state_machine) = item.state_machine.as_mut()
+                    && item.child.try_change_state_machine_instance(state_machine)
+                {
+                    item_changed = true;
+                    item_changed |= item
+                        .child
+                        .advance_state_machine_instance_preserving_events(state_machine, 0.0);
+                }
+                item_changed |= item.child.advance_outer_update_components();
+                if item.child.has_dirt(ComponentDirt::COMPONENTS) {
+                    list_dirty = true;
+                }
+                changed |= item_changed;
+            }
+            if list_dirty {
+                dirty_component_lists.push(*list_local_id);
+            }
+        }
+
+        changed |= self.advance_artboard_data_binds_with_elapsed(0.0);
+        for host_local_id in dirty_hosts {
+            changed |= self.add_dirt(host_local_id, ComponentDirt::COMPONENTS, false);
+        }
+        for list_local_id in dirty_component_lists {
+            changed |= self.add_dirt(list_local_id, ComponentDirt::COMPONENTS, false);
         }
         changed
     }
@@ -4383,6 +4459,34 @@ impl RuntimeNestedArtboardInstance {
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
         changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
+        changed
+    }
+
+    /// Advance the non-`NewFrame` portion of C++
+    /// `NestedArtboard::advanceComponent`: only state machines whose probe
+    /// changes state are applied, followed by the child artboard's advancing
+    /// components and data binds.
+    fn advance_outer_update(&mut self) -> bool {
+        if self.is_paused {
+            return false;
+        }
+
+        let local_elapsed_seconds = self.calculate_local_elapsed_seconds(0.0);
+        let mut changed = false;
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
+            else {
+                continue;
+            };
+            if self.child.try_change_state_machine_instance(state_machine) {
+                changed = true;
+                changed |= self.child.advance_state_machine_instance_preserving_events(
+                    state_machine,
+                    local_elapsed_seconds,
+                );
+            }
+        }
+        changed |= self.child.advance_outer_update_components();
         changed
     }
 

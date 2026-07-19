@@ -2585,7 +2585,7 @@ impl StateMachineLayerInstance {
         }
     }
 
-    fn update_state(
+    pub(crate) fn update_state(
         &mut self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,

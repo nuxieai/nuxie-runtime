@@ -3651,6 +3651,71 @@ impl StateMachineInstance {
         self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false)
     }
 
+    /// Probe authored transitions without advancing or reapplying the current
+    /// animations. This mirrors C++ `StateMachineInstance::tryChangeState`,
+    /// which is used by the bounded outer update loop after component dirt can
+    /// have changed data-bound transition inputs.
+    pub(crate) fn try_change_state(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+    ) -> bool {
+        self.focus.sync(artboard);
+        self.advance_data_context();
+
+        let data_context_present = self.data_bind_graph.data_context_present();
+        let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
+        let mut changed_state = false;
+        for (layer_index, layer) in state_machine
+            .layers
+            .iter()
+            .enumerate()
+            .take(self.layers.len())
+        {
+            self.pending_view_model_actions.clear();
+            let layer_changed = self.layers[layer_index].update_state(
+                &self.scripted_instances_by_global,
+                artboard,
+                &self.focus,
+                layer,
+                layer_index,
+                &mut self.inputs,
+                &self.bindable_numbers,
+                &self.bindable_integers,
+                &self.bindable_colors,
+                &self.bindable_strings,
+                &self.bindable_enums,
+                &self.bindable_assets,
+                &self.bindable_artboards,
+                &self.bindable_triggers,
+                &self.bindable_view_models,
+                &self.bindable_booleans,
+                &self.transition_durations,
+                data_context_present,
+                data_context_view_model_bound,
+                &mut self.view_model_triggers,
+                &mut self.reported_events,
+                &mut self.pending_view_model_actions,
+            );
+            if layer_changed {
+                changed_state = true;
+                self.changed_state_count += 1;
+            }
+            if !self.pending_view_model_actions.is_empty() {
+                let pending_actions = std::mem::take(&mut self.pending_view_model_actions);
+                self.perform_scheduled_view_model_actions(artboard, &pending_actions);
+                self.pending_view_model_actions = pending_actions;
+            }
+        }
+        self.pending_view_model_actions.clear();
+        if changed_state {
+            // The zero-time advance following a successful probe must not be
+            // elided by the steady-state fast path.
+            self.needs_advance = true;
+        }
+        changed_state
+    }
+
     fn advance_with_report_mode(
         &mut self,
         artboard: &mut ArtboardInstance,

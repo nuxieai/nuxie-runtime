@@ -938,6 +938,29 @@ pub trait ScriptInstance {
         ))
     }
 
+    /// Whether this concrete scripted-object occurrence still needs its user
+    /// `init` callback. C++ stores the equivalent state in
+    /// `ScriptedObject::m_userLuaInitDone`.
+    fn user_init_pending(&self) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
+
+    /// Discard the current scripted-object lifetime before the next input
+    /// hydration. VM backends use this when cold-init prerequisites are not
+    /// available, matching C++ `ensureScriptInitialized` retry semantics.
+    fn invalidate_for_init_retry(&mut self) {}
+
+    /// Recreate a lifetime invalidated by a failed/deferred init. Hosts call
+    /// this before hydrating inputs so a new script table observes the bound
+    /// context and receives the complete input set.
+    fn prepare_init_retry_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<(), ScriptError> {
+        let _ = factory;
+        Ok(())
+    }
+
     fn call_path_effect_update(
         &mut self,
         source: RawPath,

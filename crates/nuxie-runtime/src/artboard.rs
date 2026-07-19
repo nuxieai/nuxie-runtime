@@ -823,12 +823,15 @@ impl ArtboardInstance {
     ) {
         self.has_scripted_drawables = true;
         self.script_advances_active.remove(&global_id);
-        if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
+        let user_init_pending = instance.user_init_pending().unwrap_or(false);
+        if !user_init_pending && instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
             self.script_advances_active.insert(global_id);
         }
         self.script_instances_by_global
             .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
-        self.script_updates_pending.insert(global_id);
+        if !user_init_pending {
+            self.script_updates_pending.insert(global_id);
+        }
     }
 
     /// Whether this artboard instance already owns a script instance for the
@@ -1108,11 +1111,40 @@ impl ArtboardInstance {
             return Ok(false);
         }
         let initialized = instance.call_init_with_factory(&mut NoopScriptHost, factory)?;
-        if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
-            self.script_advances_active.insert(global_id);
+        if initialized {
+            if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
+                self.script_advances_active.insert(global_id);
+            }
+            self.script_updates_pending.insert(global_id);
+        } else {
+            self.script_advances_active.remove(&global_id);
+            self.script_updates_pending.remove(&global_id);
         }
-        self.script_updates_pending.insert(global_id);
         Ok(initialized)
+    }
+
+    pub fn script_user_init_pending_for_global(&self, global_id: u32) -> Result<bool, ScriptError> {
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            return Ok(false);
+        };
+        let pending = handle.borrow_mut().user_init_pending()?;
+        Ok(pending)
+    }
+
+    pub fn prepare_script_init_retry_with_factory(
+        &mut self,
+        global_id: u32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            return Ok(false);
+        };
+        let mut instance = handle.borrow_mut();
+        if !instance.user_init_pending()? {
+            return Ok(false);
+        }
+        instance.prepare_init_retry_with_factory(factory)?;
+        Ok(true)
     }
 
     pub fn set_script_input_for_global(

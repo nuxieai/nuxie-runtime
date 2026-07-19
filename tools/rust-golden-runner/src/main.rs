@@ -1648,7 +1648,6 @@ struct RunnerScriptArtboardRenderState {
     pending: Vec<(u64, usize)>,
     caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
     detached_view_model_frames: Vec<DetachedViewModelFrame>,
-    pending_script_inits: BTreeSet<u32>,
 }
 
 #[cfg(feature = "scripting")]
@@ -2164,7 +2163,7 @@ fn initialize_scripted_drawables_for_artboard(
                 Rc::clone(&render_state),
             )?;
             if has_init {
-                let initialized = script_instance
+                script_instance
                     .call_init_with_factory(&mut host, factory)
                     .with_context(|| {
                         format!(
@@ -2172,18 +2171,9 @@ fn initialize_scripted_drawables_for_artboard(
                             local_object.global_id
                         )
                     })?;
-                if !initialized {
-                    render_state
-                        .borrow_mut()
-                        .pending_script_inits
-                        .insert(local_object.global_id);
-                }
             }
         } else if has_init {
-            render_state
-                .borrow_mut()
-                .pending_script_inits
-                .insert(local_object.global_id);
+            script_instance.invalidate_for_init_retry();
         }
         if local_object.type_name == Some("ScriptedLayout")
             && script_instance
@@ -2674,6 +2664,14 @@ fn bind_scripted_drawable_context(
         {
             continue;
         }
+        let init_pending = instance
+            .script_user_init_pending_for_global(local_object.global_id)
+            .context("failed to inspect deferred scripted drawable init")?;
+        if init_pending {
+            instance
+                .prepare_script_init_retry_with_factory(local_object.global_id, factory)
+                .context("failed to recreate deferred scripted drawable")?;
+        }
         rehydrate_script_inputs(
             runtime,
             artboard,
@@ -2684,20 +2682,10 @@ fn bind_scripted_drawable_context(
             Rc::clone(render_state),
             owned_view_model_context,
         )?;
-        let init_pending = render_state
-            .borrow()
-            .pending_script_inits
-            .contains(&local_object.global_id);
         if init_pending {
-            let initialized = instance
+            instance
                 .reinitialize_script_instance_with_factory(local_object.global_id, factory)
                 .context("deferred scripted drawable init failed")?;
-            if initialized {
-                render_state
-                    .borrow_mut()
-                    .pending_script_inits
-                    .remove(&local_object.global_id);
-            }
         }
     }
     render_state

@@ -246,7 +246,7 @@ pub struct ArtboardInstance {
     script_advances_active: RuntimeScriptState<BTreeSet<u32>>,
     script_updates_pending: RuntimeScriptState<BTreeSet<u32>>,
     script_advance_queue: RuntimeScriptState<Vec<f32>>,
-    pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
+    pub(crate) nested_artboards: RuntimeNestedArtboards,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
@@ -330,6 +330,98 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     speed: f32,
     quantize: f32,
     cumulated_seconds: f32,
+}
+
+/// Mounted nested-artboard occurrences, retained contiguously like C++
+/// `Artboard::m_NestedArtboards` while keeping local-id lookup constant-time.
+///
+/// Local ids index the small side table only; iteration walks the compact,
+/// sorted entries and never scans gaps in the artboard's object-id space.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeNestedArtboards {
+    entries: Vec<(usize, RuntimeNestedArtboardInstance)>,
+    entry_by_local: Vec<Option<usize>>,
+}
+
+impl RuntimeNestedArtboards {
+    pub(crate) fn get(&self, local_id: &usize) -> Option<&RuntimeNestedArtboardInstance> {
+        let entry = self.entry_by_local.get(*local_id).copied().flatten()?;
+        self.entries.get(entry).map(|(_, nested)| nested)
+    }
+
+    pub(crate) fn get_mut(
+        &mut self,
+        local_id: &usize,
+    ) -> Option<&mut RuntimeNestedArtboardInstance> {
+        let entry = self.entry_by_local.get(*local_id).copied().flatten()?;
+        self.entries.get_mut(entry).map(|(_, nested)| nested)
+    }
+
+    fn contains_key(&self, local_id: &usize) -> bool {
+        self.entry_by_local
+            .get(*local_id)
+            .is_some_and(Option::is_some)
+    }
+
+    fn insert(
+        &mut self,
+        local_id: usize,
+        nested: RuntimeNestedArtboardInstance,
+    ) -> Option<RuntimeNestedArtboardInstance> {
+        if self.entry_by_local.len() <= local_id {
+            self.entry_by_local.resize(local_id.saturating_add(1), None);
+        }
+        if let Some(entry) = self.entry_by_local[local_id] {
+            return Some(std::mem::replace(&mut self.entries[entry].1, nested));
+        }
+
+        let entry = self
+            .entries
+            .binary_search_by_key(&local_id, |(candidate, _)| *candidate)
+            .unwrap_or_else(|entry| entry);
+        self.entries.insert(entry, (local_id, nested));
+        for (entry, (local_id, _)) in self.entries.iter().enumerate().skip(entry) {
+            self.entry_by_local[*local_id] = Some(entry);
+        }
+        None
+    }
+
+    fn remove(&mut self, local_id: &usize) -> Option<RuntimeNestedArtboardInstance> {
+        let entry = self.entry_by_local.get_mut(*local_id)?.take()?;
+        let (_, nested) = self.entries.remove(entry);
+        for (entry, (local_id, _)) in self.entries.iter().enumerate().skip(entry) {
+            self.entry_by_local[*local_id] = Some(entry);
+        }
+        Some(nested)
+    }
+
+    fn keys(&self) -> impl Iterator<Item = &usize> {
+        self.entries.iter().map(|(local_id, _)| local_id)
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&usize, &RuntimeNestedArtboardInstance)> {
+        self.entries
+            .iter()
+            .map(|(local_id, nested)| (local_id, nested))
+    }
+
+    #[cfg(test)]
+    fn values(&self) -> impl Iterator<Item = &RuntimeNestedArtboardInstance> {
+        self.entries.iter().map(|(_, nested)| nested)
+    }
+
+    fn values_mut(&mut self) -> impl Iterator<Item = &mut RuntimeNestedArtboardInstance> {
+        self.entries.iter_mut().map(|(_, nested)| nested)
+    }
+}
+
+impl std::ops::Index<&usize> for RuntimeNestedArtboards {
+    type Output = RuntimeNestedArtboardInstance;
+
+    fn index(&self, local_id: &usize) -> &Self::Output {
+        self.get(local_id)
+            .unwrap_or_else(|| panic!("no nested artboard mounted at local id {local_id}"))
+    }
 }
 
 /// Ported from C++ `src/artboard_component_list.cpp`: one persistent child
@@ -471,7 +563,7 @@ impl ArtboardInstance {
         // that occurrence in place, so occurrence-keyed render state (notably
         // TextStylePaint's opacity paint pool) survives across frames.
         self.instance_identity = RuntimeArtboardInstanceIdentity(source.instance_identity.0);
-        for (local_id, source_nested) in &source.nested_artboards {
+        for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
                 cloned_nested
                     .child
@@ -495,7 +587,7 @@ impl ArtboardInstance {
         self.scripted_data_converter_instances_by_global.0 =
             source.scripted_data_converter_instances_by_global.0.clone();
         self.script_path_effect_globals.0 = source.script_path_effect_globals.0.clone();
-        for (local_id, source_nested) in &source.nested_artboards {
+        for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
                 cloned_nested
                     .child
@@ -670,7 +762,7 @@ impl ArtboardInstance {
                 build_context.clone(),
             )?
         } else {
-            BTreeMap::new()
+            RuntimeNestedArtboards::default()
         };
         if inserted {
             visiting.remove(&graph.global_id);
@@ -4868,12 +4960,12 @@ fn build_runtime_nested_artboard_instances(
     objects: &InstanceObjectArena,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
-) -> Result<BTreeMap<usize, RuntimeNestedArtboardInstance>> {
+) -> Result<RuntimeNestedArtboards> {
     if artboards.is_empty() {
-        return Ok(BTreeMap::new());
+        return Ok(RuntimeNestedArtboards::default());
     }
 
-    let mut nested_artboards = BTreeMap::new();
+    let mut nested_artboards = RuntimeNestedArtboards::default();
     for host in &graph.nested_artboards {
         if !matches!(
             host.type_name,
@@ -5630,7 +5722,7 @@ mod tests {
             script_advances_active: RuntimeScriptState::default(),
             script_updates_pending: RuntimeScriptState::default(),
             script_advance_queue: RuntimeScriptState::default(),
-            nested_artboards: BTreeMap::new(),
+            nested_artboards: RuntimeNestedArtboards::default(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
@@ -5706,6 +5798,32 @@ mod tests {
             quantize: -1.0,
             cumulated_seconds: 0.0,
         }
+    }
+
+    #[test]
+    fn nested_artboards_preserve_sorted_iteration_and_sparse_lookup_after_edits() {
+        let mut nested_artboards = RuntimeNestedArtboards::default();
+        nested_artboards.insert(9, synthetic_nested_artboard_instance(90));
+        nested_artboards.insert(2, synthetic_nested_artboard_instance(20));
+        nested_artboards.insert(5, synthetic_nested_artboard_instance(50));
+
+        assert_eq!(
+            nested_artboards.keys().copied().collect::<Vec<_>>(),
+            [2, 5, 9]
+        );
+        assert_eq!(nested_artboards.get(&5).unwrap().child.graph_global_id, 50);
+
+        let replaced = nested_artboards
+            .insert(5, synthetic_nested_artboard_instance(51))
+            .expect("existing local is replaced");
+        assert_eq!(replaced.child.graph_global_id, 50);
+        assert_eq!(nested_artboards.get(&5).unwrap().child.graph_global_id, 51);
+
+        let removed = nested_artboards.remove(&2).expect("local is removed");
+        assert_eq!(removed.child.graph_global_id, 20);
+        assert!(nested_artboards.get(&2).is_none());
+        assert_eq!(nested_artboards.keys().copied().collect::<Vec<_>>(), [5, 9]);
+        assert_eq!(nested_artboards.get(&9).unwrap().child.graph_global_id, 90);
     }
 
     fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {

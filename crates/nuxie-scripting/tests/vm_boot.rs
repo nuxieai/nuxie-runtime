@@ -90,7 +90,7 @@ fn rive_globals_are_installed_before_sandboxing() {
         .eval::<Value>("return require('MissingModule')")
         .unwrap_err();
     assert!(
-        format!("{err}").contains("module 'MissingModule' not found"),
+        format!("{err}").contains("require could not find a script named MissingModule"),
         "got: {err}"
     );
 }
@@ -234,7 +234,7 @@ fn installing_rive_globals_is_idempotent_after_sandboxing() {
         .eval::<Value>("return require('StillMissing')")
         .unwrap_err();
     assert!(
-        format!("{err}").contains("module 'StillMissing' not found"),
+        format!("{err}").contains("require could not find a script named StillMissing"),
         "got: {err}"
     );
 }

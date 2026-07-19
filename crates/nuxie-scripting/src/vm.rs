@@ -46,6 +46,39 @@ pub use luaur_rt::{Error, Result};
 /// `src/lua/rive_lua_libs.cpp`).
 const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 
+/// Library version a script or module belongs to. `(0, 0)` is the host file.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ScopeKey {
+    pub library_id: u64,
+    pub library_version_id: u64,
+}
+
+impl ScopeKey {
+    pub const ROOT: Self = Self::new(0, 0);
+
+    const UNPINNED: Self = Self::new(u64::MAX, u64::MAX);
+
+    pub const fn new(library_id: u64, library_version_id: u64) -> Self {
+        Self {
+            library_id,
+            library_version_id,
+        }
+    }
+
+    pub const fn is_root(self) -> bool {
+        self.library_id == 0 && self.library_version_id == 0
+    }
+}
+
+#[derive(Debug, Default)]
+struct ScriptScopes {
+    /// One table per caller scope: import label -> pinned library version.
+    pins: BTreeMap<ScopeKey, BTreeMap<String, ScopeKey>>,
+    /// Readable chunkname -> scope. This also covers editor-style callers
+    /// without a retained module descriptor.
+    chunk_scopes: BTreeMap<String, ScopeKey>,
+}
+
 /// A booted Luau VM.
 ///
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
@@ -54,6 +87,7 @@ pub struct ScriptVm {
     lua: Lua,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
+    scopes: Rc<RefCell<ScriptScopes>>,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
     default_context_parent_view_models: Vec<ScriptViewModel>,
@@ -314,6 +348,53 @@ impl Default for ScriptVm {
     }
 }
 
+fn normalize_chunk_source(source: &str) -> &str {
+    source
+        .strip_prefix('=')
+        .or_else(|| source.strip_prefix('@'))
+        .unwrap_or(source)
+}
+
+fn caller_chunk_source(lua: &Lua) -> Option<String> {
+    // Level zero is this Rust callback. The immediate Lua caller is normally
+    // level one; keep walking through native helper frames (for example pcall)
+    // until the actual defining Lua chunk is found.
+    for level in 1..=32 {
+        let frame = lua.inspect_stack(level)?;
+        let Some(source) = frame.source() else {
+            continue;
+        };
+        let source = normalize_chunk_source(source);
+        if source != "[C]" {
+            return Some(source.to_owned());
+        }
+    }
+    None
+}
+
+fn resolve_require_key(scopes: &ScriptScopes, caller_chunkname: &str, request: &str) -> String {
+    let caller = scopes
+        .chunk_scopes
+        .get(normalize_chunk_source(caller_chunkname))
+        .copied()
+        .unwrap_or(ScopeKey::ROOT);
+
+    let (path, target) = if let Some(rest) = request.strip_prefix("lib:") {
+        let (label, path) = rest.split_once('/').unwrap_or((rest, ""));
+        let target = scopes
+            .pins
+            .get(&caller)
+            .and_then(|pins| pins.get(label))
+            .copied()
+            .unwrap_or(ScopeKey::UNPINNED);
+        (path, target)
+    } else {
+        (request, caller)
+    };
+
+    ScriptVm::scoped_module_key(path, target)
+}
+
 impl ScriptVm {
     pub fn instantiate_script_with_factory(
         &mut self,
@@ -334,11 +415,42 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<ScriptProgram, ScriptError> {
+        self.register_protocol_script_with_factory_scoped(name, ScopeKey::ROOT, payload, factory)
+    }
+
+    /// Scope-aware protocol registration. The readable scoped chunkname stays
+    /// attached to the returned generator and every closure it creates.
+    pub fn register_protocol_script_with_factory_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<ScriptProgram, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
             self.install_rive_globals().map_err(script_error)?;
+            let cache_key = Self::scoped_module_key(name, scope);
+            match self
+                .module_cache()
+                .map_err(script_error)?
+                .get::<Value>(cache_key.as_str())
+                .map_err(script_error)?
+            {
+                // C++ registerScript consults the shared utility cache first.
+                Value::Function(generator) => return Ok(ScriptProgram { generator }),
+                Value::Table(_) => {
+                    return Err(ScriptError::new(format!(
+                        "protocol ScriptAsset '{}' resolved to a registered table",
+                        Self::readable_chunkname(name, scope)
+                    )));
+                }
+                _ => {}
+            }
+            let chunkname = Self::readable_chunkname(name, scope);
+            self.set_chunkname_scope(&chunkname, scope);
             let generator = self
-                .load_script_asset_payload(name, payload)
+                .load_script_asset_payload(&chunkname, payload)
                 .map_err(script_error)?
                 .call(())
                 .map_err(script_error)?;
@@ -383,6 +495,7 @@ impl ScriptVm {
             lua: Lua::new(),
             rive_globals_installed: Cell::new(false),
             renderer_bindings: RendererBindings::default(),
+            scopes: Rc::new(RefCell::new(ScriptScopes::default())),
             view_models: BTreeMap::new(),
             default_context_view_model: None,
             default_context_parent_view_models: Vec::new(),
@@ -525,13 +638,73 @@ impl ScriptVm {
         Ok(cache)
     }
 
-    /// Install Rive's custom `require`, which resolves plain module names
-    /// against the registered-module cache (`require("Transform2")`).
+    /// Require-cache key for a module in `scope`; root keeps its bare name.
+    pub fn scoped_module_key(name: &str, scope: ScopeKey) -> String {
+        if scope.is_root() {
+            name.to_owned()
+        } else {
+            format!(
+                "{name}\u{1f}{}:{}",
+                scope.library_id, scope.library_version_id
+            )
+        }
+    }
+
+    /// Human-readable chunkname baked into bytecode and source functions.
+    /// Scoped names deliberately contain no colon because trace tooling treats
+    /// a colon as the separator before a line number.
+    pub fn readable_chunkname(name: &str, scope: ScopeKey) -> String {
+        if scope.is_root() {
+            name.to_owned()
+        } else {
+            format!("{}-{}/{name}", scope.library_id, scope.library_version_id)
+        }
+    }
+
+    /// Pin one `lib:` label for a caller scope to a concrete library version.
+    pub fn add_import(&self, caller: ScopeKey, library_name: &str, target: ScopeKey) {
+        self.scopes
+            .borrow_mut()
+            .pins
+            .entry(caller)
+            .or_default()
+            .insert(library_name.to_owned(), target);
+    }
+
+    /// Seed scope for a chunk without retained module metadata.
+    pub fn set_chunkname_scope(&self, chunkname: &str, scope: ScopeKey) {
+        self.scopes
+            .borrow_mut()
+            .chunk_scopes
+            .insert(normalize_chunk_source(chunkname).to_owned(), scope);
+    }
+
+    /// Resolve a request relative to a named caller chunk. Public for tooling
+    /// and conformance probes; `require` itself derives this chunk from the
+    /// active Luau stack.
+    pub fn resolve_require(&self, caller_chunkname: &str, request: &str) -> String {
+        resolve_require_key(
+            &self.scopes.borrow(),
+            normalize_chunk_source(caller_chunkname),
+            request,
+        )
+    }
+
+    /// Install Rive's custom `require`, resolving bare names in the caller's
+    /// scope and `lib:` names through that caller scope's serialized pins.
     fn install_require_global(&self, cache: Table) -> Result<()> {
         let lookup = cache.clone();
-        let require = self.lua.create_function(move |_, name: String| {
-            match lookup.get::<Value>(name.as_str())? {
-                Value::Nil => Err(Error::runtime(format!("module '{name}' not found"))),
+        let scopes = Rc::clone(&self.scopes);
+        let require = self.lua.create_function(move |lua, name: String| {
+            // The defining chunk remains on the Luau stack when a returned
+            // closure lazily calls require. Reading that frame is therefore
+            // scope-correct even long after module registration finished.
+            let caller = caller_chunk_source(lua).unwrap_or_default();
+            let cache_key = resolve_require_key(&scopes.borrow(), &caller, &name);
+            match lookup.get::<Value>(cache_key.as_str())? {
+                Value::Nil => Err(Error::runtime(format!(
+                    "require could not find a script named {name}"
+                ))),
                 value => Ok(value),
             }
         })?;
@@ -545,15 +718,31 @@ impl ScriptVm {
 
     /// The module previously registered under `name`, if any.
     pub fn registered_module(&self, name: &str) -> Result<Value> {
-        self.module_cache()?.get(name)
+        self.registered_module_scoped(name, ScopeKey::ROOT)
+    }
+
+    /// The module previously registered under `name` in `scope`, if any.
+    pub fn registered_module_scoped(&self, name: &str, scope: ScopeKey) -> Result<Value> {
+        self.module_cache()?
+            .get(Self::scoped_module_key(name, scope))
     }
 
     /// Execute a `ScriptAsset` payload (envelope + Luau bytecode) and cache
     /// its result under `name` so scripts can `require` it — the twin of
     /// C++ `ScriptingVM::registerModule`. Idempotent per name.
     pub fn register_module(&self, name: &str, payload: &[u8]) -> Result<Value> {
+        self.register_module_scoped(name, ScopeKey::ROOT, payload)
+    }
+
+    /// Scope-aware twin of [`Self::register_module`].
+    pub fn register_module_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+    ) -> Result<Value> {
         self.install_rive_globals()?;
-        self.register_module_after_init(name, payload)
+        self.register_module_after_init(name, scope, payload)
     }
 
     /// Register a module while exposing the draw call's renderer factory to
@@ -564,26 +753,88 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> Result<Value> {
-        let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || self.register_module(name, payload))
+        self.register_module_with_factory_scoped(name, ScopeKey::ROOT, payload, factory)
     }
 
-    fn register_module_after_init(&self, name: &str, payload: &[u8]) -> Result<Value> {
-        let cache = self.module_cache()?;
-        if let value @ (Value::Table(_) | Value::Function(_)) = cache.get::<Value>(name)? {
+    /// Scope-aware module registration with a renderer factory in context.
+    pub fn register_module_with_factory_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> Result<Value> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || {
+            self.register_module_scoped(name, scope, payload)
+        })
+    }
+
+    fn register_module_after_init(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+    ) -> Result<Value> {
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            self.module_cache()?.get::<Value>(cache_key.as_str())?
+        {
             return Ok(value);
         }
-        let result: Value = self.load_script_asset_payload(name, payload)?.call(())?;
+        let chunkname = Self::readable_chunkname(name, scope);
+        self.set_chunkname_scope(&chunkname, scope);
+        let function = self.load_script_asset_payload(&chunkname, payload)?;
+        self.register_loaded_module(name, scope, function)
+    }
+
+    fn register_loaded_module(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        function: Function,
+    ) -> Result<Value> {
+        let cache = self.module_cache()?;
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            cache.get::<Value>(cache_key.as_str())?
+        {
+            return Ok(value);
+        }
+        let result: Value = function.call(())?;
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
+                let display = Self::readable_chunkname(name, scope);
                 return Err(Error::runtime(format!(
-                    "module '{name}' must return a table or function, got {other:?}"
+                    "module '{display}' must return a table or function, got {other:?}"
                 )));
             }
         }
-        cache.set(name, result.clone())?;
+        cache.set(cache_key, result.clone())?;
         Ok(result)
+    }
+
+    /// Compile and register a source module. Runtime `.riv` execution uses the
+    /// bytecode methods; this source entry point supports editor/tooling flows
+    /// and conformance tests with the identical scope machinery.
+    pub fn register_source_module_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        source: &str,
+    ) -> Result<Value> {
+        self.install_rive_globals()?;
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            self.module_cache()?.get::<Value>(cache_key.as_str())?
+        {
+            return Ok(value);
+        }
+        let chunkname = Self::readable_chunkname(name, scope);
+        self.set_chunkname_scope(&chunkname, scope);
+        let function = self.lua.load(source).set_name(&chunkname).into_function()?;
+        self.register_loaded_module(name, scope, function)
     }
 
     /// Register a batch of modules, retrying until a pass makes no progress
@@ -594,13 +845,29 @@ impl ScriptVm {
         &self,
         modules: impl IntoIterator<Item = (&'a str, &'a [u8])>,
     ) -> Vec<(&'a str, Error)> {
-        let mut pending: Vec<(&str, &[u8])> = modules.into_iter().collect();
+        self.perform_scoped_registration(
+            modules
+                .into_iter()
+                .map(|(name, payload)| (name, ScopeKey::ROOT, payload)),
+        )
+        .into_iter()
+        .map(|(name, _, error)| (name, error))
+        .collect()
+    }
+
+    /// Scope-aware registration retry loop. A missing dependency may become
+    /// available in a later pass, including under a different library pin.
+    pub fn perform_scoped_registration<'a>(
+        &self,
+        modules: impl IntoIterator<Item = (&'a str, ScopeKey, &'a [u8])>,
+    ) -> Vec<(&'a str, ScopeKey, Error)> {
+        let mut pending: Vec<(&str, ScopeKey, &[u8])> = modules.into_iter().collect();
         loop {
             let mut failures = Vec::new();
             let before = pending.len();
-            for (name, payload) in pending {
-                if let Err(error) = self.register_module(name, payload) {
-                    failures.push((name, payload, error));
+            for (name, scope, payload) in pending {
+                if let Err(error) = self.register_module_scoped(name, scope, payload) {
+                    failures.push((name, scope, payload, error));
                 }
             }
             if failures.is_empty() {
@@ -610,12 +877,12 @@ impl ScriptVm {
                 // No progress this pass: report what is left.
                 return failures
                     .into_iter()
-                    .map(|(name, _, error)| (name, error))
+                    .map(|(name, scope, _, error)| (name, scope, error))
                     .collect();
             }
             pending = failures
                 .into_iter()
-                .map(|(name, payload, _)| (name, payload))
+                .map(|(name, scope, payload, _)| (name, scope, payload))
                 .collect();
         }
     }

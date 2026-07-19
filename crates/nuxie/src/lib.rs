@@ -59,7 +59,7 @@ pub use nuxie_runtime::{
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::ScriptProgram;
 #[cfg(feature = "scripting")]
-pub use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
+pub use nuxie_scripting::vm::{LuaScriptInstance, ScopeKey, ScriptVm};
 
 #[cfg(feature = "scripting")]
 #[derive(Debug, Clone)]
@@ -68,8 +68,17 @@ struct FileScriptAsset {
     global_id: u32,
     type_name: &'static str,
     name: String,
+    scope: ScopeKey,
     is_module: bool,
     payload: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone)]
+struct FileScriptLibraryImport {
+    caller: ScopeKey,
+    name: String,
+    target: ScopeKey,
 }
 
 #[cfg(feature = "scripting")]
@@ -83,6 +92,7 @@ struct ReadyFileScripts {
 #[cfg(feature = "scripting")]
 struct FileScriptRuntime {
     assets: Vec<FileScriptAsset>,
+    imports: Vec<FileScriptLibraryImport>,
     allow_unsigned_execution: bool,
     ready: Option<ReadyFileScripts>,
 }
@@ -93,6 +103,7 @@ impl std::fmt::Debug for FileScriptRuntime {
         formatter
             .debug_struct("FileScriptRuntime")
             .field("assets", &self.assets)
+            .field("imports", &self.imports)
             .field("allow_unsigned_execution", &self.allow_unsigned_execution)
             .field("ready", &self.ready.is_some())
             .finish_non_exhaustive()
@@ -102,24 +113,62 @@ impl std::fmt::Debug for FileScriptRuntime {
 #[cfg(feature = "scripting")]
 impl FileScriptRuntime {
     fn new(runtime: &RuntimeFile, allow_unsigned_execution: bool) -> Self {
-        let assets = runtime
-            .scripting_file_assets_with_contents()
+        let entries = runtime.scripting_file_assets_with_contents();
+        let assets = entries
+            .iter()
+            .copied()
+            .map(|entry| {
+                let name = entry.asset.string_property("name").unwrap_or_default();
+                let folder = entry
+                    .asset
+                    .string_property("folderPath")
+                    .unwrap_or_default();
+                FileScriptAsset {
+                    ordinal: entry.ordinal,
+                    global_id: entry.asset.id,
+                    type_name: entry.asset.type_name,
+                    name: if folder.is_empty() {
+                        name.to_owned()
+                    } else {
+                        format!("{folder}/{name}")
+                    },
+                    scope: ScopeKey::new(
+                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                        entry
+                            .asset
+                            .uint_property("scopeLibraryVersionId")
+                            .unwrap_or(0),
+                    ),
+                    is_module: entry.asset.bool_property("isModule").unwrap_or(false),
+                    payload: entry.contents.map(ToOwned::to_owned),
+                }
+            })
+            .collect();
+        let imports = entries
             .into_iter()
-            .map(|entry| FileScriptAsset {
-                ordinal: entry.ordinal,
-                global_id: entry.asset.id,
-                type_name: entry.asset.type_name,
+            .filter(|entry| entry.asset.type_name == "LibraryAsset")
+            .map(|entry| FileScriptLibraryImport {
+                caller: ScopeKey::new(
+                    entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                    entry
+                        .asset
+                        .uint_property("scopeLibraryVersionId")
+                        .unwrap_or(0),
+                ),
                 name: entry
                     .asset
                     .string_property("name")
                     .unwrap_or_default()
                     .to_owned(),
-                is_module: entry.asset.bool_property("isModule").unwrap_or(false),
-                payload: entry.contents.map(ToOwned::to_owned),
+                target: ScopeKey::new(
+                    entry.asset.uint_property("libraryId").unwrap_or(0),
+                    entry.asset.uint_property("libraryVersionId").unwrap_or(0),
+                ),
             })
             .collect();
         Self {
             assets,
+            imports,
             allow_unsigned_execution,
             ready: None,
         }
@@ -132,6 +181,12 @@ impl FileScriptRuntime {
     ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
         let mut vm = ScriptVm::new();
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+        // LibraryAsset records are serialized import edges. Seed every pin
+        // before executing any module so both eager and lazy requires observe
+        // the exact per-caller dependency graph from the file.
+        for import in &self.imports {
+            vm.add_import(import.caller, &import.name, import.target);
+        }
         let mut pending = self
             .assets
             .iter()
@@ -143,7 +198,12 @@ impl FileScriptRuntime {
             let mut failures = Vec::new();
             for asset in pending {
                 let payload = required_script_payload(asset, "module registration")?;
-                if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
+                if let Err(error) = vm.register_module_with_factory_scoped(
+                    &asset.name,
+                    asset.scope,
+                    payload,
+                    factory,
+                ) {
                     failures.push((asset, error));
                 }
             }
@@ -165,8 +225,15 @@ impl FileScriptRuntime {
         {
             let payload = required_script_payload(asset, "protocol registration")?;
             let program = vm
-                .register_protocol_script_with_factory(&asset.name, payload, factory)
-                .map_err(|error| asset_phase_error(asset, "protocol registration", error))?;
+                .register_protocol_script_with_factory_scoped(
+                    &asset.name,
+                    asset.scope,
+                    payload,
+                    factory,
+                )
+                .map_err(|error| {
+                    asset_phase_error(asset, "protocol registration", error.to_string())
+                })?;
             programs.insert(asset.ordinal, program);
         }
 
@@ -1771,6 +1838,8 @@ impl ViewModelInstance {
 #[cfg(test)]
 mod owned_instance_tests {
     use super::*;
+    #[cfg(feature = "scripting")]
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_render_api::RecordingFactory;
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
@@ -1852,6 +1921,91 @@ mod owned_instance_tests {
         // Nonexistent property key: the typed write path must report false
         // (no match), never panic.
         assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn file_script_runtime_extracts_scopes_and_nested_library_edges() {
+        let property = |key, value| AuthoringProperty { key, value };
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: 23,
+                properties: vec![],
+            },
+            AuthoringRecord {
+                type_key: 558,
+                properties: vec![
+                    property(203, AuthoringValue::String("InnerLib".to_owned())),
+                    property(798, AuthoringValue::Uint(21)),
+                    property(799, AuthoringValue::Uint(4)),
+                    property(1037, AuthoringValue::Uint(20)),
+                    property(1038, AuthoringValue::Uint(6)),
+                ],
+            },
+            AuthoringRecord {
+                type_key: 529,
+                properties: vec![
+                    property(203, AuthoringValue::String("mesh".to_owned())),
+                    property(926, AuthoringValue::String("config".to_owned())),
+                    property(914, AuthoringValue::Bool(true)),
+                    property(1037, AuthoringValue::Uint(21)),
+                    property(1038, AuthoringValue::Uint(4)),
+                ],
+            },
+        ])
+        .expect("authored scripting asset graph imports");
+
+        let scripts = FileScriptRuntime::new(&runtime, true);
+        let mesh = scripts
+            .assets
+            .iter()
+            .find(|asset| asset.type_name == "ScriptAsset")
+            .expect("script asset extracted");
+        assert_eq!(mesh.name, "config/mesh");
+        assert_eq!(mesh.scope, ScopeKey::new(21, 4));
+
+        assert_eq!(scripts.imports.len(), 1);
+        let import = &scripts.imports[0];
+        assert_eq!(import.name, "InnerLib");
+        assert_eq!(import.caller, ScopeKey::new(20, 6));
+        assert_eq!(import.target, ScopeKey::new(21, 4));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn file_script_runtime_resolves_exported_library_scope_probe() {
+        let Some(rive_runtime_dir) = std::env::var_os("RIVE_RUNTIME_DIR") else {
+            // The candidate-only fixture is exercised by the upstream-sync
+            // gates; hermetic scope behavior is covered by nuxie-scripting.
+            return;
+        };
+        let fixture = std::path::PathBuf::from(rive_runtime_dir)
+            .join("tests/unit_tests/assets/scope_probe.riv");
+        if !fixture.exists() {
+            return;
+        }
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", fixture.display()));
+        let runtime = read_runtime_file_for_facade(&bytes).expect("scope probe imports");
+        let scripts = FileScriptRuntime::new(&runtime, true);
+        let mut factory = RecordingFactory::new();
+
+        let ready = scripts
+            .build_candidate(&runtime, &mut factory)
+            .expect("scoped modules register through serialized library pins");
+        let (lib, has_decode, cached, bare_leaked): (i64, i64, i64, bool) = ready
+            .vm
+            .eval(
+                "local probe = require('scope_probe')\n\
+                 local bareLeaked = pcall(require, 'draco')\n\
+                 return probe.lib, probe.hasDecode, probe.cached, bareLeaked",
+            )
+            .expect("root scope probe reads registered results");
+        assert_eq!((lib, has_decode, cached), (1, 1, 1));
+        assert!(
+            !bare_leaked,
+            "a root bare require leaked into library scope"
+        );
     }
 
     #[cfg(feature = "scripting")]

@@ -1,4 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
+#[cfg(feature = "scripting")]
+use nuxie_binary::read_runtime_file_with_scripting;
 use nuxie_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
 use nuxie_graph::{
     ArtboardGraph, GraphFile, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
@@ -20,7 +22,7 @@ use nuxie_runtime::{
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::{ScopeKey, ScriptVm};
+use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptVm};
 #[cfg(feature = "scripting")]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -155,7 +157,8 @@ fn run() -> Result<String> {
         .unwrap_or_default();
     let bytes = std::fs::read(&options.file)
         .with_context(|| format!("failed to read {}", options.file.display()))?;
-    let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
+    let runtime = read_runtime_for_options(&bytes, options.execute_scripts)
+        .context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
     if !options.layout_bounds {
@@ -272,6 +275,7 @@ fn run() -> Result<String> {
             state_machine,
             factory.as_factory(),
             owned_view_model_context.as_ref(),
+            script_artboard_render_state.as_ref(),
         )?;
     }
     instance.bind_default_view_model_artboard_list_context(&runtime);
@@ -347,6 +351,10 @@ fn run() -> Result<String> {
             &mut instance,
             &mut state_machine,
             &mut owned_view_model_context,
+            #[cfg(feature = "scripting")]
+            script_artboard_render_state
+                .as_ref()
+                .map(|state| state as &dyn RootScriptFrameTail),
             &input_events,
         );
     }
@@ -395,6 +403,10 @@ fn run() -> Result<String> {
                         &runtime,
                         state_machine.as_mut(),
                         owned_view_model_context.as_ref(),
+                        #[cfg(feature = "scripting")]
+                        script_artboard_render_state
+                            .as_ref()
+                            .map(|state| state as &dyn RootScriptFrameTail),
                         event.seconds,
                         &mut current_seconds,
                     )
@@ -422,6 +434,10 @@ fn run() -> Result<String> {
                     &runtime,
                     state_machine.as_mut(),
                     owned_view_model_context.as_ref(),
+                    #[cfg(feature = "scripting")]
+                    script_artboard_render_state
+                        .as_ref()
+                        .map(|state| state as &dyn RootScriptFrameTail),
                     *sample,
                     &mut current_seconds,
                 )
@@ -617,6 +633,8 @@ fn run_benchmark_repeat_pass(
         instantiate_scene_state(runtime, artboard_index, artboard, &graph.artboards, scene)?;
     let mut factory = NullFactory::new();
     #[cfg(feature = "scripting")]
+    let script_frame_state = Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default()));
+    #[cfg(feature = "scripting")]
     if let (Some(state_machine_index), Some(state_machine)) =
         (scene.state_machine_index, state_machine.as_mut())
     {
@@ -627,6 +645,7 @@ fn run_benchmark_repeat_pass(
             state_machine,
             &mut factory,
             owned_view_model_context.as_ref(),
+            Some(&script_frame_state),
         )?;
     }
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
@@ -653,6 +672,8 @@ fn run_benchmark_repeat_pass(
                         runtime,
                         state_machine.as_mut(),
                         owned_view_model_context.as_ref(),
+                        #[cfg(feature = "scripting")]
+                        Some(&script_frame_state as &dyn RootScriptFrameTail),
                         *sample,
                         &mut current_seconds,
                     )
@@ -686,6 +707,8 @@ fn run_benchmark_repeat_pass(
                     runtime,
                     state_machine.as_mut(),
                     owned_view_model_context.as_ref(),
+                    #[cfg(feature = "scripting")]
+                    Some(&script_frame_state as &dyn RootScriptFrameTail),
                     *sample,
                     &mut current_seconds,
                 )?;
@@ -804,6 +827,7 @@ fn write_layout_bounds_report(
     instance: &mut ArtboardInstance,
     state_machine: &mut Option<StateMachineInstance>,
     owned_view_model_context: &mut Option<RuntimeOwnedViewModelContext>,
+    #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
     input_events: &[InputEvent],
 ) -> Result<String> {
     let mut out = String::new();
@@ -828,6 +852,8 @@ fn write_layout_bounds_report(
                 runtime,
                 state_machine.as_mut(),
                 owned_view_model_context.as_ref(),
+                #[cfg(feature = "scripting")]
+                script_frame_tail,
                 event.seconds,
                 &mut current_seconds,
             )?;
@@ -845,6 +871,8 @@ fn write_layout_bounds_report(
             runtime,
             state_machine.as_mut(),
             owned_view_model_context.as_ref(),
+            #[cfg(feature = "scripting")]
+            script_frame_tail,
             *sample,
             &mut current_seconds,
         )?;
@@ -1247,6 +1275,70 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("exactly one sample"));
     }
+
+    #[test]
+    fn active_script_import_is_explicit() {
+        let plain = Options::parse(vec!["--file".to_owned(), "fixture.riv".to_owned()])
+            .expect("parse plain runner options");
+        assert!(!plain.execute_scripts);
+
+        let active = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--execute-scripts".to_owned(),
+        ])
+        .expect("parse active script import");
+        assert!(active.execute_scripts);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn zero_duration_root_frames_advance_detached_view_models_exactly_once() {
+        #[derive(Default)]
+        struct CountingFrameTail(std::cell::Cell<usize>);
+
+        impl RootScriptFrameTail for CountingFrameTail {
+            fn advance_detached_view_models(&self) -> bool {
+                self.0.set(self.0.get() + 1);
+                false
+            }
+        }
+
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let runtime = read_runtime_file(bytes).expect("fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("fixture graph builds");
+        let artboard = graph.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+                .expect("fixture artboard instantiates");
+        let frame_tail = CountingFrameTail::default();
+        let mut current_seconds = 0.0;
+
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            None,
+            None,
+            Some(&frame_tail),
+            0.0,
+            &mut current_seconds,
+        )
+        .expect("zero-duration frame advances");
+        assert_eq!(frame_tail.0.get(), 1);
+
+        // Event boundaries can produce another root frame at the same time.
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            None,
+            None,
+            Some(&frame_tail),
+            0.0,
+            &mut current_seconds,
+        )
+        .expect("same-time event boundary advances");
+        assert_eq!(frame_tail.0.get(), 2);
+    }
 }
 
 #[derive(Debug)]
@@ -1305,6 +1397,7 @@ fn advance_scene_to(
     runtime: &RuntimeFile,
     state_machine: Option<&mut StateMachineInstance>,
     owned_view_model_context: Option<&RuntimeOwnedViewModelContext>,
+    #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
     target_seconds: f32,
     current_seconds: &mut f32,
 ) -> Result<()> {
@@ -1331,6 +1424,10 @@ fn advance_scene_to(
         .update_script_instances()
         .context("scripted drawable update failed")?;
     instance.update_pass();
+    #[cfg(feature = "scripting")]
+    if let Some(script_frame_tail) = script_frame_tail {
+        script_frame_tail.advance_detached_view_models();
+    }
     *current_seconds = target_seconds;
     Ok(())
 }
@@ -1345,6 +1442,7 @@ struct Options {
     layout_bounds: bool,
     benchmark: bool,
     benchmark_repeat: usize,
+    execute_scripts: bool,
 }
 
 impl Options {
@@ -1357,6 +1455,7 @@ impl Options {
         let mut layout_bounds = false;
         let mut benchmark = false;
         let mut benchmark_repeat = 1usize;
+        let mut execute_scripts = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -1376,12 +1475,13 @@ impl Options {
                 "--samples" => samples = parse_samples(&value(arg)?)?,
                 "--layout-bounds" => layout_bounds = true,
                 "--benchmark" => benchmark = true,
+                "--execute-scripts" => execute_scripts = true,
                 "--benchmark-repeat" => {
                     benchmark_repeat = parse_positive_usize(&value(arg)?, arg)?;
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--benchmark] [--benchmark-repeat N]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -1417,7 +1517,23 @@ impl Options {
             layout_bounds,
             benchmark,
             benchmark_repeat,
+            execute_scripts,
         })
+    }
+}
+
+fn read_runtime_for_options(bytes: &[u8], execute_scripts: bool) -> Result<RuntimeFile> {
+    if !execute_scripts {
+        return read_runtime_file(bytes).map_err(Into::into);
+    }
+
+    #[cfg(feature = "scripting")]
+    {
+        read_runtime_file_with_scripting(bytes).map_err(Into::into)
+    }
+    #[cfg(not(feature = "scripting"))]
+    {
+        bail!("--execute-scripts requires the scripting feature")
     }
 }
 
@@ -1505,10 +1621,23 @@ struct RunnerScriptArtboardRenderState {
     next_instance_id: u64,
     pending: Vec<(u64, usize)>,
     caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
+    detached_view_model_frames: Vec<DetachedViewModelFrame>,
 }
 
 #[cfg(feature = "scripting")]
 impl RunnerScriptArtboardRenderState {
+    fn retain_detached_view_model_frame(&mut self, frame: DetachedViewModelFrame) {
+        self.detached_view_model_frames.push(frame);
+    }
+
+    fn advance_detached_view_models(&self) -> bool {
+        let mut changed = false;
+        for frame in &self.detached_view_model_frames {
+            changed |= frame.advance();
+        }
+        changed
+    }
+
     fn register(&mut self, artboard_index: usize) -> u64 {
         let instance_id = self.next_instance_id;
         self.next_instance_id += 1;
@@ -1532,6 +1661,18 @@ impl RunnerScriptArtboardRenderState {
             self.caches.insert(instance_id, cache);
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "scripting")]
+trait RootScriptFrameTail {
+    fn advance_detached_view_models(&self) -> bool;
+}
+
+#[cfg(feature = "scripting")]
+impl RootScriptFrameTail for Rc<RefCell<RunnerScriptArtboardRenderState>> {
+    fn advance_detached_view_models(&self) -> bool {
+        self.borrow().advance_detached_view_models()
     }
 }
 
@@ -1649,7 +1790,9 @@ impl ScriptArtboard for RunnerScriptArtboard {
     }
 
     fn advance(&mut self, seconds: f32) -> std::result::Result<bool, ScriptError> {
-        self.bind_view_model();
+        // Construction paths bind the selected model once. C++ child artboards
+        // use advanceAndApply(..., false), so a child step must not consume its
+        // data context or the VM-wide detached-model frame.
         let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
             self.instance
                 .advance_state_machine_instance(state_machine, seconds)
@@ -2051,6 +2194,10 @@ fn initialize_scripted_drawables_for_artboard(
         instance.update_pass();
     }
 
+    render_state
+        .borrow_mut()
+        .retain_detached_view_model_frame(vm.detached_view_model_frame());
+
     Ok(())
 }
 
@@ -2167,6 +2314,7 @@ fn initialize_state_machine_scripted_objects(
     state_machine: &mut StateMachineInstance,
     factory: &mut dyn RenderFactory,
     owned_context: Option<&RuntimeOwnedViewModelContext>,
+    script_frame_state: Option<&Rc<RefCell<RunnerScriptArtboardRenderState>>>,
 ) -> Result<()> {
     let Some(definition) = artboard.state_machines.get(state_machine_index) else {
         return Ok(());
@@ -2245,6 +2393,11 @@ fn initialize_state_machine_scripted_objects(
             continue;
         }
         state_machine.set_script_instance_for_global(scripted_object.global_id, script_instance);
+    }
+    if let Some(script_frame_state) = script_frame_state {
+        script_frame_state
+            .borrow_mut()
+            .retain_detached_view_model_frame(vm.detached_view_model_frame());
     }
     Ok(())
 }
@@ -2425,12 +2578,13 @@ fn hydrate_script_inputs(
             let Some(artboard_index) = object.uint_property("artboardId") else {
                 continue;
             };
-            let artboard = RunnerScriptArtboard::new(
+            let mut artboard = RunnerScriptArtboard::new(
                 runtime,
                 artboards,
                 artboard_index as usize,
                 Rc::clone(&render_state),
             )?;
+            artboard.bind_view_model();
             script_instance
                 .set_artboard_input(name, Box::new(artboard))
                 .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
@@ -2686,16 +2840,6 @@ fn ensure_static_draw_supported_for_artboard(
                 "unsupported: {unsupported_feature} in Rust golden runner (data bind global {} target {:?})",
                 data_bind.global_id,
                 data_bind.target_type_name
-            );
-        }
-        if let Some(focus_object) = artboard
-            .local_objects
-            .iter()
-            .find(|object| object.type_name == Some("FocusData") && has_input_events)
-        {
-            bail!(
-                "unsupported: focus-data in Rust golden runner (nested child global {})",
-                focus_object.global_id
             );
         }
     }

@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::properties::property_key_for_name;
+use crate::{ArtboardInstance, Mat2D};
+
 /// Stable identity for one node in a focus tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FocusNodeId(u64);
@@ -63,7 +66,7 @@ impl FocusBounds {
 }
 
 /// Runtime state for one authored focus target.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FocusNode {
     parent: Option<FocusNodeId>,
     children: Vec<FocusNodeId>,
@@ -217,7 +220,7 @@ impl FocusEvent {
 }
 
 /// Owns focus topology and focus state for one mounted focus domain.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FocusManager {
     nodes: BTreeMap<FocusNodeId, FocusNode>,
     roots: Vec<FocusNodeId>,
@@ -609,12 +612,30 @@ impl FocusManager {
         self.drop_focus_if_ineligible();
         let current = self.primary_focus;
         let Some(next) = self.next_focusable_from(current, forward) else {
+            if current.is_some_and(|current| self.clears_at_sequential_edge(current)) {
+                self.clear_focus();
+            }
             return false;
         };
         if Some(next) == current {
             return false;
         }
         self.set_focus(next)
+    }
+
+    fn clears_at_sequential_edge(&self, current: FocusNodeId) -> bool {
+        let mut scope = self.parent(current);
+        while let Some(scope_id) = scope {
+            let Some(node) = self.nodes.get(&scope_id) else {
+                return false;
+            };
+            match node.edge_behavior {
+                FocusEdgeBehavior::Stop => return false,
+                FocusEdgeBehavior::ClosedLoop => return false,
+                FocusEdgeBehavior::ParentScope => scope = node.parent,
+            }
+        }
+        true
     }
 
     fn next_focusable_from(
@@ -745,6 +766,501 @@ impl FocusManager {
             self.collect_traversable_leaves(&node.children, result);
         }
     }
+}
+
+// Runtime projection of authored FocusData. FocusManager deliberately owns no
+// Rive-object knowledge; this layer mirrors Artboard::buildFocusTree and keeps
+// occurrence identity stable while nested artboards and component-list rows
+// are rebuilt or reordered.
+
+const FOCUS_KEY_ROOT: u64 = 1;
+const FOCUS_KEY_NESTED: u64 = 2;
+const FOCUS_KEY_LIST_SCOPE: u64 = 3;
+const FOCUS_KEY_LIST_ROW: u64 = 4;
+const FOCUS_KEY_AUTHORED: u64 = 5;
+const FOCUS_KEY_NESTED_CHILD: u64 = 6;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeFocusOccurrenceKey(Vec<u64>);
+
+impl RuntimeFocusOccurrenceKey {
+    fn root(graph_global_id: u32) -> Self {
+        Self(vec![FOCUS_KEY_ROOT, u64::from(graph_global_id)])
+    }
+
+    fn child(&self, tag: u64, first: u64, second: u64) -> Self {
+        let mut value = self.0.clone();
+        value.extend([tag, first, second]);
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeFocusDescriptor {
+    key: RuntimeFocusOccurrenceKey,
+    parent: Option<RuntimeFocusOccurrenceKey>,
+    sibling_index: usize,
+    node: FocusNode,
+    root_target_local: Option<usize>,
+}
+
+/// One state-machine instance's authored focus domain.
+///
+/// The keys describe concrete mounted occurrences, not just file-global
+/// objects. A component-list row therefore retains its FocusNode when moved,
+/// while a genuinely removed row is blurred and discarded.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeFocusTree {
+    inert: bool,
+    manager: FocusManager,
+    nodes_by_key: BTreeMap<RuntimeFocusOccurrenceKey, FocusNodeId>,
+    parents_by_key: BTreeMap<RuntimeFocusOccurrenceKey, Option<RuntimeFocusOccurrenceKey>>,
+    target_nodes: BTreeMap<usize, FocusNodeId>,
+}
+
+impl RuntimeFocusTree {
+    pub(crate) fn from_artboard(artboard: &ArtboardInstance) -> Self {
+        let mut tree = Self::default();
+        tree.sync(artboard);
+        // An empty projection cannot gain authored focus content later: lists
+        // and data-bound nested hosts contribute persistent structural scopes
+        // even while empty. Keep the common no-focus advance path O(1).
+        tree.inert = tree.nodes_by_key.is_empty();
+        tree
+    }
+
+    pub(crate) fn sync(&mut self, artboard: &ArtboardInstance) {
+        if self.inert {
+            return;
+        }
+        let mut descriptors = Vec::new();
+        let root_key = RuntimeFocusOccurrenceKey::root(artboard.graph_global_id);
+        collect_artboard_focus_descriptors(
+            artboard,
+            &root_key,
+            None,
+            true,
+            true,
+            Mat2D::IDENTITY,
+            &mut descriptors,
+        );
+        let mut sibling_counts = BTreeMap::new();
+        for descriptor in &mut descriptors {
+            let sibling_index = sibling_counts.entry(descriptor.parent.clone()).or_insert(0);
+            descriptor.sibling_index = *sibling_index;
+            *sibling_index += 1;
+        }
+
+        let desired = descriptors
+            .iter()
+            .map(|descriptor| descriptor.key.clone())
+            .collect::<BTreeSet<_>>();
+        let removed = self
+            .nodes_by_key
+            .keys()
+            .filter(|key| !desired.contains(*key))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let removed_roots = removed
+            .iter()
+            .filter(|key| {
+                self.parents_by_key
+                    .get(*key)
+                    .and_then(Option::as_ref)
+                    .is_none_or(|parent| !removed.contains(parent))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in removed_roots {
+            if let Some(node_id) = self.nodes_by_key.get(&key).copied() {
+                self.manager.remove_subtree(node_id);
+            }
+        }
+        self.nodes_by_key
+            .retain(|_, node_id| self.manager.contains(*node_id));
+
+        for descriptor in &descriptors {
+            let node_id = match self.nodes_by_key.get(&descriptor.key).copied() {
+                Some(node_id) => {
+                    if let Some(node) = self.manager.node_mut(node_id) {
+                        node.has_focusable = descriptor.node.has_focusable;
+                        node.set_can_focus(descriptor.node.can_focus());
+                        node.set_can_touch(descriptor.node.can_touch());
+                        node.set_can_traverse(descriptor.node.can_traverse());
+                        node.set_eligible(descriptor.node.is_eligible());
+                        node.set_tab_index(descriptor.node.tab_index());
+                        node.set_edge_behavior(descriptor.node.edge_behavior());
+                        node.set_bounds(descriptor.node.bounds());
+                        node.set_position(descriptor.node.position());
+                    }
+                    node_id
+                }
+                None => {
+                    let node_id = self.manager.create_node(descriptor.node.clone());
+                    self.nodes_by_key.insert(descriptor.key.clone(), node_id);
+                    node_id
+                }
+            };
+            let parent = descriptor
+                .parent
+                .as_ref()
+                .and_then(|key| self.nodes_by_key.get(key))
+                .copied();
+            self.manager
+                .insert_child(parent, node_id, descriptor.sibling_index);
+        }
+
+        self.parents_by_key = descriptors
+            .iter()
+            .map(|descriptor| (descriptor.key.clone(), descriptor.parent.clone()))
+            .collect();
+        self.target_nodes.clear();
+        for descriptor in descriptors {
+            let Some(target_local) = descriptor.root_target_local else {
+                continue;
+            };
+            let Some(node_id) = self.nodes_by_key.get(&descriptor.key).copied() else {
+                continue;
+            };
+            self.target_nodes.insert(target_local, node_id);
+        }
+        self.manager.drop_focus_if_ineligible();
+    }
+
+    pub(crate) fn has_focusable_content(&self) -> bool {
+        self.manager.has_focusable_content()
+    }
+
+    pub(crate) fn set_focus_target(&mut self, target_local: usize) -> bool {
+        self.target_nodes
+            .get(&target_local)
+            .copied()
+            .is_some_and(|node_id| self.manager.set_focus(node_id))
+    }
+
+    pub(crate) fn clear_focus(&mut self) -> bool {
+        self.manager.clear_focus()
+    }
+
+    pub(crate) fn traverse(&mut self, traversal_kind: u64) -> bool {
+        match traversal_kind {
+            0 => self.manager.focus_next(),
+            1 => self.manager.focus_previous(),
+            2 => self.manager.focus_up(),
+            3 => self.manager.focus_down(),
+            4 => self.manager.focus_left(),
+            5 => self.manager.focus_right(),
+            _ => self.manager.focus_next(),
+        }
+    }
+
+    pub(crate) fn target_has_focus(&self, target_local: usize) -> bool {
+        self.target_nodes
+            .get(&target_local)
+            .copied()
+            .is_some_and(|node_id| self.manager.has_focus(node_id))
+    }
+}
+
+fn collect_artboard_focus_descriptors(
+    artboard: &ArtboardInstance,
+    occurrence_key: &RuntimeFocusOccurrenceKey,
+    parent_focus: Option<RuntimeFocusOccurrenceKey>,
+    root_occurrence: bool,
+    inherited_eligible: bool,
+    root_transform: Mat2D,
+    descriptors: &mut Vec<RuntimeFocusDescriptor>,
+) {
+    let Some(graph) = artboard.runtime_graph() else {
+        return;
+    };
+    let Some(root_local) = graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "Artboard" && component.parent_local.is_none())
+        .map(|component| component.local_id)
+    else {
+        return;
+    };
+    collect_component_focus_descriptors(
+        artboard,
+        root_local,
+        occurrence_key,
+        parent_focus,
+        root_occurrence,
+        inherited_eligible,
+        root_transform,
+        descriptors,
+    );
+}
+
+fn collect_component_focus_descriptors(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    occurrence_key: &RuntimeFocusOccurrenceKey,
+    parent_focus: Option<RuntimeFocusOccurrenceKey>,
+    root_occurrence: bool,
+    inherited_eligible: bool,
+    root_transform: Mat2D,
+    descriptors: &mut Vec<RuntimeFocusDescriptor>,
+) {
+    let Some(graph) = artboard.runtime_graph() else {
+        return;
+    };
+    let Some(component) = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == local_id)
+    else {
+        return;
+    };
+
+    let mut host_parent = parent_focus.clone();
+    if matches!(
+        component.type_name,
+        "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
+    ) {
+        let artboard_id_key = property_key_for_name("NestedArtboard", "artboardId");
+        let data_bound = artboard_id_key.is_some_and(|property_key| {
+            graph.data_binds.iter().any(|data_bind| {
+                data_bind.target_local == Some(local_id)
+                    && data_bind.property_key == u64::from(property_key)
+            })
+        });
+        if data_bound {
+            let scope_key = occurrence_key.child(
+                FOCUS_KEY_NESTED,
+                local_id as u64,
+                u64::from(component.global_id),
+            );
+            push_focus_descriptor(
+                descriptors,
+                scope_key.clone(),
+                parent_focus.clone(),
+                FocusNode::structural_scope(),
+                None,
+            );
+            host_parent = Some(scope_key);
+        }
+        if let Some(nested) = artboard.nested_artboards.get(&local_id) {
+            let child_key = occurrence_key.child(
+                FOCUS_KEY_NESTED_CHILD,
+                local_id as u64,
+                nested.child.instance_identity(),
+            );
+            collect_artboard_focus_descriptors(
+                &nested.child,
+                &child_key,
+                host_parent.clone(),
+                false,
+                inherited_eligible
+                    && component_and_ancestors_allow_focus(artboard, local_id)
+                    && !nested_host_is_paused(artboard, local_id),
+                root_transform.multiply(
+                    artboard
+                        .component(local_id)
+                        .map_or(Mat2D::IDENTITY, |host| host.transform.world_transform),
+                ),
+                descriptors,
+            );
+        }
+    } else if component.type_name == "ArtboardComponentList" {
+        let scope_key = occurrence_key.child(
+            FOCUS_KEY_LIST_SCOPE,
+            local_id as u64,
+            u64::from(component.global_id),
+        );
+        push_focus_descriptor(
+            descriptors,
+            scope_key.clone(),
+            parent_focus.clone(),
+            FocusNode::structural_scope(),
+            None,
+        );
+        if let Some(items) = artboard.component_list_items.get(&local_id) {
+            let host_transform_local = if crate::constraints::component_list_virtualization(
+                artboard, local_id,
+            )
+            .is_some()
+            {
+                component.parent_local.unwrap_or(local_id)
+            } else {
+                local_id
+            };
+            let host_world = artboard
+                .component(host_transform_local)
+                .map_or(Mat2D::IDENTITY, |host| host.transform.world_transform);
+            let item_transforms = artboard.component_list_item_transforms.get(&local_id);
+            for (item_index, item) in items.iter().enumerate() {
+                let row_key = occurrence_key.child(
+                    FOCUS_KEY_LIST_ROW,
+                    local_id as u64,
+                    item.occurrence_identity,
+                );
+                push_focus_descriptor(
+                    descriptors,
+                    row_key.clone(),
+                    Some(scope_key.clone()),
+                    FocusNode::structural_scope(),
+                    None,
+                );
+                let child_key = row_key.child(
+                    FOCUS_KEY_ROOT,
+                    u64::from(item.child.graph_global_id),
+                    item.child.instance_identity(),
+                );
+                collect_artboard_focus_descriptors(
+                    &item.child,
+                    &child_key,
+                    Some(row_key),
+                    false,
+                    inherited_eligible && component_and_ancestors_allow_focus(artboard, local_id),
+                    root_transform.multiply(host_world).multiply(
+                        item_transforms
+                            .and_then(|transforms| transforms.get(item_index))
+                            .copied()
+                            .unwrap_or(item.transform),
+                    ),
+                    descriptors,
+                );
+            }
+        }
+    }
+
+    let direct_focus = component.children.iter().copied().find(|child_local| {
+        graph
+            .components
+            .iter()
+            .find(|child| child.local_id == *child_local)
+            .is_some_and(|child| child.type_name == "FocusData")
+    });
+    let recurse_parent = if let Some(focus_local) = direct_focus {
+        let focus_key = occurrence_key.child(
+            FOCUS_KEY_AUTHORED,
+            focus_local as u64,
+            graph
+                .components
+                .iter()
+                .find(|child| child.local_id == focus_local)
+                .map_or(0, |child| u64::from(child.global_id)),
+        );
+        push_focus_descriptor(
+            descriptors,
+            focus_key.clone(),
+            parent_focus,
+            authored_focus_node(artboard, focus_local, inherited_eligible, root_transform),
+            root_occurrence.then_some(local_id),
+        );
+        Some(focus_key)
+    } else {
+        parent_focus
+    };
+
+    for child_local in &component.children {
+        let is_focus_data = graph
+            .components
+            .iter()
+            .find(|child| child.local_id == *child_local)
+            .is_some_and(|child| child.type_name == "FocusData");
+        if !is_focus_data {
+            collect_component_focus_descriptors(
+                artboard,
+                *child_local,
+                occurrence_key,
+                recurse_parent.clone(),
+                root_occurrence,
+                inherited_eligible,
+                root_transform,
+                descriptors,
+            );
+        }
+    }
+}
+
+fn push_focus_descriptor(
+    descriptors: &mut Vec<RuntimeFocusDescriptor>,
+    key: RuntimeFocusOccurrenceKey,
+    parent: Option<RuntimeFocusOccurrenceKey>,
+    node: FocusNode,
+    root_target_local: Option<usize>,
+) {
+    descriptors.push(RuntimeFocusDescriptor {
+        key,
+        parent,
+        sibling_index: 0,
+        node,
+        root_target_local,
+    });
+}
+
+fn authored_focus_node(
+    artboard: &ArtboardInstance,
+    focus_local: usize,
+    inherited_eligible: bool,
+    root_transform: Mat2D,
+) -> FocusNode {
+    let mut node = FocusNode::new();
+    let focus_flags = property_key_for_name("FocusData", "focusFlags")
+        .and_then(|property_key| artboard.objects.uint_property(focus_local, property_key))
+        .unwrap_or(7);
+    node.set_can_focus(focus_flags & 1 != 0);
+    node.set_can_touch(focus_flags & 2 != 0);
+    node.set_can_traverse(focus_flags & 4 != 0);
+    let edge_behavior = property_key_for_name("FocusData", "edgeBehaviorValue")
+        .and_then(|property_key| artboard.objects.uint_property(focus_local, property_key))
+        .unwrap_or(0);
+    node.set_edge_behavior(match edge_behavior {
+        1 => FocusEdgeBehavior::ClosedLoop,
+        2 => FocusEdgeBehavior::Stop,
+        _ => FocusEdgeBehavior::ParentScope,
+    });
+
+    let eligible = inherited_eligible
+        && artboard
+            .component(focus_local)
+            .is_none_or(|focus_data| !focus_data.is_collapsed());
+    let parent_local = artboard
+        .component(focus_local)
+        .and_then(|focus_data| focus_data.parent_local);
+    let eligible = eligible
+        && parent_local
+            .is_none_or(|parent_local| component_and_ancestors_allow_focus(artboard, parent_local));
+    node.set_eligible(eligible);
+    if let Some(parent) = parent_local.and_then(|parent_local| artboard.component(parent_local)) {
+        let (x, y) = root_transform.transform_point(
+            parent.transform.world_transform.0[4],
+            parent.transform.world_transform.0[5],
+        );
+        node.set_position(Some(FocusPoint::new(x, y)));
+    }
+    node
+}
+
+fn component_and_ancestors_allow_focus(artboard: &ArtboardInstance, start_local: usize) -> bool {
+    let drawable_flags_key = property_key_for_name("Drawable", "drawableFlags");
+    let mut current = Some(start_local);
+    while let Some(local_id) = current {
+        let Some(component) = artboard.component(local_id) else {
+            break;
+        };
+        let is_hidden = drawable_flags_key
+            .and_then(|property_key| artboard.objects.uint_property(local_id, property_key))
+            .is_some_and(|flags| flags & 1 != 0);
+        if component.is_collapsed()
+            || is_hidden
+            || (component.capabilities.transform && component.transform.render_opacity <= 0.0)
+        {
+            return false;
+        }
+        current = component.parent_local;
+    }
+    true
+}
+
+fn nested_host_is_paused(artboard: &ArtboardInstance, local_id: usize) -> bool {
+    property_key_for_name("NestedArtboard", "isPaused")
+        .and_then(|property_key| artboard.objects.bool_property(local_id, property_key))
+        .unwrap_or(false)
 }
 
 fn score_directional_bounds(
@@ -1145,6 +1661,23 @@ mod tests {
         assert_eq!(manager.primary_focus(), Some(first));
         assert!(manager.focus_previous());
         assert_eq!(manager.primary_focus(), Some(last));
+    }
+
+    #[test]
+    fn root_sequential_edges_clear_focus_like_cpp_find_next_focusable() {
+        let mut manager = FocusManager::new();
+        let first = manager.create_node(FocusNode::new());
+        let last = manager.create_node(FocusNode::new());
+        manager.add_child(None, first);
+        manager.add_child(None, last);
+
+        manager.set_focus(last);
+        assert!(!manager.focus_next());
+        assert_eq!(manager.primary_focus(), None);
+
+        manager.set_focus(first);
+        assert!(!manager.focus_previous());
+        assert_eq!(manager.primary_focus(), None);
     }
 
     #[test]

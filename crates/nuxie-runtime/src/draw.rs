@@ -10076,7 +10076,15 @@ fn runtime_draw_command(
     }
 
     if command.object_kind == RuntimeDrawCommandObjectKind::ScriptedDrawable {
-        return runtime_draw_scripted_drawable(instance, command, factory, renderer);
+        return runtime_draw_scripted_drawable(
+            instance,
+            graph,
+            command,
+            layout_bounds,
+            path_cache,
+            factory,
+            renderer,
+        );
     }
 
     let shape_world = command.world_transform.unwrap_or_else(|| {
@@ -10383,7 +10391,10 @@ fn runtime_draw_command(
 
 fn runtime_draw_scripted_drawable(
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     command: &RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeRenderPathCache,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
@@ -10402,9 +10413,20 @@ fn runtime_draw_scripted_drawable(
     if needs_opacity_save {
         renderer.modulate_opacity(command.render_opacity);
     }
-    renderer.transform(runtime_render_mat(
-        command.world_transform.unwrap_or(Mat2D::IDENTITY),
-    ));
+    let world_transform = command.world_transform.unwrap_or_else(|| {
+        command
+            .local_id
+            .map(|local_id| {
+                path_cache.component_world_transform_with_bounds(
+                    instance,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                )
+            })
+            .unwrap_or(Mat2D::IDENTITY)
+    });
+    renderer.transform(runtime_render_mat(world_transform));
 
     let mut host = crate::NoopScriptHost;
     let draw_result = script_instance
@@ -20495,9 +20517,18 @@ mod tests {
         let mut renderer = RecordingRenderer {
             ops: Rc::clone(&ops),
         };
+        let mut path_cache = RuntimeRenderPathCache::default();
 
-        runtime_draw_scripted_drawable(&instance, &command, &mut factory, &mut renderer)
-            .expect("scripted draw succeeds");
+        runtime_draw_scripted_drawable(
+            &instance,
+            artboard,
+            &command,
+            None,
+            &mut path_cache,
+            &mut factory,
+            &mut renderer,
+        )
+        .expect("scripted draw succeeds");
 
         assert_eq!(
             ops.borrow().as_slice(),
@@ -20547,10 +20578,18 @@ mod tests {
         let mut renderer = RecordingRenderer {
             ops: Rc::clone(&ops),
         };
+        let mut path_cache = RuntimeRenderPathCache::default();
 
-        let error =
-            runtime_draw_scripted_drawable(&instance, &command, &mut factory, &mut renderer)
-                .expect_err("throwing script draw must surface an error");
+        let error = runtime_draw_scripted_drawable(
+            &instance,
+            artboard,
+            &command,
+            None,
+            &mut path_cache,
+            &mut factory,
+            &mut renderer,
+        )
+        .expect_err("throwing script draw must surface an error");
 
         assert!(error.to_string().contains("intentional draw failure"));
         assert_eq!(

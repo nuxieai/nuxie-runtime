@@ -6,6 +6,7 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_group_operation_formula_accepts_non_number_source,
 };
 use crate::properties::property_key_for_name;
+use crate::view_model::RuntimeFontAssetValue;
 use crate::{RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue, RuntimeViewModelPointer};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use std::collections::BTreeMap;
@@ -98,7 +99,7 @@ pub(crate) struct RuntimeBindableAsset {
     pub(crate) global_id: u32,
     pub(crate) data_bind_indices: Vec<usize>,
     pub(crate) default_view_model_sources: Vec<RuntimeBindableAssetDefaultViewModelSource>,
-    pub(crate) value: u64,
+    pub(crate) value: RuntimeBindableAssetValue,
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +107,88 @@ pub(crate) struct RuntimeBindableAssetDefaultViewModelSource {
     pub(crate) data_bind_index: usize,
     pub(crate) path: Vec<u32>,
     pub(crate) flags: u64,
-    pub(crate) value: u64,
+    pub(crate) value: RuntimeBindableAssetValue,
+}
+
+/// The value retained by C++ `BindablePropertyAsset`.
+///
+/// `asset_index` is the generated `propertyValue`. `font_value` models the
+/// separate private `FontAsset`: `Some` identifies a font binding and retains
+/// its live Font payload even when `propertyValue` is unchanged.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableAssetValue {
+    asset_index: u64,
+    font_value: Option<RuntimeFontAssetValue>,
+}
+
+impl RuntimeBindableAssetValue {
+    pub(crate) fn from_asset_index(asset_index: u64) -> Self {
+        Self {
+            asset_index,
+            font_value: None,
+        }
+    }
+
+    pub(crate) fn from_font_value(font_value: RuntimeFontAssetValue) -> Self {
+        Self {
+            asset_index: font_value.file_asset_index(),
+            font_value: Some(font_value),
+        }
+    }
+
+    pub(crate) fn asset_index(&self) -> u64 {
+        self.asset_index
+    }
+
+    pub(crate) fn font_value(&self) -> Option<&RuntimeFontAssetValue> {
+        self.font_value.as_ref()
+    }
+
+    pub(crate) fn data_bind_asset_index(&self) -> u64 {
+        self.font_value
+            .as_ref()
+            .filter(|font_value| font_value.live_font_bytes_arc().is_some())
+            .map(RuntimeFontAssetValue::file_asset_index)
+            .unwrap_or(self.asset_index)
+    }
+
+    pub(crate) fn font_data_bind_value(&self) -> Option<RuntimeFontAssetValue> {
+        let font_value = self.font_value.as_ref()?;
+        if font_value.live_font_bytes_arc().is_some() {
+            Some(font_value.clone())
+        } else {
+            Some(RuntimeFontAssetValue::from_file_asset_index(
+                self.asset_index,
+            ))
+        }
+    }
+
+    pub(crate) fn mark_as_font(&mut self) {
+        if self.font_value.is_none() {
+            self.font_value = Some(RuntimeFontAssetValue::from_file_asset_index(
+                self.asset_index,
+            ));
+        }
+    }
+
+    pub(crate) fn set_asset_index(&mut self, asset_index: u64) -> bool {
+        let changed = self.asset_index != asset_index;
+        self.asset_index = asset_index;
+        changed
+    }
+
+    pub(crate) fn apply_font_value(&mut self, font_value: &RuntimeFontAssetValue) -> bool {
+        let mut changed = self.asset_index != font_value.file_asset_index();
+        self.asset_index = font_value.file_asset_index();
+        match self.font_value.as_mut() {
+            Some(current) => changed |= current.apply_data_bind_value(font_value),
+            None => {
+                self.font_value = Some(font_value.clone());
+                changed = true;
+            }
+        }
+        changed
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -413,7 +495,8 @@ pub(crate) fn bindable_enum_value(
 pub(crate) struct StateMachineBindableAssetInstance {
     pub(crate) global_id: u32,
     pub(crate) data_bind_indices: Vec<usize>,
-    pub(crate) value: u64,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableAssetDefaultViewModelSource>,
+    pub(crate) value: RuntimeBindableAssetValue,
 }
 
 impl StateMachineBindableAssetInstance {
@@ -421,7 +504,8 @@ impl StateMachineBindableAssetInstance {
         Self {
             global_id: bindable_asset.global_id,
             data_bind_indices: bindable_asset.data_bind_indices.clone(),
-            value: bindable_asset.value,
+            default_view_model_sources: bindable_asset.default_view_model_sources.clone(),
+            value: bindable_asset.value.clone(),
         }
     }
 
@@ -430,11 +514,11 @@ impl StateMachineBindableAssetInstance {
     }
 
     pub(crate) fn set_value(&mut self, value: u64) -> bool {
-        if self.value == value {
-            return false;
-        }
-        self.value = value;
-        true
+        self.value.set_asset_index(value)
+    }
+
+    pub(crate) fn apply_font_value(&mut self, value: &RuntimeFontAssetValue) -> bool {
+        self.value.apply_font_value(value)
     }
 }
 
@@ -445,7 +529,7 @@ pub(crate) fn bindable_asset_value(
     bindable_assets
         .iter()
         .find(|bindable_asset| bindable_asset.global_id == global_id)
-        .map(|bindable_asset| bindable_asset.value)
+        .map(|bindable_asset| bindable_asset.value.asset_index())
 }
 
 #[derive(Debug, Clone)]
@@ -1184,7 +1268,10 @@ pub(crate) fn runtime_bindable_assets(
                 default_view_model_sources: Vec::new(),
                 value: target
                     .uint_property("propertyValue")
-                    .unwrap_or(u64::from(u32::MAX)),
+                    .map(RuntimeBindableAssetValue::from_asset_index)
+                    .unwrap_or_else(|| {
+                        RuntimeBindableAssetValue::from_asset_index(u64::from(u32::MAX))
+                    }),
             });
         if let Some(source) = runtime_bindable_asset_default_view_model_source(
             file,
@@ -1193,6 +1280,9 @@ pub(crate) fn runtime_bindable_assets(
             default_instance,
         ) {
             values.entry(target.id).and_modify(|bindable_asset| {
+                if source.value.font_value().is_some() {
+                    bindable_asset.value.mark_as_font();
+                }
                 bindable_asset.default_view_model_sources.push(source)
             });
         }
@@ -1213,10 +1303,14 @@ fn runtime_bindable_asset_default_view_model_source(
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    if source.type_name != "ViewModelInstanceAssetImage" {
-        return None;
-    }
-    let value = source.uint_property("propertyValue")?;
+    let asset_index = source.uint_property("propertyValue")?;
+    let value = match source.type_name {
+        "ViewModelInstanceAssetImage" => RuntimeBindableAssetValue::from_asset_index(asset_index),
+        "ViewModelInstanceAssetFont" => RuntimeBindableAssetValue::from_font_value(
+            RuntimeFontAssetValue::from_file_asset_index(asset_index),
+        ),
+        _ => return None,
+    };
     Some(RuntimeBindableAssetDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
@@ -1671,4 +1765,50 @@ pub(crate) fn runtime_default_view_model_triggers(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn bindable_font_retains_live_payload_for_property_writes_and_replaces_it_for_data_binds() {
+        let live: Arc<[u8]> = vec![2, 4, 6, 8].into();
+        let mut font = RuntimeFontAssetValue::default();
+        assert!(font.set_live_font_bytes(Some(Arc::clone(&live))));
+        let mut bindable = RuntimeBindableAssetValue::from_font_value(font);
+
+        assert!(bindable.set_asset_index(3));
+        assert_eq!(bindable.asset_index(), 3);
+        assert!(
+            bindable
+                .font_value()
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &live)),
+            "a generated propertyValue write preserves BindablePropertyAsset::fontValue"
+        );
+        assert_eq!(
+            bindable.data_bind_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX,
+            "a live Font wins over the independent generated propertyValue when applied to a source"
+        );
+
+        let file_font = RuntimeFontAssetValue::from_file_asset_index(1);
+        assert!(bindable.apply_font_value(&file_font));
+        assert_eq!(bindable.asset_index(), 1);
+        assert_eq!(
+            bindable
+                .font_value()
+                .and_then(RuntimeFontAssetValue::live_font_bytes),
+            None,
+            "a source-to-target font bind replaces the retained Font payload"
+        );
+        assert!(bindable.set_asset_index(5));
+        let copied_file = bindable
+            .font_data_bind_value()
+            .expect("font bindable has a font channel");
+        assert_eq!(copied_file.file_asset_index(), 5);
+        assert_eq!(copied_file.live_font_bytes(), None);
+    }
 }

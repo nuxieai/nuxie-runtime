@@ -4136,6 +4136,68 @@ fn cpp_probe_matches_rust_data_bind_context_source_paths_when_available() {
 }
 
 #[test]
+fn rust_imports_view_model_font_assets_as_a_distinct_runtime_type() {
+    let bytes = synthetic_runtime_file(6153, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_object_with_properties(bytes, "FontAsset", |bytes| {
+            push_string_property(bytes, "FontAsset", "name", "authored.ttf");
+            push_uint_property(bytes, "FontAsset", "assetId", 42);
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyAssetFont", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyAssetFont", "name", "font");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceAssetFont", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceAssetFont",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceAssetFont", "propertyValue", 0);
+        });
+    });
+
+    let file = read_runtime_file(&bytes).expect("font view-model fixture imports");
+    let view_model = file.view_model(0).expect("root view model");
+    assert_eq!(
+        view_model.properties[0].type_name,
+        "ViewModelPropertyAssetFont"
+    );
+    let value = view_model.instances[0].values[0].object;
+    assert_eq!(value.type_name, "ViewModelInstanceAssetFont");
+    assert_eq!(
+        file.view_model_instance_value_data_type_for_object(value),
+        Some(RuntimeDataType::AssetFont)
+    );
+    assert_eq!(RuntimeDataType::AssetFont.as_cpp_u32(), 13);
+    assert_eq!(
+        file.view_model_instance_font_asset_index_for_object(value),
+        Some(0)
+    );
+    assert_eq!(
+        file.view_model_instance_asset_index_for_object(value),
+        None,
+        "font identities must not leak through the image-asset accessor"
+    );
+    assert!(matches!(
+        file.view_model_instance_source_data_value_for_object(value),
+        Some(RuntimeDataValue::AssetFont(0))
+    ));
+    assert_eq!(
+        file.resolved_file_asset_for_view_model_instance_asset_object(value)
+            .map(|asset| asset.type_name),
+        Some("FontAsset")
+    );
+}
+
+#[test]
 fn cpp_probe_matches_rust_view_model_instance_asset_snapshots_when_available() {
     let Some(probe) = probe_path() else {
         eprintln!(
@@ -6430,6 +6492,17 @@ fn compare_view_model_instance_value_runtime_result(
                 ));
             }
         }
+        RuntimeDataType::AssetFont => {
+            let rust_value = rust_file
+                .view_model_instance_font_asset_index_for_object(rust_value)
+                .ok_or_else(|| format!("{label}: Rust did not resolve font asset index"))?;
+            if cpp_runtime.asset_index != Some(rust_value) {
+                return Err(format!(
+                    "{label}: font asset index mismatch, C++ {:?}, Rust {rust_value}",
+                    cpp_runtime.asset_index
+                ));
+            }
+        }
         RuntimeDataType::Artboard => {
             let rust_value = rust_file
                 .view_model_instance_artboard_index_for_object(rust_value)
@@ -6528,6 +6601,7 @@ fn compare_view_model_instance_source_data_value_result(
         RuntimeDataValue::Trigger(rust_value)
         | RuntimeDataValue::SymbolListIndex(rust_value)
         | RuntimeDataValue::AssetImage(rust_value)
+        | RuntimeDataValue::AssetFont(rust_value)
         | RuntimeDataValue::Artboard(rust_value) => {
             if cpp_data_value.integer_value != Some(rust_value) {
                 return Err(format!(
@@ -7962,6 +8036,7 @@ fn compare_converter_output(
         | RuntimeConvertedDataValue::Trigger(value)
         | RuntimeConvertedDataValue::SymbolListIndex(value)
         | RuntimeConvertedDataValue::AssetImage(value)
+        | RuntimeConvertedDataValue::AssetFont(value)
         | RuntimeConvertedDataValue::Artboard(value) => assert_eq!(
             cpp_output.integer_value,
             Some(*value),

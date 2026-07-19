@@ -31,6 +31,7 @@ pub enum RuntimeDataType {
     SymbolListIndex = 10,
     AssetImage = 11,
     Artboard = 12,
+    AssetFont = 13,
     Input = 99,
     Any = 100,
 }
@@ -4493,6 +4494,24 @@ impl RuntimeFile {
         value.uint_property("propertyValue")
     }
 
+    pub fn view_model_instance_font_asset_index(&self, value_id: usize) -> Option<u64> {
+        let value = self.object(value_id)?;
+        self.view_model_instance_font_asset_index_for_object(value)
+    }
+
+    pub fn view_model_instance_font_asset_index_for_object(
+        &self,
+        value: &RuntimeObject,
+    ) -> Option<u64> {
+        if self.view_model_instance_value_data_type_for_object(value)
+            != Some(RuntimeDataType::AssetFont)
+        {
+            return None;
+        }
+
+        value.uint_property("propertyValue")
+    }
+
     pub fn view_model_instance_artboard_index(&self, value_id: usize) -> Option<u64> {
         let value = self.object(value_id)?;
         self.view_model_instance_artboard_index_for_object(value)
@@ -4561,6 +4580,9 @@ impl RuntimeFile {
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::AssetImage => Some(RuntimeDataValue::AssetImage(
+                value.uint_property("propertyValue")?,
+            )),
+            RuntimeDataType::AssetFont => Some(RuntimeDataValue::AssetFont(
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::Artboard => Some(RuntimeDataValue::Artboard(
@@ -7419,7 +7441,7 @@ fn cpp_view_model_instance_value_symbol(
     }
 
     // `symbolTypeValue` is a ViewModel data-type discriminant whose domain is
-    // the small RuntimeDataType enum (0..=12, plus 99/100) -- always <= 255. A
+    // the small RuntimeDataType enum (0..=13, plus 99/100) -- always <= 255. A
     // value that does not fit in u8 can only come from a malformed file, so we
     // treat it as "no symbol" (0) via u8::try_from rather than silently
     // truncating with `as u8`. For every in-domain value try_from is identical
@@ -7481,6 +7503,7 @@ pub enum RuntimeDataValue<'a> {
     List(Vec<&'a RuntimeObject>),
     SymbolListIndex(u64),
     AssetImage(u64),
+    AssetFont(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -7498,6 +7521,7 @@ impl RuntimeDataValue<'_> {
             Self::List(_) => RuntimeDataType::List,
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
+            Self::AssetFont(_) => RuntimeDataType::AssetFont,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -7521,6 +7545,7 @@ pub enum RuntimeConvertedDataValue<'a> {
     GeneratedList(Vec<RuntimeGeneratedListItem>),
     SymbolListIndex(u64),
     AssetImage(u64),
+    AssetFont(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -7921,6 +7946,7 @@ impl<'a> From<&RuntimeDataValue<'a>> for RuntimeConvertedDataValue<'a> {
             RuntimeDataValue::List(value) => Self::List(value.clone()),
             RuntimeDataValue::SymbolListIndex(value) => Self::SymbolListIndex(*value),
             RuntimeDataValue::AssetImage(value) => Self::AssetImage(*value),
+            RuntimeDataValue::AssetFont(value) => Self::AssetFont(*value),
             RuntimeDataValue::Artboard(value) => Self::Artboard(*value),
             RuntimeDataValue::ViewModel(value) => Self::ViewModel(value.clone()),
         }
@@ -7941,6 +7967,7 @@ impl RuntimeConvertedDataValue<'_> {
             Self::List(_) | Self::GeneratedList(_) => RuntimeDataType::List,
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
+            Self::AssetFont(_) => RuntimeDataType::AssetFont,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -7959,6 +7986,7 @@ impl RuntimeConvertedDataValue<'_> {
             | Self::Integer(value)
             | Self::Trigger(value)
             | Self::AssetImage(value)
+            | Self::AssetFont(value)
             | Self::Artboard(value) => Some(*value as u32),
             _ => None,
         }
@@ -9349,7 +9377,7 @@ fn object_imports_successfully(
         "ViewModelInstanceListItem" => {
             return context.latest(ImportStackKey::ViewModelInstanceList);
         }
-        "ViewModelInstanceAsset" | "ViewModelInstanceAssetImage" => {
+        "ViewModelInstanceAsset" | "ViewModelInstanceAssetImage" | "ViewModelInstanceAssetFont" => {
             return context.latest(ImportStackKey::Backboard)
                 && context.latest(ImportStackKey::ViewModelInstance);
         }
@@ -9771,6 +9799,7 @@ fn cpp_data_bind_context_value_type(output_type: RuntimeDataType) -> Option<Runt
         | RuntimeDataType::Trigger
         | RuntimeDataType::SymbolListIndex
         | RuntimeDataType::AssetImage
+        | RuntimeDataType::AssetFont
         | RuntimeDataType::Artboard
         | RuntimeDataType::ViewModel
         | RuntimeDataType::Any => Some(output_type),
@@ -11353,6 +11382,7 @@ fn cpp_view_model_instance_value_data_type(type_name: &str) -> RuntimeDataType {
         "ViewModelInstanceViewModel" => RuntimeDataType::ViewModel,
         "ViewModelInstanceSymbolListIndex" => RuntimeDataType::SymbolListIndex,
         "ViewModelInstanceAssetImage" => RuntimeDataType::AssetImage,
+        "ViewModelInstanceAssetFont" => RuntimeDataType::AssetFont,
         "ViewModelInstanceArtboard" => RuntimeDataType::Artboard,
         _ => RuntimeDataType::None,
     }
@@ -11372,6 +11402,7 @@ fn cpp_view_model_property_instance_type_key(type_name: &str) -> Option<u16> {
         "ViewModelPropertyViewModel" => "ViewModelInstanceViewModel",
         "ViewModelPropertySymbolListIndex" => "ViewModelInstanceSymbolListIndex",
         "ViewModelPropertyAssetImage" => "ViewModelInstanceAssetImage",
+        "ViewModelPropertyAssetFont" => "ViewModelInstanceAssetFont",
         "ViewModelPropertyArtboard" => "ViewModelInstanceArtboard",
         _ => return None,
     };

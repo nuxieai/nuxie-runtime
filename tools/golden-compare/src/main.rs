@@ -71,7 +71,13 @@ fn run() -> Result<(), String> {
             Status::UnsupportedFeature => {
                 if options.verify_unsupported_cpp {
                     let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
-                    match run_stream(&options.cpp_runner, entry, &file, &corpus_dir) {
+                    match run_stream(
+                        &options.cpp_runner,
+                        entry,
+                        &file,
+                        &corpus_dir,
+                        RunnerKind::Cpp,
+                    ) {
                         Ok(cpp_stream) => println!(
                             "[unsupported-feature] {}: c++ stream ok ({} bytes)",
                             entry.id,
@@ -160,7 +166,13 @@ fn run() -> Result<(), String> {
             }
             Status::NotYet | Status::Diverges | Status::Exact => {
                 let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
-                match run_stream(&options.cpp_runner, entry, &file, &corpus_dir) {
+                match run_stream(
+                    &options.cpp_runner,
+                    entry,
+                    &file,
+                    &corpus_dir,
+                    RunnerKind::Cpp,
+                ) {
                     Ok(cpp_stream) => {
                         println!(
                             "[{}] {}: c++ stream ok ({} bytes)",
@@ -174,7 +186,13 @@ fn run() -> Result<(), String> {
                         if run_rust {
                             match &options.rust_runner {
                                 Some(rust_runner) => {
-                                    match run_stream(rust_runner, entry, &file, &corpus_dir) {
+                                    match run_stream(
+                                        rust_runner,
+                                        entry,
+                                        &file,
+                                        &corpus_dir,
+                                        RunnerKind::Rust,
+                                    ) {
                                         Ok(rust_stream) if status == Status::Diverges => println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
                                             entry.id,
@@ -371,6 +389,7 @@ struct CorpusEntry {
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<String>,
+    rust_execute_scripts: bool,
     samples: Vec<f32>,
     status: Status,
     verification: VerificationMode,
@@ -386,6 +405,7 @@ impl CorpusEntry {
             artboard: None,
             state_machine: None,
             input_script: None,
+            rust_execute_scripts: false,
             samples: vec![0.0],
             status: Status::NotYet,
             verification: VerificationMode::Exact,
@@ -451,6 +471,10 @@ impl CorpusEntry {
         self.features
             .iter()
             .any(|feature| feature == "scripted-runner-only")
+    }
+
+    fn executes_scripts_in_rust(&self) -> bool {
+        self.rust_execute_scripts
     }
 
     fn effective_status(&self, scripted: bool) -> Status {
@@ -598,6 +622,7 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "artboard" => entry.artboard = Some(parse_string(value, line_number)?),
             "state_machine" => entry.state_machine = Some(parse_string(value, line_number)?),
             "input_script" => entry.input_script = Some(parse_string(value, line_number)?),
+            "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value, line_number)?,
             "samples" => entry.samples = parse_float_array(value, line_number)?,
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
             "verification" => {
@@ -671,6 +696,14 @@ fn parse_float_array(value: &str, line: usize) -> Result<Vec<f32>, String> {
                 .map_err(|error| format!("line {line}: invalid sample {}: {error}", part.trim()))
         })
         .collect()
+}
+
+fn parse_bool(value: &str, line: usize) -> Result<bool, String> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("line {line}: expected true or false")),
+    }
 }
 
 fn array_inner(value: &str, line: usize) -> Result<&str, String> {
@@ -1172,6 +1205,7 @@ path = "tests/unit_tests/assets/layoutish.riv"
 samples = [0.0]
 status = "exact"
 verification = "tolerant(0.25)"
+rust_execute_scripts = true
 features = []
 
 [[file]]
@@ -1190,6 +1224,8 @@ features = ["import-error:invalid-object"]
 
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
+        assert!(entries[0].rust_execute_scripts);
+        assert!(!entries[1].rust_execute_scripts);
         assert_eq!(entries[1].verification, VerificationMode::RejectsMalformed);
     }
 
@@ -1209,8 +1245,9 @@ fn run_stream(
     entry: &CorpusEntry,
     file: &Path,
     corpus_dir: &Path,
+    runner_kind: RunnerKind,
 ) -> Result<String, String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1248,7 +1285,7 @@ fn run_malformed_rejection(
     runner_kind: RunnerKind,
     expected_rust_error: &str,
 ) -> Result<(), String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1339,7 +1376,7 @@ fn run_unsupported_diagnostic(
     corpus_dir: &Path,
     expected_feature: &str,
 ) -> Result<(), String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let mut command = stream_command(runner, entry, file, corpus_dir, RunnerKind::Rust);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1370,9 +1407,18 @@ fn run_unsupported_diagnostic(
     Ok(())
 }
 
-fn stream_command(runner: &Path, entry: &CorpusEntry, file: &Path, corpus_dir: &Path) -> Command {
+fn stream_command(
+    runner: &Path,
+    entry: &CorpusEntry,
+    file: &Path,
+    corpus_dir: &Path,
+    runner_kind: RunnerKind,
+) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(file);
+    if runner_kind == RunnerKind::Rust && entry.executes_scripts_in_rust() {
+        command.arg("--execute-scripts");
+    }
     if let Some(artboard) = &entry.artboard {
         command.arg("--artboard").arg(artboard);
     }

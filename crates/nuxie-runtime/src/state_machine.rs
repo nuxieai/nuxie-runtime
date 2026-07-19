@@ -3,6 +3,7 @@ use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
 use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
+use crate::focus::RuntimeFocusTree;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use crate::scripting::RuntimeScriptInstanceHandle;
 use nuxie_binary::{RuntimeFile, RuntimeObject};
@@ -14,8 +15,9 @@ mod bindables;
 mod instance;
 mod transition_conditions;
 pub(crate) use bindables::{
-    RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean, RuntimeBindableColor,
-    RuntimeBindableEnum, RuntimeBindableInteger, RuntimeBindableList, RuntimeBindableNumber,
+    RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableAssetDefaultViewModelSource,
+    RuntimeBindableAssetValue, RuntimeBindableBoolean, RuntimeBindableColor, RuntimeBindableEnum,
+    RuntimeBindableInteger, RuntimeBindableList, RuntimeBindableNumber,
     RuntimeBindableNumberDefaultViewModelSource, RuntimeBindableString, RuntimeBindableTrigger,
     RuntimeBindableTriggerSource, RuntimeBindableViewModel, RuntimeViewModelTrigger,
     StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
@@ -909,6 +911,7 @@ impl RuntimeStateTransition {
         &self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &ArtboardInstance,
+        focus: &RuntimeFocusTree,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         bindable_integers: &[StateMachineBindableIntegerInstance],
@@ -930,6 +933,7 @@ impl RuntimeStateTransition {
             if !condition.evaluate(
                 scripted_instances,
                 artboard,
+                focus,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -1773,6 +1777,17 @@ pub(crate) enum RuntimeScheduledListenerAction {
         flags: u64,
         global_id: u32,
     },
+    FocusTarget {
+        flags: u64,
+        target_local_id: usize,
+    },
+    FocusClear {
+        flags: u64,
+    },
+    FocusTraversal {
+        flags: u64,
+        traversal_kind: u64,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -1782,7 +1797,7 @@ pub(crate) enum RuntimeListenerViewModelChangeValue {
     Color(u32),
     String(Vec<u8>),
     Enum(u64),
-    Asset(u64),
+    Asset(RuntimeBindableAssetValue),
     Artboard(u64),
     Trigger(u64),
     Boolean(bool),
@@ -1834,6 +1849,15 @@ impl RuntimeScheduledListenerAction {
             "ScriptedListenerAction" => Some(Self::Scripted {
                 flags,
                 global_id: action.object.id,
+            }),
+            "FocusActionTarget" => Some(Self::FocusTarget {
+                flags,
+                target_local_id: usize::try_from(action.object.uint_property("targetId")?).ok()?,
+            }),
+            "FocusActionClear" => Some(Self::FocusClear { flags }),
+            "FocusActionTraversal" => Some(Self::FocusTraversal {
+                flags,
+                traversal_kind: action.object.uint_property("traversalKind").unwrap_or(0),
             }),
             _ => None,
         }
@@ -1925,7 +1949,11 @@ fn runtime_listener_view_model_change_value(
             target.uint_property("propertyValue").unwrap_or(0),
         )),
         "BindablePropertyAsset" => Some(RuntimeListenerViewModelChangeValue::Asset(
-            target.uint_property("propertyValue").unwrap_or(0),
+            RuntimeBindableAssetValue::from_asset_index(
+                target
+                    .uint_property("propertyValue")
+                    .unwrap_or(u64::from(u32::MAX)),
+            ),
         )),
         "BindablePropertyArtboard" => Some(RuntimeListenerViewModelChangeValue::Artboard(
             target.uint_property("propertyValue").unwrap_or(0),
@@ -1967,7 +1995,10 @@ pub(crate) fn perform_scheduled_listener_actions(
             | RuntimeScheduledListenerAction::NumberChange { flags, .. }
             | RuntimeScheduledListenerAction::TriggerChange { flags, .. }
             | RuntimeScheduledListenerAction::ViewModelChange { flags, .. }
-            | RuntimeScheduledListenerAction::Scripted { flags, .. } => *flags,
+            | RuntimeScheduledListenerAction::Scripted { flags, .. }
+            | RuntimeScheduledListenerAction::FocusTarget { flags, .. }
+            | RuntimeScheduledListenerAction::FocusClear { flags }
+            | RuntimeScheduledListenerAction::FocusTraversal { flags, .. } => *flags,
         };
         if flags & 1 != occurrence.value() {
             continue;
@@ -1996,7 +2027,10 @@ pub(crate) fn perform_scheduled_listener_actions(
                 }
             }
             RuntimeScheduledListenerAction::ViewModelChange { .. }
-            | RuntimeScheduledListenerAction::Scripted { .. } => {
+            | RuntimeScheduledListenerAction::Scripted { .. }
+            | RuntimeScheduledListenerAction::FocusTarget { .. }
+            | RuntimeScheduledListenerAction::FocusClear { .. }
+            | RuntimeScheduledListenerAction::FocusTraversal { .. } => {
                 pending_view_model_actions.push(action.clone());
             }
         }
@@ -2441,6 +2475,7 @@ impl StateMachineLayerInstance {
         &mut self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
+        focus: &RuntimeFocusTree,
         layer: &RuntimeStateMachineLayer,
         key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
         elapsed_seconds: f32,
@@ -2496,6 +2531,7 @@ impl StateMachineLayerInstance {
             if !self.update_state(
                 scripted_instances,
                 artboard,
+                focus,
                 layer,
                 layer_index,
                 inputs,
@@ -2539,6 +2575,7 @@ impl StateMachineLayerInstance {
         &mut self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
+        focus: &RuntimeFocusTree,
         layer: &RuntimeStateMachineLayer,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
@@ -2566,6 +2603,7 @@ impl StateMachineLayerInstance {
         if self.try_change_state(
             scripted_instances,
             artboard,
+            focus,
             layer,
             layer.any_state_index,
             layer_index,
@@ -2592,6 +2630,7 @@ impl StateMachineLayerInstance {
         self.try_change_state(
             scripted_instances,
             artboard,
+            focus,
             layer,
             self.current_state_index,
             layer_index,
@@ -2619,6 +2658,7 @@ impl StateMachineLayerInstance {
         &mut self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
+        focus: &RuntimeFocusTree,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
         layer_index: usize,
@@ -2651,6 +2691,7 @@ impl StateMachineLayerInstance {
             let Some((transition_index, state_to_index)) = self.find_random_transition(
                 scripted_instances,
                 artboard,
+                focus,
                 state,
                 state_index,
                 layer_index,
@@ -2707,6 +2748,7 @@ impl StateMachineLayerInstance {
             match transition.allow(
                 scripted_instances,
                 artboard,
+                focus,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -2756,6 +2798,7 @@ impl StateMachineLayerInstance {
         &mut self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &ArtboardInstance,
+        focus: &RuntimeFocusTree,
         state: &RuntimeLayerState,
         state_index: usize,
         layer_index: usize,
@@ -2797,6 +2840,7 @@ impl StateMachineLayerInstance {
             match transition.allow(
                 scripted_instances,
                 artboard,
+                focus,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -3370,6 +3414,7 @@ impl StateMachineLayerInstance {
 mod tests {
     use super::*;
     use crate::animation::RuntimeKeyFrameValue;
+    use crate::view_model::RuntimeFontAssetValue;
 
     fn empty_animation() -> RuntimeLinearAnimation {
         RuntimeLinearAnimation {
@@ -3449,6 +3494,39 @@ mod tests {
                 .and_then(|blend| blend.animation_instance(0))
                 .and_then(|instance| instance.key_frame_value_holder(30)),
             Some(&RuntimeKeyFrameValue::Number(30.0))
+        );
+    }
+
+    #[test]
+    fn listener_asset_clone_retains_live_font_payload() {
+        let live: Arc<[u8]> = vec![1, 3, 5, 7].into();
+        let mut font = RuntimeFontAssetValue::default();
+        assert!(font.set_live_font_bytes(Some(Arc::clone(&live))));
+        let action = RuntimeScheduledListenerAction::ViewModelChange {
+            flags: 0,
+            data_bind_index: 4,
+            value: RuntimeListenerViewModelChangeValue::Asset(
+                RuntimeBindableAssetValue::from_font_value(font),
+            ),
+        };
+
+        let RuntimeScheduledListenerAction::ViewModelChange {
+            value: RuntimeListenerViewModelChangeValue::Asset(value),
+            ..
+        } = action.clone()
+        else {
+            panic!("listener action lost its asset value");
+        };
+        assert_eq!(
+            value.asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert!(
+            value
+                .font_value()
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &live)),
+            "cloning a scheduled listener must retain the same live font"
         );
     }
 }

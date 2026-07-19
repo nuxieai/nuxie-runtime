@@ -16,7 +16,7 @@ use crate::properties::{
     solo_active_component_id_property_key,
 };
 use crate::scripting::RuntimeScriptInstanceHandle;
-use crate::view_model::RuntimeOwnedViewModelListHandle;
+use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle};
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, RuntimeViewModelPointer,
@@ -167,6 +167,9 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
         ("ViewModelInstanceAssetImage", "propertyValue") => {
             cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
         }
+        ("ViewModelInstanceAssetFont", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceAssetFont", "propertyValue")
+        }
         ("ViewModelInstance", "viewModelId") => {
             cached_runtime_data_bind_property_key!("ViewModelInstance", "viewModelId")
         }
@@ -215,6 +218,10 @@ fn runtime_data_bind_view_model_instance_enum_value_key() -> Option<u16> {
 
 fn runtime_data_bind_view_model_instance_asset_value_key() -> Option<u16> {
     cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_font_asset_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceAssetFont", "propertyValue")
 }
 
 pub(crate) fn build_nested_host_data_bind_source_locals(
@@ -443,12 +450,26 @@ pub(super) fn build_artboard_shared_data_bind_converter_states(
         .collect()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeArtboardAssetBindingTarget {
+    Image(usize),
+    Font(usize),
+}
+
+impl RuntimeArtboardAssetBindingTarget {
+    fn is_font(self) -> bool {
+        matches!(self, Self::Font(_))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardImageAssetBindingInstance {
-    target_local_id: usize,
+    target: RuntimeArtboardAssetBindingTarget,
     path: Vec<u32>,
+    path_is_name_based: bool,
     owned_context_source_path: Option<Vec<usize>>,
     default_value: RuntimeDataBindGraphValue,
+    font_value: Option<RuntimeFontAssetValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -461,6 +482,7 @@ pub(crate) enum RuntimeNestedChildContextUpdate {
 #[derive(Debug, Clone)]
 enum RuntimeStatefulViewModelValueUpdate {
     Value(RuntimeDataBindGraphValue),
+    FontAsset(u64),
     ViewModelInstance(usize),
 }
 
@@ -1423,6 +1445,11 @@ fn runtime_owned_view_model_binding_value_for_property_path(
         })
         .or_else(|| {
             context
+                .font_asset_value_by_property_path(property_path)
+                .map(|value| RuntimeDataBindGraphValue::Asset(value.file_asset_index()))
+        })
+        .or_else(|| {
+            context
                 .artboard_value_by_property_path(property_path)
                 .map(RuntimeDataBindGraphValue::Artboard)
         })
@@ -1436,6 +1463,78 @@ fn runtime_owned_view_model_binding_value_for_property_path(
                 .view_model_value_by_property_path(property_path)
                 .map(RuntimeDataBindGraphValue::ViewModel)
         })
+}
+
+fn runtime_font_asset_values_equal(
+    current: &RuntimeFontAssetValue,
+    next: &RuntimeFontAssetValue,
+) -> bool {
+    if current.file_asset_index() != next.file_asset_index() {
+        return false;
+    }
+    match (current.live_font_bytes_arc(), next.live_font_bytes_arc()) {
+        (Some(current), Some(next)) => {
+            Arc::ptr_eq(current, next) || current.as_ref() == next.as_ref()
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn runtime_owned_view_model_font_value_for_retained_context_chain(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[&[usize]],
+    path: &[u32],
+    path_is_name_based: bool,
+    scripting_manifest: bool,
+    retained_source_path: &mut Option<Vec<usize>>,
+) -> Option<RuntimeFontAssetValue> {
+    if let Some(source_path) = retained_source_path.as_deref()
+        && let Some(value) = context.font_asset_value_by_property_path(source_path)
+    {
+        return Some(value.clone());
+    }
+
+    let (source_path, value) = context_chain.iter().find_map(|context_path| {
+        let source_path = context.property_path_for_context_source_path_with_manifest_mode(
+            file,
+            context_path,
+            path,
+            path_is_name_based,
+            scripting_manifest,
+        )?;
+        let value = context.font_asset_value_by_property_path(&source_path)?;
+        Some((source_path, value.clone()))
+    })?;
+    *retained_source_path = Some(source_path);
+    Some(value)
+}
+
+fn runtime_owned_view_model_font_value_for_candidates(
+    file: &RuntimeFile,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    path: &[u32],
+    path_is_name_based: bool,
+    scripting_manifest: bool,
+) -> Option<RuntimeFontAssetValue> {
+    candidates.iter().find_map(|candidate| {
+        candidate.context_chain.iter().find_map(|context_path| {
+            let source_path = candidate
+                .context
+                .property_path_for_context_source_path_with_manifest_mode(
+                    file,
+                    context_path,
+                    path,
+                    path_is_name_based,
+                    scripting_manifest,
+                )?;
+            candidate
+                .context
+                .font_asset_value_by_property_path(&source_path)
+                .cloned()
+        })
+    })
 }
 
 fn runtime_owned_view_model_list_source_for_property_path(
@@ -2093,6 +2192,7 @@ pub(super) fn build_artboard_image_asset_bindings(
     else {
         return Vec::new();
     };
+    let font_asset_id_key = runtime_data_bind_property_key_for_name("TextStyle", "fontAssetId");
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.artboard_data_binds(artboard_index)
@@ -2104,15 +2204,22 @@ pub(super) fn build_artboard_image_asset_bindings(
                 return None;
             }
             let target = data_bind.target?;
-            if target.type_name != "Image" {
-                return None;
-            }
-            if u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
-                != image_asset_id_key
+            let target_local_id = data_bind.target_local_id?;
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let target = if target.type_name == "Image" && property_key == image_asset_id_key {
+                RuntimeArtboardAssetBindingTarget::Image(target_local_id)
+            } else if matches!(target.type_name, "TextStyle" | "TextStylePaint")
+                && Some(property_key) == font_asset_id_key
             {
+                RuntimeArtboardAssetBindingTarget::Font(target_local_id)
+            } else {
                 return None;
-            }
+            };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let path_is_name_based = file
+                .data_bind_is_name_based_for_object(data_bind.object)
+                .unwrap_or(false);
             let default_value = default_instance
                 .as_ref()
                 .and_then(|default_instance| {
@@ -2123,10 +2230,7 @@ pub(super) fn build_artboard_image_asset_bindings(
                     .and_then(|source| runtime_created_view_model_value_for_source(file, source))
                 })
                 .or_else(|| {
-                    if file
-                        .data_bind_is_name_based_for_object(data_bind.object)
-                        .unwrap_or(false)
-                    {
+                    if path_is_name_based {
                         return None;
                     }
                     runtime_created_view_model_value_for_declared_path(file, &path)
@@ -2136,9 +2240,16 @@ pub(super) fn build_artboard_image_asset_bindings(
             }
 
             Some(RuntimeArtboardImageAssetBindingInstance {
-                target_local_id: data_bind.target_local_id?,
+                target,
                 path,
+                path_is_name_based,
                 owned_context_source_path: None,
+                font_value: target.is_font().then(|| {
+                    let RuntimeDataBindGraphValue::Asset(index) = &default_value else {
+                        unreachable!("asset binding default was checked above")
+                    };
+                    RuntimeFontAssetValue::from_file_asset_index(*index)
+                }),
                 default_value,
             })
         })
@@ -3234,7 +3345,9 @@ fn runtime_created_view_model_value_for_source(
         RuntimeDataType::Trigger => Some(RuntimeDataBindGraphValue::Trigger(0)),
         RuntimeDataType::List => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
         RuntimeDataType::SymbolListIndex => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
-        RuntimeDataType::AssetImage => Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX))),
+        RuntimeDataType::AssetImage | RuntimeDataType::AssetFont => {
+            Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
+        }
         RuntimeDataType::Artboard => Some(RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX))),
         _ => None,
     }
@@ -3277,7 +3390,7 @@ fn runtime_created_view_model_value_for_declared_property(
         "ViewModelPropertyTrigger" => Some(RuntimeDataBindGraphValue::Trigger(0)),
         "ViewModelPropertyList" => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
         "ViewModelPropertySymbolListIndex" => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
-        "ViewModelPropertyAssetImage" => {
+        "ViewModelPropertyAssetImage" | "ViewModelPropertyAssetFont" => {
             Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
         }
         "ViewModelPropertyArtboard" => {
@@ -3943,25 +4056,55 @@ impl ArtboardInstance {
         }
 
         for index in 0..self.artboard_image_asset_bindings.len() {
-            let update = {
+            let (update, font_update) = {
                 let binding = &mut self.artboard_image_asset_bindings[index];
-                runtime_owned_view_model_binding_value_for_retained_context_chain(
+                let update = runtime_owned_view_model_binding_value_for_retained_context_chain(
                     file,
                     context,
                     context_chain,
                     &binding.path,
-                    false,
+                    binding.path_is_name_based,
                     allow_full_context_bindings,
                     &mut binding.owned_context_source_path,
-                )
+                );
+                let font_update = binding.target.is_font().then(|| {
+                    runtime_owned_view_model_font_value_for_retained_context_chain(
+                        file,
+                        context,
+                        context_chain,
+                        &binding.path,
+                        binding.path_is_name_based,
+                        allow_full_context_bindings,
+                        &mut binding.owned_context_source_path,
+                    )
+                });
+                (update, font_update.flatten())
             };
             if let Some(value) = update {
+                let font_changed = font_update.as_ref().is_some_and(|font_update| {
+                    self.artboard_image_asset_bindings[index]
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| {
+                            !runtime_font_asset_values_equal(current, font_update)
+                        })
+                });
+                if let Some(font_update) = font_update {
+                    self.artboard_image_asset_bindings[index].font_value = Some(font_update);
+                }
                 let path = self.artboard_image_asset_bindings[index].path.as_slice();
-                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                let value_changed = self.artboard_data_bind_values.get(path) != Some(&value);
+                if !value_changed && !font_changed {
                     continue;
                 }
                 let path = self.artboard_image_asset_bindings[index].path.clone();
-                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                if value_changed {
+                    changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                } else {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_image_asset(index);
+                    changed = true;
+                }
             }
         }
 
@@ -4152,23 +4295,51 @@ impl ArtboardInstance {
         }
 
         for index in 0..self.artboard_image_asset_bindings.len() {
-            let update = {
+            let (update, font_update) = {
                 let binding = &self.artboard_image_asset_bindings[index];
-                runtime_owned_view_model_binding_value_for_candidates(
+                let update = runtime_owned_view_model_binding_value_for_candidates(
                     file,
                     candidates,
                     &binding.path,
-                    false,
+                    binding.path_is_name_based,
                     allow_full_context_bindings,
-                )
+                );
+                let font_update = binding.target.is_font().then(|| {
+                    runtime_owned_view_model_font_value_for_candidates(
+                        file,
+                        candidates,
+                        &binding.path,
+                        binding.path_is_name_based,
+                        allow_full_context_bindings,
+                    )
+                });
+                (update, font_update.flatten())
             };
             if let Some(value) = update {
+                let font_changed = font_update.as_ref().is_some_and(|font_update| {
+                    self.artboard_image_asset_bindings[index]
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| {
+                            !runtime_font_asset_values_equal(current, font_update)
+                        })
+                });
+                if let Some(font_update) = font_update {
+                    self.artboard_image_asset_bindings[index].font_value = Some(font_update);
+                }
                 let path = self.artboard_image_asset_bindings[index].path.as_slice();
-                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                let value_changed = self.artboard_data_bind_values.get(path) != Some(&value);
+                if !value_changed && !font_changed {
                     continue;
                 }
                 let path = self.artboard_image_asset_bindings[index].path.clone();
-                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                if value_changed {
+                    changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                } else {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_image_asset(index);
+                    changed = true;
+                }
             }
         }
 
@@ -4556,7 +4727,38 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            let mut reset_font_binding_indices = Vec::new();
+            if let RuntimeDataBindGraphValue::Asset(file_asset_index) = &value {
+                for (index, binding) in self
+                    .artboard_image_asset_bindings
+                    .iter_mut()
+                    .enumerate()
+                    .filter(|(_, binding)| binding.target.is_font() && binding.path == path)
+                {
+                    // A newly selected ViewModelInstance owns a distinct
+                    // private FontAsset. Do not leak a live font retained by
+                    // the previously bound instance merely because both
+                    // serialized indices happen to match.
+                    let next = RuntimeFontAssetValue::from_file_asset_index(*file_asset_index);
+                    if binding
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| !runtime_font_asset_values_equal(current, &next))
+                    {
+                        binding.font_value = Some(next);
+                        reset_font_binding_indices.push(index);
+                    }
+                }
+            }
+            let value_changed = self.set_artboard_data_bind_value_for_path(&path, value);
+            changed |= value_changed;
+            if !value_changed {
+                for index in reset_font_binding_indices {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_image_asset(index);
+                    changed = true;
+                }
+            }
         }
         for binding in &mut self.artboard_list_bindings {
             let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
@@ -4616,6 +4818,24 @@ impl ArtboardInstance {
     ) -> bool {
         if self.artboard_data_bind_values.get(path) == Some(&value) {
             return false;
+        }
+        if let RuntimeDataBindGraphValue::Asset(file_asset_index) = &value {
+            for binding in self
+                .artboard_image_asset_bindings
+                .iter_mut()
+                .filter(|binding| binding.target.is_font() && binding.path == path)
+            {
+                match binding.font_value.as_mut() {
+                    Some(font_value) => {
+                        font_value.set_file_asset_index(*file_asset_index);
+                    }
+                    None => {
+                        binding.font_value = Some(RuntimeFontAssetValue::from_file_asset_index(
+                            *file_asset_index,
+                        ));
+                    }
+                }
+            }
         }
         let number_value = match &value {
             RuntimeDataBindGraphValue::Number(value) => Some(*value),
@@ -5294,41 +5514,53 @@ impl ArtboardInstance {
             .artboard_data_bind_target_queues
             .drain_dirty_image_assets()
         {
-            let Some((target_local_id, value)) =
-                self.artboard_image_asset_bindings
-                    .get(index)
-                    .map(|binding| {
-                        let value = self
-                            .artboard_data_bind_values
-                            .get(&binding.path)
-                            .cloned()
-                            .unwrap_or_else(|| binding.default_value.clone());
-                        (binding.target_local_id, value)
-                    })
+            let Some((target, value, font_value)) = self
+                .artboard_image_asset_bindings
+                .get(index)
+                .map(|binding| {
+                    let value = self
+                        .artboard_data_bind_values
+                        .get(&binding.path)
+                        .cloned()
+                        .unwrap_or_else(|| binding.default_value.clone());
+                    (binding.target, value, binding.font_value.clone())
+                })
             else {
                 continue;
             };
-            changed |= self.apply_artboard_image_asset_binding_value(target_local_id, &value);
+            changed |= self.apply_artboard_image_asset_binding_value(target, &value, font_value);
         }
         changed
     }
 
     fn apply_artboard_image_asset_binding_value(
         &mut self,
-        target_local_id: usize,
+        target: RuntimeArtboardAssetBindingTarget,
         value: &RuntimeDataBindGraphValue,
+        font_value: Option<RuntimeFontAssetValue>,
     ) -> bool {
-        // Mirrors C++ `src/data_bind/context/context_value_asset_image.cpp`:
-        // applying an asset-image value to an Image target swaps the Image's
-        // asset pointer. Missing/sentinel values use the view-model instance's
-        // private empty ImageAsset, which makes Image::draw return early.
         let RuntimeDataBindGraphValue::Asset(value) = value else {
             return false;
         };
-        let asset_global = self
-            .runtime_file()
-            .and_then(|file| runtime_image_asset_global_for_file_asset_index(file, *value));
-        self.set_image_asset_override(target_local_id, asset_global)
+        match target {
+            RuntimeArtboardAssetBindingTarget::Image(target_local_id) => {
+                // Mirrors C++ `context_value_asset_image.cpp`: missing values
+                // use the private empty ImageAsset, so Image::draw returns.
+                let asset_global = self
+                    .runtime_file()
+                    .and_then(|file| runtime_image_asset_global_for_file_asset_index(file, *value));
+                self.set_image_asset_override(target_local_id, asset_global)
+            }
+            RuntimeArtboardAssetBindingTarget::Font(target_local_id) => {
+                // C++ TextStyle::setAsset swaps the retained FontAsset pointer
+                // without rewriting the serialized fontAssetId property.
+                self.set_text_style_font_override(
+                    target_local_id,
+                    font_value
+                        .unwrap_or_else(|| RuntimeFontAssetValue::from_file_asset_index(*value)),
+                )
+            }
+        }
     }
 
     fn converted_artboard_property_binding_value(
@@ -6185,10 +6417,13 @@ impl ArtboardInstance {
                         .uint_property(slot.local_id, value_key)
                         .map(RuntimeDataBindGraphValue::SymbolListIndex)
                         .map(RuntimeStatefulViewModelValueUpdate::Value),
-                    "ViewModelInstanceAssetImage" | "ViewModelInstanceAssetFont" => self
+                    "ViewModelInstanceAssetImage" => self
                         .uint_property(slot.local_id, value_key)
                         .map(RuntimeDataBindGraphValue::Asset)
                         .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceAssetFont" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeStatefulViewModelValueUpdate::FontAsset),
                     "ViewModelInstanceArtboard" => self
                         .uint_property(slot.local_id, value_key)
                         .map(RuntimeDataBindGraphValue::Artboard)
@@ -6269,6 +6504,9 @@ impl ArtboardInstance {
                     RuntimeStatefulViewModelValueUpdate::Value(
                         RuntimeDataBindGraphValue::Asset(value),
                     ) => context.sync_asset_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::FontAsset(value) => {
+                        context.sync_font_asset_index_by_property_path(&update.property_path, value)
+                    }
                     RuntimeStatefulViewModelValueUpdate::Value(
                         RuntimeDataBindGraphValue::Artboard(value),
                     ) => context.sync_artboard_by_property_path(&update.property_path, value),
@@ -6358,7 +6596,13 @@ impl ArtboardInstance {
                     .map(RuntimeDataBindGraphValue::Enum)
             }
             RuntimeDataBindGraphValue::Asset(_) => {
-                let property_value_key = runtime_data_bind_view_model_instance_asset_value_key()?;
+                let property_value_key = if self.slot(source_local).and_then(|slot| slot.type_name)
+                    == Some("ViewModelInstanceAssetFont")
+                {
+                    runtime_data_bind_view_model_instance_font_asset_value_key()?
+                } else {
+                    runtime_data_bind_view_model_instance_asset_value_key()?
+                };
                 self.uint_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Asset)
             }
@@ -6463,6 +6707,143 @@ mod tests {
             ),
         ])
         .expect("list binding fixture imports")
+    }
+
+    fn font_binding_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", AuthoringValue::Uint(7))],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetFont",
+                vec![property(
+                    "ViewModelPropertyAssetFont",
+                    "name",
+                    AuthoringValue::String("font".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![property(
+                    "ViewModelInstance",
+                    "viewModelId",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+            record(
+                "ViewModelInstanceAssetFont",
+                vec![
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "parentId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "propertyValue",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(100.0)),
+                    property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "Text",
+                vec![property("Text", "parentId", AuthoringValue::Uint(0))],
+            ),
+            record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
+                    property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("TextStyle", "fontAssetId")
+                                .expect("fontAssetId key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![0, 0]),
+                    ),
+                ],
+            ),
+        ])
+        .expect("font binding fixture imports")
+    }
+
+    #[test]
+    fn font_binding_retains_live_font_value_and_applies_text_style_override() {
+        let file = font_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("font binding graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("serialized view model instance builds");
+
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        let serialized = artboard
+            .text_style_font_override(2)
+            .expect("serialized font override was applied");
+        assert_eq!(serialized.file_asset_index(), 0);
+        assert_eq!(serialized.live_font_bytes(), None);
+
+        let live: Arc<[u8]> = vec![1, 2, 3, 4].into();
+        assert!(context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))));
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        let value = artboard
+            .text_style_font_override(2)
+            .expect("font override was applied to TextStylePaint");
+        assert_eq!(
+            value.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert_eq!(value.live_font_bytes(), Some(live.as_ref()));
+
+        assert!(context.set_font_asset_index_by_property_name("font", 0));
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        let file_backed = artboard
+            .text_style_font_override(2)
+            .expect("file-backed font override was reapplied");
+        assert_eq!(file_backed.file_asset_index(), 0);
+        assert_eq!(
+            file_backed.live_font_bytes(),
+            Some(live.as_ref()),
+            "assigning a file index preserves the private live font, while resolution lets the file asset win"
+        );
     }
 
     fn list_binding(

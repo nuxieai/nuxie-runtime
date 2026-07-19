@@ -24,6 +24,7 @@ use crate::draw::{
     runtime_path_geometry_commands, runtime_shape_paint_command,
 };
 use crate::properties::{joystick_x_property_key, joystick_y_property_key, property_key_for_name};
+use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
@@ -1505,7 +1506,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         }
         Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
         Some("TextStylePaint") => {
-            property_key_for_name("TextStyle", "fontSize") == Some(property_key)
+            ["fontSize", "fontAssetId"]
+                .into_iter()
+                .any(|name| property_key_for_name("TextStyle", name) == Some(property_key))
+                && data_bind.converter_global.is_none()
         }
         Some("TrimPath") => {
             ["start", "end", "offset"]
@@ -1633,7 +1637,7 @@ impl<'a> StaticTextSlice<'a> {
             .iter()
             .filter(|style| participating_style_locals.remove(&style.local_id))
         {
-            if style.font_bytes(instance).is_none()
+            if style.font_bytes(runtime, instance).is_none()
                 || !self.style_font_size(runtime, instance, style)?.is_finite()
                 || !self
                     .style_line_height(runtime, instance, style)?
@@ -2028,7 +2032,7 @@ impl<'a> StaticTextSlice<'a> {
             return Ok(None);
         }
         let letter_spacing = self.letter_spacing(runtime, instance);
-        let Some(font_bytes) = base_style.font_bytes(instance) else {
+        let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             // Mirrors src/importers/file_asset_importer.cpp: with no
             // FileAssetLoader and no in-band contents, a hosted FontAsset
             // resolves successfully but has no decoded font.
@@ -2322,7 +2326,7 @@ impl<'a> StaticTextSlice<'a> {
                 let center_x = positioned.x + glyph.advance * 0.5;
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 let style = &self.styles[glyph.style_index];
-                if let Some(style_font_bytes) = style.font_bytes(instance) {
+                if let Some(style_font_bytes) = style.font_bytes(runtime, instance) {
                     let style_font = SkrifaFontRef::new(style_font_bytes)
                         .context("failed to parse font for outlines")?;
                     let outlines = style_font.outline_glyphs();
@@ -2391,7 +2395,7 @@ impl<'a> StaticTextSlice<'a> {
         if text.is_empty() || font_size < 0.0 {
             return self.unshaped_local_bounds(runtime, instance, None);
         }
-        let Some(font_bytes) = base_style.font_bytes(instance) else {
+        let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             return self.unshaped_local_bounds(runtime, instance, None);
         };
 
@@ -2527,7 +2531,7 @@ impl<'a> StaticTextSlice<'a> {
                 }
             };
         }
-        let Some(font_bytes) = base_style.font_bytes(instance) else {
+        let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             return match purpose {
                 StaticTextLayoutBoundsPurpose::Measure => Ok(Some((0.0, 0.0, 0.0, 0.0))),
                 StaticTextLayoutBoundsPurpose::Controlled => {
@@ -2808,7 +2812,7 @@ impl<'a> StaticTextSlice<'a> {
                     .styles
                     .get(style_index)
                     .context("line references a missing TextStylePaint")?;
-                let Some(font_bytes) = style.font_bytes(instance) else {
+                let Some(font_bytes) = style.font_bytes(runtime, instance) else {
                     continue;
                 };
                 let font = SkrifaFontRef::new(font_bytes)
@@ -2982,7 +2986,7 @@ impl<'a> StaticTextSlice<'a> {
         font_scale: f32,
     ) -> Result<f32> {
         let style = &self.styles[style_index];
-        let Some(font_bytes) = style.font_bytes(instance) else {
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
             return Ok(0.0);
         };
         let font =
@@ -3024,7 +3028,7 @@ impl<'a> StaticTextSlice<'a> {
         font_scale: f32,
     ) -> Result<f32> {
         let style = &self.styles[style_index];
-        let Some(font_bytes) = style.font_bytes(instance) else {
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
             return Ok(0.0);
         };
         let font =
@@ -3085,7 +3089,7 @@ impl<'a> StaticTextSlice<'a> {
             }
             let style_index = self.style_index_for_local(run.style_local)?;
             let style = &self.styles[style_index];
-            if style.font_bytes(instance).is_some() {
+            if style.font_bytes(runtime, instance).is_some() {
                 max_size = max_size.max(self.style_font_size(runtime, instance, style)?);
             }
         }
@@ -3228,7 +3232,7 @@ impl<'a> StaticTextSlice<'a> {
             .styles
             .get(style_index)
             .with_context(|| format!("missing TextStylePaint index {style_index}"))?;
-        let Some(font_bytes) = style.font_bytes(instance) else {
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
             return Ok(Vec::new());
         };
         let font_size = self.style_font_size(runtime, instance, style)?;
@@ -3368,7 +3372,7 @@ impl<'a> StaticTextSlice<'a> {
         if !text.is_empty()
             && let Ok(base_style) = self.base_style()
             && self.style_font_size(runtime, instance, base_style)? >= 0.0
-            && let Some(font_bytes) = base_style.font_bytes(instance)
+            && let Some(font_bytes) = base_style.font_bytes(runtime, instance)
         {
             let harf_font =
                 HarfFontRef::new(font_bytes).context("failed to parse font for clip layout")?;
@@ -4159,8 +4163,12 @@ impl<'a> StaticTextStyle<'a> {
 
     fn font_bytes<'instance>(
         &'instance self,
+        runtime: &'instance RuntimeFile,
         instance: &'instance ArtboardInstance,
     ) -> Option<&'instance [u8]> {
+        if let Some(value) = instance.text_style_font_override(self.local_id) {
+            return runtime_font_asset_bytes(runtime, instance, value);
+        }
         self.font_bytes.or_else(|| {
             self.font_asset_id
                 .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
@@ -5726,6 +5734,32 @@ fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option
     None
 }
 
+/// Resolve the effective bytes of a data-bound font value with the same
+/// precedence as C++ `DataBindContextValueAssetFont::apply`.
+///
+/// A valid file FontAsset always wins, even when it has no loaded bytes. The
+/// private live font is consulted only when the serialized index is missing,
+/// out of range, or names a non-font asset.
+pub(crate) fn runtime_font_asset_bytes<'a>(
+    runtime: &'a RuntimeFile,
+    instance: &'a ArtboardInstance,
+    value: &'a RuntimeFontAssetValue,
+) -> Option<&'a [u8]> {
+    if let Ok(file_asset_index) = usize::try_from(value.file_asset_index())
+        && let Some(font_asset) = runtime.file_asset(file_asset_index)
+        && font_asset.type_name == "FontAsset"
+    {
+        return embedded_file_asset_bytes(runtime, font_asset.id).or_else(|| {
+            font_asset
+                .uint_property("assetId")
+                .and_then(|asset_id| u32::try_from(asset_id).ok())
+                .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
+        });
+    }
+
+    value.live_font_bytes()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5858,6 +5892,60 @@ mod tests {
         assert!(
             (actual - expected).abs() <= 0.001,
             "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn data_bound_font_resolution_prefers_file_assets_then_private_live_font() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let embedded =
+            embedded_file_asset_bytes(&runtime, runtime.file_asset(0).expect("font asset").id)
+                .expect("fixture embeds font bytes");
+        let live: std::sync::Arc<[u8]> = vec![1, 2, 3, 4].into();
+        let mut value = RuntimeFontAssetValue::default();
+
+        assert!(value.set_live_font_bytes(Some(std::sync::Arc::clone(&live))));
+        assert_eq!(
+            runtime_font_asset_bytes(&runtime, &instance, &value),
+            Some(live.as_ref())
+        );
+
+        assert!(value.set_file_asset_index(0));
+        assert_eq!(
+            runtime_font_asset_bytes(&runtime, &instance, &value),
+            Some(embedded),
+            "a valid file FontAsset wins over the retained private live font"
+        );
+
+        assert!(value.set_file_asset_index(u64::from(u32::MAX)));
+        assert_eq!(
+            runtime_font_asset_bytes(&runtime, &instance, &value),
+            Some(live.as_ref())
+        );
+    }
+
+    #[test]
+    fn data_bound_live_font_override_is_used_and_dirties_text_geometry() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let style = slice.base_style().expect("fixture has a base style");
+        let live: std::sync::Arc<[u8]> = fixture_font_bytes().into();
+        let mut value = RuntimeFontAssetValue::default();
+        assert!(value.set_live_font_bytes(Some(std::sync::Arc::clone(&live))));
+        let path_epoch = instance.path_epoch();
+        let layout_epoch = instance.layout_epoch();
+
+        assert!(instance.set_text_style_font_override(style.local_id, value.clone()));
+        assert_eq!(style.font_bytes(&runtime, &instance), Some(live.as_ref()));
+        assert!(instance.path_epoch() > path_epoch);
+        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(
+            !instance.set_text_style_font_override(style.local_id, value),
+            "reapplying the same live font must not re-dirty text"
         );
     }
 

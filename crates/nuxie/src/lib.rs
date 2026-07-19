@@ -816,6 +816,15 @@ impl File {
         &self.graph
     }
 
+    #[cfg(feature = "scripting")]
+    fn advance_detached_view_models(&self) -> bool {
+        self.scripts
+            .borrow()
+            .ready
+            .as_ref()
+            .is_some_and(|ready| ready.vm.advance_detached_view_models())
+    }
+
     pub fn artboard_count(&self) -> usize {
         self.graph.artboards.len()
     }
@@ -983,6 +992,10 @@ impl<'a> ArtboardInstance<'a> {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1021,6 +1034,10 @@ impl<'a> ArtboardInstance<'a> {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1219,6 +1236,10 @@ impl<'a> ArtboardInstance<'a> {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1275,6 +1296,10 @@ impl<'a> ArtboardInstance<'a> {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1463,6 +1488,10 @@ impl OwnedArtboardInstance {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1494,6 +1523,10 @@ impl OwnedArtboardInstance {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1647,6 +1680,10 @@ impl OwnedArtboardInstance {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1703,6 +1740,10 @@ impl OwnedArtboardInstance {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 

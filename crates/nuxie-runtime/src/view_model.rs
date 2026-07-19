@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use nuxie_binary::{
     RuntimeDataValue, RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
@@ -1520,6 +1521,7 @@ pub struct RuntimeOwnedViewModelInstance {
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
+    font_assets: Vec<RuntimeOwnedViewModelFontAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
@@ -1823,6 +1825,21 @@ impl RuntimeOwnedViewModelAssetSourceHandle {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelFontAssetSourceHandle {
+    property_path: Vec<usize>,
+}
+
+impl RuntimeOwnedViewModelFontAssetSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_path[self.property_path.len() - 1]
+    }
+
+    pub fn path(&self) -> &[usize] {
+        &self.property_path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelArtboardSourceHandle {
     property_path: Vec<usize>,
 }
@@ -2032,6 +2049,32 @@ struct RuntimeOwnedViewModelListItem {
     instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
 }
 
+fn reset_runtime_owned_triggers(triggers: &mut [RuntimeOwnedViewModelTrigger]) -> bool {
+    let mut changed = false;
+    for trigger in triggers {
+        if trigger.value != 0 {
+            trigger.value = 0;
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn collect_runtime_owned_list_children(
+    lists: &[RuntimeOwnedViewModelList],
+    children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+) {
+    for list in lists {
+        children.extend(
+            list.value
+                .borrow()
+                .items
+                .iter()
+                .map(|item| Rc::clone(&item.instance)),
+        );
+    }
+}
+
 impl RuntimeOwnedViewModelListItem {
     fn new(instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
@@ -2047,6 +2090,104 @@ impl RuntimeOwnedViewModelListItem {
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,
     value: u64,
+}
+
+/// The two-part value stored by C++ `ViewModelInstanceAssetFont`.
+///
+/// `file_asset_index` is the serialized `propertyValue` and names a dense
+/// file-asset entry. `live_font_bytes` is the private runtime-only FontAsset
+/// used when that index does not resolve to a file FontAsset. Assigning a live
+/// font sets the index to the C++ missing-id sentinel; assigning a file index
+/// deliberately preserves the private value, matching the upstream object.
+#[derive(Debug, Clone)]
+pub struct RuntimeFontAssetValue {
+    file_asset_index: u64,
+    live_font_bytes: Option<Arc<[u8]>>,
+}
+
+impl RuntimeFontAssetValue {
+    pub const MISSING_FILE_ASSET_INDEX: u64 = u32::MAX as u64;
+
+    pub fn from_file_asset_index(file_asset_index: u64) -> Self {
+        Self {
+            file_asset_index,
+            live_font_bytes: None,
+        }
+    }
+
+    pub fn file_asset_index(&self) -> u64 {
+        self.file_asset_index
+    }
+
+    pub fn live_font_bytes(&self) -> Option<&[u8]> {
+        self.live_font_bytes.as_deref()
+    }
+
+    pub fn live_font_bytes_arc(&self) -> Option<&Arc<[u8]>> {
+        self.live_font_bytes.as_ref()
+    }
+
+    pub(crate) fn same_runtime_value(&self, value: &Self) -> bool {
+        if self.file_asset_index != value.file_asset_index {
+            return false;
+        }
+        match (&self.live_font_bytes, &value.live_font_bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
+        if self.file_asset_index == file_asset_index {
+            return false;
+        }
+        self.file_asset_index = file_asset_index;
+        true
+    }
+
+    pub(crate) fn set_live_font_bytes(&mut self, font_bytes: Option<Arc<[u8]>>) -> bool {
+        let same_live_font = match (&self.live_font_bytes, &font_bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        };
+        let was_missing = self.file_asset_index == Self::MISSING_FILE_ASSET_INDEX;
+        self.file_asset_index = Self::MISSING_FILE_ASSET_INDEX;
+        if same_live_font {
+            return !was_missing;
+        }
+        self.live_font_bytes = font_bytes;
+        true
+    }
+
+    /// Apply the complete value carried by a font data bind.
+    ///
+    /// This deliberately differs from [`Self::set_file_asset_index`]. A
+    /// public `propertyValue` write preserves the private live font in C++,
+    /// while `ViewModelInstanceAssetFont::applyValue(DataValueInteger*)`
+    /// first applies (and therefore clears or replaces) the retained Font
+    /// payload before falling back to the serialized file-asset index.
+    pub(crate) fn apply_data_bind_value(&mut self, value: &Self) -> bool {
+        if self.same_runtime_value(value) {
+            return false;
+        }
+        self.file_asset_index = value.file_asset_index;
+        self.live_font_bytes = value.live_font_bytes.clone();
+        true
+    }
+}
+
+impl Default for RuntimeFontAssetValue {
+    fn default() -> Self {
+        Self::from_file_asset_index(Self::MISSING_FILE_ASSET_INDEX)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelFontAsset {
+    property_index: usize,
+    value: RuntimeFontAssetValue,
 }
 
 #[derive(Debug, Clone)]
@@ -2084,6 +2225,8 @@ struct RuntimeOwnedViewModelViewModel {
     imported_lists: BTreeMap<u32, Vec<RuntimeOwnedViewModelList>>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     imported_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelAsset>>,
+    font_assets: Vec<RuntimeOwnedViewModelFontAsset>,
+    imported_font_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelFontAsset>>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     imported_artboards: BTreeMap<u32, Vec<RuntimeOwnedViewModelArtboard>>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
@@ -2350,6 +2493,7 @@ impl RuntimeOwnedViewModelViewModel {
             ),
             lists: active_values!(&self.lists, self.imported_lists),
             assets: active_values!(&self.assets, self.imported_assets),
+            font_assets: active_values!(&self.font_assets, self.imported_font_assets),
             artboards: active_values!(&self.artboards, self.imported_artboards),
             triggers: active_values!(&self.triggers, self.imported_triggers),
             view_models: match self.value {
@@ -2385,6 +2529,37 @@ impl RuntimeOwnedViewModelViewModel {
                         .find(|asset| asset.property_index == property_index)
                 })
                 .map(|asset| asset.value),
+            _ => None,
+        }
+    }
+
+    fn font_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeFontAssetValue> {
+        self.font_assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(|asset| &asset.value)
+    }
+
+    fn active_font_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeFontAssetValue> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.font_asset_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_font_assets
+                .get(&object_id)
+                .and_then(|assets| {
+                    assets
+                        .iter()
+                        .find(|asset| asset.property_index == property_index)
+                })
+                .map(|asset| &asset.value),
             _ => None,
         }
     }
@@ -2436,6 +2611,42 @@ impl RuntimeOwnedViewModelViewModel {
                 })
                 .map(|trigger| trigger.value),
             _ => None,
+        }
+    }
+
+    /// Mirrors the recursive portion of C++
+    /// `ViewModelInstanceViewModel::advanced()` for the currently selected
+    /// nested instance. Shared list children are returned to the caller so it
+    /// can recurse after releasing this instance's mutable borrow.
+    fn advance_script_frame(
+        &mut self,
+        shared_children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    ) -> bool {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                let mut changed = reset_runtime_owned_triggers(&mut self.triggers);
+                collect_runtime_owned_list_children(&self.lists, shared_children);
+                for child in &mut self.children {
+                    changed |= child.advance_script_frame(shared_children);
+                }
+                changed
+            }
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let mut changed = self
+                    .imported_triggers
+                    .get_mut(&object_id)
+                    .is_some_and(|triggers| reset_runtime_owned_triggers(triggers));
+                if let Some(lists) = self.imported_lists.get(&object_id) {
+                    collect_runtime_owned_list_children(lists, shared_children);
+                }
+                if let Some(children) = self.imported_children.get_mut(&object_id) {
+                    for child in children {
+                        changed |= child.advance_script_frame(shared_children);
+                    }
+                }
+                changed
+            }
+            RuntimeViewModelPointer::Null | RuntimeViewModelPointer::DataContextRoot => false,
         }
     }
 
@@ -2627,6 +2838,58 @@ impl RuntimeOwnedViewModelViewModel {
         }
         asset.value = value;
         true
+    }
+
+    fn set_font_asset_index_by_property_name(
+        &mut self,
+        property_name: &str,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_font_asset_index_by_property_index(property_index, file_asset_index)
+    }
+
+    fn set_font_asset_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        asset.value.set_file_asset_index(file_asset_index)
+    }
+
+    fn set_live_font_bytes_by_property_name(
+        &mut self,
+        property_name: &str,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_live_font_bytes_by_property_index(property_index, font_bytes)
+    }
+
+    fn set_live_font_bytes_by_property_index(
+        &mut self,
+        property_index: usize,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        asset.value.set_live_font_bytes(font_bytes)
     }
 
     fn set_artboard_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
@@ -2843,6 +3106,78 @@ impl RuntimeOwnedViewModelViewModel {
         }
         current.value = value;
         true
+    }
+
+    fn sync_font_asset_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        file_asset_index: u64,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.value.set_file_asset_index(file_asset_index)
+    }
+
+    fn sync_live_font_bytes_by_property_index(
+        &mut self,
+        property_index: usize,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.value.set_live_font_bytes(font_bytes)
+    }
+
+    fn apply_font_asset_data_bind_value_by_property_index(
+        &mut self,
+        property_index: usize,
+        value: &RuntimeFontAssetValue,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.value.apply_data_bind_value(value)
     }
 
     fn sync_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
@@ -4204,6 +4539,88 @@ fn runtime_owned_view_model_imported_assets(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_font_assets(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Vec<RuntimeOwnedViewModelFontAsset> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    (property.type_name == "ViewModelPropertyAssetFont").then_some(
+                        RuntimeOwnedViewModelFontAsset {
+                            property_index,
+                            value: RuntimeFontAssetValue::default(),
+                        },
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_font_assets_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelFontAsset> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyAssetFont" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let file_asset_index =
+                        file.view_model_instance_font_asset_index_for_object(source)?;
+                    Some(RuntimeOwnedViewModelFontAsset {
+                        property_index,
+                        value: RuntimeFontAssetValue::from_file_asset_index(file_asset_index),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_font_assets(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelFontAsset>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_font_assets_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_owned_view_model_artboards(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -4683,6 +5100,16 @@ fn runtime_owned_view_model_property_children(
                         runtime_owned_view_model_imported_assets(file, view_model_index)
                     })
                     .unwrap_or_default(),
+                font_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_font_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
+                imported_font_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_font_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 artboards: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_artboards(file, view_model_index)
@@ -4747,6 +5174,11 @@ impl RuntimeOwnedViewModelInstance {
         self.boolean_value_by_property_index(property_index)
     }
 
+    pub fn trigger_value_by_property_name(&self, property_name: &str) -> Option<u64> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.trigger_value_by_property_index(property_index)
+    }
+
     pub fn nested_view_model_selection_by_property_name(
         &self,
         property_name: &str,
@@ -4801,6 +5233,25 @@ impl RuntimeOwnedViewModelInstance {
             self.mark_mutated();
         }
         changed
+    }
+
+    /// Advance the values stored directly in this instance and in embedded
+    /// view-model properties. C++ `ViewModelInstance::advanced()` also walks
+    /// list items; those are shared `Rc` instances in Rust, so they are
+    /// returned for recursion after this `RefCell` borrow is released.
+    pub(crate) fn advance_script_frame_local(
+        &mut self,
+    ) -> (bool, Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>) {
+        let mut shared_children = Vec::new();
+        let mut changed = reset_runtime_owned_triggers(&mut self.triggers);
+        collect_runtime_owned_list_children(&self.lists, &mut shared_children);
+        for view_model in &mut self.view_models {
+            changed |= view_model.advance_script_frame(&mut shared_children);
+        }
+        if changed {
+            self.mark_mutated();
+        }
+        (changed, shared_children)
     }
 
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
@@ -4879,6 +5330,11 @@ impl RuntimeOwnedViewModelInstance {
                 runtime_owned_view_model_assets_for_instance(file, view_model_index, instance)
             })
             .unwrap_or_else(|| runtime_owned_view_model_assets(file, view_model_index));
+        let font_assets = instance
+            .map(|instance| {
+                runtime_owned_view_model_font_assets_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_font_assets(file, view_model_index));
         let artboards = instance
             .map(|instance| {
                 runtime_owned_view_model_artboards_for_instance(file, view_model_index, instance)
@@ -4910,6 +5366,7 @@ impl RuntimeOwnedViewModelInstance {
             symbol_list_indices,
             lists,
             assets,
+            font_assets,
             artboards,
             triggers,
             view_models,
@@ -5874,6 +6331,12 @@ impl RuntimeOwnedViewModelInstance {
         )
     }
 
+    pub(crate) fn script_list_children(&self) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        let mut children = Vec::new();
+        collect_runtime_owned_list_children(&self.lists, &mut children);
+        children
+    }
+
     pub(crate) fn push_list_item_by_property_name(
         &mut self,
         property_name: &str,
@@ -6263,6 +6726,263 @@ impl RuntimeOwnedViewModelInstance {
         let property_index = view_model.property_index_by_name(asset_name)?;
         if !view_model
             .assets
+            .iter()
+            .any(|asset| asset.property_index == property_index)
+        {
+            return None;
+        }
+        let mut property_path = view_model_path;
+        property_path.push(property_index);
+        Some(property_path)
+    }
+
+    pub fn font_asset_value_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<&RuntimeFontAssetValue> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.font_asset_value_by_property_index(property_index)
+    }
+
+    pub fn set_font_asset_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        let changed = asset.value.set_file_asset_index(file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    pub fn set_font_asset_index_by_property_name(
+        &mut self,
+        property_name: &str,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_font_asset_index_by_property_index(property_index, file_asset_index)
+    }
+
+    pub fn set_live_font_bytes_by_property_index(
+        &mut self,
+        property_index: usize,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        let changed = asset.value.set_live_font_bytes(font_bytes);
+        self.track_mutation(changed)
+    }
+
+    pub fn set_live_font_bytes_by_property_name(
+        &mut self,
+        property_name: &str,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_live_font_bytes_by_property_index(property_index, font_bytes)
+    }
+
+    pub fn font_asset_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelFontAssetSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.font_assets
+            .iter()
+            .any(|asset| asset.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelFontAssetSourceHandle {
+                property_path: vec![property_index],
+            })
+    }
+
+    pub fn font_asset_source_handle_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelFontAssetSourceHandle> {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let property_path = self.font_asset_property_path_by_names(&property_path)?;
+        Some(RuntimeOwnedViewModelFontAssetSourceHandle { property_path })
+    }
+
+    pub fn set_font_asset_index_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelFontAssetSourceHandle,
+        file_asset_index: u64,
+    ) -> bool {
+        self.set_font_asset_index_by_property_path(&handle.property_path, file_asset_index)
+    }
+
+    pub fn set_live_font_bytes_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelFontAssetSourceHandle,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        self.set_live_font_bytes_by_property_path(&handle.property_path, font_bytes)
+    }
+
+    pub fn set_font_asset_index_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        file_asset_index: u64,
+    ) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_font_asset_index_by_property_names(&property_path, file_asset_index)
+    }
+
+    pub fn set_live_font_bytes_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_live_font_bytes_by_property_names(&property_path, font_bytes)
+    }
+
+    fn set_font_asset_index_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        file_asset_index: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_font_asset_index_by_property_name(property_path[0], file_asset_index);
+        }
+        let Some((asset_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed =
+            view_model.set_font_asset_index_by_property_name(asset_name, file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    fn set_live_font_bytes_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_live_font_bytes_by_property_name(property_path[0], font_bytes);
+        }
+        let Some((asset_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed = view_model.set_live_font_bytes_by_property_name(asset_name, font_bytes);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn set_font_asset_index_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        file_asset_index: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_font_asset_index_by_property_index(property_path[0], file_asset_index);
+        }
+        let Some((asset_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed =
+            view_model.set_font_asset_index_by_property_index(*asset_index, file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn set_live_font_bytes_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
+        }
+        let Some((asset_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed = view_model.set_live_font_bytes_by_property_index(*asset_index, font_bytes);
+        self.track_mutation(changed)
+    }
+
+    fn font_asset_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
+        if property_path.len() == 1 {
+            let property_index = self.property_index_by_name(property_path[0])?;
+            return self
+                .font_assets
+                .iter()
+                .any(|asset| asset.property_index == property_index)
+                .then_some(vec![property_index]);
+        }
+
+        let (asset_name, view_model_names) = property_path.split_last()?;
+        let (view_model_path, view_model) =
+            self.view_model_property_path_by_names(view_model_names)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        let property_index = view_model.property_index_by_name(asset_name)?;
+        if !view_model
+            .font_assets
             .iter()
             .any(|asset| asset.property_index == property_index)
         {
@@ -6920,6 +7640,71 @@ impl RuntimeOwnedViewModelInstance {
         self.track_mutation(changed)
     }
 
+    pub(crate) fn sync_font_asset_index_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        file_asset_index: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_font_asset_index_by_property_index(property_path[0], file_asset_index);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed =
+            view_model.sync_font_asset_index_by_property_index(*property_index, file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_live_font_bytes_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed =
+            view_model.sync_live_font_bytes_by_property_index(*property_index, font_bytes);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn apply_font_asset_data_bind_value_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: &RuntimeFontAssetValue,
+    ) -> bool {
+        if property_path.len() == 1 {
+            let Some(asset) = self
+                .font_assets
+                .iter_mut()
+                .find(|asset| asset.property_index == property_path[0])
+            else {
+                return false;
+            };
+            let changed = asset.value.apply_data_bind_value(value);
+            return self.track_mutation(changed);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed =
+            view_model.apply_font_asset_data_bind_value_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
     pub(crate) fn sync_artboard_by_property_path(
         &mut self,
         property_path: &[usize],
@@ -7312,6 +8097,50 @@ impl RuntimeOwnedViewModelInstance {
         match parent {
             Some(view_model) => view_model.active_asset_value_by_property_index(property_index),
             None => self.asset_value_by_property_index(property_index),
+        }
+    }
+
+    fn font_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeFontAssetValue> {
+        self.font_assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(|asset| &asset.value)
+    }
+
+    pub(crate) fn font_asset_value_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<&RuntimeFontAssetValue> {
+        if property_path.len() == 1 {
+            return self.font_asset_value_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        view_model.active_font_asset_value_by_property_index(*property_index)
+    }
+
+    pub(crate) fn font_asset_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<&RuntimeFontAssetValue> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.font_asset_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => {
+                view_model.active_font_asset_value_by_property_index(property_index)
+            }
+            None => self.font_asset_value_by_property_index(property_index),
         }
     }
 
@@ -8307,6 +9136,52 @@ mod owned_context_tests {
         .expect("symbol-list-index order fixture imports")
     }
 
+    fn nested_trigger_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("child".to_owned()),
+                    ),
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Child".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyTrigger",
+                vec![property(
+                    "ViewModelPropertyTrigger",
+                    "name",
+                    AuthoringValue::String("fire".to_owned()),
+                )],
+            ),
+        ])
+        .expect("nested trigger fixture imports")
+    }
+
     #[test]
     fn generated_artboard_property_starts_unassigned() {
         let file = RuntimeFile::from_authoring_records(vec![
@@ -8336,6 +9211,180 @@ mod owned_context_tests {
             context.artboard_value_by_property_path(&[0]),
             Some(u64::from(u32::MAX))
         );
+    }
+
+    #[test]
+    fn font_assets_preserve_file_identity_and_private_live_value_without_becoming_images() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", AuthoringValue::Uint(7))],
+            ),
+            record(
+                "ImageAsset",
+                vec![property("ImageAsset", "assetId", AuthoringValue::Uint(8))],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Main".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetFont",
+                vec![property(
+                    "ViewModelPropertyAssetFont",
+                    "name",
+                    AuthoringValue::String("font".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetImage",
+                vec![property(
+                    "ViewModelPropertyAssetImage",
+                    "name",
+                    AuthoringValue::String("image".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Default".to_owned()),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceAssetFont",
+                vec![
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "propertyValue",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceAssetImage",
+                vec![
+                    property(
+                        "ViewModelInstanceAssetImage",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(1),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetImage",
+                        "propertyValue",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+        ])
+        .expect("font asset view-model fixture imports");
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("imported view-model instance");
+
+        assert_eq!(
+            context
+                .font_asset_value_by_property_name("font")
+                .map(RuntimeFontAssetValue::file_asset_index),
+            Some(0)
+        );
+        assert!(
+            context
+                .asset_source_handle_by_property_name("font")
+                .is_none()
+        );
+        assert!(
+            context
+                .font_asset_source_handle_by_property_name("image")
+                .is_none()
+        );
+        assert_eq!(context.asset_value_by_property_path(&[1]), Some(1));
+
+        let live: Arc<[u8]> = vec![1, 2, 3, 4].into();
+        assert!(context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))));
+        let live_value = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(
+            live_value.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert!(
+            live_value
+                .live_font_bytes_arc()
+                .is_some_and(|value| Arc::ptr_eq(value, &live))
+        );
+        assert!(
+            !context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))),
+            "reassigning the same live font pointer is a no-op once the sentinel is set"
+        );
+
+        assert!(context.set_font_asset_index_by_property_name("font", 0));
+        let file_value = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(file_value.file_asset_index(), 0);
+        assert!(
+            file_value
+                .live_font_bytes_arc()
+                .is_some_and(|value| Arc::ptr_eq(value, &live)),
+            "setting a file identity preserves the private live fallback like C++"
+        );
+
+        let listener_live: Arc<[u8]> = vec![5, 6, 7, 8].into();
+        let mut listener_value = RuntimeFontAssetValue::default();
+        assert!(listener_value.set_live_font_bytes(Some(Arc::clone(&listener_live))));
+        assert!(context.apply_font_asset_data_bind_value_by_property_path(&[0], &listener_value,));
+        let applied_live = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(
+            applied_live.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert!(
+            applied_live
+                .live_font_bytes_arc()
+                .is_some_and(|value| Arc::ptr_eq(value, &listener_live)),
+            "a listener/data-bind round-trip retains the live font payload"
+        );
+
+        let listener_file_value = RuntimeFontAssetValue::from_file_asset_index(0);
+        assert!(
+            context.apply_font_asset_data_bind_value_by_property_path(&[0], &listener_file_value,)
+        );
+        let applied_file = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(applied_file.file_asset_index(), 0);
+        assert_eq!(
+            applied_file.live_font_bytes(),
+            None,
+            "a file-font listener value clears the previous private live font"
+        );
+
+        assert!(context.set_live_font_bytes_by_property_name("font", None));
+        let cleared = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(
+            cleared.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert_eq!(cleared.live_font_bytes(), None);
     }
 
     #[test]
@@ -8452,5 +9501,20 @@ mod owned_context_tests {
             generated.symbol_list_index_value_by_property_path(&[1]),
             Some(9)
         );
+    }
+
+    #[test]
+    fn script_frame_advance_resets_embedded_view_model_triggers() {
+        let file = nested_trigger_fixture();
+        let mut instance =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated root instance");
+        assert!(instance.set_trigger_by_property_name_path("child/fire", 1));
+        assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(1));
+
+        let (changed, shared_children) = instance.advance_script_frame_local();
+
+        assert!(changed);
+        assert!(shared_children.is_empty());
+        assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(0));
     }
 }

@@ -4,6 +4,7 @@ use nuxie_binary::{RuntimeFile, RuntimeObject};
 
 use crate::draw::color_lerp;
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
+use crate::view_model::RuntimeFontAssetValue;
 use crate::{
     RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelContext,
     RuntimeOwnedViewModelInstance, RuntimeStateMachine, RuntimeTransitionInterpolator,
@@ -2999,6 +3000,11 @@ impl RuntimeDataBindGraphValue {
                     .collect::<Option<Vec<_>>>()?;
                 context
                     .asset_value_by_property_path(&property_path)
+                    .or_else(|| {
+                        context
+                            .font_asset_value_by_property_path(&property_path)
+                            .map(|value| value.file_asset_index())
+                    })
                     .map(Self::Asset)
             }
             Self::Artboard(_) => {
@@ -3063,6 +3069,11 @@ impl RuntimeDataBindGraphValue {
             Self::ListLength(_) => None,
             Self::Asset(_) => context
                 .asset_value_by_context_source_path(file, context_path, path, false)
+                .or_else(|| {
+                    context
+                        .font_asset_value_by_context_source_path(file, context_path, path, false)
+                        .map(|value| value.file_asset_index())
+                })
                 .map(Self::Asset),
             Self::Artboard(_) => context
                 .artboard_value_by_context_source_path(file, context_path, path, false)
@@ -3127,10 +3138,13 @@ impl RuntimeDataBindGraphValue {
             Self::ListLength(_) => file
                 .view_model_instance_list_size_for_object(source)
                 .map(Self::ListLength),
-            Self::Asset(_) => (source.type_name == "ViewModelInstanceAssetImage")
-                .then(|| source.uint_property("propertyValue"))
-                .flatten()
-                .map(Self::Asset),
+            Self::Asset(_) => matches!(
+                source.type_name,
+                "ViewModelInstanceAssetImage" | "ViewModelInstanceAssetFont"
+            )
+            .then(|| source.uint_property("propertyValue"))
+            .flatten()
+            .map(Self::Asset),
             Self::Artboard(_) => (source.type_name == "ViewModelInstanceArtboard")
                 .then(|| source.uint_property("propertyValue"))
                 .flatten()
@@ -3300,7 +3314,7 @@ impl RuntimeDataBindGraph {
                     RuntimeDataBindGraphTarget::Asset {
                         global_id: bindable.global_id,
                     },
-                    RuntimeDataBindGraphValue::Asset(source.value),
+                    RuntimeDataBindGraphValue::Asset(source.value.asset_index()),
                 );
             }
         }
@@ -5861,6 +5875,75 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    pub(crate) fn set_owned_view_model_context_font_asset_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: &RuntimeFontAssetValue,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get(source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Asset(_)) {
+            return false;
+        }
+        let path = source.path.clone();
+        let Some(property_path) =
+            runtime_owned_view_model_property_path_from_source_path(context, &path)
+        else {
+            return false;
+        };
+        let Some(current_context_value) = context.font_asset_value_by_property_path(&property_path)
+        else {
+            return false;
+        };
+        let context_changed = !current_context_value.same_runtime_value(value);
+        let file_asset_index = value.file_asset_index();
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Asset(_))
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::Asset(current) if *current == file_asset_index))
+        });
+
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        if context_changed
+            && !context.apply_font_asset_data_bind_value_by_property_path(&property_path, value)
+        {
+            return false;
+        }
+
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Asset(_))
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::Asset(current) if *current == file_asset_index);
+            source.value = RuntimeDataBindGraphValue::Asset(file_asset_index);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     pub(crate) fn set_owned_view_model_context_artboard_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
@@ -7817,7 +7900,7 @@ impl RuntimeDataBindGraph {
             let Some(value) = assets
                 .iter()
                 .find(|asset| asset.global_id == global_id)
-                .map(|asset| asset.value)
+                .map(|asset| asset.value.data_bind_asset_index())
             else {
                 continue;
             };
@@ -7877,7 +7960,7 @@ impl RuntimeDataBindGraph {
             let Some(value) = assets
                 .iter()
                 .find(|asset| asset.global_id == global_id)
-                .map(|asset| asset.value)
+                .map(|asset| asset.value.data_bind_asset_index())
             else {
                 continue;
             };

@@ -1,5 +1,5 @@
 use std::cell::{RefCell, RefMut};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::{error::Error, fmt};
 
@@ -359,6 +359,63 @@ impl ScriptViewModel {
             .set_boolean_by_property_name(name, value)
     }
 
+    pub fn trigger(&self, name: &str) -> Option<u64> {
+        self.instance.borrow().trigger_value_by_property_name(name)
+    }
+
+    /// Fire a trigger the same way C++ `ViewModelInstanceTrigger::trigger()`
+    /// does: increment the backing counter and leave consumption/reset to the
+    /// end-of-frame `advanced()` pass.
+    pub fn fire_trigger(&self, name: &str) -> bool {
+        let Some(value) = self.trigger(name) else {
+            return false;
+        };
+        self.instance
+            .borrow_mut()
+            .set_trigger_by_property_name(name, value.wrapping_add(1))
+    }
+
+    /// Consume transient values at the end of a script host frame.
+    ///
+    /// This mirrors C++ `ViewModelInstance::advanced()`: triggers are reset
+    /// without invoking script listeners, embedded view models recurse, and
+    /// shared list instances recurse exactly once even if the graph cycles.
+    pub fn advance_script_frame(&self) -> bool {
+        Self::advance_owned_instance(&self.instance)
+    }
+
+    /// Advance a shared owned instance without requiring its schema wrapper.
+    /// Scripting backends use this for owner-counted registrations that retain
+    /// precisely the backing instance, matching C++ `rcp<ViewModelInstance>`.
+    pub fn advance_owned_instance(instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> bool {
+        Self::advance_owned_instances(std::slice::from_ref(instance))
+    }
+
+    /// Advance several owned roots with one identity set shared across their
+    /// complete embedded/list graphs. This is the frame-context entry point:
+    /// registry relationships can name an instance that is also reachable
+    /// structurally, and it must still be consumed only once per frame.
+    pub fn advance_owned_instances(
+        instances: &[Rc<RefCell<RuntimeOwnedViewModelInstance>>],
+    ) -> bool {
+        let mut visited = BTreeSet::new();
+        let mut changed = false;
+        for instance in instances {
+            changed |= advance_owned_view_model_instance(instance, &mut visited);
+        }
+        changed
+    }
+
+    /// Snapshot the shared instances currently parented through this
+    /// instance's list properties. The scripting registry refreshes these
+    /// edges at frame end so host/data-binding list mutations cannot leave a
+    /// retained wrapper incorrectly classified as attached or detached.
+    pub fn owned_list_children(
+        instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        instance.borrow().script_list_children()
+    }
+
     pub fn view_model(&self, name: &str) -> Option<Self> {
         self.nested_view_models.get(name).cloned()
     }
@@ -449,6 +506,21 @@ impl ScriptViewModel {
             .borrow_mut()
             .remove_list_items_by_identity(name, &item.instance, remove_all)
     }
+}
+
+fn advance_owned_view_model_instance(
+    instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    let identity = Rc::as_ptr(instance) as usize;
+    if !visited.insert(identity) {
+        return false;
+    }
+    let (mut changed, children) = instance.borrow_mut().advance_script_frame_local();
+    for child in children {
+        changed |= advance_owned_view_model_instance(&child, visited);
+    }
+    changed
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -987,6 +1059,13 @@ pub trait ScriptingVm {
         payload: &[u8],
         host: &mut dyn ScriptHost,
     ) -> Result<Box<dyn ScriptInstance>, ScriptError>;
+
+    /// Consume detached script-created view-model instances once at the end
+    /// of a root host frame. Child/script-driven artboard advances must not
+    /// call this hook.
+    fn advance_detached_view_models(&mut self) -> bool {
+        false
+    }
 
     fn perform_registration(&mut self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
         let mut pending: Vec<usize> = (0..modules.len()).collect();

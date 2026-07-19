@@ -1,6 +1,9 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
 use super::*;
+use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
+use crate::focus::RuntimeFocusTree;
+use crate::view_model::RuntimeFontAssetValue;
 use crate::{
     ArtboardInstance, NoopScriptHost, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
     RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
@@ -66,6 +69,7 @@ pub struct StateMachineInstance {
     pointer_listener_states: Vec<RuntimePointerListenerState>,
     pointer_positions: Vec<RuntimePointerPosition>,
     scripted_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    focus: RuntimeFocusTree,
 }
 
 #[derive(Debug, Clone)]
@@ -225,6 +229,7 @@ impl StateMachineInstance {
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
             scripted_instances_by_global: BTreeMap::new(),
+            focus: RuntimeFocusTree::from_artboard(artboard),
         }
     }
 
@@ -316,6 +321,38 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn has_focus_nodes(&self) -> bool {
+        self.focus.has_focusable_content()
+    }
+
+    pub fn focus_next(&mut self) -> bool {
+        self.focus.traverse(0)
+    }
+
+    pub fn focus_previous(&mut self) -> bool {
+        self.focus.traverse(1)
+    }
+
+    pub fn focus_up(&mut self) -> bool {
+        self.focus.traverse(2)
+    }
+
+    pub fn focus_down(&mut self) -> bool {
+        self.focus.traverse(3)
+    }
+
+    pub fn focus_left(&mut self) -> bool {
+        self.focus.traverse(4)
+    }
+
+    pub fn focus_right(&mut self) -> bool {
+        self.focus.traverse(5)
+    }
+
+    pub fn clear_focus(&mut self) -> bool {
+        self.focus.clear_focus()
+    }
+
     pub fn pointer_down(
         &mut self,
         artboard: &ArtboardInstance,
@@ -345,6 +382,7 @@ impl StateMachineInstance {
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
+        self.focus.sync(artboard);
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
@@ -462,6 +500,7 @@ impl StateMachineInstance {
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
+        self.focus.sync(artboard);
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             self.pointer_down_listener_hits
                 .retain(|hit| hit.pointer_id != pointer_id);
@@ -725,6 +764,17 @@ impl StateMachineInstance {
                 RuntimeScheduledListenerAction::Scripted { global_id, .. } => {
                     changed |= self.perform_scripted_listener_action(*global_id, invocation);
                 }
+                RuntimeScheduledListenerAction::FocusTarget {
+                    target_local_id, ..
+                } => {
+                    changed |= self.focus.set_focus_target(*target_local_id);
+                }
+                RuntimeScheduledListenerAction::FocusClear { .. } => {
+                    changed |= self.focus.clear_focus();
+                }
+                RuntimeScheduledListenerAction::FocusTraversal { traversal_kind, .. } => {
+                    changed |= self.focus.traverse(*traversal_kind);
+                }
             }
         }
         if changed {
@@ -813,6 +863,17 @@ impl StateMachineInstance {
                         ScriptListenerInvocation::None,
                     );
                 }
+                RuntimeScheduledListenerAction::FocusTarget {
+                    target_local_id, ..
+                } => {
+                    changed |= self.focus.set_focus_target(*target_local_id);
+                }
+                RuntimeScheduledListenerAction::FocusClear { .. } => {
+                    changed |= self.focus.clear_focus();
+                }
+                RuntimeScheduledListenerAction::FocusTraversal { traversal_kind, .. } => {
+                    changed |= self.focus.traverse(*traversal_kind);
+                }
                 _ => {}
             }
         }
@@ -845,9 +906,10 @@ impl StateMachineInstance {
             RuntimeListenerViewModelChangeValue::Enum(value) => {
                 RuntimeDataBindGraphValue::Enum(*value)
             }
-            RuntimeListenerViewModelChangeValue::Asset(value) => {
-                RuntimeDataBindGraphValue::Asset(*value)
-            }
+            RuntimeListenerViewModelChangeValue::Asset(value) => RuntimeDataBindGraphValue::Asset(
+                self.listener_asset_value_for_data_bind(data_bind_index, value)
+                    .data_bind_asset_index(),
+            ),
             RuntimeListenerViewModelChangeValue::Artboard(value) => {
                 RuntimeDataBindGraphValue::Artboard(*value)
             }
@@ -933,16 +995,30 @@ impl StateMachineInstance {
                     self.set_default_view_model_enum_source_for_data_bind(data_bind_index, *value)
                 }
             },
-            RuntimeListenerViewModelChangeValue::Asset(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_asset_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => {
-                    self.set_default_view_model_asset_source_for_data_bind(data_bind_index, *value)
+            RuntimeListenerViewModelChangeValue::Asset(value) => {
+                let value = self
+                    .listener_asset_value_for_data_bind(data_bind_index, value)
+                    .clone();
+                let font_value = value.font_data_bind_value();
+                match (owned_context, font_value.as_ref()) {
+                    (Some(context), Some(font_value)) => self
+                        .set_owned_view_model_context_font_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            font_value,
+                        ),
+                    (Some(context), None) => self
+                        .set_owned_view_model_context_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            value.asset_index(),
+                        ),
+                    (None, _) => self.set_default_view_model_asset_source_for_data_bind(
+                        data_bind_index,
+                        value.data_bind_asset_index(),
+                    ),
                 }
-            },
+            }
             RuntimeListenerViewModelChangeValue::Artboard(value) => match owned_context {
                 Some(context) => self.set_owned_view_model_context_artboard_source_for_data_bind(
                     context,
@@ -999,6 +1075,41 @@ impl StateMachineInstance {
             return false;
         }
         self.needs_advance = true;
+        true
+    }
+
+    fn listener_asset_value_for_data_bind<'a>(
+        &'a self,
+        data_bind_index: usize,
+        fallback: &'a RuntimeBindableAssetValue,
+    ) -> &'a RuntimeBindableAssetValue {
+        self.bindable_assets
+            .iter()
+            .find(|bindable_asset| bindable_asset.has_data_bind_index(data_bind_index))
+            .map(|bindable_asset| &bindable_asset.value)
+            .unwrap_or(fallback)
+    }
+
+    fn set_owned_view_model_context_font_asset_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: &RuntimeFontAssetValue,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_owned_view_model_context_font_asset_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
+        {
+            return false;
+        }
+        // A listener can feed the updated source into another bindable in the
+        // same frame. Refresh the full Font payload now; the scalar graph only
+        // carries the generated propertyValue index.
+        self.sync_bindable_font_assets_from_owned_context(context);
         true
     }
 
@@ -1428,7 +1539,7 @@ impl StateMachineInstance {
         self.bindable_assets
             .iter()
             .find(|bindable_asset| bindable_asset.has_data_bind_index(data_bind_index))
-            .map(|bindable_asset| bindable_asset.value)
+            .map(|bindable_asset| bindable_asset.value.asset_index())
     }
 
     pub fn default_view_model_artboard_source_value_for_data_bind(
@@ -3119,6 +3230,7 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_default_view_model_context();
         }
+        self.sync_bindable_font_assets_from_default_context();
         self.bind_active_default_view_model_triggers();
         self.needs_advance = true;
         true
@@ -3152,6 +3264,11 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_view_model_instance_context(file, view_model_index, instance_index);
         }
+        self.sync_bindable_font_assets_from_imported_instance(
+            file,
+            view_model_index,
+            instance_index,
+        );
         self.bind_active_imported_view_model_triggers(file, view_model_index, instance_index, None);
         self.needs_advance = true;
         true
@@ -3171,6 +3288,11 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_imported_view_model_context(file, context);
         }
+        self.sync_bindable_font_assets_from_imported_instance(
+            file,
+            context.view_model_index,
+            context.instance_index,
+        );
         self.bind_active_imported_view_model_triggers(
             file,
             context.view_model_index,
@@ -3191,6 +3313,7 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_owned_view_model_context(context);
         }
+        self.sync_bindable_font_assets_from_owned_context(context);
         self.bind_active_owned_view_model_triggers(context);
         self.needs_advance = true;
         true
@@ -3206,6 +3329,7 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_owned_view_model_contexts(context);
         }
+        self.sync_bindable_font_assets_from_owned_contexts(context);
         if let Some(main) = context.main() {
             self.bind_active_owned_view_model_triggers(main);
         } else {
@@ -3230,6 +3354,7 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_owned_view_model_context_chain(file, context, context_chain);
         }
+        self.sync_bindable_font_assets_from_owned_context_chain(file, context, context_chain);
         self.bind_active_owned_view_model_triggers(context);
         self.needs_advance = true;
         true
@@ -3249,6 +3374,7 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             graph.bind_owned_view_model_context_chains(file, contexts);
         }
+        self.sync_bindable_font_assets_from_owned_context_chains(file, contexts);
         if let Some((main, _)) = contexts.first() {
             self.bind_active_owned_view_model_triggers(main);
         } else {
@@ -3256,6 +3382,112 @@ impl StateMachineInstance {
         }
         self.needs_advance = true;
         true
+    }
+
+    fn sync_bindable_font_assets<F>(&mut self, mut resolve: F)
+    where
+        F: FnMut(&RuntimeBindableAssetDefaultViewModelSource) -> Option<RuntimeFontAssetValue>,
+    {
+        for bindable in &mut self.bindable_assets {
+            let value = bindable
+                .default_view_model_sources
+                .iter()
+                .filter(|source| {
+                    data_bind_flags_apply_source_to_target(source.flags)
+                        && source.value.font_value().is_some()
+                })
+                .filter_map(&mut resolve)
+                .last();
+            if let Some(value) = value {
+                bindable.apply_font_value(&value);
+            }
+        }
+    }
+
+    fn sync_bindable_font_assets_from_default_context(&mut self) {
+        self.sync_bindable_font_assets(|source| source.value.font_value().cloned());
+    }
+
+    fn sync_bindable_font_assets_from_imported_instance(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) {
+        let instance_object = file
+            .view_model(view_model_index)
+            .and_then(|view_model| view_model.instances.into_iter().nth(instance_index))
+            .map(|instance| instance.object);
+        self.sync_bindable_font_assets(|source| {
+            let source_object =
+                file.data_context_view_model_property_for_instance(instance_object?, &source.path)?;
+            (source_object.type_name == "ViewModelInstanceAssetFont")
+                .then(|| source_object.uint_property("propertyValue"))
+                .flatten()
+                .map(RuntimeFontAssetValue::from_file_asset_index)
+        });
+    }
+
+    fn sync_bindable_font_assets_from_owned_context(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+    ) {
+        self.sync_bindable_font_assets(|source| {
+            runtime_owned_font_asset_value_for_state_machine_source(context, &source.path).cloned()
+        });
+    }
+
+    fn sync_bindable_font_assets_from_owned_contexts(
+        &mut self,
+        context: &RuntimeOwnedViewModelContext,
+    ) {
+        self.sync_bindable_font_assets(|source| {
+            context.instances().find_map(|instance| {
+                runtime_owned_font_asset_value_for_state_machine_source(instance, &source.path)
+                    .cloned()
+            })
+        });
+    }
+
+    fn sync_bindable_font_assets_from_owned_context_chain(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) {
+        self.sync_bindable_font_assets(|source| {
+            context_chain.iter().find_map(|context_path| {
+                context
+                    .font_asset_value_by_context_source_path(
+                        file,
+                        context_path,
+                        &source.path,
+                        false,
+                    )
+                    .cloned()
+            })
+        });
+    }
+
+    fn sync_bindable_font_assets_from_owned_context_chains(
+        &mut self,
+        file: &RuntimeFile,
+        contexts: &[(RuntimeOwnedViewModelInstance, Vec<Vec<usize>>)],
+    ) {
+        self.sync_bindable_font_assets(|source| {
+            contexts.iter().find_map(|(context, context_chain)| {
+                context_chain.iter().find_map(|context_path| {
+                    context
+                        .font_asset_value_by_context_source_path(
+                            file,
+                            context_path,
+                            &source.path,
+                            false,
+                        )
+                        .cloned()
+                })
+            })
+        });
     }
 
     pub fn advance_data_context(&mut self) -> bool {
@@ -3421,6 +3653,7 @@ impl StateMachineInstance {
         elapsed_seconds: f32,
         clear_reported_events: bool,
     ) -> bool {
+        self.focus.sync(artboard);
         if clear_reported_events {
             self.reported_events.clear();
         }
@@ -3452,6 +3685,7 @@ impl StateMachineInstance {
                 layer_instance.advance(
                     &self.scripted_instances_by_global,
                     artboard,
+                    &self.focus,
                     layer,
                     &self.key_frame_data_bind_graphs,
                     elapsed_seconds,
@@ -3601,4 +3835,18 @@ impl StateMachineInstance {
             }
         }
     }
+}
+
+fn runtime_owned_font_asset_value_for_state_machine_source<'a>(
+    context: &'a RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<&'a RuntimeFontAssetValue> {
+    if source_path.len() < 2 || usize::try_from(source_path[0]).ok()? != context.view_model_index {
+        return None;
+    }
+    let property_path = source_path[1..]
+        .iter()
+        .map(|property_index| usize::try_from(*property_index).ok())
+        .collect::<Option<Vec<_>>>()?;
+    context.font_asset_value_by_property_path(&property_path)
 }

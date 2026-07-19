@@ -36,7 +36,7 @@ use nuxie_runtime::{
     ScriptingVm as RuntimeScriptingVm,
 };
 use renderer::RendererBindings;
-use view_model::{ScriptedContext, create_scripted_view_model};
+use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
 
@@ -87,10 +87,25 @@ pub struct ScriptVm {
     lua: Lua,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
+    view_model_frame_context: ScriptViewModelFrameContext,
     scopes: Rc<RefCell<ScriptScopes>>,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
     default_context_parent_view_models: Vec<ScriptViewModel>,
+}
+
+/// Cloneable handle for the detached view-model roots owned by one scripting
+/// VM. Hosts that retain Lua-backed script instances without retaining the
+/// [`ScriptVm`] wrapper use this to perform the one root-frame tail advance.
+#[derive(Debug, Clone)]
+pub struct DetachedViewModelFrame {
+    context: ScriptViewModelFrameContext,
+}
+
+impl DetachedViewModelFrame {
+    pub fn advance(&self) -> bool {
+        self.context.advance_detached()
+    }
 }
 
 /// File-registered protocol generator. The script chunk has already executed;
@@ -284,9 +299,10 @@ impl UserData for ScriptedDataValue {
 
 impl LuaScriptInstance {
     pub fn new(table: Table) -> Self {
+        let frame_context = ScriptViewModelFrameContext::for_lua(&table.lua());
         Self {
             table,
-            renderer_bindings: RendererBindings::default(),
+            renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
             context: None,
         }
@@ -491,10 +507,14 @@ impl ScriptVm {
 
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
+        let lua = Lua::new();
+        let view_model_frame_context = ScriptViewModelFrameContext::default();
+        lua.set_app_data(view_model_frame_context.clone());
         Self {
-            lua: Lua::new(),
+            lua,
             rive_globals_installed: Cell::new(false),
-            renderer_bindings: RendererBindings::default(),
+            renderer_bindings: RendererBindings::new(view_model_frame_context.clone()),
+            view_model_frame_context,
             scopes: Rc::new(RefCell::new(ScriptScopes::default())),
             view_models: BTreeMap::new(),
             default_context_view_model: None,
@@ -529,6 +549,21 @@ impl ScriptVm {
     /// The underlying mlua-style handle (globals, create_function, userdata).
     pub fn lua(&self) -> &Lua {
         &self.lua
+    }
+
+    /// Consume every owner-tracked, parentless script view-model root at the
+    /// end of the host frame. The host calls this once after its root state
+    /// machine advance; script-driven child artboards deliberately do not.
+    pub fn advance_detached_view_models(&self) -> bool {
+        self.view_model_frame_context.advance_detached()
+    }
+
+    /// Retain the detached-view-model frame state independently of the VM
+    /// wrapper. Lua values remain owned by the script instances themselves.
+    pub fn detached_view_model_frame(&self) -> DetachedViewModelFrame {
+        DetachedViewModelFrame {
+            context: self.view_model_frame_context.clone(),
+        }
     }
 
     /// Install the Rive globals that Luau bytecode resolves with GETIMPORT.
@@ -1250,6 +1285,10 @@ impl RuntimeScriptingVm for ScriptVm {
             context_view_model,
             Some(context),
         )))
+    }
+
+    fn advance_detached_view_models(&mut self) -> bool {
+        ScriptVm::advance_detached_view_models(self)
     }
 }
 

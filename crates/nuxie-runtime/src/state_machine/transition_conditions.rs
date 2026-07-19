@@ -11,6 +11,7 @@ use super::{
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
+use crate::focus::RuntimeFocusTree;
 use crate::properties::{
     property_key_for_name, runtime_object_bool_property_by_key,
     runtime_object_color_property_by_key, runtime_object_double_property_by_key,
@@ -28,6 +29,10 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub(super) enum RuntimeTransitionCondition {
+    Focus {
+        target_local_id: usize,
+        op: TransitionConditionOp,
+    },
     Scripted {
         global_id: u32,
     },
@@ -236,6 +241,25 @@ impl RuntimeTransitionCondition {
         object: &RuntimeObject,
     ) -> Option<Self> {
         match object.type_name {
+            "TransitionFocusCondition" => {
+                let comparators = file.transition_view_model_condition_comparators(object)?;
+                let comparator = comparators
+                    .right
+                    .filter(|comparator| {
+                        comparator.type_name == "TransitionPropertyComponentComparator"
+                    })
+                    .or_else(|| {
+                        comparators.left.filter(|comparator| {
+                            comparator.type_name == "TransitionPropertyComponentComparator"
+                        })
+                    })?;
+                Some(Self::Focus {
+                    target_local_id: usize::try_from(comparator.uint_property("objectId")?).ok()?,
+                    op: TransitionConditionOp::from_value(
+                        object.uint_property("opValue").unwrap_or(0),
+                    ),
+                })
+            }
             "ScriptedTransitionCondition" => Some(Self::Scripted {
                 global_id: object.id,
             }),
@@ -940,6 +964,7 @@ impl RuntimeTransitionCondition {
         &self,
         scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &ArtboardInstance,
+        focus: &RuntimeFocusTree,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         bindable_integers: &[StateMachineBindableIntegerInstance],
@@ -957,6 +982,17 @@ impl RuntimeTransitionCondition {
         layer_index: usize,
     ) -> bool {
         match self {
+            Self::Focus {
+                target_local_id,
+                op,
+            } => {
+                let focused = focus.target_has_focus(*target_local_id);
+                if *op == TransitionConditionOp::Equal {
+                    focused
+                } else {
+                    !focused
+                }
+            }
             Self::Scripted { global_id } => {
                 evaluate_scripted_condition(*global_id, scripted_instances)
             }

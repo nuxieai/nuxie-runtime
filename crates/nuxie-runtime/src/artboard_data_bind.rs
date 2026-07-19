@@ -3560,7 +3560,9 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
-        if self.nested_artboard_locals.is_empty() {
+        if self.nested_artboard_locals.is_empty()
+            || !self.nested_artboard_tree_has_context_source_bindings()
+        {
             return false;
         }
         let mut changed = false;
@@ -3571,6 +3573,19 @@ impl ArtboardInstance {
         }
         self.artboard_context_source_values_scratch = values;
         changed
+    }
+
+    fn nested_artboard_tree_has_context_source_bindings(&self) -> bool {
+        self.nested_artboard_locals.iter().any(|host_local_id| {
+            self.nested_artboards
+                .get(host_local_id)
+                .is_some_and(|nested| {
+                    nested.child.has_artboard_context_source_bindings()
+                        || nested
+                            .child
+                            .nested_artboard_tree_has_context_source_bindings()
+                })
+        })
     }
 
     fn collect_nested_artboard_context_source_values(

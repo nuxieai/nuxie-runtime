@@ -537,7 +537,7 @@ impl ArtboardInstance {
         self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
     }
 
-    /// Settle pending writes and return visible shape locals under `point`,
+    /// Settle pending writes and return visible drawable locals under `point`,
     /// from front to back, using this instance's retained file/graph context.
     pub fn geometry_hit_test(
         &mut self,
@@ -554,7 +554,7 @@ impl ArtboardInstance {
         self.geometry_hit_test_with_context(runtime, graph, point, cache)
     }
 
-    /// Settle pending writes and return visible shape local-id paths under
+    /// Settle pending writes and return visible drawable local-id paths under
     /// `point`, from front to back. A direct hit is a one-element path. A hit
     /// inside a nested artboard is prefixed with each nested host local id.
     pub fn geometry_hit_test_paths(
@@ -753,6 +753,43 @@ impl ArtboardInstance {
                         path.insert(0, host_local_id);
                         back_to_front_hits.push(path);
                     }
+                }
+                continue;
+            }
+            if command.object_kind == RuntimeDrawCommandObjectKind::Text
+                && !active_clips.iter().any(|contains| !contains)
+            {
+                let Some(local_id) = command.local_id else {
+                    continue;
+                };
+                let render_opacity = self
+                    .component(local_id)
+                    .map(|component| component.transform.render_opacity)
+                    .unwrap_or(0.0);
+                if !render_opacity.is_finite() || render_opacity <= 0.0 {
+                    continue;
+                }
+                let layout_constraint =
+                    self.runtime_text_layout_constraint(local_id, layout_bounds);
+                let bounds = match layout_constraint {
+                    Some(constraint) => static_text_controlled_layout_bounds(
+                        runtime, graph, self, local_id, constraint,
+                    ),
+                    None => static_text_constraint_bounds(runtime, graph, self, local_id),
+                };
+                let Some(bounds) = bounds else {
+                    continue;
+                };
+                let text_world = command.world_transform.unwrap_or_else(|| {
+                    cache.paths.component_world_transform_with_bounds(
+                        self,
+                        graph,
+                        local_id,
+                        layout_bounds,
+                    )
+                });
+                if runtime_transformed_rect_bounds(bounds, text_world).contains(point) {
+                    back_to_front_hits.push(vec![local_id]);
                 }
                 continue;
             }

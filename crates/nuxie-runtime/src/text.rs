@@ -1485,6 +1485,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                     .any(|name| property_key_for_name("Text", name) == Some(property_key))
                     && (data_bind.converter_global.is_none()
                         || data_bind.converter_type_name == Some("DataConverterFormula")))
+                || (property_key_for_name("WorldTransformComponent", "opacity")
+                    == Some(property_key)
+                    && data_bind.converter_type_name == Some("DataConverterGroup"))
         }
         Some("TextFollowPathModifier") => {
             ["start", "end", "strength", "offset"]

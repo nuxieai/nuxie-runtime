@@ -8609,7 +8609,7 @@ impl Frame<'_> {
         Ok(changed)
     }
 
-    /// Return authored shapes under `point`, ordered front to back and deduplicated.
+    /// Return authored drawables under `point`, ordered front to back and deduplicated.
     pub fn hit_test(&mut self, instance: InstanceId, point: crate::Vec2D) -> Vec<ObjectId> {
         self.hit_test_paths(instance, point)
             .into_iter()
@@ -13698,7 +13698,8 @@ mod tests {
     }
 
     #[test]
-    fn authored_text_string_bind_round_trips_through_exact_riv_and_draws() -> Result<()> {
+    fn authored_text_string_and_visibility_binds_round_trip_through_exact_riv_and_draw()
+    -> Result<()> {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let font = tx.create_font_asset(FontAssetSpec {
@@ -13769,6 +13770,12 @@ mod tests {
                     name: "name".into(),
                 },
             )?;
+            let shown = view_models.create_boolean(
+                product,
+                ViewModelBooleanSpec {
+                    name: "shown".into(),
+                },
+            )?;
             let defaults = view_models.create_instance(
                 product,
                 ViewModelInstanceSpec {
@@ -13776,8 +13783,10 @@ mod tests {
                 },
             )?;
             view_models.set_string(defaults, name, "a")?;
+            view_models.set_boolean(defaults, shown, true)?;
             view_models.set_artboard_default(artboard, defaults)?;
             view_models.bind_text(run, name)?;
+            view_models.bind_visibility(text, shown, VisibilityCondition::WhenTrue, 1.0)?;
             Ok(())
         })?;
 
@@ -13786,7 +13795,12 @@ mod tests {
             .clone()
             .into_authoring_records()
             .into_iter()
-            .filter(|record| record.type_key == 447)
+            .filter(|record| {
+                record.type_key == 447
+                    && record.properties.iter().any(|property| {
+                        property.key == 586 && property.value == AuthoringValue::Uint(268)
+                    })
+            })
             .collect::<Vec<_>>();
         assert_eq!(
             authored_binds,
@@ -13812,24 +13826,34 @@ mod tests {
         let bytes = encode_authoring_records(records.into_authoring_records());
         assert_eq!(&bytes[..4], b"RIVE");
         let file = Arc::new(File::import(&bytes)?);
-        let data_bind = file
-            .runtime()
-            .artboard_data_binds(0)
-            .into_iter()
-            .next()
+        let mut data_binds = file.runtime().artboard_data_binds(0).into_iter();
+        let text_data_bind = data_binds
+            .clone()
+            .find(|bind| {
+                bind.target
+                    .is_some_and(|target| target.type_name == "TextValueRun")
+            })
             .context("exact .riv retains the TextValueRun data bind")?;
         assert_eq!(
-            data_bind.target.map(|target| target.type_name),
+            text_data_bind.target.map(|target| target.type_name),
             Some("TextValueRun")
         );
         assert_eq!(
             file.runtime()
-                .data_bind_context_source_path_ids_for_object(data_bind.object),
+                .data_bind_context_source_path_ids_for_object(text_data_bind.object),
             Some(vec![0, 0])
+        );
+        let visibility_data_bind = data_binds
+            .find(|bind| bind.target.is_some_and(|target| target.type_name == "Text"))
+            .context("exact .riv retains the Text opacity visibility bind")?;
+        assert_eq!(
+            file.runtime()
+                .data_bind_context_source_path_ids_for_object(visibility_data_bind.object),
+            Some(vec![0, 1])
         );
 
         let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
-        let view_model = instance
+        let mut view_model = instance
             .instantiate_view_model_instance(0)
             .context("exact .riv retains the product instance")?;
         assert!(instance.bind_view_model(&view_model));
@@ -13838,6 +13862,22 @@ mod tests {
         assert!(
             draw.contains("verbs=[move"),
             "the bound fixture glyph must produce a non-empty path: {draw}"
+        );
+        assert!(
+            instance.hit_test(crate::Vec2D::new(5.0, 10.0)).contains(&1),
+            "visible Text participates in retained geometry hit testing: {draw}"
+        );
+        assert!(view_model.set_bool("shown", false));
+        assert!(instance.bind_view_model(&view_model));
+        instance.advance(0.0);
+        let hidden_draw = owned_canonical_draw(&mut instance)?;
+        assert!(
+            !hidden_draw.contains("drawPath "),
+            "opacity-zero Text must not emit a glyph draw: {hidden_draw}"
+        );
+        assert!(
+            !instance.hit_test(crate::Vec2D::new(5.0, 10.0)).contains(&1),
+            "opacity-zero Text must stop receiving retained geometry hits"
         );
         Ok(())
     }

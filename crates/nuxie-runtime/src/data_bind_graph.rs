@@ -365,6 +365,17 @@ pub(crate) enum RuntimeDataBindGraphFormulaToken {
 }
 
 impl RuntimeDataBindGraphConverter {
+    pub(crate) fn can_change_output_kind(&self) -> bool {
+        match self {
+            // A scripted converter is instantiated after the static bind
+            // topology. Its authored input type does not constrain the value
+            // its script will return.
+            Self::Scripted { .. } => true,
+            Self::Group(converters) => converters.iter().any(Self::can_change_output_kind),
+            _ => false,
+        }
+    }
+
     pub(crate) fn attach_scripted_instance(
         &mut self,
         target_global_id: u32,
@@ -1543,11 +1554,11 @@ fn runtime_data_bind_graph_scripted_convert(
         RuntimeDataBindGraphValue::Color(value) => ScriptValue::Color(*value),
         _ => return None,
     };
-    match instance
+    let converted = instance
         .borrow_mut()
         .call_data_converter(method, value)
-        .ok()?
-    {
+        .ok()?;
+    match converted {
         ScriptValue::Number(value) => Some(RuntimeDataBindGraphValue::Number(value as f32)),
         ScriptValue::Bool(value) => Some(RuntimeDataBindGraphValue::Boolean(value)),
         ScriptValue::String(value) => Some(RuntimeDataBindGraphValue::String(value.into_bytes())),

@@ -441,8 +441,9 @@ impl ScriptVm {
         self.instantiate_registered_script_with_factory(&program, host, factory)
     }
 
-    /// Execute one protocol ScriptAsset chunk exactly once for a File and
-    /// retain the generator it returns.
+    /// Execute one protocol ScriptAsset chunk and return the generator it
+    /// produces. FileAsset-identity caching belongs to the caller because a
+    /// name and library scope are not unique protocol-script identities.
     pub fn register_protocol_script_with_factory(
         &self,
         name: &str,
@@ -453,7 +454,9 @@ impl ScriptVm {
     }
 
     /// Scope-aware protocol registration. The readable scoped chunkname stays
-    /// attached to the returned generator and every closure it creates.
+    /// attached to the returned generator and every closure it creates. Unlike
+    /// modules, protocol scripts never consult the name-and-scope module cache:
+    /// a protocol ScriptAsset is identified by its serialized FileAsset record.
     pub fn register_protocol_script_with_factory_scoped(
         &self,
         name: &str,
@@ -464,23 +467,6 @@ impl ScriptVm {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
             self.install_rive_globals().map_err(script_error)?;
-            let cache_key = Self::scoped_module_key(name, scope);
-            match self
-                .module_cache()
-                .map_err(script_error)?
-                .get::<Value>(cache_key.as_str())
-                .map_err(script_error)?
-            {
-                // C++ registerScript consults the shared utility cache first.
-                Value::Function(generator) => return Ok(ScriptProgram { generator }),
-                Value::Table(_) => {
-                    return Err(ScriptError::new(format!(
-                        "protocol ScriptAsset '{}' resolved to a registered table",
-                        Self::readable_chunkname(name, scope)
-                    )));
-                }
-                _ => {}
-            }
             let chunkname = Self::readable_chunkname(name, scope);
             self.set_chunkname_scope(&chunkname, scope);
             let generator = self

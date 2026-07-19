@@ -2151,13 +2151,11 @@ pub(super) fn build_artboard_property_bindings(
                         }
                         _ => unreachable!("property kind was filtered above"),
                     });
-            if !artboard_property_binding_value_matches_kind(&default_value, property_kind)
-                && !artboard_property_binding_allows_converted_default(
-                    converter.as_ref(),
-                    &default_value,
-                    property_kind,
-                )
-            {
+            if !artboard_property_binding_accepts_default(
+                converter.as_ref(),
+                &default_value,
+                property_kind,
+            ) {
                 return None;
             }
             let snapshots_source_value = converter.is_none()
@@ -2294,6 +2292,20 @@ fn artboard_property_binding_allows_converted_default(
         .convert_value(converter, default_value)
         .as_ref()
         .is_some_and(|value| artboard_property_binding_value_matches_kind(value, property_kind))
+}
+
+fn artboard_property_binding_accepts_default(
+    converter: Option<&RuntimeDataBindGraphConverter>,
+    default_value: &RuntimeDataBindGraphValue,
+    property_kind: FieldKind,
+) -> bool {
+    artboard_property_binding_value_matches_kind(default_value, property_kind)
+        || artboard_property_binding_allows_converted_default(
+            converter,
+            default_value,
+            property_kind,
+        )
+        || converter.is_some_and(RuntimeDataBindGraphConverter::can_change_output_kind)
 }
 
 fn runtime_artboard_convert_property_binding_value(
@@ -6785,6 +6797,25 @@ mod tests {
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    #[test]
+    fn scripted_converter_defers_default_output_kind_validation() {
+        let converter = RuntimeDataBindGraphConverter::Scripted {
+            global_id: 42,
+            instance: None,
+        };
+        let numeric_default = RuntimeDataBindGraphValue::Number(10_001.0);
+
+        assert!(!artboard_property_binding_value_matches_kind(
+            &numeric_default,
+            FieldKind::String
+        ));
+        assert!(artboard_property_binding_accepts_default(
+            Some(&converter),
+            &numeric_default,
+            FieldKind::String
+        ));
+    }
 
     fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
         AuthoringRecord {

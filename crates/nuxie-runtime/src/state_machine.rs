@@ -121,6 +121,17 @@ pub struct RuntimeStateMachine {
     pub(crate) transition_duration_bindings: Arc<Vec<RuntimeTransitionDurationBinding>>,
 }
 
+impl RuntimeStateMachine {
+    pub(crate) fn requires_post_update_state_probe(&self) -> bool {
+        self.layers
+            .iter()
+            .flat_map(|layer| &layer.states)
+            .flat_map(|state| &state.transitions)
+            .flat_map(|transition| &transition.conditions)
+            .any(RuntimeTransitionCondition::can_change_during_artboard_update)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeTransitionDurationBinding {
     pub(crate) transition_global_id: u32,

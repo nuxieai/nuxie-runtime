@@ -235,6 +235,19 @@ pub(super) enum RuntimeTransitionCondition {
 }
 
 impl RuntimeTransitionCondition {
+    pub(super) fn can_change_during_artboard_update(&self) -> bool {
+        // Ordinary state-machine inputs are fully consumed by the bounded
+        // transition loop inside `StateMachineLayerInstance::advance`.
+        // Artboard component/update passes cannot mutate them. Every other
+        // condition family can observe component, focus, script, or bound
+        // view-model work performed after that loop and therefore still needs
+        // C++'s post-update transition probe.
+        !matches!(
+            self,
+            Self::Bool { .. } | Self::Number { .. } | Self::Trigger { .. }
+        )
+    }
+
     pub(super) fn from_object(
         file: &RuntimeFile,
         graph: &ArtboardGraph,
@@ -1514,6 +1527,36 @@ mod scripted_tests {
             &instances_with(Err(ScriptError::new("evaluate failed")))
         ));
         assert!(!evaluate_scripted_condition(7, &BTreeMap::new()));
+    }
+
+    #[test]
+    fn only_direct_inputs_are_stable_across_artboard_updates() {
+        assert!(
+            !RuntimeTransitionCondition::Number {
+                input_index: 0,
+                op: TransitionConditionOp::Equal,
+                value: 1.0,
+            }
+            .can_change_during_artboard_update()
+        );
+        assert!(
+            !RuntimeTransitionCondition::Bool {
+                input_index: 0,
+                op: TransitionConditionOp::Equal,
+            }
+            .can_change_during_artboard_update()
+        );
+        assert!(
+            RuntimeTransitionCondition::Focus {
+                target_local_id: 0,
+                op: TransitionConditionOp::Equal,
+            }
+            .can_change_during_artboard_update()
+        );
+        assert!(
+            RuntimeTransitionCondition::Scripted { global_id: 7 }
+                .can_change_during_artboard_update()
+        );
     }
 }
 

@@ -2326,6 +2326,9 @@ impl ArtboardInstance {
         let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
+        if !state_machine.requires_post_update_state_probe() {
+            return false;
+        }
         instance.try_change_state(self, state_machine)
     }
 

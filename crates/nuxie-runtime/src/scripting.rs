@@ -336,6 +336,16 @@ impl ScriptViewModel {
             .set_number_by_property_name(name, value)
     }
 
+    pub fn color(&self, name: &str) -> Option<u32> {
+        self.instance.borrow().color_value_by_property_name(name)
+    }
+
+    pub fn set_color(&self, name: &str, value: u32) -> bool {
+        self.instance
+            .borrow_mut()
+            .set_color_by_property_name(name, value)
+    }
+
     pub fn string(&self, name: &str) -> Option<String> {
         self.instance
             .borrow()
@@ -526,6 +536,7 @@ fn advance_owned_view_model_instance(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptViewModelProperty {
     Number,
+    Color,
     String,
     Boolean,
     Trigger,
@@ -589,6 +600,7 @@ fn build_script_view_model_shared(
         .filter_map(|property| {
             let kind = match property.type_name {
                 "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
+                "ViewModelPropertyColor" => ScriptViewModelProperty::Color,
                 "ViewModelPropertyString" => ScriptViewModelProperty::String,
                 "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,

@@ -338,6 +338,18 @@ fn create_scripted_view_model_with_parent(
             }
         })?,
     )?;
+    let get_color_model = model.clone();
+    table.set(
+        "getColor",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_color_model.property(&name) {
+                Some(ScriptViewModelProperty::Color) => lua
+                    .create_userdata(ScriptedPropertyColor::new(get_color_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let get_string_model = model.clone();
     table.set(
         "getString",
@@ -421,6 +433,9 @@ fn create_scripted_view_model_with_parent(
             ScriptViewModelProperty::Number => {
                 lua.create_userdata(ScriptedPropertyNumber::new(model.clone(), name.clone()))?
             }
+            ScriptViewModelProperty::Color => {
+                lua.create_userdata(ScriptedPropertyColor::new(model.clone(), name.clone()))?
+            }
             ScriptViewModelProperty::String => {
                 lua.create_userdata(ScriptedPropertyString::new(model.clone(), name.clone()))?
             }
@@ -475,6 +490,29 @@ impl UserData for ScriptedPropertyViewModel {
 struct ScriptedPropertyNumber {
     model: ScriptViewModel,
     name: String,
+}
+
+struct ScriptedPropertyColor {
+    model: ScriptViewModel,
+    name: String,
+}
+
+impl ScriptedPropertyColor {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        Self { model, name }
+    }
+}
+
+impl UserData for ScriptedPropertyColor {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |_, this| {
+            Ok(i64::from(this.model.color(&this.name).unwrap_or_default()))
+        });
+        fields.add_field_method_set("value", |_, this, value: u32| {
+            this.model.set_color(&this.name, value);
+            Ok(())
+        });
+    }
 }
 
 impl ScriptedPropertyNumber {
@@ -865,15 +903,20 @@ mod tests {
         assert!(missing_requested_data.get());
     }
 
-    fn fixture_models() -> BTreeMap<String, ScriptViewModel> {
+    fn fixture_models_from(asset: &str) -> BTreeMap<String, ScriptViewModel> {
         let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
-            .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
+            .join("tests/unit_tests/assets")
+            .join(asset);
         let bytes = std::fs::read(&fixture)
             .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
         let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
         nuxie_runtime::script_view_models(&file)
+    }
+
+    fn fixture_models() -> BTreeMap<String, ScriptViewModel> {
+        fixture_models_from("script_create_viewmodel_instance.riv")
     }
 
     fn model_with_property(kind: ScriptViewModelProperty) -> (ScriptViewModel, String) {
@@ -887,6 +930,45 @@ mod tests {
                 Some((model.named_instance(None)?, name))
             })
             .unwrap_or_else(|| panic!("fixture has no {kind:?} property"))
+    }
+
+    #[test]
+    fn scripted_color_property_supports_direct_and_named_access() {
+        let (model, color) = fixture_models_from("scripting_root_viewmodel.riv")
+            .into_values()
+            .find_map(|model| {
+                let name = model.properties().iter().find_map(|(name, candidate)| {
+                    (*candidate == ScriptViewModelProperty::Color).then(|| name.clone())
+                })?;
+                Some((model.named_instance(None)?, name))
+            })
+            .expect("fixture has a color property");
+        let expected = model.color(&color).expect("authored color");
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+        lua.globals()
+            .set("colorName", color.clone())
+            .expect("color name global");
+
+        let values: Table = lua
+            .load(
+                r#"
+                return {
+                    model[colorName].value,
+                    model:getColor(colorName).value,
+                }
+                "#,
+            )
+            .eval()
+            .expect("color reads");
+        assert_eq!(values.get::<i64>(1).unwrap(), i64::from(expected));
+        assert_eq!(values.get::<i64>(2).unwrap(), i64::from(expected));
+
+        lua.load("model[colorName].value = 0x10203040")
+            .exec()
+            .expect("color write");
+        assert_eq!(model.color(&color), Some(0x1020_3040));
     }
 
     #[test]

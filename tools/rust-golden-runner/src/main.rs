@@ -2018,12 +2018,7 @@ fn initialize_nested_scripted_drawables(
                 .rev()
                 .filter_map(Clone::clone)
                 .collect();
-            if !artboard_script_payloads_contain(
-                runtime,
-                &artboards[child_index],
-                &script_assets,
-                b"dataContext",
-            ) {
+            if !artboard_scripts_request_context(runtime, &artboards[child_index], &script_assets) {
                 context_models_by_depth.push(child_context_model);
                 return Ok::<(), anyhow::Error>(());
             }
@@ -2054,6 +2049,17 @@ fn initialize_nested_scripted_drawables(
     instance.rebind_nested_script_owned_contexts(runtime);
     instance.update_pass();
     Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn artboard_scripts_request_context(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+) -> bool {
+    [b"dataContext".as_slice(), b"viewModel", b"rootViewModel"]
+        .into_iter()
+        .any(|marker| artboard_script_payloads_contain(runtime, artboard, script_assets, marker))
 }
 
 #[cfg(feature = "scripting")]

@@ -5148,6 +5148,11 @@ impl RuntimeOwnedViewModelInstance {
         self.number_value_by_property_index(property_index)
     }
 
+    pub fn color_value_by_property_name(&self, property_name: &str) -> Option<u32> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.color_value_by_property_index(property_index)
+    }
+
     /// Resolve a schema property ordinal to its dense numeric-value slot.
     ///
     /// Callers that retain the returned slot may subsequently read and write

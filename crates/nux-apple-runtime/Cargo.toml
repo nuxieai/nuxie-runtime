@@ -14,7 +14,15 @@ default = []
 apple-product = ["nuxie/renderer"]
 
 [dependencies]
+base64 = "0.22"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 nuxie = { path = "../nuxie", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+nuxie-schema = { path = "../nuxie-schema" }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
 objc2 = "0.6.4"

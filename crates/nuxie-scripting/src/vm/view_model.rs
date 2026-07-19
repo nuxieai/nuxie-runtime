@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use luaur_rt::{
@@ -668,14 +668,20 @@ impl UserData for ScriptedPropertyList {
 pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
     parents: Vec<ScriptViewModel>,
+    missing_requested_data: Rc<Cell<bool>>,
 }
 
 impl ScriptedContext {
     pub(super) fn new(
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         parents: Vec<ScriptViewModel>,
+        missing_requested_data: Rc<Cell<bool>>,
     ) -> Self {
-        Self { model, parents }
+        Self {
+            model,
+            parents,
+            missing_requested_data,
+        }
     }
 }
 
@@ -688,7 +694,10 @@ impl UserData for ScriptedContext {
                     model,
                     this.parents.first(),
                 )?),
-                None => Value::Nil,
+                None => {
+                    this.missing_requested_data.set(true);
+                    Value::Nil
+                }
             })
         });
         methods.add_method("rootViewModel", |lua, this, ()| {
@@ -700,12 +709,16 @@ impl UserData for ScriptedContext {
                     .or_else(|| this.model.borrow().clone())
                 {
                     Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
-                    None => Value::Nil,
+                    None => {
+                        this.missing_requested_data.set(true);
+                        Value::Nil
+                    }
                 },
             )
         });
         methods.add_method("dataContext", |lua, this, ()| {
             let Some(model) = this.model.borrow().clone() else {
+                this.missing_requested_data.set(true);
                 return Ok(Value::Nil);
             };
             lua.create_userdata(ScriptedDataContext {
@@ -819,6 +832,38 @@ impl UserData for ScriptedPropertyTrigger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn absent_context_values_mark_requested_data_missing() {
+        let lua = Lua::new();
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::clone(&missing_requested_data),
+            ))
+            .expect("scripted context");
+        lua.globals()
+            .set("context", context)
+            .expect("context global");
+
+        let values: Table = lua
+            .load(
+                r#"
+                return {
+                    context:viewModel(),
+                    context:rootViewModel(),
+                    context:dataContext(),
+                }
+                "#,
+            )
+            .eval()
+            .expect("missing context values evaluate");
+
+        assert_eq!(values.raw_len(), 0);
+        assert!(missing_requested_data.get());
+    }
 
     fn fixture_models() -> BTreeMap<String, ScriptViewModel> {
         let fixture = std::env::var_os("RIVE_RUNTIME_DIR")

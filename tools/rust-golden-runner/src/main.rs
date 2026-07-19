@@ -1648,6 +1648,7 @@ struct RunnerScriptArtboardRenderState {
     pending: Vec<(u64, usize)>,
     caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
     detached_view_model_frames: Vec<DetachedViewModelFrame>,
+    pending_script_inits: BTreeSet<u32>,
 }
 
 #[cfg(feature = "scripting")]
@@ -2150,6 +2151,9 @@ fn initialize_scripted_drawables_for_artboard(
             artboards,
             local_object.local_id,
         );
+        let has_init = script_instance
+            .has_method(ScriptMethod::Init)
+            .context("failed to inspect script init method")?;
         if !defer_cold_hydration {
             hydrate_script_inputs(
                 runtime,
@@ -2159,19 +2163,27 @@ fn initialize_scripted_drawables_for_artboard(
                 script_instance.as_mut(),
                 Rc::clone(&render_state),
             )?;
-            if script_instance
-                .has_method(ScriptMethod::Init)
-                .context("failed to inspect script init method")?
-            {
-                script_instance
-                    .call_method_with_factory(ScriptMethod::Init, &[], &mut host, factory)
+            if has_init {
+                let initialized = script_instance
+                    .call_init_with_factory(&mut host, factory)
                     .with_context(|| {
                         format!(
                             "script init failed for ScriptedDrawable global {}",
                             local_object.global_id
                         )
                     })?;
+                if !initialized {
+                    render_state
+                        .borrow_mut()
+                        .pending_script_inits
+                        .insert(local_object.global_id);
+                }
             }
+        } else if has_init {
+            render_state
+                .borrow_mut()
+                .pending_script_inits
+                .insert(local_object.global_id);
         }
         if local_object.type_name == Some("ScriptedLayout")
             && script_instance
@@ -2648,7 +2660,7 @@ fn bind_scripted_drawable_context(
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
     factory: &mut dyn RenderFactory,
     owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
-    initialize_deferred: bool,
+    _initialize_deferred: bool,
 ) -> Result<()> {
     let context_view_model = owned_view_model_context
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
@@ -2672,17 +2684,20 @@ fn bind_scripted_drawable_context(
             Rc::clone(render_state),
             owned_view_model_context,
         )?;
-        if initialize_deferred
-            && scripted_object_has_view_model_input(
-                runtime,
-                artboard,
-                artboards,
-                local_object.local_id,
-            )
-        {
-            instance
+        let init_pending = render_state
+            .borrow()
+            .pending_script_inits
+            .contains(&local_object.global_id);
+        if init_pending {
+            let initialized = instance
                 .reinitialize_script_instance_with_factory(local_object.global_id, factory)
                 .context("deferred scripted drawable init failed")?;
+            if initialized {
+                render_state
+                    .borrow_mut()
+                    .pending_script_inits
+                    .remove(&local_object.global_id);
+            }
         }
     }
     render_state

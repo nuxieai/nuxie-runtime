@@ -1107,12 +1107,12 @@ impl ArtboardInstance {
         if !instance.has_method(ScriptMethod::Init)? {
             return Ok(false);
         }
-        instance.call_method_with_factory(ScriptMethod::Init, &[], &mut NoopScriptHost, factory)?;
+        let initialized = instance.call_init_with_factory(&mut NoopScriptHost, factory)?;
         if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
             self.script_advances_active.insert(global_id);
         }
         self.script_updates_pending.insert(global_id);
-        Ok(true)
+        Ok(initialized)
     }
 
     pub fn set_script_input_for_global(

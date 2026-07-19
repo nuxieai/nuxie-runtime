@@ -129,6 +129,7 @@ pub struct LuaScriptInstance {
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
     context: Option<AnyUserData>,
+    context_missing_requested_data: Rc<Cell<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -305,6 +306,7 @@ impl LuaScriptInstance {
             renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
             context: None,
+            context_missing_requested_data: Rc::new(Cell::new(false)),
         }
     }
 
@@ -313,12 +315,14 @@ impl LuaScriptInstance {
         renderer_bindings: RendererBindings,
         context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
         context: Option<AnyUserData>,
+        context_missing_requested_data: Rc<Cell<bool>>,
     ) -> Self {
         Self {
             table,
             renderer_bindings,
             context_view_model,
             context,
+            context_missing_requested_data,
         }
     }
 
@@ -485,11 +489,13 @@ impl ScriptVm {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
             let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+            let context_missing_requested_data = Rc::new(Cell::new(false));
             let context = self
                 .lua
                 .create_userdata(ScriptedContext::new(
                     Rc::clone(&context_view_model),
                     self.default_context_parent_view_models.clone(),
+                    Rc::clone(&context_missing_requested_data),
                 ))
                 .map_err(script_error)?;
             let instance: Table = program
@@ -501,6 +507,7 @@ impl ScriptVm {
                 self.renderer_bindings.clone(),
                 context_view_model,
                 Some(context),
+                context_missing_requested_data,
             )) as Box<dyn ScriptInstance>)
         })
     }
@@ -939,6 +946,7 @@ impl ScriptVm {
             self.renderer_bindings.clone(),
             Rc::new(RefCell::new(None)),
             None,
+            Rc::new(Cell::new(false)),
         )
     }
 }
@@ -1271,11 +1279,13 @@ impl RuntimeScriptingVm for ScriptVm {
             .call(())
             .map_err(script_error)?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_missing_requested_data = Rc::new(Cell::new(false));
         let context = self
             .lua
             .create_userdata(ScriptedContext::new(
                 Rc::clone(&context_view_model),
                 self.default_context_parent_view_models.clone(),
+                Rc::clone(&context_missing_requested_data),
             ))
             .map_err(script_error)?;
         let instance: Table = generator.call(context.clone()).map_err(script_error)?;
@@ -1284,6 +1294,7 @@ impl RuntimeScriptingVm for ScriptVm {
             self.renderer_bindings.clone(),
             context_view_model,
             Some(context),
+            context_missing_requested_data,
         )))
     }
 
@@ -1364,8 +1375,12 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<bool, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
+            let missing_before = self.context_missing_requested_data.replace(false);
             let value = self.call_method_value(ScriptMethod::Init, &[])?;
-            Ok(!matches!(value, Value::Nil | Value::Boolean(false)))
+            let missing_during = self.context_missing_requested_data.replace(false);
+            Ok(!missing_before
+                && !missing_during
+                && !matches!(value, Value::Nil | Value::Boolean(false)))
         })
     }
 
@@ -1482,4 +1497,51 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
             )));
         }
     })
+}
+
+#[cfg(test)]
+mod context_init_tests {
+    use super::*;
+    use nuxie_render_api::NullFactory;
+    use nuxie_runtime::NoopScriptHost;
+
+    #[test]
+    fn init_consumes_generator_missing_data_and_allows_a_clean_retry() {
+        let lua = Lua::new();
+        let frame_context = ScriptViewModelFrameContext::default();
+        lua.set_app_data(frame_context.clone());
+        let missing_requested_data = Rc::new(Cell::new(true));
+        let context_view_model = Rc::new(RefCell::new(None));
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::clone(&context_view_model),
+                Vec::new(),
+                Rc::clone(&missing_requested_data),
+            ))
+            .expect("scripted context");
+        let table: Table = lua
+            .load("return { init = function() return true end }")
+            .eval()
+            .expect("script table");
+        let mut instance = LuaScriptInstance::with_renderer_bindings(
+            table,
+            RendererBindings::new(frame_context),
+            context_view_model,
+            Some(context),
+            missing_requested_data,
+        );
+        let mut factory = NullFactory::new();
+        let mut host = NoopScriptHost;
+
+        assert!(
+            !instance
+                .call_init_with_factory(&mut host, &mut factory)
+                .expect("cold init")
+        );
+        assert!(
+            instance
+                .call_init_with_factory(&mut host, &mut factory)
+                .expect("bound retry")
+        );
+    }
 }

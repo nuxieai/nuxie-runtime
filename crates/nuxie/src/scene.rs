@@ -8609,7 +8609,8 @@ impl Frame<'_> {
         Ok(changed)
     }
 
-    /// Return authored drawables under `point`, ordered front to back and deduplicated.
+    /// Return authored Shape and Text objects under `point`, including nested-artboard
+    /// descendants, ordered front to back and deduplicated.
     pub fn hit_test(&mut self, instance: InstanceId, point: crate::Vec2D) -> Vec<ObjectId> {
         self.hit_test_paths(instance, point)
             .into_iter()
@@ -8617,9 +8618,9 @@ impl Frame<'_> {
             .collect()
     }
 
-    /// Return authored object paths under `point`, ordered front to back and
-    /// deduplicated. Direct hits contain the hit object. Nested hits are
-    /// prefixed with each authored nested-artboard host.
+    /// Return authored Shape and Text object paths under `point`, ordered front
+    /// to back and deduplicated. Direct hits contain the hit object. Nested
+    /// hits are prefixed with each authored nested-artboard host.
     pub fn hit_test_paths(
         &mut self,
         instance: InstanceId,
@@ -13718,9 +13719,9 @@ mod tests {
                     x: 0.0,
                     y: 0.0,
                     opacity: 1.0,
-                    rotation: 0.0,
-                    scale_x: 1.0,
-                    scale_y: 1.0,
+                    rotation: std::f32::consts::FRAC_PI_4,
+                    scale_x: 1.5,
+                    scale_y: 0.5,
                     width: 120.0,
                     height: 30.0,
                     sizing: SceneTextSizing::Fixed,
@@ -13858,6 +13859,14 @@ mod tests {
             .context("exact .riv retains the product instance")?;
         assert!(instance.bind_view_model(&view_model));
         instance.advance(0.0);
+        let text_world = instance
+            .world_transform(1)
+            .context("exact .riv retains the Text transform")?;
+        let [a, b, c, d, _, _] = text_world.0;
+        assert!(
+            b.abs() > 0.5 && c.abs() > 0.25 && (a * d - b * c).abs() > 0.5,
+            "rotation and non-uniform scale must survive exact Text import: {text_world:?}"
+        );
         let draw = owned_canonical_draw(&mut instance)?;
         assert!(
             draw.contains("verbs=[move"),
@@ -13866,6 +13875,19 @@ mod tests {
         assert!(
             instance.hit_test(crate::Vec2D::new(5.0, 10.0)).contains(&1),
             "visible Text participates in retained geometry hit testing: {draw}"
+        );
+        let transformed_aabb_false_positive = crate::Vec2D::new(120.0, 5.0);
+        assert!(
+            instance
+                .world_bounds(1)
+                .is_some_and(|bounds| bounds.contains(transformed_aabb_false_positive)),
+            "the rejection probe must remain inside Text's transformed AABB"
+        );
+        assert!(
+            !instance
+                .hit_test(transformed_aabb_false_positive)
+                .contains(&1),
+            "Text hit testing must reject points inside the transformed AABB but outside the inverse-transformed local bounds"
         );
         assert!(view_model.set_bool("shown", false));
         assert!(instance.bind_view_model(&view_model));

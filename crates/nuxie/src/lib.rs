@@ -1122,12 +1122,13 @@ impl<'a> ArtboardInstance<'a> {
         Ok(changed)
     }
 
-    /// Return visible runtime drawable locals under `point`, front to back.
+    /// Return visible Shape and Text locals under `point`, front to back,
+    /// including descendants reached through nested artboards.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
-    /// Return visible runtime drawable local-id paths under `point`, front to
+    /// Return visible Shape and Text local-id paths under `point`, front to
     /// back. Direct hits contain one local id; nested hits are prefixed with
     /// their nested-host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
@@ -1589,12 +1590,13 @@ impl OwnedArtboardInstance {
         Ok(changed)
     }
 
-    /// Return visible runtime drawable locals under `point`, front to back.
+    /// Return visible Shape and Text locals under `point`, front to back,
+    /// including descendants reached through nested artboards.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
-    /// Return visible runtime drawable local-id paths under `point`, front to
+    /// Return visible Shape and Text local-id paths under `point`, front to
     /// back. Direct hits contain one local id; nested hits are prefixed with
     /// their nested-host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {

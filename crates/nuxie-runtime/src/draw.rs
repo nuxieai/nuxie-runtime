@@ -537,8 +537,9 @@ impl ArtboardInstance {
         self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
     }
 
-    /// Settle pending writes and return visible drawable locals under `point`,
-    /// from front to back, using this instance's retained file/graph context.
+    /// Settle pending writes and return visible Shape and Text locals under
+    /// `point`, from front to back, including descendants reached through
+    /// nested artboards and using this instance's retained file/graph context.
     pub fn geometry_hit_test(
         &mut self,
         point: RenderVec2D,
@@ -554,9 +555,9 @@ impl ArtboardInstance {
         self.geometry_hit_test_with_context(runtime, graph, point, cache)
     }
 
-    /// Settle pending writes and return visible drawable local-id paths under
-    /// `point`, from front to back. A direct hit is a one-element path. A hit
-    /// inside a nested artboard is prefixed with each nested host local id.
+    /// Settle pending writes and return visible Shape and Text local-id paths
+    /// under `point`, from front to back. A direct hit is a one-element path.
+    /// A hit inside a nested artboard is prefixed with each nested host local id.
     pub fn geometry_hit_test_paths(
         &mut self,
         point: RenderVec2D,
@@ -788,7 +789,11 @@ impl ArtboardInstance {
                         layout_bounds,
                     )
                 });
-                if runtime_transformed_rect_bounds(bounds, text_world).contains(point) {
+                let Some(inverse_text_world) = runtime_mat2d_invert(text_world) else {
+                    continue;
+                };
+                let (local_x, local_y) = inverse_text_world.transform_point(point.x, point.y);
+                if runtime_rect_contains(bounds, RenderVec2D::new(local_x, local_y)) {
                     back_to_front_hits.push(vec![local_id]);
                 }
                 continue;
@@ -13232,6 +13237,14 @@ fn runtime_geometry_include_point(bounds: &mut Option<RenderAabb>, point: (f32, 
         }
         None => *bounds = Some(RenderAabb::new(point.0, point.1, point.0, point.1)),
     }
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn runtime_rect_contains(bounds: (f32, f32, f32, f32), point: RenderVec2D) -> bool {
+    let (x, y, width, height) = bounds;
+    let max_x = x + width;
+    let max_y = y + height;
+    RenderAabb::new(x.min(max_x), y.min(max_y), x.max(max_x), y.max(max_y)).contains(point)
 }
 
 #[allow(clippy::arithmetic_side_effects)]

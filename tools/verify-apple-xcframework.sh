@@ -61,25 +61,49 @@ device_library="$(find "${xcframework_path}" -path '*ios-arm64/libnux_apple_runt
 simulator_library="$(find "${xcframework_path}" -path '*ios-arm64_x86_64-simulator/libnux_apple_runtime.a' -print -quit)"
 
 phase "validate architectures and exported ABI"
-test -n "${device_library}"
-test -n "${simulator_library}"
-test "$(lipo -archs "${device_library}")" = "arm64"
+if [[ -z "${device_library}" ]]; then
+    echo "device Apple runtime library is missing from ${xcframework_path}" >&2
+    exit 1
+fi
+if [[ -z "${simulator_library}" ]]; then
+    echo "simulator Apple runtime library is missing from ${xcframework_path}" >&2
+    exit 1
+fi
+device_archs="$(lipo -archs "${device_library}")"
+if [[ "${device_archs}" != "arm64" ]]; then
+    echo "unexpected device library architectures: ${device_archs}" >&2
+    exit 1
+fi
 simulator_archs="$(lipo -archs "${simulator_library}")"
-[[ "${simulator_archs}" == *arm64* ]]
-[[ "${simulator_archs}" == *x86_64* ]]
+if [[ "${simulator_archs}" != *arm64* || "${simulator_archs}" != *x86_64* ]]; then
+    echo "simulator library is missing a required architecture: ${simulator_archs}" >&2
+    exit 1
+fi
 
+required_symbols=(
+    _nux_runtime_abi_major
+    _nux_runtime_abi_minor
+    _nux_runtime_require_abi
+    _nux_runtime_build_provenance
+    _nux_flow_runtime_context_create
+    _nux_flow_render_session_create
+    _nux_flow_render_session_attach_apple_surface
+    _nux_apple_surface_reattach
+    _nux_flow_render_session_advance
+    _rust_eh_personality
+)
 for library in "${device_library}" "${simulator_library}"; do
-    symbols="$(nm -gjU "${library}" 2>/dev/null)"
-    grep -Fxq '_nux_runtime_abi_major' <<< "${symbols}"
-    grep -Fxq '_nux_runtime_abi_minor' <<< "${symbols}"
-    grep -Fxq '_nux_runtime_require_abi' <<< "${symbols}"
-    grep -Fxq '_nux_runtime_build_provenance' <<< "${symbols}"
-    grep -Fxq '_nux_flow_runtime_context_create' <<< "${symbols}"
-    grep -Fxq '_nux_flow_render_session_create' <<< "${symbols}"
-    grep -Fxq '_nux_flow_render_session_attach_apple_surface' <<< "${symbols}"
-    grep -Fxq '_nux_apple_surface_reattach' <<< "${symbols}"
-    grep -Fxq '_nux_flow_render_session_advance' <<< "${symbols}"
-    grep -Fxq '_rust_eh_personality' <<< "${symbols}"
+    phase "validate exported ABI in $(basename "${library}")"
+    if ! symbols="$(nm -gjU "${library}")"; then
+        echo "cannot inspect exported symbols in ${library}" >&2
+        exit 1
+    fi
+    for required_symbol in "${required_symbols[@]}"; do
+        if ! grep -Fxq "${required_symbol}" <<< "${symbols}"; then
+            echo "required symbol ${required_symbol} is missing from ${library}" >&2
+            exit 1
+        fi
+    done
 done
 
 phase "validate toolchain and embedded provenance"

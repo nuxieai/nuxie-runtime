@@ -12315,20 +12315,25 @@ fn runtime_draw_nested_artboard(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     nested_ancestors: &[u32],
 ) -> Result<()> {
-    if let Some(local_id) = command.local_id
+    let nested_instance = command
+        .local_id
+        .and_then(|local_id| instance.nested_artboards.get(&local_id));
+    if nested_instance.is_none()
+        && let Some(local_id) = command.local_id
         && let Some(artboard_id_key) =
             runtime_draw_property_key_for_name("NestedArtboard", "artboardId")
         && instance.uint_property(local_id, artboard_id_key) == Some(u64::from(u32::MAX))
     {
         return Ok(());
     }
-
-    let nested_instance = command
-        .local_id
-        .and_then(|local_id| instance.nested_artboards.get(&local_id));
-    let host_has_artboard_data_bind = command
-        .local_id
-        .is_some_and(|local_id| instance.nested_artboard_host_has_artboard_data_bind(local_id));
+    // A mounted child already represents the live `artboardId` resolution.
+    // Nulling the property removes that child, and mounted children always
+    // win over the authored fallback, so only an absent child needs the
+    // property/data-bind fallback checks.
+    let host_has_artboard_data_bind = nested_instance.is_none()
+        && command
+            .local_id
+            .is_some_and(|local_id| instance.nested_artboard_host_has_artboard_data_bind(local_id));
     let Some(referenced_artboard_global) = runtime_nested_artboard_referenced_global(
         nested_instance.map(|nested| nested.child.graph_global_id),
         command.referenced_artboard_global,

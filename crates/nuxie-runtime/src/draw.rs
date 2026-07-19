@@ -1721,7 +1721,9 @@ impl ArtboardInstance {
                 item.logical_index,
                 item.render_cache_revision,
             );
-            let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+            let child_cache = render_cache
+                .nested_artboards
+                .get_or_insert_default(cache_key);
             if let Some(caches) = nested_paint_caches.as_deref_mut() {
                 if !caches.contains_key(&cache_key) {
                     caches.insert(
@@ -1863,7 +1865,9 @@ impl ArtboardInstance {
             referenced_artboard_global,
             nested_instance.render_cache_revision,
         );
-        let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+        let child_cache = render_cache
+            .nested_artboards
+            .get_or_insert_default(cache_key);
         if !nested_paint_caches.contains_key(&cache_key) {
             nested_paint_caches.insert(
                 cache_key,
@@ -2001,7 +2005,9 @@ impl ArtboardInstance {
             referenced_artboard_global,
             nested_instance.map_or(0, |nested| nested.render_cache_revision),
         );
-        let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+        let child_cache = render_cache
+            .nested_artboards
+            .get_or_insert_default(cache_key);
         let child_paint_caches = match nested_paint_caches {
             Some(caches) => {
                 if !caches.contains_key(&cache_key) {
@@ -7675,6 +7681,86 @@ struct RuntimeNestedRenderCacheKey {
     instance_revision: u64,
 }
 
+const RUNTIME_COMPONENT_LIST_CACHE_NAMESPACE: u64 = 1_u64 << 63;
+
+/// Renderer resources follow a mounted nested-artboard tree, where each
+/// parent normally owns only a handful of direct children. C++ reaches those
+/// resources through the already-mounted `NestedArtboard::m_Instance`
+/// directly; using a tree map here added a logarithmic lookup and node walk to
+/// every retained draw. Keep the external renderer-resource ownership needed
+/// by Rust, but use the same small, parent-local shape as the mounted tree.
+enum RuntimeNestedRenderCaches<T> {
+    Flat(Vec<(RuntimeNestedRenderCacheKey, T)>),
+    Ordered(BTreeMap<RuntimeNestedRenderCacheKey, T>),
+}
+
+impl<T> Default for RuntimeNestedRenderCaches<T> {
+    fn default() -> Self {
+        Self::Flat(Vec::new())
+    }
+}
+
+impl<T> RuntimeNestedRenderCaches<T> {
+    const FLAT_CAPACITY: usize = 8;
+
+    #[inline]
+    fn get_or_insert_with(
+        &mut self,
+        key: RuntimeNestedRenderCacheKey,
+        make: impl FnOnce() -> T,
+    ) -> &mut T {
+        if matches!(self, Self::Ordered(_)) {
+            let Self::Ordered(entries) = self else {
+                unreachable!();
+            };
+            return entries.entry(key).or_insert_with(make);
+        }
+
+        let existing = match self {
+            Self::Flat(entries) => entries.iter().position(|(candidate, _)| *candidate == key),
+            Self::Ordered(_) => unreachable!(),
+        };
+        if let Some(index) = existing {
+            let Self::Flat(entries) = self else {
+                unreachable!();
+            };
+            return &mut entries[index].1;
+        }
+
+        let should_spill = key.instance_revision & RUNTIME_COMPONENT_LIST_CACHE_NAMESPACE != 0
+            || matches!(self, Self::Flat(entries) if entries.len() == Self::FLAT_CAPACITY);
+        if should_spill {
+            // Component-list rows are a potentially large collection, unlike
+            // the mounted direct-child set. Preserve logarithmic lookup for
+            // that explicit cache-key namespace, and for unusually broad
+            // ordinary nesting trees.
+            let Self::Flat(entries) = std::mem::replace(self, Self::Ordered(BTreeMap::new()))
+            else {
+                unreachable!();
+            };
+            let Self::Ordered(ordered) = self else {
+                unreachable!();
+            };
+            ordered.extend(entries);
+            return ordered.entry(key).or_insert_with(make);
+        }
+
+        let Self::Flat(entries) = self else {
+            unreachable!();
+        };
+        entries.push((key, make()));
+        &mut entries.last_mut().expect("just inserted").1
+    }
+
+    #[inline]
+    fn get_or_insert_default(&mut self, key: RuntimeNestedRenderCacheKey) -> &mut T
+    where
+        T: Default,
+    {
+        self.get_or_insert_with(key, T::default)
+    }
+}
+
 #[derive(Default)]
 pub struct RuntimeRenderPaintCache {
     paints: RuntimeRenderPaints,
@@ -7971,7 +8057,7 @@ pub struct RuntimeRenderPathCache {
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
-    nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPathCache>,
+    nested_artboards: RuntimeNestedRenderCaches<RuntimeRenderPathCache>,
     pending_clip_commands: Vec<usize>,
     // Cycle guard for the component_world_transform_with_bounds <->
     // compute_component_world_transform_with_layout_bounds parent-walk
@@ -10301,7 +10387,7 @@ fn component_list_render_cache_key(
     // occurrence look like a fresh artboard. `instance_revision` is the
     // wrapper occurrence identity and is already unique for duplicate VMI
     // entries, so keep the component-list namespace bit but not the index.
-    key.instance_revision = (1_u64 << 63) | instance_revision;
+    key.instance_revision = RUNTIME_COMPONENT_LIST_CACHE_NAMESPACE | instance_revision;
     key
 }
 
@@ -12936,7 +13022,7 @@ fn runtime_draw_component_list(
             item.logical_index,
             item.render_cache_revision,
         );
-        let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+        let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
         let child = component_list_layout_children
             .get(&local_id)
             .and_then(|children| children.get(item_index))
@@ -13172,7 +13258,7 @@ fn runtime_draw_nested_artboard(
         referenced_artboard_global,
         nested_instance.map_or(0, |nested| nested.render_cache_revision),
     );
-    let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+    let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
 
     if let Some(child) = persistent_child {
         let layout_child;
@@ -22724,6 +22810,51 @@ mod tests {
             authored,
             nested_render_cache_key(Some(33), Some(14), 105, 0)
         );
+    }
+
+    #[test]
+    fn nested_render_cache_retains_each_exact_instance_key() {
+        let original = nested_render_cache_key(Some(33), Some(14), 105, 7);
+        let replacement = nested_render_cache_key(Some(33), Some(14), 105, 8);
+        let mut caches = RuntimeNestedRenderCaches::default();
+
+        *caches.get_or_insert_with(original, || 7_u32) = 11;
+
+        assert_eq!(*caches.get_or_insert_with(original, || 99), 11);
+        assert_eq!(*caches.get_or_insert_with(replacement, || 17), 17);
+        assert!(
+            matches!(caches, RuntimeNestedRenderCaches::Flat(ref entries) if entries.len() == 2)
+        );
+    }
+
+    #[test]
+    fn nested_render_cache_spills_wide_nesting_trees_without_losing_entries() {
+        let mut caches = RuntimeNestedRenderCaches::default();
+        for revision in 0..=RuntimeNestedRenderCaches::<u32>::FLAT_CAPACITY {
+            let key = nested_render_cache_key(Some(33), Some(14), 105, revision as u64);
+            *caches.get_or_insert_with(key, || revision as u32) += 10;
+        }
+
+        assert!(matches!(
+            caches,
+            RuntimeNestedRenderCaches::Ordered(ref entries)
+                if entries.len() == RuntimeNestedRenderCaches::<u32>::FLAT_CAPACITY + 1
+        ));
+        let first = nested_render_cache_key(Some(33), Some(14), 105, 0);
+        assert_eq!(*caches.get_or_insert_with(first, || 99), 10);
+    }
+
+    #[test]
+    fn nested_render_cache_keeps_component_list_rows_in_the_ordered_tier() {
+        let row = component_list_render_cache_key(Some(33), Some(14), 105, 0, 7);
+        let mut caches = RuntimeNestedRenderCaches::default();
+
+        *caches.get_or_insert_with(row, || 11_u32) = 17;
+
+        assert!(matches!(
+            caches,
+            RuntimeNestedRenderCaches::Ordered(ref entries) if entries.get(&row) == Some(&17)
+        ));
     }
 
     #[test]

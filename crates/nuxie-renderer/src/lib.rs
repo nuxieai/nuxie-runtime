@@ -163,6 +163,15 @@ const MAX_ATOMIC_PATHS: usize = logical_flush::MAX_PATH_COUNT;
 const WEBGPU_SUPPORTS_CLOCKWISE_ATOMIC_MODE: bool = false;
 // RenderContextWebGPUImpl retains PlatformFeatures' default texture limit.
 const CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION: u32 = 2048;
+// wgpu-hal's Metal backend exposes at least 8,192 on every supported Apple GPU,
+// including the fallback family used by iOS 15-era devices. Trusted imports
+// use this floor so accepted encoded images cannot fail a later Apple upload
+// solely because of their dimensions.
+const APPLE_SAFE_IMAGE_MAX_TEXTURE_DIMENSION: u32 = 8192;
+// Bound the peak product-facing decoded image size to 64 MiB per asset. This
+// admits a 4,096-by-4,096 RGBA image while rejecting compressed pixel bombs
+// before the codec allocates its output buffer.
+const APPLE_SAFE_IMAGE_MAX_DECODED_BYTE_LENGTH: usize = 67_108_864;
 // RenderContext::atlasMaxSize applies an additional 4096 cap.
 const CPP_LOGICAL_ATLAS_MAX_DIMENSION: u32 = 4096;
 const FEATHER_ATLAS_PADDING: u32 = 2;
@@ -178,6 +187,17 @@ const MAX_RETAINED_STROKE_PREPARATION_BYTES: usize = 1 << 20;
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
+}
+
+fn apple_safe_image_decoded_byte_length(width: u32, height: u32) -> Option<usize> {
+    if !texture_extent_supported(width, height, APPLE_SAFE_IMAGE_MAX_TEXTURE_DIMENSION) {
+        return None;
+    }
+    let decoded_byte_length = usize::try_from(width)
+        .ok()?
+        .checked_mul(usize::try_from(height).ok()?)?
+        .checked_mul(4)?;
+    (decoded_byte_length <= APPLE_SAFE_IMAGE_MAX_DECODED_BYTE_LENGTH).then_some(decoded_byte_length)
 }
 
 fn validate_texture_extent(
@@ -506,6 +526,29 @@ pub enum RenderMode {
 }
 
 impl WgpuFactory {
+    /// Fully decode image bytes for trusted Apple import without retaining
+    /// decoded pixels or creating GPU resources. The conservative dimension
+    /// cap is supported by every Apple GPU exposed by the Metal backend.
+    pub fn validate_image_bytes(data: &[u8]) -> Result<(), ImageDecodeError> {
+        let Some((encoded_width, encoded_height)) = encoded_image_dimensions(data) else {
+            return Err(ImageDecodeError);
+        };
+        let Some(expected_decoded_byte_length) =
+            apple_safe_image_decoded_byte_length(encoded_width, encoded_height)
+        else {
+            return Err(ImageDecodeError);
+        };
+        let Some((decoded_width, decoded_height, pixels)) = decode_image_rgba(data) else {
+            return Err(ImageDecodeError);
+        };
+        if (decoded_width, decoded_height) != (encoded_width, encoded_height)
+            || pixels.len() != expected_decoded_byte_length
+        {
+            return Err(ImageDecodeError);
+        }
+        Ok(())
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
         Self::new_with_mode(width, height, RenderMode::Msaa)
@@ -7254,6 +7297,24 @@ fn multiply(left: Mat2D, right: Mat2D) -> Mat2D {
         a * ux + c * uy + tx,
         b * ux + d * uy + ty,
     ])
+}
+
+fn encoded_image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        let reader = png::Decoder::new(Cursor::new(data)).read_info().ok()?;
+        let info = reader.info();
+        Some((info.width, info.height))
+    } else if data.starts_with(&[0xff, 0xd8]) {
+        let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
+        decoder.read_info().ok()?;
+        let info = decoder.info()?;
+        Some((u32::from(info.width), u32::from(info.height)))
+    } else if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        let decoder = image_webp::WebPDecoder::new(Cursor::new(data)).ok()?;
+        Some(decoder.dimensions())
+    } else {
+        None
+    }
 }
 
 fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {

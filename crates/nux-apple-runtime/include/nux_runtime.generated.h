@@ -117,9 +117,20 @@ typedef struct NuxFlowExternalAsset {
   struct NuxByteView unique_name;
   struct NuxByteView source_key;
   struct NuxByteView expected_sha256;
+  /**
+   * Supplied encoded bytes. Image content is decoded during trusted import
+   * and must fit the Apple-safe 8,192-pixel/64-MiB decoded-image limits.
+   * Invalid required images abort import; invalid optional images are
+   * omitted with a structured warning.
+   */
   struct NuxByteView bytes;
 } NuxFlowExternalAsset;
 
+/**
+ * Full ABI 1.1 artifact-import contract. `struct_size` must cover this entire
+ * published layout; the artifact manifest and acquisition identities are
+ * required for every import.
+ */
 typedef struct NuxFlowImportRequest {
   uint32_t struct_size;
   /**
@@ -355,7 +366,9 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
 void nux_flow_render_session_free(struct NuxFlowRenderSession *session);
 
 /**
- * Imports one visual artifact into a retained runtime context.
+ * Imports one verified visual artifact into a retained runtime context.
+ * The request must provide the full ABI 1.1 import layout; the former ABI 1.0
+ * artifact-only prefix is rejected.
  *
  * # Safety
  *
@@ -482,6 +495,10 @@ uint16_t nux_runtime_abi_minor(void);
  */
 NuxStatus nux_runtime_build_provenance(struct NuxByteView *out_provenance);
 
+/**
+ * Checks whether this runtime supports the requested full import contract.
+ * ABI 1.0's manifest-free import prefix is intentionally unsupported.
+ */
 NuxStatus nux_runtime_require_abi(uint16_t required_major, uint16_t minimum_minor);
 
 #ifdef __cplusplus

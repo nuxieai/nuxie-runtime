@@ -1008,6 +1008,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-metal",
  "objc2-quartz-core",
+ "png",
  "serde",
  "serde_json",
  "sha2",

@@ -23,6 +23,7 @@ sha2 = "0.10"
 
 [dev-dependencies]
 nuxie-schema = { path = "../nuxie-schema" }
+png = "0.18"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
 objc2 = "0.6.4"

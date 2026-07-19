@@ -10268,6 +10268,19 @@ fn runtime_draw_command(
         );
     }
 
+    if runtime_try_draw_simple_solid_shape(
+        runtime,
+        instance,
+        command,
+        factory,
+        renderer,
+        paint_by_global,
+        path_cache,
+        paint_configurations.as_deref_mut(),
+    )? {
+        return Ok(());
+    }
+
     let shape_world = command.world_transform.unwrap_or_else(|| {
         command
             .local_id
@@ -10566,6 +10579,108 @@ fn runtime_draw_command(
     }
 
     Ok(())
+}
+
+/// Replay the overwhelmingly common retained-shape form without entering the
+/// generic text/effect/feather/layout paint machinery below. The guard is
+/// deliberately structural: a command that needs any richer behavior falls
+/// through to the existing replay path unchanged.
+#[inline(never)]
+fn runtime_try_draw_simple_solid_shape(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    command: &RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+) -> Result<bool> {
+    let [paint] = command.shape_paints.as_slice() else {
+        return Ok(false);
+    };
+    let (Some(local_id), Some(shape_world)) = (command.local_id, command.world_transform) else {
+        return Ok(false);
+    };
+    if command.object_kind != RuntimeDrawCommandObjectKind::Other
+        || command.type_name != "Shape"
+        || command.clipping_shape_local.is_some()
+        || !command.needs_save_operation
+        || paint.paint_type != RuntimeShapePaintKind::Fill
+        || paint.path_kind != RuntimeShapePaintPathKind::Local
+        || !matches!(
+            paint.paint_state,
+            Some(RuntimeShapePaintState::SolidColor { .. })
+        )
+        || paint.feather_state.is_some()
+        || paint.paint_space_transform.is_some()
+        || paint.has_effect_path
+        || !paint.effect_path_commands.is_empty()
+        || !paint.needs_save_operation
+        || paint.shape_world_override.is_some()
+        || paint.aliases_local_clockwise_path
+        || paint.uses_temporary_paint
+        || paint.text_path_bucket_slot.is_some()
+        || paint.text_paint_pool.is_some()
+        || paint.ensure_text_paint_pool_after_draw.is_some()
+    {
+        return Ok(false);
+    }
+
+    let global_id = paint.paint_global_id;
+    let paint_configuration_is_current =
+        paint_configurations
+            .as_deref()
+            .is_some_and(|configurations| {
+                configurations.is_current(
+                    global_id,
+                    runtime_paint_configuration_epoch(instance, paint),
+                )
+            });
+    if !paint_configuration_is_current {
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing paint global {global_id}"))?;
+        let render_paint = paint_by_global
+            .paint_mut(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
+            .as_mut();
+        if let Some(configurations) = paint_configurations.as_mut() {
+            runtime_configure_paint_with_cache(
+                render_paint,
+                configurations,
+                global_id,
+                instance,
+                object,
+                paint,
+            )?;
+        } else {
+            runtime_configure_paint(render_paint, instance, object, paint, None)?;
+        }
+    }
+
+    renderer.save();
+    renderer.transform(runtime_render_mat(shape_world));
+    let path = path_cache.draw_path_with_optional_fill_rule(
+        RuntimeDrawPathCacheKey {
+            kind: RuntimeDrawPathCacheKind::Draw,
+            path_kind: RuntimeShapePaintPathKind::Local,
+            local_id: Some(local_id),
+            path_index: paint.path_slot_index,
+        },
+        runtime_draw_path_revision(instance, RuntimeShapePaintPathKind::Local),
+        factory,
+        &paint.path_commands,
+        RenderFillRule::Clockwise,
+        Some(paint.fill_rule),
+    );
+    let render_paint = paint_by_global
+        .paint(global_id)
+        .with_context(|| format!("missing render paint for global {global_id}"))?
+        .as_ref();
+    renderer.draw_path(path.as_ref(), render_paint);
+    renderer.restore();
+    Ok(true)
 }
 
 fn runtime_draw_scripted_drawable(

@@ -102,6 +102,27 @@ status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:174:ElasticInterpolator", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:51:Polygon", "type-key:533:Feather", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
 
 [[file]]
+id = "bidirectional_binding_source"
+path = "tests/unit_tests/assets/bidirectional_binding_source.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:168:ListenerFireEvent", "type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:444:ViewModelInstanceViewModel", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:473:BindablePropertyNumber", "type-key:474:BindablePropertyEnum", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:485:TransitionValueEnumComparator", "type-key:487:ListenerViewModelChange", "type-key:500:DataConverterOperationValue", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:515:DataConverterSystemNormalizer", "type-key:53:StateMachine", "type-key:548:CustomPropertyGroup", "type-key:57:StateMachineLayer", "type-key:585:ViewModelPropertyAssetImage", "type-key:587:ViewModelInstanceAssetImage", "type-key:592:CustomPropertyColor", "type-key:593:TransitionSelfComparator", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:5:StraightVertex", "type-key:617:DataConverterToNumber", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:643:DataBindPath", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:6:CubicDetachedVertex", "type-key:84:KeyFrameBool", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+
+[[file]]
+id = "bidirectional_binding_target_1"
+path = "tests/unit_tests/assets/bidirectional_binding_target_1.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:444:ViewModelInstanceViewModel", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:536:DataConverterFormula", "type-key:541:FormulaTokenOperation", "type-key:543:FormulaTokenValue", "type-key:545:FormulaTokenInput", "type-key:585:ViewModelPropertyAssetImage", "type-key:587:ViewModelInstanceAssetImage", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:5:StraightVertex", "type-key:617:DataConverterToNumber", "type-key:642:ManifestAsset"]
+
+[[file]]
+id = "bidirectional_binding_target_2"
+path = "tests/unit_tests/assets/bidirectional_binding_target_2.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:2:Node", "type-key:3:Shape", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:444:ViewModelInstanceViewModel", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:536:DataConverterFormula", "type-key:541:FormulaTokenOperation", "type-key:543:FormulaTokenValue", "type-key:545:FormulaTokenInput", "type-key:585:ViewModelPropertyAssetImage", "type-key:587:ViewModelInstanceAssetImage", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:5:StraightVertex", "type-key:617:DataConverterToNumber", "type-key:642:ManifestAsset"]
+
+[[file]]
 id = "bidirectional_precedence"
 path = "tests/unit_tests/assets/bidirectional_precedence.riv"
 samples = [0.0]
@@ -122,6 +143,13 @@ path = "tests/unit_tests/assets/bindable_artboard_nesty.riv"
 samples = [0.0]
 status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard"]
+
+[[file]]
+id = "bindable_focus_tree_swap"
+path = "tests/unit_tests/assets/bindable_focus_tree_swap.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:487:ListenerViewModelChange", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "blend_test"
@@ -353,6 +381,20 @@ milestone = "M8"
 features = ["scripted-status:exact", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
+id = "data_bind_font_test"
+path = "tests/unit_tests/assets/data_bind_font_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:1034:ViewModelPropertyAssetFont", "type-key:1035:ViewModelInstanceAssetFont", "type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:487:ListenerViewModelChange", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:588:BindablePropertyAsset", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+
+[[file]]
+id = "data_bind_keyframes_test"
+path = "tests/unit_tests/assets/data_bind_keyframes_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:142:KeyFrameString", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+
+[[file]]
 id = "data_bind_solo"
 path = "tests/unit_tests/assets/data_bind_solo.riv"
 samples = [0.0, 0.25, 0.5, 0.75, 1.0]
@@ -429,6 +471,13 @@ path = "tests/unit_tests/assets/data_converter_to_number.riv"
 samples = [0.0]
 status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:127:CustomPropertyNumber", "type-key:129:CustomPropertyBoolean", "type-key:130:CustomPropertyString", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:142:KeyFrameString", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:490:DataConverterToString", "type-key:498:DataConverterGroupItem", "type-key:499:DataConverterGroup", "type-key:50:KeyFrameId", "type-key:53:StateMachine", "type-key:548:CustomPropertyGroup", "type-key:564:ViewModelPropertySymbolListIndex", "type-key:566:ViewModelInstanceSymbolListIndex", "type-key:57:StateMachineLayer", "type-key:592:CustomPropertyColor", "type-key:616:CustomPropertyEnum", "type-key:617:DataConverterToNumber", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:84:KeyFrameBool"]
+
+[[file]]
+id = "data_global_repro"
+path = "tests/unit_tests/assets/data_global_repro.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:443:ViewModelPropertyString", "type-key:4:Ellipse", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:637:ScriptedLayout", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "data_viz_demo"
@@ -627,6 +676,13 @@ status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:444:ViewModelInstanceViewModel", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:450:KeyFrameUint", "type-key:452:NestedArtboardLayout", "type-key:472:BindablePropertyBoolean", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:513:ForegroundLayoutDrawable", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:95:NestedStateMachine"]
 
 [[file]]
+id = "focus_test"
+path = "tests/unit_tests/assets/focus_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:1037:FocusActionClear", "type-key:1038:TransitionFocusCondition", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:652:FocusActionTarget", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:667:TransitionPropertyComponentComparator", "type-key:7:Rectangle"]
+
+[[file]]
 id = "focus_traversal"
 path = "tests/unit_tests/assets/focus_traversal.riv"
 samples = [0.0]
@@ -710,6 +766,20 @@ samples = [0.0, 0.1]
 status = "diverges"
 milestone = "M8"
 features = ["scripted-status:exact", "type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:471:BindablePropertyString", "type-key:472:BindablePropertyBoolean", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:4:Ellipse", "type-key:500:DataConverterOperationValue", "type-key:528:BlendState1DViewModel", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:5:StraightVertex", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:627:ScriptInputString", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:652:FocusActionTarget", "type-key:653:FocusData", "type-key:654:StateMachineListener", "type-key:65:StateTransition", "type-key:6:CubicDetachedVertex", "type-key:75:BlendAnimation1D", "type-key:7:Rectangle", "type-key:973:ListenerInputTypeGamepad", "type-key:974:GamepadInput"]
+
+[[file]]
+id = "global_variables_test"
+path = "tests/unit_tests/assets/global_variables_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:452:NestedArtboardLayout", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:568:DataConverterNumberToList", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:95:NestedStateMachine"]
+
+[[file]]
+id = "global_viewmodels_test"
+path = "tests/unit_tests/assets/global_viewmodels_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
 
 [[file]]
 id = "group_effect"
@@ -811,6 +881,13 @@ path = "tests/unit_tests/assets/image_fit_alignment_3.riv"
 samples = [0.0]
 status = "exact"
 features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
+
+[[file]]
+id = "image_fit_alignment_updated_test"
+path = "tests/unit_tests/assets/image_fit_alignment_updated_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:585:ViewModelPropertyAssetImage", "type-key:587:ViewModelInstanceAssetImage", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "image_scripting_property_value"
@@ -940,6 +1017,13 @@ status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
 
 [[file]]
+id = "library_scope_edge_test"
+path = "tests/unit_tests/assets/library_scope_edge_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:529:ScriptAsset", "type-key:558:LibraryAsset"]
+
+[[file]]
 id = "library_view_model_test"
 path = "tests/unit_tests/assets/library_view_model_test.riv"
 samples = [0.0]
@@ -974,6 +1058,13 @@ input_script = "tests/input_scripts/light_switch_click.txt"
 samples = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
 status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "type-key:7:Rectangle"]
+
+[[file]]
+id = "list_focus_order"
+path = "tests/unit_tests/assets/list_focus_order.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:452:NestedArtboardLayout", "type-key:472:BindablePropertyBoolean", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:490:DataConverterToString", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:564:ViewModelPropertySymbolListIndex", "type-key:566:ViewModelInstanceSymbolListIndex", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:95:NestedStateMachine"]
 
 [[file]]
 id = "list_index_script_access"
@@ -1111,6 +1202,13 @@ status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
 
 [[file]]
+id = "nested_artboard_origin_override_test"
+path = "tests/unit_tests/assets/nested_artboard_origin_override_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:1039:NestedArtboardOrigin", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:535:DataConverterBooleanNegate", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+
+[[file]]
 id = "nested_artboard_quantize_and_speed"
 path = "tests/unit_tests/assets/nested_artboard_quantize_and_speed.riv"
 samples = [0.0, 0.25, 0.5, 0.75, 1.0]
@@ -1137,6 +1235,13 @@ path = "tests/unit_tests/assets/nested_hug.riv"
 samples = [0.0]
 status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:123:NestedBool", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:451:NestedArtboardLeaf", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+
+[[file]]
+id = "nested_library_scope_test"
+path = "tests/unit_tests/assets/nested_library_scope_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:529:ScriptAsset", "type-key:558:LibraryAsset"]
 
 [[file]]
 id = "nested_needs_advance"
@@ -1299,6 +1404,13 @@ status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:128:Event", "type-key:171:KeyFrameCallback", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:444:ViewModelInstanceViewModel", "type-key:447:DataBindContext", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:489:DataConverterRounder", "type-key:4:Ellipse", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:536:DataConverterFormula", "type-key:53:StateMachine", "type-key:540:FormulaTokenParenthesisClose", "type-key:542:FormulaTokenFunction", "type-key:545:FormulaTokenInput", "type-key:548:CustomPropertyGroup", "type-key:559:ArtboardComponentList", "type-key:564:ViewModelPropertySymbolListIndex", "type-key:566:ViewModelInstanceSymbolListIndex", "type-key:568:DataConverterNumberToList", "type-key:57:StateMachineLayer", "type-key:592:CustomPropertyColor", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
+id = "reset_shared_viewmodel_instance_test"
+path = "tests/unit_tests/assets/reset_shared_viewmodel_instance_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+
+[[file]]
 id = "reuse_path_in_effect"
 path = "tests/unit_tests/assets/reuse_path_in_effect.riv"
 samples = [0.0]
@@ -1357,6 +1469,20 @@ status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:88:ScaleConstraint"]
 
 [[file]]
+id = "scope_probe"
+path = "tests/unit_tests/assets/scope_probe.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:558:LibraryAsset", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:970:ShaderAsset"]
+
+[[file]]
+id = "script_advance_test"
+path = "tests/unit_tests/assets/script_advance_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:147:Solo", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+
+[[file]]
 id = "script_affects_has_changed"
 path = "tests/unit_tests/assets/script_affects_has_changed.riv"
 samples = [0.0]
@@ -1387,6 +1513,13 @@ samples = [0.0]
 status = "diverges"
 milestone = "M8"
 features = ["scripted-status:exact", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:529:ScriptAsset", "type-key:52:Star", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:611:ScriptInputNumber", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
+
+[[file]]
+id = "script_color_data_test"
+path = "tests/unit_tests/assets/script_color_data_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:447:DataBindContext", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:629:ScriptedDataConverter", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
 id = "script_create_text_runs"
@@ -1603,6 +1736,13 @@ status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:444:ViewModelInstanceViewModel", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
 
 [[file]]
+id = "scroll_intent"
+path = "tests/unit_tests/assets/scroll_intent.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:442:ViewModelInstanceNumber", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:490:DataConverterToString", "type-key:521:ScrollConstraint", "type-key:525:ElasticScrollPhysics", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
+
+[[file]]
 id = "scroll_snap"
 path = "tests/unit_tests/assets/scroll_snap.riv"
 samples = [0.0]
@@ -1811,6 +1951,13 @@ status = "exact"
 features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:123:NestedBool", "type-key:127:CustomPropertyNumber", "type-key:128:Event", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:147:Solo", "type-key:16:PointsPath", "type-key:171:KeyFrameCallback", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:444:ViewModelInstanceViewModel", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:450:KeyFrameUint", "type-key:451:NestedArtboardLeaf", "type-key:452:NestedArtboardLayout", "type-key:472:BindablePropertyBoolean", "type-key:473:BindablePropertyNumber", "type-key:474:BindablePropertyEnum", "type-key:479:TransitionPropertyViewModelComparator", "type-key:47:TrimPath", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:485:TransitionValueEnumComparator", "type-key:487:ListenerViewModelChange", "type-key:490:DataConverterToString", "type-key:498:DataConverterGroupItem", "type-key:499:DataConverterGroup", "type-key:4:Ellipse", "type-key:500:DataConverterOperationValue", "type-key:50:KeyFrameId", "type-key:519:DataConverterRangeMapper", "type-key:530:DataConverterStringPad", "type-key:534:DataConverterInterpolator", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:5:StraightVertex", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "type-key:98:NestedRemapAnimation"]
 
 [[file]]
+id = "swappable_artboards_focus"
+path = "tests/unit_tests/assets/swappable_artboards_focus.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:51:Polygon", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:8:Triangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+
+[[file]]
 id = "tape"
 path = "tests/unit_tests/assets/tape.riv"
 samples = [0.0]
@@ -1837,6 +1984,13 @@ path = "tests/unit_tests/assets/test_modifier_run.riv"
 samples = [0.0]
 status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:158:TextModifierRange", "type-key:159:TextModifierGroup", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
+
+[[file]]
+id = "text_feather_falloff"
+path = "tests/unit_tests/assets/text_feather_falloff.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:158:TextModifierRange", "type-key:159:TextModifierGroup", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:533:Feather", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "text_follow_path_shape_length"

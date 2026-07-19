@@ -125,6 +125,13 @@ fn generate(options: Options) -> Result<()> {
         output.push_str("]\n\n");
     }
 
+    // Keep one newline at EOF without leaving the generated manifest with a
+    // whitespace-only trailing line (`git diff --check` treats that as an
+    // error).
+    if output.ends_with("\n\n") {
+        output.pop();
+    }
+
     match options.out {
         Some(path) => std::fs::write(&path, output)
             .with_context(|| format!("failed to write {}", path.display()))?,
@@ -378,6 +385,10 @@ features = []
             relative_prefix: "tests/unit_tests/assets".to_owned(),
         })
         .unwrap();
+
+        let output_bytes = std::fs::read(&output_path).unwrap();
+        assert!(output_bytes.ends_with(b"\n"));
+        assert!(!output_bytes.ends_with(b"\n\n"));
 
         let regenerated = parse_existing(&output_path).unwrap();
         let verified = regenerated.get("verified").unwrap();

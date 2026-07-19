@@ -77,6 +77,7 @@ fn run() -> Result<(), String> {
                         &file,
                         &corpus_dir,
                         RunnerKind::Cpp,
+                        options.verify_scripted_diagnostics,
                     ) {
                         Ok(cpp_stream) => println!(
                             "[unsupported-feature] {}: c++ stream ok ({} bytes)",
@@ -107,6 +108,7 @@ fn run() -> Result<(), String> {
                                 &file,
                                 &corpus_dir,
                                 feature,
+                                options.verify_scripted_diagnostics,
                             ) {
                                 Ok(()) => println!(
                                     "[unsupported-feature] {}: rust diagnostic ok ({feature})",
@@ -135,6 +137,7 @@ fn run() -> Result<(), String> {
                     &corpus_dir,
                     RunnerKind::Cpp,
                     expected_rust_error,
+                    options.verify_scripted_diagnostics,
                 ) {
                     Ok(()) => println!(
                         "[exact] {}: c++ rejected malformed import as expected",
@@ -151,6 +154,7 @@ fn run() -> Result<(), String> {
                         &corpus_dir,
                         RunnerKind::Rust,
                         expected_rust_error,
+                        options.verify_scripted_diagnostics,
                     ) {
                         Ok(()) => println!(
                             "[exact] {}: rust rejected the same malformed import as expected",
@@ -172,6 +176,7 @@ fn run() -> Result<(), String> {
                     &file,
                     &corpus_dir,
                     RunnerKind::Cpp,
+                    options.verify_scripted_diagnostics,
                 ) {
                     Ok(cpp_stream) => {
                         println!(
@@ -192,6 +197,7 @@ fn run() -> Result<(), String> {
                                         &file,
                                         &corpus_dir,
                                         RunnerKind::Rust,
+                                        options.verify_scripted_diagnostics,
                                     ) {
                                         Ok(rust_stream) if status == Status::Diverges => println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
@@ -1004,6 +1010,53 @@ mod tests {
     }
 
     #[test]
+    fn scripted_lane_forces_rust_script_execution() {
+        let entry = CorpusEntry::new();
+
+        let scripted_rust = stream_command(
+            Path::new("rust-runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("corpus"),
+            RunnerKind::Rust,
+            true,
+        );
+        assert!(
+            scripted_rust
+                .get_args()
+                .any(|argument| argument == "--execute-scripts")
+        );
+
+        let normal_rust = stream_command(
+            Path::new("rust-runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("corpus"),
+            RunnerKind::Rust,
+            false,
+        );
+        assert!(
+            normal_rust
+                .get_args()
+                .all(|argument| argument != "--execute-scripts")
+        );
+
+        let scripted_cpp = stream_command(
+            Path::new("cpp-runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("corpus"),
+            RunnerKind::Cpp,
+            true,
+        );
+        assert!(
+            scripted_cpp
+                .get_args()
+                .all(|argument| argument != "--execute-scripts")
+        );
+    }
+
+    #[test]
     fn stream_comparison_allows_float_epsilon() {
         assert!(streams_equivalent(
             "drawPath points=[(-15.2626038,-125)]\n",
@@ -1264,8 +1317,9 @@ fn run_stream(
     file: &Path,
     corpus_dir: &Path,
     runner_kind: RunnerKind,
+    scripted_lane: bool,
 ) -> Result<String, String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind);
+    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind, scripted_lane);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1302,8 +1356,9 @@ fn run_malformed_rejection(
     corpus_dir: &Path,
     runner_kind: RunnerKind,
     expected_rust_error: &str,
+    scripted_lane: bool,
 ) -> Result<(), String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind);
+    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind, scripted_lane);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1393,8 +1448,16 @@ fn run_unsupported_diagnostic(
     file: &Path,
     corpus_dir: &Path,
     expected_feature: &str,
+    scripted_lane: bool,
 ) -> Result<(), String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir, RunnerKind::Rust);
+    let mut command = stream_command(
+        runner,
+        entry,
+        file,
+        corpus_dir,
+        RunnerKind::Rust,
+        scripted_lane,
+    );
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1431,10 +1494,15 @@ fn stream_command(
     file: &Path,
     corpus_dir: &Path,
     runner_kind: RunnerKind,
+    scripted_lane: bool,
 ) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(file);
-    if runner_kind == RunnerKind::Rust && entry.executes_scripts_in_rust() {
+    // A scripted C++ runner always imports through WITH_RIVE_SCRIPTING, even
+    // for files without ScriptAsset objects. Mirror that build/runtime mode on
+    // the Rust side for the entire scripted lane. Per-entry flags only decide
+    // which files require the scripted lane when running the normal target.
+    if runner_kind == RunnerKind::Rust && (scripted_lane || entry.executes_scripts_in_rust()) {
         command.arg("--execute-scripts");
     }
     if let Some(artboard) = &entry.artboard {

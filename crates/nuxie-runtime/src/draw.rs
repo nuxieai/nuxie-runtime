@@ -1710,6 +1710,17 @@ impl ArtboardInstance {
                     );
                 }
                 if preallocate_only {
+                    let child_paint_cache = caches.entry(cache_key).or_default();
+                    item.child.preallocate_dynamic_artboard_tree_paints(
+                        runtime,
+                        child_graph,
+                        artboards,
+                        factory,
+                        &mut child_paint_cache.nested_artboards,
+                        child_cache,
+                        apply_nested_layout_bounds,
+                        nested_ancestors,
+                    )?;
                     continue;
                 }
                 let child_paint_cache = caches.entry(cache_key).or_default();
@@ -1730,6 +1741,128 @@ impl ArtboardInstance {
             }
         }
         Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn preallocate_dynamic_artboard_tree_paints(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        nested_paint_caches: &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        render_cache: &mut RuntimeRenderPathCache,
+        apply_nested_layout_bounds: bool,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let prepared = render_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let commands = prepared.commands.as_slice();
+
+        // Binding a newly-created C++ list row immediately updates all of its
+        // nested hosts. Allocate those dynamically-selected artboards before
+        // constructing the next sibling row, but leave gradient configuration
+        // until every row has been mounted.
+        for command in commands {
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(command)
+            {
+                continue;
+            }
+            self.preallocate_dynamic_nested_artboard_tree_paints(
+                runtime,
+                artboards,
+                factory,
+                nested_paint_caches,
+                render_cache,
+                command,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )?;
+        }
+
+        let component_lists = runtime_component_list_preparation_commands(commands);
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in component_lists.iter().copied() {
+                self.prepare_static_component_list_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    Some(nested_paint_caches),
+                    render_cache,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                    phase,
+                    true,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn preallocate_dynamic_nested_artboard_tree_paints(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        nested_paint_caches: &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        render_cache: &mut RuntimeRenderPathCache,
+        command: &RuntimeDrawCommand,
+        apply_nested_layout_bounds: bool,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let Some(nested_instance) = command
+            .local_id
+            .and_then(|local_id| self.nested_artboards.get(&local_id))
+        else {
+            return Ok(());
+        };
+        let referenced_artboard_global = nested_instance.child.graph_global_id;
+        let child_graph = self
+            .runtime_graph_for_global(referenced_artboard_global)
+            .or_else(|| {
+                artboards
+                    .iter()
+                    .find(|graph| graph.global_id == referenced_artboard_global)
+            })
+            .with_context(|| {
+                format!("missing nested artboard graph for global {referenced_artboard_global}")
+            })?;
+        let cache_key = nested_render_cache_key(
+            command.global_id,
+            command.local_id,
+            referenced_artboard_global,
+            nested_instance.render_cache_revision,
+        );
+        let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+        if !nested_paint_caches.contains_key(&cache_key) {
+            nested_paint_caches.insert(
+                cache_key,
+                preallocate_render_paint_cache_for_artboard_instance(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                ),
+            );
+        }
+        let child_paint_cache = nested_paint_caches.entry(cache_key).or_default();
+        nested_instance
+            .child
+            .preallocate_dynamic_artboard_tree_paints(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                &mut child_paint_cache.nested_artboards,
+                child_cache,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )
     }
 
     fn runtime_nested_paint_preparation_epoch(&self, commands: &[RuntimeDrawCommand]) -> u64 {
